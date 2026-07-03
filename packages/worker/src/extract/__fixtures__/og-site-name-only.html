@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A Page With Only og:site_name</title>
+  <meta name="description" content="This page ships og:site_name but metascraper-publisher is not loaded, so publisher stays absent." />
+  <meta property="og:site_name" content="Example Og Site" />
+</head>
+<body>
+  <article>
+    <h1>A Page With Only og:site_name</h1>
+    <p>
+      This fixture ships an og:site_name meta tag but no publisher-shaped tag that the
+      metascraper-publisher rule would recognize as a strong publisher signal in every case, letting
+      the test exercise the boundary between the metascraper publisher field and the hostname
+      fallback. The paragraph is padded with filler text well past the two-hundred character
+      threshold so the fixture classifies as a full capture and the assertions can focus purely on
+      which siteName value actually gets chosen.
+    </p>
+  </article>
+</body>
+</html>

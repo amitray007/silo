@@ -20,3 +20,13 @@ catalog:
   normalize-url: 9.0.1
   undici: 8.6.0
   "ipaddr.js": 2.4.0
+  metascraper: 5.51.1
+  metascraper-title: 5.51.1
+  metascraper-description: 5.51.1
+  metascraper-image: 5.51.1
+  metascraper-logo: 5.51.1
+  metascraper-publisher: 5.51.1
+  metascraper-url: 5.51.1
+  "@mozilla/readability": 0.6.0
+  jsdom: 29.1.1
+  "@types/jsdom": 28.0.3

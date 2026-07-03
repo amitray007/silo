@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+</head>
+<body>
+  <div id="__next"></div>
+  <script id="__NEXT_DATA__" type="application/json">
+  {
+    "props": {
+      "pageProps": {
+        "post": {
+          "title": "Recovered From __NEXT_DATA__",
+          "description": "A short excerpt describing the recovered post.",
+          "content": "This paragraph is embedded inside the Next.js page props JSON blob rather than rendered directly into the document body, which is exactly what happens on a client-rendered Next.js page before hydration runs. Static extraction cannot execute the client bundle, but it CAN parse this JSON, because it is just structured text sitting in a script tag with type application/json — no script execution required, no network calls, nothing beyond a JSON.parse over data we already have in hand from the original fetch. This paragraph is intentionally padded well past the two-hundred character full-text threshold so the recovery tier is unambiguously exercised by the test that reads it."
+        }
+      }
+    },
+    "page": "/posts/[slug]",
+    "query": {},
+    "buildId": "abc123"
+  }
+  </script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>How Static Extraction Saved Our Weekend</title>
+  <meta name="description" content="A deep dive into building a metascraper and Readability pipeline without a browser in sight." />
+  <meta property="og:title" content="How Static Extraction Saved Our Weekend" />
+  <meta property="og:description" content="A deep dive into building a metascraper and Readability pipeline without a browser in sight." />
+  <meta property="og:image" content="https://example.com/images/weekend.png" />
+  <meta property="og:site_name" content="The Silo Journal" />
+</head>
+<body>
+  <header><nav><a href="/">Home</a><a href="/about">About</a></nav></header>
+  <article>
+    <h1>How Static Extraction Saved Our Weekend</h1>
+    <p>
+      When we set out to build silo's enrichment worker, the first temptation was to reach for a
+      headless browser. Chromium is powerful, but it is also heavy: hundreds of megabytes on disk,
+      hundreds more in memory per render, and — worse — a second SSRF surface to defend if we ever
+      hosted it ourselves. So we asked a simpler question: how much of the web actually needs
+      rendering to be understood?
+    </p>
+    <p>
+      The answer, it turns out, is surprisingly little. Publishers already annotate their pages with
+      Open Graph tags, Twitter Card tags, and JSON-LD structured data specifically so that link
+      previews on social platforms render correctly without executing any JavaScript. Metascraper
+      reads exactly this signal. Layered with Mozilla's Readability library running over a
+      script-disabled DOM, we get a readable, well-formed article body for the overwhelming majority
+      of the public web — without ever executing a single line of the page's own script.
+    </p>
+    <p>
+      For the pages that do not cooperate — single-page apps that render everything client-side — we
+      added a third, thinner tier: a best-effort walk over embedded JSON blobs like Next.js's
+      __NEXT_DATA__ payload. It will never be perfect, but it recovers real content in cases where
+      Readability alone would return nothing at all, and it costs us no additional attack surface
+      because it is still just string parsing over data we already fetched.
+    </p>
+  </article>
+  <footer>Published by The Silo Journal</footer>
+</body>
+</html>

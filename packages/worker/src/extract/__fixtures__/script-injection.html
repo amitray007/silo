@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Legit Title, Not Tampered</title>
+  <meta name="description" content="This page's title must survive an inert script tag." />
+  <script>
+    document.title = 'ZZPWNEDZZ';
+    window.__pwned = true;
+    document.addEventListener('DOMContentLoaded', function () {
+      document.getElementById('article-body').textContent = 'ZZPWNEDZZ ARTICLE BODY';
+    });
+  </script>
+</head>
+<body>
+  <article>
+    <h1>Legit Title, Not Tampered</h1>
+    <p id="article-body">
+      This fixture proves jsdom scripts never execute during extraction. If the inline script above
+      ran, it would rewrite the document title and replace this paragraph's text with a sentinel
+      token before metascraper or Readability ever read the document, and the extracted title and
+      text assertions in the test would fail. Since jsdom is constructed without runScripts or
+      resources set to usable, the parser only ever treats this script tag as inert markup — text
+      content that is never evaluated as JavaScript, no matter how the page tries to run it,
+      including via a DOMContentLoaded handler that would only ever fire if the script executed at
+      all. This paragraph is padded well past the full-text threshold purely so this fixture can
+      also double as a normal full-capture case if a future test wants that, but the primary purpose
+      here is proving script inertness end to end.
+    </p>
+  </article>
+</body>
+</html>

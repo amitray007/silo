@@ -14,11 +14,21 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@mozilla/readability": "catalog:",
     "ipaddr.js": "catalog:",
+    "jsdom": "catalog:",
+    "metascraper": "catalog:",
+    "metascraper-description": "catalog:",
+    "metascraper-image": "catalog:",
+    "metascraper-logo": "catalog:",
+    "metascraper-publisher": "catalog:",
+    "metascraper-title": "catalog:",
+    "metascraper-url": "catalog:",
     "undici": "catalog:"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
+    "@types/jsdom": "catalog:",
     "@types/node": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

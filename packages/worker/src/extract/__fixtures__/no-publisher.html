@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>A Page With No Publisher Metadata</title>
+  <meta name="description" content="Neither metascraper-publisher nor og:site_name is present here." />
+</head>
+<body>
+  <article>
+    <h1>A Page With No Publisher Metadata</h1>
+    <p>
+      This fixture intentionally omits both a publisher-shaped meta tag and an og:site_name tag, so
+      that the extractor's siteName fallback path — deriving a human-readable site label from the
+      request URL's own hostname — is the only source that can possibly supply a siteName value for
+      this page. The paragraph is padded with enough filler text to clear the two-hundred character
+      readable-text threshold so this fixture classifies as a full capture, keeping the fallback
+      behavior test focused purely on the siteName field rather than on capture-status edge cases.
+    </p>
+  </article>
+</body>
+</html>
