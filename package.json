@@ -1,0 +1,18 @@
+{
+  "name": "silo",
+  "private": true,
+  "packageManager": "pnpm@10.33.2",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "lint": "turbo run lint",
+    "test": "turbo run test",
+    "quality": "turbo run quality"
+  },
+  "devDependencies": {
+    "turbo": "2.10.3"
+  }
+}
