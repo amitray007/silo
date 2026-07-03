@@ -32,8 +32,12 @@ export const links = pgTable(
     extractedText: text('extracted_text'),
 
     sourceKind: text('source_kind').notNull(),
-    // TODO(U3): type as `.$type<SourceData>()` once the per-source Zod union
-    // lands; validated against that union at the core write boundary.
+    // Deliberately typed as the loose storage shape, NOT `SourceData`.
+    // `SourceData` (the per-source Zod union) lives in `@silo/core`; typing this
+    // column with it would make `@silo/db` import `@silo/core`, inverting the
+    // core→db dependency the architecture enforces (and tripping no-circular).
+    // `db` is a leaf: it stores JSON; `core` validates `source_data` against the
+    // Zod union at the write boundary and casts reads to `SourceData`.
     sourceData: jsonb('source_data').$type<Record<string, unknown>>(),
 
     captureStatus: captureStatus('capture_status').notNull().default('enriching'),
