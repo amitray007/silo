@@ -1,0 +1,337 @@
+<title>Silo — Scope Map</title>
+<style>
+  :root {
+    --ground: #14161a;
+    --surface: #1c1f26;
+    --surface-2: #22262f;
+    --line: #2c3038;
+    --text: #c9ccd4;
+    --text-hi: #eef0f4;
+    --muted: #868b98;
+    --faint: #5a5f6b;
+    --accent: #5b9dd9;
+    --now: #5b9dd9;
+    --next: #c8a15a;
+    --later: #7d8492;
+    --never: #b46b6b;
+    --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--text);
+    font-family: var(--sans);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap {
+    max-width: 60rem;
+    margin: 0 auto;
+    padding: clamp(2rem, 5vw, 4.5rem) clamp(1.1rem, 4vw, 2.5rem) 5rem;
+  }
+
+  /* Header */
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    letter-spacing: 0.22em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin: 0 0 1rem;
+  }
+  h1 {
+    font-family: var(--sans);
+    font-weight: 680;
+    font-size: clamp(2.1rem, 6vw, 3.2rem);
+    letter-spacing: -0.02em;
+    line-height: 1.05;
+    color: var(--text-hi);
+    margin: 0 0 0.9rem;
+    text-wrap: balance;
+  }
+  .lede {
+    font-size: 1.08rem;
+    color: var(--muted);
+    max-width: 46ch;
+    margin: 0;
+  }
+  .lede strong { color: var(--text); font-weight: 600; }
+
+  /* Section heads */
+  h2 {
+    font-weight: 640;
+    font-size: 1.32rem;
+    letter-spacing: -0.01em;
+    color: var(--text-hi);
+    margin: 3.4rem 0 0.4rem;
+  }
+  .sec-note { color: var(--muted); font-size: 0.94rem; margin: 0 0 1.3rem; max-width: 54ch; }
+
+  hr.rule {
+    border: 0;
+    border-top: 1px solid var(--line);
+    margin: 3.2rem 0 0;
+  }
+
+  /* Legend */
+  .legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem 1.4rem;
+    margin: 2.2rem 0 0;
+    padding: 0.95rem 1.15rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    font-size: 0.85rem;
+  }
+  .legend .item { display: flex; align-items: center; gap: 0.55rem; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .dot.now { background: var(--now); }
+  .dot.next { background: var(--next); }
+  .dot.later { background: var(--later); }
+  .dot.never { background: var(--never); }
+  .legend .lbl { color: var(--text); font-weight: 500; }
+  .legend .desc { color: var(--faint); }
+
+  /* Table */
+  .tbl-scroll { overflow-x: auto; margin-top: 0.4rem; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.92rem;
+    min-width: 40rem;
+  }
+  thead th {
+    text-align: left;
+    font-family: var(--mono);
+    font-size: 0.68rem;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    font-weight: 500;
+    padding: 0 0.9rem 0.7rem;
+    border-bottom: 1px solid var(--line);
+  }
+  tbody td {
+    padding: 0.85rem 0.9rem;
+    border-bottom: 1px solid var(--line);
+    vertical-align: top;
+  }
+  tbody tr:hover { background: var(--surface); }
+  td.cap { color: var(--text-hi); font-weight: 550; width: 30%; }
+  td.detail { color: var(--muted); }
+  td.stage { width: 8.5rem; }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 0.28rem 0.6rem;
+    border-radius: 6px;
+    border: 1px solid;
+    white-space: nowrap;
+  }
+  .chip.now   { color: #b8d6f0; border-color: rgba(91,157,217,0.4); background: rgba(91,157,217,0.1); }
+  .chip.next  { color: #e3c98f; border-color: rgba(200,161,90,0.4); background: rgba(200,161,90,0.1); }
+  .chip.later { color: #b3b8c4; border-color: rgba(125,132,146,0.35); background: rgba(125,132,146,0.08); }
+
+  /* Anti-scope block */
+  .anti {
+    margin-top: 0.6rem;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--never);
+    border-radius: 10px;
+    padding: 1.4rem 1.6rem;
+  }
+  .anti ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.85rem; }
+  .anti li { padding-left: 1.5rem; position: relative; color: var(--text); }
+  .anti li::before {
+    content: "✕";
+    position: absolute; left: 0; top: 0;
+    color: var(--never); font-size: 0.85rem; font-weight: 700;
+  }
+  .anti li span { color: var(--muted); }
+
+  /* first-build callout */
+  .spine {
+    margin-top: 0.6rem;
+    background: linear-gradient(180deg, rgba(91,157,217,0.08), rgba(91,157,217,0.02));
+    border: 1px solid rgba(91,157,217,0.25);
+    border-radius: 12px;
+    padding: 1.5rem 1.7rem;
+  }
+  .spine ol { margin: 0.2rem 0 0; padding-left: 0; counter-reset: step; list-style: none; display: flex; flex-direction: column; gap: 0.7rem; }
+  .spine li { position: relative; padding-left: 2.4rem; color: var(--text); }
+  .spine li::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute; left: 0; top: -0.05rem;
+    width: 1.55rem; height: 1.55rem;
+    display: grid; place-items: center;
+    font-family: var(--mono); font-size: 0.78rem; font-weight: 600;
+    color: var(--now);
+    border: 1px solid rgba(91,157,217,0.4);
+    border-radius: 50%;
+    background: rgba(91,157,217,0.08);
+  }
+  .spine li strong { color: var(--text-hi); font-weight: 600; }
+
+  footer {
+    margin-top: 3.5rem;
+    padding-top: 1.4rem;
+    border-top: 1px solid var(--line);
+    color: var(--faint);
+    font-size: 0.82rem;
+    font-family: var(--mono);
+    letter-spacing: 0.03em;
+  }
+</style>
+
+<div class="wrap">
+  <p class="eyebrow">Product scope · codename silo</p>
+  <h1>Silo is the base. The mind sits on top.</h1>
+  <p class="lede">A self-owned store you feed web material into — captured <strong>with real metadata</strong>, structured cleanly, and served to you <em>and to an agent over MCP</em>. Silo holds no AI itself; its whole job is to be the best possible <strong>answerable base</strong> for an intelligence (Claude) that searches it, traces your activity, and surfaces patterns from outside. Successor to the archived <em>harbor</em>.</p>
+
+  <div class="spine" style="margin-top:1.8rem;background:linear-gradient(180deg,rgba(200,161,90,0.07),rgba(200,161,90,0.02));border-color:rgba(200,161,90,0.28);">
+    <p style="margin:0 0 0.6rem;font-family:var(--mono);font-size:0.7rem;letter-spacing:0.16em;text-transform:uppercase;color:var(--next);">The binding principle</p>
+    <p style="margin:0;color:var(--text-hi);font-size:1.05rem;font-weight:550;line-height:1.5;">No AI lives inside silo.</p>
+    <p style="margin:0.5rem 0 0;color:var(--muted);">Silo captures, structures, and serves. Every intelligent act — semantic search, trend-tracking, pattern-spotting, summarizing — is performed by an external agent reaching in over MCP. Silo's obligation is only to hold the data in a form that <em>answers well</em>.</p>
+  </div>
+
+  <div class="legend" role="list">
+    <span class="item" role="listitem"><span class="dot now"></span><span class="lbl">Now</span><span class="desc">the first build</span></span>
+    <span class="item" role="listitem"><span class="dot next"></span><span class="lbl">Next</span><span class="desc">near increments</span></span>
+    <span class="item" role="listitem"><span class="dot later"></span><span class="lbl">Later</span><span class="desc">endpoint, parked</span></span>
+    <span class="item" role="listitem"><span class="dot never"></span><span class="lbl">Not silo</span><span class="desc">deliberate anti-scope</span></span>
+  </div>
+
+  <h2>The spine — what the first build nails</h2>
+  <p class="sec-note">One motion, done well enough to trust. Everything else is a stub until this is solid.</p>
+  <div class="spine">
+    <ol>
+      <li><strong>Save a link</strong> — paste one (or a few) into silo</li>
+      <li><strong>Silo prepares its metadata</strong> — fetches title, description, site, image, and full text; the entry arrives <em>understood</em> and <em>answerable</em></li>
+      <li><strong>It lands as a rich entry</strong> in a list you trust — scannable, not a wall of blue links</li>
+      <li><strong>Tags</strong> organize it — the one lightweight primitive (they also carry any "toread/done" workflow, so no separate queue)</li>
+      <li><strong>Find it again</strong> — basic full-text search across everything saved (capture is only worth it if find-later works)</li>
+      <li><strong>Import a pile in, export it all out</strong> — never locked in, from day one</li>
+    </ol>
+    <p style="margin:1.1rem 0 0;padding-top:0.9rem;border-top:1px solid var(--line);color:var(--muted);font-size:0.9rem;">Captured richly and structured cleanly <em>from the first save</em> — so the agent layer bolts on later without a re-capture.</p>
+  </div>
+
+  <h2>Capability map</h2>
+  <p class="sec-note">Read top to bottom: the <span style="color:var(--now)">Now</span> rows are the first build. <span style="color:var(--next)">Next</span> and <span style="color:var(--later)">Later</span> are in the endpoint but parked out of the active plan.</p>
+  <div class="tbl-scroll">
+    <table>
+      <thead>
+        <tr><th>Capability</th><th>What it means for you</th><th>Stage</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td class="cap">Save "just a link"</td>
+          <td class="detail">Paste any URL — recognized or not — and it's captured. The universal floor that always works.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Rich metadata + full text</td>
+          <td class="detail">Title, description, site name, preview image, <em>and the page's readable text</em> — pulled and stored on save. Turns a URL into a real, searchable, answerable card.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Trusted list view</td>
+          <td class="detail">A clean, scannable list of everything saved — the place you go to see your material. Crisp boundary: clicking an item opens the <em>original</em> in a new tab; silo shows the card, never renders content (the in-silo reader stays Later).</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Tags</td>
+          <td class="detail">Create tags, assign them to links, one link holds many tags (many-to-many). Your one organizing tool — can also carry "toread/done" if you want.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Trash (soft delete)</td>
+          <td class="detail">Delete → link goes to trash, restorable. Trash auto-empties after a configurable window (7 / 30 days). No permanent archive, no content snapshots — a link is either in your library or on its way out.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Notes field</td>
+          <td class="detail">One optional free-form note per item — why you saved it, a reaction, the line that mattered. Turns a clip into a trace of what you thought. The agent can read it. (One field, not many.)</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Basic search</td>
+          <td class="detail">Full-text search across titles, extracted text, tags, and notes. A list without search stops being trustworthy at ~100 items — find-later is half the core loop. (The same operations MCP re-exposes later.)</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Duplicate handling</td>
+          <td class="detail">Re-save a URL silo already has (incl. tracking-param variants) → silo recognizes it, tells you, and merges tags/notes instead of creating a twin. One URL = one item.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Edit an item</td>
+          <td class="detail">Correct a wrong title/description, change tags/notes. Metadata fetching <em>will</em> get things wrong; you must be able to fix it. Small, trust-critical.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Honest degraded capture</td>
+          <td class="detail">Paywalls / JS-walls / dead links: the item still saves (metadata-only or bare URL), the card shows what was and wasn't captured, and you can retry. Silo never pretends.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Import / Export</td>
+          <td class="detail">Bring an existing pile in; take everything back out. Bulk import lands <em>instantly raw</em>, then enriches (metadata / full text) visibly in the background — no thousand-fetch wait. No lock-in, from the start.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
+          <td class="cap">MCP surface</td>
+          <td class="detail">Claude reaches into silo: add a link, list/filter/search items, read an item's details + notes. Reuses the exact operations the human UI uses. <strong>The immediate second increment</strong> — it's silo's identity, it's cheap once the core exists, and building it early keeps the store agent-native rather than UI-shaped.</td>
+          <td class="stage"><span class="chip next"><span class="dot next"></span>Next</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Plugin system + first plugins (HN, Twitter)</td>
+          <td class="detail">One increment: the source-plugin base is built <em>together with</em> its first real plugins — HN and Twitter prove the base isn't a framework in a vacuum. Each plugin recognizes its source and produces a richer card (HN: title, points, comments · Twitter: bookmarks/posts/replies). Caveat carried forward: Twitter has no friendly API way in — its capture path likely rides on the browser extension below.</td>
+          <td class="stage"><span class="chip next"><span class="dot next"></span>Next</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Capture extension (Chrome / Raycast)</td>
+          <td class="detail">Save in one keystroke instead of pasting — the habit-maker, and the likely <em>prerequisite</em> for reliable Twitter capture (logged-in browser beats the paid/restrictive API). <strong>Activity trail rides along with this:</strong> once saving is fast &amp; frequent, silo records opened-at / touch-count so an agent can answer "what was I into in June", "what's gone stale".</td>
+          <td class="stage"><span class="chip next"><span class="dot next"></span>Next</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Semantic index (mechanical)</td>
+          <td class="detail">A vector/embedding index silo <em>stores and matches</em> so "find by meaning" queries work — <strong>not AI in silo</strong>. Silo holds the index; the agent decides relevance. Bolts onto the same base once it proves itself.</td>
+          <td class="stage"><span class="chip later"><span class="dot later"></span>Later</span></td>
+        </tr>
+        <tr>
+          <td class="cap">Reading experience</td>
+          <td class="detail">A good in-silo viewer/reader — articles, tweets, HN threads rendered cleanly so silo is a nice place to actually read, not just store.</td>
+          <td class="stage"><span class="chip later"><span class="dot later"></span>Later</span></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2>What silo is deliberately <em>not</em></h2>
+  <p class="sec-note">The anti-scope is a feature — and the top two lines are what give silo its identity. Harbor bloated because it refused to say no; these are the no's that keep silo small and sharp.</p>
+  <div class="anti">
+    <ul>
+      <li>No AI inside silo. <span>Silo never summarizes, classifies, or "understands" on its own. All intelligence is an external agent over MCP. Silo is the shelves, not the librarian.</span></li>
+      <li>Not a file store. <span>Silo saves references to web material — no PDF/document upload, no ingesting local files. If you can't point a URL at it, it's not silo's job.</span></li>
+      <li>Not a content archive. <span>No permanent page snapshots (harbor's SingleFile). Silo stores metadata + extracted text, not a frozen copy of the page. Deletion is soft (trash → auto-purge), not hoarding.</span></li>
+      <li>Not trying to natively understand <em>every</em> website. <span>"Just a link" is the floor; source plugins are the opt-in upgrade for the few sources you care about.</span></li>
+      <li>Not harbor's everything-store. <span>No restaurants / products / apps as first-class types, no 8-intent taxonomy, no weekly digest, no read-later queue (tags do that job).</span></li>
+      <li>Not multi-user. <span>Silo is single-user and private — yours. No sharing, no accounts-for-others, no social layer.</span></li>
+      <li>Not deciding its stack yet. <span>Every technical/infra choice is intentionally open — product shape comes first.</span></li>
+    </ul>
+  </div>
+
+  <footer>silo · scope map · 2026-07-03 · rev 6 — plugin system + HN + Twitter merged into one increment · draft for review</footer>
+</div>

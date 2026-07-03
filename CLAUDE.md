@@ -1,0 +1,61 @@
+# Silo — build project
+
+An **agent-native personal link store**. Feed in web material (links, Twitter/X posts, HN posts, videos) captured with rich metadata + full text, organized by tags + one note field, searchable, and served over MCP so an external agent (Claude) does all the intelligence. **No AI lives inside silo** — silo is the substrate; the mind sits on top, over MCP.
+
+Planning and design are complete and live in **`docs/`**. Read them before building:
+- `docs/README.md` — index + first decisions
+- `docs/product/scope.html` — what to build, what's next, the anti-scope
+- `docs/product/future-scope.md` — parked ideas; do NOT build these
+- `docs/foundation.md` — the "core is ready" checklist (gates all feature work)
+- `docs/design/tokens.md` — the "Oat" design system (source of truth for look)
+- `docs/design/app/` — the captured UI prototype (`Silo-v2.html` + reference PNGs)
+
+The **stack is deliberately undecided** — choosing it is the first real decision, made here.
+
+## Build philosophy (binding)
+
+- **Smallest real thing first, then grow by increments** toward an OSS-able endpoint. No "v0/v1/MVP/phase" vocabulary. No big upfront plan — the backlog is discovered as you build.
+- **The endpoint, not the minimum.** The horizon is "the whole project, built well enough to be open-source," reached by accumulating small finished increments.
+- **Park the rest.** Anything not on the path to the current increment goes to `docs/product/future-scope.md` as it surfaces — never into the active plan.
+
+## Build workflow (binding)
+
+- **The unit of work is a vertical slice** — the thinnest end-to-end increment that leaves working software. Never a half-built foundation, never a phase.
+- **First slice** = the smallest real path through the system: paste a link → fetch metadata + full text → it appears in the list → find it again.
+- Each slice: research → plan → **you approve (gate 1)** → build → self-QA → adversarial review → **you test + approve (gate 2)** → pick the next smallest slice.
+
+## Foundation before features (gated)
+
+**No feature increment is built until `docs/foundation.md` is satisfied.** The foundation is itself built as small increments, smallest-first. In order:
+
+1. **Guardrails before code.** A `docs/rules/` directory — one file per language/stack — encoding how code here must be written (conventions, idioms, forbidden patterns), plus the Claude agents/skills/hooks that enforce it (lint, type-check, test, format). The point: bad code cannot land unnoticed. `docs/rules/` is the source of truth for "good code here"; reference it in every build brief.
+2. **Data architecture up front.** Model, ownership, migrations, versioning/rollout. Design it MCP-answerable (rich metadata + full text queryable) and so a mechanical semantic index can bolt on later — without an AI ever living inside silo.
+3. **Tooling chosen + recorded.** Production libs, linter + type-checker + formatter, a bug-finding/code-quality tool. Record choices in `docs/foundation.md` / `docs/rules/`.
+
+## Orchestration (binding)
+
+- The **lead agent (Opus-class) thinks, researches, plans, reviews** — and writes a **method file** (spec + implementation plan together) before any build.
+- **Delegate the build to a Sonnet subagent** given the method file — unless the change is genuinely trivial, then inline. Research runs on Opus.
+
+## Engineering principles (binding)
+
+- **Every change is easy to QA and leaves the codebase working** — never commit broken code. Each increment ships with a runnable check / observable behavior.
+- **Write for extension + correctness first**, not over-abstraction. Performance-aware by default (no obvious N+1s, no needless allocation on hot paths); measure before micro-optimizing.
+- **Naming & layout:** prefer scoped/nested paths over multi-word names (`packages/mcp/server`, not `mcp-server`). Clear hierarchy over flat hyphenated names.
+
+## Git (binding)
+
+- **Commit promptly** the moment a unit of work is complete — don't wait for confirmation. Each completed slice (or meaningful step) is its own commit.
+- **Stage by explicit path.** Never `git add -A`, `git add .`, or `git commit -a` when the tree may hold unrelated changes. Leave untouched files as found.
+- Branch off `main` for feature work; `main` always passes the quality gate (typecheck + lint + test).
+- End commit messages with:
+
+  `Co-Authored-By: Claude <noreply@anthropic.com>`
+
+## Design fidelity
+
+Build against `docs/design/tokens.md` and the captured prototype. Binding design rules: Geist Sans (400/500 only), the warm "Oat" ramp in both themes, amber only as the brand dot + status marks (never a button fill), the four marks (¶ note · ◆ added-by-claude · ◌ incomplete), "silence means complete" (healthy rows carry no status chrome). Privacy: no third-party calls per row (no Google favicon fetch) — silo is self-owned.
+
+## User context
+
+- GitHub: `amitray007`. Module paths / remote / release namespace use it — e.g. `github.com/amitray007/silo`.
