@@ -1,5 +1,12 @@
 {
   "$schema": "https://unpkg.com/knip@5/schema.json",
   "ignore": ["docs/**"],
-  "ignoreWorkspaces": ["packages/tsconfig"]
+  "ignoreWorkspaces": ["packages/tsconfig"],
+  "workspaces": {
+    "packages/db": {
+      "entry": ["src/schema/index.ts"],
+      "drizzle": true,
+      "ignoreBinaries": ["psql"]
+    }
+  }
 }
