@@ -1,43 +1,27 @@
-import { execFileSync } from 'node:child_process';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { runMigrations } from './migrate.js';
+import { createDisposableDatabase, postgresReachable } from './test-support/disposable-database.js';
 
 // Integration tests: they need a real Postgres. They create a disposable
 // database, run the real migration set against it, and drop it. If no local
 // Postgres is reachable, the suite is skipped rather than failed — CI provides
 // Postgres, local dev may not.
-const ADMIN_URL = process.env.TEST_DATABASE_URL ?? 'postgres://localhost:5432/postgres';
-const TEST_DB = `silo_migrate_test_${process.pid}`;
-
-function adminExec(statement: string): void {
-  execFileSync('psql', [ADMIN_URL, '-v', 'ON_ERROR_STOP=1', '-c', statement], {
-    stdio: 'pipe',
-  });
-}
-
-function postgresReachable(): boolean {
-  try {
-    adminExec('SELECT 1');
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 
 describeIfPg('migrate (integration)', () => {
-  const testUrl = ADMIN_URL.replace(/\/[^/]*$/, `/${TEST_DB}`);
+  let testUrl: string;
+  let dropDatabase: () => void;
 
   beforeAll(() => {
-    adminExec(`DROP DATABASE IF EXISTS ${TEST_DB}`);
-    adminExec(`CREATE DATABASE ${TEST_DB}`);
+    const database = createDisposableDatabase('silo_migrate_test');
+    testUrl = database.url;
+    dropDatabase = database.drop;
   });
 
   afterAll(() => {
-    adminExec(`DROP DATABASE IF EXISTS ${TEST_DB} WITH (FORCE)`);
+    dropDatabase();
   });
 
   it('applies the migration set and enables the vector extension', async () => {

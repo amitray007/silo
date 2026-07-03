@@ -6,7 +6,10 @@ import { defineConfig } from 'drizzle-kit';
 // `studio` — fail on their own with an empty URL, which is the right time.
 export default defineConfig({
   dialect: 'postgresql',
-  schema: './src/schema',
+  // Point at the barrel file, not the directory: a directory glob would also
+  // pick up *.test.ts files in src/schema (they import vitest, which
+  // drizzle-kit's CJS loader cannot require()).
+  schema: './src/schema/index.ts',
   out: './drizzle',
   dbCredentials: {
     url: process.env.DATABASE_URL ?? '',

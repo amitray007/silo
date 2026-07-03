@@ -8,6 +8,13 @@
       "when": 1783105702015,
       "tag": "0000_enable-extensions",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1783107494265,
+      "tag": "0001_mature_madame_hydra",
+      "breakpoints": true
     }
   ]
 }
