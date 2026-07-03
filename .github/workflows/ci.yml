@@ -1,0 +1,50 @@
+name: CI
+
+# Mirrors the local lefthook gate so --no-verify cannot bypass it.
+# Make this a required status check on main in branch-protection settings.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    name: typecheck · lint · test · quality
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm turbo run check-types
+      - run: pnpm turbo run test
+      - run: pnpm quality
+
+  pr-title:
+    name: PR title (conventional commits)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - name: Check PR title is a conventional commit
+        env:
+          TITLE: ${{ github.event.pull_request.title }}
+        run: |
+          echo "PR title: $TITLE"
+          if ! printf '%s' "$TITLE" | grep -qE '^(feat|fix|docs|refactor|perf|test|chore|build|ci)(\(.+\))?!?: .+'; then
+            echo "::error::PR title must be a conventional commit, e.g. 'feat: add search'"
+            exit 1
+          fi
