@@ -15,6 +15,10 @@ jobs:
   analyze:
     name: Analyze (javascript-typescript)
     runs-on: ubuntu-latest
+    # CodeQL uploads to GitHub code-scanning, which on a PRIVATE repo requires
+    # GitHub Advanced Security (not purchased). Skip while private; code-scanning
+    # is free once the repo is public, and this job activates automatically then.
+    if: ${{ !github.event.repository.private }}
     permissions:
       security-events: write
       actions: read
