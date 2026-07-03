@@ -3,6 +3,7 @@ packages:
   - "packages/mcp/*"
 
 catalog:
+  lefthook: 2.1.9
   typescript: 6.0.3
   vitest: 4.1.9
   "@biomejs/biome": 2.5.2

@@ -32,3 +32,8 @@ yarn-error.log*
 
 # pnpm
 .pnpm-store/
+
+# Claude Code local state (keep hooks + settings.json, ignore the rest)
+.claude/worktrees/
+.claude/settings.local.json
+.claude/*.local.json

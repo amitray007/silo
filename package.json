@@ -14,13 +14,15 @@
     "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
     "dupes": "jscpd",
     "deadcode": "knip",
-    "quality": "pnpm lint && pnpm boundaries && pnpm dupes && pnpm deadcode"
+    "quality": "pnpm lint && pnpm boundaries && pnpm dupes && pnpm deadcode",
+    "prepare": "lefthook install"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
     "dependency-cruiser": "catalog:",
     "jscpd": "catalog:",
     "knip": "catalog:",
+    "lefthook": "catalog:",
     "turbo": "2.10.3"
   }
 }

@@ -29,6 +29,8 @@ The **stack is deliberately undecided** — choosing it is the first real decisi
 **No feature increment is built until `docs/foundation.md` is satisfied.** The foundation is itself built as small increments, smallest-first. In order:
 
 1. **Guardrails before code.** A `docs/rules/` directory — one file per language/stack — encoding how code here must be written (conventions, idioms, forbidden patterns), plus the Claude agents/skills/hooks that enforce it (lint, type-check, test, format). The point: bad code cannot land unnoticed. `docs/rules/` is the source of truth for "good code here"; reference it in every build brief.
+   - Rules live in [`docs/rules/`](docs/rules/README.md): [typescript](docs/rules/typescript.md) · [architecture](docs/rules/architecture.md) (core/adapter boundary) · [api-hono](docs/rules/api-hono.md) · [db-drizzle](docs/rules/db-drizzle.md) · [testing](docs/rules/testing.md).
+   - Enforcement: `pnpm quality` (Biome + import boundaries + jscpd + knip) and `pnpm turbo run check-types test`. Gated locally by lefthook (pre-commit: Biome on staged; pre-push: types + test + quality) and by Claude Code hooks in `.claude/` (per-edit feedback + a done-gate). CI (increment 1, U5) mirrors these so `--no-verify` can't bypass them.
 2. **Data architecture up front.** Model, ownership, migrations, versioning/rollout. Design it MCP-answerable (rich metadata + full text queryable) and so a mechanical semantic index can bolt on later — without an AI ever living inside silo.
 3. **Tooling chosen + recorded.** Production libs, linter + type-checker + formatter, a bug-finding/code-quality tool. Record choices in `docs/foundation.md` / `docs/rules/`.
 
@@ -36,6 +38,7 @@ The **stack is deliberately undecided** — choosing it is the first real decisi
 
 - The **lead agent (Opus-class) thinks, researches, plans, reviews, and orchestrates** — and writes a **method file** (spec + implementation plan together) before any build. **Opus never writes feature code itself**; its job is planning and orchestration.
 - **The builder model is Sonnet.** All build/implementation work in the build stage is delegated to a **Sonnet subagent** given the method file. Opus only plans, reviews, and coordinates. (Genuinely trivial edits may be inlined, but the default is: Opus plans → Sonnet builds.) Research runs on Opus.
+- **Config/docs-heavy units may be built inline** when the user directs it — for units that are mostly configuration files, CI YAML, or markdown (not feature logic), inline authoring + self-verify is acceptable and often faster than delegation. Feature code still goes to Sonnet.
 
 ## Engineering principles (binding)
 

@@ -1,0 +1,26 @@
+# Guardrail hooks — the committer-facing gate (human or agent).
+# Layering: Claude Code hooks give the agent fast per-edit feedback;
+# these hooks are the hard gate on commit/push; CI (U5) mirrors them so
+# --no-verify cannot defeat the gate.
+#
+# Correctness rule: format/lint runs on STAGED files (fast, per-file safe),
+# but check-types and tests run on the WHOLE project — the TS checker needs
+# the full type graph, so staged-only would give misleading pass/fail.
+
+pre-commit:
+  parallel: true
+  commands:
+    biome:
+      glob: "*.{ts,tsx,js,jsx,json,jsonc,css}"
+      run: pnpm biome check --write --no-errors-on-unmatched {staged_files}
+      stage_fixed: true
+
+pre-push:
+  parallel: true
+  commands:
+    check-types:
+      run: pnpm turbo run check-types
+    test:
+      run: pnpm turbo run test
+    quality:
+      run: pnpm quality
