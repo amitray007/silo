@@ -12,7 +12,8 @@
       "outputs": []
     },
     "test": {
-      "dependsOn": ["^build"]
+      "dependsOn": ["^build"],
+      "passThroughEnv": ["DATABASE_URL", "TEST_DATABASE_URL", "CI_REQUIRE_DB"]
     }
   }
 }
