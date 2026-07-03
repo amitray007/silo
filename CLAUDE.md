@@ -29,8 +29,9 @@ The **stack is deliberately undecided** — choosing it is the first real decisi
 After **every major code change / implementation unit**, before moving to the next:
 1. **Run the local review tooling** — see `CLAUDE.local.md` (machine-local memory, not committed) for the exact tools and commands we use.
 2. **Independent review** — run a separate review on our side via the `compound-engineering:ce-code-review` skill / persona subagents (adversarial + correctness + the conditional personas that fit the diff).
-3. **Resolve every issue** both reviews surface (fix, or consciously dismiss with a recorded reason), re-run the quality gate (`check-types` + `test` + `quality`), and re-review if fixes were substantial.
-4. **Only then** proceed to the next unit. Never stack a new unit on top of an unreviewed one.
+3. **Intense QA** — beyond "tests pass," exercise the actual behavior end-to-end: happy paths, edge cases, failure/error paths, and adversarial inputs, against real infrastructure (e.g. a real Postgres for DB work). Drive the feature, observe the behavior, don't just trust the unit tests.
+4. **Resolve every issue** both reviews + QA surface (fix, or consciously dismiss with a recorded reason), re-run the quality gate (`check-types` + `test` + `quality`), and re-review if fixes were substantial.
+5. **Only then** proceed to the next unit. Never stack a new unit on top of an unreviewed one.
 
 > How we work (local tooling, personal setup, machine-specific commands) lives in `CLAUDE.local.md` — read it for the specifics. It is gitignored and never committed.
 
