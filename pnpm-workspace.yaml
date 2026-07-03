@@ -18,3 +18,5 @@ catalog:
   tsx: 4.23.0
   zod: 4.4.3
   normalize-url: 9.0.1
+  undici: 8.6.0
+  "ipaddr.js": 2.4.0
