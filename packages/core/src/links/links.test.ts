@@ -1,12 +1,8 @@
-import { runMigrations } from '@silo/db/migrate';
-import {
-  createDisposableDatabase,
-  postgresReachable,
-} from '@silo/db/test-support/disposable-database';
+import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import type { drizzle } from 'drizzle-orm/node-postgres';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { setupPgHarness } from '../test-support/pg-harness.js';
 import type * as LinksOps from './links.js';
 
 /**
@@ -14,51 +10,19 @@ import type * as LinksOps from './links.js';
  * dedup/merge, TOCTOU, trash/restore, search ranking, and tag m2m behavior
  * are all database-level behaviors mocks can't prove.
  *
- * `@silo/db`'s `db`/`pool` singleton (which `links.ts` imports) reads
- * `DATABASE_URL` at module-load time (see `packages/db/src/client.ts`), so
- * the env var must be set to THIS suite's disposable database before
- * `./links.js` is first imported anywhere — hence the dynamic `import()`
- * inside `beforeAll`, after the env var is set, rather than a static
- * top-level import (which vitest would hoist ahead of the env-var write).
+ * See `../test-support/pg-harness.ts` for why the module under test is
+ * loaded via a dynamic `import()` inside the harness's `beforeAll`.
  */
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 
 describeIfPg('links operations (integration)', () => {
-  let dropDatabase: () => void;
+  const harness = setupPgHarness('silo_core_links_test', () => import('./links.js'));
   let ops: typeof LinksOps;
   let rawDb: ReturnType<typeof drizzle>;
-  let rawPool: Pool;
 
-  beforeAll(async () => {
-    const database = createDisposableDatabase('silo_core_links_test');
-    dropDatabase = database.drop;
-
-    const migratePool = new Pool({ connectionString: database.url });
-    const migrateDb = drizzle(migratePool);
-    // runMigrations closes migratePool for us. Path is relative to this
-    // test file's cwd (packages/core), so it reaches back to db's migrations.
-    await runMigrations(migrateDb, migratePool, '../db/drizzle');
-
-    process.env.DATABASE_URL = database.url;
-    ops = await import('./links.js');
-
-    rawPool = new Pool({ connectionString: database.url });
-    rawDb = drizzle(rawPool);
-  });
-
-  afterAll(async () => {
-    // Close the @silo/db singleton pool `ops` (links.ts) runs on too — it's
-    // never closed by anything else, and dropping the database with an open
-    // connection still attached to it fires a noisy (but harmless) "idle
-    // client" error on the pool's `error` handler otherwise.
-    const { pool: opsPool } = await import('@silo/db');
-    await opsPool.end();
-    await rawPool.end();
-    dropDatabase();
-  });
-
-  afterEach(async () => {
-    await rawDb.execute(sql`TRUNCATE TABLE link_tags, links, tags RESTART IDENTITY CASCADE`);
+  beforeEach(() => {
+    ops = harness.mod();
+    rawDb = harness.rawDb();
   });
 
   async function liveCountForCanonicalUrl(canonicalUrl: string): Promise<number> {
