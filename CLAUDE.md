@@ -34,8 +34,8 @@ The **stack is deliberately undecided** — choosing it is the first real decisi
 
 ## Orchestration (binding)
 
-- The **lead agent (Opus-class) thinks, researches, plans, reviews** — and writes a **method file** (spec + implementation plan together) before any build.
-- **Delegate the build to a Sonnet subagent** given the method file — unless the change is genuinely trivial, then inline. Research runs on Opus.
+- The **lead agent (Opus-class) thinks, researches, plans, reviews, and orchestrates** — and writes a **method file** (spec + implementation plan together) before any build. **Opus never writes feature code itself**; its job is planning and orchestration.
+- **The builder model is Sonnet.** All build/implementation work in the build stage is delegated to a **Sonnet subagent** given the method file. Opus only plans, reviews, and coordinates. (Genuinely trivial edits may be inlined, but the default is: Opus plans → Sonnet builds.) Research runs on Opus.
 
 ## Engineering principles (binding)
 
@@ -45,7 +45,7 @@ The **stack is deliberately undecided** — choosing it is the first real decisi
 
 ## Git (binding)
 
-- **Commit promptly** the moment a unit of work is complete — don't wait for confirmation. Each completed slice (or meaningful step) is its own commit.
+- **Commit promptly and continuously** the moment a unit of work is complete — don't wait for confirmation. Keep committing as work proceeds; each completed slice (or meaningful step) is its own commit. Never let finished work sit uncommitted.
 - **Stage by explicit path.** Never `git add -A`, `git add .`, or `git commit -a` when the tree may hold unrelated changes. Leave untouched files as found.
 - Branch off `main` for feature work; `main` always passes the quality gate (typecheck + lint + test).
 - End commit messages with:
