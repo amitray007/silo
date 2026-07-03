@@ -35,7 +35,7 @@ The stack is already decided in the origin requirements doc: TypeScript everywhe
 ### Code quality (DRY / abstraction / dead code)
 - R8. Duplication detection (jscpd) fails CI when copy-paste exceeds a set threshold.
 - R9. Complexity ceilings (Biome cognitive-complexity rule) and dead-code detection (knip for unused files/exports/deps) run in the gate.
-- R10. Spell-check (cspell) over identifiers and comments runs in CI with a project dictionary.
+- ~~R10. Spell-check (cspell)~~ — dropped 2026-07-03 (maintaining a domain-word dictionary is more nuisance than value at this stage). The gate is Biome + boundaries + jscpd + knip.
 
 ### Enforcement (local + CI + agent)
 - R11. lefthook runs Biome on staged files at pre-commit (auto-fix + re-stage) and `check-types` + `test` on the whole project at pre-push; it never runs `tsc` on staged-files-only.
