@@ -25,3 +25,18 @@
 - `pnpm turbo run test` — whole workspace, cached (the gate).
 - `pnpm --filter @silo/core test` — one package.
 - Coverage is a separate root job (`vitest run --coverage`), not per-package.
+
+## Integration tests + CI
+
+- Integration suites need a real Postgres; they `describe.skip` when it's
+  unreachable so local dev without a DB still passes.
+- **CI must not silently skip them.** In CI, `CI_REQUIRE_DB=1` makes an
+  unreachable DB a hard failure (not a skip), and the workflow provides a
+  `pgvector/pgvector:pg18` service. A green build with skipped integration
+  tests is the failure mode to prevent — always confirm CI *ran* the tests,
+  not just that it went green.
+- **Turbo env gotcha:** `turbo run test` sandboxes task env and strips any
+  var not declared in the `test` task's `passThroughEnv`. DB env vars
+  (`DATABASE_URL`, `TEST_DATABASE_URL`, `CI_REQUIRE_DB`) are declared there —
+  a new env var the tests read at runtime must be added to `passThroughEnv`
+  or it won't reach the test process in CI.
