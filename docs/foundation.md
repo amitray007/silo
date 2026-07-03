@@ -14,5 +14,5 @@ No **feature** increment is built until every item below is checked (Build philo
 
 ## Engineering foundation (fill in AFTER product shape is locked)
 - [x] Guardrails: `docs/rules/` per language/stack + Claude agents/skills/hooks that enforce them — (2026-07-04, increment 1: `docs/rules/` + lefthook + `.claude/` hooks + CI)
-- [ ] Data architecture sketched (models, ownership, migrations, rollout/versioning path) ← **next increment (foundation item 2)**
+- [x] Data architecture sketched (models, ownership, migrations, rollout/versioning path) — (2026-07-04, increment 2: `packages/db` schema (links/tags/link_tags + source_data JSONB + generated tsvector) + drizzle-kit migrations + `packages/core` operations (dedup/merge/search/trash/restore/purge); MCP-answerable, pgvector-ready. All units reviewed + QA'd vs real Postgres.)
 - [x] Tooling chosen + recorded: production libs, linter + type-checker + formatter, a bug-finding/code-quality tool — (2026-07-04, increment 1: TS+Postgres stack, pnpm+Turborepo, Biome, Vitest, tsc, jscpd, knip, dependency-cruiser; recorded in `docs/brainstorms/2026-07-03-engineering-foundation-requirements.md` + `docs/rules/`)
