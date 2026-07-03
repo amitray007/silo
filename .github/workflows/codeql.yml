@@ -20,7 +20,7 @@ jobs:
       actions: read
       contents: read
     steps:
-      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Initialize CodeQL
         uses: github/codeql-action/init@e8e8e51caba890f74f97e228d00b0b81b666ee4c # v3
         with:
