@@ -14,12 +14,16 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@silo/db": "workspace:*",
+    "drizzle-orm": "catalog:",
     "normalize-url": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "pg": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
