@@ -8,11 +8,19 @@
   "scripts": {
     "build": "turbo run build",
     "check-types": "turbo run check-types",
-    "lint": "turbo run lint",
+    "lint": "biome check .",
+    "format": "biome check --write .",
     "test": "turbo run test",
-    "quality": "turbo run quality"
+    "boundaries": "depcruise packages --config .dependency-cruiser.cjs",
+    "dupes": "jscpd",
+    "deadcode": "knip",
+    "quality": "pnpm lint && pnpm boundaries && pnpm dupes && pnpm deadcode"
   },
   "devDependencies": {
+    "@biomejs/biome": "catalog:",
+    "dependency-cruiser": "catalog:",
+    "jscpd": "catalog:",
+    "knip": "catalog:",
     "turbo": "2.10.3"
   }
 }

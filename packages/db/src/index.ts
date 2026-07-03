@@ -1,1 +1,1 @@
-export const name = "@silo/db";
+export const name = '@silo/db';

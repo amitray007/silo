@@ -1,1 +1,1 @@
-export const name = "@silo/mcp-server";
+export const name = '@silo/mcp-server';

@@ -13,9 +13,6 @@
     },
     "test": {
       "dependsOn": ["^build"]
-    },
-    "quality": {
-      "outputs": []
     }
   }
 }

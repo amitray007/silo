@@ -1,9 +1,9 @@
-import { describe, expect, it } from "vitest";
-import { name } from "./index.js";
+import { describe, expect, it } from 'vitest';
+import { name } from './index.js';
 
-describe("@silo/db placeholder", () => {
-  it("exports a defined marker", () => {
+describe('@silo/db placeholder', () => {
+  it('exports a defined marker', () => {
     expect(name).toBeDefined();
-    expect(name).toBe("@silo/db");
+    expect(name).toBe('@silo/db');
   });
 });
