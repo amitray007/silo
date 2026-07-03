@@ -17,12 +17,29 @@ function adminExec(statement: string): void {
   });
 }
 
-/** True if a local/CI Postgres is reachable — gates `describe.skip` fallback. */
+/**
+ * True if a local/CI Postgres is reachable — gates the `describe.skip`
+ * fallback so integration suites are silently skipped when no DB is present
+ * (e.g. a local dev box without Postgres).
+ *
+ * `CI_REQUIRE_DB`: when set (in CI), an unreachable DB THROWS instead of
+ * returning false. Otherwise a misconfigured service URL would make every
+ * integration suite skip and the build go green with zero integration
+ * coverage — the exact failure this guard prevents.
+ */
 export function postgresReachable(): boolean {
   try {
     adminExec('SELECT 1');
     return true;
-  } catch {
+  } catch (error) {
+    // Explicit truthy values only — `CI_REQUIRE_DB=false`/`0` must NOT require
+    // the DB (a plain truthy check would treat any non-empty string as on).
+    const requireDb = process.env.CI_REQUIRE_DB === '1' || process.env.CI_REQUIRE_DB === 'true';
+    if (requireDb) {
+      throw new Error(
+        `CI_REQUIRE_DB is set but Postgres at ${ADMIN_URL} is unreachable — refusing to skip integration tests. Cause: ${String(error)}`,
+      );
+    }
     return false;
   }
 }

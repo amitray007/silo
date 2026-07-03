@@ -20,6 +20,29 @@ jobs:
   gate:
     name: typecheck · lint · test · quality
     runs-on: ubuntu-latest
+    # pgvector/pgvector:pg18 (not plain postgres:18) because migrations run
+    # `CREATE EXTENSION vector` — this image ships pgvector so it just works.
+    services:
+      postgres:
+        image: pgvector/pgvector:pg18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      # The integration harness reads TEST_DATABASE_URL (admin URL, for
+      # createdb/psql) and DATABASE_URL. CI_REQUIRE_DB makes an unreachable DB
+      # fail the build instead of silently skipping the integration suites.
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+      CI_REQUIRE_DB: "1"
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
