@@ -24,6 +24,14 @@ The **stack is deliberately undecided** — choosing it is the first real decisi
 - **First slice** = the smallest real path through the system: paste a link → fetch metadata + full text → it appears in the list → find it again.
 - Each slice: research → plan → **you approve (gate 1)** → build → self-QA → adversarial review → **you test + approve (gate 2)** → pick the next smallest slice.
 
+## Review protocol (binding)
+
+After **every major code change / implementation unit**, before moving to the next:
+1. **CodeRabbit CLI** — run `coderabbit review --plain` (or `--agent` for structured findings) on the local changes.
+2. **Independent review** — run a separate review on our side via the `compound-engineering:ce-code-review` skill / persona subagents (adversarial + correctness + the conditional personas that fit the diff).
+3. **Resolve every issue** both reviews surface (fix, or consciously dismiss with a recorded reason), re-run the quality gate (`check-types` + `test` + `quality`), and re-review if fixes were substantial.
+4. **Only then** proceed to the next unit. Never stack a new unit on top of an unreviewed one.
+
 ## Foundation before features (gated)
 
 **No feature increment is built until `docs/foundation.md` is satisfied.** The foundation is itself built as small increments, smallest-first. In order:
