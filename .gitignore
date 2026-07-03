@@ -37,3 +37,6 @@ yarn-error.log*
 .claude/worktrees/
 .claude/settings.local.json
 .claude/*.local.json
+
+# Machine-local project memory (personal tooling, not committed)
+CLAUDE.local.md
