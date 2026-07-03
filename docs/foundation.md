@@ -13,6 +13,6 @@ No **feature** increment is built until every item below is checked (Build philo
 - [x] What silo deliberately does NOT do is written down — anti-scope in `product/scope.html`: no AI inside, not a file store, not a content archive, not every-site understanding, not harbor's everything-store, not multi-user.
 
 ## Engineering foundation (fill in AFTER product shape is locked)
-- [ ] Guardrails: `docs/rules/` per language/stack + Claude agents/skills/hooks that enforce them
-- [ ] Data architecture sketched (models, ownership, migrations, rollout/versioning path)
-- [ ] Tooling chosen + recorded: production libs, linter + type-checker + formatter, a bug-finding/code-quality tool
+- [x] Guardrails: `docs/rules/` per language/stack + Claude agents/skills/hooks that enforce them — (2026-07-04, increment 1: `docs/rules/` + lefthook + `.claude/` hooks + CI)
+- [ ] Data architecture sketched (models, ownership, migrations, rollout/versioning path) ← **next increment (foundation item 2)**
+- [x] Tooling chosen + recorded: production libs, linter + type-checker + formatter, a bug-finding/code-quality tool — (2026-07-04, increment 1: TS+Postgres stack, pnpm+Turborepo, Biome, Vitest, tsc, jscpd, knip, dependency-cruiser; recorded in `docs/brainstorms/2026-07-03-engineering-foundation-requirements.md` + `docs/rules/`)
