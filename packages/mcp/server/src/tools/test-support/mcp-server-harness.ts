@@ -7,15 +7,17 @@ import {
 } from '@silo/db/test-support/disposable-database';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
+import { afterAll, beforeAll, describe, expect } from 'vitest';
 
 /**
- * Shared setup/teardown for `@silo/mcp-server` tool integration tests, driven
+ * Shared harness for `@silo/mcp-server` tool integration tests, driven
  * end-to-end through a real MCP client<->server pair (an in-memory linked
  * transport, per the SDK's `InMemoryTransport.createLinkedPair()`) against a
- * real, disposable Postgres. Factored out of `get-link.test.ts` and
- * `search-links.test.ts` (which were near-identical here) so the two suites'
- * distinct test bodies aren't buried under duplicated harness boilerplate —
- * see docs/rules/testing.md on preferring real infra for integration tests.
+ * real, disposable Postgres. The public entry point is `describeMcpTool` (at
+ * the bottom); every tool test suite (`get-link`/`search-links`/`list-links`)
+ * uses it so their distinct test bodies aren't buried under duplicated
+ * lifecycle boilerplate — see docs/rules/testing.md on preferring real infra
+ * for integration tests.
  *
  * `@silo/core`'s `db`/`pool` singleton reads `DATABASE_URL` at module-load
  * time, so both `@silo/core` and `../../server.js` (which imports it
@@ -44,7 +46,7 @@ export type McpServerTestContext = {
  * linked in-memory client<->server pair. Call from `beforeAll`; pair with
  * `teardownMcpServerTest` in `afterAll`.
  */
-export async function setupMcpServerTest(dbNamePrefix: string): Promise<McpServerTestContext> {
+async function setupMcpServerTest(dbNamePrefix: string): Promise<McpServerTestContext> {
   const database = createDisposableDatabase(dbNamePrefix);
   const migratePool = new Pool({ connectionString: database.url });
   // Relative to a test file's cwd (packages/mcp/server) — one directory
@@ -78,7 +80,7 @@ export async function setupMcpServerTest(dbNamePrefix: string): Promise<McpServe
  * any lingering session (including core's still-open pool) before dropping —
  * safe cleanup without reaching into `@silo/db` from the tool package.
  */
-export async function teardownMcpServerTest(
+async function teardownMcpServerTest(
   ctx: Pick<McpServerTestContext, 'pool' | 'dropDatabase'>,
 ): Promise<void> {
   // `finally` so a rejected `pool.end()` still runs `dropDatabase()` — the
@@ -91,4 +93,43 @@ export async function teardownMcpServerTest(
   }
 }
 
-export { postgresReachable };
+/**
+ * A `describe` block wired for MCP tool integration tests: skips the whole
+ * suite when Postgres is unreachable, spins up a fresh disposable DB + linked
+ * client<->server pair in `beforeAll`, tears it down in `afterAll`, and hands
+ * the suite body a `getContext()` (valid only inside `it`/`beforeEach`, after
+ * `beforeAll` has run). Collapses the ~25 lines of identical lifecycle
+ * boilerplate every tool test would otherwise repeat into one call.
+ */
+export function describeMcpTool(
+  dbNamePrefix: string,
+  suiteName: string,
+  body: (getContext: () => McpServerTestContext) => void,
+): void {
+  const runner = postgresReachable() ? describe : describe.skip;
+  runner(suiteName, () => {
+    let ctx: McpServerTestContext;
+    beforeAll(async () => {
+      ctx = await setupMcpServerTest(dbNamePrefix);
+    });
+    afterAll(async () => {
+      await teardownMcpServerTest(ctx);
+    });
+    body(() => ctx);
+  });
+}
+
+/**
+ * Asserts that `obj` (a `structuredContent` payload, or one item from a
+ * `results`/`links` array within one) carries none of the internal-only
+ * `links` columns that must never leak past `toStructuredContent`'s
+ * whitelist construction — `searchVector`, `canonicalUrl`, `sourceData`,
+ * `deletedAt`. Shared across `get_link`, `search_links`, and `list_links`
+ * tests, which each assert this same leak-absence property.
+ */
+export function expectNoLeakedFields(obj: unknown): void {
+  expect(obj).not.toHaveProperty('searchVector');
+  expect(obj).not.toHaveProperty('canonicalUrl');
+  expect(obj).not.toHaveProperty('sourceData');
+  expect(obj).not.toHaveProperty('deletedAt');
+}

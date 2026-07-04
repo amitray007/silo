@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerGetLink } from './tools/get-link.js';
+import { registerListLinks } from './tools/list-links.js';
 import { registerSearchLinks } from './tools/search-links.js';
 
 /**
@@ -29,7 +30,8 @@ export function createSiloMcpServer(): McpServer {
   registerGetLink(server);
   // C4 registers search_links.
   registerSearchLinks(server);
-  // list_links (C5) registers here too.
+  // C5 registers list_links.
+  registerListLinks(server);
 
   return server;
 }

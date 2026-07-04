@@ -145,6 +145,20 @@ rules file; agent-native parity for reads.
 - **HTTP/SSE transport + access-token auth** (the UI's MCP toggle / token rotate,
   `design/app/README.md:19`) — stdio needs none; add when a remote client does.
 - **Rich cursor for search** (keyset over `(rank,id)` snapshots) — offset is fine at this scale.
+- **Search coverage gap: `notes` + `tags` not in `search_vector`** (agent-native review,
+  C5; a CORE/DB gap, not a tool gap). The generated `search_vector`
+  (`packages/db/src/schema/links.ts`) covers title (A) / description (B) /
+  extractedText (C) only — but `scope.html:270` promises full-text over "titles,
+  extracted text, **tags, and notes**." A note or tag word is currently unfindable
+  via `search_links` (and would be in the UI too — this is not an agent-vs-human
+  parity break, and `search_links`' description is honest about current coverage).
+  Fix later by extending the generated column (or the query) to include `notes` and
+  the link's tag names. Backlog item for a core slice, not an MCP fix.
+- **`sourceData` not exposed in read results** (agent-native review, Observation 3) —
+  the whitelist omits `sourceData` (correct today: no UI renders per-source richness
+  like an HN item's points or a tweet's author). If a future source-detail view
+  renders those, add `sourceData` to `link-shape.ts`'s whitelist so the agent sees
+  what the human sees. Watch-item, noted near `link-shape.ts`.
 
 ### Outside this product's identity (anti-scope — do NOT build)
 Embeddings / semantic / vector search, hybrid BM25+vector, LLM Q&A over the corpus,

@@ -3,31 +3,16 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { LinkWithTags, PageParams } from '@silo/core';
 import { InvalidCursorError, search } from '@silo/core';
 import { z } from 'zod';
+import { baseLinkShape, toBaseLinkContent } from './link-shape.js';
 
 /**
- * Agent-facing output shape for one `search_links` result — a WHITELIST (not
- * a blacklist) of `LinkWithTags` fields, same discipline as `get_link`
- * (`get-link.ts`'s module doc explains why: internal-only columns
- * `searchVector`/`canonicalUrl`/`sourceData`/`deletedAt` are deliberately not
- * named here, so a future `links` schema column can never auto-leak). Adds
- * `rank` (the full-text relevance score) on top of the whitelisted link
- * fields — a search result carries relevance, a plain `get_link` fetch
- * doesn't.
+ * Agent-facing output shape for one `search_links` result — the shared
+ * whitelist (`./link-shape.js`) plus `rank` (the full-text relevance score)
+ * on top — a search result carries relevance, a plain `get_link`/`list_links`
+ * fetch doesn't.
  */
 const searchResultShape = {
-  id: z.uuid(),
-  url: z.string(),
-  title: z.string().nullable(),
-  description: z.string().nullable(),
-  imageUrl: z.string().nullable(),
-  siteName: z.string().nullable(),
-  extractedText: z.string().nullable(),
-  sourceKind: z.string(),
-  captureStatus: z.enum(['enriching', 'full', 'partial', 'bare']),
-  notes: z.string().nullable(),
-  tags: z.array(z.string()),
-  createdAt: z.iso.datetime(),
-  updatedAt: z.iso.datetime(),
+  ...baseLinkShape,
   rank: z.number(),
 };
 
@@ -50,29 +35,14 @@ type SearchLinksStructuredContent = z.infer<z.ZodObject<typeof searchLinksOutput
 type SearchResultContent = z.infer<z.ZodObject<typeof searchResultShape>>;
 
 /**
- * Builds one result's `structuredContent` entry as an EXPLICIT field-by-field
- * pick — never a spread of `LinkWithTags & { rank: number }`. Same rationale
- * as `get_link`'s `toStructuredContent`: makes the leak
+ * Builds one result's `structuredContent` entry: the shared whitelist pick
+ * (`toBaseLinkContent`) plus `rank` — never a spread of `LinkWithTags & {
+ * rank: number }`. Same rationale as `link-shape.ts`'s doc: makes the leak
  * (`searchVector`/`canonicalUrl`/`sourceData`/`deletedAt`) structurally
  * impossible.
  */
 function toResultContent(result: LinkWithTags & { rank: number }): SearchResultContent {
-  return {
-    id: result.id,
-    url: result.url,
-    title: result.title,
-    description: result.description,
-    imageUrl: result.imageUrl,
-    siteName: result.siteName,
-    extractedText: result.extractedText,
-    sourceKind: result.sourceKind,
-    captureStatus: result.captureStatus,
-    notes: result.notes,
-    tags: result.tags,
-    createdAt: result.createdAt.toISOString(),
-    updatedAt: result.updatedAt.toISOString(),
-    rank: result.rank,
-  };
+  return { ...toBaseLinkContent(result), rank: result.rank };
 }
 
 /**

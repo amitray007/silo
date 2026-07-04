@@ -3,17 +3,12 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { LinkWithTags } from '@silo/core';
 import { getById } from '@silo/core';
 import { z } from 'zod';
+import { baseLinkShape, toBaseLinkContent } from './link-shape.js';
 
 /**
- * Agent-facing output shape for `get_link` — a WHITELIST (not a blacklist) of
- * `LinkWithTags` fields. Internal-only columns (`searchVector`, a raw
- * Postgres tsvector; `canonicalUrl`, which can carry an `#unsafe-<uuid>`
- * dedup suffix; `sourceData`, an internal blob; `deletedAt`, live-scoping
- * plumbing) are deliberately NOT named here, so a future `links` schema
- * column can never auto-leak into the agent-facing result — it would have to
- * be added to this shape explicitly.
- *
- * `found` discriminates the two cases (found vs. not-found/trashed). Per
+ * Agent-facing output shape for `get_link` — the shared whitelist
+ * (`./link-shape.js`) with every field made `.optional()`. `found`
+ * discriminates the two cases (found vs. not-found/trashed). Per
  * docs/rules/mcp.md, a not-found id is a normal tool result, never a thrown
  * error — but SDK 1.29.0's `validateToolOutput` requires ANY non-error result
  * to carry `structuredContent` matching `outputSchema` once one is declared
@@ -28,47 +23,33 @@ import { z } from 'zod';
  */
 const getLinkOutputShape = {
   found: z.boolean(),
-  id: z.uuid().optional(),
-  url: z.string().optional(),
-  title: z.string().nullable().optional(),
-  description: z.string().nullable().optional(),
-  imageUrl: z.string().nullable().optional(),
-  siteName: z.string().nullable().optional(),
-  extractedText: z.string().nullable().optional(),
-  sourceKind: z.string().optional(),
-  captureStatus: z.enum(['enriching', 'full', 'partial', 'bare']).optional(),
-  notes: z.string().nullable().optional(),
-  tags: z.array(z.string()).optional(),
-  createdAt: z.iso.datetime().optional(),
-  updatedAt: z.iso.datetime().optional(),
+  id: baseLinkShape.id.optional(),
+  url: baseLinkShape.url.optional(),
+  title: baseLinkShape.title.optional(),
+  description: baseLinkShape.description.optional(),
+  imageUrl: baseLinkShape.imageUrl.optional(),
+  siteName: baseLinkShape.siteName.optional(),
+  extractedText: baseLinkShape.extractedText.optional(),
+  sourceKind: baseLinkShape.sourceKind.optional(),
+  captureStatus: baseLinkShape.captureStatus.optional(),
+  notes: baseLinkShape.notes.optional(),
+  tags: baseLinkShape.tags.optional(),
+  createdAt: baseLinkShape.createdAt.optional(),
+  updatedAt: baseLinkShape.updatedAt.optional(),
 };
 
 type GetLinkStructuredContent = z.infer<z.ZodObject<typeof getLinkOutputShape>>;
 
 /**
- * Builds `structuredContent` as an EXPLICIT field-by-field pick of the
- * whitelisted shape above — never a spread of `LinkWithTags`. This makes the
- * leak (`searchVector`/`canonicalUrl`/`sourceData`/`deletedAt`) structurally
- * impossible: adding a field here requires a conscious edit, not an
- * accidental one from a new DB column.
+ * Builds `structuredContent` from the shared whitelist pick
+ * (`toBaseLinkContent`) plus `found: true` — never a spread of raw
+ * `LinkWithTags`. This makes the leak (`searchVector`/`canonicalUrl`/
+ * `sourceData`/`deletedAt`) structurally impossible: adding a field requires
+ * a conscious edit to `./link-shape.js`, not an accidental one from a new DB
+ * column.
  */
 function toStructuredContent(link: LinkWithTags): GetLinkStructuredContent {
-  return {
-    found: true,
-    id: link.id,
-    url: link.url,
-    title: link.title,
-    description: link.description,
-    imageUrl: link.imageUrl,
-    siteName: link.siteName,
-    extractedText: link.extractedText,
-    sourceKind: link.sourceKind,
-    captureStatus: link.captureStatus,
-    notes: link.notes,
-    tags: link.tags,
-    createdAt: link.createdAt.toISOString(),
-    updatedAt: link.updatedAt.toISOString(),
-  };
+  return { found: true, ...toBaseLinkContent(link) };
 }
 
 /**
