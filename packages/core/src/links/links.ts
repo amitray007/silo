@@ -94,7 +94,7 @@ function mergeNotes(existing: string | null, incoming: string | undefined): stri
  * pre-existing rows stay reachable — the two only diverge on the same
  * non-ASCII codepoints noted above, the identical accepted boundary.
  */
-function normalizeTagKey(name: string): string {
+export function normalizeTagKey(name: string): string {
   return name.trim().toLowerCase();
 }
 

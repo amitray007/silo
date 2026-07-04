@@ -23,7 +23,15 @@ export type PurgeTrashOptions = {
   batchSize?: number;
 };
 
-const DEFAULT_OLDER_THAN_DAYS = 30;
+/**
+ * The trash retention window in days — a trashed link auto-purges after this
+ * many days (the mockup's "auto-empties after 30 days" / the sidebar's "30d").
+ * Exposed read-only so an adapter (the API's `GET /counts`) can show it; a
+ * user-configurable cycle (7/30/90) is deferred to a settings store.
+ */
+export const PURGE_WINDOW_DAYS = 30;
+
+const DEFAULT_OLDER_THAN_DAYS = PURGE_WINDOW_DAYS;
 const DEFAULT_BATCH_SIZE = 500;
 
 /**

@@ -160,4 +160,42 @@ describeIfPg('listTagsWithCounts (integration, C3)', () => {
       expect(relevant.map((t) => t.count)).toEqual([3, 3, 1]);
     });
   });
+
+  describe('createTag (C4)', () => {
+    it('creates a standalone tag with no link attached', async () => {
+      const name = await ops.createTag('standalone');
+      expect(name).toBe('standalone');
+      // It exists but has zero live links, so listTagsWithCounts omits it.
+      const listed = await ops.listTagsWithCounts();
+      expect(listed.some((t) => t.name === 'standalone')).toBe(false);
+    });
+
+    it('is idempotent and W1 case-insensitive — AI then ai is one tag, first casing kept', async () => {
+      const first = await ops.createTag('AI');
+      const second = await ops.createTag('ai');
+      expect(first).toBe('AI');
+      // Re-creating a case-variant returns the CANONICAL (first-entered) display
+      // name, never clobbering it — one tag row, display "AI".
+      expect(second).toBe('AI');
+    });
+
+    it('a blank / whitespace-only name is a no-op returning null', async () => {
+      expect(await ops.createTag('   ')).toBeNull();
+      expect(await ops.createTag('')).toBeNull();
+    });
+
+    it('a created standalone tag is usable as a live filter once a link carries it', async () => {
+      await ops.createTag('reading');
+      const link = await ops.createLink({
+        url: 'https://example.com/createtag-usable',
+        tags: ['reading'],
+        sourceKind: 'link',
+      });
+      const listed = await ops.listTagsWithCounts();
+      expect(listed.find((t) => t.name === 'reading')?.count).toBe(1);
+      // And case-insensitive lookup still finds it (W1).
+      const filtered = await ops.list({ tag: 'READING' });
+      expect(filtered.links.some((l) => l.id === link.id)).toBe(true);
+    });
+  });
 });

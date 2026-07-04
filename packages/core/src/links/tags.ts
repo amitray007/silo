@@ -1,5 +1,6 @@
 import { db, links, linkTags, tags } from '@silo/db';
 import { asc, desc, eq, sql } from 'drizzle-orm';
+import { normalizeTagKey } from './links.js';
 
 /**
  * A tag's display name plus how many LIVE links carry it (plan 007, C3) —
@@ -51,4 +52,34 @@ export async function listTagsWithCounts(): Promise<TagCount[]> {
     .orderBy(desc(sql`count(distinct ${linkTags.linkId})`), asc(tags.name));
 
   return rows.map((row) => ({ name: row.name, count: Number(row.count) }));
+}
+
+/**
+ * Create a standalone (detached) tag — a tag row with no link attached yet, for
+ * the mockup's sidebar "+ new tag" action. Idempotent + W1-correct: keyed on
+ * `normalizeTagKey(name)` via `onConflictDoNothing`, so creating `AI` then `ai`
+ * yields ONE tag whose display `name` is the first-entered casing (an existing
+ * row's `name` is never clobbered). A blank/whitespace-only name is a no-op that
+ * returns `null`. Returns the resulting tag's display `name` (the existing one
+ * when it already existed), or `null` for a blank name.
+ */
+export async function createTag(name: string): Promise<string | null> {
+  const trimmed = name.trim();
+  if (!trimmed) return null;
+  const normalizedKey = normalizeTagKey(trimmed);
+
+  await db
+    .insert(tags)
+    .values({ name: trimmed, normalizedKey })
+    .onConflictDoNothing({ target: tags.normalizedKey });
+
+  // Re-read by key so the return is the CANONICAL display name — the
+  // first-entered casing if the tag already existed (onConflictDoNothing left it
+  // untouched), or `trimmed` if we just inserted it.
+  const [row] = await db
+    .select({ name: tags.name })
+    .from(tags)
+    .where(eq(tags.normalizedKey, normalizedKey))
+    .limit(1);
+  return row?.name ?? null;
 }
