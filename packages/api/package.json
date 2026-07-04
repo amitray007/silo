@@ -11,14 +11,24 @@
   "types": "./src/index.ts",
   "scripts": {
     "check-types": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "dev": "tsx --env-file-if-exists=../../.env src/main.ts",
+    "start": "tsx --env-file-if-exists=../../.env src/main.ts"
   },
   "dependencies": {
-    "@silo/core": "workspace:*"
+    "@hono/node-server": "catalog:",
+    "@silo/core": "workspace:*",
+    "hono": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@silo/db": "workspace:*",
     "@silo/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "drizzle-orm": "catalog:",
+    "pg": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
