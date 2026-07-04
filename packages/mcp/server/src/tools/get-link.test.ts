@@ -1,13 +1,11 @@
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { runMigrations } from '@silo/db/migrate';
-import {
-  createDisposableDatabase,
-  postgresReachable,
-} from '@silo/db/test-support/disposable-database';
-import { drizzle } from 'drizzle-orm/node-postgres';
-import { Pool } from 'pg';
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  postgresReachable,
+  setupMcpServerTest,
+  teardownMcpServerTest,
+} from './test-support/mcp-server-harness.js';
 
 /**
  * Integration tests for `get_link`, driven end-to-end through a real MCP
@@ -17,55 +15,30 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
  * `registerTool` wiring in `server.ts`, and `core.getById`'s live-scoping —
  * not just the handler function in isolation.
  *
- * `@silo/core`'s `db`/`pool` singleton reads `DATABASE_URL` at module-load
- * time, so both `@silo/core` and `../server.js` (which imports it
- * transitively via `get-link.ts`) are dynamically imported only after the env
- * var is set — same pattern as `packages/worker/src/enrich.test.ts`.
- *
- * This test file imports `@silo/db`'s shared disposable-database + migration
- * harness. That is allowed: the `adapters-no-db` boundary (docs/rules/mcp.md)
- * carves out `*.test.ts` files — integration tests legitimately need real
- * infrastructure, and test code never ships in the adapter runtime. Production
- * code under `packages/mcp/**` importing `@silo/db` still fails the gate.
+ * Setup/teardown (the disposable database, migrations, and the linked
+ * client<->server pair) is shared with `search-links.test.ts` via
+ * `./test-support/mcp-server-harness.js` — see that module's doc comment for
+ * the `DATABASE_URL`-then-dynamic-import rationale and the `test-support/`
+ * carve-out in the `adapters-no-db` boundary (docs/rules/mcp.md).
  */
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 
 describeIfPg('get_link (integration, via MCP client<->server)', () => {
-  let dropDatabase: () => void;
   let core: typeof import('@silo/core');
-  let serverMod: typeof import('../server.js');
   let pool: Pool;
   let client: Client;
+  let dropDatabase: () => void;
 
   beforeAll(async () => {
-    const database = createDisposableDatabase('silo_mcp_get_link_test');
-    dropDatabase = database.drop;
-    const migratePool = new Pool({ connectionString: database.url });
-    // Relative to this test file's cwd (packages/mcp/server) — one directory
-    // deeper than packages/{core,worker}, hence the extra `../` vs. those
-    // suites' `../db/drizzle`.
-    await runMigrations(drizzle(migratePool), migratePool, '../../db/drizzle');
-
-    process.env.DATABASE_URL = database.url;
-    core = await import('@silo/core');
-    serverMod = await import('../server.js');
-    pool = new Pool({ connectionString: database.url });
-
-    const server = serverMod.createSiloMcpServer();
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    client = new Client({ name: 'test-client', version: '0.0.0' });
-    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    const ctx = await setupMcpServerTest('silo_mcp_get_link_test');
+    core = ctx.core;
+    pool = ctx.pool;
+    client = ctx.client;
+    dropDatabase = ctx.dropDatabase;
   });
 
   afterAll(async () => {
-    // Deliberately do NOT import `@silo/db` here to close core's pooled
-    // connection (the adapter boundary forbids `@silo/mcp-server` importing
-    // `@silo/db` even in a test file — see the module doc comment above).
-    // `dropDatabase()` issues `DROP DATABASE ... WITH (FORCE)`, which
-    // terminates any lingering session (including core's still-open pool)
-    // before dropping — safe cleanup without reaching into `@silo/db`.
-    await pool.end();
-    dropDatabase();
+    await teardownMcpServerTest({ pool, dropDatabase });
   });
 
   async function newLink(url: string, tags?: string[]): Promise<string> {

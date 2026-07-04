@@ -72,7 +72,10 @@
       "includes": [
         "packages/web/**/*.test.ts",
         "packages/api/**/*.test.ts",
-        "packages/mcp/**/*.test.ts"
+        "packages/mcp/**/*.test.ts",
+        "packages/web/**/test-support/**",
+        "packages/api/**/test-support/**",
+        "packages/mcp/**/test-support/**"
       ],
       "linter": {
         "rules": {

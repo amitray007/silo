@@ -1,0 +1,304 @@
+import type { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import type { Pool } from 'pg';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import {
+  postgresReachable,
+  setupMcpServerTest,
+  teardownMcpServerTest,
+} from './test-support/mcp-server-harness.js';
+
+/**
+ * Integration tests for `search_links`, driven end-to-end through a real MCP
+ * client<->server pair (an in-memory linked transport, per the SDK's
+ * `InMemoryTransport.createLinkedPair()`) against a real Postgres. Same
+ * pattern as `get-link.test.ts` — setup/teardown is shared via
+ * `./test-support/mcp-server-harness.js`; see that module's doc comment for
+ * the `DATABASE_URL`-then-dynamic-import rationale and the `test-support/`
+ * carve-out in the `adapters-no-db` boundary (docs/rules/mcp.md).
+ */
+const describeIfPg = postgresReachable() ? describe : describe.skip;
+
+describeIfPg('search_links (integration, via MCP client<->server)', () => {
+  let core: typeof import('@silo/core');
+  let pool: Pool;
+  let client: Client;
+  let dropDatabase: () => void;
+
+  beforeAll(async () => {
+    const ctx = await setupMcpServerTest('silo_mcp_search_links_test');
+    core = ctx.core;
+    pool = ctx.pool;
+    client = ctx.client;
+    dropDatabase = ctx.dropDatabase;
+  });
+
+  afterAll(async () => {
+    await teardownMcpServerTest({ pool, dropDatabase });
+  });
+
+  /** Creates a link and enriches it in one step with the given searchable
+   * title/text, so full-text search has something distinctive to match on. */
+  async function seedLink(
+    url: string,
+    opts: { title: string; text?: string; tags?: string[] },
+  ): Promise<string> {
+    const link = opts.tags
+      ? await core.createLink({ url, sourceKind: 'link', tags: opts.tags })
+      : await core.createLink({ url, sourceKind: 'link' });
+    await core.recordEnrichment(link.id, {
+      title: opts.title,
+      text: opts.text ?? opts.title,
+      status: 'full',
+    });
+    return link.id;
+  }
+
+  it('tools/list lists both get_link and search_links', async () => {
+    const { tools } = await client.listTools();
+    const names = tools.map((t) => t.name);
+    expect(names).toContain('get_link');
+    expect(names).toContain('search_links');
+  });
+
+  it('a query matching multiple links -> ranked results (best first), tags + rank present', async () => {
+    // "octopus" appears once in one doc, many times in another — ts_rank
+    // should favor the denser match.
+    const sparseId = await seedLink('https://example.com/search-sparse', {
+      title: 'A note about octopus intelligence',
+      text: 'Octopus intelligence is a fascinating subject studied by marine biologists.',
+      tags: ['marine'],
+    });
+    const denseId = await seedLink('https://example.com/search-dense', {
+      title: 'Octopus octopus octopus',
+      text: 'Octopus octopus octopus octopus octopus octopus octopus octopus octopus.',
+      tags: ['marine', 'cephalopods'],
+    });
+    // An unrelated link that should never match "octopus".
+    await seedLink('https://example.com/search-unrelated', {
+      title: 'A guide to sourdough bread baking',
+      text: 'Sourdough bread baking requires patience and a good starter culture.',
+    });
+
+    const result = await client.callTool({
+      name: 'search_links',
+      arguments: { query: 'octopus' },
+    });
+    expect(result.isError).toBeFalsy();
+
+    const structured = result.structuredContent as {
+      results: Array<Record<string, unknown>>;
+      count: number;
+      nextCursor?: string;
+    };
+    expect(structured.count).toBe(2);
+    expect(structured.results).toHaveLength(2);
+    expect(structured.nextCursor).toBeUndefined();
+
+    const ids = structured.results.map((r) => r.id);
+    expect(ids).toContain(sparseId);
+    expect(ids).toContain(denseId);
+
+    // Ranked best-first: the denser match ranks higher (or at least
+    // non-increasing rank order across the page).
+    const ranks = structured.results.map((r) => r.rank as number);
+    expect(ranks[0]).toBeGreaterThanOrEqual(ranks[1] ?? 0);
+    // The denser doc should be first given ts_rank's frequency weighting.
+    expect(structured.results[0]?.id).toBe(denseId);
+
+    for (const r of structured.results) {
+      expect(Array.isArray(r.tags)).toBe(true);
+      expect(typeof r.rank).toBe('number');
+    }
+
+    // Text summary is a readable ranked list.
+    const [content] = result.content as Array<{ type: 'text'; text: string }>;
+    expect(content?.text).toContain('2 results for "octopus"');
+  });
+
+  it('LEAK-ABSENCE: a result never carries searchVector/canonicalUrl/sourceData/deletedAt', async () => {
+    await seedLink('https://example.com/search-leak-check', {
+      title: 'A unique leak-check phrase zzqqxx',
+    });
+
+    const result = await client.callTool({
+      name: 'search_links',
+      arguments: { query: 'zzqqxx' },
+    });
+    expect(result.isError).toBeFalsy();
+    const structured = result.structuredContent as { results: Array<Record<string, unknown>> };
+    expect(structured.results).toHaveLength(1);
+    const [first] = structured.results;
+    expect(first).not.toHaveProperty('searchVector');
+    expect(first).not.toHaveProperty('canonicalUrl');
+    expect(first).not.toHaveProperty('sourceData');
+    expect(first).not.toHaveProperty('deletedAt');
+
+    // outputSchema round-trip: `callTool` resolving without `isError` on this
+    // found result IS the proof structuredContent validated against
+    // `searchLinksOutputShape` (SDK 1.29.0 `validateToolOutput`) — a mismatch
+    // would surface as a tool error here, not a silent pass.
+  });
+
+  it('a query with no matches -> results: [], count 0, non-error, plain text', async () => {
+    const result = await client.callTool({
+      name: 'search_links',
+      arguments: { query: 'zzznomatchforanyseededlinkzzz' },
+    });
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toEqual({ results: [], count: 0 });
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('No results for'),
+      }),
+    ]);
+  });
+
+  /**
+   * Walks every page of a `search_links` call (via `client`) with the given
+   * `query`/`limit`, asserting each page carries no more than `limit` results
+   * and no id repeats across pages. Returns the full set of ids seen and how
+   * many pages it took, letting the calling test assert its own expectations
+   * about totals. `maxPages` is a hard stop guarding against a runaway loop
+   * if pagination somehow never terminates.
+   */
+  async function walkAllPages(
+    query: string,
+    limit: number,
+    maxPages = 10,
+  ): Promise<{ ids: string[]; pages: number; sawNextCursor: boolean }> {
+    const ids: string[] = [];
+    const seen = new Set<string>();
+    let cursor: string | undefined;
+    let pages = 0;
+    let sawNextCursor = false;
+
+    do {
+      const args: Record<string, unknown> = { query, limit };
+      if (cursor !== undefined) args.cursor = cursor;
+      const result = await client.callTool({ name: 'search_links', arguments: args });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results: Array<{ id: string }>;
+        count: number;
+        nextCursor?: string;
+      };
+      expect(structured.count).toBeLessThanOrEqual(limit);
+
+      for (const r of structured.results) {
+        expect(seen.has(r.id)).toBe(false); // no overlap across pages
+        seen.add(r.id);
+        ids.push(r.id);
+      }
+
+      pages++;
+      if (structured.nextCursor !== undefined) sawNextCursor = true;
+      cursor = structured.nextCursor;
+    } while (cursor !== undefined && pages < maxPages);
+
+    return { ids, pages, sawNextCursor };
+  }
+
+  it('pagination: walks distinct pages via nextCursor and terminates', async () => {
+    // Seed 5 links all matching a shared distinctive term, paginate with
+    // limit=2 and walk until nextCursor is exhausted.
+    const seededIds: string[] = [];
+    for (let i = 0; i < 5; i++) {
+      const id = await seedLink(`https://example.com/search-page-${i}`, {
+        title: `Pagewalk term ${i}`,
+        text: `Pagewalk term appears here number ${i} of the paging test set.`,
+      });
+      seededIds.push(id);
+    }
+
+    const { ids: seenIds, pages, sawNextCursor } = await walkAllPages('pagewalk', 2);
+
+    expect(sawNextCursor).toBe(true);
+    expect(pages).toBeGreaterThan(1);
+    expect(new Set(seenIds).size).toBe(5); // last page had no nextCursor -> terminated cleanly
+    for (const id of seededIds) {
+      expect(seenIds).toContain(id);
+    }
+  });
+
+  it('a forged/garbage cursor -> tool error with a helpful message, not a crash', async () => {
+    const result = await client.callTool({
+      name: 'search_links',
+      arguments: { query: 'anything', cursor: 'not-a-real-cursor' },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('Invalid or expired cursor'),
+      }),
+    ]);
+  });
+
+  it('a well-formed cursor of the WRONG kind (a list cursor) -> the same clean tool error', async () => {
+    // A `list` cursor is valid base64url JSON but decodes to `kind: 'list'`,
+    // which `decodeSearchCursor` rejects with a *different* InvalidCursorError
+    // throw site than the garbage-string case above. Get a real one from
+    // `core.list()` (seed >1 link so it actually returns a nextCursor), then
+    // feed it to `search_links` — the handler must still convert it to the
+    // clean cursor error, not crash or silently mis-page.
+    await seedLink('https://example.com/wrong-kind-cursor-a', { title: 'wrongkind alpha' });
+    await seedLink('https://example.com/wrong-kind-cursor-b', { title: 'wrongkind beta' });
+    const listPage = await core.list({}, { limit: 1 });
+    expect(listPage.nextCursor).toBeDefined();
+
+    const result = await client.callTool({
+      name: 'search_links',
+      arguments: { query: 'wrongkind', cursor: listPage.nextCursor },
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      expect.objectContaining({
+        type: 'text',
+        text: expect.stringContaining('Invalid or expired cursor'),
+      }),
+    ]);
+  });
+
+  it('limit is clamped at the MCP boundary: limit=1 -> exactly one + cursor; huge limit -> no error, all matches', async () => {
+    // Three matches for a distinctive term.
+    for (let i = 0; i < 3; i++) {
+      await seedLink(`https://example.com/clamp-${i}`, {
+        title: `Clampterm entry ${i}`,
+        text: `Clampterm appears here in entry number ${i}.`,
+      });
+    }
+
+    // limit=1 -> exactly one result on the page, and (since 3 > 1) a cursor.
+    const one = await client.callTool({
+      name: 'search_links',
+      arguments: { query: 'clampterm', limit: 1 },
+    });
+    expect(one.isError).toBeFalsy();
+    const oneStructured = one.structuredContent as {
+      results: unknown[];
+      count: number;
+      nextCursor?: string;
+    };
+    expect(oneStructured.count).toBe(1);
+    expect(oneStructured.results).toHaveLength(1);
+    expect(oneStructured.nextCursor).toBeDefined();
+
+    // A limit far above the max cap (100) must be CLAMPED by core, not
+    // rejected or passed through raw — so the call succeeds and returns all 3
+    // matches on one page with no cursor.
+    const huge = await client.callTool({
+      name: 'search_links',
+      arguments: { query: 'clampterm', limit: 100000 },
+    });
+    expect(huge.isError).toBeFalsy();
+    const hugeStructured = huge.structuredContent as { count: number; nextCursor?: string };
+    expect(hugeStructured.count).toBe(3);
+    expect(hugeStructured.nextCursor).toBeUndefined();
+  });
+
+  it('an empty query string -> SDK input validation error (isError), not the handler', async () => {
+    const result = await client.callTool({ name: 'search_links', arguments: { query: '' } });
+    expect(result.isError).toBe(true);
+  });
+});

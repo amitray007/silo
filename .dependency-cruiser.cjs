@@ -15,11 +15,15 @@ module.exports = {
       name: 'adapters-no-db',
       comment:
         'Adapters (web/api/mcp) must not import @silo/db directly; only @silo/core owns data access. ' +
-        'Carve-out: *.test.ts files MAY import @silo/db (e.g. the disposable-database test harness) — ' +
-        'integration tests legitimately need real infrastructure, and test code never ships in the ' +
-        'adapter runtime. Production adapter code importing @silo/db still fails this rule.',
+        'Carve-out: *.test.ts files, and any file under a test-support/ directory, MAY import @silo/db ' +
+        '(e.g. the disposable-database test harness, or a shared MCP test-harness module) — integration ' +
+        'tests legitimately need real infrastructure, and test code never ships in the adapter runtime. ' +
+        'Production adapter code importing @silo/db still fails this rule.',
       severity: 'error',
-      from: { path: '^packages/(web|api|mcp)/', pathNot: '\\.test\\.ts$' },
+      from: {
+        path: '^packages/(web|api|mcp)/',
+        pathNot: ['\\.test\\.ts$', '(^|/)test-support/'],
+      },
       to: { path: '^packages/db/' },
     },
     {

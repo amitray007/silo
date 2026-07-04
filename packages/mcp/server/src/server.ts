@@ -1,5 +1,6 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerGetLink } from './tools/get-link.js';
+import { registerSearchLinks } from './tools/search-links.js';
 
 /**
  * Build the silo MCP server. Read tools (`get_link`, `search_links`,
@@ -26,7 +27,9 @@ export function createSiloMcpServer(): McpServer {
   // `tools/list` handler once the first tool is registered, so this call also
   // makes `tools/list` live for the first time.
   registerGetLink(server);
-  // search_links (C4) and list_links (C5) register here too.
+  // C4 registers search_links.
+  registerSearchLinks(server);
+  // list_links (C5) registers here too.
 
   return server;
 }
