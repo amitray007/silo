@@ -184,6 +184,27 @@ async function findExistingForDedup(exec: Executor, url: string): Promise<Link |
 }
 
 /**
+ * Best-effort pre-check for whether `createLink(url)` will dedup-merge into
+ * an existing row (live OR trashed) rather than insert fresh. Exposed so a
+ * caller (e.g. the `capture_link` MCP tool) can report an honest `deduped`
+ * signal to an agent BEFORE calling `createLink` — using `findByCanonicalUrl`
+ * for that purpose is a live-only check and silently under-reports the
+ * revive-a-trashed-link case, since `createLink`'s actual merge target
+ * (`findExistingForDedup`, just above) matches trashed rows too. This runs
+ * the exact same live-or-trashed lookup on the bare `db` executor.
+ *
+ * Best-effort/non-authoritative like `findByCanonicalUrl`: a concurrent
+ * writer can still race between this check and the subsequent `createLink`
+ * call. That race only affects a reported flag, never stored data —
+ * `createLink`'s own transaction + partial-unique-index retry remains the
+ * sole source of truth for what actually got written.
+ */
+export async function willDedupCapture(url: string): Promise<boolean> {
+  const existing = await findExistingForDedup(db, url);
+  return existing !== null;
+}
+
+/**
  * Create a link, or dedup-merge into an existing one (live or trashed) with the
  * same canonical url. Revives a trashed match. `ok:false` urls never dedup and
  * always insert fresh (their stored `canonical_url` is uniquely suffixed so two

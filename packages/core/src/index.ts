@@ -53,6 +53,7 @@ export {
   restore,
   search,
   softDelete,
+  willDedupCapture,
 } from './links/links.js';
 // Trash purge (U5): bounded, batched, unscheduled — see purgeTrash's doc
 // comment for the batching/termination argument. Scheduling (pg-boss) is a
