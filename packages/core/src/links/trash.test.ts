@@ -282,4 +282,131 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
       expect(combined).toEqual({ live, trash });
     });
   });
+
+  describe('hardDelete (destructive, C3)', () => {
+    it('permanently deletes a TRASHED link and its link_tags, returning true', async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/harddelete-trashed',
+        tags: ['hd-tag-a', 'hd-tag-b'],
+        sourceKind: 'link',
+      });
+      await ops.softDelete(link.id);
+
+      const linkTagsBefore = await rawDb.execute<{ count: string }>(
+        sql`select count(*) from link_tags where link_id = ${link.id}`,
+      );
+      expect(linkTagsBefore.rows[0]?.count).toBe('2');
+
+      const result = await ops.hardDelete(link.id);
+
+      expect(result).toBe(true);
+      const rows = await rawDb.execute<{ id: string }>(
+        sql`select id from links where id = ${link.id}`,
+      );
+      expect(rows.rows).toHaveLength(0);
+      const linkTagsAfter = await rawDb.execute<{ count: string }>(
+        sql`select count(*) from link_tags where link_id = ${link.id}`,
+      );
+      expect(linkTagsAfter.rows[0]?.count).toBe('0');
+    });
+
+    it('CRITICAL GUARD: hardDelete on a LIVE link returns false and leaves the live link fully untouched', async () => {
+      const live = await ops.createLink({
+        url: 'https://example.com/harddelete-live-guard',
+        title: 'still here',
+        tags: ['still-tagged'],
+        sourceKind: 'link',
+      });
+
+      const result = await ops.hardDelete(live.id);
+
+      expect(result).toBe(false);
+      // Prove the guard: query the live row back and assert it is present,
+      // unmodified, and still live.
+      const survivor = await ops.getById(live.id);
+      expect(survivor).not.toBeNull();
+      expect(survivor?.id).toBe(live.id);
+      expect(survivor?.title).toBe('still here');
+      expect(survivor?.deletedAt).toBeNull();
+      expect(survivor?.tags).toEqual(['still-tagged']);
+    });
+
+    it('hardDelete on an unknown id returns false', async () => {
+      const result = await ops.hardDelete('00000000-0000-0000-0000-000000000000');
+      expect(result).toBe(false);
+    });
+
+    it('countTrash drops after hardDelete removes a trashed link', async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/harddelete-count',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(link.id);
+      const before = await ops.countTrash();
+
+      const result = await ops.hardDelete(link.id);
+
+      expect(result).toBe(true);
+      expect(await ops.countTrash()).toBe(before - 1);
+    });
+  });
+
+  describe('emptyTrash (destructive, C3)', () => {
+    it('permanently deletes ALL trashed links, leaves live links intact, returns the count deleted', async () => {
+      const beforeCounts = await ops.getCounts();
+
+      const liveIds: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/emptytrash-live-${i}`,
+          sourceKind: 'link',
+        });
+        liveIds.push(link.id);
+      }
+
+      const trashedIds: string[] = [];
+      for (let i = 0; i < 4; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/emptytrash-trashed-${i}`,
+          tags: [`emptytrash-tag-${i}`],
+          sourceKind: 'link',
+        });
+        await ops.softDelete(link.id);
+        trashedIds.push(link.id);
+      }
+
+      const purged = await ops.emptyTrash();
+
+      expect(purged).toBe(beforeCounts.trash + 4);
+
+      // All trashed links (from this test) are gone.
+      for (const id of trashedIds) {
+        const rows = await rawDb.execute<{ id: string }>(
+          sql`select id from links where id = ${id}`,
+        );
+        expect(rows.rows).toHaveLength(0);
+        const linkTagsRows = await rawDb.execute<{ count: string }>(
+          sql`select count(*) from link_tags where link_id = ${id}`,
+        );
+        expect(linkTagsRows.rows[0]?.count).toBe('0');
+      }
+
+      // All live links (from this test) are untouched.
+      for (const id of liveIds) {
+        const survivor = await ops.getById(id);
+        expect(survivor).not.toBeNull();
+        expect(survivor?.deletedAt).toBeNull();
+      }
+
+      // No trash remains at all.
+      expect(await ops.countTrash()).toBe(0);
+      expect(await ops.countLive()).toBe(beforeCounts.live + 3);
+    });
+
+    it('emptyTrash on an already-empty trash returns 0 without error', async () => {
+      await ops.emptyTrash(); // drain any leftover trash from other tests in this file
+      const purged = await ops.emptyTrash();
+      expect(purged).toBe(0);
+    });
+  });
 });

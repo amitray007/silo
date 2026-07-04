@@ -135,3 +135,56 @@ export async function getCounts(): Promise<Counts> {
     .from(links);
   return { live: Number(row?.live ?? 0), trash: Number(row?.trash ?? 0) };
 }
+
+/**
+ * Permanently delete ONE trashed link (plan 007, C3) — the mockup's per-row
+ * "delete now", bypassing `purgeTrash`'s age window entirely. `link_tags`
+ * rows cascade via the FK's `ON DELETE CASCADE` (see
+ * `packages/db/src/schema/link-tags.ts`) — never touched directly here.
+ *
+ * DESTRUCTIVE — CRITICAL GUARD: this must NEVER delete a LIVE link. "Delete
+ * now" is a trash-only action; a live link can only reach deletion by first
+ * being soft-deleted (`softDelete`) and then hard-deleted (or reaped by
+ * `purgeTrash`/`emptyTrash`). The guard is `deleted_at IS NOT NULL` INSIDE
+ * the `DELETE`'s own `WHERE` clause — not a separate read-then-check — so
+ * the check-and-delete is one atomic statement with no TOCTOU window: there
+ * is no gap between "confirm it's trashed" and "delete it" for a concurrent
+ * `restore()` to land in. If the row doesn't exist, or exists but is live,
+ * the `WHERE` matches zero rows and the `DELETE` is a no-op.
+ *
+ * Returns whether a row was actually deleted (`rowCount > 0`), so a caller
+ * can distinguish "deleted" from "already gone / not trashed" without a
+ * separate existence check — mirrors `purgeTrash`'s "return the count"
+ * discipline at the single-row scale.
+ */
+export async function hardDelete(id: string): Promise<boolean> {
+  const deleted = await db.execute<{ id: string }>(sql`
+    delete from ${links}
+    where ${links.id} = ${id}
+      and ${links.deletedAt} is not null
+    returning id
+  `);
+  return deleted.rows.length > 0;
+}
+
+/**
+ * Permanently delete ALL trashed links (plan 007, C3) — the mockup's "empty
+ * now", regardless of age (distinct from `purgeTrash`, which is age-gated
+ * and batched for a large unattended backlog). Returns the count deleted.
+ * `link_tags` rows cascade via the FK, same as `hardDelete`/`purgeTrash`.
+ *
+ * DESTRUCTIVE — same guard discipline as `hardDelete`: the `deleted_at IS NOT
+ * NULL` predicate lives in the `DELETE`'s own `WHERE` clause, so a live link
+ * can never be matched. Unlike `purgeTrash`, this is not batched — "empty
+ * now" is a deliberate, bounded, user-initiated action on a personal store's
+ * trash (not an unattended sweep of an unbounded backlog), so one statement
+ * is the simpler and sufficient tool here.
+ */
+export async function emptyTrash(): Promise<number> {
+  const deleted = await db.execute<{ id: string }>(sql`
+    delete from ${links}
+    where ${links.deletedAt} is not null
+    returning id
+  `);
+  return deleted.rows.length;
+}

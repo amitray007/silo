@@ -1,0 +1,163 @@
+import { postgresReachable } from '@silo/db/test-support/disposable-database';
+import { beforeEach, describe, expect, it } from 'vitest';
+import { setupPgHarness } from '../test-support/pg-harness.js';
+import type * as LinksOps from './links.js';
+import type * as TagsOps from './tags.js';
+import type * as TrashOps from './trash.js';
+
+/**
+ * Integration tests for `listTagsWithCounts` (plan 007, C3) against a real
+ * Postgres (see docs/rules/testing.md) — the grouped join over
+ * `tags ⋈ link_tags ⋈ links`, the live-only count, W1 case-fold dedup, and
+ * ordering are all database-level behaviors mocks can't prove.
+ */
+const describeIfPg = postgresReachable() ? describe : describe.skip;
+
+describeIfPg('listTagsWithCounts (integration, C3)', () => {
+  const harness = setupPgHarness('silo_core_tags_test', async () => {
+    const links = await import('./links.js');
+    const trash = await import('./trash.js');
+    const tagsMod = await import('./tags.js');
+    return { ...links, ...trash, ...tagsMod };
+  });
+  let ops: typeof LinksOps & typeof TrashOps & typeof TagsOps;
+
+  beforeEach(() => {
+    ops = harness.mod();
+  });
+
+  /** Find a tag's entry in the full list by name, or undefined if absent. */
+  function findTag(list: TagsOps.TagCount[], name: string): TagsOps.TagCount | undefined {
+    return list.find((t) => t.name === name);
+  }
+
+  it('counts only LIVE links per tag; a link with multiple tags counts toward each', async () => {
+    const a = await ops.createLink({
+      url: 'https://example.com/tagcount-a',
+      tags: ['widgets', 'gadgets'],
+      sourceKind: 'link',
+    });
+    const b = await ops.createLink({
+      url: 'https://example.com/tagcount-b',
+      tags: ['widgets'],
+      sourceKind: 'link',
+    });
+    const trashed = await ops.createLink({
+      url: 'https://example.com/tagcount-trashed',
+      tags: ['widgets'],
+      sourceKind: 'link',
+    });
+    await ops.softDelete(trashed.id);
+
+    const list = await ops.listTagsWithCounts();
+
+    expect(findTag(list, 'widgets')?.count).toBe(2);
+    expect(findTag(list, 'gadgets')?.count).toBe(1);
+    // sanity: both live links exist and are distinct
+    expect(a.id).not.toBe(b.id);
+  });
+
+  it('W1 case-variants collapse to one tag row: AI/ai count together under the first-entered display name', async () => {
+    const first = await ops.createLink({
+      url: 'https://example.com/tagcount-case-1',
+      tags: ['AI'],
+      sourceKind: 'link',
+    });
+    const second = await ops.createLink({
+      url: 'https://example.com/tagcount-case-2',
+      tags: ['ai'],
+      sourceKind: 'link',
+    });
+
+    const list = await ops.listTagsWithCounts();
+    const aiEntries = list.filter((t) => t.name.toLowerCase() === 'ai');
+
+    expect(aiEntries).toHaveLength(1);
+    expect(aiEntries[0]?.name).toBe('AI'); // first-entered casing wins (see addTagWith)
+    expect(aiEntries[0]?.count).toBe(2);
+    expect(first.id).not.toBe(second.id);
+  });
+
+  it('a tag whose only link is TRASHED does not appear in the list at all', async () => {
+    const link = await ops.createLink({
+      url: 'https://example.com/tagcount-alltrashed',
+      tags: ['ghost-tag'],
+      sourceKind: 'link',
+    });
+    await ops.softDelete(link.id);
+
+    const list = await ops.listTagsWithCounts();
+
+    expect(findTag(list, 'ghost-tag')).toBeUndefined();
+  });
+
+  it('a tag with no links at all (never attached / detached) does not appear', async () => {
+    // No createLink call ever attaches this tag name — listTagsWithCounts
+    // only ever sees rows produced by the inner join, so an untagged/absent
+    // name simply never shows up. This documents that absence-of-evidence
+    // (rather than an explicit assertion on a specific row) is expected.
+    const list = await ops.listTagsWithCounts();
+    expect(findTag(list, 'never-created-tag-xyz')).toBeUndefined();
+  });
+
+  it("a hard-deleted trashed link does not change a shared tag's live count", async () => {
+    const survivor = await ops.createLink({
+      url: 'https://example.com/tagcount-harddelete-survivor',
+      tags: ['persistent'],
+      sourceKind: 'link',
+    });
+    const doomed = await ops.createLink({
+      url: 'https://example.com/tagcount-harddelete-doomed',
+      tags: ['persistent'],
+      sourceKind: 'link',
+    });
+    // Trash `doomed` first — its live count contribution is already gone at
+    // this point (asserted below), BEFORE hardDelete ever runs.
+    await ops.softDelete(doomed.id);
+    const afterTrash = await ops.listTagsWithCounts();
+    expect(findTag(afterTrash, 'persistent')?.count).toBe(1);
+
+    const deleted = await ops.hardDelete(doomed.id);
+    expect(deleted).toBe(true);
+
+    const afterHardDelete = await ops.listTagsWithCounts();
+    // The trashed link was never counted as live in the first place (proven
+    // above), so hard deleting it doesn't change the tag's live count.
+    expect(findTag(afterHardDelete, 'persistent')?.count).toBe(1);
+    expect(survivor.id).not.toBe(doomed.id);
+  });
+
+  describe('ordering', () => {
+    it('orders by count descending, then name ascending for ties', async () => {
+      // 'zeta' gets 3 live links, 'alpha' gets 3 live links (tie -> name asc),
+      // 'beta' gets 1 live link (lowest).
+      for (let i = 0; i < 3; i++) {
+        await ops.createLink({
+          url: `https://example.com/tagorder-zeta-${i}`,
+          tags: ['order-zeta'],
+          sourceKind: 'link',
+        });
+      }
+      for (let i = 0; i < 3; i++) {
+        await ops.createLink({
+          url: `https://example.com/tagorder-alpha-${i}`,
+          tags: ['order-alpha'],
+          sourceKind: 'link',
+        });
+      }
+      await ops.createLink({
+        url: 'https://example.com/tagorder-beta-0',
+        tags: ['order-beta'],
+        sourceKind: 'link',
+      });
+
+      const list = await ops.listTagsWithCounts();
+      const relevant = list.filter((t) =>
+        ['order-zeta', 'order-alpha', 'order-beta'].includes(t.name),
+      );
+
+      expect(relevant.map((t) => t.name)).toEqual(['order-alpha', 'order-zeta', 'order-beta']);
+      expect(relevant.map((t) => t.count)).toEqual([3, 3, 1]);
+    });
+  });
+});
