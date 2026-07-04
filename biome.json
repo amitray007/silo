@@ -60,7 +60,29 @@
                   "@silo/db": "Adapters (web/api/mcp) must not import @silo/db directly; only @silo/core owns data access.",
                   "@silo/web": "Adapter packages must not depend on each other; share code through @silo/core.",
                   "@silo/api": "Adapter packages must not depend on each other; share code through @silo/core.",
-                  "@silo/mcp-server": "Adapter packages must not depend on each other; share code through @silo/core."
+                  "@silo/mcp-server": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/worker": "Adapters must not depend on the worker; only the @silo/app composition root wires them together.",
+                  "@silo/app": "Nothing may import the @silo/app composition root; it is the top-level entrypoint that wires the others."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["packages/worker/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@silo/web": "The worker must not depend on adapters; share code through @silo/core.",
+                  "@silo/api": "The worker must not depend on adapters; share code through @silo/core.",
+                  "@silo/mcp-server": "The worker must not depend on adapters; share code through @silo/core.",
+                  "@silo/app": "Nothing may import the @silo/app composition root; it is the top-level entrypoint that wires the others."
                 }
               }
             }

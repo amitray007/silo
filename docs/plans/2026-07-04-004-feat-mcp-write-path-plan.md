@@ -185,15 +185,10 @@ tags in core; the "actionable guidance in every result" mcp.md rule; agent-nativ
 write parity.
 
 ### Deferred to follow-up (plan-local)
-- **MCP server does not register an enrichment enqueuer** (W2 QA observation).
-  `main.ts` starts the read/write tools but no pg-boss enqueuer, so `capture_link`
-  creates the link correctly (`enriching`, live) but the enqueue is a no-op IN THAT
-  PROCESS — the link is only enriched when a separate worker process runs against
-  the same DB. This is the intended injectable-seam design (U5), and U5's safety net
-  applies (a one-time no-op-enqueuer warning + `requestRetry` re-kicks stranded
-  `enriching` links). Decide later whether the MCP server should register an
-  enqueuer itself, or docs should state a worker must run alongside. Not a W2 bug —
-  W2's job (create the link + hand to core) is correct.
+- ~~**MCP server does not register an enrichment enqueuer**~~ — **RESOLVED by
+  plan 005 (`@silo/app` composition root)**: the turnkey `silo` process starts the
+  worker (registering the enqueuer in-process) alongside the MCP server, so
+  `capture_link` enqueues and the same process enriches it. Proven end-to-end.
 - **HTTP/SSE transport + auth** (still stdio-only; unchanged from plan 003).
 - **Rich `sourceData` capture** (an agent supplying HN/twitter metadata via
   `capture_link`) — omitted now; `sourceKind:'link'` is the clean path. Add when a
