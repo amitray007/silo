@@ -1,7 +1,10 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerAddTag } from './tools/add-tag.js';
 import { registerCaptureLink } from './tools/capture-link.js';
+import { registerEditLink } from './tools/edit-link.js';
 import { registerGetLink } from './tools/get-link.js';
 import { registerListLinks } from './tools/list-links.js';
+import { registerRemoveTag } from './tools/remove-tag.js';
 import { registerSearchLinks } from './tools/search-links.js';
 
 /**
@@ -37,6 +40,10 @@ export function createSiloMcpServer(): McpServer {
   registerListLinks(server);
   // W2 registers capture_link — the first write tool.
   registerCaptureLink(server);
+  // W3 registers edit_link, add_tag, and remove_tag.
+  registerEditLink(server);
+  registerAddTag(server);
+  registerRemoveTag(server);
 
   return server;
 }
