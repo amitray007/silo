@@ -1,0 +1,405 @@
+import type * as CoreOps from '@silo/core';
+import { postgresReachable } from '@silo/db/test-support/disposable-database';
+import type { Hono } from 'hono';
+import { describe, expect, it } from 'vitest';
+import type { ErrorEnvelope } from '../app.js';
+import { expectWhitelistedLinkShape } from '../test-support/assertions.js';
+import { setupPgHarness } from '../test-support/pg-harness.js';
+
+/**
+ * HTTP-level integration tests for the A3 write routes (plan 007), driven via
+ * Hono's `app.request(...)` against a real Postgres (see `docs/rules/
+ * testing.md` — dedup/merge, tag case-folding, and live-scoping are database
+ * behaviors mocks can't prove). Covers `POST /api/links` (capture),
+ * `PATCH /api/links/:id` (edit), `POST /api/links/:id/tags` /
+ * `DELETE /api/links/:id/tags/:tag` (tag add/remove), and `POST /api/tags`
+ * (standalone create-tag).
+ *
+ * ONE `setupPgHarness` call for the whole file (mirrors `links.test.ts`'s A2
+ * suite — `@silo/db`'s `pool`/`db` are true module-load-time singletons and
+ * the harness's `afterAll` permanently closes that pool, so a second
+ * `setupPgHarness` in the same file would reuse an already-closed pool).
+ */
+const describeIfPg = postgresReachable() ? describe : describe.skip;
+
+/** POSTs a JSON `body` to `path` on `app` — the shared request-building boilerplate every write-route test needs (Hono's `app.request` takes a `Request`-like init, not a bare object). */
+async function postJson(app: Hono, path: string, body: unknown): Promise<Response> {
+  return app.request(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** PATCHes a JSON `body` to `path` on `app`. */
+async function patchJson(app: Hono, path: string, body: unknown): Promise<Response> {
+  return app.request(path, {
+    method: 'PATCH',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
+/** DELETEs `path` on `app` (no body — used for the remove-tag route). */
+async function del(app: Hono, path: string): Promise<Response> {
+  return app.request(path, { method: 'DELETE' });
+}
+
+/** Asserts `res` is a 400 with the given `error` code, returning the parsed envelope — the write-route analogue of `assertions.ts`'s `expect400` (that one only drives GET). */
+async function expect400Response(res: Response, errorCode: string): Promise<ErrorEnvelope> {
+  expect(res.status).toBe(400);
+  const body = (await res.json()) as ErrorEnvelope;
+  expect(body.error).toBe(errorCode);
+  return body;
+}
+
+/** Asserts `res` is a 404 with `error: 'not_found'`. */
+async function expect404Response(res: Response): Promise<void> {
+  expect(res.status).toBe(404);
+  const body = (await res.json()) as ErrorEnvelope;
+  expect(body.error).toBe('not_found');
+}
+
+describeIfPg('A3 write routes (integration)', () => {
+  const harness = setupPgHarness('silo_api_links_write_test', async () => {
+    const core = (await import('@silo/core')) as typeof CoreOps;
+    const { createApp } = await import('../app.js');
+    const { pool } = await import('@silo/db');
+    return { core, app: createApp(), pool };
+  });
+
+  /** Total row count in `links` (including trashed) — proves the bad-URL guard saves NOTHING, not merely "no live link" (mirrors `capture-link.test.ts`'s MCP-side `totalLinkCount`). */
+  async function totalLinkCount(): Promise<number> {
+    const { pool } = harness.mod();
+    const result = await pool.query<{ count: string }>('select count(*) from links');
+    return Number(result.rows[0]?.count ?? '0');
+  }
+
+  describe('POST /api/links', () => {
+    it('fresh capture -> 201, enriching status, user origin, tags attached, deduped false', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links', {
+        url: 'https://example.com/write-capture-fresh',
+        tags: ['fresh-capture-tag'],
+        note: 'a fresh note',
+        sourceKind: 'link',
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown>; deduped: boolean };
+      expect(body.deduped).toBe(false);
+      expectWhitelistedLinkShape(body.link);
+      expect(body.link.captureStatus).toBe('enriching');
+      // Web capture is USER origin — the `◆` mark is agent-only (MCP's job).
+      expect(body.link.addedBy).toBe('user');
+      expect(body.link.tags).toEqual(['fresh-capture-tag']);
+      expect(body.link.notes).toBe('a fresh note');
+      expect(body.link.url).toBe('https://example.com/write-capture-fresh');
+    });
+
+    it('re-capturing the same url -> deduped true, same id, notes appended', async () => {
+      const { app } = harness.mod();
+      const url = 'https://example.com/write-capture-dedup';
+      const first = await postJson(app, '/api/links', { url, note: 'first note' });
+      expect(first.status).toBe(201);
+      const firstBody = (await first.json()) as { link: { id: string }; deduped: boolean };
+      expect(firstBody.deduped).toBe(false);
+
+      const second = await postJson(app, '/api/links', { url, note: 'second note' });
+      expect(second.status).toBe(201);
+      const secondBody = (await second.json()) as {
+        link: { id: string; notes: string | null };
+        deduped: boolean;
+      };
+      expect(secondBody.deduped).toBe(true);
+      expect(secondBody.link.id).toBe(firstBody.link.id);
+      expect(secondBody.link.notes).toContain('first note');
+      expect(secondBody.link.notes).toContain('second note');
+    });
+
+    it('bad URLs -> 400 invalid_url, NOTHING saved (checked after EACH input)', async () => {
+      const { app } = harness.mod();
+      const badUrls = [
+        'javascript:alert(1)',
+        'not a url',
+        'data:text/plain;base64,aGVsbG8=',
+        `https://example.com/${'a'.repeat(9000)}`,
+      ];
+      for (const url of badUrls) {
+        const before = await totalLinkCount();
+        const res = await postJson(app, '/api/links', { url });
+        const body = await expect400Response(res, 'invalid_url');
+        expect(body.message).toContain('nothing was saved');
+        const after = await totalLinkCount();
+        expect(after).toBe(before);
+      }
+    });
+
+    it('missing url in body -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links', { tags: ['no-url'] });
+      await expect400Response(res, 'validation_error');
+    });
+
+    it('bad sourceKind enum -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links', {
+        url: 'https://example.com/write-capture-bad-source-kind',
+        sourceKind: 'not-a-real-kind',
+      });
+      await expect400Response(res, 'validation_error');
+    });
+
+    it('the response link is the whitelisted shape (no internal-field leak)', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links', {
+        url: 'https://example.com/write-capture-shape-check',
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expectWhitelistedLinkShape(body.link);
+    });
+  });
+
+  describe('PATCH /api/links/:id', () => {
+    it('edits title/description/note — persists (re-GET confirms)', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-edit-persists',
+        sourceKind: 'link',
+      });
+
+      const res = await patchJson(app, `/api/links/${created.id}`, {
+        title: 'Edited Title',
+        description: 'Edited description',
+        note: 'Edited note',
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expect(body.link.title).toBe('Edited Title');
+      expect(body.link.description).toBe('Edited description');
+      expect(body.link.notes).toBe('Edited note');
+
+      // Re-GET to confirm the edit actually persisted, not just echoed back.
+      const getRes = await app.request(`/api/links/${created.id}`);
+      const getBody = (await getRes.json()) as Record<string, unknown>;
+      expect(getBody.title).toBe('Edited Title');
+      expect(getBody.description).toBe('Edited description');
+      expect(getBody.notes).toBe('Edited note');
+    });
+
+    it('unknown id -> 404 not_found', async () => {
+      const { app } = harness.mod();
+      const res = await patchJson(app, '/api/links/00000000-0000-0000-0000-000000000000', {
+        title: 'x',
+      });
+      await expect404Response(res);
+    });
+
+    it('trashed id -> 404 not_found', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-edit-trashed',
+        sourceKind: 'link',
+      });
+      await core.softDelete(created.id);
+
+      const res = await patchJson(app, `/api/links/${created.id}`, { title: 'x' });
+      await expect404Response(res);
+    });
+
+    it('non-uuid id -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await patchJson(app, '/api/links/not-a-uuid', { title: 'x' });
+      await expect400Response(res, 'validation_error');
+    });
+
+    it('empty body -> 200, returns current (unchanged) link', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-edit-empty-body',
+        sourceKind: 'link',
+        title: 'Original Title',
+      });
+
+      const res = await patchJson(app, `/api/links/${created.id}`, {});
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expect(body.link.title).toBe('Original Title');
+      expect(body.link.id).toBe(created.id);
+    });
+  });
+
+  describe('POST /api/links/:id/tags', () => {
+    it('adds a tag -> 200 with tag in link.tags', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-add-tag-basic',
+        sourceKind: 'link',
+      });
+
+      const res = await postJson(app, `/api/links/${created.id}/tags`, { tag: 'newly-added' });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: { tags: string[] } };
+      expect(body.link.tags).toContain('newly-added');
+    });
+
+    it('idempotent — adding the same tag twice still yields one tag', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-add-tag-idempotent',
+        sourceKind: 'link',
+      });
+
+      await postJson(app, `/api/links/${created.id}/tags`, { tag: 'repeat-tag' });
+      const res = await postJson(app, `/api/links/${created.id}/tags`, { tag: 'repeat-tag' });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: { tags: string[] } };
+      const count = body.link.tags.filter((t) => t === 'repeat-tag').length;
+      expect(count).toBe(1);
+    });
+
+    it('case-insensitive — adding "AI" then "ai" yields one tag (W1)', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-add-tag-case-insensitive',
+        sourceKind: 'link',
+      });
+
+      await postJson(app, `/api/links/${created.id}/tags`, { tag: 'AI' });
+      const res = await postJson(app, `/api/links/${created.id}/tags`, { tag: 'ai' });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: { tags: string[] } };
+      const matches = body.link.tags.filter((t) => t.toLowerCase() === 'ai');
+      expect(matches.length).toBe(1);
+    });
+
+    it('unknown id -> 404 not_found', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links/00000000-0000-0000-0000-000000000000/tags', {
+        tag: 'x',
+      });
+      await expect404Response(res);
+    });
+
+    it('trashed link -> 404 not_found', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-add-tag-trashed',
+        sourceKind: 'link',
+      });
+      await core.softDelete(created.id);
+
+      const res = await postJson(app, `/api/links/${created.id}/tags`, { tag: 'x' });
+      await expect404Response(res);
+    });
+
+    it('missing tag body -> 400 validation_error', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-add-tag-missing-body',
+        sourceKind: 'link',
+      });
+      const res = await postJson(app, `/api/links/${created.id}/tags`, {});
+      await expect400Response(res, 'validation_error');
+    });
+  });
+
+  describe('DELETE /api/links/:id/tags/:tag', () => {
+    it('removes a tag -> 200, tag gone', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-remove-tag-basic',
+        sourceKind: 'link',
+        tags: ['to-remove'],
+      });
+
+      const res = await del(app, `/api/links/${created.id}/tags/to-remove`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: { tags: string[] } };
+      expect(body.link.tags).not.toContain('to-remove');
+    });
+
+    it('removes by different case — "AI" removes via "ai"', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-remove-tag-case',
+        sourceKind: 'link',
+        tags: ['AI'],
+      });
+
+      const res = await del(app, `/api/links/${created.id}/tags/ai`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: { tags: string[] } };
+      expect(body.link.tags.map((t) => t.toLowerCase())).not.toContain('ai');
+    });
+
+    it('removing an absent tag -> 200, no-op', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-remove-tag-absent',
+        sourceKind: 'link',
+        tags: ['stays'],
+      });
+
+      const res = await del(app, `/api/links/${created.id}/tags/never-was-there`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: { tags: string[] } };
+      expect(body.link.tags).toContain('stays');
+    });
+
+    it('unknown link id -> 404 not_found', async () => {
+      const { app } = harness.mod();
+      const res = await del(app, '/api/links/00000000-0000-0000-0000-000000000000/tags/whatever');
+      await expect404Response(res);
+    });
+
+    it('trashed link -> 404 not_found', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-remove-tag-trashed',
+        sourceKind: 'link',
+        tags: ['doomed'],
+      });
+      await core.softDelete(created.id);
+
+      const res = await del(app, `/api/links/${created.id}/tags/doomed`);
+      await expect404Response(res);
+    });
+  });
+
+  describe('POST /api/tags', () => {
+    it('creates a standalone tag -> 201 { name }', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/tags', { name: 'standalone-fresh' });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { name: string };
+      expect(body.name).toBe('standalone-fresh');
+    });
+
+    it('case-insensitive idempotent — "AI" then "ai" -> one tag, canonical (first-entered) name', async () => {
+      const { app } = harness.mod();
+      const first = await postJson(app, '/api/tags', { name: 'AI-standalone' });
+      expect(first.status).toBe(201);
+      const firstBody = (await first.json()) as { name: string };
+      expect(firstBody.name).toBe('AI-standalone');
+
+      const second = await postJson(app, '/api/tags', { name: 'ai-standalone' });
+      expect(second.status).toBe(201);
+      const secondBody = (await second.json()) as { name: string };
+      // Canonical display name is the first-entered casing.
+      expect(secondBody.name).toBe('AI-standalone');
+    });
+
+    it('blank name -> 400 (whitespace-only passes min(1) but core.createTag returns null)', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/tags', { name: '   ' });
+      await expect400Response(res, 'validation_error');
+    });
+
+    it('missing name -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/tags', {});
+      await expect400Response(res, 'validation_error');
+    });
+  });
+});

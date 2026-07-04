@@ -35,3 +35,28 @@ export function toPageParams(query: PageQuery): PageParams {
   if (query.cursor !== undefined) page.cursor = query.cursor;
   return page;
 }
+
+/** `POST /api/links` (capture) body schema — plan 007, A3. `sourceKind` mirrors `capture_link`'s MCP input (defaults to `'link'`). */
+export const captureBodySchema = z.object({
+  url: z.string(),
+  tags: z.array(z.string()).optional(),
+  note: z.string().optional(),
+  sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
+});
+
+/** `PATCH /api/links/:id` (edit) body schema — every field optional; an empty body is a valid no-op (returns the current link, per `core.editLink`'s own empty-patch branch). */
+export const editBodySchema = z.object({
+  title: z.string().optional(),
+  description: z.string().optional(),
+  note: z.string().optional(),
+});
+
+/** `POST /api/links/:id/tags` (add tag) body schema. */
+export const addTagBodySchema = z.object({
+  tag: z.string().min(1),
+});
+
+/** `POST /api/tags` (standalone create-tag) body schema. */
+export const createTagBodySchema = z.object({
+  name: z.string().min(1),
+});
