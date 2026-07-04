@@ -1,0 +1,110 @@
+@import "./fonts.css";
+@import "./tokens.css";
+
+/* Minimal reset */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Geist", system-ui, sans-serif;
+  font-size: 15px;
+  line-height: 1.55;
+  background: var(--bg);
+  color: var(--ink);
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+::selection {
+  background: rgba(201, 143, 45, 0.22);
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--fnt);
+}
+
+/* Accessibility floor: focus ring is NEVER amber. */
+a:focus-visible,
+button:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+[tabindex]:focus-visible {
+  outline: 2px solid var(--ghost);
+  outline-offset: 2px;
+}
+
+/* Calm motion: interactive elements transition briskly, never showily. */
+button,
+a,
+input,
+textarea,
+select {
+  transition:
+    background 0.14s ease,
+    color 0.14s ease,
+    border-color 0.14s ease,
+    box-shadow 0.14s ease;
+}
+
+/* The brand "grain" dot — amber radial gradient. Brand mark only, never chrome. */
+.silo-grain-dot {
+  display: inline-block;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 32% 30%, #e8b054, var(--mark) 70%);
+}
+
+@keyframes siloPulse {
+  0%,
+  100% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes siloIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes siloFade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation: none !important;
+    transition: none !important;
+  }
+}

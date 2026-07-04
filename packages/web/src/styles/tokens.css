@@ -1,0 +1,41 @@
+/**
+ * Silo "Oat" design tokens.
+ * Source of truth: docs/design/tokens.md + docs/design/app/Silo-v2.html (:root block).
+ * Exact hex values copied from the prototype — do not "improve" them here.
+ *
+ * Theme mechanism: `data-theme="dark"` is set on <html> (see src/theme/).
+ * Light is the default (:root with no attribute); dark overrides via
+ * :root[data-theme="dark"] so both selectors match the same element.
+ */
+
+:root {
+  --bg: #fbf7ef;
+  --bg2: #f4ede1;
+  --line: #ebe2d2;
+  --hov: #f3ecdf;
+  --ink: #211b11;
+  --mut: #6e6350;
+  --fnt: #736850;
+  --ghost: #857963;
+  --mark: #c98f2d;
+  --markt: #a87514;
+  --warn: #a8482d;
+
+  color-scheme: light;
+}
+
+:root[data-theme="dark"] {
+  --bg: #171310;
+  --bg2: #201a15;
+  --line: #2c251d;
+  --hov: #211b15;
+  --ink: #ede5d8;
+  --mut: #a89a87;
+  --fnt: #968871;
+  --ghost: #7e7260;
+  --mark: #d9a441;
+  --markt: #d9a441;
+  --warn: #ce7454;
+
+  color-scheme: dark;
+}
