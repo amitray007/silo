@@ -1,20 +1,30 @@
 import { randomUUID } from 'node:crypto';
 import { db, links, linkTags, tags } from '@silo/db';
-import type { InferSelectModel } from 'drizzle-orm';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { canonicalize } from './canonicalize.js';
 import { enqueueEnrichment } from './enqueue.js';
-import type { Executor } from './executor.js';
+import type { Executor, Link } from './executor.js';
 import { whereLive } from './live.js';
+import {
+  decodeListCursor,
+  decodeSearchCursor,
+  effectiveLimit,
+  encodeListCursor,
+  encodeSearchCursor,
+  hydrateTags,
+  type LinkWithTags,
+  type PageParams,
+} from './pagination.js';
 import type { SourceData } from './source-data.js';
 import { sourceDataSchema } from './source-data.js';
 
-/** A single `links` row, typed. */
-export type Link = InferSelectModel<typeof links>;
-
-// `Db`/`Tx`/`Executor` moved to ./executor.ts so ./enqueue.ts can reference
-// them without a links.ts <-> enqueue.ts cycle. Re-exported for compatibility.
-export type { Db, Tx } from './executor.js';
+// `Db`/`Tx`/`Executor`/`Link` live in ./executor.ts so both ./enqueue.ts and
+// ./pagination.ts can reference them without a cycle through links.ts.
+// Re-exported here for compatibility (existing callers import `Link` from
+// `links.js` / `@silo/core`).
+export type { Db, Executor, Link, Tx } from './executor.js';
+export type { LinkWithTags, PageParams } from './pagination.js';
+export { InvalidCursorError } from './pagination.js';
 
 /** Postgres unique-violation error code (`23505`). */
 const UNIQUE_VIOLATION = '23505';
@@ -236,8 +246,8 @@ export async function findByCanonicalUrl(url: string): Promise<Link | null> {
   return row ?? null;
 }
 
-/** Fetch a single live link by id, or `null` if it doesn't exist or is trashed. */
-export async function getById(id: string): Promise<Link | null> {
+/** Fetch a single live link row (no tag hydration), or `null` if it doesn't exist or is trashed. */
+async function getRawById(id: string): Promise<Link | null> {
   const [row] = await db
     .select()
     .from(links)
@@ -246,41 +256,131 @@ export async function getById(id: string): Promise<Link | null> {
   return row ?? null;
 }
 
+/** Fetch a single live link by id, or `null` if it doesn't exist or is trashed. */
+export async function getById(id: string): Promise<LinkWithTags | null> {
+  const row = await getRawById(id);
+  if (!row) return null;
+  const [hydrated] = await hydrateTags(db, [row]);
+  return hydrated ?? null;
+}
+
 export type ListFilter = {
   tag?: string;
   status?: Link['captureStatus'];
 };
 
-/** List live links, optionally filtered by tag name and/or capture status, newest first. */
-export async function list(filter: ListFilter = {}): Promise<Link[]> {
-  if (filter.tag) {
-    const conditions = [eq(tags.name, filter.tag)];
-    if (filter.status) conditions.push(eq(links.captureStatus, filter.status));
-    const rows = await db
-      .select({ link: links })
+export type ListPage = {
+  links: LinkWithTags[];
+  nextCursor?: string;
+};
+
+/** Selects `created_at` as full-precision text (Postgres renders all 6
+ * fractional-second digits) — the value carried in the keyset cursor. See
+ * `afterListCursor` for why the JS `Date` node-postgres parses the column
+ * into can't be used. */
+const createdAtText = sql<string>`${links.createdAt}::text`;
+
+/**
+ * Keyset predicate for `list`'s `(created_at, id)` DESC ordering: rows
+ * strictly "after" the cursor row, i.e. `created_at < c.createdAt OR
+ * (created_at = c.createdAt AND id < c.id)`. Composable with `whereLive` and
+ * the tag/status filter branches via `and(...)`.
+ *
+ * `createdAtText` (a full-microsecond-precision string) is cast back to
+ * `timestamptz` and compared against the RAW `links.createdAt` column — the
+ * same raw column the `ORDER BY created_at DESC, id DESC` sorts on, so the
+ * WHERE predicate and the ORDER BY agree at identical precision. This is
+ * load-bearing: node-postgres parses `timestamptz` into a JS `Date`
+ * (millisecond precision), and `Date#toISOString()` is likewise millisecond
+ * precision, so a cursor built from the parsed `Date` would be lossy. An
+ * earlier `date_trunc('milliseconds', ...)` attempt truncated the COLUMN to
+ * ms to match that lossy cursor — but the ORDER BY still sorted on the raw
+ * µs column, so two rows in the same millisecond bucket with DIFFERENT
+ * microsecond values compared "tied" (falling to the `id` tiebreak) while
+ * the ORDER BY placed them by their true µs values, silently dropping rows
+ * across a page boundary. Carrying full µs precision in the cursor and
+ * comparing the raw column removes the mismatch entirely.
+ */
+function afterListCursor(createdAt: string, id: string): ReturnType<typeof sql> {
+  const cursorCreatedAt = sql`${createdAt}::timestamptz`;
+  return sql`(${links.createdAt} < ${cursorCreatedAt} OR (${links.createdAt} = ${cursorCreatedAt} AND ${links.id} < ${id}))`;
+}
+
+/**
+ * List live links, optionally filtered by tag name and/or capture status,
+ * newest first, tag-hydrated and keyset-paginated on `(createdAt, id)`.
+ * `limit` is clamped to `[1, 100]` (default 20). A malformed/mismatched
+ * cursor throws `InvalidCursorError`.
+ */
+export async function list(filter: ListFilter = {}, page: PageParams = {}): Promise<ListPage> {
+  const limit = effectiveLimit(page.limit);
+  const cursor = page.cursor !== undefined ? decodeListCursor(page.cursor) : undefined;
+  const cursorCondition = cursor ? afterListCursor(cursor.createdAt, cursor.id) : undefined;
+
+  // Each row carries `createdAtText` — the full-microsecond-precision text
+  // rendering of `created_at` — alongside the typed `Link`, so the keyset
+  // cursor is built from the exact stored value, not the lossy JS `Date`
+  // node-postgres parses the column into. It is stripped before tag
+  // hydration (hydration only needs the `Link`).
+  const rows = await (async () => {
+    if (filter.tag) {
+      const conditions = [eq(tags.name, filter.tag)];
+      if (filter.status) conditions.push(eq(links.captureStatus, filter.status));
+      if (cursorCondition) conditions.push(cursorCondition);
+      return db
+        .select({ link: links, createdAtText })
+        .from(links)
+        .innerJoin(linkTags, eq(linkTags.linkId, links.id))
+        .innerJoin(tags, eq(tags.id, linkTags.tagId))
+        .where(whereLive(...conditions))
+        .orderBy(desc(links.createdAt), desc(links.id))
+        .limit(limit + 1);
+    }
+    const conditions = filter.status ? [eq(links.captureStatus, filter.status)] : [];
+    if (cursorCondition) conditions.push(cursorCondition);
+    return db
+      .select({ link: links, createdAtText })
       .from(links)
-      .innerJoin(linkTags, eq(linkTags.linkId, links.id))
-      .innerJoin(tags, eq(tags.id, linkTags.tagId))
       .where(whereLive(...conditions))
-      .orderBy(desc(links.createdAt));
-    return rows.map((row) => row.link);
-  }
-  const conditions = filter.status ? [eq(links.captureStatus, filter.status)] : [];
-  return db
-    .select()
-    .from(links)
-    .where(whereLive(...conditions))
-    .orderBy(desc(links.createdAt));
+      .orderBy(desc(links.createdAt), desc(links.id))
+      .limit(limit + 1);
+  })();
+
+  const hasMore = rows.length > limit;
+  const page_ = hasMore ? rows.slice(0, limit) : rows;
+  const lastRow = page_.at(-1);
+  const nextCursor =
+    hasMore && lastRow ? encodeListCursor(lastRow.createdAtText, lastRow.link.id) : undefined;
+
+  const hydrated = await hydrateTags(
+    db,
+    page_.map((row) => row.link),
+  );
+  return nextCursor === undefined ? { links: hydrated } : { links: hydrated, nextCursor };
 }
 
 export type SearchResult = Link & { rank: number };
 
+export type SearchPage = {
+  results: (LinkWithTags & { rank: number })[];
+  nextCursor?: string;
+};
+
 /**
- * Full-text search over live links, ranked by `ts_rank` (highest first).
- * `websearch_to_tsquery` is safe on raw, untrusted input (query-parsing
- * function, bound as a parameter — no injection).
+ * Full-text search over live links, ranked by `ts_rank` (highest first),
+ * tag-hydrated and offset-paginated. Rank is not unique/keyset-able, so
+ * pagination uses a bounded offset cursor — capped at `MAX_OFFSET` in
+ * `decodeSearchCursor` (a forged/deep offset is rejected with
+ * `InvalidCursorError` rather than run, since each page past that depth is a
+ * full sort-then-discard) — documented tradeoff: a row inserted mid-paging
+ * can shift results, acceptable for search at this scale. `limit` is clamped
+ * to `[1, 100]` (default 20). `websearch_to_tsquery` stays bound as a
+ * parameter (no injection) exactly as before.
  */
-export async function search(query: string): Promise<SearchResult[]> {
+export async function search(query: string, page: PageParams = {}): Promise<SearchPage> {
+  const limit = effectiveLimit(page.limit);
+  const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
+
   const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
   const rows = await db
     .select({
@@ -289,8 +389,20 @@ export async function search(query: string): Promise<SearchResult[]> {
     })
     .from(links)
     .where(whereLive(sql`${links.searchVector} @@ ${tsQuery}`))
-    .orderBy(desc(sql`ts_rank(${links.searchVector}, ${tsQuery})`));
-  return rows.map((row) => ({ ...row.link, rank: row.rank }));
+    .orderBy(desc(sql`ts_rank(${links.searchVector}, ${tsQuery})`))
+    .limit(limit + 1)
+    .offset(offset);
+
+  const hasMore = rows.length > limit;
+  const page_ = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? encodeSearchCursor(offset + limit) : undefined;
+
+  const hydrated = await hydrateTags(
+    db,
+    page_.map((row) => row.link),
+  );
+  const results = hydrated.map((link, i) => ({ ...link, rank: page_[i]?.rank ?? 0 }));
+  return nextCursor === undefined ? { results } : { results, nextCursor };
 }
 
 export type EditLinkInput = {
@@ -299,14 +411,21 @@ export type EditLinkInput = {
   notes?: string;
 };
 
-/** Update editable metadata on a live link. `updated_at` advances via the schema's `$onUpdate`. */
+/**
+ * Update editable metadata on a live link. `updated_at` advances via the
+ * schema's `$onUpdate`. Both branches return a bare `Link` (no `tags`) —
+ * the no-op branch (empty patch) deliberately uses the un-hydrated
+ * `getRawById`, not `getById` (which returns `LinkWithTags`), so the
+ * declared `Promise<Link | null>` return shape is consistent regardless of
+ * which branch runs.
+ */
 export async function editLink(id: string, input: EditLinkInput): Promise<Link | null> {
   const patch: Partial<Pick<Link, 'title' | 'description' | 'notes'>> = {};
   if (input.title !== undefined) patch.title = input.title;
   if (input.description !== undefined) patch.description = input.description;
   if (input.notes !== undefined) patch.notes = input.notes;
   if (Object.keys(patch).length === 0) {
-    return getById(id);
+    return getRawById(id);
   }
   const [updated] = await db
     .update(links)

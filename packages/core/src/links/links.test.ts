@@ -39,6 +39,45 @@ describeIfPg('links operations (integration)', () => {
     return Number(rows.rows[0]?.count ?? '0');
   }
 
+  /** Walk every `list()` page via `nextCursor` (small limit, guarded against an infinite loop) and return every link id seen, in page order. */
+  async function walkAllListPages(
+    filter: Parameters<typeof LinksOps.list>[0] = {},
+    limit = 2,
+  ): Promise<string[]> {
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let guard = 0;
+    do {
+      const { links: page, nextCursor } = await ops.list(
+        filter,
+        cursor === undefined ? { limit } : { limit, cursor },
+      );
+      seen.push(...page.map((l) => l.id));
+      cursor = nextCursor;
+      guard++;
+    } while (cursor !== undefined && guard < 10);
+    return seen;
+  }
+
+  /** Set `created_at` for every given link id to the same raw timestamptz literal (e.g. to force a microsecond-precision tie). */
+  async function forceCreatedAt(ids: ReadonlyArray<string>, createdAt: string): Promise<void> {
+    await rawDb.execute(
+      sql`update links set created_at = ${createdAt}::timestamptz where id in (${sql.join(
+        ids.map((id) => sql`${id}`),
+        sql`, `,
+      )})`,
+    );
+  }
+
+  /** Set each link id to its OWN raw timestamptz literal (one UPDATE per pair), for building precise microsecond spreads. */
+  async function setCreatedAtEach(pairs: ReadonlyArray<readonly [string, string]>): Promise<void> {
+    for (const [id, createdAt] of pairs) {
+      await rawDb.execute(
+        sql`update links set created_at = ${createdAt}::timestamptz where id = ${id}`,
+      );
+    }
+  }
+
   describe('createLink — happy path', () => {
     it('inserts a new link with status=enriching; getById returns it typed', async () => {
       const created = await ops.createLink({
@@ -109,9 +148,9 @@ describeIfPg('links operations (integration)', () => {
       const withTagA = await ops.list({ tag: 'a' });
       const withTagB = await ops.list({ tag: 'b' });
       const withTagC = await ops.list({ tag: 'c' });
-      expect(withTagA.map((l) => l.id)).toContain(first.id);
-      expect(withTagB.map((l) => l.id)).toContain(first.id);
-      expect(withTagC.map((l) => l.id)).toContain(first.id);
+      expect(withTagA.links.map((l) => l.id)).toContain(first.id);
+      expect(withTagB.links.map((l) => l.id)).toContain(first.id);
+      expect(withTagC.links.map((l) => l.id)).toContain(first.id);
     });
 
     it('falls back to merge when a concurrent insert wins the TOCTOU race (23505 caught)', async () => {
@@ -130,8 +169,8 @@ describeIfPg('links operations (integration)', () => {
 
       const withA = await ops.list({ tag: 'racer-a' });
       const withB = await ops.list({ tag: 'racer-b' });
-      expect(withA.map((l) => l.id)).toContain(a.id);
-      expect(withB.map((l) => l.id)).toContain(a.id);
+      expect(withA.links.map((l) => l.id)).toContain(a.id);
+      expect(withB.links.map((l) => l.id)).toContain(a.id);
     });
   });
 
@@ -173,9 +212,9 @@ describeIfPg('links operations (integration)', () => {
       await ops.softDelete(created.id);
       expect(await ops.getById(created.id)).toBeNull();
       const listAfterTrash = await ops.list();
-      expect(listAfterTrash.map((l) => l.id)).not.toContain(created.id);
+      expect(listAfterTrash.links.map((l) => l.id)).not.toContain(created.id);
       const searchAfterTrash = await ops.search('Keyword');
-      expect(searchAfterTrash.map((l) => l.id)).not.toContain(created.id);
+      expect(searchAfterTrash.results.map((r) => r.id)).not.toContain(created.id);
 
       const result = await ops.restore(created.id);
       expect(result.status).toBe('restored');
@@ -215,8 +254,8 @@ describeIfPg('links operations (integration)', () => {
       // Only one row for that canonical url, and it's live.
       expect(await liveCountForCanonicalUrl('https://example.com/trash-resave')).toBe(1);
       // Both the original and the fresh tag are present.
-      expect((await ops.list({ tag: 'keep' })).map((l) => l.id)).toContain(created.id);
-      expect((await ops.list({ tag: 'fresh' })).map((l) => l.id)).toContain(created.id);
+      expect((await ops.list({ tag: 'keep' })).links.map((l) => l.id)).toContain(created.id);
+      expect((await ops.list({ tag: 'fresh' })).links.map((l) => l.id)).toContain(created.id);
     });
 
     it('re-saving a live url with a richer source_data updates the stored payload (no drop)', async () => {
@@ -271,7 +310,7 @@ describeIfPg('links operations (integration)', () => {
       expect(result.link.notes).toContain('replacement notes');
       expect(result.link.notes).toContain('original notes');
       const withOldTag = await ops.list({ tag: 'old-tag' });
-      expect(withOldTag.map((l) => l.id)).toContain(liveReplacement.id);
+      expect(withOldTag.links.map((l) => l.id)).toContain(liveReplacement.id);
     });
 
     it('restore on a link that is not trashed returns not_found', async () => {
@@ -304,7 +343,7 @@ describeIfPg('links operations (integration)', () => {
       });
       await ops.softDelete(trashed.id);
 
-      const results = await ops.search('octopus');
+      const { results } = await ops.search('octopus');
       const ids = results.map((r) => r.id);
       expect(ids).toContain(titleMatch.id);
       expect(ids).toContain(bodyMatch.id);
@@ -336,7 +375,7 @@ describeIfPg('links operations (integration)', () => {
       expect(tagRows.rows[0]?.count).toBe('1');
 
       const withTag = await ops.list({ tag: 'shared' });
-      expect(withTag.map((l) => l.id).sort()).toEqual([linkA.id, linkB.id].sort());
+      expect(withTag.links.map((l) => l.id).sort()).toEqual([linkA.id, linkB.id].sort());
     });
 
     it('removeTag unlinks without deleting the tag row', async () => {
@@ -349,7 +388,7 @@ describeIfPg('links operations (integration)', () => {
       await ops.removeTag(link.id, 'sticky');
 
       const withTag = await ops.list({ tag: 'sticky' });
-      expect(withTag.map((l) => l.id)).not.toContain(link.id);
+      expect(withTag.links.map((l) => l.id)).not.toContain(link.id);
 
       const tagRows = await rawDb.execute<{ count: string }>(
         sql`select count(*) from tags where name = 'sticky'`,
@@ -366,8 +405,8 @@ describeIfPg('links operations (integration)', () => {
       await ops.createLink({ url: 'https://example.com/not-tagged', sourceKind: 'link' });
 
       const result = await ops.list({ tag: 'exclusive' });
-      expect(result).toHaveLength(1);
-      expect(result[0]?.id).toBe(tagged.id);
+      expect(result.links).toHaveLength(1);
+      expect(result.links[0]?.id).toBe(tagged.id);
     });
   });
 
@@ -395,10 +434,10 @@ describeIfPg('links operations (integration)', () => {
       await ops.softDelete(trashedFull.id);
 
       const fullOnly = await ops.list({ status: 'full' });
-      expect(fullOnly.map((l) => l.id)).toEqual([full.id]);
+      expect(fullOnly.links.map((l) => l.id)).toEqual([full.id]);
 
       const bareOnly = await ops.list({ status: 'bare' });
-      expect(bareOnly.map((l) => l.id)).toEqual([bare.id]);
+      expect(bareOnly.links.map((l) => l.id)).toEqual([bare.id]);
     });
   });
 
@@ -434,6 +473,482 @@ describeIfPg('links operations (integration)', () => {
 
       const result = await ops.editLink(created.id, { title: 'nope' });
       expect(result).toBeNull();
+    });
+  });
+
+  describe('tag hydration', () => {
+    it('getById returns sorted tags, and [] for a link with none', async () => {
+      const tagged = await ops.createLink({
+        url: 'https://example.com/hydrate-getbyid',
+        tags: ['zebra', 'apple', 'mango'],
+        sourceKind: 'link',
+      });
+      const untagged = await ops.createLink({
+        url: 'https://example.com/hydrate-getbyid-none',
+        sourceKind: 'link',
+      });
+
+      const fetchedTagged = await ops.getById(tagged.id);
+      expect(fetchedTagged?.tags).toEqual(['apple', 'mango', 'zebra']);
+
+      const fetchedUntagged = await ops.getById(untagged.id);
+      expect(fetchedUntagged?.tags).toEqual([]);
+    });
+
+    it('list hydrates multiple links in one batched call, preserving order and per-link tags', async () => {
+      const a = await ops.createLink({
+        url: 'https://example.com/hydrate-batch-a',
+        tags: ['b-tag', 'a-tag'],
+        sourceKind: 'link',
+      });
+      const b = await ops.createLink({
+        url: 'https://example.com/hydrate-batch-b',
+        sourceKind: 'link',
+      });
+      const c = await ops.createLink({
+        url: 'https://example.com/hydrate-batch-c',
+        tags: ['only-c'],
+        sourceKind: 'link',
+      });
+
+      const { links: page } = await ops.list();
+      const byId = new Map(page.map((l) => [l.id, l]));
+
+      expect(byId.get(a.id)?.tags).toEqual(['a-tag', 'b-tag']);
+      expect(byId.get(b.id)?.tags).toEqual([]);
+      expect(byId.get(c.id)?.tags).toEqual(['only-c']);
+
+      // Newest-first order preserved through hydration: c, b, a were created
+      // in that order, so c is newest.
+      const ids = page.map((l) => l.id);
+      expect(ids.indexOf(c.id)).toBeLessThan(ids.indexOf(b.id));
+      expect(ids.indexOf(b.id)).toBeLessThan(ids.indexOf(a.id));
+    });
+  });
+
+  describe('list pagination (keyset)', () => {
+    it('pages through every row exactly once via nextCursor, last page has none', async () => {
+      const created: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/keyset-${i}`,
+          sourceKind: 'link',
+        });
+        created.push(link.id);
+      }
+
+      const seen = await walkAllListPages();
+
+      // Every created id appears exactly once across all pages.
+      expect(seen.sort()).toEqual([...created].sort());
+      expect(new Set(seen).size).toBe(seen.length);
+    });
+
+    it('BUG 1 regression: rows sharing an IDENTICAL (microsecond-precision) created_at are never dropped', async () => {
+      // Reproduces the original bug: node-postgres surfaces `created_at` as a
+      // JS `Date` (millisecond precision), but the column itself is
+      // microsecond precision. `encodeListCursor` serializes via
+      // `toISOString()` (ms), so comparing the RAW column against that
+      // ms-truncated cursor value made the tie branch `created_at =
+      // cursorCreatedAt` false for rows that only tie at microsecond
+      // resolution — silently skipping them. Force five rows onto the exact
+      // same microsecond timestamp and page through with a small limit: every
+      // row must come back exactly once.
+      const created: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/tied-created-at-${i}`,
+          sourceKind: 'link',
+        });
+        created.push(link.id);
+      }
+      await forceCreatedAt(created, '2026-04-04 08:00:00.222222+00');
+
+      const seen = await walkAllListPages();
+
+      expect(seen.sort()).toEqual([...created].sort());
+      expect(new Set(seen).size).toBe(seen.length);
+    });
+
+    it('BUG 1 regression (sub-millisecond spread): rows in ONE ms bucket with DISTINCT microsecond values all walk exactly once', async () => {
+      // The subtle case a millisecond-truncating predicate gets wrong: rows
+      // that are NOT exact ties but share a millisecond bucket while differing
+      // in microseconds. `ORDER BY created_at DESC` sorts on the raw µs column,
+      // so these rows have a real, strict order — but a predicate that
+      // truncated the column to ms would treat them as tied and fall to the
+      // `id` tiebreak, which has no relation to their true µs order, silently
+      // dropping rows across a page boundary. The keyset must compare the RAW
+      // column against a full-µs-precision cursor so WHERE and ORDER BY agree.
+      const created: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/submilli-${i}`,
+          sourceKind: 'link',
+        });
+        created.push(link.id);
+      }
+      // All within the SAME millisecond (.100xxx) but each a distinct
+      // microsecond value, deliberately assigned so µs-order and id-order do
+      // NOT coincide (this is what makes the id tiebreak actively wrong).
+      const micros = ['.100999', '.100001', '.100500', '.100250', '.100750'];
+      await setCreatedAtEach(
+        created.map((id, i) => [id, `2026-06-06 10:00:00${micros[i]}+00`] as const),
+      );
+
+      const seen = await walkAllListPages({}, 1);
+
+      expect(seen.sort()).toEqual([...created].sort());
+      expect(new Set(seen).size).toBe(seen.length);
+    });
+
+    it('BUG 1 regression (mixed): some rows tied on created_at, some distinct, all walk exactly once', async () => {
+      const tiedIds: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/mixed-tied-${i}`,
+          sourceKind: 'link',
+        });
+        tiedIds.push(link.id);
+      }
+      await forceCreatedAt(tiedIds, '2026-05-05 09:30:00.333333+00');
+
+      const distinctIds: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/mixed-distinct-${i}`,
+          sourceKind: 'link',
+        });
+        distinctIds.push(link.id);
+      }
+
+      const allIds = [...tiedIds, ...distinctIds];
+      const seen = await walkAllListPages();
+
+      expect(seen.sort()).toEqual([...allIds].sort());
+      expect(new Set(seen).size).toBe(seen.length);
+    });
+
+    it('BUG 2 regression: a list cursor with a non-uuid id throws InvalidCursorError, not a raw DB error', async () => {
+      const forgedCursor = Buffer.from(
+        JSON.stringify({
+          kind: 'list',
+          createdAt: new Date().toISOString(),
+          id: 'not-a-uuid-at-all',
+        }),
+        'utf8',
+      ).toString('base64url');
+
+      await expect(ops.list({}, { cursor: forgedCursor })).rejects.toThrow(ops.InvalidCursorError);
+    });
+
+    it('BUG 2 regression: a well-formed-but-non-uuid id (36 chars, wrong shape) also throws InvalidCursorError', async () => {
+      const forgedCursor = Buffer.from(
+        JSON.stringify({
+          kind: 'list',
+          createdAt: new Date().toISOString(),
+          // Same length as a uuid but not the 8-4-4-4-12 hex shape.
+          id: 'zzzzzzzz-zzzz-zzzz-zzzz-zzzzzzzzzzzz',
+        }),
+        'utf8',
+      ).toString('base64url');
+
+      await expect(ops.list({}, { cursor: forgedCursor })).rejects.toThrow(ops.InvalidCursorError);
+    });
+
+    it('a well-formed valid-uuid cursor still round-trips normally', async () => {
+      for (let i = 0; i < 3; i++) {
+        await ops.createLink({ url: `https://example.com/valid-cursor-${i}`, sourceKind: 'link' });
+      }
+      const page1 = await ops.list({}, { limit: 1 });
+      expect(page1.nextCursor).toBeDefined();
+      const page2 = await ops.list({}, { limit: 10, cursor: page1.nextCursor as string });
+      expect(page2.links.length).toBeGreaterThan(0);
+    });
+
+    it('keyset paging is stable when a row is inserted between page fetches', async () => {
+      const first = await ops.createLink({
+        url: 'https://example.com/keyset-stable-1',
+        sourceKind: 'link',
+      });
+      const second = await ops.createLink({
+        url: 'https://example.com/keyset-stable-2',
+        sourceKind: 'link',
+      });
+
+      const page1 = await ops.list({}, { limit: 1 });
+      expect(page1.links.map((l) => l.id)).toEqual([second.id]);
+      expect(page1.nextCursor).toBeDefined();
+
+      // Insert a brand-new (newest) row between page fetches. Because it
+      // sorts ahead of the cursor position, it must NOT appear on page 2 nor
+      // cause `first`/`second` to be dropped or duplicated.
+      const insertedMidPaging = await ops.createLink({
+        url: 'https://example.com/keyset-stable-inserted',
+        sourceKind: 'link',
+      });
+
+      const page2 = await ops.list({}, { limit: 10, cursor: page1.nextCursor as string });
+      const page2Ids = page2.links.map((l) => l.id);
+      expect(page2Ids).toContain(first.id);
+      expect(page2Ids).not.toContain(second.id);
+      expect(page2Ids).not.toContain(insertedMidPaging.id);
+      expect(page2.nextCursor).toBeUndefined();
+    });
+
+    it('trashed links never appear in any page', async () => {
+      const live = await ops.createLink({
+        url: 'https://example.com/keyset-live',
+        sourceKind: 'link',
+      });
+      const trashed = await ops.createLink({
+        url: 'https://example.com/keyset-trashed',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(trashed.id);
+
+      const { links: page, nextCursor } = await ops.list();
+      expect(page.map((l) => l.id)).toContain(live.id);
+      expect(page.map((l) => l.id)).not.toContain(trashed.id);
+      expect(nextCursor).toBeUndefined();
+    });
+
+    it('empty result set has no nextCursor', async () => {
+      const { links: page, nextCursor } = await ops.list({ tag: 'does-not-exist' });
+      expect(page).toEqual([]);
+      expect(nextCursor).toBeUndefined();
+    });
+
+    it('limit clamps: 0 still returns at least 1 row, 1000 is capped at 100', async () => {
+      for (let i = 0; i < 3; i++) {
+        await ops.createLink({ url: `https://example.com/clamp-${i}`, sourceKind: 'link' });
+      }
+
+      const zeroLimit = await ops.list({}, { limit: 0 });
+      expect(zeroLimit.links).toHaveLength(1);
+
+      const hugeLimit = await ops.list({}, { limit: 1000 });
+      expect(hugeLimit.links.length).toBeLessThanOrEqual(100);
+      expect(hugeLimit.links.length).toBe(3);
+
+      // A non-finite limit (e.g. NaN from a malformed caller) never reaches
+      // the query as an invalid value — falls back to the default (20).
+      const nanLimit = await ops.list({}, { limit: Number.NaN });
+      expect(nanLimit.links.length).toBe(3);
+    });
+
+    it('a malformed cursor throws InvalidCursorError', async () => {
+      await expect(ops.list({}, { cursor: 'not-valid-base64json' })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
+    });
+
+    it('a search cursor fed to list throws InvalidCursorError (not a silent wrong result)', async () => {
+      const { nextCursor } = await ops.search('nonexistent-query-xyz', { limit: 1 });
+      // No results, so nextCursor is undefined; build a well-formed *search*
+      // cursor directly to prove the cross-tool-cursor rejection, since we
+      // need a payload with kind: 'search' to feed into `list`.
+      expect(nextCursor).toBeUndefined();
+      const searchShapedCursor = Buffer.from(
+        JSON.stringify({ kind: 'search', offset: 0 }),
+        'utf8',
+      ).toString('base64url');
+
+      await expect(ops.list({}, { cursor: searchShapedCursor })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
+    });
+  });
+
+  describe('search pagination (offset)', () => {
+    it('round-trips an offset cursor across pages without dup/drop', async () => {
+      for (let i = 0; i < 5; i++) {
+        await ops.createLink({
+          url: `https://example.com/search-page-${i}`,
+          title: 'searchword pagination test',
+          sourceKind: 'link',
+        });
+      }
+
+      const seenIds: string[] = [];
+      let cursor: string | undefined;
+      let guard = 0;
+      do {
+        const { results, nextCursor } = await ops.search(
+          'searchword',
+          cursor === undefined ? { limit: 2 } : { limit: 2, cursor },
+        );
+        seenIds.push(...results.map((r) => r.id));
+        cursor = nextCursor;
+        guard++;
+      } while (cursor !== undefined && guard < 10);
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+    });
+
+    it('last page has no nextCursor; empty results have no nextCursor', async () => {
+      await ops.createLink({
+        url: 'https://example.com/search-onepage',
+        title: 'uniquesearchtermonly',
+        sourceKind: 'link',
+      });
+
+      const { nextCursor } = await ops.search('uniquesearchtermonly', { limit: 10 });
+      expect(nextCursor).toBeUndefined();
+
+      const empty = await ops.search('termnobodywrote');
+      expect(empty.results).toEqual([]);
+      expect(empty.nextCursor).toBeUndefined();
+    });
+
+    it('search results are tag-hydrated', async () => {
+      await ops.createLink({
+        url: 'https://example.com/search-hydrated',
+        title: 'hydratesearchterm',
+        tags: ['search-tag'],
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('hydratesearchterm');
+      expect(results[0]?.tags).toEqual(['search-tag']);
+    });
+
+    it('rank stays bound to its OWN link when ranks differ (guards hydrateTags order-preservation)', async () => {
+      // `search` re-attaches `rank` to hydrated results by array index
+      // (`page_[i]?.rank`), which only stays correct if `hydrateTags`
+      // preserves input row order. Use rows with clearly different
+      // searchword density so ranks are distinct, then confirm each result's
+      // rank matches ITS OWN link, not a neighbor's (which a hydration
+      // reorder would silently produce).
+      const highRank = await ops.createLink({
+        url: 'https://example.com/rank-high',
+        title: 'rankterm rankterm rankterm',
+        description: 'rankterm rankterm',
+        sourceKind: 'link',
+      });
+      const midRank = await ops.createLink({
+        url: 'https://example.com/rank-mid',
+        title: 'rankterm',
+        sourceKind: 'link',
+      });
+      const lowRank = await ops.createLink({
+        url: 'https://example.com/rank-low',
+        extractedText: 'a passing mention of rankterm deep in the body text',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('rankterm');
+      const byId = new Map(results.map((r) => [r.id, r]));
+
+      const highRankValue = byId.get(highRank.id)?.rank ?? -1;
+      const midRankValue = byId.get(midRank.id)?.rank ?? -1;
+      const lowRankValue = byId.get(lowRank.id)?.rank ?? -1;
+
+      // Distinct ranks confirm the ordering actually differentiates rows —
+      // otherwise a swapped attachment could go unnoticed.
+      expect(highRankValue).toBeGreaterThan(midRankValue);
+      expect(midRankValue).toBeGreaterThan(lowRankValue);
+
+      // Results are ts_rank DESC, so index order must exactly match rank
+      // order — proving each result's `rank` is the one computed FOR that
+      // link, not a neighbor's.
+      expect(results.map((r) => r.id)).toEqual([highRank.id, midRank.id, lowRank.id]);
+      expect(results.map((r) => r.rank)).toEqual(
+        [...results.map((r) => r.rank)].sort((a, b) => b - a),
+      );
+    });
+
+    it('limit clamps: 0 still returns at least 1 row, 1000 is capped at 100', async () => {
+      for (let i = 0; i < 3; i++) {
+        await ops.createLink({
+          url: `https://example.com/search-clamp-${i}`,
+          title: 'clampsearchterm',
+          sourceKind: 'link',
+        });
+      }
+
+      const zeroLimit = await ops.search('clampsearchterm', { limit: 0 });
+      expect(zeroLimit.results).toHaveLength(1);
+
+      const hugeLimit = await ops.search('clampsearchterm', { limit: 1000 });
+      expect(hugeLimit.results.length).toBeLessThanOrEqual(100);
+      expect(hugeLimit.results.length).toBe(3);
+    });
+
+    it('a malformed cursor throws InvalidCursorError', async () => {
+      await expect(ops.search('anything', { cursor: '!!!not-base64!!!' })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
+    });
+
+    it('a forged cursor with a fractional offset throws InvalidCursorError', async () => {
+      const fractionalOffsetCursor = Buffer.from(
+        JSON.stringify({ kind: 'search', offset: 1.5 }),
+        'utf8',
+      ).toString('base64url');
+
+      await expect(ops.search('anything', { cursor: fractionalOffsetCursor })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
+    });
+
+    it('BUG 3 regression: a forged offset beyond the maximum throws InvalidCursorError', async () => {
+      // MAX_OFFSET = MAX_LIMIT * 100 = 10_000 (see pagination.ts). A forged
+      // cursor asking to skip past that depth must be rejected outright, not
+      // silently run as a full sort-then-discard.
+      const beyondMaxOffsetCursor = Buffer.from(
+        JSON.stringify({ kind: 'search', offset: 10_001 }),
+        'utf8',
+      ).toString('base64url');
+
+      await expect(ops.search('anything', { cursor: beyondMaxOffsetCursor })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
+    });
+
+    it('an offset at or under the maximum still round-trips normally', async () => {
+      const atMaxOffsetCursor = Buffer.from(
+        JSON.stringify({ kind: 'search', offset: 10_000 }),
+        'utf8',
+      ).toString('base64url');
+
+      // No rows at that depth, but decode/validate must succeed and just
+      // return an empty page — never throw for a within-bounds offset.
+      const { results, nextCursor } = await ops.search('anything', {
+        cursor: atMaxOffsetCursor,
+      });
+      expect(results).toEqual([]);
+      expect(nextCursor).toBeUndefined();
+    });
+
+    it('a list cursor fed to search throws InvalidCursorError (not a silent wrong result)', async () => {
+      await ops.createLink({ url: 'https://example.com/cross-cursor-1', sourceKind: 'link' });
+      await ops.createLink({ url: 'https://example.com/cross-cursor-2', sourceKind: 'link' });
+
+      const { nextCursor } = await ops.list({}, { limit: 1 });
+      expect(nextCursor).toBeDefined();
+
+      await expect(ops.search('anything', { cursor: nextCursor as string })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
+    });
+
+    it('trashed links never appear in search pages', async () => {
+      const live = await ops.createLink({
+        url: 'https://example.com/search-trash-page',
+        title: 'trashsearchpageterm',
+        sourceKind: 'link',
+      });
+      const trashed = await ops.createLink({
+        url: 'https://example.com/search-trash-page-2',
+        title: 'trashsearchpageterm',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(trashed.id);
+
+      const { results } = await ops.search('trashsearchpageterm');
+      expect(results.map((r) => r.id)).toContain(live.id);
+      expect(results.map((r) => r.id)).not.toContain(trashed.id);
     });
   });
 });

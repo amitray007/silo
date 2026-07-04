@@ -33,8 +33,12 @@ export type {
   CreateLinkInput,
   EditLinkInput,
   Link,
+  LinkWithTags,
   ListFilter,
+  ListPage,
+  PageParams,
   RestoreResult,
+  SearchPage,
   SearchResult,
 } from './links/links.js';
 export {
@@ -43,6 +47,7 @@ export {
   editLink,
   findByCanonicalUrl,
   getById,
+  InvalidCursorError,
   list,
   removeTag,
   restore,
