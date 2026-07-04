@@ -68,6 +68,24 @@ describeMcpTool(
       expect(result.structuredContent).toEqual({ found: false });
     });
 
+    it('trashing an agent-originated link reports addedBy: agent (C1 — the hand-built structuredContent must not drop it)', async () => {
+      const { core, client } = getContext();
+      const created = await core.createLink({
+        url: 'https://example.com/trash-addedby-agent',
+        sourceKind: 'link',
+        origin: 'agent',
+      });
+
+      const result = await client.callTool({
+        name: 'trash_link',
+        arguments: { id: created.id },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.addedBy).toBe('agent');
+      expectNoLeakedFields(structured);
+    });
+
     it('outputSchema round-trip: a found:true trash result validates against the declared schema', async () => {
       const { client } = getContext();
       const id = await seedLink(getContext, 'https://example.com/trash-schema-roundtrip');

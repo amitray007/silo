@@ -70,6 +70,28 @@ describeMcpTool(
       expect(fetched?.tags).toEqual(['AI']);
     });
 
+    it("capture_link always sets addedBy: 'agent' (MCP captures are agent-origin) -- get_link shows it too", async () => {
+      const { core, client } = getContext();
+      const result = await client.callTool({
+        name: 'capture_link',
+        arguments: { url: 'https://example.com/capture-origin-agent' },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.addedBy).toBe('agent');
+      expectNoLeakedFields(structured);
+
+      const id = structured.id as string;
+      const fetched = await core.getById(id);
+      expect(fetched?.addedBy).toBe('agent');
+
+      const getLinkResult = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(getLinkResult.isError).toBeFalsy();
+      const getLinkStructured = getLinkResult.structuredContent as Record<string, unknown>;
+      expect(getLinkStructured.addedBy).toBe('agent');
+    });
+
     it('re-capturing the same URL -> deduped true, same id, notes appended', async () => {
       const { core } = getContext();
       const firstStructured = await captureLink(

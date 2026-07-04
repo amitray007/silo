@@ -73,6 +73,7 @@ export function registerTrashLink(server: McpServer): void {
           extractedText: deleted.extractedText,
           sourceKind: deleted.sourceKind,
           captureStatus: deleted.captureStatus,
+          addedBy: deleted.addedBy,
           notes: deleted.notes,
           tags: [],
           createdAt: deleted.createdAt.toISOString(),

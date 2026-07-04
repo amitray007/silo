@@ -22,6 +22,11 @@ import { z } from 'zod';
  * it, so the agent isn't missing anything a human sees. If a source-detail view
  * ever surfaces those fields, add `sourceData` here so agent-native read parity
  * holds (see plan 003's deferred list).
+ *
+ * `addedBy` (plan 007, C1) IS whitelisted, unlike `sourceData`: it's
+ * provenance (who saved this — a human or an agent, backing the mockup's `◆`
+ * mark), not an internal-only field like `searchVector` — agent-native parity
+ * means the agent should see the same origin signal a human sees in the UI.
  */
 export const baseLinkShape = {
   id: z.uuid(),
@@ -33,6 +38,7 @@ export const baseLinkShape = {
   extractedText: z.string().nullable(),
   sourceKind: z.string(),
   captureStatus: z.enum(['enriching', 'full', 'partial', 'bare']),
+  addedBy: z.enum(['user', 'agent']),
   notes: z.string().nullable(),
   tags: z.array(z.string()),
   createdAt: z.iso.datetime(),
@@ -60,6 +66,7 @@ export function toBaseLinkContent(link: LinkWithTags): BaseLinkContent {
     extractedText: link.extractedText,
     sourceKind: link.sourceKind,
     captureStatus: link.captureStatus,
+    addedBy: link.addedBy,
     notes: link.notes,
     tags: link.tags,
     createdAt: link.createdAt.toISOString(),

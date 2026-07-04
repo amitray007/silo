@@ -2,7 +2,7 @@ import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
 import { tsvector } from '../types.js';
-import { captureStatus } from './enums.js';
+import { captureStatus, linkOrigin } from './enums.js';
 
 /**
  * The `links` table — one row per saved item. Stable typed columns for
@@ -41,6 +41,14 @@ export const links = pgTable(
     sourceData: jsonb('source_data').$type<Record<string, unknown>>(),
 
     captureStatus: captureStatus('capture_status').notNull().default('enriching'),
+
+    // Origin provenance (plan 007, C1): who caused this link to be saved —
+    // backs the mockup's `◆` "added-by-claude" mark. `NOT NULL DEFAULT 'user'`
+    // so the migration backfills every existing row to 'user' (a silent,
+    // no-mark default) with no separate backfill statement needed — Postgres
+    // fills the default for pre-existing rows on an `ADD COLUMN ... NOT NULL
+    // DEFAULT`. See `enums.ts`'s `linkOrigin` doc comment for the merge rule.
+    addedBy: linkOrigin('added_by').notNull().default('user'),
 
     notes: text('notes'),
 

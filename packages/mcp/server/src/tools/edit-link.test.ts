@@ -49,6 +49,24 @@ describeMcpTool(
       expect(fetched?.notes).toBe('a fresh note');
     });
 
+    it('edit_link (C1) reports addedBy alongside the edited fields (foundResult/toBaseLinkContent path)', async () => {
+      const { core, client } = getContext();
+      const created = await core.createLink({
+        url: 'https://example.com/edit-addedby-agent',
+        sourceKind: 'link',
+        origin: 'agent',
+      });
+
+      const result = await client.callTool({
+        name: 'edit_link',
+        arguments: { id: created.id, title: 'Retitled' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.addedBy).toBe('agent');
+      expectNoLeakedFields(structured);
+    });
+
     it('editing an unknown uuid -> found: false', async () => {
       const { client } = getContext();
       const result = await client.callTool({

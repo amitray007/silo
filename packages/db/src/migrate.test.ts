@@ -159,4 +159,118 @@ describeIfPg('migrate (integration)', () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  /**
+   * C1 migration proof (0004_robust_maestro.sql, plan 007): existing rows
+   * written before the `added_by` column existed must backfill to
+   * `'user'` when the migration runs, and the resulting column/enum must
+   * carry the right constraints. This is the exact same "pre-existing row,
+   * then apply the migration, then re-check" pattern as the H2 test above,
+   * built against a temp migrations folder truncated before 0004.
+   *
+   * Also proves a real drizzle-kit generation gap found while building this
+   * migration: the raw `drizzle-kit generate` output for this column added
+   * `ALTER TABLE "links" ADD COLUMN "added_by" "link_origin" ...` with NO
+   * preceding `CREATE TYPE "public"."link_origin"` statement (the generated
+   * snapshot's `enums` section omitted `link_origin` entirely) — applying
+   * that raw output against a disposable database failed with `type
+   * "link_origin" does not exist`. The committed 0004 migration hand-adds
+   * the `CREATE TYPE` (mirroring 0001's `capture_status`); this test proves
+   * the hand-fixed file actually applies cleanly end-to-end, not just that
+   * it looks right.
+   */
+  it("C1: pre-existing rows backfill added_by to 'user'; column/enum constraints are correct", async () => {
+    const realDrizzleDir = path.resolve('./drizzle');
+    const journal = JSON.parse(
+      readFileSync(path.join(realDrizzleDir, 'meta/_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+    const c1EntryIndex = journal.entries.findIndex((entry) => entry.tag === '0004_robust_maestro');
+    expect(c1EntryIndex).toBeGreaterThanOrEqual(0);
+    const preC1Entries = journal.entries.slice(0, c1EntryIndex);
+    expect(preC1Entries.length).toBeGreaterThan(0);
+
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'silo-pre-c1-migrations-'));
+    try {
+      mkdirSync(path.join(tempDir, 'meta'), { recursive: true });
+      writeFileSync(
+        path.join(tempDir, 'meta/_journal.json'),
+        JSON.stringify({ ...journal, entries: preC1Entries }),
+      );
+      for (const entry of preC1Entries) {
+        writeFileSync(
+          path.join(tempDir, `${entry.tag}.sql`),
+          readFileSync(path.join(realDrizzleDir, `${entry.tag}.sql`)),
+        );
+      }
+
+      const database = createDisposableDatabase('silo_c1_migration_test');
+      try {
+        // 1. Migrate to the PRE-C1 schema (no added_by column at all).
+        const preMigratePool = new Pool({ connectionString: database.url });
+        const preMigrateDb = drizzle(preMigratePool);
+        await runMigrations(preMigrateDb, preMigratePool, tempDir);
+
+        // 2. Insert rows in the pre-C1 state, confirming added_by does not
+        // exist yet — a meaningful baseline, not a vacuous pass.
+        const seedPool = new Pool({ connectionString: database.url });
+        const seedDb = drizzle(seedPool);
+        await seedDb.execute(
+          sql`insert into links (url, canonical_url, title, source_kind) values
+              ('https://example.com/pre-c1-a', 'https://example.com/pre-c1-a', 'pre-existing A', 'link'),
+              ('https://example.com/pre-c1-b', 'https://example.com/pre-c1-b', 'pre-existing B', 'link')`,
+        );
+        const columnBefore = await seedDb.execute<{ n: number }>(
+          sql`select count(*)::int as n from information_schema.columns
+              where table_name = 'links' and column_name = 'added_by'`,
+        );
+        expect(columnBefore.rows[0]?.n).toBe(0);
+
+        // 3. Run the REAL migrations folder (includes 0004) against the SAME
+        // database.
+        const upgradePool = new Pool({ connectionString: database.url });
+        const upgradeDb = drizzle(upgradePool);
+        await runMigrations(upgradeDb, upgradePool, './drizzle');
+
+        // 4. Every pre-existing row backfilled to 'user' — no explicit
+        // backfill statement was run; the NOT NULL DEFAULT on the ALTER did
+        // it for us.
+        const after = await seedDb.execute<{ url: string; added_by: string }>(
+          sql`select url, added_by from links order by url`,
+        );
+        expect(after.rows).toEqual([
+          { url: 'https://example.com/pre-c1-a', added_by: 'user' },
+          { url: 'https://example.com/pre-c1-b', added_by: 'user' },
+        ]);
+
+        // 5. Column + enum constraints are exactly as designed.
+        const columnAfter = await seedDb.execute<{
+          is_nullable: string;
+          column_default: string | null;
+          udt_name: string;
+        }>(
+          sql`select is_nullable, column_default, udt_name from information_schema.columns
+              where table_name = 'links' and column_name = 'added_by'`,
+        );
+        expect(columnAfter.rows[0]).toMatchObject({
+          is_nullable: 'NO',
+          column_default: "'user'::link_origin",
+          udt_name: 'link_origin',
+        });
+
+        const enumValues = await seedDb.execute<{ enumlabel: string }>(
+          sql`select e.enumlabel from pg_type t
+              join pg_enum e on e.enumtypid = t.oid
+              where t.typname = 'link_origin'
+              order by e.enumsortorder`,
+        );
+        expect(enumValues.rows.map((r) => r.enumlabel)).toEqual(['user', 'agent']);
+
+        await seedPool.end();
+      } finally {
+        database.drop();
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

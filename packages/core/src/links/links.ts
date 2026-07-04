@@ -50,6 +50,15 @@ export type CreateLinkInput = {
   sourceData?: SourceData;
   notes?: string;
   tags?: ReadonlyArray<string>;
+  /**
+   * Who caused this link to be saved (plan 007, C1): `'user'` (a human/web
+   * capture) or `'agent'` (an MCP `capture_link` call). Defaults to `'user'`
+   * when omitted — matches the DB column's own `NOT NULL DEFAULT 'user'`, so
+   * every existing caller that doesn't pass `origin` keeps its current
+   * behavior unchanged. See `mergeIntoExisting`'s doc comment for the
+   * agent-sticky merge rule this drives on dedup-merge.
+   */
+  origin?: 'user' | 'agent';
 };
 
 /**
@@ -115,6 +124,23 @@ async function attachTags(
 }
 
 /**
+ * Agent-sticky merge rule for `added_by` on dedup-merge (plan 007, C1):
+ * merged origin is `'agent'` if EITHER the existing row OR the incoming
+ * capture is `'agent'`, else `'user'`. Monotonic toward `'agent'` and never
+ * downgrades: once a link has been touched by an agent it keeps the `◆` mark
+ * even if later re-saved from the web by a human, but a plain user-saved link
+ * that an agent re-captures picks up the mark going forward. Incoming
+ * `undefined` (a caller that doesn't pass `origin`, e.g. legacy call sites)
+ * is treated as `'user'` — the same default `CreateLinkInput.origin` carries.
+ */
+function mergedOrigin(
+  existing: Link['addedBy'],
+  incoming: 'user' | 'agent' | undefined,
+): Link['addedBy'] {
+  return existing === 'agent' || incoming === 'agent' ? 'agent' : 'user';
+}
+
+/**
  * Read-modify-write merge of `input` into the existing row `existing` (which
  * may be live OR trashed — a trashed match is revived by clearing
  * `deleted_at`). Unions tags, appends notes, and folds in freshly-provided
@@ -150,6 +176,7 @@ async function mergeIntoExisting(
       imageUrl: input.imageUrl ?? existing.imageUrl,
       siteName: input.siteName ?? existing.siteName,
       extractedText: input.extractedText ?? existing.extractedText,
+      addedBy: mergedOrigin(existing.addedBy, input.origin),
     })
     .where(eq(links.id, existing.id))
     .returning();
@@ -260,6 +287,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
           sourceData,
           notes: input.notes,
           captureStatus: 'enriching',
+          addedBy: input.origin ?? 'user',
         })
         .returning();
       if (!inserted) {
@@ -672,6 +700,11 @@ export async function restore(id: string): Promise<RestoreResult> {
         const mergeInput: CreateLinkInput = {
           url: trashedRow.url,
           sourceKind: trashedRow.sourceKind,
+          // Carry the trashed row's own origin into the merge so a collision
+          // during restore can't silently drop `agent` provenance (the
+          // agent-sticky rule in `mergedOrigin` needs to see it as the
+          // "incoming" side here, same as a fresh capture would).
+          origin: trashedRow.addedBy,
         };
         if (trashedRow.notes) mergeInput.notes = trashedRow.notes;
         const mergedRow = await mergeIntoExisting(

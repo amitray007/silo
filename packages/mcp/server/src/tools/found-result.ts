@@ -26,6 +26,7 @@ export const foundLinkOutputShape = {
   extractedText: baseLinkShape.extractedText.optional(),
   sourceKind: baseLinkShape.sourceKind.optional(),
   captureStatus: baseLinkShape.captureStatus.optional(),
+  addedBy: baseLinkShape.addedBy.optional(),
   notes: baseLinkShape.notes.optional(),
   tags: baseLinkShape.tags.optional(),
   createdAt: baseLinkShape.createdAt.optional(),

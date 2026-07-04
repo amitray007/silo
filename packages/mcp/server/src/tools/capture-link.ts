@@ -127,7 +127,11 @@ export function registerCaptureLink(server: McpServer): void {
       // reject an explicit `undefined` — the input schema's `.optional()`
       // fields come through as `undefined` when omitted, so each is only
       // assigned when actually present. `sourceKind` defaults to 'link'.
-      const input: CreateLinkInput = { url, sourceKind: sourceKind ?? 'link' };
+      // `origin: 'agent'` (plan 007, C1): every MCP capture is agent-caused —
+      // this is the one write path that sets it, backing the mockup's `◆`
+      // "added-by-claude" mark. Web/API captures (a later slice) pass
+      // `origin: 'user'` instead.
+      const input: CreateLinkInput = { url, sourceKind: sourceKind ?? 'link', origin: 'agent' };
       if (tags !== undefined) input.tags = tags;
       if (note !== undefined) input.notes = note;
 

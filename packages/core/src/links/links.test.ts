@@ -111,6 +111,103 @@ describeIfPg('links operations (integration)', () => {
     });
   });
 
+  describe('added_by origin (C1)', () => {
+    it("createLink with no origin defaults addedBy to 'user'", async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/origin-default',
+        sourceKind: 'link',
+      });
+      expect(created.addedBy).toBe('user');
+
+      const fetched = await ops.getById(created.id);
+      expect(fetched?.addedBy).toBe('user');
+    });
+
+    it("createLink with origin: 'agent' sets addedBy to 'agent'", async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/origin-agent',
+        sourceKind: 'link',
+        origin: 'agent',
+      });
+      expect(created.addedBy).toBe('agent');
+
+      const fetched = await ops.getById(created.id);
+      expect(fetched?.addedBy).toBe('agent');
+    });
+
+    it("createLink with origin: 'user' explicitly sets addedBy to 'user'", async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/origin-explicit-user',
+        sourceKind: 'link',
+        origin: 'user',
+      });
+      expect(created.addedBy).toBe('user');
+    });
+
+    it('dedup-merge: user-then-agent re-save UPGRADES addedBy to agent', async () => {
+      const url = 'https://example.com/origin-merge-user-then-agent';
+      const first = await ops.createLink({ url, sourceKind: 'link', origin: 'user' });
+      expect(first.addedBy).toBe('user');
+
+      const second = await ops.createLink({ url, sourceKind: 'link', origin: 'agent' });
+      expect(second.id).toBe(first.id);
+      expect(second.addedBy).toBe('agent');
+
+      const fetched = await ops.getById(first.id);
+      expect(fetched?.addedBy).toBe('agent');
+    });
+
+    it('dedup-merge: agent-then-user re-save is STICKY — addedBy stays agent', async () => {
+      const url = 'https://example.com/origin-merge-agent-then-user';
+      const first = await ops.createLink({ url, sourceKind: 'link', origin: 'agent' });
+      expect(first.addedBy).toBe('agent');
+
+      const second = await ops.createLink({ url, sourceKind: 'link', origin: 'user' });
+      expect(second.id).toBe(first.id);
+      expect(second.addedBy).toBe('agent');
+
+      const fetched = await ops.getById(first.id);
+      expect(fetched?.addedBy).toBe('agent');
+    });
+
+    it('dedup-merge: user-then-user re-save stays user', async () => {
+      const url = 'https://example.com/origin-merge-user-then-user';
+      const first = await ops.createLink({ url, sourceKind: 'link', origin: 'user' });
+      expect(first.addedBy).toBe('user');
+
+      const second = await ops.createLink({ url, sourceKind: 'link', origin: 'user' });
+      expect(second.id).toBe(first.id);
+      expect(second.addedBy).toBe('user');
+    });
+
+    it('dedup-merge: agent-then-agent re-save stays agent', async () => {
+      const url = 'https://example.com/origin-merge-agent-then-agent';
+      const first = await ops.createLink({ url, sourceKind: 'link', origin: 'agent' });
+      expect(first.addedBy).toBe('agent');
+
+      const second = await ops.createLink({ url, sourceKind: 'link', origin: 'agent' });
+      expect(second.id).toBe(first.id);
+      expect(second.addedBy).toBe('agent');
+    });
+
+    it('reads (list/search) return addedBy alongside every link', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/origin-read-surface',
+        title: 'Origin Read Surface Keyword',
+        sourceKind: 'link',
+        origin: 'agent',
+      });
+
+      const listed = await ops.list();
+      const listedLink = listed.links.find((l) => l.id === created.id);
+      expect(listedLink?.addedBy).toBe('agent');
+
+      const searched = await ops.search('Origin Read Surface Keyword');
+      const searchedLink = searched.results.find((r) => r.id === created.id);
+      expect(searchedLink?.addedBy).toBe('agent');
+    });
+  });
+
   describe('createLink — dedup / merge', () => {
     it('merges a tracking-param variant of the same url into one row (not a twin)', async () => {
       const first = await ops.createLink({
