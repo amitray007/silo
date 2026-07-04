@@ -1,6 +1,10 @@
 import { InvalidCursorError } from '@silo/core';
 import { Hono } from 'hono';
 import { ZodError } from 'zod';
+import { registerCountsRoutes } from './routes/counts.js';
+import { registerLinksRoutes } from './routes/links.js';
+import { registerTagsRoutes } from './routes/tags.js';
+import { registerTrashRoutes } from './routes/trash.js';
 
 /**
  * The API's error envelope — every non-2xx JSON body this API returns has
@@ -22,12 +26,19 @@ function errorBody(error: string, message: string, details?: unknown): ErrorEnve
 }
 
 /**
- * Builds the silo HTTP API. Routes are registered here (A1 registers none —
- * `GET /health` and `GET /` only; A2–A4 add `/api/links`, `/api/trash`,
- * `/api/tags`, `/api/counts`, and the write/lifecycle routes on top of this
- * same factory). Each route is a thin translation over an `@silo/core`
- * function (`docs/rules/architecture.md`: adapters do `HTTP request ↔ core
- * call ↔ HTTP response`, never business logic).
+ * Builds the silo HTTP API. Routes are registered here (A1 registered none —
+ * `GET /health` and `GET /` only; A2 adds the `/api` read surface — `/links`,
+ * `/links/search`, `/links/:id`, `/trash`, `/tags`, `/counts`; A3/A4 add the
+ * write/lifecycle routes on top of this same factory). Each route is a thin
+ * translation over an `@silo/core` function (`docs/rules/architecture.md`:
+ * adapters do `HTTP request ↔ core call ↔ HTTP response`, never business
+ * logic).
+ *
+ * The `/api` sub-app is a separate `Hono` instance mounted via `route('/api',
+ * ...)` — each `registerXRoutes` function registers its paths on it
+ * unprefixed (e.g. `app.get('/links', ...)` inside `registerLinksRoutes`
+ * becomes reachable at `/api/links` once mounted). This keeps each routes
+ * module free of repeating the `/api` prefix on every path.
  *
  * Returned UNSTARTED (no listening socket) — mirrors `@silo/mcp-server`'s
  * `createSiloMcpServer()`/`main.ts` split (see its doc comment): tests drive
@@ -46,6 +57,13 @@ export function createApp(): Hono {
   );
 
   app.get('/health', (c) => c.json({ ok: true }));
+
+  const api = new Hono();
+  registerLinksRoutes(api);
+  registerTrashRoutes(api);
+  registerTagsRoutes(api);
+  registerCountsRoutes(api);
+  app.route('/api', api);
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 
