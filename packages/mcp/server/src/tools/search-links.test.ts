@@ -76,6 +76,47 @@ describeMcpTool(
       expect(content?.text).toContain('2 results for "octopus"');
     });
 
+    it('H2: finds a link by a word that appears ONLY in its notes', async () => {
+      const { core, client } = getContext();
+      const link = await core.createLink({
+        url: 'https://example.com/search-notes-only-mcp',
+        sourceKind: 'link',
+        notes: 'a personal reminder mentioning wizzlefroth for later',
+      });
+      await core.recordEnrichment(link.id, {
+        title: 'an unrelated enriched title',
+        status: 'full',
+      });
+
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'wizzlefroth' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results: Array<{ id: string }> };
+      expect(structured.results.map((r) => r.id)).toContain(link.id);
+    });
+
+    it('H2: finds a link by a TAG name that appears nowhere else', async () => {
+      const id = await seedLink(getContext, 'https://example.com/search-tag-only-mcp', {
+        title: 'an unrelated enriched title',
+        tags: ['blorptastic'],
+      });
+
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'blorptastic' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results: Array<{ id: string; tags: string[] }>;
+      };
+      expect(structured.results.map((r) => r.id)).toContain(id);
+      const match = structured.results.find((r) => r.id === id);
+      expect(match?.tags).toEqual(['blorptastic']);
+    });
+
     it('LEAK-ABSENCE: a result never carries searchVector/canonicalUrl/sourceData/deletedAt', async () => {
       const { client } = getContext();
       await seedLink(getContext, 'https://example.com/search-leak-check', {
