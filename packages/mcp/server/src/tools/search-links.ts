@@ -84,15 +84,15 @@ export function registerSearchLinks(server: McpServer): void {
     {
       title: 'Search links',
       description:
-        "Full-text search over saved links' title, description, and extracted " +
-        'text. Returns matches ranked by relevance (best match first), each ' +
-        "with the link's metadata, tags, and a numeric relevance rank. This is " +
-        'KEYWORD/full-text search, not semantic search — phrase `query` as ' +
-        'search terms (e.g. "rust async runtime"), not a natural-language ' +
-        'question. Paginate with `limit` (default 20, max 100) and the ' +
-        'returned `nextCursor`: pass it back as `cursor` to fetch the next ' +
-        'page; omit `cursor` for the first page. An empty `results` array ' +
-        'means no matches, not an error.',
+        "Full-text search over saved links' title, description, extracted " +
+        'text, notes, and tags. Returns matches ranked by relevance (best ' +
+        "match first), each with the link's metadata, tags, and a numeric " +
+        'relevance rank. This is KEYWORD/full-text search, not semantic ' +
+        'search — phrase `query` as search terms (e.g. "rust async ' +
+        'runtime"), not a natural-language question. Paginate with `limit` ' +
+        '(default 20, max 100) and the returned `nextCursor`: pass it back ' +
+        'as `cursor` to fetch the next page; omit `cursor` for the first ' +
+        'page. An empty `results` array means no matches, not an error.',
       inputSchema: {
         query: z
           .string()

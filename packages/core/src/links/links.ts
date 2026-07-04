@@ -424,29 +424,78 @@ export type SearchPage = {
 };
 
 /**
+ * Correlated scalar subquery: the tsvector of `links.id`'s tag NAMES, built by
+ * `string_agg`-ing every attached tag's `name` (joined `link_tags` -> `tags`)
+ * into one space-joined string and running it through `to_tsvector`. A link
+ * with no tags gets `string_agg(...) = NULL`, coalesced to `''` so
+ * `to_tsvector` still returns a (empty, non-matching) vector rather than NULL.
+ *
+ * Why query-time and not in the generated `search_vector` column: a
+ * `GENERATED ALWAYS AS` expression can only reference columns of its OWN row
+ * — tags live in a separate m2m join (`link_tags`/`tags`), unreachable from a
+ * generated column without a trigger-maintained materialization (out of scope
+ * here; `search_vector` stays a Postgres-native STORED generated column with
+ * no app-level trigger to keep in sync). Folding the join in here instead
+ * keeps that simplicity at the cost of a per-candidate correlated subquery —
+ * acceptable at personal-store scale (see `search`'s doc comment).
+ */
+const tagSearchVector = sql`to_tsvector('english', coalesce((
+  select string_agg(${tags.name}, ' ')
+  from ${linkTags}
+  inner join ${tags} on ${tags.id} = ${linkTags.tagId}
+  where ${linkTags.linkId} = ${links.id}
+), ''))`;
+
+/**
  * Full-text search over live links, ranked by `ts_rank` (highest first),
- * tag-hydrated and offset-paginated. Rank is not unique/keyset-able, so
- * pagination uses a bounded offset cursor — capped at `MAX_OFFSET` in
- * `decodeSearchCursor` (a forged/deep offset is rejected with
- * `InvalidCursorError` rather than run, since each page past that depth is a
- * full sort-then-discard) — documented tradeoff: a row inserted mid-paging
- * can shift results, acceptable for search at this scale. `limit` is clamped
- * to `[1, 100]` (default 20). `websearch_to_tsquery` stays bound as a
- * parameter (no injection) exactly as before.
+ * tag-hydrated and offset-paginated. Matches a row when EITHER the stored
+ * `search_vector` (title/description/extracted_text/notes, per the schema's
+ * generated column) OR the link's tag names (`tagSearchVector`, computed at
+ * query time — see its doc comment for why tags can't live in the generated
+ * column) satisfy the query. Rank combines both signals by SUMMING their
+ * `ts_rank`s: a tag hit is a real relevance signal (an exact, deliberately
+ * user-applied label), so it should be able to lift a link's rank rather than
+ * being ignored whenever the stored vector alone would rank it lower — while
+ * a link matching on both signals ranks above one matching on only one,
+ * which a `GREATEST`/max-of-two would not distinguish.
+ *
+ * Rank is not unique/keyset-able, so pagination uses a bounded offset cursor
+ * — capped at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is
+ * rejected with `InvalidCursorError` rather than run, since each page past
+ * that depth is a full sort-then-discard) — documented tradeoff: a row
+ * inserted mid-paging can shift results, acceptable for search at this scale.
+ * `limit` is clamped to `[1, 100]` (default 20). `websearch_to_tsquery` stays
+ * bound as a parameter (no injection) exactly as before.
+ *
+ * Performance note: `tagSearchVector` is a correlated subquery evaluated per
+ * candidate row (once for the WHERE match, once for the rank — Postgres does
+ * not automatically common-subexpression-eliminate a repeated correlated
+ * subquery across clauses). Fine at personal-store scale (a handful of tags
+ * per link, a modest total row count); if this ever shows up as a hot path, a
+ * trigger-maintained materialized tag-tsvector column on `links` would let
+ * tags join the GIN-indexed `search_vector` path instead — deliberately not
+ * built now (adds a write-side trigger to keep in sync, out of scope for this
+ * increment).
  */
 export async function search(query: string, page: PageParams = {}): Promise<SearchPage> {
   const limit = effectiveLimit(page.limit);
   const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
 
   const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
+  const titleRank = sql`ts_rank(${links.searchVector}, ${tsQuery})`;
+  const tagRank = sql`ts_rank(${tagSearchVector}, ${tsQuery})`;
+  const combinedRank = sql<number>`${titleRank} + ${tagRank}`;
+
   const rows = await db
     .select({
       link: links,
-      rank: sql<number>`ts_rank(${links.searchVector}, ${tsQuery})`,
+      rank: combinedRank,
     })
     .from(links)
-    .where(whereLive(sql`${links.searchVector} @@ ${tsQuery}`))
-    .orderBy(desc(sql`ts_rank(${links.searchVector}, ${tsQuery})`))
+    .where(
+      whereLive(sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`),
+    )
+    .orderBy(desc(combinedRank))
     .limit(limit + 1)
     .offset(offset);
 

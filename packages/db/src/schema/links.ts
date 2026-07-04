@@ -45,13 +45,23 @@ export const links = pgTable(
     notes: text('notes'),
 
     // Generated, read-only full-text column — Postgres keeps it in sync on
-    // every insert/update of title/description/extracted_text. MUST use the
-    // explicit 'english' config: the single-arg to_tsvector(text) form is not
-    // immutable and Postgres rejects it in a generated column. coalesce(...)
-    // on every input column so one NULL doesn't null the whole vector.
+    // every insert/update of title/description/extracted_text/notes. MUST use
+    // the explicit 'english' config: the single-arg to_tsvector(text) form is
+    // not immutable and Postgres rejects it in a generated column.
+    // coalesce(...) on every input column so one NULL doesn't null the whole
+    // vector.
+    //
+    // `notes` (H2, plan 006) is weight D — the lowest — since it's a personal
+    // annotation, below even the extracted body text. It CAN live in this
+    // generated column because `notes` is a column of this same `links` row;
+    // `tags` cannot follow the same path — a generated column can only
+    // reference columns of its own row, and tags are a separate m2m table
+    // (`link_tags`/`tags`) reached by a join. Tag-name matching is therefore
+    // done at query time in `core`'s `search()`, not here — see that
+    // function's doc comment for the query-time approach and its tradeoffs.
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('english', coalesce(${links.title}, '')), 'A') || setweight(to_tsvector('english', coalesce(${links.description}, '')), 'B') || setweight(to_tsvector('english', coalesce(${links.extractedText}, '')), 'C')`,
+        sql`setweight(to_tsvector('english', coalesce(${links.title}, '')), 'A') || setweight(to_tsvector('english', coalesce(${links.description}, '')), 'B') || setweight(to_tsvector('english', coalesce(${links.extractedText}, '')), 'C') || setweight(to_tsvector('english', coalesce(${links.notes}, '')), 'D')`,
     ),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

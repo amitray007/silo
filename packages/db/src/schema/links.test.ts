@@ -150,6 +150,53 @@ describeIfPg('links schema (integration)', () => {
     expect(rows.rows[0]?.count).toBe('2');
   });
 
+  it('populates search_vector from notes (weight D) and matches via websearch_to_tsquery (H2)', async () => {
+    await db.insert(links).values({
+      url: 'https://example.com/notes-only',
+      canonicalUrl: 'https://example.com/notes-only',
+      title: 'unrelated title',
+      notes: 'a distinctivenotesword only appears in this personal annotation',
+      sourceKind: 'link',
+    });
+
+    const rows = await db.execute<{ url: string }>(
+      sql`select url from links where search_vector @@ websearch_to_tsquery('english', 'distinctivenotesword')`,
+    );
+
+    expect(rows.rows).toHaveLength(1);
+    expect(rows.rows[0]?.url).toBe('https://example.com/notes-only');
+  });
+
+  it('ranks a title match above a notes-only match (weighting A > D)', async () => {
+    await db.insert(links).values([
+      {
+        url: 'https://example.com/notes-vs-title-a',
+        canonicalUrl: 'https://example.com/notes-vs-title-a',
+        title: 'narwhal',
+        sourceKind: 'link',
+      },
+      {
+        url: 'https://example.com/notes-vs-title-b',
+        canonicalUrl: 'https://example.com/notes-vs-title-b',
+        title: 'unrelated headline',
+        notes: 'a note that happens to mention narwhal in passing',
+        sourceKind: 'link',
+      },
+    ]);
+
+    const rows = await db.execute<{ url: string; rank: number }>(
+      sql`select url, ts_rank(search_vector, websearch_to_tsquery('english', 'narwhal')) as rank
+          from links
+          where search_vector @@ websearch_to_tsquery('english', 'narwhal')
+          order by rank desc`,
+    );
+
+    expect(rows.rows).toHaveLength(2);
+    const [titleMatch, notesMatch] = rows.rows;
+    expect(titleMatch?.url).toBe('https://example.com/notes-vs-title-a');
+    expect(titleMatch?.rank).toBeGreaterThan(notesMatch?.rank ?? Number.POSITIVE_INFINITY);
+  });
+
   it('produces a non-null search_vector when description and extracted_text are null (coalesce)', async () => {
     await db.insert(links).values({
       url: 'https://example.com/title-only',

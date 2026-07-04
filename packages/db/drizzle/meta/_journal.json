@@ -22,6 +22,13 @@
       "when": 1783170174365,
       "tag": "0002_curious_gargoyle",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1783184285962,
+      "tag": "0003_unique_mercury",
+      "breakpoints": true
     }
   ]
 }

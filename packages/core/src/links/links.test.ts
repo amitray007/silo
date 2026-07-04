@@ -354,6 +354,102 @@ describeIfPg('links operations (integration)', () => {
       const bodyRank = results.find((r) => r.id === bodyMatch.id)?.rank ?? 0;
       expect(titleRank).toBeGreaterThan(bodyRank);
     });
+
+    it('finds a link by a word that appears ONLY in its notes (H2: notes coverage)', async () => {
+      const notesMatch = await ops.createLink({
+        url: 'https://example.com/search-notes-only',
+        title: 'an unrelated title',
+        extractedText: 'an unrelated body of text',
+        notes: 'remember to revisit this for the platypusfootgun angle',
+        sourceKind: 'link',
+      });
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/search-notes-unrelated',
+        title: 'a completely different link',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('platypusfootgun');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(notesMatch.id);
+      expect(ids).not.toContain(unrelated.id);
+    });
+
+    it('finds a link by a TAG name that appears nowhere else (H2: tag coverage)', async () => {
+      const tagMatch = await ops.createLink({
+        url: 'https://example.com/search-tag-only',
+        title: 'an unrelated title',
+        extractedText: 'an unrelated body of text',
+        tags: ['zynthquokka'],
+        sourceKind: 'link',
+      });
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/search-tag-unrelated',
+        title: 'a completely different link',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('zynthquokka');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(tagMatch.id);
+      expect(ids).not.toContain(unrelated.id);
+      // Tag-only matches are still tag-hydrated in the result.
+      expect(results.find((r) => r.id === tagMatch.id)?.tags).toEqual(['zynthquokka']);
+    });
+
+    it('ranks a title match above a notes-only or tag-only match for the same term', async () => {
+      const titleMatch = await ops.createLink({
+        url: 'https://example.com/search-rank-title',
+        title: 'wobblesnarf',
+        sourceKind: 'link',
+      });
+      const notesMatch = await ops.createLink({
+        url: 'https://example.com/search-rank-notes',
+        title: 'unrelated',
+        notes: 'a passing mention of wobblesnarf in a note',
+        sourceKind: 'link',
+      });
+      const tagMatch = await ops.createLink({
+        url: 'https://example.com/search-rank-tag',
+        title: 'unrelated',
+        tags: ['wobblesnarf'],
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('wobblesnarf');
+      const byId = new Map(results.map((r) => [r.id, r]));
+      const titleRank = byId.get(titleMatch.id)?.rank ?? -1;
+      const notesRank = byId.get(notesMatch.id)?.rank ?? -1;
+      const tagRank = byId.get(tagMatch.id)?.rank ?? -1;
+
+      expect([titleMatch.id, notesMatch.id, tagMatch.id]).toEqual(
+        expect.arrayContaining(results.map((r) => r.id)),
+      );
+      expect(titleRank).toBeGreaterThan(notesRank);
+      expect(titleRank).toBeGreaterThan(tagRank);
+    });
+
+    it('a link matching both notes AND a tag ranks at least as high as either alone (combined rank)', async () => {
+      const both = await ops.createLink({
+        url: 'https://example.com/search-both-signal',
+        title: 'unrelated',
+        notes: 'mentions crimsonaardvark here',
+        tags: ['crimsonaardvark'],
+        sourceKind: 'link',
+      });
+      const notesOnly = await ops.createLink({
+        url: 'https://example.com/search-notes-only-signal',
+        title: 'unrelated',
+        notes: 'mentions crimsonaardvark here too',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('crimsonaardvark');
+      const byId = new Map(results.map((r) => [r.id, r]));
+      const bothRank = byId.get(both.id)?.rank ?? -1;
+      const notesOnlyRank = byId.get(notesOnly.id)?.rank ?? -1;
+      expect(bothRank).toBeGreaterThanOrEqual(notesOnlyRank);
+    });
   });
 
   describe('tags', () => {
