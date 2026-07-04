@@ -31,3 +31,4 @@ catalog:
   jsdom: 29.1.1
   "@types/jsdom": 28.0.3
   pg-boss: 12.25.0
+  "@modelcontextprotocol/sdk": 1.29.0

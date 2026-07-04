@@ -9,13 +9,21 @@
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
+  "bin": {
+    "silo-mcp": "./src/main.ts"
+  },
   "scripts": {
     "check-types": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "tsx src/main.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }
