@@ -1,0 +1,33 @@
+# Local-dev Postgres for silo.
+#
+# Uses the pgvector image (NOT plain postgres): silo's first migration runs
+# `CREATE EXTENSION vector`, so a plain postgres image would fail to migrate.
+# This is the same image CI uses (pgvector/pgvector:pg18).
+#
+# The credentials below are obvious local-dev defaults — NOT secrets. They match
+# the DATABASE_URL in .env.example. Do not reuse them anywhere real.
+#
+# Usage:
+#   pnpm db:up        # start this in the background (waits for healthy)
+#   pnpm db:migrate   # apply migrations
+#   pnpm start        # run the turnkey `silo` process
+services:
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: silo-postgres
+    environment:
+      POSTGRES_USER: silo
+      POSTGRES_PASSWORD: silo
+      POSTGRES_DB: silo
+    ports:
+      - '5432:5432'
+    volumes:
+      - silo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U silo -d silo']
+      interval: 2s
+      timeout: 5s
+      retries: 15
+
+volumes:
+  silo-pgdata:

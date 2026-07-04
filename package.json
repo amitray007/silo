@@ -15,6 +15,10 @@
     "dupes": "jscpd",
     "deadcode": "knip",
     "quality": "pnpm lint && pnpm boundaries && pnpm dupes && pnpm deadcode",
+    "db:up": "docker compose up -d --wait",
+    "db:down": "docker compose down",
+    "db:migrate": "pnpm --filter @silo/db run db:migrate",
+    "start": "pnpm --filter @silo/app run start",
     "prepare": "lefthook install"
   },
   "devDependencies": {
