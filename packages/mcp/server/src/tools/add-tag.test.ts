@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { describeMcpTool, expectNoLeakedFields } from './test-support/mcp-server-harness.js';
+import {
+  describeMcpTool,
+  expectNoLeakedFields,
+  expectValidLinkStructuredContent,
+  seedLink,
+} from './test-support/mcp-server-harness.js';
 
 // Integration tests for `add_tag` via a real MCP client<->server pair
 // against a real Postgres — proving the whole path (Zod input validation,
@@ -10,13 +15,6 @@ describeMcpTool(
   'silo_mcp_add_tag_test',
   'add_tag (integration, via MCP client<->server)',
   (getContext) => {
-    /** Seeds a fresh live link via `core.createLink` and returns its id. */
-    async function seedLink(url: string): Promise<string> {
-      const { core } = getContext();
-      const created = await core.createLink({ url, sourceKind: 'link' });
-      return created.id;
-    }
-
     it('tools/list lists add_tag alongside the other tools', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
@@ -27,7 +25,7 @@ describeMcpTool(
 
     it('adds a tag -> link has it', async () => {
       const { core, client } = getContext();
-      const id = await seedLink('https://example.com/add-tag-basic');
+      const id = await seedLink(getContext, 'https://example.com/add-tag-basic');
 
       const result = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'reading' } });
 
@@ -42,7 +40,7 @@ describeMcpTool(
 
     it('adding the same tag twice -> idempotent (one tag)', async () => {
       const { client } = getContext();
-      const id = await seedLink('https://example.com/add-tag-idempotent');
+      const id = await seedLink(getContext, 'https://example.com/add-tag-idempotent');
 
       await client.callTool({ name: 'add_tag', arguments: { id, tag: 'reading' } });
       const second = await client.callTool({
@@ -57,7 +55,7 @@ describeMcpTool(
 
     it("adds 'AI' then 'ai' -> one tag (case-insensitive dedup from W1)", async () => {
       const { client } = getContext();
-      const id = await seedLink('https://example.com/add-tag-case');
+      const id = await seedLink(getContext, 'https://example.com/add-tag-case');
 
       const first = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'AI' } });
       expect((first.structuredContent as Record<string, unknown>).tags).toEqual(['AI']);
@@ -82,7 +80,7 @@ describeMcpTool(
 
     it('adding to a trashed link -> found: false (guard refuses, no FK-throw)', async () => {
       const { core, client } = getContext();
-      const id = await seedLink('https://example.com/add-tag-trashed');
+      const id = await seedLink(getContext, 'https://example.com/add-tag-trashed');
       await core.softDelete(id);
 
       const result = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'reading' } });
@@ -92,14 +90,11 @@ describeMcpTool(
 
     it('outputSchema round-trip: a found:true result validates against the declared schema', async () => {
       const { client } = getContext();
-      const id = await seedLink('https://example.com/add-tag-schema-roundtrip');
+      const id = await seedLink(getContext, 'https://example.com/add-tag-schema-roundtrip');
       const result = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'x' } });
       expect(result.isError).toBeFalsy();
       expect(result.structuredContent).toBeDefined();
-      const structured = result.structuredContent as Record<string, unknown>;
-      expect(structured.found).toBe(true);
-      expect(typeof structured.createdAt).toBe('string');
-      expectNoLeakedFields(structured);
+      expectValidLinkStructuredContent(result.structuredContent as Record<string, unknown>);
     });
   },
 );

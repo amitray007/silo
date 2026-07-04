@@ -5,7 +5,10 @@ import { registerEditLink } from './tools/edit-link.js';
 import { registerGetLink } from './tools/get-link.js';
 import { registerListLinks } from './tools/list-links.js';
 import { registerRemoveTag } from './tools/remove-tag.js';
+import { registerRestoreLink } from './tools/restore-link.js';
+import { registerRetryCapture } from './tools/retry-capture.js';
 import { registerSearchLinks } from './tools/search-links.js';
+import { registerTrashLink } from './tools/trash-link.js';
 
 /**
  * Build the silo MCP server. Read tools (`get_link`, `search_links`,
@@ -44,6 +47,12 @@ export function createSiloMcpServer(): McpServer {
   registerEditLink(server);
   registerAddTag(server);
   registerRemoveTag(server);
+  // W4 registers trash_link and restore_link.
+  registerTrashLink(server);
+  registerRestoreLink(server);
+  // W5 registers retry_capture — closes the agent-native parity gap for
+  // retrying a degraded capture.
+  registerRetryCapture(server);
 
   return server;
 }

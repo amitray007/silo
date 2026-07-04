@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { describeMcpTool, expectNoLeakedFields } from './test-support/mcp-server-harness.js';
+import {
+  describeMcpTool,
+  expectNoLeakedFields,
+  expectValidLinkStructuredContent,
+  seedLink,
+} from './test-support/mcp-server-harness.js';
 
 // Integration tests for `edit_link` via a real MCP client<->server pair
 // against a real Postgres — proving the whole path (Zod input validation,
@@ -10,14 +15,6 @@ describeMcpTool(
   'silo_mcp_edit_link_test',
   'edit_link (integration, via MCP client<->server)',
   (getContext) => {
-    /** Seeds a fresh live link via `core.createLink` and returns its id — the
-     * shared setup step every test below needs before it can edit something. */
-    async function seedLink(url: string): Promise<string> {
-      const { core } = getContext();
-      const created = await core.createLink({ url, sourceKind: 'link' });
-      return created.id;
-    }
-
     it('tools/list lists edit_link alongside the other tools', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
@@ -29,7 +26,7 @@ describeMcpTool(
 
     it('edits title + note -> row changes in core, tool returns the updated link', async () => {
       const { core, client } = getContext();
-      const id = await seedLink('https://example.com/edit-basic');
+      const id = await seedLink(getContext, 'https://example.com/edit-basic');
 
       const result = await client.callTool({
         name: 'edit_link',
@@ -66,7 +63,7 @@ describeMcpTool(
 
     it('editing a trashed link -> found: false (live-scoped)', async () => {
       const { core, client } = getContext();
-      const id = await seedLink('https://example.com/edit-trashed');
+      const id = await seedLink(getContext, 'https://example.com/edit-trashed');
       await core.softDelete(id);
 
       const result = await client.callTool({
@@ -79,7 +76,7 @@ describeMcpTool(
 
     it('an empty edit (no fields) -> returns the current link unchanged', async () => {
       const { core, client } = getContext();
-      const id = await seedLink('https://example.com/edit-empty');
+      const id = await seedLink(getContext, 'https://example.com/edit-empty');
       await core.editLink(id, { title: 'kept' });
 
       const result = await client.callTool({ name: 'edit_link', arguments: { id } });
@@ -90,18 +87,14 @@ describeMcpTool(
 
     it('outputSchema round-trip: a found:true result validates against the declared schema', async () => {
       const { client } = getContext();
-      const id = await seedLink('https://example.com/edit-schema-roundtrip');
+      const id = await seedLink(getContext, 'https://example.com/edit-schema-roundtrip');
       const result = await client.callTool({
         name: 'edit_link',
         arguments: { id, description: 'd' },
       });
       expect(result.isError).toBeFalsy();
       expect(result.structuredContent).toBeDefined();
-      const structured = result.structuredContent as Record<string, unknown>;
-      expect(structured.found).toBe(true);
-      expect(typeof structured.createdAt).toBe('string');
-      expect(typeof structured.updatedAt).toBe('string');
-      expectNoLeakedFields(structured);
+      expectValidLinkStructuredContent(result.structuredContent as Record<string, unknown>);
     });
   },
 );

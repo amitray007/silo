@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { describeMcpTool, expectNoLeakedFields } from './test-support/mcp-server-harness.js';
+import {
+  describeMcpTool,
+  expectInvalidCursorError,
+  expectNoLeakedFields,
+  seedLink,
+} from './test-support/mcp-server-harness.js';
 
 // Integration tests for `search_links` via a real MCP client<->server pair
 // against a real Postgres. Setup/teardown is shared via the harness module.
@@ -7,24 +12,6 @@ describeMcpTool(
   'silo_mcp_search_links_test',
   'search_links (integration, via MCP client<->server)',
   (getContext) => {
-    /** Creates a link and enriches it in one step with the given searchable
-     * title/text, so full-text search has something distinctive to match on. */
-    async function seedLink(
-      url: string,
-      opts: { title: string; text?: string; tags?: string[] },
-    ): Promise<string> {
-      const { core } = getContext();
-      const link = opts.tags
-        ? await core.createLink({ url, sourceKind: 'link', tags: opts.tags })
-        : await core.createLink({ url, sourceKind: 'link' });
-      await core.recordEnrichment(link.id, {
-        title: opts.title,
-        text: opts.text ?? opts.title,
-        status: 'full',
-      });
-      return link.id;
-    }
-
     it('tools/list lists both get_link and search_links', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
@@ -37,18 +24,18 @@ describeMcpTool(
       const { client } = getContext();
       // "octopus" appears once in one doc, many times in another — ts_rank
       // should favor the denser match.
-      const sparseId = await seedLink('https://example.com/search-sparse', {
+      const sparseId = await seedLink(getContext, 'https://example.com/search-sparse', {
         title: 'A note about octopus intelligence',
         text: 'Octopus intelligence is a fascinating subject studied by marine biologists.',
         tags: ['marine'],
       });
-      const denseId = await seedLink('https://example.com/search-dense', {
+      const denseId = await seedLink(getContext, 'https://example.com/search-dense', {
         title: 'Octopus octopus octopus',
         text: 'Octopus octopus octopus octopus octopus octopus octopus octopus octopus.',
         tags: ['marine', 'cephalopods'],
       });
       // An unrelated link that should never match "octopus".
-      await seedLink('https://example.com/search-unrelated', {
+      await seedLink(getContext, 'https://example.com/search-unrelated', {
         title: 'A guide to sourdough bread baking',
         text: 'Sourdough bread baking requires patience and a good starter culture.',
       });
@@ -91,7 +78,7 @@ describeMcpTool(
 
     it('LEAK-ABSENCE: a result never carries searchVector/canonicalUrl/sourceData/deletedAt', async () => {
       const { client } = getContext();
-      await seedLink('https://example.com/search-leak-check', {
+      await seedLink(getContext, 'https://example.com/search-leak-check', {
         title: 'A unique leak-check phrase zzqqxx',
       });
 
@@ -178,7 +165,7 @@ describeMcpTool(
       // limit=2 and walk until nextCursor is exhausted.
       const seededIds: string[] = [];
       for (let i = 0; i < 5; i++) {
-        const id = await seedLink(`https://example.com/search-page-${i}`, {
+        const id = await seedLink(getContext, `https://example.com/search-page-${i}`, {
           title: `Pagewalk term ${i}`,
           text: `Pagewalk term appears here number ${i} of the paging test set.`,
         });
@@ -201,13 +188,7 @@ describeMcpTool(
         name: 'search_links',
         arguments: { query: 'anything', cursor: 'not-a-real-cursor' },
       });
-      expect(result.isError).toBe(true);
-      expect(result.content).toEqual([
-        expect.objectContaining({
-          type: 'text',
-          text: expect.stringContaining('Invalid or expired cursor'),
-        }),
-      ]);
+      expectInvalidCursorError(result);
     });
 
     it('a well-formed cursor of the WRONG kind (a list cursor) -> the same clean tool error', async () => {
@@ -218,8 +199,12 @@ describeMcpTool(
       // `core.list()` (seed >1 link so it actually returns a nextCursor), then
       // feed it to `search_links` — the handler must still convert it to the
       // clean cursor error, not crash or silently mis-page.
-      await seedLink('https://example.com/wrong-kind-cursor-a', { title: 'wrongkind alpha' });
-      await seedLink('https://example.com/wrong-kind-cursor-b', { title: 'wrongkind beta' });
+      await seedLink(getContext, 'https://example.com/wrong-kind-cursor-a', {
+        title: 'wrongkind alpha',
+      });
+      await seedLink(getContext, 'https://example.com/wrong-kind-cursor-b', {
+        title: 'wrongkind beta',
+      });
       const listPage = await core.list({}, { limit: 1 });
       expect(listPage.nextCursor).toBeDefined();
 
@@ -227,20 +212,14 @@ describeMcpTool(
         name: 'search_links',
         arguments: { query: 'wrongkind', cursor: listPage.nextCursor },
       });
-      expect(result.isError).toBe(true);
-      expect(result.content).toEqual([
-        expect.objectContaining({
-          type: 'text',
-          text: expect.stringContaining('Invalid or expired cursor'),
-        }),
-      ]);
+      expectInvalidCursorError(result);
     });
 
     it('limit is clamped at the MCP boundary: limit=1 -> exactly one + cursor; huge limit -> no error, all matches', async () => {
       const { client } = getContext();
       // Three matches for a distinctive term.
       for (let i = 0; i < 3; i++) {
-        await seedLink(`https://example.com/clamp-${i}`, {
+        await seedLink(getContext, `https://example.com/clamp-${i}`, {
           title: `Clampterm entry ${i}`,
           text: `Clampterm appears here in entry number ${i}.`,
         });

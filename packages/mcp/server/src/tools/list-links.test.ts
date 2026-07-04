@@ -1,5 +1,10 @@
 import { expect, it } from 'vitest';
-import { describeMcpTool, expectNoLeakedFields } from './test-support/mcp-server-harness.js';
+import {
+  describeMcpTool,
+  expectInvalidCursorError,
+  expectNoLeakedFields,
+  seedLink,
+} from './test-support/mcp-server-harness.js';
 
 // Integration tests for `list_links` via a real MCP client<->server pair
 // against a real Postgres. Setup/teardown is shared via the harness module.
@@ -7,31 +12,6 @@ describeMcpTool(
   'silo_mcp_list_links_test',
   'list_links (integration, via MCP client<->server)',
   (getContext) => {
-    /** Creates a link, optionally tagged and/or enriched (title/text/status) in one step. */
-    async function seedLink(
-      url: string,
-      opts: {
-        title: string;
-        text?: string;
-        tags?: string[];
-        status?: 'enriching' | 'full' | 'partial' | 'bare';
-      },
-    ): Promise<string> {
-      const { core } = getContext();
-      const link = opts.tags
-        ? await core.createLink({ url, sourceKind: 'link', tags: opts.tags })
-        : await core.createLink({ url, sourceKind: 'link' });
-      const status = opts.status !== 'enriching' ? opts.status : undefined;
-      if (opts.text !== undefined || status !== undefined) {
-        await core.recordEnrichment(link.id, {
-          title: opts.title,
-          text: opts.text ?? opts.title,
-          status: status ?? 'full',
-        });
-      }
-      return link.id;
-    }
-
     /** Forces `created_at` for the given link ids to an identical raw timestamptz literal, via the harness's raw `pg.Pool` — reproduces the C1 tied-created_at keyset bug at the MCP boundary. */
     async function forceCreatedAt(ids: ReadonlyArray<string>, createdAt: string): Promise<void> {
       const { pool } = getContext();
@@ -52,13 +32,13 @@ describeMcpTool(
 
     it('basic list: newest-first order, tags present, count correct', async () => {
       const { client } = getContext();
-      const firstId = await seedLink('https://example.com/list-basic-1', {
+      const firstId = await seedLink(getContext, 'https://example.com/list-basic-1', {
         title: 'Basic one',
         tags: ['alpha'],
       });
       // Ensure a distinguishable created_at ordering vs. the next insert.
       await new Promise((resolve) => setTimeout(resolve, 5));
-      const secondId = await seedLink('https://example.com/list-basic-2', {
+      const secondId = await seedLink(getContext, 'https://example.com/list-basic-2', {
         title: 'Basic two',
         tags: ['beta'],
       });
@@ -88,7 +68,9 @@ describeMcpTool(
 
     it('LEAK-ABSENCE: a link never carries searchVector/canonicalUrl/sourceData/deletedAt', async () => {
       const { client } = getContext();
-      await seedLink('https://example.com/list-leak-check', { title: 'Leak check unique zzqqxx' });
+      await seedLink(getContext, 'https://example.com/list-leak-check', {
+        title: 'Leak check unique zzqqxx',
+      });
 
       const result = await client.callTool({ name: 'list_links', arguments: { limit: 1 } });
       expect(result.isError).toBeFalsy();
@@ -105,13 +87,17 @@ describeMcpTool(
 
     it('tag filter: only links carrying the exact tag are returned', async () => {
       const { client } = getContext();
-      const taggedId = await seedLink('https://example.com/list-tag-filter-tagged', {
+      const taggedId = await seedLink(getContext, 'https://example.com/list-tag-filter-tagged', {
         title: 'Tag filter tagged',
         tags: ['filterme'],
       });
-      const untaggedId = await seedLink('https://example.com/list-tag-filter-untagged', {
-        title: 'Tag filter untagged',
-      });
+      const untaggedId = await seedLink(
+        getContext,
+        'https://example.com/list-tag-filter-untagged',
+        {
+          title: 'Tag filter untagged',
+        },
+      );
 
       const result = await client.callTool({
         name: 'list_links',
@@ -126,11 +112,11 @@ describeMcpTool(
 
     it('status filter: only links with the given capture status are returned', async () => {
       const { client } = getContext();
-      const fullId = await seedLink('https://example.com/list-status-full', {
+      const fullId = await seedLink(getContext, 'https://example.com/list-status-full', {
         title: 'Status full',
         status: 'full',
       });
-      const partialId = await seedLink('https://example.com/list-status-partial', {
+      const partialId = await seedLink(getContext, 'https://example.com/list-status-partial', {
         title: 'Status partial',
         status: 'partial',
       });
@@ -156,17 +142,21 @@ describeMcpTool(
       // Exercises core.list's tag-join branch where BOTH conditions are pushed
       // together (links.ts: `if (filter.tag) { ...; if (filter.status) push
       // eq(status) too }`) — distinct from either filter tested alone above.
-      const matchId = await seedLink('https://example.com/list-combo-match', {
+      const matchId = await seedLink(getContext, 'https://example.com/list-combo-match', {
         title: 'Combo match',
         tags: ['comboterm'],
         status: 'full',
       });
-      const wrongStatusId = await seedLink('https://example.com/list-combo-wrong-status', {
-        title: 'Combo wrong status',
-        tags: ['comboterm'],
-        status: 'partial',
-      });
-      const wrongTagId = await seedLink('https://example.com/list-combo-wrong-tag', {
+      const wrongStatusId = await seedLink(
+        getContext,
+        'https://example.com/list-combo-wrong-status',
+        {
+          title: 'Combo wrong status',
+          tags: ['comboterm'],
+          status: 'partial',
+        },
+      );
+      const wrongTagId = await seedLink(getContext, 'https://example.com/list-combo-wrong-tag', {
         title: 'Combo wrong tag',
         tags: ['othertag'],
         status: 'full',
@@ -240,7 +230,7 @@ describeMcpTool(
       // MCP tool (not just core's unit tests).
       const tiedIds: string[] = [];
       for (let i = 0; i < 6; i++) {
-        const id = await seedLink(`https://example.com/list-tied-created-at-${i}`, {
+        const id = await seedLink(getContext, `https://example.com/list-tied-created-at-${i}`, {
           title: `Tied created at ${i}`,
         });
         tiedIds.push(id);
@@ -263,13 +253,7 @@ describeMcpTool(
         name: 'list_links',
         arguments: { cursor: 'not-a-real-cursor' },
       });
-      expect(result.isError).toBe(true);
-      expect(result.content).toEqual([
-        expect.objectContaining({
-          type: 'text',
-          text: expect.stringContaining('Invalid or expired cursor'),
-        }),
-      ]);
+      expectInvalidCursorError(result);
     });
 
     it('a well-formed cursor of the WRONG kind (a search offset cursor) -> the same clean tool error', async () => {
@@ -280,11 +264,11 @@ describeMcpTool(
       // real one from `core.search()` (seed >1 matching link so it actually
       // returns a nextCursor), then feed it to `list_links` — the handler must
       // still convert it to the clean cursor error, not crash or silently mis-page.
-      await seedLink('https://example.com/list-wrong-kind-cursor-a', {
+      await seedLink(getContext, 'https://example.com/list-wrong-kind-cursor-a', {
         title: 'wrongkindsearch alpha',
         text: 'wrongkindsearch alpha text',
       });
-      await seedLink('https://example.com/list-wrong-kind-cursor-b', {
+      await seedLink(getContext, 'https://example.com/list-wrong-kind-cursor-b', {
         title: 'wrongkindsearch beta',
         text: 'wrongkindsearch beta text',
       });
@@ -295,13 +279,7 @@ describeMcpTool(
         name: 'list_links',
         arguments: { cursor: searchPage.nextCursor },
       });
-      expect(result.isError).toBe(true);
-      expect(result.content).toEqual([
-        expect.objectContaining({
-          type: 'text',
-          text: expect.stringContaining('Invalid or expired cursor'),
-        }),
-      ]);
+      expectInvalidCursorError(result);
     });
 
     it('an empty result (status filter matching nothing) -> links: [], count 0, non-error, plain text', async () => {

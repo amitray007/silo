@@ -26,6 +26,13 @@ recommendation) is the external agent's, performed over these primitives.
 - Bound every list-shaped result. Read tools paginate through `core`'s
   `limit`/cursor surface (default 20, hard cap 100) — never return an unbounded
   set into an agent's context.
+- **Every result carries agent-actionable guidance.** A tool result's text never
+  just reports status — it tells the agent what to do next. Success says what
+  changed and suggests the natural next tool/step; not-found says why and how to
+  proceed (which tool to try); errors say how to fix the input. The agent has
+  only the tool's text + structuredContent to act on — make the text move it
+  forward. (E.g. `capture_link` explains enrichment is async and to re-check via
+  `get_link`; `restore_link`'s `merged` outcome names the surviving link's id.)
 
 ## Don't
 

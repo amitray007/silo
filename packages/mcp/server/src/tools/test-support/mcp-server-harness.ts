@@ -133,3 +133,93 @@ export function expectNoLeakedFields(obj: unknown): void {
   expect(obj).not.toHaveProperty('sourceData');
   expect(obj).not.toHaveProperty('deletedAt');
 }
+
+/**
+ * Asserts a `found: true` link `structuredContent` payload is well-formed: the
+ * discriminator is set, timestamps serialized as ISO strings, and no internal
+ * columns leaked. Shared by the write tools' outputSchema round-trip tests
+ * (`callTool` resolving non-error already proves it validated against the
+ * declared `outputSchema`; this pins the concrete field shape too).
+ */
+export function expectValidLinkStructuredContent(obj: Record<string, unknown>): void {
+  expect(obj.found).toBe(true);
+  expect(typeof obj.createdAt).toBe('string');
+  expect(typeof obj.updatedAt).toBe('string');
+  expectNoLeakedFields(obj);
+}
+
+/**
+ * Asserts that a `CallToolResult` is the clean "Invalid or expired cursor"
+ * tool error both `list_links` and `search_links` fall back to for any
+ * cursor that doesn't decode to their own cursor `kind` — a garbage string,
+ * or a well-formed cursor from the *other* tool (e.g. a `search` cursor fed
+ * to `list_links`). Both suites assert this same shape from three different
+ * bad-cursor tests each, so it's centralized here rather than repeated.
+ */
+export function expectInvalidCursorError(result: Awaited<ReturnType<Client['callTool']>>): void {
+  expect(result.isError).toBe(true);
+  expect(result.content).toEqual([
+    expect.objectContaining({
+      type: 'text',
+      text: expect.stringContaining('Invalid or expired cursor'),
+    }),
+  ]);
+}
+
+/**
+ * Creates a link via `core.createLink`, optionally tagged and/or enriched
+ * (title/description/text/status) in one step, and returns its id. Shared
+ * seeding helper for tool integration tests — every `*.test.ts` suite in
+ * this directory used to define its own local `seedLink` (a bare
+ * `(url) => id` form in most, a richer enrichment-aware form in a few); those
+ * were identical or near-identical across files and tripped jscpd's
+ * duplication threshold, so there is exactly one definition now.
+ *
+ * `opts.tags` is only forwarded to `createLink` when present (an absent
+ * `tags` and an empty array are meaningfully different to `createLink`, so
+ * this doesn't default it to `[]`). When any of `title`/`description`/`text`/
+ * `status` is provided, `core.recordEnrichment` is called with exactly those
+ * fields set (never `undefined` — required under this package's
+ * `exactOptionalPropertyTypes`), defaulting `status` to `'full'` so a caller
+ * supplying only e.g. `title` gets a fully-enriched link rather than one
+ * stuck in the transient `'enriching'` state `createLink` leaves it in.
+ */
+export async function seedLink(
+  getContext: () => McpServerTestContext,
+  url: string,
+  opts?: {
+    title?: string;
+    description?: string;
+    text?: string;
+    tags?: string[];
+    status?: 'enriching' | 'full' | 'partial' | 'bare';
+  },
+): Promise<string> {
+  const { core } = getContext();
+  const link = await core.createLink({
+    url,
+    sourceKind: 'link',
+    ...(opts?.tags ? { tags: opts.tags } : {}),
+  });
+
+  // `'enriching'` is `createLink`'s own transient starting status, never a
+  // valid *result* `recordEnrichment` accepts (see its schema) — treat an
+  // explicit `status: 'enriching'` as "leave it as createLink left it",
+  // same narrowing the original `list-links.test.ts` `seedLink` did.
+  const status = opts?.status !== 'enriching' ? opts?.status : undefined;
+  if (
+    opts?.title !== undefined ||
+    opts?.description !== undefined ||
+    opts?.text !== undefined ||
+    status !== undefined
+  ) {
+    await core.recordEnrichment(link.id, {
+      ...(opts?.title !== undefined ? { title: opts.title } : {}),
+      ...(opts?.description !== undefined ? { description: opts.description } : {}),
+      ...(opts?.text !== undefined ? { text: opts.text } : {}),
+      status: status ?? 'full',
+    });
+  }
+
+  return link.id;
+}
