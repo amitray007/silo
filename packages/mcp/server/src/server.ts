@@ -1,12 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { registerGetLink } from './tools/get-link.js';
 
 /**
- * Build the silo MCP server. This is where read tools (`get_link`,
- * `search_links`, `list_links`) are registered in later units — each a thin
- * translation over an `@silo/core` function (`architecture.md`: adapters do
- * `MCP tool params ↔ core call ↔ MCP result`, never business logic). Right now
- * it registers ZERO tools: this unit only proves the server builds, connects
- * over stdio, and obeys the import boundary (core-only).
+ * Build the silo MCP server. Read tools (`get_link`, `search_links`,
+ * `list_links`) are registered here — each a thin translation over an
+ * `@silo/core` function (`architecture.md`: adapters do `MCP tool params ↔
+ * core call ↔ MCP result`, never business logic).
  *
  * Returned unconnected so tests can construct it without a live transport, and
  * so `main.ts` owns the stdio wiring + process lifecycle.
@@ -15,10 +14,6 @@ export function createSiloMcpServer(): McpServer {
   const server = new McpServer(
     { name: 'silo', version: '0.0.0' },
     {
-      // NOTE: the high-level McpServer only wires the `tools/list` handler once
-      // the first tool is registered (via registerTool). Until C3 adds a tool,
-      // `tools/list` is intentionally unsupported — this scaffold only proves the
-      // server builds + connects over stdio. The capability appears with C3.
       instructions:
         'Silo is a personal link store. These tools read links you have ' +
         'captured (metadata, extracted text, tags). All intelligence — ' +
@@ -27,7 +22,11 @@ export function createSiloMcpServer(): McpServer {
     },
   );
 
-  // Tools are registered in C3–C5. Intentionally none yet.
+  // C3 registers get_link — the high-level McpServer only wires the
+  // `tools/list` handler once the first tool is registered, so this call also
+  // makes `tools/list` live for the first time.
+  registerGetLink(server);
+  // search_links (C4) and list_links (C5) register here too.
 
   return server;
 }

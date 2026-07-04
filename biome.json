@@ -67,6 +67,29 @@
           }
         }
       }
+    },
+    {
+      "includes": [
+        "packages/web/**/*.test.ts",
+        "packages/api/**/*.test.ts",
+        "packages/mcp/**/*.test.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@silo/web": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/api": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/mcp-server": "Adapter packages must not depend on each other; share code through @silo/core."
+                }
+              }
+            }
+          }
+        }
+      }
     }
   ]
 }

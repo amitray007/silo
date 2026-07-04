@@ -18,11 +18,17 @@
     "start": "tsx src/main.ts"
   },
   "dependencies": {
-    "@modelcontextprotocol/sdk": "catalog:"
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@silo/core": "workspace:*",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@silo/db": "workspace:*",
     "@silo/tsconfig": "workspace:*",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "drizzle-orm": "catalog:",
+    "pg": "catalog:",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

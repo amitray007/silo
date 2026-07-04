@@ -209,13 +209,31 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
+      '@silo/core':
+        specifier: workspace:*
+        version: link:../../core
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
     devDependencies:
+      '@silo/db':
+        specifier: workspace:*
+        version: link:../../db
       '@silo/tsconfig':
         specifier: workspace:*
         version: link:../../tsconfig
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.0
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2(@types/pg@8.20.0)(pg@8.22.0)
+      pg:
+        specifier: 'catalog:'
+        version: 8.22.0
       tsx:
         specifier: 'catalog:'
         version: 4.23.0
