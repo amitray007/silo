@@ -139,6 +139,49 @@ importers:
         specifier: 'catalog:'
         version: 4.1.9(@types/node@24.13.2)(jsdom@29.1.1)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
 
+  packages/app:
+    dependencies:
+      '@modelcontextprotocol/sdk':
+        specifier: 'catalog:'
+        version: 1.29.0(zod@4.4.3)
+      '@silo/mcp-server':
+        specifier: workspace:*
+        version: link:../mcp/server
+      '@silo/worker':
+        specifier: workspace:*
+        version: link:../worker
+    devDependencies:
+      '@silo/core':
+        specifier: workspace:*
+        version: link:../core
+      '@silo/db':
+        specifier: workspace:*
+        version: link:../db
+      '@silo/tsconfig':
+        specifier: workspace:*
+        version: link:../tsconfig
+      '@types/node':
+        specifier: 'catalog:'
+        version: 24.13.2
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.0
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2(@types/pg@8.20.0)(pg@8.22.0)
+      pg:
+        specifier: 'catalog:'
+        version: 8.22.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.9(@types/node@24.13.2)(jsdom@29.1.1)(vite@8.1.3(@types/node@24.13.2)(esbuild@0.28.1)(jiti@2.7.0)(tsx@4.23.0)(yaml@2.9.0))
+
   packages/core:
     dependencies:
       '@silo/db':

@@ -1,0 +1,37 @@
+{
+  "name": "@silo/app",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "bin": {
+    "silo": "./src/main.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "start": "tsx src/main.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "catalog:",
+    "@silo/mcp-server": "workspace:*",
+    "@silo/worker": "workspace:*"
+  },
+  "devDependencies": {
+    "@silo/core": "workspace:*",
+    "@silo/db": "workspace:*",
+    "@silo/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "drizzle-orm": "catalog:",
+    "pg": "catalog:",
+    "tsx": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}
