@@ -66,13 +66,49 @@ function mergeNotes(existing: string | null, incoming: string | undefined): stri
   return `${existing}\n\n${trimmedIncoming}`;
 }
 
-/** Ensures each tag name exists (creating any that don't) and links them all to `linkId`. */
+/**
+ * Case-insensitive dedup key for a tag's display `name`: trimmed + lowercased.
+ * Single source of truth — every read/write site that matches or creates a
+ * tag goes through this, so `AI`/`ai`/` ai ` always resolve to the same key.
+ * Not exported: internal to this module's tag operations.
+ *
+ * Scope of the case-fold: `String.prototype.toLowerCase()` is exact for ASCII
+ * (all realistic tag labels — the `AI`/`ai` case included), which is the only
+ * guarantee this product needs. It is NOT full Unicode case-folding: a handful
+ * of locale-sensitive codepoints (e.g. Turkish dotted-İ, the Kelvin sign K)
+ * fold differently than a naive reader expects, so two visually-"same" tags in
+ * those alphabets could fail to collapse (or, rarely, over-collapse). Accepted
+ * as out-of-scope for a personal ASCII-label store rather than pulled in via an
+ * ICU dependency. IMPORTANT: the one-time migration backfill
+ * (`0002_curious_gargoyle.sql`) computes the same key with Postgres
+ * `lower(trim(name))`; SQL `lower()` and this function agree on ASCII, so
+ * pre-existing rows stay reachable — the two only diverge on the same
+ * non-ASCII codepoints noted above, the identical accepted boundary.
+ */
+function normalizeTagKey(name: string): string {
+  return name.trim().toLowerCase();
+}
+
+/**
+ * Ensures each tag name exists (creating any that don't, keyed on the
+ * case-insensitive `normalized_key`) and links them all to `linkId`.
+ * De-dups the input list on the normalized key too, so `['AI', 'ai']` in one
+ * call attaches a single tag, not two attempts at the same row.
+ */
 async function attachTags(
   exec: Executor,
   linkId: string,
   tagNames: ReadonlyArray<string>,
 ): Promise<void> {
-  const uniqueNames = [...new Set(tagNames.map((name) => name.trim()).filter(Boolean))];
+  const trimmed = tagNames.map((name) => name.trim()).filter(Boolean);
+  const seenKeys = new Set<string>();
+  const uniqueNames: string[] = [];
+  for (const name of trimmed) {
+    const key = normalizeTagKey(name);
+    if (seenKeys.has(key)) continue;
+    seenKeys.add(key);
+    uniqueNames.push(name);
+  }
   for (const name of uniqueNames) {
     await addTagWith(exec, linkId, name);
   }
@@ -324,7 +360,7 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
   // hydration (hydration only needs the `Link`).
   const rows = await (async () => {
     if (filter.tag) {
-      const conditions = [eq(tags.name, filter.tag)];
+      const conditions = [eq(tags.normalizedKey, normalizeTagKey(filter.tag))];
       if (filter.status) conditions.push(eq(links.captureStatus, filter.status));
       if (cursorCondition) conditions.push(cursorCondition);
       return db
@@ -435,37 +471,67 @@ export async function editLink(id: string, input: EditLinkInput): Promise<Link |
   return updated ?? null;
 }
 
-/** Internal: attach one tag on the given executor (creating the tag row if new). */
+/**
+ * Internal: attach one tag on the given executor (creating the tag row if
+ * new), keyed on the case-insensitive `normalized_key`. `AI` and `ai` resolve
+ * to the same row: the FIRST-entered casing wins as the stored display
+ * `name` — a later `addTagWith(..., 'ai')` when `AI` already exists reuses
+ * the existing row untouched, it does not overwrite `name`.
+ */
 async function addTagWith(exec: Executor, linkId: string, tagName: string): Promise<void> {
   const name = tagName.trim();
   if (!name) return;
+  const normalizedKey = normalizeTagKey(name);
 
   // Insert the tag if new; otherwise fetch the existing row. onConflictDoNothing
-  // avoids the write/lock of a no-op self-update on a hot shared tag.
+  // avoids the write/lock of a no-op self-update on a hot shared tag, and never
+  // clobbers an existing row's display `name` with a differently-cased dupe.
   const [insertedTag] = await exec
     .insert(tags)
-    .values({ name })
-    .onConflictDoNothing({ target: tags.name })
+    .values({ name, normalizedKey })
+    .onConflictDoNothing({ target: tags.normalizedKey })
     .returning();
   const tagId =
     insertedTag?.id ??
-    (await exec.select({ id: tags.id }).from(tags).where(eq(tags.name, name)).limit(1))[0]?.id;
+    (
+      await exec
+        .select({ id: tags.id })
+        .from(tags)
+        .where(eq(tags.normalizedKey, normalizedKey))
+        .limit(1)
+    )[0]?.id;
   if (!tagId) {
     throw new Error(`addTag: could not resolve tag "${name}"`);
   }
   await exec.insert(linkTags).values({ linkId, tagId }).onConflictDoNothing();
 }
 
-/** Attach `tagName` to `linkId`, creating the tag row if it doesn't exist yet. Idempotent. */
+/**
+ * Attach `tagName` to `linkId`, creating the tag row if it doesn't exist yet
+ * (keyed case-insensitively on `normalized_key`). Idempotent.
+ *
+ * Unlike `createLink`, this runs on the bare `db` executor, NOT in a
+ * transaction: the tag insert and the `link_tags` insert are two separate
+ * auto-committed statements. A crash between them can leave a newly-created
+ * tag row with no `link_tags` referencing it — a harmless orphaned (unattached)
+ * tag, not corruption. This is intentional and consistent with the existing
+ * design where a tag row's lifetime is independent of any link (see
+ * `removeTag`, which likewise never deletes the tag row).
+ */
 export async function addTag(linkId: string, tagName: string): Promise<void> {
   await addTagWith(db, linkId, tagName);
 }
 
-/** Unlink `tagName` from `linkId`. The tag row itself is never deleted (may be used elsewhere). */
+/**
+ * Unlink `tagName` from `linkId`, matched case-insensitively via
+ * `normalized_key` (`remove_tag('ai')` removes an `AI` tag). The tag row
+ * itself is never deleted (may be used elsewhere).
+ */
 export async function removeTag(linkId: string, tagName: string): Promise<void> {
   const name = tagName.trim();
   if (!name) return;
-  const [tag] = await db.select().from(tags).where(eq(tags.name, name)).limit(1);
+  const normalizedKey = normalizeTagKey(name);
+  const [tag] = await db.select().from(tags).where(eq(tags.normalizedKey, normalizedKey)).limit(1);
   if (!tag) return;
   await db.delete(linkTags).where(and(eq(linkTags.linkId, linkId), eq(linkTags.tagId, tag.id)));
 }

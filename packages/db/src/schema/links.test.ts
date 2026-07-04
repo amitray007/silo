@@ -184,7 +184,10 @@ describeIfPg('links schema (integration)', () => {
         sourceKind: 'link',
       })
       .returning({ id: links.id });
-    const [tag] = await db.insert(tags).values({ name: 'reading' }).returning({ id: tags.id });
+    const [tag] = await db
+      .insert(tags)
+      .values({ name: 'reading', normalizedKey: 'reading' })
+      .returning({ id: tags.id });
     if (!link || !tag) {
       throw new Error('expected insert().returning() to return the inserted rows');
     }
@@ -204,10 +207,12 @@ describeIfPg('links schema (integration)', () => {
     expect(tagRows.rows).toHaveLength(1);
   });
 
-  it('enforces tags.name uniqueness', async () => {
-    await db.insert(tags).values({ name: 'unique-tag' });
+  it('enforces tags.normalized_key uniqueness (case-insensitive dedup key)', async () => {
+    await db.insert(tags).values({ name: 'Unique-Tag', normalizedKey: 'unique-tag' });
 
-    await expect(db.insert(tags).values({ name: 'unique-tag' })).rejects.toThrow(/unique/i);
+    await expect(
+      db.insert(tags).values({ name: 'unique-tag', normalizedKey: 'unique-tag' }),
+    ).rejects.toThrow(/unique/i);
   });
 
   it('bumps updated_at on an ORM update ($onUpdate), leaving created_at fixed', async () => {

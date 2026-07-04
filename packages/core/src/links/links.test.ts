@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
@@ -407,6 +408,458 @@ describeIfPg('links operations (integration)', () => {
       const result = await ops.list({ tag: 'exclusive' });
       expect(result.links).toHaveLength(1);
       expect(result.links[0]?.id).toBe(tagged.id);
+    });
+  });
+
+  describe('case-insensitive tags (W1)', () => {
+    async function tagRowCountFor(normalizedKey: string): Promise<number> {
+      const rows = await rawDb.execute<{ count: string }>(
+        sql`select count(*) from tags where normalized_key = ${normalizedKey}`,
+      );
+      return Number(rows.rows[0]?.count ?? '0');
+    }
+
+    it('`AI` then `ai` on the same link collapses to ONE tag, display name `AI`', async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/case-ai-same-link',
+        sourceKind: 'link',
+      });
+
+      await ops.addTag(link.id, 'AI');
+      await ops.addTag(link.id, 'ai');
+
+      expect(await tagRowCountFor('ai')).toBe(1);
+
+      const tagRows = await rawDb.execute<{ name: string }>(
+        sql`select name from tags where normalized_key = 'ai'`,
+      );
+      expect(tagRows.rows[0]?.name).toBe('AI');
+
+      const fetched = await ops.getById(link.id);
+      expect(fetched?.tags).toEqual(['AI']);
+    });
+
+    it("adding 'ai' when 'AI' already exists is an idempotent no-op (still one tag, display AI)", async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/case-idempotent',
+        sourceKind: 'link',
+      });
+      await ops.addTag(link.id, 'AI');
+
+      await ops.addTag(link.id, 'ai');
+      await ops.addTag(link.id, 'ai');
+
+      expect(await tagRowCountFor('ai')).toBe(1);
+      const fetched = await ops.getById(link.id);
+      expect(fetched?.tags).toEqual(['AI']);
+    });
+
+    it("removeTag('ai') removes the 'AI' tag", async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/case-remove',
+        sourceKind: 'link',
+      });
+      await ops.addTag(link.id, 'AI');
+
+      await ops.removeTag(link.id, 'ai');
+
+      const fetched = await ops.getById(link.id);
+      expect(fetched?.tags).toEqual([]);
+      // The tag row itself survives (may be used elsewhere) — only the join is removed.
+      expect(await tagRowCountFor('ai')).toBe(1);
+    });
+
+    it("list({tag:'ai'}) finds a link tagged 'AI'; whitespace variant also matches", async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/case-list-filter',
+        tags: ['AI'],
+        sourceKind: 'link',
+      });
+
+      const byLower = await ops.list({ tag: 'ai' });
+      expect(byLower.links.map((l) => l.id)).toContain(link.id);
+
+      const byWhitespace = await ops.list({ tag: ' AI ' });
+      expect(byWhitespace.links.map((l) => l.id)).toContain(link.id);
+    });
+
+    it("createLink with tags:['AI','ai','  ai  '] produces exactly one tag", async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/case-create-link-tags',
+        tags: ['AI', 'ai', '  ai  '],
+        sourceKind: 'link',
+      });
+
+      expect(await tagRowCountFor('ai')).toBe(1);
+      const fetched = await ops.getById(link.id);
+      expect(fetched?.tags).toEqual(['AI']);
+    });
+
+    it('ASCII case-fold is exact; non-ASCII locale-sensitive folding is a documented, accepted boundary', async () => {
+      // Pins the actual behavior of normalizeTagKey's `.toLowerCase()` (see its
+      // docstring) so the boundary is a recorded decision, not an accident.
+      // ASCII — the only case this product needs — collapses exactly:
+      const asciiLink = await ops.createLink({
+        url: 'https://example.com/case-ascii-fold',
+        sourceKind: 'link',
+      });
+      await ops.addTag(asciiLink.id, 'Design');
+      await ops.addTag(asciiLink.id, 'DESIGN');
+      await ops.addTag(asciiLink.id, 'design');
+      expect(await tagRowCountFor('design')).toBe(1);
+      expect((await ops.getById(asciiLink.id))?.tags).toEqual(['Design']);
+
+      // Non-ASCII: JS `.toLowerCase()` maps Turkish dotted capital İ (U+0130)
+      // to 'i' + combining dot (U+0069 U+0307), NOT plain 'i', so 'İ' and 'i'
+      // do NOT collapse. This is the accepted boundary the helper documents —
+      // asserting it here so any future change to the fold strategy trips a
+      // test rather than silently altering dedup semantics.
+      const turkishLink = await ops.createLink({
+        url: 'https://example.com/case-turkish-fold',
+        sourceKind: 'link',
+      });
+      await ops.addTag(turkishLink.id, 'İ'); // 'İ'
+      await ops.addTag(turkishLink.id, 'i');
+      const turkishTags = (await ops.getById(turkishLink.id))?.tags ?? [];
+      expect(turkishTags).toHaveLength(2);
+      expect(turkishTags).toContain('i');
+      expect(turkishTags).toContain('İ');
+    });
+
+    it('two links tagged with different casings of the same word share ONE tag row (runtime dedup proof)', async () => {
+      // Proves the runtime create/dedup logic keeps case-variant tags as a
+      // single row across DIFFERENT links (a lighter-weight proxy for "what
+      // the migration's collision-merge guarantees for pre-existing data" —
+      // see the dedicated migration-fixture test below for the actual
+      // pre-migration-schema scenario).
+      const linkA = await ops.createLink({
+        url: 'https://example.com/case-cross-link-a',
+        tags: ['Reading'],
+        sourceKind: 'link',
+      });
+      const linkB = await ops.createLink({
+        url: 'https://example.com/case-cross-link-b',
+        tags: ['reading'],
+        sourceKind: 'link',
+      });
+
+      expect(await tagRowCountFor('reading')).toBe(1);
+      const withTag = await ops.list({ tag: 'READING' });
+      expect(withTag.links.map((l) => l.id).sort()).toEqual([linkA.id, linkB.id].sort());
+    });
+
+    it("mergeIntoExisting's tag union dedups on the normalized key across two saves", async () => {
+      const url = 'https://example.com/case-merge-union';
+      const first = await ops.createLink({ url, tags: ['AI'], sourceKind: 'link' });
+      const merged = await ops.createLink({ url, tags: ['ai', 'New'], sourceKind: 'link' });
+
+      expect(merged.id).toBe(first.id);
+      expect(await tagRowCountFor('ai')).toBe(1);
+      expect(await tagRowCountFor('new')).toBe(1);
+
+      const fetched = await ops.getById(first.id);
+      expect(fetched?.tags).toEqual(['AI', 'New']);
+    });
+
+    it('link_tags PK integrity holds: no duplicate (link_id, tag_id) row after repeated case-variant adds', async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/case-pk-integrity',
+        sourceKind: 'link',
+      });
+      await ops.addTag(link.id, 'AI');
+      await ops.addTag(link.id, 'Ai');
+      await ops.addTag(link.id, 'aI');
+      await ops.addTag(link.id, 'ai');
+
+      const joinRows = await rawDb.execute<{ count: string }>(
+        sql`select count(*) from link_tags where link_id = ${link.id}`,
+      );
+      expect(joinRows.rows[0]?.count).toBe('1');
+    });
+
+    it('CONCURRENT: two simultaneous addTag calls with different casings of the same word (on different links) still collapse to ONE tag row', async () => {
+      // The sequential dedup tests above prove correctness under `await`-in-turn
+      // execution; this proves the `insert ... onConflictDoNothing(normalized_key)`
+      // + SELECT-fallback in `addTagWith` also holds under TRUE concurrency —
+      // two writers racing to create the same normalized key. Postgres
+      // serializes the conflicting inserts on the unique index (one wins, the
+      // other's ON CONFLICT DO NOTHING no-ops and its fallback SELECT reads the
+      // winner), so exactly one tag row must exist afterward and both links must
+      // resolve to it.
+      const linkA = await ops.createLink({
+        url: 'https://example.com/case-concurrent-a',
+        sourceKind: 'link',
+      });
+      const linkB = await ops.createLink({
+        url: 'https://example.com/case-concurrent-b',
+        sourceKind: 'link',
+      });
+
+      await Promise.all([ops.addTag(linkA.id, 'AI'), ops.addTag(linkB.id, 'ai')]);
+
+      expect(await tagRowCountFor('ai')).toBe(1);
+      const withTag = await ops.list({ tag: 'ai' });
+      expect(withTag.links.map((l) => l.id).sort()).toEqual([linkA.id, linkB.id].sort());
+    });
+
+    it('THREE-way collision merge: AI / ai / Ai across three links all fold into one survivor with no lost association', async () => {
+      // Extends the 2-way SQL-level proof to N>2: the migration's
+      // `GROUP BY normalized_key` / `min(id::text)` survivor selection is not
+      // special-cased for exactly two dupes, so three case-variants sharing a
+      // key must collapse to one row with all three links preserved.
+      const linkA = await ops.createLink({
+        url: 'https://example.com/case-3way-a',
+        sourceKind: 'link',
+      });
+      const linkB = await ops.createLink({
+        url: 'https://example.com/case-3way-b',
+        sourceKind: 'link',
+      });
+      const linkC = await ops.createLink({
+        url: 'https://example.com/case-3way-c',
+        sourceKind: 'link',
+      });
+
+      const idA = randomUUID();
+      const idB = randomUUID();
+      const idC = randomUUID();
+      await rawDb.execute(
+        sql`insert into tags (id, name, normalized_key) values (${idA}, 'AI', 'ai-3way-a'), (${idB}, 'ai', 'ai-3way-b'), (${idC}, 'Ai', 'ai-3way-c')`,
+      );
+      await rawDb.execute(sql`alter table tags drop constraint tags_normalized_key_unique`);
+      await rawDb.execute(
+        sql`update tags set normalized_key = 'ai' where id in (${idA}, ${idB}, ${idC})`,
+      );
+      await rawDb.execute(
+        sql`insert into link_tags (link_id, tag_id) values (${linkA.id}, ${idA})`,
+      );
+      await rawDb.execute(
+        sql`insert into link_tags (link_id, tag_id) values (${linkB.id}, ${idB})`,
+      );
+      await rawDb.execute(
+        sql`insert into link_tags (link_id, tag_id) values (${linkC.id}, ${idC})`,
+      );
+
+      // Run the migration's three merge statements.
+      await rawDb.execute(sql`
+        WITH survivors AS (
+          SELECT normalized_key, min(id::text)::uuid AS survivor_id
+          FROM tags GROUP BY normalized_key
+        ),
+        dupes AS (
+          SELECT t.id AS dupe_id, s.survivor_id
+          FROM tags t JOIN survivors s ON s.normalized_key = t.normalized_key
+          WHERE t.id <> s.survivor_id
+        )
+        INSERT INTO link_tags (link_id, tag_id)
+        SELECT lt.link_id, d.survivor_id
+        FROM link_tags lt JOIN dupes d ON d.dupe_id = lt.tag_id
+        ON CONFLICT DO NOTHING
+      `);
+      await rawDb.execute(sql`
+        WITH survivors AS (
+          SELECT normalized_key, min(id::text)::uuid AS survivor_id
+          FROM tags GROUP BY normalized_key
+        ),
+        dupes AS (
+          SELECT t.id AS dupe_id
+          FROM tags t JOIN survivors s ON s.normalized_key = t.normalized_key
+          WHERE t.id <> s.survivor_id
+        )
+        DELETE FROM link_tags WHERE tag_id IN (SELECT dupe_id FROM dupes)
+      `);
+      await rawDb.execute(sql`
+        WITH survivors AS (
+          SELECT normalized_key, min(id::text)::uuid AS survivor_id
+          FROM tags GROUP BY normalized_key
+        )
+        DELETE FROM tags t USING survivors s
+        WHERE t.normalized_key = s.normalized_key AND t.id <> s.survivor_id
+      `);
+      await rawDb.execute(
+        sql`alter table tags add constraint tags_normalized_key_unique unique (normalized_key)`,
+      );
+
+      expect(await tagRowCountFor('ai')).toBe(1);
+      const survivingTag = await rawDb.execute<{ name: string }>(
+        sql`select name from tags where normalized_key = 'ai'`,
+      );
+      const survivingName = survivingTag.rows[0]?.name;
+      expect(['AI', 'ai', 'Ai']).toContain(survivingName);
+      expect((await ops.getById(linkA.id))?.tags).toEqual([survivingName]);
+      expect((await ops.getById(linkB.id))?.tags).toEqual([survivingName]);
+      expect((await ops.getById(linkC.id))?.tags).toEqual([survivingName]);
+    });
+
+    it("SQL-level collision-merge proof: hand-built duplicate case-variant tag rows on DIFFERENT links merge cleanly under the migration's merge query, with no data loss and no unique violation", async () => {
+      // This directly exercises the collision-merge SQL from
+      // packages/db/drizzle/0002_curious_gargoyle.sql (steps 3) against a
+      // hand-built "pre-migration-like" fixture: two tag rows that collide
+      // under normalization (`AI` / `ai`), each linked to a DIFFERENT link,
+      // plus a third link that already holds the survivor tag (to prove the
+      // ON CONFLICT DO NOTHING branch is exercised and no PK violation
+      // occurs). Limitation: this runs the merge query directly against
+      // tables already migrated to the FINAL schema (normalized_key column
+      // present, nullable for this test's purposes) rather than replaying
+      // the actual ALTER TABLE ... ADD COLUMN step against the OLD
+      // (pre-migration) table shape — simulating the true pre-migration
+      // schema in a per-test fixture isn't practical here since the schema
+      // module (and disposable-database bootstrap) is already on the new
+      // shape by the time any test runs. What IS proven end-to-end: (a) the
+      // 0002 migration actually applied cleanly with zero pre-existing rows
+      // (see @silo/db's migrate tests + this suite's own harness bootstrap,
+      // both green), and (b) the exact merge QUERY LOGIC the migration uses
+      // correctly merges collisions without losing link associations or
+      // violating constraints, run here against manually-inserted collision
+      // fixtures that mimic the pre-migration state (multiple tag rows
+      // sharing a normalized_key).
+      const linkA = await ops.createLink({
+        url: 'https://example.com/migration-fixture-a',
+        sourceKind: 'link',
+      });
+      const linkB = await ops.createLink({
+        url: 'https://example.com/migration-fixture-b',
+        sourceKind: 'link',
+      });
+      const linkC = await ops.createLink({
+        url: 'https://example.com/migration-fixture-c',
+        sourceKind: 'link',
+      });
+
+      // Hand-build a collision the normal write path would never produce:
+      // two tag rows with different `normalized_key` values first (so the
+      // unique constraint on normalized_key doesn't block the insert), then
+      // rewrite them post-insert to force the collision the migration must
+      // repair — exactly the shape existing production data could be in
+      // before this migration ran.
+      const survivorId = randomUUID();
+      const dupeId = randomUUID();
+      await rawDb.execute(
+        sql`insert into tags (id, name, normalized_key) values (${survivorId}, 'AI', 'ai-tmp-survivor')`,
+      );
+      await rawDb.execute(
+        sql`insert into tags (id, name, normalized_key) values (${dupeId}, 'ai', 'ai-tmp-dupe')`,
+      );
+      // Two rows can't both be updated to the same normalized_key while the
+      // UNIQUE constraint is live (immediate per-row check) — drop it to force
+      // the collision fixture, exactly mirroring how the real migration's
+      // steps 1-3 run with normalized_key UNCONSTRAINED before step 4 adds the
+      // UNIQUE constraint back (only after the merge below has already
+      // resolved every collision).
+      await rawDb.execute(sql`alter table tags drop constraint tags_normalized_key_unique`);
+      await rawDb.execute(
+        sql`update tags set normalized_key = 'ai' where id in (${survivorId}, ${dupeId})`,
+      );
+      // linkA holds the survivor tag already; linkB holds the dupe tag (the
+      // repoint case); linkC holds the survivor tag too (the ON CONFLICT
+      // DO NOTHING case: after repoint, linkC would try to gain a duplicate
+      // (link_id, tag_id) pointing at survivorId if it also held the dupe —
+      // exercised here by giving linkC BOTH tags pre-merge).
+      await rawDb.execute(
+        sql`insert into link_tags (link_id, tag_id) values (${linkA.id}, ${survivorId})`,
+      );
+      await rawDb.execute(
+        sql`insert into link_tags (link_id, tag_id) values (${linkB.id}, ${dupeId})`,
+      );
+      await rawDb.execute(
+        sql`insert into link_tags (link_id, tag_id) values (${linkC.id}, ${survivorId})`,
+      );
+      await rawDb.execute(
+        sql`insert into link_tags (link_id, tag_id) values (${linkC.id}, ${dupeId})`,
+      );
+
+      expect(await tagRowCountFor('ai')).toBe(2);
+
+      // Run the exact merge-query logic from migration 0002 (steps 3a/3b/3c).
+      await rawDb.execute(sql`
+        WITH survivors AS (
+          SELECT normalized_key, min(id::text)::uuid AS survivor_id
+          FROM tags
+          GROUP BY normalized_key
+        ),
+        dupes AS (
+          SELECT t.id AS dupe_id, s.survivor_id
+          FROM tags t
+          JOIN survivors s ON s.normalized_key = t.normalized_key
+          WHERE t.id <> s.survivor_id
+        )
+        INSERT INTO link_tags (link_id, tag_id)
+        SELECT lt.link_id, d.survivor_id
+        FROM link_tags lt
+        JOIN dupes d ON d.dupe_id = lt.tag_id
+        ON CONFLICT DO NOTHING
+      `);
+      await rawDb.execute(sql`
+        WITH survivors AS (
+          SELECT normalized_key, min(id::text)::uuid AS survivor_id
+          FROM tags
+          GROUP BY normalized_key
+        ),
+        dupes AS (
+          SELECT t.id AS dupe_id
+          FROM tags t
+          JOIN survivors s ON s.normalized_key = t.normalized_key
+          WHERE t.id <> s.survivor_id
+        )
+        DELETE FROM link_tags
+        WHERE tag_id IN (SELECT dupe_id FROM dupes)
+      `);
+      await rawDb.execute(sql`
+        WITH survivors AS (
+          SELECT normalized_key, min(id::text)::uuid AS survivor_id
+          FROM tags
+          GROUP BY normalized_key
+        )
+        DELETE FROM tags t
+        USING survivors s
+        WHERE t.normalized_key = s.normalized_key
+          AND t.id <> s.survivor_id
+      `);
+
+      // Step 4 of the real migration: re-adding the UNIQUE constraint now
+      // succeeds — proof the collision was fully resolved (no two rows
+      // share a normalized_key anymore).
+      await rawDb.execute(
+        sql`alter table tags add constraint tags_normalized_key_unique unique (normalized_key)`,
+      );
+
+      // Exactly one tag row survives for the 'ai' key.
+      expect(await tagRowCountFor('ai')).toBe(1);
+      const survivingTag = await rawDb.execute<{ id: string; name: string }>(
+        sql`select id, name from tags where normalized_key = 'ai'`,
+      );
+      expect(survivingTag.rows).toHaveLength(1);
+      const finalSurvivorId = survivingTag.rows[0]?.id;
+      // Which of the two case-variant display names wins is deterministic
+      // (min(id::text)) but NOT meaningful (the migration comment says so
+      // explicitly) — assert it's one of the two original names, not a
+      // specific one, since the fixture used random ids for both rows.
+      const survivingName = survivingTag.rows[0]?.name;
+      expect(['AI', 'ai']).toContain(survivingName);
+
+      // No link lost its tag: all three links still resolve to the surviving row.
+      const fetchedA = await ops.getById(linkA.id);
+      const fetchedB = await ops.getById(linkB.id);
+      const fetchedC = await ops.getById(linkC.id);
+      expect(fetchedA?.tags).toEqual([survivingName]);
+      expect(fetchedB?.tags).toEqual([survivingName]);
+      expect(fetchedC?.tags).toEqual([survivingName]);
+
+      // link_tags PK integrity: linkC never ends up with two rows for the
+      // same (link_id, tag_id) pair despite having held both the survivor
+      // and the dupe pre-merge.
+      const linkCJoinRows = await rawDb.execute<{ count: string }>(
+        sql`select count(*) from link_tags where link_id = ${linkC.id} and tag_id = ${finalSurvivorId}`,
+      );
+      expect(linkCJoinRows.rows[0]?.count).toBe('1');
+
+      // No rows were silently dropped: total link_tags rows across the three
+      // links is exactly 3 (one per link), not 4 (which would mean the
+      // ON CONFLICT DO NOTHING didn't dedupe) or fewer (data loss).
+      const totalJoinRows = await rawDb.execute<{ count: string }>(
+        sql`select count(*) from link_tags where link_id in (${linkA.id}, ${linkB.id}, ${linkC.id})`,
+      );
+      expect(totalJoinRows.rows[0]?.count).toBe('3');
     });
   });
 

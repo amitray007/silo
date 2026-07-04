@@ -15,6 +15,13 @@
       "when": 1783107494265,
       "tag": "0001_mature_madame_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1783170174365,
+      "tag": "0002_curious_gargoyle",
+      "breakpoints": true
     }
   ]
 }
