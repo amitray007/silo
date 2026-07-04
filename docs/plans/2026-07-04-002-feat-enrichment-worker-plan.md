@@ -156,7 +156,7 @@ Per-unit `Files` are authoritative; the implementer may adjust layout.
 
 ## Implementation Units
 
-Dependency-ordered. Each is independently landable and committed on completion, following the binding review protocol (CodeRabbit + independent `ce-code-review` + intense QA vs real Postgres) before the next. Feature-bearing units carry test scenarios.
+Dependency-ordered. Each is independently landable and committed on completion, following the binding review protocol (local review tooling + independent `ce-code-review` + intense QA vs real Postgres) before the next. Feature-bearing units carry test scenarios.
 
 ### U1. CI runs the Postgres integration tests
 
