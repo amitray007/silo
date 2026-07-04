@@ -36,9 +36,9 @@ documented for someone who isn't us.
    `silo` (stdio: command + args + env). This is THE thing an agent-native tool
    must document, and it's absent.
 4. **A rule violation in a committed doc** — `docs/plans/2026-07-04-002-…md:159`
-   names "CodeRabbit" in committed docs. Project rule: the local review tool stays
-   in machine-local memory, NEVER in committed docs. Scrub it (generalize to "the
-   binding review protocol", matching the other plans).
+   names our local review tool in committed docs. Project rule: that tool's name
+   stays in machine-local memory (gitignored `CLAUDE.local.md`), NEVER in committed
+   docs. Scrub it (generalize to "local review tooling", matching the other plans).
 5. **Recorded scope gap worth closing now** — full-text `search` covers
    title/description/extractedText but NOT `notes` or `tags`, though
    `scope.html:270` promises "titles, extracted text, **tags, and notes**." Small
@@ -49,9 +49,9 @@ documented for someone who isn't us.
 ## Implementation units (smallest-first)
 
 ### H1 — scrub the review-tool leak (rule compliance)
-- `docs/plans/2026-07-04-002-…md:159`: replace the "CodeRabbit + independent
-  ce-code-review" phrasing with the generic "binding review protocol" wording the
-  other plans use. Confirm `git grep -i coderabbit` returns nothing in tracked
+- `docs/plans/2026-07-04-002-…md:159`: replace the phrasing that names our local
+  review tool with the generic "local review tooling" wording the other plans use.
+  Confirm a case-insensitive grep for that tool's name returns nothing in tracked
   files. Trivial, docs-only, do first.
 
 ### H2 — search covers notes + tags (core + db; the documented-promise gap)
@@ -111,7 +111,8 @@ documented for someone who isn't us.
   wrong — fix the README, not just the code.
 - H2: drive `search_links` over the real MCP server and find a link by a word only
   in its notes, and by a tag name.
-- `git grep -i coderabbit` → empty. Full gate + quality green. No secrets/hardcoded
+- A case-insensitive grep for the local review tool's name → empty across tracked
+  files. Full gate + quality green. No secrets/hardcoded
   paths introduced (compose creds are obviously local-dev defaults, documented as
   such).
 
