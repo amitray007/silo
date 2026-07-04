@@ -4,21 +4,27 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "exports": {
-    ".": "./src/index.ts"
-  },
-  "main": "./src/index.ts",
-  "types": "./src/index.ts",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
     "check-types": "tsc --noEmit",
     "test": "vitest run"
   },
   "dependencies": {
-    "@silo/core": "workspace:*"
+    "@tanstack/react-query": "catalog:",
+    "react": "catalog:",
+    "react-dom": "catalog:",
+    "react-router-dom": "catalog:"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
+    "@testing-library/react": "catalog:",
+    "@types/react": "catalog:",
+    "@types/react-dom": "catalog:",
+    "@vitejs/plugin-react": "catalog:",
+    "jsdom": "catalog:",
     "typescript": "catalog:",
+    "vite": "catalog:",
     "vitest": "catalog:"
   }
 }
