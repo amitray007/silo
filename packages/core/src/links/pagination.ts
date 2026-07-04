@@ -69,7 +69,20 @@ type SearchCursorPayload = {
   offset: number;
 };
 
-function encode(payload: ListCursorPayload | SearchCursorPayload): string {
+/**
+ * The opaque keyset cursor payload for `listTrash` (plan 007, C2) — position
+ * on `(deletedAt, id)` DESC. A DISTINCT `kind` from `ListCursorPayload` (which
+ * shares the same `{ createdAt/deletedAt, id }` shape) so a `list` cursor can
+ * never be silently accepted by `listTrash` (or vice versa) — see
+ * `decodeTrashCursor`.
+ */
+type TrashCursorPayload = {
+  kind: 'trash';
+  deletedAt: string;
+  id: string;
+};
+
+function encode(payload: ListCursorPayload | SearchCursorPayload | TrashCursorPayload): string {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
 
@@ -126,6 +139,46 @@ export function decodeListCursor(cursor: string): { createdAt: string; id: strin
     throw new InvalidCursorError('cursor id is not a valid uuid');
   }
   return { createdAt: payload.createdAt, id: payload.id };
+}
+
+/**
+ * Encode a `listTrash` keyset cursor for the last row of the current page.
+ *
+ * `deletedAt` is the FULL-microsecond-precision text rendering of the row's
+ * `deleted_at` (from Postgres via `${links.deletedAt}::text`), NOT a JS
+ * `Date` — same rationale as `encodeListCursor`'s `createdAt`: node-postgres
+ * parses `timestamptz` into a `Date` at millisecond precision, which would
+ * silently lose the microseconds the keyset predicate needs to break ties
+ * exactly against the raw column (see `links.ts`'s `afterTrashCursor`). The
+ * raw string is stored opaquely and cast back to `timestamptz` at query
+ * time — it is never re-parsed in JS.
+ */
+export function encodeTrashCursor(deletedAt: string, id: string): string {
+  return encode({ kind: 'trash', deletedAt, id });
+}
+
+/** Decode + validate a `listTrash` keyset cursor. Throws `InvalidCursorError` on any mismatch. */
+export function decodeTrashCursor(cursor: string): { deletedAt: string; id: string } {
+  const parsed = decode(cursor);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    (parsed as { kind?: unknown }).kind !== 'trash' ||
+    typeof (parsed as { deletedAt?: unknown }).deletedAt !== 'string' ||
+    typeof (parsed as { id?: unknown }).id !== 'string'
+  ) {
+    throw new InvalidCursorError('cursor is not a valid trash cursor');
+  }
+  const payload = parsed as TrashCursorPayload;
+  // Validate `deletedAt` parses as a real instant, WITHOUT round-tripping
+  // through the parsed `Date` — see `decodeListCursor`'s identical note.
+  if (Number.isNaN(new Date(payload.deletedAt).getTime())) {
+    throw new InvalidCursorError('cursor deletedAt is not a valid date');
+  }
+  if (!UUID_RE.test(payload.id)) {
+    throw new InvalidCursorError('cursor id is not a valid uuid');
+  }
+  return { deletedAt: payload.deletedAt, id: payload.id };
 }
 
 /** Encode a `search` offset cursor pointing at the next unread row. */

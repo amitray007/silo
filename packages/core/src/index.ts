@@ -60,8 +60,13 @@ export {
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { purgeTrash } from './links/purge.js';
-
 // Per-source `source_data` validation (U3): the Zod discriminated union
 // keyed on `source_kind`, and its inferred type.
 export type { SourceData } from './links/source-data.js';
 export { sourceDataSchema } from './links/source-data.js';
+// Trash reads + counts (plan 007, C2): listTrash is the ONE read in this
+// package deliberately NOT scoped through `whereLive` — see trash.ts's doc
+// comment for why it's quarantined in its own module. getCounts/countLive/
+// countTrash back the mockup's sidebar live/trash counts.
+export type { Counts, TrashPage } from './links/trash.js';
+export { countLive, countTrash, getCounts, listTrash } from './links/trash.js';
