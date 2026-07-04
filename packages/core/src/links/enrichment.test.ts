@@ -253,14 +253,17 @@ describeIfPg('enrichment operations (integration)', () => {
       expect((await linksOps.getById(link.id))?.captureStatus).toBe('full');
     });
 
-    it('is a no-op (null) on an already-enriching link', async () => {
+    it('re-kicks a link stranded at enriching (recovery for a no-worker create)', async () => {
       const link = await linksOps.createLink({
         url: 'https://ex.com/retry-enr',
         sourceKind: 'link',
       });
-      // Freshly created links start `enriching`.
+      // Freshly created links start `enriching`. If no worker ever enqueued the
+      // job (no-op enqueuer), the link is stranded there — requestRetry is the
+      // recovery path back into the queue, so it returns the link (not null).
       const result = await enrichmentOps.requestRetry(link.id);
-      expect(result).toBeNull();
+      expect(result).not.toBeNull();
+      expect(result?.captureStatus).toBe('enriching');
     });
   });
 

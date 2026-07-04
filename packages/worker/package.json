@@ -11,10 +11,13 @@
   "types": "./src/index.ts",
   "scripts": {
     "check-types": "tsc --noEmit",
+    "start": "tsx src/worker.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "@mozilla/readability": "catalog:",
+    "@silo/core": "workspace:*",
+    "drizzle-orm": "catalog:",
     "ipaddr.js": "catalog:",
     "jsdom": "catalog:",
     "metascraper": "catalog:",
@@ -24,12 +27,17 @@
     "metascraper-publisher": "catalog:",
     "metascraper-title": "catalog:",
     "metascraper-url": "catalog:",
+    "pg-boss": "catalog:",
     "undici": "catalog:"
   },
   "devDependencies": {
+    "@silo/db": "workspace:*",
     "@silo/tsconfig": "workspace:*",
     "@types/jsdom": "catalog:",
     "@types/node": "catalog:",
+    "@types/pg": "catalog:",
+    "pg": "catalog:",
+    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

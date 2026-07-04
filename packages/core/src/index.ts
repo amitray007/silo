@@ -4,6 +4,17 @@ export const name = '@silo/core';
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';
 export { canonicalize } from './links/canonicalize.js';
+// Enrichment enqueue seam (enrichment-worker slice): createLink enqueues via a
+// registered enqueuer (no-op by default). The worker registers the real
+// pg-boss send at startup via setEnrichmentEnqueuer — this keeps core free of
+// any @silo/worker dependency (dependency flows adapter -> core).
+export type { EnrichmentEnqueuer } from './links/enqueue.js';
+export {
+  ENRICH_LINK_QUEUE,
+  enqueueEnrichment,
+  resetEnrichmentEnqueuer,
+  setEnrichmentEnqueuer,
+} from './links/enqueue.js';
 // Enrichment write path (increment 3, U4): recordEnrichment writes an
 // enrichment result (metadata + terminal capture_status) onto a live link;
 // requestRetry resets a live link back to `enriching` for a user-triggered
@@ -11,6 +22,9 @@ export { canonicalize } from './links/canonicalize.js';
 // The actual fetch/extract/enqueue is the worker's job (U2/U3/U5).
 export type { EnrichmentResult } from './links/enrichment.js';
 export { enrichmentResultSchema, recordEnrichment, requestRetry } from './links/enrichment.js';
+// Executor types (shared db/tx handle) — the worker's real enqueuer is typed
+// against these.
+export type { Db, Executor, Tx } from './links/executor.js';
 // Core link operations (U4): the typed data-access primitives the UI and
 // MCP adapters both call — create (dedup/merge), read, list, search, edit,
 // tag, trash/restore. See docs/rules/architecture.md — this is the one

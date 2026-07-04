@@ -72,6 +72,9 @@ catalogs:
     pg:
       specifier: 8.22.0
       version: 8.22.0
+    pg-boss:
+      specifier: 12.25.0
+      version: 12.25.0
     tsx:
       specifier: 4.23.0
       version: 4.23.0
@@ -236,6 +239,12 @@ importers:
       '@mozilla/readability':
         specifier: 'catalog:'
         version: 0.6.0
+      '@silo/core':
+        specifier: workspace:*
+        version: link:../core
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 0.45.2(@types/pg@8.20.0)(pg@8.22.0)
       ipaddr.js:
         specifier: 'catalog:'
         version: 2.4.0
@@ -263,10 +272,16 @@ importers:
       metascraper-url:
         specifier: 'catalog:'
         version: 5.51.1(debug@4.4.3)
+      pg-boss:
+        specifier: 'catalog:'
+        version: 12.25.0
       undici:
         specifier: 'catalog:'
         version: 8.6.0
     devDependencies:
+      '@silo/db':
+        specifier: workspace:*
+        version: link:../db
       '@silo/tsconfig':
         specifier: workspace:*
         version: link:../tsconfig
@@ -276,6 +291,15 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 24.13.2
+      '@types/pg':
+        specifier: 'catalog:'
+        version: 8.20.0
+      pg:
+        specifier: 'catalog:'
+        version: 8.22.0
+      tsx:
+        specifier: 'catalog:'
+        version: 4.23.0
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
@@ -1309,6 +1333,10 @@ packages:
     cpu: [x64]
     os: [win32]
 
+  cron-parser@5.6.1:
+    resolution: {integrity: sha512-QBm4o1PwZiuY7KFbVvW7FLC8bozy7YWzv+Fz6KRS7sQghzcbDZCGxr/Bc5b6TQreAoSwuWVP491dIcK0THCX6A==}
+    engines: {node: '>=18'}
+
   css-select@5.2.2:
     resolution: {integrity: sha512-TizTzUddG/xYLA3NXodFM0fSbNizXjOKhqiQQwvhlspadZokn1KDy0NZFS0wuEubIYAV5/c1/lAr0TaaFXEXzw==}
 
@@ -1825,6 +1853,10 @@ packages:
     resolution: {integrity: sha512-RPimw/7aMdv2oqRrxKwvZXcPfwBrn/JZ2xYcY9Hus/6LaS3VOAKVWKWgNLCFSiOm1ESXinjsDlidVU7JlnCN2A==}
     engines: {node: 20 || >=22}
 
+  luxon@3.7.2:
+    resolution: {integrity: sha512-vtEhXh/gNjI9Yg1u4jX/0YVPMvxzHuGgCm6tC5kZyb08yjGWGnqAjGJvcXbqQR2P3MyMEFnRbpcdFS6PBcLqew==}
+    engines: {node: '>=12'}
+
   magic-string@0.30.21:
     resolution: {integrity: sha512-vd2F4YUyEXKGcLHoq+TEyCjxueSeHnFxyyjNp80yg0XV4vUhnDer/lvvlqM/arB5bXQN5K2/3oinyCRyx8T2CQ==}
 
@@ -1898,6 +1930,10 @@ packages:
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
     hasBin: true
 
+  non-error@0.1.0:
+    resolution: {integrity: sha512-TMB1uHiGsHRGv1uYclfhivcnf0/PdFp2pNqRxXjncaAsjYMoisaQJI+SSZCqRq+VliwRTC8tsMQfmrWjDMhkPQ==}
+    engines: {node: '>=20'}
+
   nopt@10.0.1:
     resolution: {integrity: sha512-df3sBr/6ax9hSGuC3CspvLlbnX8cP5L5nZwXF8cGN8l0zSWR6BvzmQ6jPUKjvo6+/xdpkNvEcucBNUdBeeV13g==}
     engines: {node: ^22.22.2 || ^24.15.0 || >=26.0.0}
@@ -1950,6 +1986,11 @@ packages:
 
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
+
+  pg-boss@12.25.0:
+    resolution: {integrity: sha512-m0kpRsrj5j3hGtzslQzLo/5EfSDtQlNf2N6uvCft3tPHrbSXqdxJRzjb675gf3ZnWcTsu6IIYjCN5zezkZQ+WQ==}
+    engines: {node: '>=22.12.0'}
+    hasBin: true
 
   pg-cloudflare@1.4.0:
     resolution: {integrity: sha512-Vo7z/6rrQYxpNRylp4Tlob2elzbh+N/MOQbxFVWCxS7oEx6jF53GTJFxK2WWpKuBRkmiin4Mt+xofFDjx09R0A==}
@@ -2080,6 +2121,10 @@ packages:
     engines: {node: '>=10'}
     hasBin: true
 
+  serialize-error@13.0.1:
+    resolution: {integrity: sha512-bBZaRwLH9PN5HbLCjPId4dP5bNGEtumcErgOX952IsvOhVPrm3/AeK1y0UHA/QaPG701eg0yEnOKsCOC6X/kaA==}
+    engines: {node: '>=20'}
+
   siginfo@2.0.0:
     resolution: {integrity: sha512-ybx0WO1/8bSBLEWXZvEd7gMW3Sn3JFlW3TvX1nREbDLRNQNaeNN8WK0meBwPdAaOI7TtRRRJn/Es1zhrrCHu7g==}
 
@@ -2133,6 +2178,10 @@ packages:
 
   symbol-tree@3.2.4:
     resolution: {integrity: sha512-9QNk5KwDF+Bvz+PyObkmSYjI5ksVUYtjW7AU22r2NKcfLJcXp96hkDWU3+XndOsUb+AQ9QhfzfCT2O+CNWT5Tw==}
+
+  tagged-tag@1.0.0:
+    resolution: {integrity: sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng==}
+    engines: {node: '>=20'}
 
   tapable@2.3.3:
     resolution: {integrity: sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==}
@@ -2195,6 +2244,10 @@ packages:
   turbo@2.10.3:
     resolution: {integrity: sha512-uZIqzfgtWbyqu1Tqwdd0giRnPGgL0ejbcdF8eZLJhtTTVSrOgArZGzYeXTD6XNcc7ANgdhqex11Y9bHBeyiQLQ==}
     hasBin: true
+
+  type-fest@5.7.0:
+    resolution: {integrity: sha512-1URUxUqfHFM1c+zfSPsa3gnkO7Aq21qyH75SIduNYz4SzY964rn1X2vCMQaHSHhktiw+0kPa2iyb6PUpXqB6Vg==}
+    engines: {node: '>=20'}
 
   typescript@6.0.3:
     resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
@@ -3097,6 +3150,10 @@ snapshots:
   cpd-windows-x64-msvc@5.0.11:
     optional: true
 
+  cron-parser@5.6.1:
+    dependencies:
+      luxon: 3.7.2
+
   css-select@5.2.2:
     dependencies:
       boolbase: 1.0.0
@@ -3538,6 +3595,8 @@ snapshots:
 
   lru-cache@11.5.1: {}
 
+  luxon@3.7.2: {}
+
   magic-string@0.30.21:
     dependencies:
       '@jridgewell/sourcemap-codec': 1.5.5
@@ -3637,6 +3696,8 @@ snapshots:
       undici: 8.6.0
       which: 7.0.0
 
+  non-error@0.1.0: {}
+
   nopt@10.0.1:
     dependencies:
       abbrev: 5.0.0
@@ -3722,6 +3783,14 @@ snapshots:
   path-parse@1.0.7: {}
 
   pathe@2.0.3: {}
+
+  pg-boss@12.25.0:
+    dependencies:
+      cron-parser: 5.6.1
+      pg: 8.22.0
+      serialize-error: 13.0.1
+    transitivePeerDependencies:
+      - pg-native
 
   pg-cloudflare@1.4.0:
     optional: true
@@ -3851,6 +3920,11 @@ snapshots:
 
   semver@7.8.5: {}
 
+  serialize-error@13.0.1:
+    dependencies:
+      non-error: 0.1.0
+      type-fest: 5.7.0
+
   siginfo@2.0.0: {}
 
   sisteransi@1.0.5: {}
@@ -3885,6 +3959,8 @@ snapshots:
   supports-preserve-symlinks-flag@1.0.0: {}
 
   symbol-tree@3.2.4: {}
+
+  tagged-tag@1.0.0: {}
 
   tapable@2.3.3: {}
 
@@ -3953,6 +4029,10 @@ snapshots:
       '@turbo/linux-arm64': 2.10.3
       '@turbo/windows-64': 2.10.3
       '@turbo/windows-arm64': 2.10.3
+
+  type-fest@5.7.0:
+    dependencies:
+      tagged-tag: 1.0.0
 
   typescript@6.0.3: {}
 

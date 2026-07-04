@@ -83,22 +83,25 @@ export async function recordEnrichment(
   return updated ?? null;
 }
 
-/** Capture statuses a retry is valid from — the plan's state machine only
- * draws `partial`/`bare` -> `enriching`. `full` is terminal and `enriching`
- * is already in-flight, so neither is retryable. */
-const RETRYABLE_STATUSES = ['partial', 'bare'] as const;
+/** Capture statuses a retry is valid from. `partial`/`bare` are the plan's
+ * state-machine retry sources (R12). `enriching` is ALSO included as a recovery
+ * path: a link created in a process with no enqueuer registered (a script, a
+ * mis-wired API process, a worker that never started) is stranded at
+ * `enriching` with no job ever enqueued — allowing a retry to re-kick it is the
+ * only core-level way back into the queue. `full` is terminal and excluded, so
+ * a good capture is never needlessly downgraded by a re-fetch. */
+const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
 
 /**
  * Reset a LIVE, retryable link back to `enriching`, for a user-triggered retry
- * of a `partial`/`bare` capture (plan R12). Core only resets the status column
- * and returns the link — actually re-enqueueing the enrichment job is the
- * worker/queue's job (U5); core stays db-only and has no queue dependency.
+ * of a `partial`/`bare` capture — or to re-kick a link stranded at `enriching`
+ * (plan R12). Core only resets the status column and returns the link (setting
+ * it dirty so a fresh enqueue can pick it up); actually re-enqueueing the job
+ * is the worker/queue's job (U5) — core stays db-only with no queue dependency.
  *
- * Scoped to `partial`/`bare` (per the plan's state machine): retrying a `full`
- * (terminal) or already-`enriching` link is a no-op that returns `null`, so a
- * good capture can't be needlessly downgraded by a re-fetch. Live-scoped via
- * `whereLive`: a trashed link is never resurrected. Returns `null` if `linkId`
- * doesn't exist, is trashed, or isn't in a retryable status.
+ * Excludes `full` (terminal) so a good capture can't be downgraded by a
+ * re-fetch. Live-scoped via `whereLive`: a trashed link is never resurrected.
+ * Returns `null` if `linkId` doesn't exist, is trashed, or is already `full`.
  */
 export async function requestRetry(linkId: string): Promise<Link | null> {
   const [updated] = await db

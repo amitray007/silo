@@ -253,6 +253,9 @@ The enrichment worker: transactional enqueue, SSRF-safe fetch, static-first extr
 - Non-UTF-8 `<meta>`-charset decoding — known limitation, park in `future-scope.md`.
 - linkedom-for-Readability optimization — measured-later, if jsdom memory/throughput is a real problem.
 - A pooled/reused fetch or browser — premature; per-job is leak-proof and fine at this volume.
+- **DLQ alerting + stranded-`enriching` sweep (U5 review, deferred)** — dead-lettered enrichments (retry-exhausted) and links stranded at `enriching` (created without a running worker) are now *observable* (worker logs DLQ depth at startup; the no-op enqueuer warns once; `requestRetry` can re-kick an `enriching` link), but there is no automated alert or periodic sweep. Add a scheduled job that re-enqueues `enriching` links older than N minutes and alerts on DLQ depth, once scheduling (pg-boss cron) lands.
+- **`expireInSeconds:120` vs worst-case `extract()` time (U5 review, deferred)** — job-reclaim double-execution is *safe* (recordEnrichment is idempotent), but the "extract never approaches 120s on a 5MB body" assumption is unmeasured. Measure jsdom worst-case parse time before raising throughput; lower the parse cap or raise expiry with margin if it gets close.
+- **Bounded `boss.stop` timeout (U5 review, deferred)** — graceful stop currently has no explicit timeout; a hung in-flight `enrichLink` could delay shutdown until pg-boss's internal default. Pass an explicit `timeout` under the orchestrator's SIGKILL grace once deployed.
 
 ### Deferred for later (origin: docs/brainstorms/2026-07-03-engineering-foundation-requirements.md)
 - The HTTP API + UI (paste and list surfaces) — a separate web/api slice; this slice is verified via the worker + `core`.

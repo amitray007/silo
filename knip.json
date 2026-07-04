@@ -4,7 +4,6 @@
   "ignoreWorkspaces": ["packages/tsconfig"],
   "workspaces": {
     "packages/db": {
-      "entry": ["src/schema/index.ts"],
       "drizzle": true,
       "ignoreBinaries": ["psql"]
     }

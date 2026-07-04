@@ -3,6 +3,8 @@ import { db, links, linkTags, tags } from '@silo/db';
 import type { InferSelectModel } from 'drizzle-orm';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { canonicalize } from './canonicalize.js';
+import { enqueueEnrichment } from './enqueue.js';
+import type { Executor } from './executor.js';
 import { whereLive } from './live.js';
 import type { SourceData } from './source-data.js';
 import { sourceDataSchema } from './source-data.js';
@@ -10,13 +12,9 @@ import { sourceDataSchema } from './source-data.js';
 /** A single `links` row, typed. */
 export type Link = InferSelectModel<typeof links>;
 
-/**
- * A database handle: either the pooled `db` singleton or a transaction handle.
- * Composite writes take a `tx` so insert + tag-attach commit atomically.
- */
-type Db = typeof db;
-type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
-type Executor = Db | Tx;
+// `Db`/`Tx`/`Executor` moved to ./executor.ts so ./enqueue.ts can reference
+// them without a links.ts <-> enqueue.ts cycle. Re-exported for compatibility.
+export type { Db, Tx } from './executor.js';
 
 /** Postgres unique-violation error code (`23505`). */
 const UNIQUE_VIOLATION = '23505';
@@ -150,6 +148,18 @@ async function findExistingForDedup(exec: Executor, url: string): Promise<Link |
  * leaves a live link with partial tags. The partial-unique index is the
  * backstop for the read-then-insert TOCTOU race — a 23505 is caught and
  * retried as a merge.
+ *
+ * Enrichment enqueue (plan R1/R2, U5): every path that produces a live link
+ * here — a fresh insert, a dedup-merge, or a TOCTOU-retry merge — also calls
+ * `enqueueEnrichment` for that link id on the SAME transaction `tx`. That goes
+ * through core's injectable enqueue seam (a no-op unless a worker has
+ * registered one — see `enqueue.ts`); the worker's real enqueuer sends the
+ * `enrich-link` job on `tx` via pg-boss `fromDrizzle`, so the job commits
+ * atomically with the row (never lost, never runs before the row is visible).
+ * A re-save (dedup-merge) re-enqueues too: the merge may have revived a trashed
+ * link or supplied richer source data, and `singletonKey = linkId` (+ the
+ * queue's `stately` policy) means this never stacks a second job for the same
+ * link.
  */
 export async function createLink(input: CreateLinkInput): Promise<Link> {
   const { canonical, ok } = canonicalize(input.url);
@@ -164,7 +174,9 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (ok) {
         const existing = await findExistingForDedup(tx, input.url);
         if (existing) {
-          return mergeIntoExisting(tx, existing, input, sourceData);
+          const merged = await mergeIntoExisting(tx, existing, input, sourceData);
+          await enqueueEnrichment(tx, merged.id);
+          return merged;
         }
       }
       const [inserted] = await tx
@@ -189,6 +201,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (input.tags && input.tags.length > 0) {
         await attachTags(tx, inserted.id, input.tags);
       }
+      await enqueueEnrichment(tx, inserted.id);
       return inserted;
     });
   } catch (error) {
@@ -203,7 +216,9 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (!existing) {
         throw error;
       }
-      return mergeIntoExisting(tx, existing, input, sourceData);
+      const merged = await mergeIntoExisting(tx, existing, input, sourceData);
+      await enqueueEnrichment(tx, merged.id);
+      return merged;
     });
   }
 }
