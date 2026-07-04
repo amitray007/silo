@@ -102,3 +102,86 @@ independently, each with its own leak-guard test.
 `.env.example`). No other environment variables are read directly by this
 package; `@silo/core`'s `DATABASE_URL` requirement is inherited transitively
 (the api never touches `@silo/db` itself).
+
+## The full route surface (A2 reads, A3 writes, A4 lifecycle)
+
+Every route is mounted under `/api` (see `app.ts`'s doc comment on the
+sub-app-mount pattern). All bodies/queries/params are Zod-validated at the
+edge; a validation failure is `400 validation_error`, a bad/non-uuid id is
+`400 validation_error` too (never a pointless DB round-trip that would only
+ever 404). Every link in a response is shaped through `link-json.ts`'s
+whitelist — no route ever returns a raw `LinkWithTags`.
+
+| Route                             | Method | Success        | Not-found / guard failure | Notes                                                              |
+| ---------------------------------- | ------ | --------------- | -------------------------- | ------------------------------------------------------------------- |
+| `/links`                           | GET    | 200 `{links, nextCursor?}` | —                | filters: `tag`, `status`; paginated                                 |
+| `/links/search`                    | GET    | 200 `{results, nextCursor?}` | —              | `q` required; each result carries `rank`                            |
+| `/links/:id`                       | GET    | 200 `{link}`     | 404 `not_found`            | live-scoped                                                          |
+| `/trash`                           | GET    | 200 `{links, nextCursor?}` | —                | NOT live-scoped (C2 `listTrash`); each link carries `deletedAt`      |
+| `/tags`                            | GET    | 200 `{tags}`    | —                           | `listTagsWithCounts` — sidebar tag list                              |
+| `/counts`                          | GET    | 200 `{live, trash, purgeWindowDays}` | —     | `purgeWindowDays` is the read-only `PURGE_WINDOW_DAYS` constant (C4) |
+| `/links` (capture)                 | POST   | 201 `{link, deduped}` | 400 `invalid_url`     | web/API captures are `origin: 'user'` (the `◆` mark is agent-only)   |
+| `/links/:id`                       | PATCH  | 200 `{link}`     | 404 `not_found`            | live-scoped edit; empty body is a valid no-op                        |
+| `/links/:id/tags`                  | POST   | 200 `{link}`     | 404 `not_found`            | guarded via `getById` first (`addTag` isn't live-scoped)             |
+| `/links/:id/tags/:tag`             | DELETE | 200 `{link}`     | 404 `not_found`            | guarded via `getById` first; removing an absent tag is a 200 no-op   |
+| `/tags` (standalone create)        | POST   | 201 `{name}`    | 400 `validation_error`     | blank/whitespace name; case-insensitive idempotent (canonical name)  |
+| `/links/:id/trash`                 | POST   | 200 `{link}` (tags `[]`) | 404 `not_found`  | unknown OR already-trashed (indistinguishable — honest message)      |
+| `/links/:id/restore`               | POST   | 200 `{outcome, link}` | 404 `{outcome:'not_found'}` | `outcome`: `restored` \| `merged` — see below                  |
+| `/links/:id/retry`                 | POST   | 200 `{link}` (status `enriching`) | 404 `not_found` | unknown, trashed, or already `full` (never downgrades a good capture) |
+| `/trash/:id` (hard-delete one)     | DELETE | 204 (no body)   | 404 `not_found`            | TRASHED-ONLY guard — a live id is a no-op 404, live row untouched     |
+| `/trash` (empty all)               | DELETE | 200 `{deleted}` | —                           | hard-deletes every currently-trashed link, regardless of age          |
+
+POST is used for the state-transition actions (trash/restore/retry, capture,
+tag add, create-tag) — they're actions or creates, not idempotent PUTs, so a
+success is `200`/`201` rather than `204`. DELETE is reserved for the
+permanent, destructive removals (`/trash/:id`, `/trash`) — a single
+no-body delete is `204`; "delete all" returns `200 {deleted}` since the count
+is the one useful confirmation that action needs. Every not-found case is a
+`404` with the shared `not_found` envelope (never a silent `200`); every bad
+input is a `400` (`validation_error` for Zod failures, `invalid_url` for the
+capture route's URL guard, `invalid_cursor` for a malformed/wrong-kind
+pagination cursor).
+
+### The restore `merged` outcome contract
+
+`POST /links/:id/restore` mirrors `restore_link`'s MCP handler exactly
+(`packages/mcp/server/src/tools/restore-link.ts`) because `core.restore`
+returns a discriminated `RestoreResult` with three cases, not a plain
+found/not-found boolean:
+
+- **`not_found`** (404): the id is unknown, or not currently in the trash
+  (e.g. already live). The two cannot be told apart — the message says so.
+- **`restored`** (200): the trashed link is live again, same id.
+- **`merged`** (200): while the link sat in trash, a fresh live row was saved
+  for the same canonical url. Restoring would collide, so the trashed row's
+  notes/tags are folded into that OTHER, already-live row instead — the
+  response's `link.id` is that other id, **not** the id requested. The
+  `message` field spells out both ids explicitly (the requested id and the
+  survivor's id) so a caller can never mistake this for the id it asked for
+  quietly changing underneath it. The original id no longer exists as a live
+  link once this happens.
+
+### The hard-delete guard
+
+`hardDelete`/`emptyTrash` (`@silo/core`, C3) are TRASHED-ONLY by construction
+— their own `WHERE ... AND deleted_at IS NOT NULL` predicate means a live row
+can never be matched, so handing `DELETE /trash/:id` a live link's id is a
+no-op (`false` from core) that maps to `404 not_found`, leaving that live row
+completely untouched. This is deliberate: "wrong id" and "not trashed" both
+collapse to the same safe outcome, because the alternative (trying to
+distinguish them) would require a second query that a concurrent trash/
+restore could race anyway — the atomic guard is the only thing that matters.
+
+## Auth (there is none — v1 is localhost, single-user)
+
+**This API has no authentication or authorization in v1.** Every route above
+is reachable by any client that can reach the process — there is no API key,
+session, or user scoping anywhere in `@silo/api`. This is an explicit,
+recorded decision, not an oversight: silo's whole premise (see the top-level
+`CLAUDE.md`) is a **personal, single-user, self-owned store** meant to run on
+`localhost` (or a private network the user controls) behind no public
+ingress. Multi-user support, an API key/token, or any request-scoping by
+identity is out of scope for this slice and not planned until a concrete
+multi-user need arises — if this API is ever exposed beyond localhost, an
+auth layer must be added first; nothing here should be treated as safe to
+expose directly to the public internet.

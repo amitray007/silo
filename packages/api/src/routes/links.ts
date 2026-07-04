@@ -53,7 +53,10 @@ export function registerLinksRoutes(app: Hono): void {
     if (!link) {
       return c.json({ error: 'not_found', message: `No link with id ${id}` }, 404);
     }
-    return c.json(toLinkJson(link));
+    // `{ link }` (not a bare link) so a single link has the SAME envelope on the
+    // read path as on every write path (PATCH/capture/tag/trash/restore/retry all
+    // return `{ link }`) — a client uses one unwrap for the resource, not per-verb.
+    return c.json({ link: toLinkJson(link) });
   });
 
   app.get('/links', async (c) => {

@@ -181,10 +181,10 @@ describeIfPg('A3 write routes (integration)', () => {
 
       // Re-GET to confirm the edit actually persisted, not just echoed back.
       const getRes = await app.request(`/api/links/${created.id}`);
-      const getBody = (await getRes.json()) as Record<string, unknown>;
-      expect(getBody.title).toBe('Edited Title');
-      expect(getBody.description).toBe('Edited description');
-      expect(getBody.notes).toBe('Edited note');
+      const getBody = (await getRes.json()) as { link: Record<string, unknown> };
+      expect(getBody.link.title).toBe('Edited Title');
+      expect(getBody.link.description).toBe('Edited description');
+      expect(getBody.link.notes).toBe('Edited note');
     });
 
     it('unknown id -> 404 not_found', async () => {

@@ -377,10 +377,14 @@ describeIfPg('A2 read routes (integration)', () => {
         sourceKind: 'link',
         title: 'Found title',
       });
-      const body = await expectOk<Record<string, unknown>>(app, `/api/links/${created.id}`);
-      expect(body.id).toBe(created.id);
-      expect(body.title).toBe('Found title');
-      expectWhitelistedLinkShape(body);
+      const body = await expectOk<{ link: Record<string, unknown> }>(
+        app,
+        `/api/links/${created.id}`,
+      );
+      // `{ link }` envelope — same shape as every write route (contract consistency).
+      expect(body.link.id).toBe(created.id);
+      expect(body.link.title).toBe('Found title');
+      expectWhitelistedLinkShape(body.link);
     });
 
     it('unknown (well-formed) uuid -> 404 not_found', async () => {

@@ -201,6 +201,22 @@ interaction that has a data/operation need. Real-PG + real-HTTP tested. The
   settings store (theme/plugins/purge-cycle get+set); export-all as one op; bulk
   batch endpoints; API auth/access-token (localhost single-user for now — document
   the assumption). The purge-cycle picker (7/30/90) waits for the settings store.
+- **Contract-polish items (api-contract review, A4) — decide WITH the SPA:**
+  (a) API **versioning** — routes are un-prefixed (`/api/...`); add a `/v1` prefix
+  before any external consumer depends on the shapes. (b) The `{results}` (search)
+  vs `{links}` (list/trash) collection-key split — keep as the deliberate marker
+  of the ranked variant, or unify; decide when the SPA's list renderer is built.
+  (c) `restore` **`merged`** surfaces the survivor id only via `link.id` + the prose
+  `message` — consider adding a dedicated `mergedIntoId` field so a client can
+  reconcile the old→new id programmatically. (d) `deduped` on capture is a
+  best-effort pre-create prediction (racy under concurrency) — derive it from the
+  create result, or document it as advisory, if the SPA drives UX off it. (e) The
+  `trash` action's response reports `tags:[]` (a trashed row can't be
+  live-hydrated) — the SPA should re-fetch `GET /trash` for the authoritative tag
+  set rather than trust the trash-action body.
+  (RESOLVED in A4: the single-link envelope is now uniform — `GET /:id` returns
+  `{link}` like every write route; and the server binds to loopback `127.0.0.1`
+  by default, `HOST` opt-in + warning for wider binding.)
 
 ### Outside scope / anti-scope
 No business logic in routes (thin over core — enforced). No AI. No SSRF re-impl
