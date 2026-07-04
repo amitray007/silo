@@ -24,19 +24,25 @@ import {
 /** Local per-node worker slots (plan: "the worker" — not yet horizontally tuned). */
 const LOCAL_CONCURRENCY = 5;
 
-export interface RunWorkerResult {
+/** A running worker instance, returned by `startWorker()`. */
+export interface WorkerHandle {
   /** Stops the worker gracefully, waiting for any in-flight job (bounded by pg-boss's own timeout). */
   stop: () => Promise<void>;
 }
 
 /**
- * Start the worker: connect pg-boss, ensure the queue exists, and register
- * the `enrich-link` handler. Returns a `stop()` for graceful shutdown —
- * factored out from the `main()` process wiring below so tests can start/
- * stop a worker instance directly without touching `process` signal
- * handlers.
+ * Start the worker: connect pg-boss, ensure the queue exists, register the
+ * `createLink` enqueue seam (in THIS process), and register the
+ * `enrich-link` handler. Returns a `stop()` for graceful shutdown.
+ *
+ * Public entrypoint (plan 005, A1): this is the composable boot sequence a
+ * composition-root process (`@silo/app`) calls to run the enrichment worker
+ * in-process alongside other adapters, rather than as a separate OS process.
+ * It is also what `main()` below calls for the standalone `@silo/worker`
+ * process. Importing this module never runs it — only calling `startWorker()`
+ * does (see the main-module guard at the bottom of this file).
  */
-export async function runWorker(): Promise<RunWorkerResult> {
+export async function startWorker(): Promise<WorkerHandle> {
   const boss = createWorkerBoss();
 
   boss.on('error', (error) => {
@@ -84,7 +90,7 @@ export async function runWorker(): Promise<RunWorkerResult> {
  * (`node worker.js` / `tsx worker.ts`) does.
  */
 async function main(): Promise<void> {
-  const { stop } = await runWorker();
+  const { stop } = await startWorker();
   console.log(`silo worker: listening on queue "${ENRICH_LINK_QUEUE}"`);
 
   let stopping = false;

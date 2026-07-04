@@ -2,14 +2,17 @@
  * @silo/worker public entry.
  *
  * This slice ships the SSRF-safe fetch module (U2), static-first extraction
- * (U3), the core write path (U4), and the pg-boss queue + worker entrypoint
- * (U5). `worker.ts` (the long-lived process entrypoint) and its `main()`
- * guard are deliberately NOT re-exported here — nothing in the workspace
- * imports `@silo/worker` as a library (it has no adapter consumers per
- * architecture.md), so the only "export" that matters for the entrypoint is
- * the `pnpm --filter @silo/worker start` / `node dist/worker.js` process
- * boundary itself, registered as a knip entry (see knip.json) rather than a
- * package export.
+ * (U3), the core write path (U4), the pg-boss queue + worker entrypoint (U5),
+ * and the public `startWorker()` runtime API (plan 005, A1). `worker.ts`'s
+ * `main()` process wiring (signal handling, console logging) and its
+ * main-module guard stay private — but `startWorker()` itself (the boot
+ * sequence: connect pg-boss, ensure the queue, register the enqueuer, run the
+ * enrichment work loop) IS a public export: `@silo/app` (the composition
+ * root, plan 005 A2) imports `@silo/worker` as a library to run the
+ * enrichment worker in-process alongside other adapters, rather than as a
+ * separate OS process. The standalone `pnpm --filter @silo/worker start` /
+ * `node dist/worker.js` process boundary (for scale-out) still exists too,
+ * registered as a knip entry (see knip.json).
  */
 
 // Enrichment job (U5): the `enrich-link` handler's business logic — fetch ->
@@ -49,3 +52,8 @@ export {
   ENRICH_LINK_QUEUE_OPTIONS,
   ensureEnrichLinkQueue,
 } from './queue.js';
+// Public runtime API (plan 005, A1): the composable boot sequence a
+// composition-root process calls to start the enrichment worker in-process.
+// Importing this module is side-effect-free — only calling `startWorker()`
+// connects pg-boss / registers the enqueuer / starts the work loop.
+export { startWorker, type WorkerHandle } from './worker.js';
