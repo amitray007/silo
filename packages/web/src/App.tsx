@@ -1,3 +1,4 @@
+import { useCounts } from './api/hooks';
 import { Chip, ComingSoon, GrainDot, Mark, NavItem, SidebarSection } from './components';
 import { ThemeToggle } from './theme/ThemeToggle';
 
@@ -5,8 +6,14 @@ import { ThemeToggle } from './theme/ThemeToggle';
  * Placeholder app frame + a small gallery of the W3 Oat primitives. The real
  * sidebar/frame/routing lands in W5; this proves the primitives render
  * against the live tokens/themes (and keeps them "used" for knip) until then.
+ * `useCounts()` wires the W4 API client + hooks in end-to-end (through the
+ * dev proxy to the real API when it's running) — the Library/Trash `meta`
+ * below falls back to the W3 gallery's placeholder numbers while the query is
+ * loading/erroring, and switches to the live counts once they resolve.
  */
 export function App() {
+  const { data: counts } = useCounts();
+
   return (
     <div>
       <div
@@ -37,8 +44,12 @@ export function App() {
         }}
       >
         <section style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-          <NavItem label="Library" meta={12} active href="#library" />
-          <NavItem label="Trash" meta="3 · 30d" href="#trash" />
+          <NavItem label="Library" meta={counts ? counts.live : 12} active href="#library" />
+          <NavItem
+            label="Trash"
+            meta={counts ? `${counts.trash} · ${counts.purgeWindowDays}d` : '3 · 30d'}
+            href="#trash"
+          />
           <SidebarSection label="Tags">
             <NavItem label="#mcp" meta={4} href="#tags/mcp" />
             <NavItem label="#essays" meta={2} href="#tags/essays" />
