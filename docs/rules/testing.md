@@ -40,3 +40,10 @@
   (`DATABASE_URL`, `TEST_DATABASE_URL`, `CI_REQUIRE_DB`) are declared there —
   a new env var the tests read at runtime must be added to `passThroughEnv`
   or it won't reach the test process in CI.
+- **jscpd does NOT scan test files** (`.jscpd.json` ignores `**/*.test.{ts,tsx}`).
+  Test files legitimately share setup boilerplate — mock-`fetch` stubs, a
+  `render` helper, `QueryClient`/`MemoryRouter` wrappers, MCP tool-test
+  scaffolding — and forcing that DRY produces worse, less-readable tests (a test
+  should be legible in isolation). The duplication gate guards PRODUCTION `src`
+  only, where a clone signals a missing abstraction. Don't contort a test to
+  dodge jscpd; if you're tempted to, the file's probably excluded already.

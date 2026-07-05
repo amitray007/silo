@@ -6,5 +6,12 @@
   "absolute": true,
   "gitignore": true,
   "pattern": "packages/**/src/**/*.{ts,tsx}",
-  "ignore": ["**/node_modules/**", "**/dist/**", "**/.turbo/**", "**/docs/**", "**/test-support/**"]
+  "ignore": [
+    "**/node_modules/**",
+    "**/dist/**",
+    "**/.turbo/**",
+    "**/docs/**",
+    "**/test-support/**",
+    "**/*.test.{ts,tsx}"
+  ]
 }
