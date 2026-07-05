@@ -29,7 +29,13 @@ describe('App routing', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(jsonResponse({ live: 128, trash: 2, purgeWindowDays: 30 })),
+      vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/api/links')) {
+          return Promise.resolve(jsonResponse({ links: [] }));
+        }
+        return Promise.resolve(jsonResponse({ live: 128, trash: 2, purgeWindowDays: 30 }));
+      }),
     );
   });
 
@@ -40,7 +46,7 @@ describe('App routing', () => {
   it('renders the Library view (and its active nav item) at /', async () => {
     renderApp(['/']);
     await waitFor(() => expect(screen.getByText('128')).toBeDefined());
-    expect(screen.getByText(/Library — coming soon/i)).toBeDefined();
+    await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
     const libraryLink = screen.getByRole('link', { name: /library/i });
     expect(libraryLink.getAttribute('aria-current')).toBe('page');
   });

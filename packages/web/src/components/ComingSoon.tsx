@@ -1,18 +1,12 @@
+import { CenteredPanel } from './CenteredPanel';
+
 /**
  * The calm content-area placeholder for routed views not yet built (W5).
  * Matches the prototype's empty-state calm: centered, muted, no chrome.
  */
 export function ComingSoon({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        padding: '104px 0 40px',
-        textAlign: 'center',
-      }}
-    >
+    <CenteredPanel>
       <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink)' }}>
         {title}
       </p>
@@ -23,6 +17,6 @@ export function ComingSoon({ title, subtitle }: { title: string; subtitle?: stri
           {subtitle}
         </p>
       )}
-    </div>
+    </CenteredPanel>
   );
 }

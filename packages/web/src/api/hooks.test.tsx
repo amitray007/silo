@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { queryKeys, useCounts, useTags } from './hooks';
+import { queryKeys, useCounts, useInfiniteLinks, useTags } from './hooks';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -85,5 +86,60 @@ describe('useTags', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(tags);
     expect(fetch).toHaveBeenCalledWith('/api/tags');
+  });
+});
+
+describe('useInfiniteLinks', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('advances through pages via the opaque cursor and stops when nextCursor is absent', async () => {
+    const page1 = { links: [{ id: '1' }], nextCursor: 'cursor-abc' };
+    const page2 = { links: [{ id: '2' }] };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(page1))
+      .mockResolvedValueOnce(jsonResponse(page2));
+
+    const { result } = renderHook(() => useInfiniteLinks(), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.pages).toEqual([page1]);
+    expect(result.current.hasNextPage).toBe(true);
+    expect(fetch).toHaveBeenCalledWith('/api/links');
+
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+
+    await waitFor(() => expect(result.current.data?.pages).toEqual([page1, page2]));
+    expect(fetch).toHaveBeenCalledWith('/api/links?cursor=cursor-abc');
+    expect(result.current.hasNextPage).toBe(false);
+  });
+
+  it('goes from loading to success with the first page', async () => {
+    const page1 = { links: [{ id: '1' }] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(page1));
+
+    const { result } = renderHook(() => useInfiniteLinks(), { wrapper });
+
+    expect(result.current.isLoading).toBe(true);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.pages).toEqual([page1]);
+  });
+
+  it('surfaces an error state when the request fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'internal_error', message: 'Internal server error' }, 500),
+    );
+
+    const { result } = renderHook(() => useInfiniteLinks(), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    expect(result.current.error).toMatchObject({ status: 500, error: 'internal_error' });
   });
 });

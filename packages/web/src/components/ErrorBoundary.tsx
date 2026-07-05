@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { CenteredPanel } from './CenteredPanel';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -35,15 +36,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
   override render() {
     if (this.state.hasError) {
       return (
-        <div
-          style={{
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            padding: '104px 0 40px',
-            textAlign: 'center',
-          }}
-        >
+        <CenteredPanel>
           <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink)' }}>
             Something went wrong
           </p>
@@ -73,7 +66,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
           >
             Reload
           </button>
-        </div>
+        </CenteredPanel>
       );
     }
 

@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { apiGet } from './client';
-import type { Counts, TagsResponse } from './types';
+import type { Counts, LinksResponse, TagsResponse } from './types';
 
 /**
  * Query keys as a plain object of key-builders (not raw string arrays
@@ -31,5 +31,26 @@ export function useTags() {
   return useQuery({
     queryKey: queryKeys.tags(),
     queryFn: () => apiGet<TagsResponse>('/api/tags'),
+  });
+}
+
+/**
+ * The Library list's cursor-paginated feed (`GET /api/links`, no tag filter —
+ * plan 010). `pageParam` is the previous page's opaque `nextCursor`, passed
+ * back verbatim as `?cursor=` (URL-encoded — it's an opaque token, not
+ * necessarily URL-safe); `getNextPageParam` reads the next page's cursor off
+ * the last-fetched page, so `hasNextPage` flips to `false` the moment a page
+ * comes back without one. Callers flatten `data.pages.flatMap(p => p.links)`
+ * before rendering.
+ */
+export function useInfiniteLinks() {
+  return useInfiniteQuery({
+    queryKey: queryKeys.links(),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      apiGet<LinksResponse>(
+        `/api/links${pageParam ? `?cursor=${encodeURIComponent(pageParam)}` : ''}`,
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage: LinksResponse) => lastPage.nextCursor,
   });
 }
