@@ -1,0 +1,14 @@
+{
+  "name": "silo",
+  "short_name": "silo",
+  "description": "An agent-native personal link store.",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }
+  ],
+  "theme_color": "#fbf7ef",
+  "background_color": "#fbf7ef",
+  "display": "standalone",
+  "start_url": "/"
+}

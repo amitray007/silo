@@ -8,8 +8,14 @@
       content="silo — an agent-native personal link store. Save links, tweets, HN posts, and videos with rich metadata and full text; an external agent does the intelligence over MCP."
     />
     <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbf7ef" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171310" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#14100c" />
+    <!-- Favicon set (all self-hosted — no third-party fetch, per the privacy
+         rule). SVG for modern browsers; PNG fallbacks + apple-touch + manifest. -->
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+    <link rel="manifest" href="/site.webmanifest" />
     <title>silo</title>
     <script>
       // FOUC guard: resolves + applies the theme BEFORE React mounts, so the
