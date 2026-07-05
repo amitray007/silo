@@ -1,6 +1,7 @@
 import type { MouseEvent } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
+import { ThemeToggle } from '../theme/ThemeToggle';
 import { GrainDot } from './GrainDot';
 import { NavItem } from './NavItem';
 import { SidebarSection } from './SidebarSection';
@@ -100,6 +101,9 @@ export function Sidebar() {
 
       <span style={{ flex: 1 }} />
 
+      <div style={{ padding: '4px 10px 8px' }}>
+        <ThemeToggle />
+      </div>
       <NavItemLink to="/settings" label="Settings" />
     </nav>
   );

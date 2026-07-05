@@ -1,14 +1,18 @@
 import { Outlet } from 'react-router-dom';
-import { ThemeToggle } from '../theme/ThemeToggle';
 import { Sidebar } from './Sidebar';
 
 /**
- * The Oat outer frame (`docs/design/app/Silo-v2.html`, ~L26-30): a
- * full-viewport `--bg` ground, centered app card (`max-width: 62rem`,
- * `--line` border, 14px radius, overflow hidden) holding the `Sidebar`
- * (210px) beside the routed content pane. The theme toggle sits above the
- * card, top-left, matching the prototype's placement — outside the card so
- * it never competes with in-card chrome.
+ * The full-bleed Oat frame. Unlike the prototype's floating 62rem card, the app
+ * fills the whole viewport (`--bg` ground) and the sidebar + content sit as one
+ * CENTERED band with generous empty gutters on wide screens — the app owns the
+ * window, but the usable content is a narrow, centered column (per the product
+ * direction + the reference layouts). No border, no rounded card, no
+ * app-in-a-card.
+ *
+ * Layout: a full-height flex row centered by `justify-content: center`. The
+ * sidebar keeps its 210px rail (on `--bg2`, border-right) flush against the
+ * content; the content region caps its inner column at a ~720px reading width
+ * (see LibraryView / the routed views) so rows never stretch edge-to-edge.
  */
 export function AppFrame() {
   return (
@@ -18,29 +22,47 @@ export function AppFrame() {
         background: 'var(--bg)',
         color: 'var(--ink)',
         boxSizing: 'border-box',
-        padding: 'clamp(10px, 3vh, 34px) clamp(8px, 3vw, 28px)',
+        display: 'flex',
+        justifyContent: 'center',
       }}
     >
-      <div style={{ maxWidth: '62rem', margin: '0 auto 12px' }}>
-        <ThemeToggle />
-      </div>
-
+      {/* The centered band: sidebar (210px) + a ~720px content column sit as one
+          unit, capped so equal empty gutters fall on BOTH far sides on wide
+          windows (the app owns the window; the usable content is a centered,
+          narrow band — not flush-left, not stretched). */}
       <div
         style={{
-          maxWidth: '62rem',
-          margin: '0 auto',
-          border: '1px solid var(--line)',
-          borderRadius: 14,
-          background: 'var(--bg)',
-          overflow: 'hidden',
           display: 'flex',
-          minHeight: 'min(46rem, calc(100vh - 68px))',
+          width: '100%',
+          maxWidth: '60rem',
+          minHeight: '100vh',
         }}
       >
         <Sidebar />
-        <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-          <Outlet />
-        </div>
+        {/* Content region: the routed view fills it, capped at a ~720px reading
+            width, with top padding for the omnibar/first group. */}
+        <main
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            padding: '18px clamp(20px, 3vw, 34px) 0',
+          }}
+        >
+          <div
+            style={{
+              width: '100%',
+              maxWidth: '45rem',
+              flex: 1,
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            <Outlet />
+          </div>
+        </main>
       </div>
     </div>
   );
