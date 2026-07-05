@@ -3,7 +3,44 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="silo — an agent-native personal link store. Save links, tweets, HN posts, and videos with rich metadata and full text; an external agent does the intelligence over MCP."
+    />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#fbf7ef" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#171310" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>silo</title>
+    <script>
+      // FOUC guard: resolves + applies the theme BEFORE React mounts, so the
+      // very first paint is already correct (no light->dark flash for a
+      // dark-mode user). Keep this logic in sync with
+      // src/theme/theme.ts's resolveInitialTheme/applyThemeToDocument —
+      // any change there must be mirrored here, and vice versa.
+      (() => {
+        var STORAGE_KEY = 'silo-theme';
+        var stored;
+        var theme;
+        try {
+          stored = window.localStorage.getItem(STORAGE_KEY);
+          theme =
+            stored === 'dark' || stored === 'light'
+              ? stored
+              : window.matchMedia('(prefers-color-scheme: dark)').matches
+                ? 'dark'
+                : 'light';
+          // Mirrors applyThemeToDocument: dark sets the attribute, light
+          // leaves it unset (the default :root already matches light).
+          if (theme === 'dark') {
+            document.documentElement.setAttribute('data-theme', 'dark');
+          }
+        } catch (_e) {
+          // localStorage/matchMedia can throw (private mode, disabled APIs).
+          // Fall through harmlessly — no attribute set means the light
+          // default applies, and React resolves the real theme on mount.
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

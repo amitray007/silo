@@ -3,6 +3,7 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import './styles/base.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
@@ -22,12 +23,20 @@ if (!rootElement) {
 
 createRoot(rootElement).render(
   <StrictMode>
+    {/*
+      ThemeProvider stays outermost so `data-theme` is already resolved and
+      the ErrorBoundary's fallback renders themed, not flashed-unstyled.
+      ErrorBoundary sits just inside it so a render error anywhere in
+      query/router/App (not just ThemeProvider itself) is caught.
+    */}
     <ThemeProvider>
-      <QueryClientProvider client={queryClient}>
-        <BrowserRouter>
-          <App />
-        </BrowserRouter>
-      </QueryClientProvider>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
+        </QueryClientProvider>
+      </ErrorBoundary>
     </ThemeProvider>
   </StrictMode>,
 );

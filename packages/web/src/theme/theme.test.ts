@@ -57,6 +57,50 @@ describe('resolveInitialTheme', () => {
     const theme = resolveInitialTheme({ getItem: () => null }, fakeMatchMedia(true));
     expect(theme).toBe('dark');
   });
+
+  /**
+   * This is the FOUC contract: index.html's inline <script> mirrors this
+   * exact resolution order (stored theme, else prefers-color-scheme) so the
+   * `data-theme` it sets before first paint matches what this function
+   * resolves once React mounts. If any of these cases changes, the inline
+   * script (index.html <head>) must change to match, or a dark-mode user
+   * gets a flash from the script's guess flipping to React's real answer.
+   */
+  describe('FOUC contract (must match the inline script in index.html)', () => {
+    it('stored dark, system light -> dark', () => {
+      expect(resolveInitialTheme({ getItem: () => 'dark' }, fakeMatchMedia(false))).toBe('dark');
+    });
+
+    it('stored light, system dark -> light', () => {
+      expect(resolveInitialTheme({ getItem: () => 'light' }, fakeMatchMedia(true))).toBe('light');
+    });
+
+    it('no storage, system dark -> dark', () => {
+      expect(resolveInitialTheme({ getItem: () => null }, fakeMatchMedia(true))).toBe('dark');
+    });
+
+    it('no storage, system light -> light', () => {
+      expect(resolveInitialTheme({ getItem: () => null }, fakeMatchMedia(false))).toBe('light');
+    });
+
+    it('storage throws, system dark -> dark (falls through harmlessly)', () => {
+      const throwingStorage = {
+        getItem: () => {
+          throw new Error('blocked');
+        },
+      };
+      expect(resolveInitialTheme(throwingStorage, fakeMatchMedia(true))).toBe('dark');
+    });
+
+    it('storage throws, system light -> light (falls through harmlessly)', () => {
+      const throwingStorage = {
+        getItem: () => {
+          throw new Error('blocked');
+        },
+      };
+      expect(resolveInitialTheme(throwingStorage, fakeMatchMedia(false))).toBe('light');
+    });
+  });
 });
 
 describe('applyThemeToDocument', () => {

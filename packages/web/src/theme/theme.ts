@@ -22,6 +22,13 @@ export function readSystemTheme(matchMediaFn: typeof matchMedia = matchMedia): T
   return matchMediaFn('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
 }
 
+/**
+ * Keep in sync with the inline FOUC script in index.html's <head> — that
+ * script duplicates this exact resolution order (stored theme, else system
+ * preference) so the pre-paint `data-theme` it sets matches what this
+ * function resolves once React mounts. If this logic changes, mirror the
+ * change in index.html or a dark-mode user gets a double flash.
+ */
 export function resolveInitialTheme(
   storage: Pick<Storage, 'getItem'> = localStorage,
   matchMediaFn: typeof matchMedia = matchMedia,

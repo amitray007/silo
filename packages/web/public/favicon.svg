@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="silo-favicon-title">
+  <!--
+    The amber "grain dot" mark, self-hosted (no third-party favicon fetch —
+    see docs/rules/architecture.md privacy rule). Mirrors the gradient used
+    by .silo-grain-dot in src/styles/base.css (light-mode --mark colors).
+  -->
+  <title id="silo-favicon-title">silo</title>
+  <defs>
+    <radialGradient id="grain" cx="32%" cy="30%" r="75%">
+      <stop offset="0%" stop-color="#e8b054" />
+      <stop offset="70%" stop-color="#c98f2d" />
+    </radialGradient>
+  </defs>
+  <circle cx="16" cy="16" r="15" fill="url(#grain)" />
+</svg>
