@@ -49,6 +49,16 @@
   },
   "overrides": [
     {
+      "includes": ["packages/web/src/styles/base.css"],
+      "linter": {
+        "rules": {
+          "complexity": {
+            "noImportantStyles": "off"
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/web/**", "packages/api/**", "packages/mcp/**"],
       "linter": {
         "rules": {
