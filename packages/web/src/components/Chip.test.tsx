@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { Chip, chipLetter } from './Chip';
 
@@ -27,12 +27,34 @@ describe('Chip', () => {
     expect(screen.getByText('T')).toBeDefined();
   });
 
-  it('uses the Oat chip tokens (bg2 fill, line border) — no remote favicon', () => {
+  it('uses the Oat chip tokens (bg2 fill, line border) on the outer chip', () => {
     render(<Chip domain="tbray.org" />);
-    const chip = screen.getByText('T');
-    expect(chip.style.background).toBe('var(--bg2)');
-    expect(chip.style.border).toContain('var(--line)');
-    // no <img>/background-image favicon fetch anywhere in the chip
-    expect(chip.querySelector('img')).toBeNull();
+    const letter = screen.getByText('T');
+    const chip = letter.parentElement;
+    expect(chip).not.toBeNull();
+    expect(chip?.style.background).toBe('var(--bg2)');
+    expect(chip?.style.border).toContain('var(--line)');
+  });
+
+  it('points the favicon overlay at the self-proxied /api/favicon endpoint (never a third-party host)', () => {
+    const { container } = render(<Chip domain="tbray.org" />);
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('src')).toBe('/api/favicon?domain=tbray.org');
+  });
+
+  it('falls back to the letter (removes the img) when the favicon fails to load', () => {
+    const { container } = render(<Chip domain="tbray.org" />);
+    const img = container.querySelector('img');
+    expect(img).not.toBeNull();
+    if (!img) return;
+    fireEvent.error(img);
+    expect(screen.getByText('T')).toBeDefined();
+    expect(container.querySelector('img')).toBeNull();
+  });
+
+  it('renders no favicon img when there is no domain', () => {
+    const { container } = render(<Chip domain={null} />);
+    expect(container.querySelector('img')).toBeNull();
   });
 });

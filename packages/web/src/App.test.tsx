@@ -60,9 +60,10 @@ describe('App routing', () => {
     expect(trashLink.getAttribute('aria-current')).toBe('page');
   });
 
-  it('renders the tag name at /tags/:name', async () => {
+  it('renders the tag-scoped Library view (title + empty state) at /tags/:name', async () => {
     renderApp(['/tags/mcp']);
-    await waitFor(() => expect(screen.getByText(/#mcp — coming soon/i)).toBeDefined());
+    await waitFor(() => expect(screen.getByText('#mcp')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('No links tagged #mcp yet.')).toBeDefined());
   });
 
   it('renders the Settings view at /settings', async () => {

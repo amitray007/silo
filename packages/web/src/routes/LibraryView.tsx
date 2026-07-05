@@ -1,159 +1,51 @@
-import type { ReactNode } from 'react';
-import type { ApiError } from '../api/client';
-import { useCounts, useInfiniteLinks } from '../api/hooks';
-import { CenteredPanel } from '../components/CenteredPanel';
-import { ContentHeader } from '../components/ContentHeader';
-import { DayGroup } from '../components/DayGroup';
-import { GrainDot } from '../components/GrainDot';
-import { bucketByDay } from '../lib/buckets';
-import { useIntersectionPrefetch } from '../lib/useIntersectionPrefetch';
+import { ListBody } from './shared/ListBodies';
+import { ContentFrame, ListOmnibar } from './shared/ListHeader';
+import { EmptyState } from './shared/ListStates';
+import { useListView } from './shared/useListView';
 
-/** The calm first-page loading placeholder — a couple of muted skeleton rows, not a spinner (CLAUDE.md "calm" states). */
-function LoadingState() {
+/** `/`'s empty state copy — "nothing kept yet at all" (distinct from `TagView`'s per-tag empty copy). */
+function LibraryEmptyState() {
   return (
-    <div style={{ padding: '20px 11px' }} role="status" aria-label="Loading…">
-      {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          style={{
-            height: 34,
-            borderRadius: 8,
-            background: 'var(--bg2)',
-            marginBottom: 8,
-            opacity: 0.6,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-/** The design's richer empty state (`Silo-v2.html:96-103`) — the grain-dot + "Nothing kept yet." */
-function EmptyState() {
-  return (
-    <CenteredPanel>
-      <GrainDot size={22} />
-      <p style={{ margin: '22px 0 0', fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink)' }}>
-        Nothing kept yet.
-      </p>
-      <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--mut)', maxWidth: '24rem' }}>
-        Paste a link in the bar above — it's saved the moment it lands.
-      </p>
-      <p
-        style={{ margin: '26px 0 0', fontSize: '0.76rem', color: 'var(--fnt)', maxWidth: '24rem' }}
-      >
-        Claude can add links here too, once you connect it in Settings → access.
-      </p>
-    </CenteredPanel>
-  );
-}
-
-/** A calm inline error message (not a white screen — the `ErrorBoundary` still backstops render errors). */
-function ErrorState({ error }: { error: ApiError }) {
-  return (
-    <CenteredPanel>
-      <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500, color: 'var(--warn)' }}>
-        Couldn't load your links
-      </p>
-      <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--mut)', maxWidth: '24rem' }}>
-        {error.message}
-      </p>
-    </CenteredPanel>
+    <EmptyState
+      title="Nothing kept yet."
+      body={
+        <>
+          Paste a link in the bar above — it's saved the moment it lands.
+          <br />
+          <span style={{ fontSize: '0.9em', color: 'var(--fnt)' }}>
+            Claude can add links here too, once you connect it in Settings → access.
+          </span>
+        </>
+      }
+    />
   );
 }
 
 /**
- * The header (unscrolled, full content width) + scrolling body wrapper
- * shared by every render branch below — `.silo-content-body` is v3's
- * scrolling region (it owns `overflow-y:auto`); `.silo-content-col` inside
- * it caps the reading column at ~720px without introducing a second,
- * nested scroll container.
- */
-function LibraryFrame({ count, children }: { count: number | undefined; children: ReactNode }) {
-  return (
-    <>
-      <ContentHeader title="Library" count={count} />
-      <div className="silo-content-body">
-        <div className="silo-content-col">{children}</div>
-      </div>
-    </>
-  );
-}
-
-/**
- * `/` — the Library list (plan 010): day-grouped, read-only rows fed by
- * `useInfiniteLinks`. Pagination is a visible "load more" button (the
- * deterministic, a11y-friendly affordance) backed by an `IntersectionObserver`
- * sentinel that eagerly prefetches the next page as the user nears the foot,
- * so the button (or the next scroll) usually hits a warm cache.
+ * `/` — the Library list (plan 010, extended by plan 011 V3-2 with the
+ * omnibar's live search). Day-grouped, read-only rows via `useListView()`
+ * (no tag scope); when the omnibar carries a non-empty, non-URL query, the
+ * body switches to the search results (`ListBody`). Pagination (the "load
+ * more" button + prefetch sentinel) is Library-only — search results aren't
+ * paginated in this slice (matches v3, which searches the already-loaded
+ * list). Shares its orchestration/header/body/state chrome with `TagView`
+ * via `./shared/*` — see those modules' doc comments.
  */
 export function LibraryView() {
-  const { data: counts } = useCounts();
-  const { data, isLoading, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
-    useInfiniteLinks();
+  const view = useListView();
 
-  const canPrefetch = Boolean(hasNextPage) && !isFetchingNextPage;
-  const sentinelRef = useIntersectionPrefetch(() => fetchNextPage(), { enabled: canPrefetch });
-
-  if (isLoading) {
-    return (
-      <LibraryFrame count={counts?.live}>
-        <LoadingState />
-      </LibraryFrame>
-    );
-  }
-  if (isError) {
-    return (
-      <LibraryFrame count={counts?.live}>
-        <ErrorState error={error as ApiError} />
-      </LibraryFrame>
-    );
-  }
-
-  const links = data?.pages.flatMap((page) => page.links) ?? [];
-  if (links.length === 0) {
-    return (
-      <LibraryFrame count={counts?.live}>
-        <EmptyState />
-      </LibraryFrame>
-    );
-  }
-
-  const groups = bucketByDay(links);
+  const header = (
+    <ListOmnibar
+      omnibar={view.omnibar}
+      searchEnabled={view.searchEnabled}
+      shownCount={view.searchEnabled ? view.results.length : view.links.length}
+      libCount={view.liveCount ?? 0}
+    />
+  );
 
   return (
-    <LibraryFrame count={counts?.live}>
-      <div style={{ flex: 1 }}>
-        {groups.map((group) => (
-          <DayGroup key={group.label} label={group.label} links={group.items} />
-        ))}
-
-        {/* Prefetch sentinel — sits just above the foot so the observer fires before the user reaches the button. Renders nothing visible. */}
-        <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
-
-        {hasNextPage && (
-          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
-            <button
-              type="button"
-              onClick={() => fetchNextPage()}
-              disabled={isFetchingNextPage}
-              style={{
-                border: '1px solid var(--line)',
-                background: 'var(--bg2)',
-                color: 'var(--ink)',
-                borderRadius: 6,
-                padding: '6px 14px',
-                fontSize: '0.84rem',
-                fontFamily: 'inherit',
-                cursor: isFetchingNextPage ? 'default' : 'pointer',
-                opacity: isFetchingNextPage ? 0.6 : 1,
-              }}
-            >
-              {isFetchingNextPage ? 'Loading…' : 'Load more'}
-            </button>
-          </div>
-        )}
-      </div>
-    </LibraryFrame>
+    <ContentFrame title="Library" count={view.liveCount} headerSlot={header}>
+      {ListBody(view, <LibraryEmptyState />)}
+    </ContentFrame>
   );
 }

@@ -1,6 +1,6 @@
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
 import { apiGet } from './client';
-import type { Counts, LinksResponse, TagsResponse } from './types';
+import type { Counts, LinksResponse, SearchResponse, TagsResponse } from './types';
 
 /**
  * Query keys as a plain object of key-builders (not raw string arrays
@@ -16,6 +16,7 @@ export const queryKeys = {
   tags: () => ['tags'] as const,
   links: (filter?: { tag?: string; status?: string }) => ['links', filter ?? {}] as const,
   link: (id: string) => ['link', id] as const,
+  search: (q: string) => ['search', q] as const,
 };
 
 /** The sidebar's live/trash counts (`GET /api/counts`) — `useCounts().data` is `Counts | undefined` until loaded. */
@@ -35,22 +36,45 @@ export function useTags() {
 }
 
 /**
- * The Library list's cursor-paginated feed (`GET /api/links`, no tag filter —
- * plan 010). `pageParam` is the previous page's opaque `nextCursor`, passed
- * back verbatim as `?cursor=` (URL-encoded — it's an opaque token, not
- * necessarily URL-safe); `getNextPageParam` reads the next page's cursor off
- * the last-fetched page, so `hasNextPage` flips to `false` the moment a page
- * comes back without one. Callers flatten `data.pages.flatMap(p => p.links)`
- * before rendering.
+ * The Library/tag list's cursor-paginated feed (`GET /api/links[?tag=]`).
+ * `tag` (added plan 011, V3-2) scopes the feed to `/tags/:name` — omitted,
+ * this is the plain Library feed (plan 010). `pageParam` is the previous
+ * page's opaque `nextCursor`, passed back verbatim as `?cursor=`
+ * (URL-encoded — it's an opaque token, not necessarily URL-safe);
+ * `getNextPageParam` reads the next page's cursor off the last-fetched page,
+ * so `hasNextPage` flips to `false` the moment a page comes back without one.
+ * Callers flatten `data.pages.flatMap(p => p.links)` before rendering.
  */
-export function useInfiniteLinks() {
+export function useInfiniteLinks(tag?: string) {
   return useInfiniteQuery({
-    queryKey: queryKeys.links(),
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      apiGet<LinksResponse>(
-        `/api/links${pageParam ? `?cursor=${encodeURIComponent(pageParam)}` : ''}`,
-      ),
+    queryKey: queryKeys.links(tag ? { tag } : undefined),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) => {
+      const params = new URLSearchParams();
+      if (tag) params.set('tag', tag);
+      if (pageParam) params.set('cursor', pageParam);
+      const qs = params.toString();
+      return apiGet<LinksResponse>(`/api/links${qs ? `?${qs}` : ''}`);
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: LinksResponse) => lastPage.nextCursor,
+  });
+}
+
+/**
+ * The omnibar's live search (`GET /api/links/search?q=`) — plan 011, V3-2.
+ * `enabled: q.trim().length > 0` means an empty/blank query never fires a
+ * request (mirrors the API's own `q` min-length-1 guard — a client-side
+ * no-op is cheaper than a request that would just 400). Callers are
+ * responsible for debouncing keystrokes (`Omnibar.tsx`) and for not calling
+ * this when the query looks like a URL (the `keep` capture path, not
+ * search) — this hook itself has no opinion on that, it just fetches for
+ * whatever `q` it's given.
+ */
+export function useSearchLinks(q: string) {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: queryKeys.search(trimmed),
+    queryFn: () => apiGet<SearchResponse>(`/api/links/search?q=${encodeURIComponent(trimmed)}`),
+    enabled: trimmed.length > 0,
   });
 }

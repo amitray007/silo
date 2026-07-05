@@ -3,7 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { queryKeys, useCounts, useInfiniteLinks, useTags } from './hooks';
+import { queryKeys, useCounts, useInfiniteLinks, useSearchLinks, useTags } from './hooks';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -141,5 +141,109 @@ describe('useInfiniteLinks', () => {
 
     await waitFor(() => expect(result.current.isError).toBe(true));
     expect(result.current.error).toMatchObject({ status: 500, error: 'internal_error' });
+  });
+
+  it('scopes the request to ?tag= when a tag is passed (plan 011, V3-2 /tags/:name filtering)', async () => {
+    const page1 = { links: [{ id: '1' }] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(page1));
+
+    const { result } = renderHook(() => useInfiniteLinks('mcp'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp');
+  });
+
+  it('combines ?tag= and ?cursor= on a subsequent page', async () => {
+    const page1 = { links: [{ id: '1' }], nextCursor: 'cursor-abc' };
+    const page2 = { links: [{ id: '2' }] };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(page1))
+      .mockResolvedValueOnce(jsonResponse(page2));
+
+    const { result } = renderHook(() => useInfiniteLinks('mcp'), { wrapper });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    await act(async () => {
+      await result.current.fetchNextPage();
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp&cursor=cursor-abc');
+  });
+
+  it('a differently-tagged call uses a distinct cache key (fetches independently)', async () => {
+    const responseA = { links: [{ id: 'a' }] };
+    const responseB = { links: [] as unknown[] };
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse(responseA))
+      .mockResolvedValueOnce(jsonResponse(responseB));
+
+    const { result: resultA } = renderHook(() => useInfiniteLinks('mcp'), { wrapper });
+    const { result: resultB } = renderHook(() => useInfiniteLinks('ai'), { wrapper });
+
+    await waitFor(() => expect(resultA.current.isSuccess).toBe(true));
+    await waitFor(() => expect(resultB.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp');
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=ai');
+  });
+});
+
+describe('useSearchLinks', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('fetches and returns results for a non-empty query', async () => {
+    const response = { results: [{ id: '1', rank: 0.5 }] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
+
+    const { result } = renderHook(() => useSearchLinks('typescript'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(response);
+    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=typescript');
+  });
+
+  it('is disabled (never fetches) for an empty/blank query', () => {
+    renderHook(() => useSearchLinks('   '), { wrapper });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('trims the query before both the request and the cache key', async () => {
+    const response = { results: [] as unknown[] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
+
+    const { result } = renderHook(() => useSearchLinks('  hooks  '), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=hooks');
+  });
+
+  it('an empty result set resolves cleanly (the "nothing found" case)', async () => {
+    const response = { results: [] as unknown[] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
+
+    const { result } = renderHook(() => useSearchLinks('nosuchtermxyz'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data?.results).toEqual([]);
+  });
+
+  it('re-enables and fetches when the query goes from blank to non-blank', async () => {
+    const response = { results: [{ id: '1', rank: 1 }] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
+
+    const { result, rerender } = renderHook(({ q }) => useSearchLinks(q), {
+      wrapper,
+      initialProps: { q: '' },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+
+    rerender({ q: 'typescript' });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=typescript');
   });
 });

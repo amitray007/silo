@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { deriveDomain, deriveTitleFromUrl } from './url';
+import { deriveDomain, deriveTitleFromUrl, looksLikeUrl } from './url';
 
 describe('deriveDomain', () => {
   it('returns the hostname for a valid url', () => {
@@ -38,5 +38,32 @@ describe('deriveTitleFromUrl', () => {
   it('passes through scheme-less or non-http(s) input unchanged', () => {
     expect(deriveTitleFromUrl('example.com/post')).toBe('example.com/post');
     expect(deriveTitleFromUrl('ftp://example.com/file')).toBe('ftp://example.com/file');
+  });
+});
+
+describe('looksLikeUrl', () => {
+  it('accepts an explicit http(s) URL', () => {
+    expect(looksLikeUrl('https://example.com')).toBe(true);
+    expect(looksLikeUrl('http://example.com/path?q=1')).toBe(true);
+  });
+
+  it('accepts a scheme-less bare domain paste', () => {
+    expect(looksLikeUrl('example.com')).toBe(true);
+    expect(looksLikeUrl('example.com/some/path')).toBe(true);
+    expect(looksLikeUrl('sub.example.co.uk')).toBe(true);
+  });
+
+  it('rejects plain search text (no dot-tld shape)', () => {
+    expect(looksLikeUrl('react hooks')).toBe(false);
+    expect(looksLikeUrl('typescript')).toBe(false);
+  });
+
+  it('rejects text containing whitespace even if it has a dot', () => {
+    expect(looksLikeUrl('example.com is nice')).toBe(false);
+  });
+
+  it('rejects empty/blank input', () => {
+    expect(looksLikeUrl('')).toBe(false);
+    expect(looksLikeUrl('   ')).toBe(false);
   });
 });

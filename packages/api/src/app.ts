@@ -2,6 +2,7 @@ import { InvalidCursorError } from '@silo/core';
 import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import { registerCountsRoutes } from './routes/counts.js';
+import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
 import { registerTagsRoutes } from './routes/tags.js';
@@ -65,6 +66,7 @@ export function createApp(): Hono {
   registerTrashRoutes(api);
   registerTagsRoutes(api);
   registerCountsRoutes(api);
+  registerFaviconRoutes(api);
   app.route('/api', api);
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
