@@ -122,18 +122,22 @@ select {
   display: none;
 }
 
-/* The sidebar rail: fixed 210px width on desktop, its own right border on
-   top of the band's right wall reads correctly since it sits flush against
-   the content region (the band's left wall is the sidebar's outer edge). */
+/* The sidebar rail: fixed 216px width on desktop (v3), its own right border
+   on top of the band's right wall reads correctly since it sits flush
+   against the content region (the band's left wall is the sidebar's outer
+   edge). `overflow-y: auto` (v3) lets a long tag list scroll independently
+   of the content region on tall-tag-list/short-viewport combinations. */
 .silo-sidebar {
-  width: 210px;
+  width: 216px;
   flex: none;
+  min-height: 0;
+  overflow-y: auto;
   background: var(--bg2);
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 16px 13px;
+  padding: 15px 12px;
   box-sizing: border-box;
 }
 
@@ -142,14 +146,33 @@ select {
   display: none;
 }
 
+/* The content region: a flex column of TWO stacked children — the header bar
+   (v3: `ContentHeader`, full width, NOT scrolled) and the scrolling body
+   below it. No padding lives on this outer wrapper, so the header's
+   border-bottom reaches the content region's full width, matching v3. */
 .silo-content {
   flex: 1;
   min-width: 0;
+  min-height: 0;
   display: flex;
   flex-direction: column;
-  padding: 18px clamp(20px, 3vw, 34px) 0;
 }
 
+/* The scrolling body beneath the header bar — v3: `flex:1;min-height:0;
+   overflow-y:auto;padding:8px clamp(16px,3vw,28px) 36px`. Each route renders
+   its `ContentHeader` (unscrolled, a `.silo-content` flex sibling) followed
+   by this body wrapper, so only the body scrolls. */
+.silo-content-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 8px clamp(16px, 3vw, 28px) 36px;
+  display: flex;
+  flex-direction: column;
+}
+
+/* The reading-column cap — only the LIST narrows to ~720px, not the header
+   (which spans the full content width via `.silo-content-body`'s padding). */
 .silo-content-col {
   width: 100%;
   max-width: 45rem;
@@ -214,10 +237,6 @@ select {
     inset: 0;
     z-index: 20;
     background: rgba(20, 15, 5, 0.32);
-  }
-
-  .silo-content {
-    padding: 14px 16px 0;
   }
 
   .silo-content-col {

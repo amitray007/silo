@@ -14,7 +14,15 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function renderWithRealQuery() {
+/**
+ * `LibraryView` now also renders the v3 header bar via `useCounts()` (a real
+ * `useQuery`) — every render needs a `QueryClientProvider` ancestor, even the
+ * tests below that mock `useInfiniteLinks` directly via `vi.spyOn` and don't
+ * care about the header's count. `useCounts` itself hits the mocked global
+ * `fetch`; those tests don't assert on the header, so its (unmocked-URL)
+ * response settling asynchronously after the assertions run is harmless.
+ */
+function renderLibraryView() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
@@ -71,7 +79,7 @@ describe('LibraryView', () => {
 
   it('shows the calm loading state on first page load', () => {
     mockUseInfiniteLinks({ isLoading: true });
-    render(<LibraryView />);
+    renderLibraryView();
     expect(screen.getByRole('status', { name: 'Loading…' })).toBeDefined();
   });
 
@@ -79,7 +87,7 @@ describe('LibraryView', () => {
     mockUseInfiniteLinks({
       data: { pages: [{ links: [] } as LinksResponse], pageParams: [undefined] },
     });
-    render(<LibraryView />);
+    renderLibraryView();
     expect(screen.getByText('Nothing kept yet.')).toBeDefined();
   });
 
@@ -88,7 +96,7 @@ describe('LibraryView', () => {
       isError: true,
       error: new ApiError(500, 'internal_error', 'Something broke server-side'),
     });
-    render(<LibraryView />);
+    renderLibraryView();
     expect(screen.getByText('Something broke server-side')).toBeDefined();
   });
 
@@ -102,7 +110,7 @@ describe('LibraryView', () => {
     mockUseInfiniteLinks({
       data: { pages: [{ links: [today, old] } as LinksResponse], pageParams: [undefined] },
     });
-    render(<LibraryView />);
+    renderLibraryView();
     expect(screen.getByText('Today')).toBeDefined();
     expect(screen.getByText('Earlier')).toBeDefined();
     expect(screen.getByText('Today link')).toBeDefined();
@@ -117,7 +125,7 @@ describe('LibraryView', () => {
       hasNextPage: true,
       fetchNextPage,
     });
-    render(<LibraryView />);
+    renderLibraryView();
 
     const button = screen.getByRole('button', { name: 'Load more' });
     button.click();
@@ -134,7 +142,7 @@ describe('LibraryView', () => {
       },
       hasNextPage: false,
     });
-    render(<LibraryView />);
+    renderLibraryView();
     expect(screen.getByText('Page one')).toBeDefined();
     expect(screen.getByText('Page two')).toBeDefined();
   });
@@ -148,7 +156,7 @@ describe('LibraryView', () => {
       isFetchingNextPage: false,
       fetchNextPage,
     });
-    render(<LibraryView />);
+    renderLibraryView();
 
     expect(FakeIntersectionObserver.instances).toHaveLength(1);
     FakeIntersectionObserver.instances[0]?.fire(true);
@@ -162,7 +170,7 @@ describe('LibraryView', () => {
       hasNextPage: true,
       isFetchingNextPage: true,
     });
-    render(<LibraryView />);
+    renderLibraryView();
     expect(FakeIntersectionObserver.instances).toHaveLength(0);
   });
 
@@ -172,7 +180,7 @@ describe('LibraryView', () => {
       data: { pages: [{ links: [page1] } as LinksResponse], pageParams: [undefined] },
       hasNextPage: false,
     });
-    render(<LibraryView />);
+    renderLibraryView();
     expect(FakeIntersectionObserver.instances).toHaveLength(0);
     expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull();
   });
@@ -203,11 +211,20 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
       nextCursor: 'c1',
     };
     const page2: LinksResponse = { links: [link({ id: 'p2', title: 'Page two' })] };
-    vi.mocked(fetch)
-      .mockResolvedValueOnce(jsonResponse(page1))
-      .mockResolvedValueOnce(jsonResponse(page2));
+    // `LibraryView` also fires `useCounts()` for the header's count (v3) —
+    // route the mock by URL rather than by call order, since both requests
+    // are in flight together.
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 1, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/links') return Promise.resolve(jsonResponse(page1));
+      if (url === '/api/links?cursor=c1') return Promise.resolve(jsonResponse(page2));
+      throw new Error(`unexpected fetch: ${url}`);
+    });
 
-    renderWithRealQuery();
+    renderLibraryView();
 
     await waitFor(() => expect(screen.getByText('Page one')).toBeDefined());
     expect(fetch).toHaveBeenCalledWith('/api/links');
@@ -225,11 +242,17 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
   });
 
   it('renders a calm inline error using the real ApiError surfaced by a failed fetch', async () => {
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ error: 'internal_error', message: 'Internal server error' }, 500),
-    );
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+      }
+      return Promise.resolve(
+        jsonResponse({ error: 'internal_error', message: 'Internal server error' }, 500),
+      );
+    });
 
-    renderWithRealQuery();
+    renderLibraryView();
 
     await waitFor(() => expect(screen.getByText('Internal server error')).toBeDefined());
   });

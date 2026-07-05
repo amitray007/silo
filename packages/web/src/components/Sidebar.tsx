@@ -1,9 +1,10 @@
-import { forwardRef, type MouseEvent } from 'react';
+import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { GrainDot } from './GrainDot';
-import { NavItem } from './NavItem';
+import { LibraryIcon, SettingsIcon, TrashIcon } from './NavIcons';
+import { NavItem, type NavItemVariant } from './NavItem';
 import { SidebarSection } from './SidebarSection';
 
 const noop = () => {};
@@ -25,12 +26,16 @@ function NavItemLink({
   label,
   meta,
   end = false,
+  icon,
+  variant,
   onNavigate,
 }: {
   to: string;
   label: string;
   meta?: React.ReactNode;
   end?: boolean;
+  icon?: ReactNode;
+  variant?: NavItemVariant | undefined;
   onNavigate: () => void;
 }) {
   const navigate = useNavigate();
@@ -46,7 +51,17 @@ function NavItemLink({
     onNavigate();
   };
 
-  return <NavItem label={label} meta={meta} active={active} href={to} onClick={onClick} />;
+  return (
+    <NavItem
+      label={label}
+      meta={meta}
+      active={active}
+      href={to}
+      icon={icon}
+      variant={variant}
+      onClick={onClick}
+    />
+  );
 }
 
 interface SidebarProps {
@@ -98,16 +113,24 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       data-open={open}
       className="silo-sidebar"
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 9px 16px' }}>
-        <GrainDot />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px 15px' }}>
+        <GrainDot size={16} />
         <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>silo</span>
       </div>
 
-      <NavItemLink to="/" end label="Library" meta={counts?.live} onNavigate={onNavigate} />
+      <NavItemLink
+        to="/"
+        end
+        label="Library"
+        meta={counts?.live}
+        icon={<LibraryIcon />}
+        onNavigate={onNavigate}
+      />
       <NavItemLink
         to="/trash"
         label="Trash"
         meta={counts ? `${counts.trash} · ${counts.purgeWindowDays}d` : undefined}
+        icon={<TrashIcon />}
         onNavigate={onNavigate}
       />
 
@@ -119,6 +142,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
               to={`/tags/${tag.name}`}
               label={`#${tag.name}`}
               meta={tag.count}
+              variant="tag"
               onNavigate={onNavigate}
             />
           ))}
@@ -130,7 +154,13 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       <div style={{ padding: '4px 10px 8px' }}>
         <ThemeToggle />
       </div>
-      <NavItemLink to="/settings" label="Settings" onNavigate={onNavigate} />
+      <NavItemLink
+        to="/settings"
+        label="Settings"
+        icon={<SettingsIcon />}
+        variant="settings"
+        onNavigate={onNavigate}
+      />
     </nav>
   );
 });

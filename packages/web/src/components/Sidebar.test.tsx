@@ -73,6 +73,33 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /settings/i })).toBeDefined();
   });
 
+  it('renders v3 icons (svg) for Library, Trash, and Settings — but not for tags', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 3, trash: 1, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/tags') {
+        return Promise.resolve(jsonResponse({ tags: [{ name: 'ai', count: 2 }] }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    renderSidebar();
+
+    await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+
+    const libraryLink = screen.getByRole('link', { name: /library/i });
+    const trashLink = screen.getByRole('link', { name: /trash/i });
+    const settingsLink = screen.getByRole('link', { name: /settings/i });
+    const tagLink = screen.getByRole('link', { name: /#ai/i });
+
+    expect(libraryLink.querySelector('svg')).not.toBeNull();
+    expect(trashLink.querySelector('svg')).not.toBeNull();
+    expect(settingsLink.querySelector('svg')).not.toBeNull();
+    expect(tagLink.querySelector('svg')).toBeNull();
+  });
+
   it('marks the current route active via aria-current', async () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
 

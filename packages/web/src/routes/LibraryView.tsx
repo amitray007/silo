@@ -1,6 +1,8 @@
+import type { ReactNode } from 'react';
 import type { ApiError } from '../api/client';
-import { useInfiniteLinks } from '../api/hooks';
+import { useCounts, useInfiniteLinks } from '../api/hooks';
 import { CenteredPanel } from '../components/CenteredPanel';
+import { ContentHeader } from '../components/ContentHeader';
 import { DayGroup } from '../components/DayGroup';
 import { GrainDot } from '../components/GrainDot';
 import { bucketByDay } from '../lib/buckets';
@@ -61,6 +63,24 @@ function ErrorState({ error }: { error: ApiError }) {
 }
 
 /**
+ * The header (unscrolled, full content width) + scrolling body wrapper
+ * shared by every render branch below — `.silo-content-body` is v3's
+ * scrolling region (it owns `overflow-y:auto`); `.silo-content-col` inside
+ * it caps the reading column at ~720px without introducing a second,
+ * nested scroll container.
+ */
+function LibraryFrame({ count, children }: { count: number | undefined; children: ReactNode }) {
+  return (
+    <>
+      <ContentHeader title="Library" count={count} />
+      <div className="silo-content-body">
+        <div className="silo-content-col">{children}</div>
+      </div>
+    </>
+  );
+}
+
+/**
  * `/` — the Library list (plan 010): day-grouped, read-only rows fed by
  * `useInfiniteLinks`. Pagination is a visible "load more" button (the
  * deterministic, a11y-friendly affordance) backed by an `IntersectionObserver`
@@ -68,51 +88,72 @@ function ErrorState({ error }: { error: ApiError }) {
  * so the button (or the next scroll) usually hits a warm cache.
  */
 export function LibraryView() {
+  const { data: counts } = useCounts();
   const { data, isLoading, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useInfiniteLinks();
 
   const canPrefetch = Boolean(hasNextPage) && !isFetchingNextPage;
   const sentinelRef = useIntersectionPrefetch(() => fetchNextPage(), { enabled: canPrefetch });
 
-  if (isLoading) return <LoadingState />;
-  if (isError) return <ErrorState error={error as ApiError} />;
+  if (isLoading) {
+    return (
+      <LibraryFrame count={counts?.live}>
+        <LoadingState />
+      </LibraryFrame>
+    );
+  }
+  if (isError) {
+    return (
+      <LibraryFrame count={counts?.live}>
+        <ErrorState error={error as ApiError} />
+      </LibraryFrame>
+    );
+  }
 
   const links = data?.pages.flatMap((page) => page.links) ?? [];
-  if (links.length === 0) return <EmptyState />;
+  if (links.length === 0) {
+    return (
+      <LibraryFrame count={counts?.live}>
+        <EmptyState />
+      </LibraryFrame>
+    );
+  }
 
   const groups = bucketByDay(links);
 
   return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: '0 0 20px' }}>
-      {groups.map((group) => (
-        <DayGroup key={group.label} label={group.label} links={group.items} />
-      ))}
+    <LibraryFrame count={counts?.live}>
+      <div style={{ flex: 1 }}>
+        {groups.map((group) => (
+          <DayGroup key={group.label} label={group.label} links={group.items} />
+        ))}
 
-      {/* Prefetch sentinel — sits just above the foot so the observer fires before the user reaches the button. Renders nothing visible. */}
-      <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
+        {/* Prefetch sentinel — sits just above the foot so the observer fires before the user reaches the button. Renders nothing visible. */}
+        <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />
 
-      {hasNextPage && (
-        <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
-          <button
-            type="button"
-            onClick={() => fetchNextPage()}
-            disabled={isFetchingNextPage}
-            style={{
-              border: '1px solid var(--line)',
-              background: 'var(--bg2)',
-              color: 'var(--ink)',
-              borderRadius: 6,
-              padding: '6px 14px',
-              fontSize: '0.84rem',
-              fontFamily: 'inherit',
-              cursor: isFetchingNextPage ? 'default' : 'pointer',
-              opacity: isFetchingNextPage ? 0.6 : 1,
-            }}
-          >
-            {isFetchingNextPage ? 'Loading…' : 'Load more'}
-          </button>
-        </div>
-      )}
-    </div>
+        {hasNextPage && (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '12px 0 4px' }}>
+            <button
+              type="button"
+              onClick={() => fetchNextPage()}
+              disabled={isFetchingNextPage}
+              style={{
+                border: '1px solid var(--line)',
+                background: 'var(--bg2)',
+                color: 'var(--ink)',
+                borderRadius: 6,
+                padding: '6px 14px',
+                fontSize: '0.84rem',
+                fontFamily: 'inherit',
+                cursor: isFetchingNextPage ? 'default' : 'pointer',
+                opacity: isFetchingNextPage ? 0.6 : 1,
+              }}
+            >
+              {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            </button>
+          </div>
+        )}
+      </div>
+    </LibraryFrame>
   );
 }

@@ -1,7 +1,10 @@
 /**
  * Silo "Oat" design tokens.
- * Source of truth: docs/design/tokens.md + docs/design/app/Silo-v2.html (:root block).
+ * Source of truth: docs/design/tokens.md + docs/design/app/Silo-v3.html (:root block).
  * Exact hex values copied from the prototype — do not "improve" them here.
+ * v3 also defines a `--desk` desktop-backdrop token (used by its floating
+ * card shell) — we deliberately do NOT adopt it (plan 011 decision 1: we
+ * keep the full-bleed frame, not v3's 80rem card).
  *
  * Theme mechanism: `data-theme="dark"` is set on <html> (see src/theme/).
  * Light is the default (:root with no attribute); dark overrides via
@@ -10,9 +13,9 @@
 
 :root {
   --bg: #fbf7ef;
-  --bg2: #f4ede1;
+  --bg2: #f1e9da;
   --line: #ebe2d2;
-  --hov: #f3ecdf;
+  --hov: #f1e9da;
   --ink: #211b11;
   --mut: #6e6350;
   --fnt: #736850;
@@ -25,10 +28,10 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #171310;
-  --bg2: #201a15;
-  --line: #2c251d;
-  --hov: #211b15;
+  --bg: #1a1510;
+  --bg2: #141009;
+  --line: #2e2720;
+  --hov: #241d15;
   --ink: #ede5d8;
   --mut: #a89a87;
   --fnt: #968871;

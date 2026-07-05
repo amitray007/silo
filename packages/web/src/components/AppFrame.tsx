@@ -119,12 +119,14 @@ export function AppFrame() {
 
         <Sidebar id={DRAWER_ID} ref={sidebarRef} open={drawerOpen} onNavigate={closeDrawer} />
 
-        {/* Content region: the routed view fills it, capped at a ~720px reading
-            width, with top padding for the omnibar/first group. */}
+        {/* Content region: a flex column of two stacked children, both
+            supplied by the routed view via <Outlet/> — the header bar
+            (`ContentHeader`, full width, unscrolled) then `.silo-content-body`
+            (the scrolling region, reading-column-capped inside). Keeping the
+            header out of AppFrame lets each route own its own title/count/
+            right slot without AppFrame needing route-specific knowledge. */}
         <main className="silo-content">
-          <div className="silo-content-col">
-            <Outlet />
-          </div>
+          <Outlet />
         </main>
       </div>
     </div>
