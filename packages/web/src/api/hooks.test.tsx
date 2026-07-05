@@ -6,11 +6,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink } from '../test/fixtures';
 import {
   queryKeys,
+  useAddTag,
   useCaptureLink,
   useCounts,
+  useCreateTag,
+  useEditLink,
   useInfiniteLinks,
+  useRemoveTag,
   useSearchLinks,
   useTags,
+  useTrashLink,
 } from './hooks';
 import type { LinksResponse } from './types';
 
@@ -446,5 +451,327 @@ describe('useCaptureLink', () => {
     resolveSecond(jsonResponse({ link: makeLink({ id: 's2' }), deduped: false }, 201));
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+});
+
+describe('useEditLink', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('PATCHes only the given fields to /api/links/:id', async () => {
+    const updated = makeLink({ id: '1', title: 'New title' });
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: updated }, 200));
+
+    const { result } = renderHook(() => useEditLink('1'), { wrapper });
+
+    let response: unknown;
+    await act(async () => {
+      response = await result.current.mutateAsync({ title: 'New title' });
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links/1', {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'New title' }),
+    });
+    expect(response).toEqual({ link: updated });
+  });
+
+  it('invalidates links/link/counts/tags on settle', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function TestWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: makeLink({ id: '1' }) }, 200));
+
+    const { result } = renderHook(() => useEditLink('1'), { wrapper: TestWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ description: 'new desc' });
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(['link']);
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+  });
+
+  it('surfaces an error for a failed edit', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'not_found', message: 'No live link with id 1' }, 404),
+    );
+
+    const { result } = renderHook(() => useEditLink('1'), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ title: 'x' }).catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe('useTrashLink', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeWrapper() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function TrashWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    return { queryClient, TrashWrapper };
+  }
+
+  it('POSTs to /api/links/:id/trash', async () => {
+    const { TrashWrapper } = makeWrapper();
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ link: makeLink({ id: '1', tags: [] }) }, 200),
+    );
+
+    const { result } = renderHook(() => useTrashLink('1'), { wrapper: TrashWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links/1/trash', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+  });
+
+  it('optimistically removes the row from every cached links list before the server responds', async () => {
+    const { queryClient, TrashWrapper } = makeWrapper();
+    const existing: LinksResponse = {
+      links: [makeLink({ id: 'target' }), makeLink({ id: 'keep' })],
+    };
+    queryClient.setQueryData(queryKeys.links(), { pages: [existing], pageParams: [undefined] });
+
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+
+    act(() => {
+      result.current.mutate();
+    });
+
+    await waitFor(() => {
+      const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+      expect(cache?.pages[0]?.links.map((l) => l.id)).toEqual(['keep']);
+    });
+  });
+
+  it('restores the row from the pre-mutation snapshot if the trash call fails', async () => {
+    const { queryClient, TrashWrapper } = makeWrapper();
+    const existing: LinksResponse = { links: [makeLink({ id: 'target' })] };
+    queryClient.setQueryData(queryKeys.links(), { pages: [existing], pageParams: [undefined] });
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'not_found', message: 'gone' }, 404),
+    );
+
+    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync().catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+    expect(cache?.pages).toEqual([existing]);
+  });
+
+  it('a failed trash does not clobber a DIFFERENT row written into the same cache entry while the trash call was in flight (id-scoped restore, not a whole-cache snapshot)', async () => {
+    // Regression: an earlier version of useTrashLink snapshotted the WHOLE
+    // matching `['links']` cache entry in `onMutate` (via `getQueriesData`)
+    // and restored that whole snapshot verbatim in `onError` — which would
+    // silently WIPE OUT any row written into the same cache entry after the
+    // snapshot was taken but before the failed trash's rollback ran (e.g. a
+    // concurrent tag mutation's invalidate-driven refetch landing on the same
+    // link, or another capture). This test reproduces exactly that ordering:
+    // seed 'target' alone, start trashing it (onMutate snapshots + removes
+    // it), then — while the trash POST is still unresolved — write 'other'
+    // into the SAME cache entry (standing in for a concurrent mutation's
+    // write), then let the trash call fail. A whole-snapshot restore would
+    // overwrite the cache back to "[target]" and silently drop 'other'; the
+    // id-scoped restore re-inserts only 'target', leaving 'other' intact.
+    const { queryClient, TrashWrapper } = makeWrapper();
+    const existing: LinksResponse = { links: [makeLink({ id: 'target' })] };
+    queryClient.setQueryData(queryKeys.links(), { pages: [existing], pageParams: [undefined] });
+
+    let resolveTrash!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveTrash = resolve;
+        }),
+    );
+
+    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+
+    act(() => {
+      result.current.mutate();
+    });
+
+    // Wait for the optimistic removal to land (onMutate has run).
+    await waitFor(() => {
+      const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+      expect(cache?.pages[0]?.links).toHaveLength(0);
+    });
+
+    // A concurrent write lands in the SAME cache entry while trash is still in flight.
+    act(() => {
+      const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+      queryClient.setQueryData(queryKeys.links(), {
+        ...cache,
+        pages: [{ links: [makeLink({ id: 'other' })] }],
+      });
+    });
+
+    resolveTrash(jsonResponse({ error: 'not_found', message: 'gone' }, 404));
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+    const ids = cache?.pages[0]?.links.map((l) => l.id).sort();
+    expect(ids).toEqual(['other', 'target']);
+  });
+
+  it('invalidates links/counts/tags on settle', async () => {
+    const { queryClient, TrashWrapper } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ link: makeLink({ id: '1', tags: [] }) }, 200),
+    );
+
+    const { result } = renderHook(() => useTrashLink('1'), { wrapper: TrashWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+  });
+});
+
+describe('useAddTag / useRemoveTag', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('useAddTag POSTs { tag } to /api/links/:id/tags', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ link: makeLink({ id: '1', tags: ['mcp'] }) }, 200),
+    );
+
+    const { result } = renderHook(() => useAddTag('1'), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync('mcp');
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links/1/tags', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ tag: 'mcp' }),
+    });
+  });
+
+  it('useRemoveTag DELETEs /api/links/:id/tags/:tag (URL-encoded)', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: makeLink({ id: '1' }) }, 200));
+
+    const { result } = renderHook(() => useRemoveTag('1'), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync('a tag');
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links/1/tags/a%20tag', { method: 'DELETE' });
+  });
+
+  it('both invalidate links/counts/tags on settle', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function TagsWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: makeLink({ id: '1' }) }, 200));
+
+    const { result } = renderHook(() => useAddTag('1'), { wrapper: TagsWrapper });
+    await act(async () => {
+      await result.current.mutateAsync('mcp');
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+  });
+});
+
+describe('useCreateTag', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('POSTs { name } to /api/tags and invalidates tags on settle', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function CreateTagWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ name: 'design' }, 201));
+
+    const { result } = renderHook(() => useCreateTag(), { wrapper: CreateTagWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync('design');
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/tags', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ name: 'design' }),
+    });
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+  });
+
+  it('surfaces an error for a blank/invalid tag name', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'validation_error', message: 'Tag name must not be blank' }, 400),
+    );
+
+    const { result } = renderHook(() => useCreateTag(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync('   ').catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
   });
 });

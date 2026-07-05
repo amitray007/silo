@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import * as hooks from '../api/hooks';
 import type { LinksResponse } from '../api/types';
+import { RowMenuProvider } from '../components/RowMenuContext';
 import { makeLink as link } from '../test/fixtures';
 import { LibraryView } from './LibraryView';
 
@@ -26,7 +27,9 @@ function renderLibraryView() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <LibraryView />
+      <RowMenuProvider>
+        <LibraryView />
+      </RowMenuProvider>
     </QueryClientProvider>,
   );
 }

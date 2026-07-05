@@ -5,12 +5,14 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { apiGet, apiPost } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost } from './client';
 import type {
   CaptureRequest,
   CaptureResponse,
   Counts,
+  EditLinkRequest,
   LinkJson,
+  LinkResponse,
   LinksResponse,
   SearchResponse,
   TagsResponse,
@@ -222,6 +224,127 @@ export function useCaptureLink() {
       queryClient.invalidateQueries({ queryKey: queryKeys.links() });
       queryClient.invalidateQueries({ queryKey: ['links'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+    },
+  });
+}
+
+/**
+ * The shared "settle" tail for every mutation below that doesn't optimistically
+ * touch the cache itself (edit/tag add/tag remove/create-tag): invalidate the
+ * broad `['links']` family (covers every tag-scoped + untagged cache),
+ * `counts`, and `tags` so the server's reconciled state (new tag counts, edited
+ * title/description, etc.) reliably replaces whatever was showing. A plain
+ * invalidate is deliberately simpler than an optimistic patch here — these
+ * mutations touch fields (`tags`, `title`, `description`, `note`) that don't
+ * need to feel instantaneous the way capture/trash do, per the build brief.
+ */
+function invalidateLinkQueries(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: ['links'] });
+  queryClient.invalidateQueries({ queryKey: ['link'] });
+  queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
+  queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+}
+
+/**
+ * The edit modal's save mutation (`PATCH /api/links/:id`, plan 011 V3-4) —
+ * `title`/`description`/`note` are all optional (an empty patch is a valid
+ * no-op per `editBodySchema`). No optimistic update: the modal already shows
+ * exactly what the user typed while open, so there's nothing to "feel
+ * instant" — settling with a plain invalidate keeps this hook simple and
+ * correct (no risk of an optimistic edit clobbering a concurrent server-side
+ * change).
+ */
+export function useEditLink(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: EditLinkRequest) => apiPatch<LinkResponse>(`/api/links/${id}`, input),
+    onSettled: () => invalidateLinkQueries(queryClient),
+  });
+}
+
+/**
+ * The row menu's + edit modal's "move to trash" mutation (`POST
+ * /api/links/:id/trash`, plan 011 V3-4) — optimistically removes the row from
+ * every cached `links` list so it disappears the instant trash is clicked,
+ * per the build brief ("the row disappears (optimistic)"). On failure the
+ * row is RE-INSERTED (via `insertOptimisticLink`, the same by-id-scoped
+ * splice `useCaptureLink` uses to insert its placeholder) rather than
+ * restored from a whole-cache snapshot — a review of this hook flagged that
+ * an earlier version snapshotted every matching `['links']` query in
+ * `onMutate` and restored the WHOLE snapshot verbatim in `onError`, which
+ * would silently clobber any OTHER mutation that had written to the same
+ * cache entries in between (e.g. a tag add/remove on this same link, fired
+ * from the same open `EditModal`, settling while the trash POST is still in
+ * flight and then failing) — exactly the class of bug `useCaptureLink`'s own
+ * doc comment already reasons about avoiding for concurrent captures.
+ * Re-inserting just this one link by id, using whatever its row data looked
+ * like right before removal, leaves every other row (and any of ITS
+ * in-flight edits) untouched.
+ */
+export function useTrashLink(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiPost<LinkResponse>(`/api/links/${id}/trash`, {}),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: ['links'] });
+      const matches = queryClient.getQueriesData<LinksInfiniteData>({ queryKey: ['links'] });
+      const removedLink = matches
+        .flatMap(([, data]) => data?.pages.flatMap((page) => page.links) ?? [])
+        .find((l) => l.id === id);
+      removeOptimisticLink(queryClient, id);
+      return { removedLink };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.removedLink) insertOptimisticLink(queryClient, context.removedLink);
+    },
+    onSettled: () => invalidateLinkQueries(queryClient),
+  });
+}
+
+/**
+ * The row menu's tags fly-out "add" mutation (`POST /api/links/:id/tags`,
+ * plan 011 V3-4). Plain invalidate on settle — tag membership across the
+ * sidebar's per-tag counts, the tag-scoped list caches, and this link's own
+ * row is enough surface area that an optimistic patch would have to touch all
+ * three; a fast invalidate is simpler and still feels immediate against a
+ * local API.
+ */
+export function useAddTag(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (tag: string) => apiPost<LinkResponse>(`/api/links/${id}/tags`, { tag }),
+    onSettled: () => invalidateLinkQueries(queryClient),
+  });
+}
+
+/** The row menu's tags fly-out "remove" mutation (`DELETE /api/links/:id/tags/:tag`) — mirrors `useAddTag`'s invalidate-only settle. */
+export function useRemoveTag(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (tag: string) =>
+      apiDelete<LinkResponse>(`/api/links/${id}/tags/${encodeURIComponent(tag)}`),
+    onSettled: () => invalidateLinkQueries(queryClient),
+  });
+}
+
+/**
+ * The tags fly-out's "+ create" mutation (`POST /api/tags`) — standalone tag
+ * creation (not yet assigned to any link; the caller assigns it via
+ * `useAddTag` right after, matching v3's `createEfTagFn`/menu "create" flow).
+ * Invalidates `tags` on settle so the fly-out's option list picks up the new
+ * tag immediately.
+ */
+export function useCreateTag() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (name: string) => apiPost<{ name: string }>('/api/tags', { name }),
+    onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
     },
   });

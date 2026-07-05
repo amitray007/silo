@@ -73,6 +73,9 @@ export type CaptureResponse = { link: LinkJson; deduped: boolean };
 /** `POST /api/links` (capture) request body — mirrors `captureBodySchema` (`packages/api/src/query-schemas.ts`). */
 export type CaptureRequest = { url: string; tags?: string[]; note?: string };
 
+/** `PATCH /api/links/:id` (edit) request body — mirrors `editBodySchema` (`packages/api/src/query-schemas.ts`). Every field optional; an empty body is a valid no-op. */
+export type EditLinkRequest = { title?: string; description?: string; note?: string };
+
 /** `GET /api/tags` response envelope. */
 export type TagsResponse = { tags: TagCount[] };
 

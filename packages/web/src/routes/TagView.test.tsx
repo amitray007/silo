@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { RowMenuProvider } from '../components/RowMenuContext';
 import { makeLink as link } from '../test/fixtures';
 import { TagView } from './TagView';
 
@@ -35,12 +36,14 @@ function renderTagView(tagName: string, fetchImpl: typeof fetch) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
-        <Routes>
-          <Route path="/" element={<div>landed on library</div>} />
-          <Route path="/tags/:name" element={<TagView />} />
-        </Routes>
-      </MemoryRouter>
+      <RowMenuProvider>
+        <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
+          <Routes>
+            <Route path="/" element={<div>landed on library</div>} />
+            <Route path="/tags/:name" element={<TagView />} />
+          </Routes>
+        </MemoryRouter>
+      </RowMenuProvider>
     </QueryClientProvider>,
   );
 }

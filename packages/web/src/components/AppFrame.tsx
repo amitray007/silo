@@ -1,9 +1,41 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
+import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { Sidebar } from './Sidebar';
 
 const DRAWER_ID = 'silo-drawer';
+
+/**
+ * Mounted once inside `RowMenuProvider` (plan 011, V3-4) — owns the two
+ * document-level listeners v3's root component owns (`clickFn`/the `Escape`
+ * branch for `menuId`), and renders the single shared `EditModal` instance
+ * when a link is being edited. Living here (not inside `LinkRow`) is what
+ * lets ONE `mousedown`/`keydown` listener close whichever row's menu is open
+ * regardless of which route rendered it — `RowMenu` itself already stops
+ * propagation for clicks INSIDE the popover (`RowMenu.tsx`), so this
+ * document-level handler only ever fires for a genuine "outside" click.
+ */
+function RowMenuLayer() {
+  const { openMenuId, closeMenu, editingLink } = useRowMenu();
+
+  useEffect(() => {
+    if (openMenuId === null) return;
+    const onMouseDown = () => closeMenu();
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') closeMenu();
+    };
+    document.addEventListener('mousedown', onMouseDown);
+    document.addEventListener('keydown', onKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', onMouseDown);
+      document.removeEventListener('keydown', onKeyDown);
+    };
+  }, [openMenuId, closeMenu]);
+
+  return editingLink ? <EditModal link={editingLink} /> : null;
+}
 
 /**
  * The full-bleed Oat frame. Unlike the prototype's floating 62rem card, the app
@@ -124,9 +156,17 @@ export function AppFrame() {
             (`ContentHeader`, full width, unscrolled) then `.silo-content-body`
             (the scrolling region, reading-column-capped inside). Keeping the
             header out of AppFrame lets each route own its own title/count/
-            right slot without AppFrame needing route-specific knowledge. */}
+            right slot without AppFrame needing route-specific knowledge.
+            `RowMenuProvider` wraps the outlet (plan 011, V3-4) so the row `⋯`
+            menu + edit-modal state is shared by every routed view — see
+            `RowMenuContext.tsx`'s doc comment for why this lives here and not
+            per-route. `RowMenuLayer` renders the single shared `EditModal`
+            instance and owns the document-level close listeners. */}
         <main className="silo-content">
-          <Outlet />
+          <RowMenuProvider>
+            <Outlet />
+            <RowMenuLayer />
+          </RowMenuProvider>
         </main>
       </div>
     </div>

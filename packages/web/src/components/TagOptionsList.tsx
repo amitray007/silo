@@ -1,0 +1,71 @@
+import type { TagOption } from '../lib/tagOptions';
+
+/**
+ * The shared toggle-list row rendered inside both `RowMenu`'s `TagsFlyout`
+ * and `EditModal`'s `EditTagsFlyout` (plan 011, V3-4) — pulled out once both
+ * popovers needed the exact same "# {name} · active dot" button (`jscpd`
+ * flagged the inline duplicate at >1.5% production `tsx` duplication; this
+ * component is the fix, not a workaround). `size` picks the two popovers'
+ * slightly different paddings/font-sizes (v3's row-menu tags fly-out vs. the
+ * edit modal's wider tags picker) without forking the whole row.
+ */
+export function TagOptionsList({
+  opts,
+  hidden,
+  size = 'sm',
+  onToggle,
+}: {
+  opts: TagOption[];
+  hidden: number;
+  size?: 'sm' | 'md';
+  onToggle: (name: string, active: boolean) => void;
+}) {
+  const rowPadding = size === 'sm' ? '4px 8px' : '5px 9px';
+  const notePadding = size === 'sm' ? '3px 8px 1px' : '3px 9px 1px';
+
+  return (
+    <>
+      {opts.map((opt) => (
+        <button
+          key={opt.name}
+          type="button"
+          onClick={() => onToggle(opt.name, opt.active)}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            width: '100%',
+            boxSizing: 'border-box',
+            border: 0,
+            background: 'none',
+            fontFamily: 'inherit',
+            textAlign: 'left',
+            padding: rowPadding,
+            borderRadius: 6,
+            fontSize: '0.78rem',
+            fontWeight: 400,
+            cursor: 'pointer',
+            color: opt.active ? 'var(--ink)' : 'var(--mut)',
+          }}
+        >
+          <span style={{ color: 'var(--ghost)' }}>#</span>
+          <span>{opt.name}</span>
+          <span
+            style={{
+              marginLeft: 'auto',
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: opt.active ? 'var(--mark)' : 'transparent',
+            }}
+          />
+        </button>
+      ))}
+      {hidden > 0 && (
+        <div style={{ padding: notePadding, fontSize: '0.7rem', color: 'var(--ghost)' }}>
+          {hidden} more — type to narrow
+        </div>
+      )}
+    </>
+  );
+}
