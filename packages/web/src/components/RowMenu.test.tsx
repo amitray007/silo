@@ -158,6 +158,29 @@ describe('RowMenu', () => {
     );
   });
 
+  it('gives every action row a --hov background on hover, not just "tags" (review fix: menuItemStyle() was called with no argument for these rows)', () => {
+    renderMenu();
+
+    const openRow = screen.getByText('open in new tab').closest('a') as HTMLElement;
+    expect(openRow.style.background).not.toBe('var(--hov)');
+    fireEvent.mouseEnter(openRow);
+    expect(openRow.style.background).toBe('var(--hov)');
+    fireEvent.mouseLeave(openRow);
+    expect(openRow.style.background).not.toBe('var(--hov)');
+
+    const copyRow = screen.getByText('copy link').closest('button') as HTMLElement;
+    fireEvent.mouseEnter(copyRow);
+    expect(copyRow.style.background).toBe('var(--hov)');
+
+    const editRow = screen.getByText('edit').closest('button') as HTMLElement;
+    fireEvent.mouseEnter(editRow);
+    expect(editRow.style.background).toBe('var(--hov)');
+
+    const trashRow = screen.getByText('move to trash').closest('button') as HTMLElement;
+    fireEvent.mouseEnter(trashRow);
+    expect(trashRow.style.background).toBe('var(--hov)');
+  });
+
   it('stops mousedown/click propagation so a click inside the popover never bubbles up (no row navigation)', () => {
     const outerHandler = vi.fn();
     const link = makeLink({ id: 'row-2', url: 'https://example.com' });

@@ -10,12 +10,15 @@ import { TagOptionsList } from './TagOptionsList';
 const COPY_RESET_MS = 700;
 
 /**
- * The menu item shell — a `--hov`-tinted row on hover/focus rather than the
- * previous flat "no visible affordance until you actually mouse over it"
- * look, per the RowMenu redesign (build brief item 11: "the tags hover all
- * look bad … make it feel crafted"). `active` (used by the "tags" trigger
- * while its fly-out is open) pins the hover background on even without the
+ * The menu item shell's base style — `active` (used by the "tags" trigger
+ * while its fly-out is open) pins the `--hov` background on even without the
  * pointer there, matching how a disclosure control should read as "open".
+ * Hover/focus feedback for the OTHER rows is handled by `MenuItem` below, not
+ * here — inline styles have no `:hover` pseudo-class, so a per-row
+ * `onMouseEnter`/`onMouseLeave`-driven `active` flag is what actually makes
+ * the hover background happen (a review fix: an earlier version of this file
+ * called `menuItemStyle()` with no argument for every row except "tags",
+ * so only "tags" ever got the promised `--hov` hover treatment).
  */
 function menuItemStyle(active = false): React.CSSProperties {
   return {
@@ -35,6 +38,54 @@ function menuItemStyle(active = false): React.CSSProperties {
     color: 'var(--mut)',
     cursor: 'pointer',
   };
+}
+
+/**
+ * A menu row that tracks its OWN hover/focus state and applies `--hov` via
+ * `menuItemStyle` — shared by every action below (open/copy/edit/trash) so
+ * each doesn't have to re-wire its own `onMouseEnter`/`onMouseLeave` pair
+ * (`TagOptionsList.tsx`'s row hover uses the same per-row local-state
+ * pattern, for the same reason: no `:hover` pseudo-class on inline styles).
+ * Renders as `<a>` when `href` is given (open-in-new-tab), a `<button>`
+ * otherwise.
+ */
+function MenuItem({
+  href,
+  onClick,
+  children,
+}: {
+  href?: string;
+  onClick?: () => void;
+  children: React.ReactNode;
+}) {
+  const [hovered, setHovered] = useState(false);
+  const handlers = {
+    onMouseEnter: () => setHovered(true),
+    onMouseLeave: () => setHovered(false),
+    onFocus: () => setHovered(true),
+    onBlur: () => setHovered(false),
+  };
+
+  if (href) {
+    return (
+      <a
+        href={href}
+        target="_blank"
+        rel="noopener"
+        onClick={onClick}
+        style={{ ...menuItemStyle(hovered), textDecoration: 'none' }}
+        {...handlers}
+      >
+        {children}
+      </a>
+    );
+  }
+
+  return (
+    <button type="button" onClick={onClick} style={menuItemStyle(hovered)} {...handlers}>
+      {children}
+    </button>
+  );
 }
 
 /** The leading icon slot — fixed 16px so every row's label starts at the same x, whatever icon (SVG or a lone glyph like `#`) sits in it. */
@@ -253,41 +304,40 @@ export function RowMenu({ link }: { link: LinkJson }) {
 
       <Divider />
 
-      <a
-        href={link.url}
-        target="_blank"
-        rel="noopener"
-        onClick={closeMenu}
-        style={{ ...menuItemStyle(), textDecoration: 'none' }}
-      >
+      <MenuItem href={link.url} onClick={closeMenu}>
         <span style={iconSlotStyle}>
           <OpenIcon />
         </span>
         <span>open in new tab</span>
-      </a>
-      <button type="button" onClick={handleCopy} style={menuItemStyle()}>
+      </MenuItem>
+      <MenuItem onClick={handleCopy}>
         <span style={iconSlotStyle}>
           <CopyIcon />
         </span>
-        <span style={{ color: copied ? 'var(--markt)' : 'var(--mut)' }}>
+        {/* `--ink`, not amber, for the "copied" confirmation — review fix
+            (ce-frontend-design): amber (`--mark`/`--markt`) is reserved for
+            the brand grain-dot only, never a control/feedback state, and the
+            marks that used to justify `--markt` here (note/claude/enriching)
+            were removed in this same polish pass. */}
+        <span style={{ color: copied ? 'var(--ink)' : 'var(--mut)' }}>
           {copied ? 'copied' : 'copy link'}
         </span>
-      </button>
+      </MenuItem>
 
       <Divider />
 
-      <button type="button" onClick={handleEdit} style={menuItemStyle()}>
+      <MenuItem onClick={handleEdit}>
         <span style={iconSlotStyle}>
           <EditIcon />
         </span>
         <span>edit</span>
-      </button>
-      <button type="button" onClick={handleTrash} style={menuItemStyle()}>
+      </MenuItem>
+      <MenuItem onClick={handleTrash}>
         <span style={iconSlotStyle}>
           <TrashIcon size={14} stroke="var(--ghost)" />
         </span>
         <span>move to trash</span>
-      </button>
+      </MenuItem>
     </div>
   );
 }

@@ -13,17 +13,26 @@ const TEXT_INPUT_TAGS = new Set(['INPUT', 'TEXTAREA']);
  * native tags). Exported for the module's own tests to exercise directly
  * without constructing a full paste event.
  *
- * Reads the `contenteditable` ATTRIBUTE (`closest('[contenteditable="true"], [contenteditable=""]')`)
- * rather than the `isContentEditable` DOM property — jsdom (this project's
- * test environment) doesn't implement that property (always `undefined`),
- * and checking the attribute also correctly covers an element that inherited
+ * Reads the `contenteditable` ATTRIBUTE (`closest('[contenteditable="true"],
+ * [contenteditable=""], [contenteditable="plaintext-only"]')` — the three
+ * attribute values that turn editing ON; `"false"`/absent do not) rather than
+ * the `isContentEditable` DOM property — jsdom (this project's test
+ * environment) doesn't implement that property (always `undefined`), and
+ * checking the attribute also correctly covers an element that inherited
  * editability from a `contenteditable` ancestor, which a real paste target
- * often is (e.g. a `<span>` inside a rich-text editor's root).
+ * often is (e.g. a `<span>` inside a rich-text editor's root). Includes
+ * `"plaintext-only"` (review fix, CodeRabbit) alongside the more common
+ * `"true"`/`""` — a plain-text-only editable region is still a real text
+ * field a paste must not be hijacked from.
  */
 export function isTextEntryElement(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;
   if (TEXT_INPUT_TAGS.has(target.tagName)) return true;
-  return target.closest('[contenteditable="true"], [contenteditable=""]') !== null;
+  return (
+    target.closest(
+      '[contenteditable="true"], [contenteditable=""], [contenteditable="plaintext-only"]',
+    ) !== null
+  );
 }
 
 /**

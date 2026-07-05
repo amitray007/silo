@@ -131,6 +131,14 @@ describe('isTextEntryElement', () => {
     editable.remove();
   });
 
+  it('is true for a contenteditable="plaintext-only" element', () => {
+    const editable = document.createElement('div');
+    editable.setAttribute('contenteditable', 'plaintext-only');
+    document.body.appendChild(editable);
+    expect(isTextEntryElement(editable)).toBe(true);
+    editable.remove();
+  });
+
   it('is false for a plain, non-editable element', () => {
     expect(isTextEntryElement(document.createElement('div'))).toBe(false);
   });
