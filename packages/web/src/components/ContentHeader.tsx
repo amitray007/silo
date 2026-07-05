@@ -36,8 +36,17 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
         borderBottom: '1px solid var(--line)',
       }}
     >
-      <span
+      {/* The one real heading per route (Library/Trash/#tag) — previously a
+          plain <span>, so a screen-reader user navigating by heading found
+          NOTHING anywhere in the app (Rams review: heading hierarchy). `h1`
+          is correct here (not `h2`+): each route only ever renders one
+          `ContentHeader`, and it's the top-level heading for that screen's
+          content — the sidebar/nav chrome around it has no headings of its
+          own to nest under. Margin reset to 0 since a bare `<h1>` carries
+          browser default block margins that would shift this row's layout. */}
+      <h1
         style={{
+          margin: 0,
           fontSize: '1rem',
           fontWeight: 500,
           color: 'var(--ink)',
@@ -45,7 +54,7 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
         }}
       >
         {title}
-      </span>
+      </h1>
       {count !== undefined && (
         <span style={{ fontSize: '0.76rem', color: 'var(--ghost)' }}>{count}</span>
       )}

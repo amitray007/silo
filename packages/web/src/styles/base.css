@@ -220,11 +220,15 @@ select {
        order + accessibility tree — `transform` alone leaves its nav links
        keyboard-focusable + screen-reader-perceivable while off-screen (the
        classic off-canvas focus-leak). Delayed so it only hides AFTER the
-       slide-out completes; on open it flips visible immediately (0s delay). */
+       slide-out completes; on open it flips visible immediately (0s delay).
+       Eased with the iOS-like drawer curve (design-review pass,
+       review-animations-STANDARDS.md's Easing table: "moving/morphing on
+       screen" motion, not a hover/color change, so it gets the dedicated
+       drawer curve rather than the weak built-in `ease`). */
     visibility: hidden;
     transition:
-      transform 0.16s ease,
-      visibility 0s linear 0.16s;
+      transform 0.18s var(--ease-drawer),
+      visibility 0s linear 0.18s;
     box-shadow: none;
   }
 
@@ -232,7 +236,7 @@ select {
     transform: translateX(0);
     visibility: visible;
     transition:
-      transform 0.16s ease,
+      transform 0.18s var(--ease-drawer),
       visibility 0s linear 0s;
     box-shadow: 2px 0 12px rgba(20, 15, 5, 0.18);
   }
@@ -469,6 +473,262 @@ select {
   color: var(--ink);
 }
 
+/* Dock actions (clear/select all/empty all/restore/delete now/move to
+   trash) — previously flat text with no hover or press feedback at all
+   (design-review pass, emil-design-eng.md's "every interactive element needs
+   consistent hover/active states"). Color shift on hover uses plain `ease`
+   (the philosophy's prescribed curve for hover/color changes); press
+   feedback uses the shared strong ease-out on `transform` only. */
+.silo-dock-action {
+  border-radius: 6px;
+  transform: scale(1);
+  transition:
+    color 0.14s ease,
+    transform 0.12s var(--ease-out);
+}
+
+.silo-dock-action:hover:not(:disabled) {
+  color: var(--ink);
+}
+
+.silo-dock-action:active:not(:disabled) {
+  transform: scale(0.97);
+}
+
+/* The row multi-select checkbox (Library + Trash rows) — a binary toggle
+   that had no press feedback at all (emil-design-eng.md: "buttons must feel
+   responsive"). Transform-only, GPU-friendly. */
+.silo-row-checkbox {
+  transform: scale(1);
+  transition:
+    transform 0.1s var(--ease-out),
+    background 0.14s ease,
+    border-color 0.14s ease;
+}
+
+.silo-row-checkbox:active {
+  transform: scale(0.9);
+}
+
+/* Trash row restore/delete-now icon buttons — previously flat `--ghost` with
+   no hover/active feedback (emil-design-eng.md consistency pass). */
+.silo-trash-row-icon {
+  transform: scale(1);
+  transition:
+    color 0.14s ease,
+    background 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-trash-row-icon:hover:not(:disabled) {
+  color: var(--ink);
+  background: var(--hov);
+}
+
+.silo-trash-row-icon:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+/* EditModal's tag-chip remove (✕) — previously no hover feedback despite
+   being clickable (emil-design-eng.md consistency pass). */
+.silo-tag-chip-remove {
+  border-radius: 999px;
+  transition:
+    color 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-tag-chip-remove:hover {
+  color: var(--ink);
+}
+
+.silo-tag-chip-remove:active {
+  transform: scale(0.85);
+}
+
+/* Sidebar nav rows (Library/Trash/tags/Settings) — the ACTIVE state already
+   had its own ink-on-raised-bg treatment (inline, in NavItem.tsx); this adds
+   the missing INACTIVE hover/press feedback so every row — not just the
+   current one — reads as clickable (emil-design-eng.md consistency pass).
+   Hover uses `--hov` (never `--bg`, which is reserved for the active pill),
+   so a hovered-but-inactive row stays visually distinct from the current
+   page. `:active` here only applies while NOT the active row — pressing the
+   already-active row has nothing to press feedback toward. The resting
+   `background: transparent` lives HERE (not inline) — review fix
+   (CodeRabbit): NavItem.tsx used to set it inline for the inactive case,
+   which (inline styles always beating CSS regardless of specificity) fully
+   defeated the `:hover` rule below; NavItem.tsx now only sets an inline
+   background for the active case, leaving every other state CSS-owned. */
+.silo-nav-item {
+  background: transparent;
+}
+
+.silo-nav-item:hover:not([aria-current="page"]) {
+  background: var(--hov);
+}
+
+.silo-nav-item:active:not([aria-current="page"]) {
+  transform: scale(0.99);
+}
+
+/* Theme toggle segments (light/dark) — previously no hover/press feedback,
+   the segmented control just snapped between active/inactive with no
+   in-between affordance (emil-design-eng.md consistency pass). */
+.silo-theme-toggle-btn {
+  transition:
+    color 0.14s ease,
+    background 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-theme-toggle-btn:hover:not([aria-pressed="true"]) {
+  color: var(--ink);
+}
+
+.silo-theme-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+/* Tag toggle rows (RowMenu's tags fly-out + EditModal's tags picker) —
+   previously hover-only via local state with no press feedback
+   (emil-design-eng.md consistency pass). */
+.silo-tag-option {
+  transition: transform 0.1s var(--ease-out);
+}
+
+.silo-tag-option:active {
+  transform: scale(0.98);
+}
+
+/* Small icon-only sidebar buttons (the tags section's ⌕ find toggle) — color
+   transition + press feedback, matching the rest of the sidebar's row
+   family (emil-design-eng.md consistency pass). */
+.silo-icon-btn-sm {
+  transform: scale(1);
+  transition:
+    color 0.14s ease,
+    background 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-icon-btn-sm:hover {
+  background: var(--hov);
+}
+
+.silo-icon-btn-sm:active {
+  transform: scale(0.92);
+}
+
+/* Sidebar text-only affordances ("+N more"/"show less", "+ new tag") — had a
+   color transition but no press feedback (emil-design-eng.md consistency
+   pass). Hover darkens toward --mut (still calm, not a full --hov fill —
+   these are quieter than a real nav row) before landing on --ink on press. */
+.silo-sidebar-text-btn {
+  transform: scale(1);
+  transition:
+    color 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-sidebar-text-btn:hover {
+  color: var(--mut);
+}
+
+.silo-sidebar-text-btn:active {
+  color: var(--ink);
+  transform: scale(0.98);
+}
+
+/* The omnibar's "clear filter" tag pill — had hover color/border transitions
+   but no press feedback (emil-design-eng.md consistency pass). */
+.silo-tag-pill {
+  transform: scale(1);
+  transition:
+    border-color 0.14s ease,
+    color 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-tag-pill:hover {
+  border-color: var(--ghost);
+  color: var(--ink);
+}
+
+.silo-tag-pill:active {
+  transform: scale(0.96);
+}
+
+/* EditModal footer's "trash"/"cancel" text actions — previously totally
+   inert, no hover or press feedback at all (emil-design-eng.md consistency
+   pass — the most glaring gap in the modal: its two secondary actions gave
+   no indication they were interactive). */
+.silo-edit-footer-btn {
+  border-radius: 6px;
+  transform: scale(1);
+  transition:
+    color 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-edit-footer-btn:hover {
+  color: var(--ink);
+}
+
+.silo-edit-footer-btn:active {
+  transform: scale(0.97);
+}
+
+/* EditModal's primary "Save" button — same resting/hover/active ramp as
+   .silo-settings-btn (Geist's secondary-button recipe) so the modal's one
+   real commit action feels as alive as the rest of the app's buttons. */
+.silo-edit-save-btn {
+  transform: scale(1);
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.12s var(--ease-out);
+}
+
+.silo-edit-save-btn:hover {
+  background: var(--surface-hover);
+  border-color: var(--ghost);
+}
+
+.silo-edit-save-btn:active {
+  background: var(--surface-active);
+  transform: scale(0.97);
+}
+
+/* RowMenu's action rows (tags/open/copy/edit/trash) — press feedback via the
+   real `:active` pseudo-class rather than a JS-tracked boolean (review fix,
+   ce-julik-frontend-races: a `pointercancel`/`touchcancel` with no matching
+   `mouseup` could leave a hand-rolled `pressed` state stuck `true`; `:active`
+   is native and stateless, so it can't get stuck). Hover's `--hov`
+   background still comes from `menuItemStyle`'s inline style (JS-tracked,
+   since it also drives the "tags" trigger's pinned-open look) — this only
+   owns the transform layer. */
+.silo-menu-item:active {
+  transform: scale(0.97);
+}
+
+/* Small bordered text inputs across the app (EditModal's title/description/
+   tags-find/note fields, RowMenu's + EditModal's tags fly-out find inputs,
+   the sidebar's find-a-tag/new-tag inputs) — every one of them set inline
+   `outline: 'none'` with NO compensating focus indicator at all (Rams
+   review, SERIOUS: 2.4.7 focus outline removed with nothing replacing it —
+   an inline `outline:none` beats the global `:focus-visible` rule since
+   inline styles always win the cascade, so these fields were focusable but
+   silently, invisibly so). This restores a real, visible focus state — a
+   `--ghost` border + a soft matching ring, the same "the border IS the ring"
+   language the Omnibar already uses for its own JS-tracked `focused` prop —
+   without reintroducing the browser's default (usually blue, theme-
+   mismatched) outline ring on top of it. */
+.silo-field:focus-visible {
+  outline: none;
+  border-color: var(--ghost);
+  box-shadow: 0 0 0 3px rgba(133, 121, 95, 0.18);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .silo-settings-tab::after {
     transition: opacity 0.12s ease;
@@ -485,10 +745,16 @@ select {
   }
 }
 
+/* Modals only (ModalShell) — occasional-frequency, centered overlays, so a
+   plain keyframe entrance is fine (design-review pass: STANDARDS.md's
+   frequency table puts "occasional (modals, drawers, toasts)" at "standard
+   animation", keyframes included — unlike the popovers below, a modal is
+   never rapidly re-triggered mid-animation). Eased with the shared strong
+   ease-out token rather than the default (too weak) `ease` keyword. */
 @keyframes siloIn {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(4px) scale(0.98);
   }
   to {
     opacity: 1;
@@ -502,6 +768,35 @@ select {
   }
   to {
     opacity: 1;
+  }
+}
+
+/* Popovers (RowMenu, its tags fly-out, EditModal's tags fly-out, the
+   HoverPreview card): opened/closed far more often than a modal — dozens of
+   times per session — so per the review-animations STANDARDS these need to
+   be INTERRUPTIBLE (a transition that can retarget mid-animation, not a
+   keyframe that restarts from zero if you re-hover before the first play
+   finishes) and ORIGIN-AWARE (scale from the trigger, not center — each
+   caller sets `transform-origin` inline since it varies per popover's anchor
+   corner). React only mounts these while open (`{open && <Popover/>}`), so
+   there's no later "closed" state to transition FROM/TO in the DOM — instead
+   of restructuring every caller to stay mounted + toggle a class, this uses
+   `@starting-style` (the standards doc's own recommended modern-CSS
+   approach): the browser plays a transition from the `@starting-style` frame
+   to the base style the instant the element is first painted, so mounting
+   already IS "entering" with no JS mount-effect/`data-mounted` dance needed.
+   There is intentionally no matching exit transition (unmount is instant) —
+   these are quick, frequent popovers where a snappy close reads better than
+   a lingering fade-out, and the STANDARDS doc's asymmetric-timing principle
+   (fast where the system responds) supports a fast/instant exit here. */
+.silo-popover {
+  transition:
+    opacity 0.14s var(--ease-out),
+    transform 0.14s var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+    transform: scale(0.96) translateY(-2px);
   }
 }
 

@@ -3,11 +3,18 @@ import { describe, expect, it } from 'vitest';
 import { NavItem } from './NavItem';
 
 describe('NavItem', () => {
-  it('renders an inactive item: mut text on transparent bg', () => {
+  it('renders an inactive item: mut text, background left to CSS (not inline)', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
     expect(link.style.color).toBe('var(--mut)');
-    expect(link.style.background).toBe('transparent');
+    // The inactive case must NOT set an inline `background` (review fix,
+    // CodeRabbit): inline styles always beat CSS regardless of specificity,
+    // so an inline `background: transparent` here would silently defeat
+    // `.silo-nav-item:hover`'s `--hov` background in base.css. The resting
+    // transparent + the hover/press feedback are CSS-owned via the
+    // `silo-nav-item` class instead.
+    expect(link.style.background).toBe('');
+    expect(link.className).toContain('silo-nav-item');
     expect(link.getAttribute('aria-current')).toBeNull();
   });
 
@@ -28,11 +35,11 @@ describe('NavItem', () => {
     expect(link.style.boxShadow).not.toContain('--mark');
   });
 
-  it('an inactive item has no raised background or shadow', () => {
+  it('an inactive item sets no inline background/shadow (the raised look is active-only)', () => {
     render(<NavItem label="Trash" href="/trash" />);
     const link = screen.getByRole('link', { name: /trash/i });
-    expect(link.style.background).toBe('transparent');
-    expect(link.style.boxShadow).toBe('none');
+    expect(link.style.background).toBe('');
+    expect(link.style.boxShadow).toBe('');
     expect(link.getAttribute('aria-current')).toBeNull();
   });
 

@@ -25,9 +25,24 @@ export function RowSelectCheckbox({
   if (!visible) return null;
 
   return (
+    // The visible box stays a compact 18px (matching the chip it swaps
+    // places with — a 40px box here would break the row's tight `gap:13`
+    // rhythm and visually dominate the title/domain text next to it). The
+    // click/tap target is still small by the a11y floor's ~40px guidance
+    // (Rams review), but this control always sits inside a row that is
+    // ITSELF a large click target (`.silo-link-row`, ~36px tall) with
+    // `stopPropagation` already carving this box out of it — a real 40px hit
+    // area here would need to overlap the adjacent chip/title, which isn't
+    // safe to do with inline flex siblings. Flagged as an accepted residual
+    // rather than silently left unlabeled: `aria-label`/`aria-pressed` at
+    // least make it correctly operable for assistive tech and keyboard users
+    // even at this visual size.
     <button
       type="button"
       title="select"
+      aria-label={isSelected ? 'deselect' : 'select'}
+      aria-pressed={isSelected}
+      className="silo-row-checkbox"
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => {
         e.preventDefault();

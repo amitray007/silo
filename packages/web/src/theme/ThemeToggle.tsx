@@ -48,6 +48,7 @@ export function ThemeToggle() {
             key={option.value}
             type="button"
             aria-pressed={active}
+            className="silo-theme-toggle-btn"
             onClick={() => setTheme(option.value)}
             style={{
               appearance: 'none',
@@ -60,6 +61,7 @@ export function ThemeToggle() {
               cursor: 'pointer',
               color: active ? 'var(--ink)' : 'var(--ghost)',
               background: active ? 'var(--hov)' : 'transparent',
+              transform: 'scale(1)',
             }}
           >
             {option.label}

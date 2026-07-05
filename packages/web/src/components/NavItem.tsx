@@ -55,6 +55,7 @@ export function NavItem({
       {...anchorProps}
       href={href}
       aria-current={active ? 'page' : undefined}
+      className="silo-nav-item"
       style={{
         display: 'flex',
         alignItems: 'center',
@@ -74,9 +75,20 @@ export function NavItem({
         // reads as a raised card lifted off the --bg2 sidebar — the prototype's
         // exact `on` state (Silo-v2.html): b:var(--bg), s:0 1px 3px rgba(40,30,10,.12).
         // Never amber (tokens.md: "active = ink on raised bg, never amber").
-        background: active ? 'var(--bg)' : 'transparent',
-        boxShadow: active ? '0 1px 3px rgba(40, 30, 10, 0.12)' : 'none',
-        transition: 'background .15s ease, color .15s ease, box-shadow .15s ease',
+        // The INACTIVE background is intentionally omitted here (review fix,
+        // CodeRabbit): inline styles always beat CSS class rules regardless
+        // of specificity, so an inline `background: 'transparent'` for the
+        // non-active case would silently defeat `.silo-nav-item:hover`'s
+        // `--hov` background in base.css — the hover feedback would never
+        // actually paint. Only the ACTIVE case sets an inline background
+        // (it's a per-instance boolean CSS can't express); the resting/hover
+        // background for every other row is CSS-owned.
+        ...(active
+          ? { background: 'var(--bg)', boxShadow: '0 1px 3px rgba(40, 30, 10, 0.12)' }
+          : {}),
+        transform: 'scale(1)',
+        transition:
+          'background .15s ease, color .15s ease, box-shadow .15s ease, transform .1s var(--ease-out)',
       }}
     >
       {icon && (

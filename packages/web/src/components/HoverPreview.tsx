@@ -54,6 +54,7 @@ export function HoverPreview({
   return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — every actual control inside (the `open ↗` anchor, the ✕ close button) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
     <div
+      className="silo-popover"
       onMouseEnter={onKeep}
       onMouseLeave={onHide}
       style={{
@@ -68,7 +69,12 @@ export function HoverPreview({
         boxShadow: '0 24px 60px -24px rgba(40,28,8,.5)',
         overflow: 'hidden',
         boxSizing: 'border-box',
-        animation: 'siloIn .16s ease',
+        // The card is placed to the RIGHT of the hovered row
+        // (`computePosition` in HoverPreviewContext.tsx: `rect.right + 14`),
+        // so it grows from its own left edge — the edge nearest the row it's
+        // previewing — not its center (review-animations-STANDARDS.md's
+        // origin-aware rule).
+        transformOrigin: 'left center',
       }}
     >
       <button
@@ -76,6 +82,7 @@ export function HoverPreview({
         title="close"
         aria-label="close preview"
         onClick={onHide}
+        className="silo-icon-btn-sm"
         style={{
           position: 'absolute',
           top: 9,
@@ -133,11 +140,11 @@ export function HoverPreview({
           href={link.url}
           target="_blank"
           rel="noopener"
+          className="silo-edit-footer-btn"
           style={{
             color: 'var(--fnt)',
             textDecoration: 'none',
             fontWeight: 500,
-            transition: 'color .15s ease',
           }}
         >
           open ↗

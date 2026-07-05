@@ -36,6 +36,8 @@ export function TagOptionsList({
         <button
           key={opt.name}
           type="button"
+          aria-pressed={opt.active}
+          className="silo-tag-option"
           onClick={() => onToggle(opt.name, opt.active)}
           onMouseEnter={() => setHoveredName(opt.name)}
           onMouseLeave={() => setHoveredName((current) => (current === opt.name ? null : current))}
@@ -55,6 +57,7 @@ export function TagOptionsList({
             fontWeight: 400,
             cursor: 'pointer',
             color: opt.active ? 'var(--ink)' : 'var(--mut)',
+            transform: 'scale(1)',
           }}
         >
           <span style={{ color: 'var(--ghost)' }}>#</span>

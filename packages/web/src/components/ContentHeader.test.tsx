@@ -9,6 +9,11 @@ describe('ContentHeader', () => {
     expect(screen.getByText('128')).toBeDefined();
   });
 
+  it('renders the title as a real heading (design-review pass — every route needs one navigable heading)', () => {
+    render(<ContentHeader title="Library" count={128} />);
+    expect(screen.getByRole('heading', { level: 1, name: 'Library' })).toBeDefined();
+  });
+
   it('renders without a count when omitted', () => {
     render(<ContentHeader title="Settings" />);
     expect(screen.getByText('Settings')).toBeDefined();

@@ -33,13 +33,16 @@ function TrashRowActions({ id }: { id: string }) {
     flex: 'none',
     display: 'grid',
     placeItems: 'center',
+    width: 26,
+    height: 26,
     border: 0,
+    borderRadius: 6,
     background: 'none',
     lineHeight: 1,
     color: 'var(--ghost)',
     cursor: busy ? 'default' : 'pointer',
     opacity: busy ? 0.5 : 1,
-    padding: '2px 4px',
+    padding: 0,
     fontFamily: 'inherit',
   };
 
@@ -48,7 +51,9 @@ function TrashRowActions({ id }: { id: string }) {
       <button
         type="button"
         title="restore"
+        aria-label="restore"
         disabled={busy}
+        className="silo-trash-row-icon"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.preventDefault();
@@ -64,7 +69,9 @@ function TrashRowActions({ id }: { id: string }) {
       <button
         type="button"
         title="delete now"
+        aria-label="delete now"
         disabled={busy}
+        className="silo-trash-row-icon"
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => {
           e.preventDefault();

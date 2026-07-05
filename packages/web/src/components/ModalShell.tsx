@@ -97,7 +97,7 @@ export function ModalShell({
         display: 'grid',
         placeItems: 'center',
         zIndex: 40,
-        animation: 'siloFade .16s ease',
+        animation: 'siloFade .16s var(--ease-out)',
       }}
     >
       <div
@@ -119,7 +119,11 @@ export function ModalShell({
           boxShadow: '0 24px 60px -28px rgba(40,28,8,.35)',
           boxSizing: 'border-box',
           outline: 'none',
-          animation: 'siloIn .16s ease',
+          // transform-origin stays the default `center` here (modals are the
+          // documented exception to "popovers scale from their trigger" —
+          // they're not anchored to a control, they appear centered in the
+          // viewport, per review-animations-STANDARDS.md's Physicality section).
+          animation: 'siloIn .2s var(--ease-out)',
         }}
       >
         {children}
@@ -161,7 +165,13 @@ export function ModalHeader({
         marginBottom: leading ? 15 : 13,
       }}
     >
-      <span style={{ fontSize: '1.05rem', fontWeight: 500 }}>{title}</span>
+      {/* `h2` (Rams review: heading hierarchy) — nested one level under each
+          route's `ContentHeader` `h1`, since a modal is contextually "inside"
+          the page it overlays. The dialog's accessible name still comes from
+          `ModalShell`'s `aria-label` (unchanged) — this is purely so a
+          screen-reader user's heading-navigation actually finds "Edit"/
+          "Settings" instead of silence. */}
+      <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 500 }}>{title}</h2>
       {leading}
       <span style={{ flex: 1 }} />
       <button type="button" onClick={onClose} className="silo-modal-esc">

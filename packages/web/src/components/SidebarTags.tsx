@@ -130,16 +130,17 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           title="find a tag"
           aria-label="find a tag"
           aria-expanded={findOpen}
+          className="silo-icon-btn-sm"
           style={{
             border: 0,
             background: 'none',
+            borderRadius: 6,
             fontFamily: 'inherit',
             padding: '2px 3px',
             fontSize: '1.15rem',
             lineHeight: 1,
             color: findOpen ? 'var(--ink)' : 'var(--ghost)',
             cursor: 'pointer',
-            transition: 'color .15s ease',
           }}
         >
           ⌕
@@ -152,6 +153,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           value={query}
           onChange={(event) => setQuery(event.target.value)}
           placeholder="find tag"
+          className="silo-field"
           style={{
             margin: '0 4px 3px',
             padding: '4px 8px',
@@ -175,6 +177,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         <button
           type="button"
           onClick={() => setShowAll((v) => !v)}
+          className="silo-sidebar-text-btn"
           style={{
             border: 0,
             background: 'none',
@@ -188,7 +191,6 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             fontWeight: 400,
             color: 'var(--fnt)',
             cursor: 'pointer',
-            transition: 'color .15s ease',
           }}
         >
           {showAll ? 'show less' : `+${moreCount} more`}
@@ -204,6 +206,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             onKeyDown={onNewTagKeyDown}
             onBlur={closeNewTag}
             placeholder="tag name"
+            className="silo-field"
             style={{
               margin: '2px 4px',
               padding: '4px 8px',
@@ -235,6 +238,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         <button
           type="button"
           onClick={openNewTag}
+          className="silo-sidebar-text-btn"
           style={{
             border: 0,
             background: 'none',
@@ -248,7 +252,6 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             fontWeight: 400,
             color: 'var(--fnt)',
             cursor: 'pointer',
-            transition: 'color .15s ease',
           }}
         >
           + new tag

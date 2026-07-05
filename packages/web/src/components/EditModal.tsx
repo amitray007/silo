@@ -111,6 +111,7 @@ function EditTagsFlyout({
 
   return (
     <div
+      className="silo-popover"
       style={{
         position: 'absolute',
         left: 0,
@@ -122,7 +123,12 @@ function EditTagsFlyout({
         borderRadius: 10,
         boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
         padding: 5,
-        animation: 'siloIn .14s ease',
+        // Drops down from the full-width tags trigger directly above it — a
+        // centered top origin reads correctly since the fly-out spans the
+        // trigger's exact width (review-animations-STANDARDS.md's
+        // origin-aware rule; center is right here because the "trigger" IS
+        // the full width, unlike RowMenu's corner-anchored popovers).
+        transformOrigin: 'top center',
       }}
     >
       <input
@@ -140,6 +146,7 @@ function EditTagsFlyout({
           }
         }}
         placeholder="find or create a tag"
+        className="silo-field"
         style={{
           width: '100%',
           boxSizing: 'border-box',
@@ -285,6 +292,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="how you'll look for it later"
+        className="silo-field"
         style={{ ...fieldStyle, fontWeight: 500 }}
       />
 
@@ -294,6 +302,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
         placeholder="what this is, in your words"
+        className="silo-field"
         style={{ ...fieldStyle, color: 'var(--mut)', fontSize: '0.82rem', resize: 'vertical' }}
       />
 
@@ -301,6 +310,8 @@ export function EditModal({ link }: { link: LinkJson }) {
       <div style={{ position: 'relative', marginBottom: 13 }}>
         <button
           type="button"
+          aria-haspopup="true"
+          aria-expanded={tagsOpen}
           onClick={() => {
             setTagsOpen((open) => !open);
             setTagQuery('');
@@ -347,6 +358,7 @@ export function EditModal({ link }: { link: LinkJson }) {
                   removeTag.mutate(tag, { onSuccess: () => applyTagToggle(tag, false) });
                 }}
                 title="remove"
+                className="silo-tag-chip-remove"
                 style={{ color: 'var(--ghost)', cursor: 'pointer' }}
               >
                 ✕
@@ -379,6 +391,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         onChange={(e) => setNote(e.target.value)}
         rows={2}
         placeholder="why you kept it"
+        className="silo-field"
         style={{
           ...fieldStyle,
           color: 'var(--mut)',
@@ -393,6 +406,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         <button
           type="button"
           onClick={handleTrash}
+          className="silo-edit-footer-btn"
           style={{
             display: 'inline-flex',
             alignItems: 'center',
@@ -429,6 +443,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         <button
           type="button"
           onClick={closeEdit}
+          className="silo-edit-footer-btn"
           style={{
             border: 0,
             background: 'none',
@@ -445,6 +460,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         <button
           type="button"
           onClick={handleSave}
+          className="silo-edit-save-btn"
           style={{
             border: '1px solid var(--line)',
             background: 'var(--bg2)',

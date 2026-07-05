@@ -37,6 +37,8 @@ function menuItemStyle(active = false): React.CSSProperties {
     fontWeight: 500,
     color: 'var(--mut)',
     cursor: 'pointer',
+    transform: 'scale(1)',
+    transition: 'background 0.14s ease, transform 0.12s var(--ease-out)',
   };
 }
 
@@ -65,6 +67,15 @@ function MenuItem({
     onFocus: () => setHovered(true),
     onBlur: () => setHovered(false),
   };
+  // Press feedback (Emil Kowalski's "buttons must feel responsive" — a
+  // subtle `scale(0.97)` on press) uses the real CSS `:active` pseudo-class
+  // (`.silo-menu-item`, base.css) rather than a JS-tracked boolean — review
+  // fix (ce-julik-frontend-races): an earlier version tracked `pressed` via
+  // onMouseDown/onMouseUp/onMouseLeave/onBlur, which a touch-and-drag-off or
+  // a touch cancelled mid-gesture (`touchcancel`/`pointercancel`, neither of
+  // which fires a matching `mouseup`) could leave stuck `true`. `:active` is
+  // native, stateless, and can't get stuck.
+  const style = menuItemStyle(hovered);
 
   if (href) {
     return (
@@ -73,7 +84,8 @@ function MenuItem({
         target="_blank"
         rel="noopener"
         onClick={onClick}
-        style={{ ...menuItemStyle(hovered), textDecoration: 'none' }}
+        className="silo-menu-item"
+        style={{ ...style, textDecoration: 'none' }}
         {...handlers}
       >
         {children}
@@ -82,7 +94,7 @@ function MenuItem({
   }
 
   return (
-    <button type="button" onClick={onClick} style={menuItemStyle(hovered)} {...handlers}>
+    <button type="button" onClick={onClick} className="silo-menu-item" style={style} {...handlers}>
       {children}
     </button>
   );
@@ -165,6 +177,7 @@ function TagsFlyout({ link }: { link: LinkJson }) {
 
   return (
     <div
+      className="silo-popover"
       style={{
         position: 'absolute',
         right: 'calc(100% - 2px)',
@@ -175,13 +188,17 @@ function TagsFlyout({ link }: { link: LinkJson }) {
         borderRadius: 12,
         boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
         padding: 6,
-        animation: 'siloIn .14s ease',
+        // Grows leftward from the "tags" trigger it's anchored to (its right
+        // edge sits flush against the trigger's left edge) — not the popover's
+        // own center, per review-animations-STANDARDS.md's origin-aware rule.
+        transformOrigin: 'top right',
       }}
     >
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
         placeholder="find tag"
+        className="silo-field"
         style={{
           width: '100%',
           boxSizing: 'border-box',
@@ -263,6 +280,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
     // biome-ignore lint/a11y/useKeyWithClickEvents: this popover's onClick only stops propagation (v3's "clicking inside the menu must not bubble to the row <a> or the document click-outside listener") — it is not itself an interactive control; every real action inside is a proper <button>/<a>.
     // biome-ignore lint/a11y/noStaticElementInteractions: same rationale — a non-interactive click/mousedown guard, not a control.
     <div
+      className="silo-popover"
       onMouseDown={stop}
       onClick={stop}
       style={{
@@ -276,7 +294,9 @@ export function RowMenu({ link }: { link: LinkJson }) {
         borderRadius: 12,
         boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
         padding: 5,
-        animation: 'siloIn .14s ease',
+        // Anchored top-right to the row's `⋯` trigger — scales from there,
+        // not center (review-animations-STANDARDS.md's origin-aware rule).
+        transformOrigin: 'top right',
       }}
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: hover-open convenience only — the "tags" button below is already keyboard-operable (click toggles the fly-out) and owns all a11y semantics; this wrapper just widens the hover target v3-style. */}
@@ -287,6 +307,8 @@ export function RowMenu({ link }: { link: LinkJson }) {
       >
         <button
           type="button"
+          aria-haspopup="true"
+          aria-expanded={tagsFlyOpen}
           onClick={() => setTagsFlyOpen((open) => !open)}
           style={menuItemStyle(tagsFlyOpen)}
         >

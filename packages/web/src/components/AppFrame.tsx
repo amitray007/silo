@@ -228,6 +228,7 @@ export function AppFrame() {
               aria-expanded={drawerOpen}
               aria-controls={DRAWER_ID}
               onClick={() => (drawerOpen ? closeDrawer() : openDrawer())}
+              className="silo-icon-btn-sm"
               style={{
                 display: 'flex',
                 alignItems: 'center',

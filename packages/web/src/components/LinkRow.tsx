@@ -154,6 +154,9 @@ export function LinkRow({ link }: { link: LinkJson }) {
           <button
             type="button"
             title="options"
+            aria-label="options"
+            aria-haspopup="true"
+            aria-expanded={menuOpen}
             onMouseDown={(e) => e.stopPropagation()}
             onClick={(e) => {
               e.preventDefault();
@@ -162,15 +165,23 @@ export function LinkRow({ link }: { link: LinkJson }) {
             }}
             style={{
               flex: 'none',
+              display: 'grid',
+              placeItems: 'center',
+              width: 28,
+              height: 28,
               border: 0,
+              borderRadius: 6,
               background: 'none',
               fontSize: '0.9rem',
               lineHeight: 1,
               color: menuOpen ? 'var(--ink)' : 'var(--ghost)',
               cursor: 'pointer',
-              padding: '2px 4px',
+              padding: 0,
               fontFamily: 'inherit',
               fontWeight: 500,
+              transform: 'scale(1)',
+              transition:
+                'color 0.14s ease, background 0.14s ease, transform 0.12s var(--ease-out)',
             }}
           >
             ⋯

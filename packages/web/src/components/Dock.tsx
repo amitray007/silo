@@ -50,7 +50,12 @@ export function Dock({
         borderRadius: 999,
         boxShadow: '0 20px 50px -18px rgba(40,28,8,.45)',
         padding,
-        animation: 'siloIn .16s ease',
+        // Bottom-anchored: it slides/scales up off the bottom edge it's
+        // pinned to, not its own center (review-animations-STANDARDS.md's
+        // origin-aware rule — the same "grow from the anchor" logic applied
+        // to a fixed-position dock instead of a trigger-anchored popover).
+        transformOrigin: 'bottom center',
+        animation: 'siloIn .16s var(--ease-out)',
       }}
     >
       {children}
@@ -89,6 +94,7 @@ export function DockAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      className="silo-dock-action"
       style={{
         border: 0,
         background: 'none',
@@ -124,6 +130,7 @@ export function DockIconAction({
       type="button"
       onClick={onClick}
       disabled={disabled}
+      className="silo-dock-action"
       style={{
         display: 'inline-flex',
         alignItems: 'center',

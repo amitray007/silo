@@ -110,6 +110,8 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
           type="button"
           onClick={onClearTag}
           title="clear filter"
+          aria-label={`clear filter #${tagName}`}
+          className="silo-tag-pill"
           style={{
             flex: 'none',
             display: 'inline-flex',
@@ -124,7 +126,6 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
             fontWeight: 500,
             color: 'var(--mut)',
             cursor: 'pointer',
-            transition: 'border-color .15s ease, color .15s ease',
           }}
         >
           <span style={{ color: 'var(--ghost)' }}>#</span>
