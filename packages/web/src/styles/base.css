@@ -86,6 +86,145 @@ select {
   background: var(--hov);
 }
 
+/* ---------------------------------------------------------------------- */
+/* Layout shell (AppFrame + Sidebar): the ONLY components whose layout      */
+/* lives in CSS classes with @media breakpoints (see docs/rules/web-react   */
+/* .md "Layout (the frame)"). Leaf components keep inline token styles.     */
+/* ---------------------------------------------------------------------- */
+
+/* Full-viewport ground; centers the band with equal empty gutters on wide
+   windows. Not a card — no border, no radius on this outer layer. */
+.silo-frame {
+  min-height: 100vh;
+  background: var(--bg);
+  color: var(--ink);
+  box-sizing: border-box;
+  display: flex;
+  justify-content: center;
+}
+
+/* The centered band: sidebar + content column sit as one bounded unit,
+   capped at ~60rem. Bounded on BOTH sides via a left/right wall so the band
+   reads as a contained column, not two panes bleeding into the gutter —
+   vertical side walls only (no top/bottom border, no radius: not a card). */
+.silo-band {
+  display: flex;
+  width: 100%;
+  max-width: 60rem;
+  min-height: 100vh;
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+}
+
+/* Mobile top bar (☰ + brand): hidden on desktop, shown ≤ the mobile
+   breakpoint. Lives inside the band, above the content. */
+.silo-topbar {
+  display: none;
+}
+
+/* The sidebar rail: fixed 210px width on desktop, its own right border on
+   top of the band's right wall reads correctly since it sits flush against
+   the content region (the band's left wall is the sidebar's outer edge). */
+.silo-sidebar {
+  width: 210px;
+  flex: none;
+  background: var(--bg2);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 16px 13px;
+  box-sizing: border-box;
+}
+
+/* Scrim behind the drawer on mobile — inert on desktop. */
+.silo-scrim {
+  display: none;
+}
+
+.silo-content {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 18px clamp(20px, 3vw, 34px) 0;
+}
+
+.silo-content-col {
+  width: 100%;
+  max-width: 45rem;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Mobile: sidebar becomes an off-canvas drawer, top bar appears, content
+   goes full-width. Breakpoint chosen to clear the 210px rail + a usable
+   content column on a phone/small-tablet viewport. */
+@media (max-width: 720px) {
+  .silo-band {
+    /* Stack vertically: the top bar sits above the content, and the content
+       fills the full width. The sidebar is lifted out of flow (position:fixed
+       below), so it no longer reserves a 210px column. */
+    flex-direction: column;
+    border-left: none;
+    border-right: none;
+  }
+
+  .silo-topbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--line);
+    background: var(--bg2);
+  }
+
+  .silo-sidebar {
+    position: fixed;
+    inset: 0 auto 0 0;
+    z-index: 30;
+    width: min(78vw, 300px);
+    transform: translateX(-100%);
+    /* `visibility: hidden` takes the closed off-canvas drawer OUT of the tab
+       order + accessibility tree — `transform` alone leaves its nav links
+       keyboard-focusable + screen-reader-perceivable while off-screen (the
+       classic off-canvas focus-leak). Delayed so it only hides AFTER the
+       slide-out completes; on open it flips visible immediately (0s delay). */
+    visibility: hidden;
+    transition:
+      transform 0.16s ease,
+      visibility 0s linear 0.16s;
+    box-shadow: none;
+  }
+
+  .silo-sidebar[data-open="true"] {
+    transform: translateX(0);
+    visibility: visible;
+    transition:
+      transform 0.16s ease,
+      visibility 0s linear 0s;
+    box-shadow: 2px 0 12px rgba(20, 15, 5, 0.18);
+  }
+
+  .silo-scrim[data-open="true"] {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 20;
+    background: rgba(20, 15, 5, 0.32);
+  }
+
+  .silo-content {
+    padding: 14px 16px 0;
+  }
+
+  .silo-content-col {
+    max-width: 100%;
+  }
+}
+
 @keyframes siloPulse {
   0%,
   100% {

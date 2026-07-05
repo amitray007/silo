@@ -1,10 +1,12 @@
-import type { MouseEvent } from 'react';
+import { forwardRef, type MouseEvent } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { GrainDot } from './GrainDot';
 import { NavItem } from './NavItem';
 import { SidebarSection } from './SidebarSection';
+
+const noop = () => {};
 
 /**
  * A `NavItem` wired to react-router: `useMatch` computes whether the current
@@ -14,17 +16,22 @@ import { SidebarSection } from './SidebarSection';
  * `<NavLink>` — that would nest two `<a>` elements (invalid HTML, and it
  * breaks `aria-current`/role queries onto the wrong anchor), so `NavItem`'s
  * own anchor stays the single, real link.
+ *
+ * `onNavigate` fires after a successful client-side navigation — `AppFrame`
+ * uses it to close the mobile drawer when a nav item is tapped.
  */
 function NavItemLink({
   to,
   label,
   meta,
   end = false,
+  onNavigate,
 }: {
   to: string;
   label: string;
   meta?: React.ReactNode;
   end?: boolean;
+  onNavigate: () => void;
 }) {
   const navigate = useNavigate();
   const match = useMatch({ path: to, end });
@@ -36,9 +43,19 @@ function NavItemLink({
     }
     event.preventDefault();
     navigate(to);
+    onNavigate();
   };
 
   return <NavItem label={label} meta={meta} active={active} href={to} onClick={onClick} />;
+}
+
+interface SidebarProps {
+  /** DOM id the mobile ☰ button's `aria-controls` points at. */
+  id?: string;
+  /** Whether the drawer is open (mobile only — inert/ignored on desktop). */
+  open?: boolean;
+  /** Fires after a nav item navigates — closes the mobile drawer. */
+  onNavigate?: () => void;
 }
 
 /**
@@ -48,42 +65,50 @@ function NavItemLink({
  * the API), and Settings pinned to the bottom via flex (the Tags section
  * grows to fill available space).
  *
+ * Doubles as the mobile off-canvas drawer: on desktop this is a static rail
+ * (`.silo-sidebar`, no `@media` override applies); on mobile the same markup
+ * slides in as an overlay driven by `data-open` (see `base.css`). It stays a
+ * single `<nav aria-label="Sidebar">` landmark in both states — open or
+ * closed, mobile or desktop — rather than swapping to a `dialog` role, so
+ * assistive tech sees one stable, correctly-labeled navigation region.
+ *
  * Loading/empty/error states are handled calmly: while counts/tags are
  * loading we simply omit the meta/section content (no layout-shifting
  * skeleton chrome); an empty tag list renders no Tags section at all; a
  * failed tags fetch renders nothing rather than crashing the sidebar.
  */
-export function Sidebar() {
+export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar(
+  { id, open = false, onNavigate = noop },
+  ref,
+) {
   const { data: counts } = useCounts();
   const { data: tagsData, isError: tagsErrored } = useTags();
 
   const tags = tagsErrored ? [] : (tagsData?.tags ?? []);
 
   return (
+    // tabIndex={-1} makes the drawer programmatically focusable (AppFrame
+    // moves focus here when it opens on mobile) without adding it to the tab
+    // order.
     <nav
+      id={id}
+      ref={ref}
+      tabIndex={-1}
       aria-label="Sidebar"
-      style={{
-        width: 210,
-        flex: 'none',
-        background: 'var(--bg2)',
-        borderRight: '1px solid var(--line)',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 2,
-        padding: '16px 13px',
-        boxSizing: 'border-box',
-      }}
+      data-open={open}
+      className="silo-sidebar"
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '5px 9px 16px' }}>
         <GrainDot />
         <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>silo</span>
       </div>
 
-      <NavItemLink to="/" end label="Library" meta={counts?.live} />
+      <NavItemLink to="/" end label="Library" meta={counts?.live} onNavigate={onNavigate} />
       <NavItemLink
         to="/trash"
         label="Trash"
         meta={counts ? `${counts.trash} · ${counts.purgeWindowDays}d` : undefined}
+        onNavigate={onNavigate}
       />
 
       {tags.length > 0 && (
@@ -94,6 +119,7 @@ export function Sidebar() {
               to={`/tags/${tag.name}`}
               label={`#${tag.name}`}
               meta={tag.count}
+              onNavigate={onNavigate}
             />
           ))}
         </SidebarSection>
@@ -104,7 +130,7 @@ export function Sidebar() {
       <div style={{ padding: '4px 10px 8px' }}>
         <ThemeToggle />
       </div>
-      <NavItemLink to="/settings" label="Settings" />
+      <NavItemLink to="/settings" label="Settings" onNavigate={onNavigate} />
     </nav>
   );
-}
+});
