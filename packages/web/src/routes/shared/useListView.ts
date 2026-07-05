@@ -1,5 +1,5 @@
 import type { ApiError } from '../../api/client';
-import { useCounts, useInfiniteLinks, useSearchLinks } from '../../api/hooks';
+import { useCaptureLink, useCounts, useInfiniteLinks, useSearchLinks } from '../../api/hooks';
 import type { LinkJson, SearchResultJson } from '../../api/types';
 import { useOmnibarState } from '../../lib/useOmnibarState';
 
@@ -32,6 +32,27 @@ export interface ListViewState {
   hasNextPage: boolean | undefined;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
+  /**
+   * The omnibar's `keep ↵` handler (plan 011, V3-3) — captures `omnibar.q`
+   * via `useCaptureLink`, scoped to `tag` when this view has one (a link kept
+   * while viewing `#ai` picks up `#ai`), then clears the omnibar. A no-op
+   * when `q` doesn't currently look like a URL, matching the Omnibar
+   * component's own `omniIsUrl` guard on Enter — this is a second, cheap
+   * guard against a stale closure calling `onKeep` after the query changed.
+   */
+  onKeep: () => void;
+  /** True while a capture is in flight — lets the omnibar show a subtle busy state. */
+  isCapturing: boolean;
+  /**
+   * The most recent capture failure's message (`useCaptureLink`'s
+   * `ApiError`), or `undefined` when the last capture (if any) succeeded —
+   * lets the header surface a calm one-line "couldn't save that" instead of
+   * failing silently (the omnibar clears optimistically on every `onKeep`,
+   * so a failure MUST be shown somewhere or it's invisible).
+   */
+  captureError: string | undefined;
+  /** Count of links in the current feed still `captureStatus === 'enriching'` — feeds the header's `◌` indicator. */
+  enrichingCount: number;
 }
 
 export function useListView(tag?: string): ListViewState {
@@ -39,16 +60,27 @@ export function useListView(tag?: string): ListViewState {
   const { data, isLoading, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useInfiniteLinks(tag);
   const omnibar = useOmnibarState();
+  const captureLink = useCaptureLink();
 
   const searchEnabled = omnibar.debouncedQ.trim().length > 0 && !omnibar.isUrl;
   const { data: searchData, isLoading: isSearching } = useSearchLinks(
     searchEnabled ? omnibar.debouncedQ : '',
   );
 
+  const links = data?.pages.flatMap((page) => page.links) ?? [];
+
+  const onKeep = () => {
+    if (!omnibar.isUrl) return;
+    const url = omnibar.q.trim();
+    if (!url) return;
+    captureLink.mutate({ url, ...(tag ? { tags: [tag] } : {}) });
+    omnibar.clear();
+  };
+
   return {
     omnibar,
     liveCount: counts?.live,
-    links: data?.pages.flatMap((page) => page.links) ?? [],
+    links,
     results: searchData?.results ?? [],
     searchEnabled,
     isLoading,
@@ -58,5 +90,9 @@ export function useListView(tag?: string): ListViewState {
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage: () => fetchNextPage(),
+    onKeep,
+    isCapturing: captureLink.isPending,
+    captureError: captureLink.isError ? (captureLink.error as ApiError).message : undefined,
+    enrichingCount: links.filter((link) => link.captureStatus === 'enriching').length,
   };
 }

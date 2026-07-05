@@ -15,17 +15,26 @@ import type { useOmnibarState } from '../../lib/useOmnibarState';
 export function ContentFrame({
   title,
   count,
+  enrichingCount,
+  captureError,
   headerSlot,
   children,
 }: {
   title: ReactNode;
   count: number | undefined;
+  enrichingCount?: number;
+  captureError?: string;
   headerSlot: ReactNode;
   children: ReactNode;
 }) {
   return (
     <>
-      <ContentHeader title={title} count={count}>
+      <ContentHeader
+        title={title}
+        count={count}
+        {...(enrichingCount !== undefined ? { enrichingCount } : {})}
+        {...(captureError !== undefined ? { captureError } : {})}
+      >
         {headerSlot}
       </ContentHeader>
       <div className="silo-content-body">
@@ -38,15 +47,16 @@ export function ContentFrame({
 /**
  * The omnibar bound to `useOmnibarState`, shared by `LibraryView` (no tag
  * filter — `tagName` omitted) and `TagView` (`tagName` set, `onClearTag`
- * navigates back to `/`). Holds the (mostly no-op for now — V3-3 owns
- * capture) `onKeep` callback and the shown-count wiring so neither view has
- * to repeat it.
+ * navigates back to `/`). `onKeep` (plan 011, V3-3) is `useListView`'s real
+ * capture handler — this component no longer owns any capture logic itself,
+ * it only wires the callback through so neither view has to repeat it.
  */
 export function ListOmnibar({
   omnibar,
   searchEnabled,
   shownCount,
   libCount,
+  onKeep,
   tagName,
   onClearTag,
 }: {
@@ -54,6 +64,7 @@ export function ListOmnibar({
   searchEnabled: boolean;
   shownCount: number;
   libCount: number;
+  onKeep: () => void;
   tagName?: string;
   onClearTag?: () => void;
 }) {
@@ -62,11 +73,7 @@ export function ListOmnibar({
       ref={omnibar.inputRef}
       value={omnibar.q}
       onChange={omnibar.setQ}
-      onKeep={() => {
-        // Capture (POST /links) lands in V3-3 — this slice only shows the
-        // `keep ↵` affordance so the design reads complete; Enter on a
-        // URL-looking query is intentionally a no-op for now.
-      }}
+      onKeep={onKeep}
       focused={omnibar.focused}
       onFocus={omnibar.onFocus}
       onBlur={omnibar.onBlur}

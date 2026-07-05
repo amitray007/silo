@@ -38,13 +38,20 @@ export function TagView() {
       searchEnabled={view.searchEnabled}
       shownCount={view.searchEnabled ? view.results.length : view.links.length}
       libCount={view.liveCount ?? 0}
+      onKeep={view.onKeep}
       tagName={tag}
       onClearTag={() => navigate('/')}
     />
   );
 
   return (
-    <ContentFrame title={`#${tag}`} count={view.links.length} headerSlot={header}>
+    <ContentFrame
+      title={`#${tag}`}
+      count={view.links.length}
+      enrichingCount={view.enrichingCount}
+      {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
+      headerSlot={header}
+    >
       {ListBody(view, <TagEmptyState tag={tag} />)}
     </ContentFrame>
   );

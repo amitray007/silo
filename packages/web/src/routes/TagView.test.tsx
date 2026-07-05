@@ -127,4 +127,47 @@ describe('TagView', () => {
 
     await waitFor(() => expect(screen.getByText('Internal server error')).toBeDefined());
   });
+
+  it('capturing from a tag view applies that tag to the capture request (plan 011, V3-3)', async () => {
+    const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (method === 'POST' && url === '/api/links') {
+        return Promise.resolve(
+          jsonResponse(
+            {
+              link: link({ id: 's1', url: 'https://new-example.com', tags: ['mcp'] }),
+              deduped: false,
+            },
+            201,
+          ),
+        );
+      }
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 5, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/links?tag=mcp') return Promise.resolve(jsonResponse({ links: [] }));
+      if (url === '/api/tags') return Promise.resolve(jsonResponse({ tags: [] }));
+      throw new Error(`unexpected fetch: ${method} ${url}`);
+    }) as unknown as typeof fetch;
+
+    renderTagView('mcp', fetchImpl);
+    await waitFor(() => expect(screen.getByText('No links tagged #mcp yet.')).toBeDefined());
+
+    const input = screen.getByPlaceholderText(/search in #mcp/i);
+    fireEvent.change(input, { target: { value: 'https://new-example.com' } });
+    await waitFor(() => expect(screen.getByText('keep')).toBeDefined());
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    await waitFor(() =>
+      expect(fetchImpl).toHaveBeenCalledWith(
+        '/api/links',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ url: 'https://new-example.com', tags: ['mcp'] }),
+        }),
+      ),
+    );
+    await waitFor(() => expect((input as HTMLInputElement).value).toBe(''));
+  });
 });

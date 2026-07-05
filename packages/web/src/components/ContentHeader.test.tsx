@@ -28,4 +28,32 @@ describe('ContentHeader', () => {
     const placeholder = container.querySelector('[aria-hidden="true"]');
     expect(placeholder).not.toBeNull();
   });
+
+  it('shows the ◌ enriching indicator when enrichingCount is positive (plan 011, V3-3)', () => {
+    render(<ContentHeader title="Library" enrichingCount={3} />);
+    expect(screen.getByText('◌')).toBeDefined();
+    expect(screen.getByText('3 capturing')).toBeDefined();
+  });
+
+  it('hides the enriching indicator when enrichingCount is 0', () => {
+    render(<ContentHeader title="Library" enrichingCount={0} />);
+    expect(screen.queryByText('◌')).toBeNull();
+  });
+
+  it('hides the enriching indicator when enrichingCount is omitted', () => {
+    render(<ContentHeader title="Library" />);
+    expect(screen.queryByText('◌')).toBeNull();
+  });
+
+  it('shows a calm capture-error message when captureError is set (plan 011, V3-3)', () => {
+    render(<ContentHeader title="Library" captureError="Not a valid http(s) URL" />);
+    const alert = screen.getByRole('alert');
+    expect(alert.textContent).toContain("couldn't save that");
+    expect(alert.textContent).toContain('Not a valid http(s) URL');
+  });
+
+  it('renders no capture-error chrome when captureError is omitted', () => {
+    render(<ContentHeader title="Library" />);
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
 });

@@ -62,6 +62,17 @@ export type TrashResponse = { links: TrashLinkJson[]; nextCursor?: string };
 /** `GET /api/links/:id` response envelope. */
 export type LinkResponse = { link: LinkJson };
 
+/**
+ * `POST /api/links` (capture) response envelope — mirrors
+ * `links-write.ts`'s `c.json({ link, deduped }, 201)`. `deduped` is `true`
+ * when the URL had already been captured and the write merged into the
+ * existing row rather than creating a new one.
+ */
+export type CaptureResponse = { link: LinkJson; deduped: boolean };
+
+/** `POST /api/links` (capture) request body — mirrors `captureBodySchema` (`packages/api/src/query-schemas.ts`). */
+export type CaptureRequest = { url: string; tags?: string[]; note?: string };
+
 /** `GET /api/tags` response envelope. */
 export type TagsResponse = { tags: TagCount[] };
 

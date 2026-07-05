@@ -40,11 +40,18 @@ export function LibraryView() {
       searchEnabled={view.searchEnabled}
       shownCount={view.searchEnabled ? view.results.length : view.links.length}
       libCount={view.liveCount ?? 0}
+      onKeep={view.onKeep}
     />
   );
 
   return (
-    <ContentFrame title="Library" count={view.liveCount} headerSlot={header}>
+    <ContentFrame
+      title="Library"
+      count={view.liveCount}
+      enrichingCount={view.enrichingCount}
+      {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
+      headerSlot={header}
+    >
       {ListBody(view, <LibraryEmptyState />)}
     </ContentFrame>
   );

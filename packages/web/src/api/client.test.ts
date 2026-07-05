@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ApiError, apiGet, setApiBaseUrl } from './client';
+import { ApiError, apiDelete, apiGet, apiPatch, apiPost, setApiBaseUrl } from './client';
 import type {
   AddedBy,
+  CaptureResponse,
   CaptureStatus,
   Counts,
   LinkJson,
@@ -156,6 +157,116 @@ describe('apiGet', () => {
     const failure = apiGet('/api/counts');
     await expect(failure).rejects.toBeInstanceOf(ApiError);
     await expect(failure).rejects.toMatchObject({ status: 200, error: 'invalid_response' });
+  });
+});
+
+describe('apiPost', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('POSTs the body as JSON and returns the typed response', async () => {
+    const captureResponse: CaptureResponse = { link: linkFixture, deduped: false };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(captureResponse, 201));
+
+    const result = await apiPost<CaptureResponse>('/api/links', { url: 'https://example.com' });
+
+    expect(result).toEqual(captureResponse);
+    expect(fetch).toHaveBeenCalledWith('/api/links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'https://example.com' }),
+    });
+  });
+
+  it('throws a typed ApiError on a non-2xx response', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'invalid_url', message: 'Not a valid http(s) URL' }, 400),
+    );
+
+    const failure = apiPost('/api/links', { url: 'not-a-url' });
+    await expect(failure).rejects.toBeInstanceOf(ApiError);
+    await expect(failure).rejects.toMatchObject({
+      status: 400,
+      error: 'invalid_url',
+      message: 'Not a valid http(s) URL',
+    });
+  });
+
+  it('throws an ApiError (not a raw TypeError) on a network failure', async () => {
+    vi.mocked(fetch).mockRejectedValueOnce(new TypeError('Failed to fetch'));
+
+    const failure = apiPost('/api/links', { url: 'https://example.com' });
+    await expect(failure).rejects.toBeInstanceOf(ApiError);
+    await expect(failure).rejects.toMatchObject({ status: 0, error: 'network_error' });
+  });
+
+  it('resolves against an overridden base URL set by setApiBaseUrl', async () => {
+    setApiBaseUrl('http://localhost:8787');
+    try {
+      const captureResponse: CaptureResponse = { link: linkFixture, deduped: false };
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(captureResponse, 201));
+
+      await apiPost<CaptureResponse>('/api/links', { url: 'https://example.com' });
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    } finally {
+      setApiBaseUrl('');
+    }
+  });
+});
+
+describe('apiPatch / apiDelete', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('apiPatch PATCHes the body as JSON and returns the typed response', async () => {
+    const linkResponse: LinkResponse = { link: linkFixture };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(linkResponse, 200));
+
+    const result = await apiPatch<LinkResponse>(`/api/links/${linkFixture.id}`, {
+      title: 'New title',
+    });
+
+    expect(result).toEqual(linkResponse);
+    expect(fetch).toHaveBeenCalledWith(`/api/links/${linkFixture.id}`, {
+      method: 'PATCH',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ title: 'New title' }),
+    });
+  });
+
+  it('apiDelete sends no body', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ ok: true }, 200));
+
+    await apiDelete(`/api/links/${linkFixture.id}`);
+
+    expect(fetch).toHaveBeenCalledWith(`/api/links/${linkFixture.id}`, { method: 'DELETE' });
+  });
+
+  it('a 204 No Content response resolves to undefined rather than an invalid_response ApiError', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    await expect(apiDelete(`/api/links/${linkFixture.id}`)).resolves.toBeUndefined();
+  });
+
+  it('a 200 response with an empty body (content-length: 0) also resolves to undefined', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      new Response('', { status: 200, headers: { 'content-length': '0' } }),
+    );
+
+    await expect(apiDelete(`/api/links/${linkFixture.id}`)).resolves.toBeUndefined();
   });
 });
 

@@ -3,7 +3,16 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { queryKeys, useCounts, useInfiniteLinks, useSearchLinks, useTags } from './hooks';
+import { makeLink } from '../test/fixtures';
+import {
+  queryKeys,
+  useCaptureLink,
+  useCounts,
+  useInfiniteLinks,
+  useSearchLinks,
+  useTags,
+} from './hooks';
+import type { LinksResponse } from './types';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -245,5 +254,197 @@ describe('useSearchLinks', () => {
     rerender({ q: 'typescript' });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(fetch).toHaveBeenCalledWith('/api/links/search?q=typescript');
+  });
+});
+
+describe('useCaptureLink', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  /** Like the module-level `wrapper`, but returns the `QueryClient` too so a test can inspect/seed its cache directly. */
+  function makeWrapper() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function CaptureWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    return { queryClient, CaptureWrapper };
+  }
+
+  it('POSTs to /api/links with the given url/tags', async () => {
+    const { CaptureWrapper } = makeWrapper();
+    const created = makeLink({ id: 'server-1', url: 'https://example.com' });
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: created, deduped: false }, 201));
+
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ url: 'https://example.com', tags: ['mcp'] });
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ url: 'https://example.com', tags: ['mcp'] }),
+    });
+  });
+
+  it('optimistically prepends a placeholder row to the untagged links cache before the server responds', async () => {
+    const { queryClient, CaptureWrapper } = makeWrapper();
+    const existing: LinksResponse = { links: [makeLink({ id: 'existing' })] };
+    queryClient.setQueryData(queryKeys.links(), {
+      pages: [existing],
+      pageParams: [undefined],
+    });
+
+    // Never resolves during this assertion window — lets us inspect the optimistic (pre-response) state.
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+
+    act(() => {
+      result.current.mutate({ url: 'https://new-example.com' });
+    });
+
+    await waitFor(() => {
+      const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+      expect(cache?.pages[0]?.links).toHaveLength(2);
+    });
+    const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+    const optimisticLink = cache?.pages[0]?.links[0];
+    expect(optimisticLink?.url).toBe('https://new-example.com');
+    expect(optimisticLink?.captureStatus).toBe('enriching');
+    // The pre-existing row is still there, just pushed down.
+    expect(cache?.pages[0]?.links[1]?.id).toBe('existing');
+  });
+
+  it('rolls back the optimistic insert on a failed capture', async () => {
+    const { queryClient, CaptureWrapper } = makeWrapper();
+    const existing: LinksResponse = { links: [makeLink({ id: 'existing' })] };
+    queryClient.setQueryData(queryKeys.links(), {
+      pages: [existing],
+      pageParams: [undefined],
+    });
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'invalid_url', message: 'Not a valid http(s) URL' }, 400),
+    );
+
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ url: 'not-a-url' }).catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+    // Rolled back to exactly the pre-mutation snapshot — no optimistic row left behind.
+    expect(cache?.pages).toEqual([existing]);
+  });
+
+  it('one capture failing does not roll back a DIFFERENT still-in-flight capture (id-scoped rollback, not snapshot-restore)', async () => {
+    const { queryClient, CaptureWrapper } = makeWrapper();
+    queryClient.setQueryData(queryKeys.links(), {
+      pages: [{ links: [] } satisfies LinksResponse],
+      pageParams: [undefined],
+    });
+
+    let resolveSecond!: (value: Response) => void;
+    vi.mocked(fetch)
+      // A fails immediately.
+      .mockResolvedValueOnce(
+        jsonResponse({ error: 'invalid_url', message: 'Not a valid http(s) URL' }, 400),
+      )
+      // B stays in flight while A's rollback runs.
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+
+    act(() => {
+      result.current.mutate({ url: 'not-a-url' }); // A
+    });
+    act(() => {
+      result.current.mutate({ url: 'https://two.example.com' }); // B
+    });
+
+    // A's rollback has run (its placeholder is gone); B's placeholder must still be present.
+    await waitFor(() => {
+      const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+      const urls = cache?.pages[0]?.links.map((l) => l.url) ?? [];
+      expect(urls).toEqual(['https://two.example.com']);
+    });
+
+    resolveSecond(jsonResponse({ link: makeLink({ id: 's2' }), deduped: false }, 201));
+  });
+
+  it('invalidates links/counts/tags on settle (success), reconciling with the server (dedup-safe)', async () => {
+    const { queryClient, CaptureWrapper } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    const created = makeLink({ id: 'server-1', url: 'https://example.com' });
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: created, deduped: true }, 201));
+
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ url: 'https://example.com' });
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+    expect(invalidatedKeys).toContainEqual(['links']);
+  });
+
+  it('two concurrent captures both land as optimistic rows without stomping each other', async () => {
+    const { queryClient, CaptureWrapper } = makeWrapper();
+    queryClient.setQueryData(queryKeys.links(), {
+      pages: [{ links: [] } satisfies LinksResponse],
+      pageParams: [undefined],
+    });
+
+    let resolveFirst!: (value: Response) => void;
+    let resolveSecond!: (value: Response) => void;
+    vi.mocked(fetch)
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveFirst = resolve;
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            resolveSecond = resolve;
+          }),
+      );
+
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+
+    act(() => {
+      result.current.mutate({ url: 'https://one.example.com' });
+    });
+    act(() => {
+      result.current.mutate({ url: 'https://two.example.com' });
+    });
+
+    await waitFor(() => {
+      const cache = queryClient.getQueryData<{ pages: LinksResponse[] }>(queryKeys.links());
+      expect(cache?.pages[0]?.links).toHaveLength(2);
+    });
+
+    resolveFirst(jsonResponse({ link: makeLink({ id: 's1' }), deduped: false }, 201));
+    resolveSecond(jsonResponse({ link: makeLink({ id: 's2' }), deduped: false }, 201));
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
   });
 });

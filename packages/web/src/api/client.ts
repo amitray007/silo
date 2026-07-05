@@ -76,16 +76,49 @@ async function toApiError(response: Response): Promise<ApiError> {
 }
 
 /**
- * `GET`s `path` (resolved against `baseUrl`) and returns the JSON body typed
- * as `T`. Throws a typed `ApiError` — never a raw `fetch`/`Response` error —
- * on a non-2xx response, a malformed success body, or a network failure (e.g.
- * the dev proxy target being down), so every caller (the query hooks) can
- * treat "the request failed" as one shape regardless of cause.
+ * Reads a JSON `Response` body typed as `T`, or throws a typed `ApiError` —
+ * never a raw parse error — when the body isn't valid JSON. A `204 No
+ * Content` (or any genuinely empty body — checked via `content-length: 0`
+ * OR an empty text body, since some responses omit `content-length`
+ * entirely) resolves to `undefined as T` rather than attempting
+ * `response.json()`: an empty body is not malformed JSON, it's simply no
+ * body, and the API legitimately returns exactly this shape (e.g. `DELETE
+ * /api/trash/:id`'s `c.body(null, 204)`) — a future `apiDelete` caller must
+ * see that as success, not an `invalid_response` error. Shared tail for
+ * every verb below (`apiGet`/`apiRequest`) so "how do we turn a `Response`
+ * into `T`" has exactly one implementation.
  */
-export async function apiGet<T>(path: string): Promise<T> {
+async function readJson<T>(response: Response): Promise<T> {
+  if (response.status === 204 || response.headers.get('content-length') === '0') {
+    return undefined as T;
+  }
+
+  const text = await response.text();
+  if (text === '') return undefined as T;
+
+  try {
+    return JSON.parse(text) as T;
+  } catch (cause) {
+    throw new ApiError(
+      response.status,
+      'invalid_response',
+      cause instanceof Error ? cause.message : 'Response body was not valid JSON',
+    );
+  }
+}
+
+/**
+ * Runs `fetch(path, init)` (resolved against `baseUrl`), turning a network
+ * failure into a typed `network_error` `ApiError` and a non-2xx response into
+ * the API's own error envelope (via `toApiError`) — the shared error-handling
+ * core behind both `apiGet` and every write verb (`apiPost`/`apiPatch`/
+ * `apiDelete`), so "the request failed" has exactly one meaning regardless of
+ * which verb triggered it.
+ */
+async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(`${baseUrl}${path}`);
+    response = init ? await fetch(`${baseUrl}${path}`, init) : await fetch(`${baseUrl}${path}`);
   } catch (cause) {
     throw new ApiError(
       0,
@@ -97,14 +130,64 @@ export async function apiGet<T>(path: string): Promise<T> {
   if (!response.ok) {
     throw await toApiError(response);
   }
+  return response;
+}
 
-  try {
-    return (await response.json()) as T;
-  } catch (cause) {
-    throw new ApiError(
-      response.status,
-      'invalid_response',
-      cause instanceof Error ? cause.message : 'Response body was not valid JSON',
-    );
-  }
+/**
+ * `GET`s `path` (resolved against `baseUrl`) and returns the JSON body typed
+ * as `T`. Throws a typed `ApiError` — never a raw `fetch`/`Response` error —
+ * on a non-2xx response, a malformed success body, or a network failure (e.g.
+ * the dev proxy target being down), so every caller (the query hooks) can
+ * treat "the request failed" as one shape regardless of cause.
+ */
+export async function apiGet<T>(path: string): Promise<T> {
+  return readJson<T>(await apiFetch(path));
+}
+
+/**
+ * Shared body for every non-GET verb below: `fetch`es `path` with a JSON
+ * `body` (when given) and the given HTTP `method`, returning the JSON
+ * response typed as `T`. Mirrors `apiGet`'s error handling exactly (both
+ * route through `apiFetch`/`readJson`) — a network failure, a non-2xx
+ * response, and a malformed success body all become a typed `ApiError`,
+ * never a raw `fetch`/`Response`/parse error. A `void` request body
+ * (`undefined`) omits the `body`/`content-type` entirely (used by e.g. a
+ * no-body `DELETE`); most callers pass a JSON-serializable object.
+ */
+async function apiRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
+  const response = await apiFetch(path, {
+    method,
+    ...(body !== undefined
+      ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
+      : {}),
+  });
+  return readJson<T>(response);
+}
+
+/**
+ * `POST`s `body` as JSON to `path` (resolved against `baseUrl`) and returns
+ * the JSON response typed as `T`. The web mutation layer's first write verb
+ * (plan 011, V3-3) — `useCaptureLink` is its first caller
+ * (`POST /api/links`). Same `ApiError` contract as `apiGet`.
+ */
+export function apiPost<T>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(path, 'POST', body);
+}
+
+/**
+ * `PATCH`es `body` as JSON to `path` — added alongside `apiPost` for later
+ * mutation slices (e.g. V3-4's edit-link `PATCH /api/links/:id`) since it's
+ * trivial given `apiRequest` and keeps every write verb's error handling
+ * identical. Unused by this slice.
+ */
+export function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(path, 'PATCH', body);
+}
+
+/**
+ * `DELETE`s `path` with no request body — added alongside `apiPost` for later
+ * mutation slices (e.g. trash/purge). Unused by this slice.
+ */
+export function apiDelete<T>(path: string): Promise<T> {
+  return apiRequest<T>(path, 'DELETE');
 }

@@ -1,6 +1,20 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { apiGet } from './client';
-import type { Counts, LinksResponse, SearchResponse, TagsResponse } from './types';
+import {
+  type InfiniteData,
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { apiGet, apiPost } from './client';
+import type {
+  CaptureRequest,
+  CaptureResponse,
+  Counts,
+  LinkJson,
+  LinksResponse,
+  SearchResponse,
+  TagsResponse,
+} from './types';
 
 /**
  * Query keys as a plain object of key-builders (not raw string arrays
@@ -76,5 +90,139 @@ export function useSearchLinks(q: string) {
     queryKey: queryKeys.search(trimmed),
     queryFn: () => apiGet<SearchResponse>(`/api/links/search?q=${encodeURIComponent(trimmed)}`),
     enabled: trimmed.length > 0,
+  });
+}
+
+/**
+ * Builds the placeholder row inserted into the cache the instant `useCaptureLink`
+ * fires (before the server has responded) — v3's "saved the moment it lands"
+ * (`Silo-v3.html`'s `keep()`: the new row appears with `status: 'enriching'`
+ * immediately, filled in later). `id` is a client-generated UUID (`crypto.randomUUID`,
+ * available in every browser this SPA targets) — distinct from any server id,
+ * so the `onSettled` invalidate/refetch cleanly replaces it (React re-keys by
+ * `id`; the placeholder just disappears when the real list lands) rather than
+ * colliding with a real row.
+ */
+function buildOptimisticLink(input: CaptureRequest): LinkJson {
+  const now = new Date().toISOString();
+  return {
+    id: crypto.randomUUID(),
+    url: input.url,
+    title: null,
+    description: null,
+    imageUrl: null,
+    siteName: null,
+    extractedText: null,
+    sourceKind: 'link',
+    captureStatus: 'enriching',
+    addedBy: 'user',
+    notes: input.note ?? null,
+    tags: input.tags ?? [],
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+/** The shape `useInfiniteLinks`'s cache holds — pages of `LinksResponse`, keyed by `queryKeys.links(filter)`. */
+type LinksInfiniteData = InfiniteData<LinksResponse>;
+
+/**
+ * Prepends `link` to the FIRST page of every cached `links` infinite-query
+ * (every `tag` filter's cache, plus the untagged Library cache) whose scope
+ * `link` belongs to — i.e. the untagged cache always, and a tagged cache only
+ * when `link.tags` includes that tag. This is what makes the optimistic
+ * insert show up in both `LibraryView` and a `TagView` for one of the link's
+ * tags without duplicating the splice logic per cache entry.
+ */
+function insertOptimisticLink(
+  queryClient: ReturnType<typeof useQueryClient>,
+  link: LinkJson,
+): void {
+  const matches = queryClient.getQueriesData<LinksInfiniteData>({ queryKey: ['links'] });
+  for (const [queryKey, data] of matches) {
+    if (!data) continue;
+    const filter = (queryKey as [string, { tag?: string; status?: string } | undefined])[1];
+    const tag = filter?.tag;
+    if (tag && !link.tags.includes(tag)) continue;
+
+    const [firstPage, ...restPages] = data.pages;
+    const updatedFirstPage: LinksResponse = {
+      ...(firstPage ?? { links: [] }),
+      links: [link, ...(firstPage?.links ?? [])],
+    };
+    queryClient.setQueryData<LinksInfiniteData>(queryKey, {
+      ...data,
+      pages: [updatedFirstPage, ...restPages],
+    });
+  }
+}
+
+/**
+ * Removes the placeholder row with `linkId` from every cached `links`
+ * infinite-query, wherever it landed — the `onError` rollback for a failed
+ * capture. Filters BY ID rather than restoring a pre-mutation snapshot,
+ * specifically so two concurrent captures can't clobber each other: if
+ * capture A fails while capture B's placeholder is still in the cache (B
+ * inserted after A snapshotted), a snapshot-restore would revert the whole
+ * cache entry to its pre-A state and silently delete B's row too. Filtering
+ * out only `linkId` leaves every other row — including any other in-flight
+ * placeholder — untouched.
+ */
+function removeOptimisticLink(
+  queryClient: ReturnType<typeof useQueryClient>,
+  linkId: string,
+): void {
+  const matches = queryClient.getQueriesData<LinksInfiniteData>({ queryKey: ['links'] });
+  for (const [queryKey, data] of matches) {
+    if (!data) continue;
+    const pages = data.pages.map((page) => ({
+      ...page,
+      links: page.links.filter((l) => l.id !== linkId),
+    }));
+    queryClient.setQueryData<LinksInfiniteData>(queryKey, { ...data, pages });
+  }
+}
+
+/**
+ * The omnibar's capture mutation (`POST /api/links`, plan 011 V3-3) — the
+ * web mutation layer's first `useMutation`. Wraps `apiPost` with v3's
+ * "saved the moment it lands" UX via TanStack Query's optimistic-update
+ * lifecycle:
+ *
+ * - `onMutate`: cancels any in-flight `links` queries (so a background
+ *   refetch can't clobber the optimistic splice with stale data), then
+ *   prepends a placeholder row (`captureStatus: 'enriching'`, a fresh
+ *   client-generated id) to the untagged Library cache and to any
+ *   tag-scoped cache the capture's `tags` belong to.
+ * - `onError`: removes ONLY that placeholder (matched by its own id) from
+ *   every cache it was inserted into — NOT a blanket snapshot-restore. Two
+ *   concurrent captures each own their own placeholder id, so one failing
+ *   and rolling back can never delete the other's still-in-flight (or
+ *   already-succeeded) row.
+ * - `onSettled` (success OR failure): invalidates `links`/`counts`/`tags` so
+ *   the real server state (which may have DEDUP-MERGED into an existing row
+ *   instead of creating a new one) reconciles every placeholder away,
+ *   regardless of outcome.
+ */
+export function useCaptureLink() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: CaptureRequest) => apiPost<CaptureResponse>('/api/links', input),
+    onMutate: async (input: CaptureRequest) => {
+      await queryClient.cancelQueries({ queryKey: ['links'] });
+      const optimisticLink = buildOptimisticLink(input);
+      insertOptimisticLink(queryClient, optimisticLink);
+      return { optimisticLinkId: optimisticLink.id };
+    },
+    onError: (_error, _input, context) => {
+      if (context?.optimisticLinkId) removeOptimisticLink(queryClient, context.optimisticLinkId);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.links() });
+      queryClient.invalidateQueries({ queryKey: ['links'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+    },
   });
 }
