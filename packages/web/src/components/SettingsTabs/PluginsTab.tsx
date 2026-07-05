@@ -1,4 +1,4 @@
-import { rowDesc, rowLabel, settingsRowDivided, tabNote } from './rowStyles';
+import { badgeChip, rowDesc, rowLabel, settingsRowDivided, tabNote } from './rowStyles';
 
 const PLUGIN_ROWS = [
   { key: 'hn', name: 'Hacker News', desc: 'points and comments — inline and on hover' },
@@ -26,19 +26,7 @@ export function PluginsTab() {
             <div style={rowLabel}>{plugin.name}</div>
             <div style={rowDesc}>{plugin.desc}</div>
           </div>
-          <span
-            style={{
-              fontSize: '0.72rem',
-              fontWeight: 500,
-              color: 'var(--ghost)',
-              border: '1px solid var(--line)',
-              borderRadius: 999,
-              padding: '3px 10px',
-              background: 'var(--bg2)',
-            }}
-          >
-            soon
-          </span>
+          <span style={badgeChip}>soon</span>
         </div>
       ))}
       <p style={tabNote}>

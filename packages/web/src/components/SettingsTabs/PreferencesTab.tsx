@@ -1,6 +1,6 @@
 import { useCounts } from '../../api/hooks';
 import { ThemeToggle } from '../../theme/ThemeToggle';
-import { rowDesc, rowLabel, settingsRow, settingsRowDivided, stubButton } from './rowStyles';
+import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
 
 /**
  * Settings → Preferences (v3's `tabPrefs`): the Theme row (WIRED to the real
@@ -40,7 +40,7 @@ export function PreferencesTab() {
           type="button"
           disabled
           title={`fixed at ${purgeDays} days for now`}
-          style={stubButton}
+          className="silo-settings-btn"
         >
           {purgeDays} days ▾
         </button>

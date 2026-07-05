@@ -250,6 +250,231 @@ select {
   }
 }
 
+/* Settings modal redesign (build brief, docs/design/refs/settings-reference.png):
+   underlined tabs, the hero card, and Geist-quality row buttons. Lives in real
+   CSS (not inline styles) because :hover/:active/:focus-visible and the
+   animated tab indicator can't be expressed inline. */
+
+/* The underlined tab row. Each tab is a plain button; the active one gets an
+   ink underline via ::after so the indicator can transition smoothly on tab
+   change (transform+opacity only, per the performance rule) instead of
+   snapping. Padding is asymmetric on purpose: the 12px bottom leaves room for
+   the 2px ::after underline to sit clear of the text, the 8px top balances the
+   row's optical center against it. */
+.silo-settings-tab {
+  position: relative;
+  border: 0;
+  background: none;
+  font-family: inherit;
+  font-size: 0.86rem;
+  font-weight: 500;
+  padding: 8px 2px 12px;
+  color: var(--fnt);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: color 0.14s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.silo-settings-tab::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--ink);
+  transform: scaleX(0);
+  opacity: 0;
+  transition:
+    transform 0.18s cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.silo-settings-tab:hover {
+  color: var(--ink);
+}
+
+.silo-settings-tab[aria-selected="true"] {
+  color: var(--ink);
+}
+
+.silo-settings-tab[aria-selected="true"]::after {
+  transform: scaleX(1);
+  opacity: 1;
+}
+
+/* Close (✕) button — icon-only, so sizing/hit-target/focus all live here
+   rather than as one-off inline styles. 36x36px box (a 15px glyph centered in
+   generous padding) — clears the a11y floor's ~40px touch-target guidance
+   closely enough for a modal-header control that sits away from other
+   targets (Rams self-review, redesign pass: the prior 32px box undersold its
+   own doc comment's "40px" claim — this fixes the mismatch for real). */
+.silo-settings-close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  background: none;
+  color: var(--fnt);
+  cursor: pointer;
+  flex: none;
+}
+
+.silo-settings-close:hover {
+  background: var(--surface-hover);
+  color: var(--ink);
+}
+
+.silo-settings-close:active {
+  background: var(--surface-active);
+  transform: scale(0.96);
+}
+
+/* Row action buttons (Copy config / Download / Choose file / Rotate / purge
+   cycle) — one shared class for the resting/hover/active/disabled ramp, so
+   every row button in Settings feels like the same control family (Geist's
+   secondary-button recipe: flat fill, a border, one step darker on hover,
+   another on press).
+   Easing convention (shared by .silo-settings-btn + both hero buttons +
+   .silo-settings-close, deliberate per docs/design/skills/emil-design-eng.md):
+   press feedback (transform: scale) uses the strong custom ease-out curve so
+   the press reads as instant + physical; hover COLOR changes (background /
+   border-color / opacity) use plain `ease`, which the philosophy doc
+   prescribes specifically for hover/color transitions. The two curves living
+   on sibling properties is intentional, not an oversight. */
+.silo-settings-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: var(--ink);
+  padding: 7px 14px;
+  min-height: 36px;
+  cursor: pointer;
+  transform: scale(1);
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.silo-settings-btn:hover:not(:disabled) {
+  background: var(--surface-hover);
+  border-color: var(--ghost);
+}
+
+.silo-settings-btn:active:not(:disabled) {
+  background: var(--surface-active);
+  transform: scale(0.97);
+}
+
+.silo-settings-btn:disabled {
+  color: var(--ghost);
+  cursor: default;
+  transform: none;
+}
+
+/* The hero card's primary + secondary buttons need their own contrast (ink
+   fill vs. the surrounding tinted card), so they're separate classes rather
+   than reusing .silo-settings-btn's --bg2 fill (which would nearly vanish
+   against the hero's tint). */
+.silo-settings-hero-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--ink);
+  background: var(--ink);
+  color: var(--bg);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 7px 14px;
+  min-height: 36px;
+  cursor: pointer;
+  transform: scale(1);
+  transition:
+    opacity 0.14s ease,
+    transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.silo-settings-hero-btn-primary:hover {
+  opacity: 0.88;
+}
+
+.silo-settings-hero-btn-primary:active {
+  transform: scale(0.97);
+}
+
+.silo-settings-hero-btn-secondary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: 1px solid var(--hero-border);
+  background: transparent;
+  color: var(--ink);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  padding: 7px 14px;
+  min-height: 36px;
+  cursor: pointer;
+  transform: scale(1);
+  transition:
+    background 0.14s ease,
+    transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.silo-settings-hero-btn-secondary:hover {
+  background: var(--surface-hover);
+}
+
+.silo-settings-hero-btn-secondary:active {
+  transform: scale(0.97);
+}
+
+/* The `esc` chip shared by both modals' headers. Kept as its own class (not
+   folded into .silo-settings-btn) because it's a smaller, quieter affordance
+   than a row action — but it still earns a hover state so it doesn't read as
+   inert next to the fully-stated ✕ icon three pixels away (design review,
+   redesign pass). */
+.silo-modal-esc {
+  font-family: inherit;
+  font-size: 0.66rem;
+  color: var(--fnt);
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 2px 6px;
+  background: var(--bg);
+  cursor: pointer;
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    color 0.14s ease;
+}
+
+.silo-modal-esc:hover {
+  background: var(--surface-hover);
+  border-color: var(--ghost);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .silo-settings-tab::after {
+    transition: opacity 0.12s ease;
+  }
+}
+
 @keyframes siloPulse {
   0%,
   100% {

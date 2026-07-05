@@ -1,12 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import {
-  rowDesc,
-  rowLabel,
-  settingsRow,
-  settingsRowDivided,
-  stubButton,
-  tabNote,
-} from './rowStyles';
+import { rowDesc, rowLabel, settingsRow, settingsRowDivided, tabNote } from './rowStyles';
+import { SettingsHero } from './SettingsHero';
 
 /**
  * The static stdio MCP client-config snippet from `README.md`'s "Connect an
@@ -27,8 +21,10 @@ const MCP_CLIENT_CONFIG = `{
 }`;
 
 /**
- * Settings → Access (v3's `tabAccess`): MCP-access toggle, "Copy config",
- * access token + "Rotate" — all backed by settings/auth that don't exist yet
+ * Settings → Access (v3's `tabAccess`): a hero card explaining MCP access
+ * (silo's whole point — "let an agent add, search, and read your links"),
+ * with "Copy config" as the hero's primary action; below it, MCP-access
+ * toggle + access token rows backed by settings/auth that don't exist yet
  * (MCP access is today a stdio subprocess with no in-app toggle or token;
  * scope "Next" per `docs/product/scope.html`). The toggle and Rotate stay
  * disabled/non-functional. "Copy config" is the one live affordance here — it
@@ -63,10 +59,23 @@ export function AccessTab() {
 
   return (
     <>
+      <SettingsHero
+        title="MCP access"
+        description="Let an agent add, search, and read your links — over the Model Context Protocol. No AI lives inside silo; the mind sits on top, over MCP."
+        primaryAction={
+          <button
+            type="button"
+            className="silo-settings-hero-btn-primary"
+            onClick={handleCopyConfig}
+          >
+            {copied === true ? 'Copied' : copied === false ? "Couldn't copy" : 'Copy config'}
+          </button>
+        }
+      />
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>MCP access</div>
-          <div style={rowDesc}>let an agent add, search, and read your links</div>
+          <div style={rowDesc}>always on for now — no per-agent toggle yet</div>
         </div>
         <button
           type="button"
@@ -84,29 +93,6 @@ export function AccessTab() {
           }}
         />
       </div>
-      <div style={settingsRowDivided}>
-        <div style={{ flex: 1 }}>
-          <div style={rowLabel}>Client config</div>
-          <div style={rowDesc}>add silo to Claude's MCP server list</div>
-        </div>
-        <button
-          type="button"
-          onClick={handleCopyConfig}
-          style={{
-            border: '1px solid var(--line)',
-            background: 'var(--bg2)',
-            borderRadius: 8,
-            fontSize: '0.76rem',
-            fontWeight: 500,
-            color: 'var(--ink)',
-            padding: '6px 14px',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
-          {copied === true ? 'Copied' : copied === false ? "Couldn't copy" : 'Copy config'}
-        </button>
-      </div>
       <div style={settingsRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Access token</div>
@@ -114,7 +100,7 @@ export function AccessTab() {
             not yet available — MCP access is a local subprocess, not a token
           </div>
         </div>
-        <button type="button" disabled title="not yet available" style={stubButton}>
+        <button type="button" disabled title="not yet available" className="silo-settings-btn">
           Rotate
         </button>
       </div>

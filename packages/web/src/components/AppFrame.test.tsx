@@ -116,7 +116,7 @@ describe('AppFrame', () => {
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
       expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
       expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
       expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
     });
@@ -162,16 +162,16 @@ describe('AppFrame', () => {
       expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull();
     });
 
-    it('switches tabs via the segmented pill (opens on Plugins by default, matching v3)', () => {
+    it('switches tabs via the underlined tab strip (opens on Plugins by default, matching v3)', () => {
       renderAppFrame();
 
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
       expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
       expect(screen.getByText(/oat, in two lights/i)).toBeDefined();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
     });
 

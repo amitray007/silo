@@ -72,7 +72,7 @@ describe('App routing', () => {
     // route backdrop (the modal IS the settings surface).
     await waitFor(() => expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined());
     // The modal's own content is present (a tab), not a stale "coming soon".
-    expect(screen.getByRole('button', { name: /preferences/i })).toBeDefined();
+    expect(screen.getByRole('tab', { name: /preferences/i })).toBeDefined();
   });
 
   it('closes the Settings modal when navigating away from /settings (no floating modal over the new route)', async () => {

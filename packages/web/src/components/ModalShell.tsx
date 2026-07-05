@@ -128,15 +128,28 @@ export function ModalShell({
   );
 }
 
-/** The `Title … esc` header row shared by both modals (v3's `<span>Edit</span>`/`<span>Settings</span>` + the `esc` chip button) — `leading` is the optional extra content between the title and the flex-spacer (Edit's domain label). */
+/**
+ * The `Title … esc [✕]` header row shared by both modals (v3's
+ * `<span>Edit</span>`/`<span>Settings</span>` + the `esc` chip button) —
+ * `leading` is the optional extra content between the title and the
+ * flex-spacer (Edit's domain label). `showCloseIcon` additionally renders a
+ * ✕ icon button (the redesign brief's top-right close, matching
+ * `docs/design/refs/settings-reference.png`) — opt-in per caller so
+ * `EditModal` keeps its existing esc-chip-only header exactly as before,
+ * while `SettingsModal` gets both: the ✕ for the reference's visual parity,
+ * the `esc` chip kept alongside it since it's a discoverable affordance for
+ * "how do I close this" that predates the ✕ and costs nothing to keep.
+ */
 export function ModalHeader({
   title,
   onClose,
   leading,
+  showCloseIcon,
 }: {
   title: string;
   onClose: () => void;
   leading?: ReactNode;
+  showCloseIcon?: boolean;
 }) {
   return (
     <div
@@ -148,25 +161,24 @@ export function ModalHeader({
         marginBottom: leading ? 15 : 13,
       }}
     >
-      <span style={{ fontSize: '1rem', fontWeight: 500 }}>{title}</span>
+      <span style={{ fontSize: '1.05rem', fontWeight: 500 }}>{title}</span>
       {leading}
       <span style={{ flex: 1 }} />
-      <button
-        type="button"
-        onClick={onClose}
-        style={{
-          fontFamily: 'inherit',
-          fontSize: '0.66rem',
-          color: 'var(--fnt)',
-          border: '1px solid var(--line)',
-          borderRadius: 5,
-          padding: '2px 6px',
-          background: 'var(--bg)',
-          cursor: 'pointer',
-        }}
-      >
+      <button type="button" onClick={onClose} className="silo-modal-esc">
         esc
       </button>
+      {showCloseIcon && (
+        <button type="button" onClick={onClose} aria-label="Close" className="silo-settings-close">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path
+              d="M4 4l8 8M12 4l-8 8"
+              stroke="currentColor"
+              strokeWidth="1.4"
+              strokeLinecap="round"
+            />
+          </svg>
+        </button>
+      )}
     </div>
   );
 }

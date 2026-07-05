@@ -1,14 +1,7 @@
-import {
-  rowDesc,
-  rowLabel,
-  settingsRow,
-  settingsRowDivided,
-  stubButton,
-  tabNote,
-} from './rowStyles';
+import { rowDesc, rowLabel, settingsRow, settingsRowDivided, tabNote } from './rowStyles';
 
 /**
- * Settings → Import/Export (v3's `tabImport`): v3 has a full choose-file →
+ * Settings → Import + Export (v3's `tabImport`): v3 has a full choose-file →
  * preview → "Import N links" flow plus a JSON export download, both backed
  * by import/export API routes that don't exist yet (this slice's brief:
  * render the rows faithfully, disabled, with a calm "not yet" note — don't
@@ -24,7 +17,7 @@ export function ImportExportTab() {
           <div style={rowLabel}>Import</div>
           <div style={rowDesc}>a Pocket, Instapaper, or browser-bookmarks export file</div>
         </div>
-        <button type="button" disabled title="not yet available" style={stubButton}>
+        <button type="button" disabled title="not yet available" className="silo-settings-btn">
           Choose file…
         </button>
       </div>
@@ -33,7 +26,7 @@ export function ImportExportTab() {
           <div style={rowLabel}>Export</div>
           <div style={rowDesc}>everything as JSON — links, full text, notes, tags</div>
         </div>
-        <button type="button" disabled title="not yet available" style={stubButton}>
+        <button type="button" disabled title="not yet available" className="silo-settings-btn">
           Download
         </button>
       </div>

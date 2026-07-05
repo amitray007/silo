@@ -57,33 +57,41 @@ describe('SettingsModal', () => {
     vi.unstubAllGlobals();
   });
 
-  it('opens on the Plugins tab by default (matching v3) and shows the segmented tab strip', () => {
+  it('opens on the Plugins tab by default (matching v3) and shows the underlined tab strip', () => {
     renderModal();
     expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Plugins' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Preferences' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Import/Export' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Access' })).toBeDefined();
+    expect(screen.getByRole('tablist', { name: /settings sections/i })).toBeDefined();
+    const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
+    expect(pluginsTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tab', { name: 'Preferences' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Import/Export' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Access' })).toBeDefined();
     expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
   });
 
-  it('switches tabs on click, rendering each panel exclusively', () => {
+  it('switches tabs on click, rendering each panel exclusively and updating aria-selected', () => {
     renderModal();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
+    expect(screen.getByRole('tab', { name: 'Preferences' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('tab', { name: 'Plugins' }).getAttribute('aria-selected')).toBe(
+      'false',
+    );
     // "Theme" appears twice while Preferences is active (the row label AND
     // ThemeToggle's visually-hidden <legend>) — assert at least one, and use
     // the row label specifically to prove Preferences rendered.
     expect(screen.getAllByText('Theme').length).toBeGreaterThan(0);
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Import/Export' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Import/Export' }));
     expect(screen.getByText('Import')).toBeDefined();
     expect(screen.getByText('Export')).toBeDefined();
     expect(screen.queryByText('Theme')).toBeNull();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Access' }));
-    expect(screen.getByText('MCP access')).toBeDefined();
+    fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+    expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
     expect(screen.queryByText('Import')).toBeNull();
   });
 
@@ -93,6 +101,16 @@ describe('SettingsModal', () => {
     expect(document.activeElement).toBe(screen.getByRole('dialog'));
 
     fireEvent.click(screen.getByRole('button', { name: 'esc' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
+  it('the ✕ close button closes the modal and restores focus to the trigger', () => {
+    renderModal();
+    const trigger = screen.getByText('trigger');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(trigger);
@@ -123,21 +141,21 @@ describe('SettingsModal', () => {
   it('remembers the last-viewed tab across close/reopen (does NOT reset to Plugins — deliberate, per SettingsContext doc comment)', () => {
     renderModal();
     // Switch away from the default Plugins tab, then close.
-    fireEvent.click(screen.getByRole('button', { name: 'Access' }));
-    expect(screen.getByText('MCP access')).toBeDefined();
+    fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+    expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'esc' }));
     expect(screen.queryByRole('dialog')).toBeNull();
 
     // Reopen via the trigger — it should land back on Access, not Plugins.
     fireEvent.click(screen.getByText('trigger'));
-    expect(screen.getByText('MCP access')).toBeDefined();
+    expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
   });
 
   describe('Preferences tab', () => {
     it('the real theme toggle changes the theme (data-theme flips)', () => {
       renderModal();
-      fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'dark' }));
@@ -149,7 +167,7 @@ describe('SettingsModal', () => {
 
     it('shows the real purge window from /api/counts, disabled (non-functional)', async () => {
       renderModal();
-      fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
       const purgeButton = await screen.findByRole('button', { name: /30 days/i });
       expect(purgeButton).toHaveProperty('disabled', true);
@@ -171,7 +189,7 @@ describe('SettingsModal', () => {
   describe('Import/Export tab (stubbed)', () => {
     it('renders Import/Export rows with disabled buttons', () => {
       renderModal();
-      fireEvent.click(screen.getByRole('button', { name: 'Import/Export' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Import/Export' }));
 
       const chooseFile = screen.getByRole('button', { name: /choose file/i });
       const download = screen.getByRole('button', { name: /download/i });
@@ -181,9 +199,16 @@ describe('SettingsModal', () => {
   });
 
   describe('Access tab', () => {
+    it('renders the hero card with the honest MCP-access copy', () => {
+      renderModal();
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+
+      expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
+    });
+
     it('renders the MCP toggle and Rotate as disabled/non-functional', () => {
       renderModal();
-      fireEvent.click(screen.getByRole('button', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
 
       const mcpToggle = screen.getByTitle(/always on/i);
       expect(mcpToggle).toHaveProperty('disabled', true);
@@ -191,12 +216,12 @@ describe('SettingsModal', () => {
       expect(rotate).toHaveProperty('disabled', true);
     });
 
-    it('"Copy config" writes the static MCP client config to the clipboard', async () => {
+    it('"Copy config" (the hero\'s primary action) writes the static MCP client config to the clipboard', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.assign(navigator, { clipboard: { writeText } });
 
       renderModal();
-      fireEvent.click(screen.getByRole('button', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       fireEvent.click(screen.getByRole('button', { name: /copy config/i }));
 
       expect(writeText).toHaveBeenCalledTimes(1);
@@ -214,7 +239,7 @@ describe('SettingsModal', () => {
       Object.assign(navigator, { clipboard: { writeText } });
 
       renderModal();
-      fireEvent.click(screen.getByRole('button', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       fireEvent.click(screen.getByRole('button', { name: /copy config/i }));
 
       expect(await screen.findByText("Couldn't copy")).toBeDefined();

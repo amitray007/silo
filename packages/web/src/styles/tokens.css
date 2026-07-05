@@ -26,6 +26,24 @@
   --markt: #a87514;
   --warn: #a8482d;
 
+  /* Settings redesign (build brief, docs/design/refs/settings-reference.png):
+     a subtle hero-card tint + a resting/hover/active surface ramp for
+     Geist-quality buttons, plus a soft "badge" tone for calm chips (Plugins'
+     "soon"). Additive to the Oat ramp above — never replaces --bg/--bg2/--line
+     — so light mode keeps the same warm Oat identity, just with two more
+     semantic roles for this one surface. */
+  --hero-grad-from: #f4ecd9;
+  --hero-grad-to: #fbf7ef;
+  --hero-border: #e6dac0;
+  --surface-hover: #efe6d4;
+  --surface-active: #e9dec7;
+  --badge-bg: #f1e9da;
+  --badge-border: #e6dac0;
+  /* NOT --ghost (#857963) — that pairing only clears 3.54:1 against
+     --badge-bg, short of AA's 4.5:1 for normal text (Rams self-review,
+     redesign pass). --mut's hex clears 4.89:1 on the same background. */
+  --badge-ink: #6e6350;
+
   color-scheme: light;
 }
 
@@ -49,6 +67,19 @@
   --mark: #dda54a;
   --markt: #e0ab4f;
   --warn: #d67e5c;
+
+  /* Same additive roles as light mode above — deepened for the dark ground so
+     the hero card reads as a gentle lift off --bg (never a bright card), and
+     buttons get a visible-but-quiet hover/active step (learned from Geist's
+     gray-200/gray-300 hover/active convention: one step lighter each stage). */
+  --hero-grad-from: #201910;
+  --hero-grad-to: #14100c;
+  --hero-border: #322920;
+  --surface-hover: #221b12;
+  --surface-active: #2a2116;
+  --badge-bg: #201a13;
+  --badge-border: #322920;
+  --badge-ink: #ad9e89;
 
   color-scheme: dark;
 }
