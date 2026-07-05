@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import { SettingsProvider } from './SettingsContext';
 import { Sidebar } from './Sidebar';
 
 function tagCounts(names: string[]): { name: string; count: number }[] {
@@ -22,7 +23,9 @@ function renderSidebar(initialEntries: string[] = ['/']) {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={initialEntries}>
-          <Sidebar />
+          <SettingsProvider>
+            <Sidebar />
+          </SettingsProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </ThemeProvider>,

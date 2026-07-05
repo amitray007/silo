@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
 import { useRowMenu } from './RowMenuContext';
@@ -24,7 +25,7 @@ function jsonResponse(body: unknown, status = 200): Response {
  * coordination logic).
  */
 function EscapeProbe() {
-  const { openMenuId, toggleMenu } = useRowMenu();
+  const { openMenuId, toggleMenu, openEdit } = useRowMenu();
   const librarySelection = useLibrarySelection();
   const trashSelection = useTrashSelection();
 
@@ -35,6 +36,12 @@ function EscapeProbe() {
       <span>trash selected: {trashSelection.selected.length}</span>
       <button type="button" onClick={() => toggleMenu('row-1')}>
         open menu
+      </button>
+      <button
+        type="button"
+        onClick={() => openEdit(makeLink({ id: 'edit-1', url: 'https://example.com/x' }))}
+      >
+        open edit
       </button>
       <button type="button" onClick={() => librarySelection.toggle('a')}>
         select library row
@@ -57,6 +64,7 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
               <Route path="/" element={<div>outlet content</div>} />
               <Route path="/trash" element={<div>trash content</div>} />
               <Route path="/probe" element={<EscapeProbe />} />
+              <Route path="/settings" element={<div>settings route content</div>} />
             </Route>
           </Routes>
         </MemoryRouter>
@@ -77,14 +85,85 @@ describe('AppFrame', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders the sidebar, the theme toggle, and the routed outlet content', () => {
+  it('renders the sidebar and the routed outlet content (the theme toggle now lives in Settings, not the sidebar)', () => {
     renderAppFrame();
 
     expect(screen.getAllByText('silo').length).toBeGreaterThan(0);
     expect(screen.getByRole('link', { name: /library/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
-    expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
+    expect(screen.queryByRole('button', { name: /^light$/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /^dark$/i })).toBeNull();
     expect(screen.getByText('outlet content')).toBeDefined();
+  });
+
+  describe('Settings modal', () => {
+    it('clicking the sidebar Settings nav item opens the modal, with the real theme toggle inside Preferences', () => {
+      renderAppFrame();
+
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+      expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
+      expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
+    });
+
+    it('Escape closes the Settings modal and restores focus to the trigger', () => {
+      renderAppFrame();
+
+      const settingsLink = screen.getByRole('link', { name: /settings/i });
+      // jsdom's fireEvent.click doesn't implicitly focus the target the way a
+      // real browser click does — focus it explicitly so the modal's
+      // focus-restore-on-close has a real "trigger" element to return to.
+      settingsLink.focus();
+      fireEvent.click(settingsLink);
+      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+
+      fireEvent.keyDown(document, { key: 'Escape' });
+
+      expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull();
+      expect(document.activeElement).toBe(settingsLink);
+    });
+
+    it('clicking the scrim closes the Settings modal', () => {
+      renderAppFrame();
+
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+      const dialog = screen.getByRole('dialog', { name: /settings/i });
+
+      // The scrim is `dialog.parentElement` (the fixed-inset backdrop `SettingsModal` renders around the panel).
+      fireEvent.click(dialog.parentElement as Element);
+
+      expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull();
+    });
+
+    it('switches tabs via the segmented pill (opens on Plugins by default, matching v3)', () => {
+      renderAppFrame();
+
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+      expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
+      expect(screen.getByText(/oat, in two lights/i)).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Access' }));
+      expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
+    });
+
+    it('opening Settings closes an already-open Edit modal (mutual exclusion — no two stacked scrim modals)', () => {
+      renderAppFrame(['/probe']);
+
+      // Open the Edit modal (via the probe's real useRowMenu().openEdit).
+      fireEvent.click(screen.getByText('open edit'));
+      expect(screen.getByRole('dialog', { name: /edit item/i })).toBeDefined();
+
+      // Now open Settings from the sidebar — the Edit modal must close, so the
+      // two focus-trapped scrim modals never coexist (each registers its own
+      // capture-phase Escape listener; both open at once = double-close bugs).
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+
+      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+      expect(screen.queryByRole('dialog', { name: /edit item/i })).toBeNull();
+    });
   });
 
   it('the ☰ button starts closed with correct a11y wiring', () => {

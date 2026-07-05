@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from './App';
@@ -68,7 +68,22 @@ describe('App routing', () => {
 
   it('renders the Settings view at /settings', async () => {
     renderApp(['/settings']);
-    await waitFor(() => expect(screen.getByText(/Settings — coming soon/i)).toBeDefined());
+    // v3's Settings is a MODAL — landing on /settings opens it over an empty
+    // route backdrop (the modal IS the settings surface).
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined());
+    // The modal's own content is present (a tab), not a stale "coming soon".
+    expect(screen.getByRole('button', { name: /preferences/i })).toBeDefined();
+  });
+
+  it('closes the Settings modal when navigating away from /settings (no floating modal over the new route)', async () => {
+    renderApp(['/settings']);
+    await waitFor(() => expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined());
+
+    // Click the Library nav item — leaving /settings unmounts SettingsView,
+    // whose cleanup closes the modal.
+    fireEvent.click(screen.getByRole('link', { name: /library/i }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull());
   });
 
   it('renders a calm not-found view for an unknown path', async () => {

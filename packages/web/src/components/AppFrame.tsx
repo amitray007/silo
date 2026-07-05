@@ -4,6 +4,8 @@ import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
+import { SettingsProvider, useSettings } from './SettingsContext';
+import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
 
 const DRAWER_ID = 'silo-drawer';
@@ -37,9 +39,32 @@ const DRAWER_ID = 'silo-drawer';
  * their own `clear` button or Escape only).
  */
 function RowMenuLayer() {
-  const { openMenuId, closeMenu, editingLink } = useRowMenu();
+  const { openMenuId, closeMenu, editingLink, closeEdit } = useRowMenu();
   const librarySelection = useLibrarySelection();
   const trashSelection = useTrashSelection();
+  const { open: settingsOpen } = useSettings();
+
+  // Mutual exclusion with the Settings modal (review fix, ce-julik-frontend-
+  // races): EditModal and SettingsModal are both centered, scrim'd, focus-
+  // trapped dialogs, and each mounts its OWN `ModalShell` with its OWN
+  // capture-phase document Escape listener. If both were open at once, a
+  // single Escape would fire BOTH listeners (capture-phase siblings on the
+  // same node aren't stopped by `stopPropagation`), and two nested scrims/
+  // focus-traps would fight. Every other overlapping-overlay pair in this app
+  // is made mutually exclusive at the state layer (`openEdit` already clears
+  // the row menu) — Settings was the odd one out. The only REACHABLE overlap
+  // is "Edit open → user opens Settings from the sidebar": while Settings is
+  // up (a full-screen scrim'd modal) the user can't reach a row's ⋯→Edit
+  // trigger behind it, so the reverse transition can't happen. Settings is the
+  // fresher action there, so it wins — closing the edit modal underneath. This
+  // lives here (not in `SettingsLayer`) because `SettingsLayer` renders OUTSIDE
+  // `RowMenuProvider` — only this layer can see both `editingLink` and
+  // `settingsOpen`.
+  useEffect(() => {
+    if (settingsOpen && editingLink) {
+      closeEdit();
+    }
+  }, [settingsOpen, editingLink, closeEdit]);
 
   useEffect(() => {
     if (openMenuId === null) return;
@@ -68,6 +93,25 @@ function RowMenuLayer() {
   }, [openMenuId, closeMenu, librarySelection, trashSelection]);
 
   return editingLink ? <EditModal link={editingLink} /> : null;
+}
+
+/**
+ * Renders the shared `SettingsModal` whenever `useSettings().open` is true
+ * (mirrors `RowMenuLayer`'s "layer component reads context, renders the
+ * overlay" shape). Lives as its own tiny component — rather than an inline
+ * `{settingsOpen && <SettingsModal/>}` in `AppFrame` — purely so `AppFrame`
+ * itself doesn't need to call `useSettings()` (it renders `SettingsProvider`
+ * around this layer instead, keeping the provider/consumer split explicit).
+ *
+ * The modal is closed on navigation AWAY from `/settings` by `SettingsView`'s
+ * unmount cleanup (not by a route-watching effect here) — see that route's
+ * doc comment for why (a route-diff effect here would race the open
+ * transition, since opening from the sidebar flips `open` and navigates in
+ * the same batch).
+ */
+function SettingsLayer() {
+  const { open } = useSettings();
+  return open ? <SettingsModal /> : null;
 }
 
 /**
@@ -102,8 +146,30 @@ export function AppFrame() {
   const previousPathRef = useRef(location.pathname);
 
   const closeDrawer = () => {
-    setDrawerOpen(false);
-    menuButtonRef.current?.focus();
+    // Only steal focus back to the (offscreen-on-desktop) ☰ button when the
+    // drawer was actually open — `Sidebar`'s `onNavigate` calls this after
+    // EVERY nav-item click (including Settings, which also opens a modal),
+    // not just ones that happened while the drawer was open. Unconditionally
+    // focusing here would fight a focus a modal just moved into its own
+    // panel (review fix: surfaced by the Settings modal's focus-restore
+    // test, which found every desktop nav click was silently re-focusing the
+    // hidden ☰ button). The functional updater reads the live pending value,
+    // so overlapping calls in one batch each see the correct `open`.
+    //
+    // Accepted residual (ce-correctness, mobile-only, low severity): if the
+    // drawer IS open (mobile) when Settings is tapped, this synchronously
+    // refocuses the ☰ button before `SettingsModal`'s `ModalShell` mounts, so
+    // the modal captures the ☰ button (not the Settings link) as its
+    // focus-restore target. On mobile the ☰ button is the on-screen drawer
+    // trigger sitting right there in the topbar, so returning focus to it on
+    // close is a reasonable landing spot — not worth threading an explicit
+    // trigger element through the shared ModalShell API to "fix".
+    setDrawerOpen((open) => {
+      if (open) {
+        menuButtonRef.current?.focus();
+      }
+      return false;
+    });
   };
 
   const openDrawer = () => {
@@ -139,74 +205,82 @@ export function AppFrame() {
   }, [drawerOpen]);
 
   return (
-    <div className="silo-frame">
-      <div className="silo-band">
-        <div className="silo-topbar">
-          <button
-            ref={menuButtonRef}
-            type="button"
-            aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-            aria-expanded={drawerOpen}
-            aria-controls={DRAWER_ID}
-            onClick={() => (drawerOpen ? closeDrawer() : openDrawer())}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              width: 40,
-              height: 40,
-              flex: 'none',
-              background: 'transparent',
-              border: 'none',
-              borderRadius: 8,
-              color: 'var(--ink)',
-              fontSize: '1.1rem',
-              cursor: 'pointer',
-            }}
-          >
-            <span aria-hidden="true">☰</span>
-          </button>
-          <GrainDot />
-          <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
-            silo
-          </span>
+    // `SettingsProvider` wraps the whole frame (not just `main`, unlike
+    // `RowMenuProvider`/`SelectionProvider`) because the Settings modal is
+    // opened from the SIDEBAR's Settings button, which sits outside `main` as
+    // a sibling — the sidebar needs `useSettings()` too, so the provider has
+    // to sit above both.
+    <SettingsProvider>
+      <div className="silo-frame">
+        <div className="silo-band">
+          <div className="silo-topbar">
+            <button
+              ref={menuButtonRef}
+              type="button"
+              aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+              aria-expanded={drawerOpen}
+              aria-controls={DRAWER_ID}
+              onClick={() => (drawerOpen ? closeDrawer() : openDrawer())}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                width: 40,
+                height: 40,
+                flex: 'none',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 8,
+                color: 'var(--ink)',
+                fontSize: '1.1rem',
+                cursor: 'pointer',
+              }}
+            >
+              <span aria-hidden="true">☰</span>
+            </button>
+            <GrainDot />
+            <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
+              silo
+            </span>
+          </div>
+
+          {/* The scrim is a pointer-only dismiss affordance (aria-hidden — the
+              drawer itself is dismissed via Escape or the ☰ button, both
+              already keyboard-operable). */}
+          <div
+            className="silo-scrim"
+            data-open={drawerOpen}
+            aria-hidden="true"
+            onClick={closeDrawer}
+          />
+
+          <Sidebar id={DRAWER_ID} ref={sidebarRef} open={drawerOpen} onNavigate={closeDrawer} />
+
+          {/* Content region: a flex column of two stacked children, both
+              supplied by the routed view via <Outlet/> — the header bar
+              (`ContentHeader`, full width, unscrolled) then `.silo-content-body`
+              (the scrolling region, reading-column-capped inside). Keeping the
+              header out of AppFrame lets each route own its own title/count/
+              right slot without AppFrame needing route-specific knowledge.
+              `RowMenuProvider` wraps the outlet (plan 011, V3-4) so the row `⋯`
+              menu + edit-modal state is shared by every routed view — see
+              `RowMenuContext.tsx`'s doc comment for why this lives here and not
+              per-route. `SelectionProvider` (V3-5) does the same for the two
+              multi-select scopes (library/trash) — see `SelectionContext.tsx`'s
+              doc comment. `RowMenuLayer` renders the single shared `EditModal`
+              instance and owns the document-level close/Escape-priority
+              listeners for both. */}
+          <main className="silo-content">
+            <RowMenuProvider>
+              <SelectionProvider>
+                <Outlet />
+                <RowMenuLayer />
+              </SelectionProvider>
+            </RowMenuProvider>
+          </main>
         </div>
-
-        {/* The scrim is a pointer-only dismiss affordance (aria-hidden — the
-            drawer itself is dismissed via Escape or the ☰ button, both
-            already keyboard-operable). */}
-        <div
-          className="silo-scrim"
-          data-open={drawerOpen}
-          aria-hidden="true"
-          onClick={closeDrawer}
-        />
-
-        <Sidebar id={DRAWER_ID} ref={sidebarRef} open={drawerOpen} onNavigate={closeDrawer} />
-
-        {/* Content region: a flex column of two stacked children, both
-            supplied by the routed view via <Outlet/> — the header bar
-            (`ContentHeader`, full width, unscrolled) then `.silo-content-body`
-            (the scrolling region, reading-column-capped inside). Keeping the
-            header out of AppFrame lets each route own its own title/count/
-            right slot without AppFrame needing route-specific knowledge.
-            `RowMenuProvider` wraps the outlet (plan 011, V3-4) so the row `⋯`
-            menu + edit-modal state is shared by every routed view — see
-            `RowMenuContext.tsx`'s doc comment for why this lives here and not
-            per-route. `SelectionProvider` (V3-5) does the same for the two
-            multi-select scopes (library/trash) — see `SelectionContext.tsx`'s
-            doc comment. `RowMenuLayer` renders the single shared `EditModal`
-            instance and owns the document-level close/Escape-priority
-            listeners for both. */}
-        <main className="silo-content">
-          <RowMenuProvider>
-            <SelectionProvider>
-              <Outlet />
-              <RowMenuLayer />
-            </SelectionProvider>
-          </RowMenuProvider>
-        </main>
+        <SettingsLayer />
       </div>
-    </div>
+    </SettingsProvider>
   );
 }

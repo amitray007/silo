@@ -2,10 +2,10 @@ import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
 import type { TagCount } from '../api/types';
-import { ThemeToggle } from '../theme/ThemeToggle';
 import { GrainDot } from './GrainDot';
 import { LibraryIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
+import { useSettings } from './SettingsContext';
 import { SidebarTags } from './SidebarTags';
 
 const noop = () => {};
@@ -21,6 +21,12 @@ const noop = () => {};
  *
  * `onNavigate` fires after a successful client-side navigation — `AppFrame`
  * uses it to close the mobile drawer when a nav item is tapped.
+ *
+ * `onBeforeNavigate` (optional) runs before the `navigate(to)` call — the
+ * Settings item uses it to also open the Settings modal in the same click,
+ * so the item stays a real, linkable `/settings` anchor (bookmarkable,
+ * correct `aria-current`) while ALSO triggering v3's modal-open behavior
+ * (`openSettings`) rather than only rendering a route.
  */
 function NavItemLink({
   to,
@@ -30,6 +36,7 @@ function NavItemLink({
   icon,
   variant,
   onNavigate,
+  onBeforeNavigate,
 }: {
   to: string;
   label: string;
@@ -38,6 +45,7 @@ function NavItemLink({
   icon?: ReactNode;
   variant?: NavItemVariant | undefined;
   onNavigate: () => void;
+  onBeforeNavigate?: () => void;
 }) {
   const navigate = useNavigate();
   const match = useMatch({ path: to, end });
@@ -48,6 +56,7 @@ function NavItemLink({
       return;
     }
     event.preventDefault();
+    onBeforeNavigate?.();
     navigate(to);
     onNavigate();
   };
@@ -79,7 +88,13 @@ interface SidebarProps {
  * brand row, Library (live count), Trash (`count · purgeWindowDays`), a Tags
  * section built from `useTags()` (count-desc order preserved as returned by
  * the API), and Settings pinned to the bottom via flex (the Tags section
- * grows to fill available space).
+ * grows to fill available space). The Settings button both navigates to
+ * `/settings` (keeping it a real, linkable nav item) AND opens the shared
+ * Settings modal (plan 011, V3-7) via `useSettings().openSettings()` — v3's
+ * `openSettings` is a modal trigger, not a route change, so this reproduces
+ * that behavior while keeping the route linkable. The light/dark theme
+ * toggle that used to live here has MOVED into Settings → Preferences (v3
+ * only shows it there, not in the sidebar).
  *
  * Doubles as the mobile off-canvas drawer: on desktop this is a static rail
  * (`.silo-sidebar`, no `@media` override applies); on mobile the same markup
@@ -99,6 +114,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
 ) {
   const { data: counts } = useCounts();
   const { data: tagsData, isError: tagsErrored } = useTags();
+  const { openSettings } = useSettings();
 
   const tags = tagsErrored ? [] : (tagsData?.tags ?? []);
 
@@ -151,15 +167,13 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
 
       <span style={{ flex: 1 }} />
 
-      <div style={{ padding: '4px 10px 8px' }}>
-        <ThemeToggle />
-      </div>
       <NavItemLink
         to="/settings"
         label="Settings"
         icon={<SettingsIcon />}
         variant="settings"
         onNavigate={onNavigate}
+        onBeforeNavigate={() => openSettings()}
       />
     </nav>
   );

@@ -1,0 +1,172 @@
+import { type ReactNode, useEffect, useRef } from 'react';
+
+/**
+ * The scrim + panel shell shared by every v3 centered modal (`editOpen`,
+ * `settingsOpen` — `Silo-v3.html`): fixed-inset `rgba(24,17,7,.32)` scrim
+ * with `siloFade`, a `siloIn` panel with the focus-trap host (`tabIndex={-1}`
+ * + a roving Tab handler), scrim-click-to-close, and a document-level
+ * capture-phase Escape handler. Pulled out of `EditModal`/`SettingsModal`
+ * (which each had their own copy) once `SettingsModal` landed and `jscpd`
+ * flagged the two as ~90 duplicated lines — this is the single place that
+ * owns:
+ *
+ * - focus-in-on-open + focus-restore-on-close (captures
+ *   `document.activeElement` at mount, refocuses it on unmount if it's still
+ *   in the DOM)
+ * - the Tab-trap keydown handler (first/last focusable cycling)
+ * - the capture-phase Escape listener (`true` — takes priority over
+ *   `AppFrame`'s `RowMenuLayer` bubble-phase listener and any other, since a
+ *   modal is always the topmost overlay while open)
+ * - the scrim's click-to-close + the panel's click-stopPropagation guard
+ *
+ * Callers own everything INSIDE the panel (header, tabs, fields, footer) —
+ * this only owns the shell chrome + the a11y wiring, so each modal's actual
+ * content stays exactly as different as it needs to be (`EditModal`'s form
+ * vs. `SettingsModal`'s tabs).
+ */
+export function ModalShell({
+  width,
+  ariaLabel,
+  onClose,
+  children,
+  maxHeight,
+}: {
+  /** The panel's fixed pixel width (v3: 520 for Edit, 560 for Settings). */
+  width: number;
+  /** `aria-label` on the `role="dialog"` panel. */
+  ariaLabel: string;
+  onClose: () => void;
+  children: ReactNode;
+  /** Optional `maxHeight` (v3's Settings panel scrolls internally at `80vh`; Edit has no such cap). */
+  maxHeight?: string;
+}) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<Element | null>(null);
+
+  useEffect(() => {
+    triggerRef.current = document.activeElement;
+    panelRef.current?.focus();
+    return () => {
+      const trigger = triggerRef.current;
+      if (trigger instanceof HTMLElement && document.contains(trigger)) {
+        trigger.focus();
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown, true);
+    return () => document.removeEventListener('keydown', onKeyDown, true);
+  }, [onClose]);
+
+  const trapTab = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== 'Tab') return;
+    const panel = e.currentTarget;
+    const focusables = Array.from(
+      panel.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input, textarea, select',
+      ),
+    ).filter((el) => el.offsetParent !== null);
+    if (focusables.length === 0) return;
+    const first = focusables[0] as HTMLElement;
+    const last = focusables[focusables.length - 1] as HTMLElement;
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  return (
+    // biome-ignore lint/a11y/useKeyWithClickEvents: scrim dismiss is pointer-only convenience — Escape (handled by the document listener above) is the keyboard-equivalent close path, matching v3.
+    // biome-ignore lint/a11y/noStaticElementInteractions: same — a non-interactive click guard, not a control.
+    <div
+      onClick={onClose}
+      style={{
+        position: 'fixed',
+        inset: 0,
+        background: 'rgba(24,17,7,.32)',
+        display: 'grid',
+        placeItems: 'center',
+        zIndex: 40,
+        animation: 'siloFade .16s ease',
+      }}
+    >
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={ariaLabel}
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={trapTab}
+        tabIndex={-1}
+        style={{
+          width,
+          maxWidth: 'calc(100vw - 48px)',
+          ...(maxHeight ? { maxHeight, overflowY: 'auto' } : {}),
+          border: '1px solid var(--line)',
+          borderRadius: 14,
+          background: 'var(--bg)',
+          padding: '21px 24px',
+          boxShadow: '0 24px 60px -28px rgba(40,28,8,.35)',
+          boxSizing: 'border-box',
+          outline: 'none',
+          animation: 'siloIn .16s ease',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** The `Title … esc` header row shared by both modals (v3's `<span>Edit</span>`/`<span>Settings</span>` + the `esc` chip button) — `leading` is the optional extra content between the title and the flex-spacer (Edit's domain label). */
+export function ModalHeader({
+  title,
+  onClose,
+  leading,
+}: {
+  title: string;
+  onClose: () => void;
+  leading?: ReactNode;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 11,
+        justifyContent: leading ? undefined : 'space-between',
+        marginBottom: leading ? 15 : 13,
+      }}
+    >
+      <span style={{ fontSize: '1rem', fontWeight: 500 }}>{title}</span>
+      {leading}
+      <span style={{ flex: 1 }} />
+      <button
+        type="button"
+        onClick={onClose}
+        style={{
+          fontFamily: 'inherit',
+          fontSize: '0.66rem',
+          color: 'var(--fnt)',
+          border: '1px solid var(--line)',
+          borderRadius: 5,
+          padding: '2px 6px',
+          background: 'var(--bg)',
+          cursor: 'pointer',
+        }}
+      >
+        esc
+      </button>
+    </div>
+  );
+}
