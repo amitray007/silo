@@ -1,5 +1,5 @@
 import { db, links, linkTags, tags } from '@silo/db';
-import { asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { normalizeTagKey } from './links.js';
 
 /**
@@ -39,17 +39,27 @@ export type TagCount = {
  * naturally counts them as a single tag's live-link count, not two.
  */
 export async function listTagsWithCounts(): Promise<TagCount[]> {
+  // LEFT joins (not inner) so a freshly-created tag with ZERO live links still
+  // appears in the sidebar with count 0 — the "+ new tag" flow creates an empty
+  // tag, and it must be visible so a link can then be assigned to it (matching
+  // the v3 sidebar). The `deletedAt is null` filter lives in the join's ON
+  // clause (not a WHERE) so a tag whose only links are trashed still surfaces
+  // at count 0 rather than being filtered out entirely.
+  // Count DISTINCT LIVE links (`links.id`, the left-joined side that is NULL
+  // for a trashed/absent link) — NOT `linkTags.linkId`, which survives the left
+  // join for a trashed link and would inflate the count. `count(<col>)` ignores
+  // NULLs, so an empty/all-trashed tag correctly yields 0 while still appearing.
+  const liveCount = sql<string>`count(distinct ${links.id})`;
   const rows = await db
     .select({
       name: tags.name,
-      count: sql<string>`count(distinct ${linkTags.linkId})`,
+      count: liveCount,
     })
     .from(tags)
-    .innerJoin(linkTags, eq(linkTags.tagId, tags.id))
-    .innerJoin(links, eq(links.id, linkTags.linkId))
-    .where(sql`${links.deletedAt} is null`)
+    .leftJoin(linkTags, eq(linkTags.tagId, tags.id))
+    .leftJoin(links, and(eq(links.id, linkTags.linkId), sql`${links.deletedAt} is null`))
     .groupBy(tags.id, tags.name)
-    .orderBy(desc(sql`count(distinct ${linkTags.linkId})`), asc(tags.name));
+    .orderBy(desc(liveCount), asc(tags.name));
 
   return rows.map((row) => ({ name: row.name, count: Number(row.count) }));
 }

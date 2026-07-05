@@ -78,26 +78,34 @@ describeIfPg('listTagsWithCounts (integration, C3)', () => {
     expect(first.id).not.toBe(second.id);
   });
 
-  it('a tag whose only link is TRASHED does not appear in the list at all', async () => {
+  it('a name that was never created as a tag does not appear', async () => {
+    // A name with no `tags` row at all can't surface regardless of the join —
+    // there is nothing to left-join FROM.
+    const list = await ops.listTagsWithCounts();
+    expect(findTag(list, 'never-created-tag-xyz')).toBeUndefined();
+  });
+
+  it('a freshly-created tag with zero live links appears at count 0', async () => {
+    // The "+ new tag" flow creates an empty tag; it MUST be visible in the
+    // sidebar (count 0) so a link can then be assigned to it. LEFT joins make
+    // this work where the old inner join silently hid it.
+    const name = await ops.createTag('empty-fresh-tag');
+    expect(name).toBe('empty-fresh-tag');
+    const list = await ops.listTagsWithCounts();
+    expect(findTag(list, 'empty-fresh-tag')?.count).toBe(0);
+  });
+
+  it('a tag whose only link is trashed appears at count 0 (not hidden)', async () => {
     const link = await ops.createLink({
-      url: 'https://example.com/tagcount-alltrashed',
-      tags: ['ghost-tag'],
+      url: 'https://example.com/only-trashed-tag',
+      tags: ['ghosttag'],
       sourceKind: 'link',
     });
     await ops.softDelete(link.id);
-
     const list = await ops.listTagsWithCounts();
-
-    expect(findTag(list, 'ghost-tag')).toBeUndefined();
-  });
-
-  it('a tag with no links at all (never attached / detached) does not appear', async () => {
-    // No createLink call ever attaches this tag name — listTagsWithCounts
-    // only ever sees rows produced by the inner join, so an untagged/absent
-    // name simply never shows up. This documents that absence-of-evidence
-    // (rather than an explicit assertion on a specific row) is expected.
-    const list = await ops.listTagsWithCounts();
-    expect(findTag(list, 'never-created-tag-xyz')).toBeUndefined();
+    // The tag row still exists; its live count is 0 (the deletedAt filter lives
+    // in the join ON clause, so the tag surfaces rather than vanishing).
+    expect(findTag(list, 'ghosttag')?.count).toBe(0);
   });
 
   it("a hard-deleted trashed link does not change a shared tag's live count", async () => {
@@ -162,12 +170,13 @@ describeIfPg('listTagsWithCounts (integration, C3)', () => {
   });
 
   describe('createTag (C4)', () => {
-    it('creates a standalone tag with no link attached', async () => {
+    it('creates a standalone tag with no link attached — and it appears at count 0', async () => {
       const name = await ops.createTag('standalone');
       expect(name).toBe('standalone');
-      // It exists but has zero live links, so listTagsWithCounts omits it.
+      // A standalone tag has zero live links but MUST still be listed (count 0)
+      // so the "+ new tag" flow surfaces it in the sidebar.
       const listed = await ops.listTagsWithCounts();
-      expect(listed.some((t) => t.name === 'standalone')).toBe(false);
+      expect(findTag(listed, 'standalone')?.count).toBe(0);
     });
 
     it('is idempotent and W1 case-insensitive — AI then ai is one tag, first casing kept', async () => {
