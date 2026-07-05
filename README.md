@@ -23,7 +23,12 @@ enriches captures in the background. An agent can already fully operate it:
 
 All of it over **10 MCP tools**: `capture_link`, `get_link`, `search_links`,
 `list_links`, `edit_link`, `add_tag`, `remove_tag`, `trash_link`, `restore_link`,
-`retry_capture`. There is no web UI yet — that's the next increment.
+`retry_capture` — and over an **HTTP API** (`@silo/api`) that the human web UI
+uses (the same operations; adapters never drift because both call one core).
+
+The **web UI** (`@silo/web`, React + Vite in the "Oat" design system) is taking
+shape: the app frame + a live, themed sidebar are in; the library/list screens
+land incrementally. See [Web UI](#web-ui) below to run it.
 
 ## Why
 
@@ -76,6 +81,34 @@ The client launches `silo` as a subprocess and speaks JSON-RPC over stdio — th
 process boundary is the trust boundary, so there's no network surface and no auth
 to configure. The client then sees the 10 tools above.
 
+## Web UI
+
+The human web UI runs as a React SPA (`@silo/web`) served by Vite, talking to the
+HTTP API (`@silo/api`, Hono) over the same core. `pnpm dev` runs **both** — the
+API and the SPA — together:
+
+```bash
+pnpm db:up            # Postgres (if not already up)
+pnpm db:migrate       # apply the schema
+pnpm dev              # runs @silo/api (:8787) + @silo/web (Vite :5173)
+```
+
+Then open **http://localhost:5173**. Vite proxies `/api/*` to the API, so the SPA
+is same-origin in dev (no CORS). The API binds to **loopback** (`127.0.0.1`) and
+has **no auth** — it's a single-user localhost surface (set `HOST` to bind wider,
+which prints a warning). The `PORT`/`HOST` for the API are documented in
+`.env.example`.
+
+Two ways to run silo, for two audiences:
+
+- **`pnpm start`** — the turnkey `silo` process (MCP server + worker, one binary)
+  for an **agent** to drive over MCP. No web server.
+- **`pnpm dev`** — the API + web UI for a **human**, plus you'll want the worker
+  for enrichment (run `pnpm start` alongside, or a standalone `@silo/worker`).
+
+The UI is early — the app frame + a live sidebar are in; the library/list screens
+land incrementally. It renders in light or dark (the toggle top-left).
+
 ## Architecture
 
 A TypeScript monorepo. Every human- or agent-facing operation goes through **one
@@ -86,9 +119,9 @@ packages/
   core/        the brain — all operations + data access
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment (SSRF-safe fetch → extract) service ─▶ core
-  mcp/server/  MCP adapter (stdio)                                        ─▶ core
-  api/         HTTP adapter (Hono) — placeholder                          ─▶ core
-  web/         UI (Vite + React) — placeholder                           ─▶ core
+  mcp/server/  MCP adapter (stdio) — 10 tools                            ─▶ core
+  api/         HTTP adapter (Hono) — the full read/write surface          ─▶ core
+  web/         React SPA (Vite, "Oat" design) — talks to the API over HTTP
   app/         composition root — runs the MCP server + worker as `silo`
   tsconfig/    shared strict TypeScript config
 ```
