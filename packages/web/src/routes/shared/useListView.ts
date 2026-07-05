@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import type { ApiError } from '../../api/client';
 import { useCaptureLink, useCounts, useInfiniteLinks, useSearchLinks } from '../../api/hooks';
 import type { LinkJson, SearchResultJson } from '../../api/types';
@@ -67,13 +68,21 @@ export function useListView(tag?: string): ListViewState {
 
   const links = data?.pages.flatMap((page) => page.links) ?? [];
 
-  const onKeep = () => {
+  // Stable across renders (the mutate/clear functions TanStack Query and
+  // `useOmnibarState` hand back are themselves stable) so a consumer that
+  // memoizes on `onKeep`/`fetchNextPage` — e.g. an effect or a memoized child
+  // — doesn't see a new function identity every render for no reason.
+  const onKeep = useCallback(() => {
     if (!omnibar.isUrl) return;
     const url = omnibar.q.trim();
     if (!url) return;
     captureLink.mutate({ url, ...(tag ? { tags: [tag] } : {}) });
     omnibar.clear();
-  };
+  }, [omnibar.isUrl, omnibar.q, omnibar.clear, captureLink.mutate, tag]);
+
+  const triggerFetchNextPage = useCallback(() => {
+    fetchNextPage();
+  }, [fetchNextPage]);
 
   return {
     omnibar,
@@ -87,7 +96,7 @@ export function useListView(tag?: string): ListViewState {
     isSearching,
     hasNextPage,
     isFetchingNextPage,
-    fetchNextPage: () => fetchNextPage(),
+    fetchNextPage: triggerFetchNextPage,
     onKeep,
     isCapturing: captureLink.isPending,
     captureError: captureLink.isError ? (captureLink.error as ApiError).message : undefined,

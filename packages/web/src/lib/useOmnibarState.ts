@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { looksLikeUrl } from './url';
 import { useDebouncedValue } from './useDebouncedValue';
 
@@ -22,6 +22,11 @@ const SEARCH_DEBOUNCE_MS = 200;
  *   idle chip literally reads "⌘ K").
  * - `clear()` — resets `q` (used by the Escape key and the tag-pill's clear
  *   affordance so both go through one code path).
+ *
+ * The returned object + its callbacks are memoized so `q`'s per-keystroke
+ * update doesn't hand every consumer (`ListOmnibar`, `useListView`) a brand
+ * new `onFocus`/`onBlur`/`clear` reference each render — cheap to keep
+ * stable, and it's the shape a memoized consumer would need anyway.
  */
 export function useOmnibarState() {
   const [q, setQ] = useState('');
@@ -40,15 +45,22 @@ export function useOmnibarState() {
     return () => document.removeEventListener('keydown', onKeyDown);
   }, []);
 
-  return {
-    q,
-    setQ,
-    debouncedQ,
-    focused,
-    onFocus: () => setFocused(true),
-    onBlur: () => setFocused(false),
-    isUrl: looksLikeUrl(q),
-    inputRef,
-    clear: () => setQ(''),
-  };
+  const onFocus = useCallback(() => setFocused(true), []);
+  const onBlur = useCallback(() => setFocused(false), []);
+  const clear = useCallback(() => setQ(''), []);
+
+  return useMemo(
+    () => ({
+      q,
+      setQ,
+      debouncedQ,
+      focused,
+      onFocus,
+      onBlur,
+      isUrl: looksLikeUrl(q),
+      inputRef,
+      clear,
+    }),
+    [q, debouncedQ, focused, onFocus, onBlur, clear],
+  );
 }
