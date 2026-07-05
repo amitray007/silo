@@ -22,5 +22,7 @@ pre-push:
       run: pnpm turbo run check-types
     test:
       run: pnpm turbo run test
+    build:
+      run: pnpm turbo run build
     quality:
       run: pnpm quality

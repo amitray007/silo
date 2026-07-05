@@ -53,6 +53,17 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm turbo run check-types
       - run: pnpm turbo run test
+      - run: pnpm turbo run build
+      # Bundle safety (belt-and-suspenders — the real guard is the enforced
+      # import boundary: web may not import @silo/core/@silo/db, so pg can't
+      # enter the browser graph). Fail if server code ever leaks into the SPA
+      # bundle anyway.
+      - name: web bundle has no server code
+        run: |
+          if grep -rlE "drizzle-orm|@silo/db|require\('pg'\)|node:(fs|net|tls|dns)" packages/web/dist/assets/ ; then
+            echo "::error::server code leaked into the @silo/web browser bundle"
+            exit 1
+          fi
       - run: pnpm quality
 
   pr-title:
