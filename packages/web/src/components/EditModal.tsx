@@ -11,6 +11,7 @@ import type { LinkJson } from '../api/types';
 import { buildTagOptions } from '../lib/tagOptions';
 import { deriveDomain } from '../lib/url';
 import { useRowMenu } from './RowMenuContext';
+import { useLibrarySelection } from './SelectionContext';
 import { TagOptionsList } from './TagOptionsList';
 
 const labelStyle: React.CSSProperties = {
@@ -213,6 +214,7 @@ function EditTagsFlyout({
  */
 export function EditModal({ link }: { link: LinkJson }) {
   const { closeEdit } = useRowMenu();
+  const selection = useLibrarySelection();
   const [title, setTitle] = useState(link.title ?? '');
   const [description, setDescription] = useState(link.description ?? '');
   const [note, setNote] = useState(link.notes ?? '');
@@ -281,6 +283,10 @@ export function EditModal({ link }: { link: LinkJson }) {
   };
 
   const handleTrash = () => {
+    // Drop this row from the Library selection if it was selected (review fix)
+    // — same rationale as `RowMenu`'s trash: trashing individually removes the
+    // row, so a stale selected id would drift the dock's count.
+    selection.deselect([link.id]);
     trashLink.mutate();
     closeEdit();
   };

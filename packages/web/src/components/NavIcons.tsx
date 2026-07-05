@@ -24,14 +24,28 @@ export function LibraryIcon() {
   );
 }
 
-export function TrashIcon() {
+/**
+ * The trash-can glyph — `size`/`stroke` are overridable (defaulting to the
+ * sidebar nav rail's 15px/`currentColor`) so `Dock.tsx`'s `DockTrashIcon`
+ * (12px, `var(--ghost)`, used in the docks' "move to trash"/"empty all"/
+ * "delete now" buttons and `TrashRowActions`' delete-now button) can reuse
+ * this exact path data instead of duplicating the SVG (jscpd guards
+ * production src at 1.5%).
+ */
+export function TrashIcon({
+  size = 15,
+  stroke = 'currentColor',
+}: {
+  size?: number;
+  stroke?: string;
+}) {
   return (
     <svg
-      width="15"
-      height="15"
+      width={size}
+      height={size}
       viewBox="0 0 16 16"
       fill="none"
-      stroke="currentColor"
+      stroke={stroke}
       strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"

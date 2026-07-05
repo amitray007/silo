@@ -11,11 +11,15 @@ import type {
   CaptureResponse,
   Counts,
   EditLinkRequest,
+  EmptyTrashResponse,
   LinkJson,
   LinkResponse,
   LinksResponse,
+  RestoreResponse,
   SearchResponse,
   TagsResponse,
+  TrashLinkJson,
+  TrashResponse,
 } from './types';
 
 /**
@@ -33,6 +37,7 @@ export const queryKeys = {
   links: (filter?: { tag?: string; status?: string }) => ['links', filter ?? {}] as const,
   link: (id: string) => ['link', id] as const,
   search: (q: string) => ['search', q] as const,
+  trash: () => ['trash'] as const,
 };
 
 /** The sidebar's live/trash counts (`GET /api/counts`) — `useCounts().data` is `Counts | undefined` until loaded. */
@@ -347,5 +352,223 @@ export function useCreateTag() {
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
     },
+  });
+}
+
+/**
+ * The Trash screen's feed (`GET /api/trash`, plan 011 V3-5). Unlike
+ * `useInfiniteLinks`, this is a plain (non-paginated) query — the Trash
+ * screen's build brief doesn't call for "load more" chrome, and v3's mock
+ * data has no trash pagination UI either; a later slice can upgrade this to
+ * `useInfiniteQuery` if the trash list grows large enough to need it, without
+ * changing this hook's call sites (same query key family, `['trash', ...]`).
+ */
+export function useTrashList() {
+  return useQuery({
+    queryKey: queryKeys.trash(),
+    queryFn: () => apiGet<TrashResponse>('/api/trash'),
+  });
+}
+
+/**
+ * Removes `id` from every cached `trash` query's `links` array — the shared
+ * optimistic-removal tail for `useRestoreLink`/`useDeleteNow`/the bulk trash
+ * mutations below. Mirrors `removeOptimisticLink`'s by-id (not
+ * whole-snapshot) approach for the same reason: two concurrent
+ * restore/delete calls on different rows must not be able to clobber each
+ * other's optimistic state.
+ */
+function removeFromTrashCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+): TrashLinkJson | undefined {
+  const matches = queryClient.getQueriesData<TrashResponse>({ queryKey: queryKeys.trash() });
+  let removed: TrashLinkJson | undefined;
+  for (const [queryKey, data] of matches) {
+    if (!data) continue;
+    const found = data.links.find((l) => l.id === id);
+    if (found) removed = found;
+    queryClient.setQueryData<TrashResponse>(queryKey, {
+      ...data,
+      links: data.links.filter((l) => l.id !== id),
+    });
+  }
+  return removed;
+}
+
+/** Re-inserts `link` at the front of every cached `trash` query — the `onError` rollback for `removeFromTrashCache`, mirroring `insertOptimisticLink`'s by-id re-insert. */
+function insertIntoTrashCache(
+  queryClient: ReturnType<typeof useQueryClient>,
+  link: TrashLinkJson,
+): void {
+  const matches = queryClient.getQueriesData<TrashResponse>({ queryKey: queryKeys.trash() });
+  for (const [queryKey, data] of matches) {
+    if (!data) continue;
+    queryClient.setQueryData<TrashResponse>(queryKey, {
+      ...data,
+      links: [link, ...data.links],
+    });
+  }
+}
+
+/** The shared settle tail for every trash-lifecycle mutation below: the trash list itself, plus `counts` (live/trash tallies) — trash mutations never touch tag counts. */
+function invalidateTrashQueries(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: queryKeys.trash() });
+  queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
+}
+
+/**
+ * The trash row's "restore" mutation (`POST /api/links/:id/restore`, plan 011
+ * V3-5) — optimistically removes the row from the trash cache the instant
+ * restore is clicked (it's about to reappear in the Library instead).
+ * `onSettled` invalidates BOTH `trash` and `links`/`counts` — restoring
+ * un-trashes a link, so the Library feed needs to pick it up too, not just
+ * the trash list losing it. On failure the row is re-inserted (by id, not a
+ * whole-cache snapshot — same rationale as `useTrashLink`'s doc comment).
+ */
+export function useRestoreLink(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiPost<RestoreResponse>(`/api/links/${id}/restore`, {}),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.trash() });
+      const removedLink = removeFromTrashCache(queryClient, id);
+      return { removedLink };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.removedLink) insertIntoTrashCache(queryClient, context.removedLink);
+    },
+    onSettled: () => {
+      invalidateTrashQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['links'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+    },
+  });
+}
+
+/**
+ * The trash row's "delete now" mutation (`DELETE /api/trash/:id`, plan 011
+ * V3-5) — a hard, irreversible delete; matching v3, there is no confirm
+ * dialog. Optimistically removes the row from the trash cache; on failure
+ * it's re-inserted (the delete never actually happened server-side).
+ */
+export function useDeleteNow(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiDelete<void>(`/api/trash/${id}`),
+    onMutate: async () => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.trash() });
+      const removedLink = removeFromTrashCache(queryClient, id);
+      return { removedLink };
+    },
+    onError: (_error, _vars, context) => {
+      if (context?.removedLink) insertIntoTrashCache(queryClient, context.removedLink);
+    },
+    onSettled: () => invalidateTrashQueries(queryClient),
+  });
+}
+
+/**
+ * The trash dock's "empty all" mutation (`DELETE /api/trash`, plan 011 V3-5)
+ * — matching v3's `emptyNow` (no confirm). No optimistic clear: the whole
+ * trash list is about to disappear regardless of a race with anything else
+ * touching it, so a plain invalidate-on-settle is simplest and correct here
+ * (unlike a single-row removal, there's no "other row" an optimistic update
+ * could protect).
+ */
+export function useEmptyTrash() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiDelete<EmptyTrashResponse>('/api/trash'),
+    onSettled: () => invalidateTrashQueries(queryClient),
+  });
+}
+
+/**
+ * The row menu's / edit modal's "retry capture" mutation (`POST
+ * /api/links/:id/retry`) — surfaced here per the build brief's optional
+ * degraded-retry affordance. Plain invalidate-on-settle: a retry resets
+ * `captureStatus` back to `enriching` server-side, and the enriching
+ * indicator/mark already re-renders correctly off a fresh `links` fetch, so
+ * there's nothing worth optimistically patching.
+ */
+export function useRetryCapture(id: string) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiPost<LinkResponse>(`/api/links/${id}/retry`, {}),
+    onSettled: () => invalidateLinkQueries(queryClient),
+  });
+}
+
+/**
+ * Fires `mutationFn` for every id in `ids` concurrently (`Promise.allSettled`
+ * — a partial failure never aborts the others) and returns which ids
+ * succeeded/failed. Shared by every bulk op below (bulk-trash from the
+ * Library selection dock, bulk-restore/bulk-delete-now from the Trash
+ * selection dock) so "loop the single-item endpoint, tolerate partial
+ * failure" has exactly one implementation rather than four near-identical
+ * copies (jscpd guards production src at 1.5%).
+ */
+export async function runBulk(
+  ids: string[],
+  mutationFn: (id: string) => Promise<unknown>,
+): Promise<{ succeeded: string[]; failed: string[] }> {
+  const results = await Promise.allSettled(ids.map((id) => mutationFn(id)));
+  const succeeded: string[] = [];
+  const failed: string[] = [];
+  results.forEach((result, i) => {
+    const id = ids[i];
+    if (id === undefined) return;
+    (result.status === 'fulfilled' ? succeeded : failed).push(id);
+  });
+  return { succeeded, failed };
+}
+
+/**
+ * The Library selection dock's "move to trash" bulk op (plan 011, V3-5) — no
+ * bulk API exists, so this loops `POST /api/links/:id/trash` per id via
+ * `runBulk` (concurrent, partial-failure-tolerant) and invalidates once at
+ * the end rather than once per row (avoids N redundant refetches for an
+ * N-item selection). Returns the same `{ succeeded, failed }` shape as
+ * `runBulk` so the calling dock can report "3 of 5 moved to trash" on a
+ * partial failure instead of failing silently.
+ */
+export function useBulkTrash() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) => runBulk(ids, (id) => apiPost(`/api/links/${id}/trash`, {})),
+    onSettled: () => {
+      invalidateLinkQueries(queryClient);
+      invalidateTrashQueries(queryClient);
+    },
+  });
+}
+
+/** The Trash selection dock's "restore" bulk op — loops `POST /api/links/:id/restore` via `runBulk`; see `useBulkTrash`'s doc comment for the shared shape/rationale. */
+export function useBulkRestore() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) => runBulk(ids, (id) => apiPost(`/api/links/${id}/restore`, {})),
+    onSettled: () => {
+      invalidateTrashQueries(queryClient);
+      queryClient.invalidateQueries({ queryKey: ['links'] });
+      queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+    },
+  });
+}
+
+/** The Trash selection dock's "delete now" bulk op — loops `DELETE /api/trash/:id` via `runBulk`; see `useBulkTrash`'s doc comment for the shared shape/rationale. */
+export function useBulkDeleteNow() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (ids: string[]) => runBulk(ids, (id) => apiDelete(`/api/trash/${id}`)),
+    onSettled: () => invalidateTrashQueries(queryClient),
   });
 }

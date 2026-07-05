@@ -63,6 +63,20 @@ export type TrashResponse = { links: TrashLinkJson[]; nextCursor?: string };
 export type LinkResponse = { link: LinkJson };
 
 /**
+ * `POST /api/links/:id/restore` response envelope — mirrors
+ * `packages/api/src/routes/trash.ts`'s two success shapes. `outcome:
+ * 'merged'` means the restored link collided with an already-live URL and
+ * was folded into that OTHER link — `link.id` is that other id, not the id
+ * originally requested (see the route's doc comment).
+ */
+export type RestoreResponse =
+  | { outcome: 'restored'; link: LinkJson }
+  | { outcome: 'merged'; link: LinkJson; message: string };
+
+/** `DELETE /api/trash` (empty all) response envelope — mirrors `trash.ts`'s `c.json({ deleted }, 200)`. */
+export type EmptyTrashResponse = { deleted: number };
+
+/**
  * `POST /api/links` (capture) response envelope — mirrors
  * `links-write.ts`'s `c.json({ link, deduped }, 201)`. `deduped` is `true`
  * when the URL had already been captured and the write merged into the

@@ -3,36 +3,69 @@ import { Outlet, useLocation } from 'react-router-dom';
 import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
+import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
 import { Sidebar } from './Sidebar';
 
 const DRAWER_ID = 'silo-drawer';
 
 /**
- * Mounted once inside `RowMenuProvider` (plan 011, V3-4) — owns the two
- * document-level listeners v3's root component owns (`clickFn`/the `Escape`
- * branch for `menuId`), and renders the single shared `EditModal` instance
- * when a link is being edited. Living here (not inside `LinkRow`) is what
- * lets ONE `mousedown`/`keydown` listener close whichever row's menu is open
- * regardless of which route rendered it — `RowMenu` itself already stops
- * propagation for clicks INSIDE the popover (`RowMenu.tsx`), so this
- * document-level handler only ever fires for a genuine "outside" click.
+ * Mounted once inside `RowMenuProvider` (plan 011, V3-4; extended V3-5 for
+ * multi-select) — owns the document-level `Escape`/`mousedown` handling for
+ * the row menu AND both selection scopes, and renders the single shared
+ * `EditModal` instance when a link is being edited. Living here (not inside
+ * `LinkRow`/`TrashRow`) is what lets ONE Escape handler arbitrate between
+ * every route's row menu AND its selection dock, rather than each route
+ * installing its own and several firing on the same keypress.
+ *
+ * Scope note: the mobile drawer (`AppFrame` below) keeps its OWN, separate
+ * Escape handler (mounted only while the drawer is open) — the two are
+ * independent by design: the drawer is mobile-only chrome that owns its own
+ * open/close lifecycle, and on the rare overlap (drawer open AND a menu open
+ * or selection active) a single Escape dismisses both, which reads fine (the
+ * drawer closes, the menu/selection collapses). This handler is authoritative
+ * only for the menu-vs-library-vs-trash arbitration below, not for the drawer.
+ *
+ * Escape's priority within this handler (the build brief's "Esc should close
+ * menu if open, else clear selection"): closes the row `⋯` menu first if one
+ * is open — closing a menu is the more "local", more recently-opened kind of
+ * state — otherwise clears the library selection, otherwise the trash
+ * selection. (In practice at most one of these is ever non-empty at a time,
+ * but the ordering makes the menu-open + selection-active edge case
+ * deterministic: one Escape closes the menu, a second clears the selection.)
+ * `mousedown`-outside still only closes the row menu (v3 has no analogous
+ * "click outside clears selection" behavior — the docks are dismissed via
+ * their own `clear` button or Escape only).
  */
 function RowMenuLayer() {
   const { openMenuId, closeMenu, editingLink } = useRowMenu();
+  const librarySelection = useLibrarySelection();
+  const trashSelection = useTrashSelection();
 
   useEffect(() => {
     if (openMenuId === null) return;
     const onMouseDown = () => closeMenu();
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') closeMenu();
-    };
     document.addEventListener('mousedown', onMouseDown);
-    document.addEventListener('keydown', onKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', onMouseDown);
-      document.removeEventListener('keydown', onKeyDown);
-    };
+    return () => document.removeEventListener('mousedown', onMouseDown);
   }, [openMenuId, closeMenu]);
+
+  useEffect(() => {
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      if (openMenuId !== null) {
+        closeMenu();
+        return;
+      }
+      if (librarySelection.selected.length > 0) {
+        librarySelection.clear();
+        return;
+      }
+      if (trashSelection.selected.length > 0) {
+        trashSelection.clear();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [openMenuId, closeMenu, librarySelection, trashSelection]);
 
   return editingLink ? <EditModal link={editingLink} /> : null;
 }
@@ -160,12 +193,17 @@ export function AppFrame() {
             `RowMenuProvider` wraps the outlet (plan 011, V3-4) so the row `⋯`
             menu + edit-modal state is shared by every routed view — see
             `RowMenuContext.tsx`'s doc comment for why this lives here and not
-            per-route. `RowMenuLayer` renders the single shared `EditModal`
-            instance and owns the document-level close listeners. */}
+            per-route. `SelectionProvider` (V3-5) does the same for the two
+            multi-select scopes (library/trash) — see `SelectionContext.tsx`'s
+            doc comment. `RowMenuLayer` renders the single shared `EditModal`
+            instance and owns the document-level close/Escape-priority
+            listeners for both. */}
         <main className="silo-content">
           <RowMenuProvider>
-            <Outlet />
-            <RowMenuLayer />
+            <SelectionProvider>
+              <Outlet />
+              <RowMenuLayer />
+            </SelectionProvider>
           </RowMenuProvider>
         </main>
       </div>

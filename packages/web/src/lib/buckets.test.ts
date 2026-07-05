@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import type { LinkJson } from '../api/types';
-import { bucketByDay } from './buckets';
+import type { LinkJson, TrashLinkJson } from '../api/types';
+import { bucketByDay, bucketTrashByDay, purgeCountdownDays } from './buckets';
 
 /** A `now` fixed well inside a day (not near midnight) so day-delta math in the fixtures below is unambiguous. */
 const NOW = new Date(2026, 6, 5, 12, 0, 0); // 2026-07-05 noon, local time
@@ -96,5 +96,84 @@ describe('bucketByDay', () => {
 
   it('returns an empty array for no links', () => {
     expect(bucketByDay([], NOW)).toEqual([]);
+  });
+});
+
+/** A `TrashLinkJson` fixture keyed on `deletedAt` (not `createdAt`) — `bucketTrashByDay` groups by when a link was TRASHED. */
+function trashLink(
+  overrides: Partial<TrashLinkJson> & { id: string; deletedAt: string },
+): TrashLinkJson {
+  return {
+    url: 'https://example.com',
+    title: 'Example',
+    description: null,
+    imageUrl: null,
+    siteName: null,
+    extractedText: null,
+    sourceKind: 'link',
+    captureStatus: 'full',
+    addedBy: 'user',
+    notes: null,
+    tags: [],
+    createdAt: overrides.deletedAt,
+    updatedAt: overrides.deletedAt,
+    ...overrides,
+  };
+}
+
+describe('bucketTrashByDay', () => {
+  it('groups by deletedAt, not createdAt', () => {
+    const l = trashLink({
+      id: '1',
+      createdAt: at(2026, 5, 1), // captured long ago
+      deletedAt: at(2026, 6, 5, 8), // trashed today
+    });
+    expect(bucketTrashByDay([l], NOW)).toEqual([{ label: 'Today', items: [l] }]);
+  });
+
+  it('has the extra "This month" band (7-29 days) the Library grouping does not', () => {
+    const l = trashLink({ id: '1', deletedAt: at(2026, 5, 20) }); // 16 days back
+    expect(bucketTrashByDay([l], NOW)).toEqual([{ label: 'This month', items: [l] }]);
+  });
+
+  it('falls to Earlier at 30+ days back', () => {
+    const l = trashLink({ id: '1', deletedAt: at(2026, 5, 1) }); // 35 days back
+    expect(bucketTrashByDay([l], NOW)).toEqual([{ label: 'Earlier', items: [l] }]);
+  });
+
+  it('the last day of This month (29 days back) still buckets as This month, not Earlier', () => {
+    const l = trashLink({ id: '1', deletedAt: at(2026, 5, 7) }); // 29 days back
+    expect(bucketTrashByDay([l], NOW)).toEqual([{ label: 'This month', items: [l] }]);
+  });
+
+  it('drops empty groups and preserves label order across non-adjacent buckets', () => {
+    const todayLink = trashLink({ id: 'today', deletedAt: at(2026, 6, 5) });
+    const monthLink = trashLink({ id: 'month', deletedAt: at(2026, 5, 20) });
+    expect(bucketTrashByDay([todayLink, monthLink], NOW)).toEqual([
+      { label: 'Today', items: [todayLink] },
+      { label: 'This month', items: [monthLink] },
+    ]);
+  });
+
+  it('returns an empty array for no trashed links', () => {
+    expect(bucketTrashByDay([], NOW)).toEqual([]);
+  });
+});
+
+describe('purgeCountdownDays', () => {
+  it('counts down from a 30-day purge window', () => {
+    const deletedAt = at(2026, 6, 1); // 4 days before NOW
+    expect(purgeCountdownDays(deletedAt, 30, NOW)).toBe(26);
+  });
+
+  it('never goes negative once the purge window has technically elapsed', () => {
+    const deletedAt = at(2026, 5, 1); // 35 days before NOW
+    expect(purgeCountdownDays(deletedAt, 30, NOW)).toBe(0);
+  });
+
+  it('is exactly the full window on the moment of deletion', () => {
+    // `at()` fixes noon; NOW is also noon on 2026-07-05, so `deletedAt` right
+    // now is exactly 0 elapsed days.
+    expect(purgeCountdownDays(NOW.toISOString(), 30, NOW)).toBe(30);
   });
 });

@@ -1,9 +1,12 @@
+import { useState } from 'react';
 import type { LinkJson } from '../api/types';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { Chip } from './Chip';
 import { Mark, type MarkKind } from './Mark';
 import { RowMenu } from './RowMenu';
 import { useRowMenu } from './RowMenuContext';
+import { RowSelectCheckbox } from './RowSelectCheckbox';
+import { useLibrarySelection } from './SelectionContext';
 
 /**
  * The capture-status mark for a row — mutually exclusive with itself (a link
@@ -25,19 +28,28 @@ function captureStatusMark(captureStatus: LinkJson['captureStatus']): MarkKind |
 
 /**
  * The Library row (plan 010 — `Silo-v2.html:110-136`, `render-rows-*.png`;
- * write chrome added plan 011 V3-4). The whole row is a link out to
- * `link.url`; the `⋯` button (always rendered, ghost→ink on hover, matching
- * v3) opens `RowMenu` for THIS row via the shared `useRowMenu()` context — see
- * `RowMenuContext.tsx`'s doc comment for why the open/edit state lives there
- * rather than per-route. The `⋯` button's `onMouseDown` stops propagation so
- * the click never reaches the row's `<a>` (no accidental navigation) before
- * `onClick` toggles the menu; the outer wrapping `<span>` is `position:
- * relative` so `RowMenu`'s `position:absolute` anchors to this row, not the
- * whole list.
+ * write chrome added plan 011 V3-4; multi-select added V3-5). The whole row
+ * is a link out to `link.url`; the `⋯` button (always rendered, ghost→ink on
+ * hover, matching v3) opens `RowMenu` for THIS row via the shared
+ * `useRowMenu()` context — see `RowMenuContext.tsx`'s doc comment for why the
+ * open/edit state lives there rather than per-route. The `⋯` button's
+ * `onMouseDown` stops propagation so the click never reaches the row's `<a>`
+ * (no accidental navigation) before `onClick` toggles the menu; the outer
+ * wrapping `<span>` is `position: relative` so `RowMenu`'s
+ * `position:absolute` anchors to this row, not the whole list.
  *
  * Marks: up to three can co-occur (note + claude + enriching/degraded) — each
  * is an independent flag except the capture-status mark, which is one of
  * three states (or none, on a healthy `full` link).
+ *
+ * Multi-select: hovering (or having the `⋯` menu open, or any row already
+ * selected) swaps the chip for a checkbox — `hovered` is tracked locally
+ * (needed for that content swap; the row's OWN hover background stays pure
+ * CSS, `.silo-link-row:hover` in `base.css`, since inline styles can't do
+ * `:hover` — this local flag only drives the checkbox/chip swap). A selected
+ * row keeps the `--hov` background even when not hovered (v3's `bg: (hov ||
+ * isSel) ? 'var(--hov)' : 'transparent'`), applied as an inline override on
+ * top of the CSS default.
  */
 export function LinkRow({ link }: { link: LinkJson }) {
   const domain = deriveDomain(link.url);
@@ -45,12 +57,31 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const statusMark = captureStatusMark(link.captureStatus);
   const { openMenuId, toggleMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
+  const [hovered, setHovered] = useState(false);
+  const selection = useLibrarySelection();
+  const isSelected = selection.isSelected(link.id);
+  const showCheck = hovered || menuOpen || selection.selected.length > 0;
 
   return (
     <span style={{ position: 'relative', display: 'block' }}>
-      <a href={link.url} target="_blank" rel="noopener" className="silo-link-row">
+      <a
+        href={link.url}
+        target="_blank"
+        rel="noopener"
+        className="silo-link-row"
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        onFocus={() => setHovered(true)}
+        onBlur={() => setHovered(false)}
+        style={isSelected ? { background: 'var(--hov)' } : undefined}
+      >
         <span style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
-          <Chip domain={domain} />
+          <RowSelectCheckbox
+            visible={showCheck}
+            isSelected={isSelected}
+            onToggle={() => selection.toggle(link.id)}
+          />
+          {!showCheck && <Chip domain={domain} />}
           <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 11 }}>
             <span
               style={{

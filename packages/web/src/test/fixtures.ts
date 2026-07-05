@@ -1,4 +1,4 @@
-import type { LinkJson } from '../api/types';
+import type { LinkJson, TrashLinkJson } from '../api/types';
 
 /**
  * A minimal, valid `LinkJson` fixture for tests — every field defaulted so
@@ -22,6 +22,15 @@ export function makeLink(overrides: Partial<LinkJson> = {}): LinkJson {
     tags: [],
     createdAt: '2026-07-05T12:00:00.000Z',
     updatedAt: '2026-07-05T12:00:00.000Z',
+    ...overrides,
+  };
+}
+
+/** A minimal, valid `TrashLinkJson` fixture (`makeLink` plus `deletedAt`) — shared by `TrashRow`/`TrashView`/trash-hook tests (plan 011, V3-5). */
+export function makeTrashLink(overrides: Partial<TrashLinkJson> = {}): TrashLinkJson {
+  return {
+    ...makeLink(overrides),
+    deletedAt: '2026-07-05T12:00:00.000Z',
     ...overrides,
   };
 }

@@ -5,17 +5,20 @@ import { describe, expect, it } from 'vitest';
 import { makeLink } from '../test/fixtures';
 import { LinkRow } from './LinkRow';
 import { RowMenuProvider } from './RowMenuContext';
+import { SelectionProvider } from './SelectionContext';
 
 function link(overrides: Parameters<typeof makeLink>[0] = {}) {
   return makeLink({ url: 'https://www.example.com/a-post', title: 'A post', ...overrides });
 }
 
-/** `LinkRow` reads `useRowMenu()` for its `⋯` button (plan 011, V3-4) — every render needs a `RowMenuProvider` ancestor; the `⋯` menu's tag hooks need a `QueryClientProvider` too. */
+/** `LinkRow` reads `useRowMenu()` for its `⋯` button (plan 011, V3-4) and `useLibrarySelection()` for its hover checkbox (V3-5) — every render needs both a `RowMenuProvider` and a `SelectionProvider` ancestor; the `⋯` menu's tag hooks need a `QueryClientProvider` too. */
 function renderRow(ui: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <RowMenuProvider>{ui}</RowMenuProvider>
+      <RowMenuProvider>
+        <SelectionProvider>{ui}</SelectionProvider>
+      </RowMenuProvider>
     </QueryClientProvider>,
   );
 }
@@ -89,7 +92,9 @@ describe('LinkRow', () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <LinkRow link={link({ notes: 'a comment' })} />
+          <SelectionProvider>
+            <LinkRow link={link({ notes: 'a comment' })} />
+          </SelectionProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -98,7 +103,9 @@ describe('LinkRow', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <LinkRow link={link({ notes: null })} />
+          <SelectionProvider>
+            <LinkRow link={link({ notes: null })} />
+          </SelectionProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );

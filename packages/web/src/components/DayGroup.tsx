@@ -1,4 +1,5 @@
 import type { LinkJson } from '../api/types';
+import { DayGroupHeading } from './DayGroupHeading';
 import { LinkRow } from './LinkRow';
 
 /**
@@ -9,17 +10,7 @@ import { LinkRow } from './LinkRow';
 export function DayGroup({ label, links }: { label: string; links: LinkJson[] }) {
   return (
     <div>
-      <p
-        style={{
-          fontSize: '0.78rem',
-          fontWeight: 500,
-          color: 'var(--ghost)',
-          padding: '20px 11px 6px',
-          margin: 0,
-        }}
-      >
-        {label}
-      </p>
+      <DayGroupHeading label={label} />
       {links.map((link) => (
         <LinkRow key={link.id} link={link} />
       ))}

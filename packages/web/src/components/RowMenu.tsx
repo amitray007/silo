@@ -3,6 +3,7 @@ import { useAddTag, useRemoveTag, useTags, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import { buildTagOptions } from '../lib/tagOptions';
 import { useRowMenu } from './RowMenuContext';
+import { useLibrarySelection } from './SelectionContext';
 import { TagOptionsList } from './TagOptionsList';
 
 const COPY_RESET_MS = 700;
@@ -101,6 +102,7 @@ function TagsFlyout({ link }: { link: LinkJson }) {
  */
 export function RowMenu({ link }: { link: LinkJson }) {
   const { closeMenu, openEdit } = useRowMenu();
+  const selection = useLibrarySelection();
   const [tagsFlyOpen, setTagsFlyOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const trashLink = useTrashLink(link.id);
@@ -125,6 +127,11 @@ export function RowMenu({ link }: { link: LinkJson }) {
 
   const handleTrash = () => {
     closeMenu();
+    // Drop this row from the Library selection if it was selected (review
+    // fix) — trashing it individually removes the row, and a stale id left in
+    // the selection would inflate the dock's "N selected" count and could be
+    // re-included in a later bulk action against a now-gone id.
+    selection.deselect([link.id]);
     trashLink.mutate();
   };
 

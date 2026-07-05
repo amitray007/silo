@@ -31,7 +31,7 @@ describe('App routing', () => {
       'fetch',
       vi.fn().mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.includes('/api/links')) {
+        if (url.includes('/api/links') || url.includes('/api/trash')) {
           return Promise.resolve(jsonResponse({ links: [] }));
         }
         return Promise.resolve(jsonResponse({ live: 128, trash: 2, purgeWindowDays: 30 }));
@@ -55,7 +55,7 @@ describe('App routing', () => {
 
   it('renders the Trash view + active nav item at /trash', async () => {
     renderApp(['/trash']);
-    await waitFor(() => expect(screen.getByText(/Trash — coming soon/i)).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Trash is empty.')).toBeDefined());
     const trashLink = screen.getByRole('link', { name: /trash/i });
     expect(trashLink.getAttribute('aria-current')).toBe('page');
   });

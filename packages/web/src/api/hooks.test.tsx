@@ -3,21 +3,30 @@ import { renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeLink } from '../test/fixtures';
+import { makeLink, makeTrashLink } from '../test/fixtures';
 import {
   queryKeys,
+  runBulk,
   useAddTag,
+  useBulkDeleteNow,
+  useBulkRestore,
+  useBulkTrash,
   useCaptureLink,
   useCounts,
   useCreateTag,
+  useDeleteNow,
   useEditLink,
+  useEmptyTrash,
   useInfiniteLinks,
   useRemoveTag,
+  useRestoreLink,
+  useRetryCapture,
   useSearchLinks,
   useTags,
   useTrashLink,
+  useTrashList,
 } from './hooks';
-import type { LinksResponse } from './types';
+import type { LinksResponse, TrashResponse } from './types';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -773,5 +782,467 @@ describe('useCreateTag', () => {
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe('useTrashList', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('goes from loading to success with the trash payload', async () => {
+    const trash = { links: [makeTrashLink({ id: '1' })] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(trash));
+
+    const { result } = renderHook(() => useTrashList(), { wrapper });
+
+    expect(result.current.isLoading).toBe(true);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(result.current.data).toEqual(trash);
+    expect(fetch).toHaveBeenCalledWith('/api/trash');
+  });
+
+  it('surfaces an error state when the request fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'internal_error', message: 'Internal server error' }, 500),
+    );
+
+    const { result } = renderHook(() => useTrashList(), { wrapper });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe('useRestoreLink', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeWrapper() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function RestoreWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    return { queryClient, RestoreWrapper };
+  }
+
+  it('POSTs to /api/links/:id/restore', async () => {
+    const { RestoreWrapper } = makeWrapper();
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
+    );
+
+    const { result } = renderHook(() => useRestoreLink('1'), { wrapper: RestoreWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links/1/restore', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+  });
+
+  it('optimistically removes the row from the trash cache before the server responds', async () => {
+    const { queryClient, RestoreWrapper } = makeWrapper();
+    const existing: TrashResponse = {
+      links: [makeTrashLink({ id: 'target' }), makeTrashLink({ id: 'keep' })],
+    };
+    queryClient.setQueryData(queryKeys.trash(), existing);
+
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useRestoreLink('target'), { wrapper: RestoreWrapper });
+
+    act(() => {
+      result.current.mutate();
+    });
+
+    await waitFor(() => {
+      const cache = queryClient.getQueryData<TrashResponse>(queryKeys.trash());
+      expect(cache?.links.map((l) => l.id)).toEqual(['keep']);
+    });
+  });
+
+  it('re-inserts the row if the restore call fails', async () => {
+    const { queryClient, RestoreWrapper } = makeWrapper();
+    const existing: TrashResponse = { links: [makeTrashLink({ id: 'target' })] };
+    queryClient.setQueryData(queryKeys.trash(), existing);
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'not_found', message: 'gone' }, 404),
+    );
+
+    const { result } = renderHook(() => useRestoreLink('target'), { wrapper: RestoreWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync().catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const cache = queryClient.getQueryData<TrashResponse>(queryKeys.trash());
+    expect(cache?.links.map((l) => l.id)).toEqual(['target']);
+  });
+
+  it('invalidates trash/links/counts/tags on settle (restoring un-trashes a link)', async () => {
+    const { queryClient, RestoreWrapper } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
+    );
+
+    const { result } = renderHook(() => useRestoreLink('1'), { wrapper: RestoreWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+  });
+});
+
+describe('useDeleteNow', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function makeWrapper() {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function DeleteWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    return { queryClient, DeleteWrapper };
+  }
+
+  it('DELETEs /api/trash/:id', async () => {
+    const { DeleteWrapper } = makeWrapper();
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const { result } = renderHook(() => useDeleteNow('1'), { wrapper: DeleteWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/trash/1', { method: 'DELETE' });
+  });
+
+  it('optimistically removes the row from the trash cache before the server responds', async () => {
+    const { queryClient, DeleteWrapper } = makeWrapper();
+    const existing: TrashResponse = { links: [makeTrashLink({ id: 'target' })] };
+    queryClient.setQueryData(queryKeys.trash(), existing);
+
+    vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
+
+    const { result } = renderHook(() => useDeleteNow('target'), { wrapper: DeleteWrapper });
+
+    act(() => {
+      result.current.mutate();
+    });
+
+    await waitFor(() => {
+      const cache = queryClient.getQueryData<TrashResponse>(queryKeys.trash());
+      expect(cache?.links).toHaveLength(0);
+    });
+  });
+
+  it('re-inserts the row if the delete call fails (the delete never actually happened)', async () => {
+    const { queryClient, DeleteWrapper } = makeWrapper();
+    const existing: TrashResponse = { links: [makeTrashLink({ id: 'target' })] };
+    queryClient.setQueryData(queryKeys.trash(), existing);
+
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'not_found', message: 'gone' }, 404),
+    );
+
+    const { result } = renderHook(() => useDeleteNow('target'), { wrapper: DeleteWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync().catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+    const cache = queryClient.getQueryData<TrashResponse>(queryKeys.trash());
+    expect(cache?.links.map((l) => l.id)).toEqual(['target']);
+  });
+
+  it('invalidates trash/counts on settle', async () => {
+    const { queryClient, DeleteWrapper } = makeWrapper();
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+
+    const { result } = renderHook(() => useDeleteNow('1'), { wrapper: DeleteWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+  });
+});
+
+describe('useEmptyTrash', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('DELETEs /api/trash and invalidates trash/counts on settle', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function EmptyWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ deleted: 3 }, 200));
+
+    const { result } = renderHook(() => useEmptyTrash(), { wrapper: EmptyWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/trash', { method: 'DELETE' });
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+  });
+
+  it('surfaces an error if the request fails', async () => {
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'internal_error', message: 'Internal server error' }, 500),
+    );
+
+    const { result } = renderHook(() => useEmptyTrash(), { wrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync().catch(() => {});
+    });
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+  });
+});
+
+describe('useRetryCapture', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('POSTs to /api/links/:id/retry and invalidates on settle', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function RetryWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ link: makeLink({ id: '1', captureStatus: 'enriching' }) }, 200),
+    );
+
+    const { result } = renderHook(() => useRetryCapture('1'), { wrapper: RetryWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync();
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links/1/retry', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({}),
+    });
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(['links']);
+  });
+});
+
+describe('runBulk', () => {
+  it('fires every id concurrently and reports all as succeeded when every call resolves', async () => {
+    const mutationFn = vi.fn().mockResolvedValue(undefined);
+    const result = await runBulk(['a', 'b', 'c'], mutationFn);
+
+    expect(mutationFn).toHaveBeenCalledTimes(3);
+    expect(result.succeeded.sort()).toEqual(['a', 'b', 'c']);
+    expect(result.failed).toEqual([]);
+  });
+
+  it('tolerates a partial failure — one rejected id does not abort the others', async () => {
+    const mutationFn = vi.fn().mockImplementation((id: string) => {
+      if (id === 'bad') return Promise.reject(new Error('nope'));
+      return Promise.resolve(undefined);
+    });
+
+    const result = await runBulk(['good1', 'bad', 'good2'], mutationFn);
+
+    expect(result.succeeded.sort()).toEqual(['good1', 'good2']);
+    expect(result.failed).toEqual(['bad']);
+  });
+
+  it('returns empty succeeded/failed for an empty id list (no-op)', async () => {
+    const mutationFn = vi.fn();
+    const result = await runBulk([], mutationFn);
+
+    expect(mutationFn).not.toHaveBeenCalled();
+    expect(result).toEqual({ succeeded: [], failed: [] });
+  });
+});
+
+describe('useBulkTrash', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('loops POST /api/links/:id/trash for every selected id', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function BulkWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ link: makeLink({ tags: [] }) }, 200));
+
+    const { result } = renderHook(() => useBulkTrash(), { wrapper: BulkWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync(['a', 'b']);
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/links/a/trash',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/links/b/trash',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('invalidates links/trash/counts/tags once at the end, not once per id', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function BulkWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValue(jsonResponse({ link: makeLink({ tags: [] }) }, 200));
+
+    const { result } = renderHook(() => useBulkTrash(), { wrapper: BulkWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync(['a', 'b', 'c']);
+    });
+
+    const trashInvalidateCalls = invalidateSpy.mock.calls.filter(
+      (call) => JSON.stringify(call[0]?.queryKey) === JSON.stringify(queryKeys.trash()),
+    );
+    expect(trashInvalidateCalls).toHaveLength(1);
+  });
+
+  it('a partial failure still resolves — the mutation does not reject overall', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function BulkWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/links/bad/trash') {
+        return Promise.resolve(jsonResponse({ error: 'not_found', message: 'gone' }, 404));
+      }
+      return Promise.resolve(jsonResponse({ link: makeLink({ tags: [] }) }, 200));
+    });
+
+    const { result } = renderHook(() => useBulkTrash(), { wrapper: BulkWrapper });
+
+    let outcome: { succeeded: string[]; failed: string[] } | undefined;
+    await act(async () => {
+      outcome = await result.current.mutateAsync(['good', 'bad']);
+    });
+
+    expect(outcome?.succeeded).toEqual(['good']);
+    expect(outcome?.failed).toEqual(['bad']);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+  });
+});
+
+describe('useBulkRestore / useBulkDeleteNow', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('useBulkRestore loops POST /api/links/:id/restore and invalidates trash/links/counts/tags', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function RestoreBulkWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValue(
+      jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
+    );
+
+    const { result } = renderHook(() => useBulkRestore(), { wrapper: RestoreBulkWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync(['a', 'b']);
+    });
+
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/links/a/restore',
+      expect.objectContaining({ method: 'POST' }),
+    );
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
+    expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+  });
+
+  it('useBulkDeleteNow loops DELETE /api/trash/:id and invalidates trash/counts', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function DeleteBulkWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
+
+    const { result } = renderHook(() => useBulkDeleteNow(), { wrapper: DeleteBulkWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync(['a', 'b']);
+    });
+
+    expect(fetch).toHaveBeenCalledWith('/api/trash/a', { method: 'DELETE' });
+    expect(fetch).toHaveBeenCalledWith('/api/trash/b', { method: 'DELETE' });
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
   });
 });
