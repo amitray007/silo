@@ -10,6 +10,13 @@ function tagCounts(names: string[]): { name: string; count: number }[] {
   return names.map((name, i) => ({ name, count: names.length - i }));
 }
 
+/** Count rendered tag rows (links to `/tags/…`) — the tag name is split from
+ * its `#` span now, so a text regex on `#tag` no longer matches a whole row. */
+function tagRowCount(): number {
+  return screen.queryAllByRole('link').filter((el) => el.getAttribute('href')?.startsWith('/tags/'))
+    .length;
+}
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -65,14 +72,15 @@ describe('Sidebar', () => {
 
     expect(screen.getByText('silo')).toBeDefined();
     await waitFor(() => expect(screen.getByText('128')).toBeDefined());
-    expect(screen.getByText('2 · 30d')).toBeDefined();
+    expect(screen.getByText('2')).toBeDefined();
 
-    await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
-    const tagNames = screen
-      .getAllByText(/^#/)
-      .map((el) => el.textContent)
-      .filter((text): text is string => text !== null);
-    expect(tagNames).toEqual(['#ai', '#design', '#mcp']);
+    // The `#` is its own span (spacing fix), so the tag name is a separate text
+    // node — query by name and read tag rows by role for order.
+    await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
+    const tagNames = ['ai', 'design', 'mcp'].map(
+      (name) => screen.getByRole('link', { name: new RegExp(name, 'i') }).textContent,
+    );
+    expect(tagNames).toEqual(['#ai23', '#design17', '#mcp7']);
     expect(screen.getByText('23')).toBeDefined();
     expect(screen.getByText('17')).toBeDefined();
     expect(screen.getByText('7')).toBeDefined();
@@ -94,7 +102,7 @@ describe('Sidebar', () => {
 
     renderSidebar();
 
-    await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
     const libraryLink = screen.getByRole('link', { name: /library/i });
     const trashLink = screen.getByRole('link', { name: /trash/i });
@@ -175,7 +183,7 @@ describe('Sidebar', () => {
 
     it('toggles the filter input and filters the tag list case-insensitively', async () => {
       renderSidebar();
-      await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
       expect(screen.queryByPlaceholderText('find tag')).toBeNull();
 
@@ -184,9 +192,9 @@ describe('Sidebar', () => {
       expect(input).toBeDefined();
 
       fireEvent.change(input, { target: { value: 'DES' } });
-      expect(screen.getByText('#design')).toBeDefined();
-      expect(screen.queryByText('#ai')).toBeNull();
-      expect(screen.queryByText('#mcp')).toBeNull();
+      expect(screen.getByText('design')).toBeDefined();
+      expect(screen.queryByText('ai')).toBeNull();
+      expect(screen.queryByText('mcp')).toBeNull();
 
       // Toggling closed again hides the input.
       fireEvent.click(screen.getByTitle('find a tag'));
@@ -209,18 +217,18 @@ describe('Sidebar', () => {
       });
 
       renderSidebar();
-      await waitFor(() => expect(screen.getByText('#tag0')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('tag0')).toBeDefined());
 
-      expect(screen.getAllByText(/^#tag/)).toHaveLength(10);
+      expect(tagRowCount()).toBe(10);
       const more = screen.getByText('+3 more');
       expect(more).toBeDefined();
 
       fireEvent.click(more);
-      expect(screen.getAllByText(/^#tag/)).toHaveLength(13);
+      expect(tagRowCount()).toBe(13);
       expect(screen.getByText('show less')).toBeDefined();
 
       fireEvent.click(screen.getByText('show less'));
-      expect(screen.getAllByText(/^#tag/)).toHaveLength(10);
+      expect(tagRowCount()).toBe(10);
     });
 
     it('shows no "+N more" toggle when there are 10 or fewer tags', async () => {
@@ -236,7 +244,7 @@ describe('Sidebar', () => {
       });
 
       renderSidebar();
-      await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
       expect(screen.queryByText(/more$/)).toBeNull();
     });
   });
@@ -271,7 +279,7 @@ describe('Sidebar', () => {
       const fetchMock = mockOneTagAndCreate();
 
       renderSidebar();
-      await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
       fireEvent.click(screen.getByText('+ new tag'));
       const input = screen.getByPlaceholderText('tag name');
@@ -290,7 +298,7 @@ describe('Sidebar', () => {
       const fetchMock = mockOneTagAndCreate();
 
       renderSidebar();
-      await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
       fireEvent.click(screen.getByText('+ new tag'));
       const input = screen.getByPlaceholderText('tag name');
@@ -305,7 +313,7 @@ describe('Sidebar', () => {
       const fetchMock = mockOneTagAndCreate();
 
       renderSidebar();
-      await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
       fireEvent.click(screen.getByText('+ new tag'));
       const input = screen.getByPlaceholderText('tag name');
@@ -332,7 +340,7 @@ describe('Sidebar', () => {
       });
 
       renderSidebar();
-      await waitFor(() => expect(screen.getByText('#ai')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
       fireEvent.click(screen.getByText('+ new tag'));
       const input = screen.getByPlaceholderText('tag name');

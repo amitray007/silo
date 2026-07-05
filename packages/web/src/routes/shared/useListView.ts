@@ -51,8 +51,6 @@ export interface ListViewState {
    * so a failure MUST be shown somewhere or it's invisible).
    */
   captureError: string | undefined;
-  /** Count of links in the current feed still `captureStatus === 'enriching'` — feeds the header's `◌` indicator. */
-  enrichingCount: number;
 }
 
 export function useListView(tag?: string): ListViewState {
@@ -93,6 +91,5 @@ export function useListView(tag?: string): ListViewState {
     onKeep,
     isCapturing: captureLink.isPending,
     captureError: captureLink.isError ? (captureLink.error as ApiError).message : undefined,
-    enrichingCount: links.filter((link) => link.captureStatus === 'enriching').length,
   };
 }

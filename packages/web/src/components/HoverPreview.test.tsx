@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { makeLink } from '../test/fixtures';
 import { HoverPreview } from './HoverPreview';
@@ -120,6 +120,14 @@ describe('HoverPreview', () => {
     expect(card).not.toBeNull();
     expect((card as HTMLElement).style.top).toBe('77px');
     expect((card as HTMLElement).style.left).toBe('88px');
+  });
+
+  it('renders a ✕ close button that calls onHide when clicked', () => {
+    const onHide = vi.fn();
+    render(<HoverPreview link={makeLink()} position={position} onKeep={vi.fn()} onHide={onHide} />);
+    const closeButton = screen.getByRole('button', { name: /close preview/i });
+    fireEvent.click(closeButton);
+    expect(onHide).toHaveBeenCalledTimes(1);
   });
 
   it('is portaled to document.body', () => {

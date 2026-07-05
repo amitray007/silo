@@ -1,16 +1,20 @@
 /**
  * The sidebar nav's inline SVG icons (v3, `docs/design/app/Silo-v3.html`):
- * Library (bookmark), Trash (trash can), Settings (sliders). 15×15,
+ * Library (bookmark), Trash (trash can), Settings (sliders). 18×18,
  * `viewBox="0 0 16 16"`, `stroke="currentColor"` (so they inherit the nav
  * item's ink/mut color — no hardcoded hex), stroke-width 1.4, round caps/
- * joins — copied path-for-path from the prototype.
+ * joins — path data copied from the prototype. Bumped from v3's original
+ * 15px per the user-feedback polish pass ("icons look too small" — the
+ * Orpheus reference, `docs/design/refs/*.png`, uses larger/cleaner icons);
+ * the `viewBox` stays `0 0 16 16` so the path data is untouched, only the
+ * rendered `width`/`height` grew.
  */
 
 export function LibraryIcon() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="18"
+      height="18"
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
@@ -26,14 +30,14 @@ export function LibraryIcon() {
 
 /**
  * The trash-can glyph — `size`/`stroke` are overridable (defaulting to the
- * sidebar nav rail's 15px/`currentColor`) so `Dock.tsx`'s `DockTrashIcon`
+ * sidebar nav rail's 18px/`currentColor`) so `Dock.tsx`'s `DockTrashIcon`
  * (12px, `var(--ghost)`, used in the docks' "move to trash"/"empty all"/
  * "delete now" buttons and `TrashRowActions`' delete-now button) can reuse
  * this exact path data instead of duplicating the SVG (jscpd guards
  * production src at 1.5%).
  */
 export function TrashIcon({
-  size = 15,
+  size = 18,
   stroke = 'currentColor',
 }: {
   size?: number;
@@ -62,8 +66,8 @@ export function TrashIcon({
 export function SettingsIcon() {
   return (
     <svg
-      width="15"
-      height="15"
+      width="18"
+      height="18"
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"

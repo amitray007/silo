@@ -66,14 +66,12 @@ function LibrarySelectionDock({ selectedIds }: { selectedIds: string[] }) {
 export function ContentFrame({
   title,
   count,
-  enrichingCount,
   captureError,
   headerSlot,
   children,
 }: {
   title: ReactNode;
   count: number | undefined;
-  enrichingCount?: number;
   captureError?: string;
   headerSlot: ReactNode;
   children: ReactNode;
@@ -86,7 +84,6 @@ export function ContentFrame({
       <ContentHeader
         title={title}
         count={count}
-        {...(enrichingCount !== undefined ? { enrichingCount } : {})}
         {...(captureError !== undefined ? { captureError } : {})}
       >
         {headerSlot}

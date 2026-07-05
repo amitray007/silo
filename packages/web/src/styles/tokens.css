@@ -1,7 +1,9 @@
 /**
  * Silo "Oat" design tokens.
- * Source of truth: docs/design/tokens.md + docs/design/app/Silo-v3.html (:root block).
- * Exact hex values copied from the prototype — do not "improve" them here.
+ * Source of truth: docs/design/tokens.md + docs/design/app/Silo-v3.html (:root block),
+ * with a user-directed polish pass (see docs/design/refs/*.png, the "Orpheus"
+ * reference) that deepens dark mode toward a richer near-black with warmth
+ * and keeps light mode's original Oat hex values untouched.
  * v3 also defines a `--desk` desktop-backdrop token (used by its floating
  * card shell) — we deliberately do NOT adopt it (plan 011 decision 1: we
  * keep the full-bleed frame, not v3's 80rem card).
@@ -27,18 +29,26 @@
   color-scheme: light;
 }
 
+/*
+ * Dark mode, deepened toward the Orpheus reference (docs/design/refs/*.png):
+ * a richer near-black ground (`--bg`) with warmth instead of v3's original
+ * dark-brown `#1a1510`, a darker sidebar/well (`--bg2`) for more contrast
+ * against `--bg`, softer low-contrast borders, and a warmer, more legible
+ * `--ink`/`--mut` so the amber brand dot + marks pop against the deeper
+ * ground. Same token NAMES/roles as light — only the dark hex values move.
+ */
 :root[data-theme="dark"] {
-  --bg: #1a1510;
-  --bg2: #141009;
-  --line: #2e2720;
-  --hov: #241d15;
-  --ink: #ede5d8;
-  --mut: #a89a87;
-  --fnt: #968871;
-  --ghost: #7e7260;
-  --mark: #d9a441;
-  --markt: #d9a441;
-  --warn: #ce7454;
+  --bg: #14100c;
+  --bg2: #0c0906;
+  --line: #292219;
+  --hov: #201a13;
+  --ink: #f2e9db;
+  --mut: #ad9e89;
+  --fnt: #94856f;
+  --ghost: #85795f;
+  --mark: #dda54a;
+  --markt: #e0ab4f;
+  --warn: #d67e5c;
 
   color-scheme: dark;
 }

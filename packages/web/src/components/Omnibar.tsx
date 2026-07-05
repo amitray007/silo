@@ -74,20 +74,23 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
   return (
     <div
       style={{
-        width: 'clamp(230px, 42%, 430px)',
+        // Bumped from v3's `clamp(230px, 42%, 430px)` per direct user
+        // feedback ("make the omnibar bigger … so 'paste a link to keep' is
+        // more prominent") — wider clamp bounds + roomier padding below.
+        width: 'clamp(280px, 46%, 520px)',
         display: 'flex',
         alignItems: 'center',
-        gap: 9,
+        gap: 10,
         border: `1px solid ${focused ? 'var(--ghost)' : 'var(--line)'}`,
-        borderRadius: 10,
+        borderRadius: 11,
         background: 'var(--bg2)',
-        padding: '8px 13px',
+        padding: '10px 15px',
         transition: 'border-color .15s ease, background .2s ease',
       }}
     >
       <svg
-        width="14"
-        height="14"
+        width="15"
+        height="15"
         viewBox="0 0 16 16"
         fill="none"
         stroke="var(--ghost)"
@@ -152,7 +155,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
           background: 'none',
           outline: 'none',
           font: 'inherit',
-          fontSize: '0.85rem',
+          fontSize: '0.92rem',
           color: 'var(--ink)',
           padding: 0,
         }}

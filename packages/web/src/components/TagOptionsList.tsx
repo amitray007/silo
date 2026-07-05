@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import type { TagOption } from '../lib/tagOptions';
 
 /**
@@ -8,6 +9,11 @@ import type { TagOption } from '../lib/tagOptions';
  * component is the fix, not a workaround). `size` picks the two popovers'
  * slightly different paddings/font-sizes (v3's row-menu tags fly-out vs. the
  * edit modal's wider tags picker) without forking the whole row.
+ *
+ * Hover feedback (`--hov` background on the hovered row) added per the
+ * RowMenu redesign (build brief item 11: "the tags hover all look bad") —
+ * previously every row was flat/inert until clicked, which read as broken
+ * rather than interactive.
  */
 export function TagOptionsList({
   opts,
@@ -20,8 +26,9 @@ export function TagOptionsList({
   size?: 'sm' | 'md';
   onToggle: (name: string, active: boolean) => void;
 }) {
-  const rowPadding = size === 'sm' ? '4px 8px' : '5px 9px';
-  const notePadding = size === 'sm' ? '3px 8px 1px' : '3px 9px 1px';
+  const [hoveredName, setHoveredName] = useState<string | null>(null);
+  const rowPadding = size === 'sm' ? '5px 9px' : '6px 9px';
+  const notePadding = size === 'sm' ? '4px 9px 2px' : '4px 9px 2px';
 
   return (
     <>
@@ -30,6 +37,8 @@ export function TagOptionsList({
           key={opt.name}
           type="button"
           onClick={() => onToggle(opt.name, opt.active)}
+          onMouseEnter={() => setHoveredName(opt.name)}
+          onMouseLeave={() => setHoveredName((current) => (current === opt.name ? null : current))}
           style={{
             display: 'flex',
             alignItems: 'center',
@@ -37,12 +46,12 @@ export function TagOptionsList({
             width: '100%',
             boxSizing: 'border-box',
             border: 0,
-            background: 'none',
+            background: hoveredName === opt.name ? 'var(--hov)' : 'none',
             fontFamily: 'inherit',
             textAlign: 'left',
             padding: rowPadding,
-            borderRadius: 6,
-            fontSize: '0.78rem',
+            borderRadius: 7,
+            fontSize: '0.8rem',
             fontWeight: 400,
             cursor: 'pointer',
             color: opt.active ? 'var(--ink)' : 'var(--mut)',

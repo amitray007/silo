@@ -49,14 +49,48 @@ describe('bucketByDay', () => {
     expect(bucketByDay([l], NOW)).toEqual([{ label: 'This week', items: [l] }]);
   });
 
-  it('buckets a link 7 calendar days back as Earlier', () => {
+  it('buckets a link 7 calendar days back, in the previous calendar month, as Last month', () => {
+    // NOW is 2026-07-05; 2026-06-28 is in June — the calendar month right before July.
     const l = link({ id: '1', createdAt: at(2026, 5, 28) });
-    expect(bucketByDay([l], NOW)).toEqual([{ label: 'Earlier', items: [l] }]);
+    expect(bucketByDay([l], NOW)).toEqual([{ label: 'Last month', items: [l] }]);
   });
 
-  it('buckets a link 10 days back as Earlier', () => {
+  it('buckets a link 10 days back, same previous calendar month, as Last month', () => {
     const l = link({ id: '1', createdAt: at(2026, 5, 25) });
-    expect(bucketByDay([l], NOW)).toEqual([{ label: 'Earlier', items: [l] }]);
+    expect(bucketByDay([l], NOW)).toEqual([{ label: 'Last month', items: [l] }]);
+  });
+
+  it('buckets a link two calendar months back with a real "{Month} {Year}" label', () => {
+    // NOW is July 2026; May 2026 is two months back — not "Last month".
+    const l = link({ id: '1', createdAt: at(2026, 4, 15) });
+    expect(bucketByDay([l], NOW)).toEqual([{ label: 'May 2026', items: [l] }]);
+  });
+
+  it('labels a calendar month from a prior YEAR with the year included', () => {
+    const l = link({ id: '1', createdAt: at(2025, 6, 15) }); // July 2025 — a year back
+    expect(bucketByDay([l], NOW)).toEqual([{ label: 'July 2025', items: [l] }]);
+  });
+
+  it('groups older links by calendar month (not by a rolling 30-day window), most-recent-month-first', () => {
+    const juneLink = link({ id: 'june', createdAt: at(2026, 5, 20) });
+    const mayLink = link({ id: 'may', createdAt: at(2026, 4, 10) });
+    const aprilLink = link({ id: 'april', createdAt: at(2026, 3, 1) });
+    // Deliberately out of chronological order in the input to prove the
+    // month-key sort (not insertion order) drives the result.
+    const result = bucketByDay([mayLink, juneLink, aprilLink], NOW);
+    expect(result).toEqual([
+      { label: 'Last month', items: [juneLink] },
+      { label: 'May 2026', items: [mayLink] },
+      { label: 'April 2026', items: [aprilLink] },
+    ]);
+  });
+
+  it('keeps multiple links from the same older calendar month in one bucket, in relative order', () => {
+    const first = link({ id: 'first', createdAt: at(2026, 5, 3) });
+    const second = link({ id: 'second', createdAt: at(2026, 5, 22) });
+    expect(bucketByDay([first, second], NOW)).toEqual([
+      { label: 'Last month', items: [first, second] },
+    ]);
   });
 
   it('is a calendar-day boundary, not a rolling 24h window: 11pm yesterday and 1am today are 1 calendar day apart', () => {
@@ -79,12 +113,12 @@ describe('bucketByDay', () => {
 
   it('drops empty groups and preserves label order across non-adjacent buckets', () => {
     const todayLink = link({ id: 'today', createdAt: at(2026, 6, 5) });
-    const earlierLink = link({ id: 'earlier', createdAt: at(2026, 5, 1) });
+    const olderLink = link({ id: 'older', createdAt: at(2026, 4, 1) }); // May 2026 — two months back
     // Input newest-first, as the API returns; Yesterday/This week have no items.
-    const result = bucketByDay([todayLink, earlierLink], NOW);
+    const result = bucketByDay([todayLink, olderLink], NOW);
     expect(result).toEqual([
       { label: 'Today', items: [todayLink] },
-      { label: 'Earlier', items: [earlierLink] },
+      { label: 'May 2026', items: [olderLink] },
     ]);
   });
 

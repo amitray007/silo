@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { usePasteCapture } from '../lib/usePasteCapture';
 import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
 import { HoverPreviewProvider } from './HoverPreviewContext';
@@ -145,6 +146,11 @@ export function AppFrame() {
   const sidebarRef = useRef<HTMLDivElement>(null);
   const location = useLocation();
   const previousPathRef = useRef(location.pathname);
+
+  // Paste-to-capture (build brief, "Omnibar" item 3) — mounted once at the
+  // app root, same as the other document-level singletons below, so a paste
+  // anywhere on the page (not just inside the omnibar) can be caught.
+  usePasteCapture();
 
   const closeDrawer = () => {
     // Only steal focus back to the (offscreen-on-desktop) ☰ button when the

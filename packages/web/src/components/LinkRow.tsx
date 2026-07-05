@@ -1,32 +1,14 @@
 import { useEffect, useState } from 'react';
 import type { LinkJson } from '../api/types';
 import { isHoverCapable } from '../lib/pointer';
+import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { Chip } from './Chip';
 import { useHoverPreview } from './HoverPreviewContext';
-import { Mark, type MarkKind } from './Mark';
 import { RowMenu } from './RowMenu';
 import { useRowMenu } from './RowMenuContext';
 import { RowSelectCheckbox } from './RowSelectCheckbox';
 import { useLibrarySelection } from './SelectionContext';
-
-/**
- * The capture-status mark for a row — mutually exclusive with itself (a link
- * has exactly one `captureStatus`), but composed alongside the independent
- * note/claude marks below. `'full'` (healthy) deliberately yields no mark —
- * "silence means complete" (CLAUDE.md "Design fidelity").
- */
-function captureStatusMark(captureStatus: LinkJson['captureStatus']): MarkKind | null {
-  switch (captureStatus) {
-    case 'enriching':
-      return 'enriching';
-    case 'partial':
-    case 'bare':
-      return 'degraded';
-    default:
-      return null;
-  }
-}
 
 /**
  * The Library row (plan 010 — `Silo-v2.html:110-136`, `render-rows-*.png`;
@@ -40,23 +22,29 @@ function captureStatusMark(captureStatus: LinkJson['captureStatus']): MarkKind |
  * wrapping `<span>` is `position: relative` so `RowMenu`'s
  * `position:absolute` anchors to this row, not the whole list.
  *
- * Marks: up to three can co-occur (note + claude + enriching/degraded) — each
- * is an independent flag except the capture-status mark, which is one of
- * three states (or none, on a healthy `full` link).
+ * Marks: per a direct user-feedback polish pass, the inline `¶`/`◆`/`◌`
+ * glyphs (note / added-by-Claude / capturing / degraded) are REMOVED from the
+ * row entirely — rows show chip + title + domain only, no status chrome. The
+ * quoted note LINE underneath (when `link.notes` is set) stays; only the
+ * glyph badge next to the title is gone. `Mark`/`MarkKind` are deleted
+ * (unused after this — see `docs/rules/testing.md`/knip).
+ *
+ * Hover meta: on hover (or focus), a relative-time string ("2h ago") derived
+ * from `createdAt` renders on the right, next to the domain — v3's `it.meta`
+ * (`Silo-v3.html:127-129`), restored per user feedback.
  *
  * Multi-select: hovering (or having the `⋯` menu open, or any row already
  * selected) swaps the chip for a checkbox — `hovered` is tracked locally
  * (needed for that content swap; the row's OWN hover background stays pure
  * CSS, `.silo-link-row:hover` in `base.css`, since inline styles can't do
- * `:hover` — this local flag only drives the checkbox/chip swap). A selected
- * row keeps the `--hov` background even when not hovered (v3's `bg: (hov ||
- * isSel) ? 'var(--hov)' : 'transparent'`), applied as an inline override on
- * top of the CSS default.
+ * `:hover` — this local flag also drives the hover-meta/chip swap). A
+ * selected row keeps the `--hov` background even when not hovered (v3's
+ * `bg: (hov || isSel) ? 'var(--hov)' : 'transparent'`), applied as an inline
+ * override on top of the CSS default.
  */
 export function LinkRow({ link }: { link: LinkJson }) {
   const domain = deriveDomain(link.url);
   const title = link.title ?? deriveTitleFromUrl(link.url);
-  const statusMark = captureStatusMark(link.captureStatus);
   const { openMenuId, toggleMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
   const [hovered, setHovered] = useState(false);
@@ -143,13 +131,6 @@ export function LinkRow({ link }: { link: LinkJson }) {
             >
               {title}
             </span>
-            {(statusMark || link.notes || link.addedBy === 'agent') && (
-              <span style={{ flex: 'none', display: 'inline-flex', gap: 5 }}>
-                {link.notes && <Mark kind="note" />}
-                {link.addedBy === 'agent' && <Mark kind="claude" />}
-                {statusMark && <Mark kind={statusMark} />}
-              </span>
-            )}
             <span
               style={{
                 flex: 'none',
@@ -164,6 +145,11 @@ export function LinkRow({ link }: { link: LinkJson }) {
             >
               {domain}
             </span>
+            {hovered && (
+              <span style={{ flex: 'none', fontSize: '0.74rem', color: 'var(--fnt)' }}>
+                {relativeTimeFromNow(link.createdAt)}
+              </span>
+            )}
           </span>
           <button
             type="button"

@@ -22,11 +22,19 @@ const noop = () => {};
  * `onNavigate` fires after a successful client-side navigation — `AppFrame`
  * uses it to close the mobile drawer when a nav item is tapped.
  *
- * `onBeforeNavigate` (optional) runs before the `navigate(to)` call — the
- * Settings item uses it to also open the Settings modal in the same click,
- * so the item stays a real, linkable `/settings` anchor (bookmarkable,
- * correct `aria-current`) while ALSO triggering v3's modal-open behavior
- * (`openSettings`) rather than only rendering a route.
+ * `onBeforeNavigate` (optional) runs before the `navigate(to)` call.
+ *
+ * `skipNavigate` (optional — the Settings item's own case, per a direct
+ * user-feedback fix: "don't navigate to /settings when opening the modal")
+ * suppresses the `navigate(to)` call entirely: the click only runs
+ * `onBeforeNavigate` (Settings' `openSettings()`) and `onNavigate` (mobile
+ * drawer close), never pushing the route. `href`/`aria-current` still point
+ * at `/settings` so the item LOOKS and reads like the same linkable anchor —
+ * middle-click/cmd-click/open-in-new-tab still work (native anchor behavior,
+ * untouched by `onClick`) and `/settings` typed directly or followed via that
+ * still opens the modal (via `SettingsView`'s own mount effect) — only a
+ * plain left-click routing through THIS click handler skips the `navigate`
+ * call, so the visible URL never changes for that one interaction.
  */
 function NavItemLink({
   to,
@@ -37,15 +45,17 @@ function NavItemLink({
   variant,
   onNavigate,
   onBeforeNavigate,
+  skipNavigate = false,
 }: {
   to: string;
-  label: string;
+  label: ReactNode;
   meta?: React.ReactNode;
   end?: boolean;
   icon?: ReactNode;
   variant?: NavItemVariant | undefined;
   onNavigate: () => void;
   onBeforeNavigate?: () => void;
+  skipNavigate?: boolean;
 }) {
   const navigate = useNavigate();
   const match = useMatch({ path: to, end });
@@ -57,7 +67,7 @@ function NavItemLink({
     }
     event.preventDefault();
     onBeforeNavigate?.();
-    navigate(to);
+    if (!skipNavigate) navigate(to);
     onNavigate();
   };
 
@@ -85,14 +95,19 @@ interface SidebarProps {
 
 /**
  * The real, data-bound sidebar (`docs/design/app/library-sidebar-light.png`):
- * brand row, Library (live count), Trash (`count · purgeWindowDays`), a Tags
+ * brand row, Library (live count), Trash (count only — v3's `trashMeta`,
+ * per direct user feedback: the `· {purgeWindowDays}d` suffix was dropped),
+ * a Tags
  * section built from `useTags()` (count-desc order preserved as returned by
  * the API), and Settings pinned to the bottom via flex (the Tags section
- * grows to fill available space). The Settings button both navigates to
- * `/settings` (keeping it a real, linkable nav item) AND opens the shared
- * Settings modal (plan 011, V3-7) via `useSettings().openSettings()` — v3's
- * `openSettings` is a modal trigger, not a route change, so this reproduces
- * that behavior while keeping the route linkable. The light/dark theme
+ * grows to fill available space). The Settings button opens the shared
+ * Settings modal (plan 011, V3-7) via `useSettings().openSettings()` WITHOUT
+ * navigating to `/settings` (`skipNavigate`, per a direct user-feedback fix:
+ * "don't navigate to /settings when opening the modal" — Settings is a
+ * popover, not a screen, so clicking it from the sidebar must not change the
+ * visible route). `/settings` stays reachable/linkable as its own URL
+ * (`SettingsView`'s mount effect opens the same modal) for bookmarking/deep
+ * links — only THIS click path skips the route push. The light/dark theme
  * toggle that used to live here has MOVED into Settings → Preferences (v3
  * only shows it there, not in the sidebar).
  *
@@ -146,7 +161,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       <NavItemLink
         to="/trash"
         label="Trash"
-        meta={counts ? `${counts.trash} · ${counts.purgeWindowDays}d` : undefined}
+        meta={counts ? String(counts.trash) : undefined}
         icon={<TrashIcon />}
         onNavigate={onNavigate}
       />
@@ -157,7 +172,12 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           <NavItemLink
             key={tag.name}
             to={`/tags/${tag.name}`}
-            label={`#${tag.name}`}
+            label={
+              <>
+                <span style={{ color: 'var(--ghost)', marginRight: 4 }}>#</span>
+                {tag.name}
+              </>
+            }
             meta={tag.count}
             variant="tag"
             onNavigate={onNavigate}
@@ -174,6 +194,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         variant="settings"
         onNavigate={onNavigate}
         onBeforeNavigate={() => openSettings()}
+        skipNavigate
       />
     </nav>
   );

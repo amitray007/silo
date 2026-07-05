@@ -29,20 +29,10 @@ describe('ContentHeader', () => {
     expect(placeholder).not.toBeNull();
   });
 
-  it('shows the ◌ enriching indicator when enrichingCount is positive (plan 011, V3-3)', () => {
-    render(<ContentHeader title="Library" enrichingCount={3} />);
-    expect(screen.getByText('◌')).toBeDefined();
-    expect(screen.getByText('3 capturing')).toBeDefined();
-  });
-
-  it('hides the enriching indicator when enrichingCount is 0', () => {
-    render(<ContentHeader title="Library" enrichingCount={0} />);
-    expect(screen.queryByText('◌')).toBeNull();
-  });
-
-  it('hides the enriching indicator when enrichingCount is omitted', () => {
+  it('renders no ◌ capturing chrome anywhere (removed per user feedback — no capturing UI)', () => {
     render(<ContentHeader title="Library" />);
     expect(screen.queryByText('◌')).toBeNull();
+    expect(screen.queryByText(/capturing/)).toBeNull();
   });
 
   it('shows a calm capture-error message when captureError is set (plan 011, V3-3)', () => {

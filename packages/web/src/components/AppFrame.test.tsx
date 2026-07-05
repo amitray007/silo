@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -53,6 +53,12 @@ function EscapeProbe() {
   );
 }
 
+/** Echoes the current route's pathname into the DOM — lets a test assert the URL DIDN'T change after a click, not just what content rendered. */
+function PathProbe() {
+  const location = useLocation();
+  return <span data-testid="current-path">{location.pathname}</span>;
+}
+
 function renderAppFrame(initialEntries: string[] = ['/']) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -61,7 +67,15 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
         <MemoryRouter initialEntries={initialEntries}>
           <Routes>
             <Route element={<AppFrame />}>
-              <Route path="/" element={<div>outlet content</div>} />
+              <Route
+                path="/"
+                element={
+                  <>
+                    <PathProbe />
+                    <div>outlet content</div>
+                  </>
+                }
+              />
               <Route path="/trash" element={<div>trash content</div>} />
               <Route path="/probe" element={<EscapeProbe />} />
               <Route path="/settings" element={<div>settings route content</div>} />
@@ -105,6 +119,18 @@ describe('AppFrame', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Preferences' }));
       expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
       expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
+    });
+
+    it('does NOT navigate to /settings when opening the modal from the sidebar button (per user feedback: Settings is a popover, not a route change)', () => {
+      renderAppFrame();
+      expect(screen.getByTestId('current-path').textContent).toBe('/');
+
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+
+      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+      // The underlying route/outlet content is untouched — still "/", not "/settings".
+      expect(screen.getByTestId('current-path').textContent).toBe('/');
+      expect(screen.getByText('outlet content')).toBeDefined();
     });
 
     it('Escape closes the Settings modal and restores focus to the trigger', () => {

@@ -48,7 +48,6 @@ export function LibraryView() {
     <ContentFrame
       title="Library"
       count={view.liveCount}
-      enrichingCount={view.enrichingCount}
       {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
       headerSlot={header}
     >

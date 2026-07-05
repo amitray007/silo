@@ -63,7 +63,7 @@ describeIfPg('GET /api/tags (integration)', () => {
     expect(popular.index).toBeLessThan(rare.index);
   });
 
-  it('a tag whose only links are trashed is absent from the list', async () => {
+  it('a tag whose only links are trashed still appears at count 0', async () => {
     const { core, app } = harness.mod();
     const link = await core.createLink({
       url: 'https://example.com/tags-trashed-only',
@@ -72,8 +72,11 @@ describeIfPg('GET /api/tags (integration)', () => {
     });
     await core.softDelete(link.id);
 
+    // The tag row persists; its live count is 0 (see core.listTagsWithCounts —
+    // left-joined so an empty/all-trashed tag surfaces rather than vanishing,
+    // so the '+ new tag' flow's empty tags are visible + assignable).
     const { entry } = await findTag(app, 'trashed-only-tag');
-    expect(entry).toBeUndefined();
+    expect(entry).toEqual({ name: 'trashed-only-tag', count: 0 });
   });
 
   it('overall ordering across many tags is count desc then name asc', async () => {

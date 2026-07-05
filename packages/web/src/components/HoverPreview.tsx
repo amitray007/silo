@@ -52,7 +52,7 @@ export function HoverPreview({
   const meta = relativeTimeFromNow(link.createdAt);
 
   return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — every actual control inside (the `open ↗` anchor) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
+    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — every actual control inside (the `open ↗` anchor, the ✕ close button) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
     <div
       onMouseEnter={onKeep}
       onMouseLeave={onHide}
@@ -71,7 +71,29 @@ export function HoverPreview({
         animation: 'siloIn .16s ease',
       }}
     >
-      <div style={{ padding: '13px 14px 2px' }}>
+      <button
+        type="button"
+        title="close"
+        aria-label="close preview"
+        onClick={onHide}
+        style={{
+          position: 'absolute',
+          top: 9,
+          right: 9,
+          border: 0,
+          background: 'none',
+          fontFamily: 'inherit',
+          fontSize: '0.72rem',
+          lineHeight: 1,
+          color: 'var(--ghost)',
+          cursor: 'pointer',
+          padding: 4,
+          borderRadius: 6,
+        }}
+      >
+        ✕
+      </button>
+      <div style={{ padding: '13px 26px 2px 14px' }}>
         <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
           {title}
         </div>

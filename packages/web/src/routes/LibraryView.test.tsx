@@ -7,6 +7,7 @@ import type { LinksResponse } from '../api/types';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { SelectionProvider } from '../components/SelectionContext';
+import { bucketByDay } from '../lib/buckets';
 import { makeLink as link } from '../test/fixtures';
 import { LibraryView } from './LibraryView';
 
@@ -110,20 +111,28 @@ describe('LibraryView', () => {
   });
 
   it('groups rows under the correct day labels', () => {
-    const today = link({ id: 'today', title: 'Today link', createdAt: new Date().toISOString() });
-    const old = link({
-      id: 'old',
-      title: 'Old link',
-      createdAt: new Date(Date.now() - 20 * 24 * 60 * 60 * 1000).toISOString(),
-    });
+    // Older links now group by calendar MONTH (feedback #14) — "Last month"
+    // or a "{Month} {Year}" label — rather than a single "Earlier" bucket.
+    // Derive the expected month label from bucketByDay so the test is
+    // date-robust (a fixed offset would land in a different month over time).
+    const now = new Date();
+    const oldDate = new Date(now.getFullYear(), now.getMonth() - 2, 15); // ~2 months back
+    const today = link({ id: 'today', title: 'Today link', createdAt: now.toISOString() });
+    const old = link({ id: 'old', title: 'Old link', createdAt: oldDate.toISOString() });
+    const groups = bucketByDay([today, old], now);
+    const oldGroupLabel = groups.find((g) => g.items.some((l) => l.id === 'old'))?.label;
+
     mockUseInfiniteLinks({
       data: { pages: [{ links: [today, old] } as LinksResponse], pageParams: [undefined] },
     });
     renderLibraryView();
     expect(screen.getByText('Today')).toBeDefined();
-    expect(screen.getByText('Earlier')).toBeDefined();
     expect(screen.getByText('Today link')).toBeDefined();
     expect(screen.getByText('Old link')).toBeDefined();
+    // The old link sits under its month group, not "Today".
+    expect(oldGroupLabel).toBeDefined();
+    expect(oldGroupLabel).not.toBe('Today');
+    expect(screen.getByText(oldGroupLabel as string)).toBeDefined();
   });
 
   it('the load-more button calls fetchNextPage and page 2 appends once data updates', () => {
@@ -270,8 +279,9 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
 /**
  * Capture (plan 011, V3-3): Enter on a URL-looking omnibar query calls
  * `POST /api/links` and clears the bar, with the new row appearing instantly
- * (the optimistic insert) ahead of any server response — and the `◌ N
- * capturing` header indicator reflecting the resulting `enriching` row.
+ * (the optimistic insert) ahead of any server response. The `◌ N capturing`
+ * header indicator that used to reflect the resulting `enriching` row was
+ * REMOVED per a direct user-feedback polish pass (no capturing UI anywhere).
  * Drives the real `useListView`/`useCaptureLink`/`Omnibar` stack end to end
  * (only `fetch` is mocked), matching the "real hook" style above.
  */
@@ -287,7 +297,7 @@ describe('LibraryView capture (plan 011, V3-3)', () => {
     vi.restoreAllMocks();
   });
 
-  it('Enter on a URL query POSTs to /api/links, clears the bar, and shows the row + enriching indicator instantly', async () => {
+  it('Enter on a URL query POSTs to /api/links, clears the bar, and shows the optimistic row instantly', async () => {
     let resolveCapture!: (value: Response) => void;
     const capturePromise = new Promise<Response>((resolve) => {
       resolveCapture = resolve;
@@ -321,8 +331,6 @@ describe('LibraryView capture (plan 011, V3-3)', () => {
     await waitFor(() => expect((input as HTMLInputElement).value).toBe(''));
     // The optimistic row renders before the server has responded (title + domain both read "new-example.com").
     await waitFor(() => expect(screen.getAllByText('new-example.com').length).toBeGreaterThan(0));
-    // The header's enriching indicator reflects the optimistic `enriching` row.
-    expect(screen.getByText('1 capturing')).toBeDefined();
 
     resolveCapture(
       jsonResponse(

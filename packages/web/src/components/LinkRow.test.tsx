@@ -50,44 +50,50 @@ describe('LinkRow', () => {
     expect(anchor.getAttribute('rel')).toBe('noopener');
   });
 
-  it('shows no mark at all on a healthy full link with no notes, not agent-added — silence means complete', () => {
+  it('shows no mark glyph at all — marks were removed per user feedback (silence means complete, always)', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'full', notes: null, addedBy: 'user' })} />);
     expect(screen.queryByRole('img')).toBeNull();
   });
 
-  it('shows the enriching mark and dims the title while capturing', () => {
+  it('dims the title while capturing, with no mark glyph', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
-    expect(screen.getByLabelText('capturing…')).toBeDefined();
+    expect(screen.queryByRole('img')).toBeNull();
     expect(screen.getByText('A post').style.color).toBe('var(--fnt)');
   });
 
-  it('shows the degraded mark for a partial capture', () => {
+  it('shows no mark glyph for a partial capture', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'partial' })} />);
-    expect(screen.getByLabelText('capture incomplete')).toBeDefined();
+    expect(screen.queryByRole('img')).toBeNull();
   });
 
-  it('shows the degraded mark for a bare capture', () => {
+  it('shows no mark glyph for a bare capture', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'bare' })} />);
-    expect(screen.getByLabelText('capture incomplete')).toBeDefined();
+    expect(screen.queryByRole('img')).toBeNull();
   });
 
-  it('shows the note mark when notes are present', () => {
+  it('shows no note mark glyph when notes are present (only the note line, tested below)', () => {
     renderRow(<LinkRow link={link({ notes: 'read later' })} />);
-    expect(screen.getByLabelText('has a note')).toBeDefined();
+    expect(screen.queryByLabelText('has a note')).toBeNull();
+    expect(screen.getByText('"read later"')).toBeDefined();
   });
 
-  it('shows the claude mark when addedBy is agent', () => {
+  it('shows no claude mark glyph when addedBy is agent', () => {
     renderRow(<LinkRow link={link({ addedBy: 'agent' })} />);
-    expect(screen.getByLabelText('added by Claude')).toBeDefined();
+    expect(screen.queryByLabelText('added by Claude')).toBeNull();
   });
 
-  it('composes note + claude + enriching together (a 3-mark combo)', () => {
+  it('shows the relative-time hover meta on hover, next to the domain', () => {
     renderRow(
-      <LinkRow link={link({ notes: 'context', addedBy: 'agent', captureStatus: 'enriching' })} />,
+      <LinkRow
+        link={link({ title: 'A post', createdAt: new Date(Date.now() - 3600_000).toISOString() })}
+      />,
     );
-    expect(screen.getByLabelText('has a note')).toBeDefined();
-    expect(screen.getByLabelText('added by Claude')).toBeDefined();
-    expect(screen.getByLabelText('capturing…')).toBeDefined();
+    const anchor = screen.getByRole('link', { name: /A post/ });
+    expect(screen.queryByText('1h ago')).toBeNull();
+    fireEvent.mouseEnter(anchor);
+    expect(screen.getByText('1h ago')).toBeDefined();
+    fireEvent.mouseLeave(anchor);
+    expect(screen.queryByText('1h ago')).toBeNull();
   });
 
   it('renders the note line, quoted, only when notes are present', () => {
@@ -128,17 +134,14 @@ describe('LinkRow', () => {
     expect(screen.queryByText('""')).toBeNull();
   });
 
-  it('never uses the amber mark/markt color tokens outside of a Mark glyph (no amber chrome)', () => {
+  it('never uses the amber mark/markt color tokens anywhere in the row (no amber chrome — marks are gone)', () => {
     const { container } = renderRow(
       <LinkRow link={link({ notes: 'x', addedBy: 'agent', captureStatus: 'partial' })} />,
     );
-    const markEls = new Set(screen.getAllByRole('img'));
 
     for (const el of container.querySelectorAll<HTMLElement>('*')) {
       const color = el.style.color;
-      if (color === 'var(--mark)' || color === 'var(--markt)') {
-        expect(markEls.has(el)).toBe(true);
-      }
+      expect(color === 'var(--mark)' || color === 'var(--markt)').toBe(false);
     }
   });
 

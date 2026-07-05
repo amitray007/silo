@@ -48,7 +48,6 @@ export function TagView() {
     <ContentFrame
       title={`#${tag}`}
       count={view.links.length}
-      enrichingCount={view.enrichingCount}
       {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
       headerSlot={header}
     >

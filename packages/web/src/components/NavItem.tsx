@@ -80,7 +80,7 @@ export function NavItem({
       }}
     >
       {icon && (
-        <span style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 16 }}>
+        <span style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 18 }}>
           {icon}
         </span>
       )}
