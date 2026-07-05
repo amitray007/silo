@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import * as hooks from '../api/hooks';
 import type { LinksResponse } from '../api/types';
+import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { SelectionProvider } from '../components/SelectionContext';
 import { makeLink as link } from '../test/fixtures';
@@ -30,7 +31,9 @@ function renderLibraryView() {
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
         <SelectionProvider>
-          <LibraryView />
+          <HoverPreviewProvider>
+            <LibraryView />
+          </HoverPreviewProvider>
         </SelectionProvider>
       </RowMenuProvider>
     </QueryClientProvider>,

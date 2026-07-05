@@ -1,7 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { LinkJson } from '../api/types';
+import { isHoverCapable } from '../lib/pointer';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { Chip } from './Chip';
+import { useHoverPreview } from './HoverPreviewContext';
 import { Mark, type MarkKind } from './Mark';
 import { RowMenu } from './RowMenu';
 import { useRowMenu } from './RowMenuContext';
@@ -61,6 +63,52 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const selection = useLibrarySelection();
   const isSelected = selection.isSelected(link.id);
   const showCheck = hovered || menuOpen || selection.selected.length > 0;
+  const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
+
+  // The hover-preview trigger (plan 011, V3-8 — v3's `it.enter`/`it.leave`,
+  // `Silo-v3.html:808-823`). Suppressed (no preview scheduled at all, not
+  // scheduled-then-hidden) whenever THIS row's `⋯` menu is open — a preview
+  // popping up behind/beside an open menu would fight it for the same screen
+  // real estate for no benefit — or the pointer isn't hover-capable (a tap on
+  // a touch device is not a "hover", and there is no pointer to later "leave"
+  // and close it). `enter` reads `menuOpen` fresh each call (not captured at
+  // mount) since it's a plain closure recreated every render, matching v3's
+  // own per-render `enter` closure.
+  const handleEnter = (e: React.SyntheticEvent<HTMLAnchorElement>) => {
+    setHovered(true);
+    if (menuOpen || !isHoverCapable()) return;
+    scheduleShow(link, e.currentTarget.getBoundingClientRect());
+  };
+  const handleLeave = () => {
+    setHovered(false);
+    scheduleHide(link.id);
+  };
+
+  // Opening this row's `⋯` menu (the button's own `onClick`, which
+  // `stopPropagation`s and so never fires the anchor's `onMouseLeave`) must
+  // still dismiss an already-showing/pending preview for this row — the menu
+  // popover and the hover-preview card both anchor near the same row and
+  // would otherwise overlap on screen. `scheduleHide` is a no-op if no
+  // preview is showing/pending for this id, so this is safe to call
+  // unconditionally whenever `menuOpen` flips true.
+  useEffect(() => {
+    if (menuOpen) scheduleHide(link.id);
+  }, [menuOpen, scheduleHide, link.id]);
+
+  // Unmount cleanup (review fix, ce-correctness + ce-julik-frontend-races): a
+  // row can disappear with no `mouseLeave` ever firing — trashed via the
+  // `⋯` menu, or simply filtered out of the list by a query refetch/edit
+  // while still hovered. Without this, either an already-scheduled SHOW timer
+  // fires later and pops a preview open for a link no longer in the list, or
+  // an already-OPEN preview keeps showing this link's stale
+  // title/tags/notes (or its trashed content) until the user happens to
+  // move the pointer elsewhere. `dismiss` is immediate (no hide delay) and a
+  // safe no-op if this row's preview isn't the pending/showing one — see
+  // `HoverPreviewContext.tsx`'s doc comment on `dismiss`. Deliberately a
+  // SEPARATE effect from the `menuOpen` one above (different trigger,
+  // different semantics: that one still honors the hide delay via
+  // `scheduleHide`; this one is unmount-only and bypasses it).
+  useEffect(() => () => dismiss(link.id), [dismiss, link.id]);
 
   return (
     <span style={{ position: 'relative', display: 'block' }}>
@@ -69,10 +117,10 @@ export function LinkRow({ link }: { link: LinkJson }) {
         target="_blank"
         rel="noopener"
         className="silo-link-row"
-        onMouseEnter={() => setHovered(true)}
-        onMouseLeave={() => setHovered(false)}
-        onFocus={() => setHovered(true)}
-        onBlur={() => setHovered(false)}
+        onMouseEnter={handleEnter}
+        onMouseLeave={handleLeave}
+        onFocus={handleEnter}
+        onBlur={handleLeave}
         style={isSelected ? { background: 'var(--hov)' } : undefined}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 13 }}>

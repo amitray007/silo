@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
+import { HoverPreviewProvider } from './HoverPreviewContext';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
 import { SettingsProvider, useSettings } from './SettingsContext';
@@ -267,14 +268,18 @@ export function AppFrame() {
               `RowMenuContext.tsx`'s doc comment for why this lives here and not
               per-route. `SelectionProvider` (V3-5) does the same for the two
               multi-select scopes (library/trash) — see `SelectionContext.tsx`'s
-              doc comment. `RowMenuLayer` renders the single shared `EditModal`
-              instance and owns the document-level close/Escape-priority
-              listeners for both. */}
+              doc comment. `HoverPreviewProvider` (V3-8) does the same for the
+              single shared hover-preview card — see
+              `HoverPreviewContext.tsx`'s doc comment. `RowMenuLayer` renders
+              the single shared `EditModal` instance and owns the
+              document-level close/Escape-priority listeners for both. */}
           <main className="silo-content">
             <RowMenuProvider>
               <SelectionProvider>
-                <Outlet />
-                <RowMenuLayer />
+                <HoverPreviewProvider>
+                  <Outlet />
+                  <RowMenuLayer />
+                </HoverPreviewProvider>
               </SelectionProvider>
             </RowMenuProvider>
           </main>

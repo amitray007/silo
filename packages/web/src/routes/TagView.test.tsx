@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { SelectionProvider } from '../components/SelectionContext';
 import { makeLink as link } from '../test/fixtures';
@@ -39,12 +40,14 @@ function renderTagView(tagName: string, fetchImpl: typeof fetch) {
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
         <SelectionProvider>
-          <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
-            <Routes>
-              <Route path="/" element={<div>landed on library</div>} />
-              <Route path="/tags/:name" element={<TagView />} />
-            </Routes>
-          </MemoryRouter>
+          <HoverPreviewProvider>
+            <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
+              <Routes>
+                <Route path="/" element={<div>landed on library</div>} />
+                <Route path="/tags/:name" element={<TagView />} />
+              </Routes>
+            </MemoryRouter>
+          </HoverPreviewProvider>
         </SelectionProvider>
       </RowMenuProvider>
     </QueryClientProvider>,
