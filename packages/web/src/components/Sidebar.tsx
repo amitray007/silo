@@ -1,11 +1,12 @@
 import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
+import type { TagCount } from '../api/types';
 import { ThemeToggle } from '../theme/ThemeToggle';
 import { GrainDot } from './GrainDot';
 import { LibraryIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
-import { SidebarSection } from './SidebarSection';
+import { SidebarTags } from './SidebarTags';
 
 const noop = () => {};
 
@@ -134,20 +135,19 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         onNavigate={onNavigate}
       />
 
-      {tags.length > 0 && (
-        <SidebarSection label="Tags">
-          {tags.map((tag) => (
-            <NavItemLink
-              key={tag.name}
-              to={`/tags/${tag.name}`}
-              label={`#${tag.name}`}
-              meta={tag.count}
-              variant="tag"
-              onNavigate={onNavigate}
-            />
-          ))}
-        </SidebarSection>
-      )}
+      <SidebarTags
+        tags={tags}
+        renderTagLink={(tag: TagCount) => (
+          <NavItemLink
+            key={tag.name}
+            to={`/tags/${tag.name}`}
+            label={`#${tag.name}`}
+            meta={tag.count}
+            variant="tag"
+            onNavigate={onNavigate}
+          />
+        )}
+      />
 
       <span style={{ flex: 1 }} />
 
