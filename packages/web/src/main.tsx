@@ -4,6 +4,7 @@ import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { DevTools } from './dev/DevTools';
 import './styles/base.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
@@ -37,6 +38,8 @@ createRoot(rootElement).render(
           </BrowserRouter>
         </QueryClientProvider>
       </ErrorBoundary>
+      {/* Dev-only annotation toolbar; a no-op (and tree-shaken) in production. */}
+      <DevTools />
     </ThemeProvider>
   </StrictMode>,
 );
