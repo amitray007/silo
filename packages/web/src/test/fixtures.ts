@@ -1,4 +1,4 @@
-import type { LinkJson, TrashLinkJson } from '../api/types';
+import type { LinkJson, SourceData, TrashLinkJson } from '../api/types';
 
 /**
  * A minimal, valid `LinkJson` fixture for tests — every field defaulted so
@@ -35,3 +35,31 @@ export function makeTrashLink(overrides: Partial<TrashLinkJson> = {}): TrashLink
     ...overrides,
   };
 }
+
+/**
+ * Per-variant `sourceData` fixtures (plan 012 phase 2 — rich hover previews)
+ * for `HoverPreview`/`LinkRow` tests. Each pairs with `makeLink({ sourceData:
+ * ... })` to build a fixture link of that source kind.
+ */
+export const hackerNewsSourceData: Extract<SourceData, { kind: 'hacker_news' }> = {
+  kind: 'hacker_news',
+  points: 342,
+  comments: 128,
+  author: 'pg',
+};
+
+export const githubSourceData: Extract<SourceData, { kind: 'github' }> = {
+  kind: 'github',
+  stars: 58100,
+  forks: 6600,
+  issues: 412,
+  description: 'Reference implementations for the Model Context Protocol',
+  language: 'TypeScript',
+  languagePct: 72,
+};
+
+export const youtubeSourceData: Extract<SourceData, { kind: 'youtube' }> = {
+  kind: 'youtube',
+  channel: 'Fireship',
+  thumbnailUrl: 'https://img.youtube.com/vi/abc123/hqdefault.jpg',
+};

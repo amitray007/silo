@@ -72,6 +72,54 @@ describeIfPg('GET /api/preview-image (integration)', () => {
     expect(fetchImageSafely).toHaveBeenCalledWith('https://cdn.example.com/og-image.png');
   });
 
+  it('falls back to a YouTube sourceData.thumbnailUrl when imageUrl is null', async () => {
+    const { core, app, fetchImageSafely } = harness.mod();
+    const created = await core.createLink({
+      url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+      sourceKind: 'youtube',
+    });
+    // The YouTube enricher stores the thumbnail in sourceData, NOT imageUrl.
+    await core.recordEnrichment(created.id, {
+      status: 'full',
+      sourceData: {
+        kind: 'youtube',
+        channel: 'Rick Astley',
+        thumbnailUrl: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      },
+    });
+    const bytes = new Uint8Array([1, 2, 3]);
+    fetchImageSafely.mockResolvedValue({ ok: true, bytes, contentType: 'image/jpeg' });
+
+    const res = await app.request(`/api/preview-image?linkId=${created.id}`);
+    expect(res.status).toBe(200);
+    // The thumbnail URL is server-derived (the enricher's), not client input.
+    expect(fetchImageSafely).toHaveBeenCalledWith(
+      'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+    );
+  });
+
+  it('rejects an image/svg+xml upstream (XSS vector) as no-preview (404)', async () => {
+    const { core, app, fetchImageSafely } = harness.mod();
+    const created = await core.createLink({
+      url: 'https://example.com/svg-og-image',
+      sourceKind: 'link',
+    });
+    await core.recordEnrichment(created.id, {
+      status: 'full',
+      imageUrl: 'https://evil.example.com/xss.svg',
+    });
+    // An attacker-controlled og:image responding as SVG (which can carry inline
+    // <script>) must be rejected — SVG is not in the raster-only allowlist.
+    fetchImageSafely.mockResolvedValue({
+      ok: true,
+      bytes: new Uint8Array([1]),
+      contentType: 'image/svg+xml',
+    });
+
+    const res = await app.request(`/api/preview-image?linkId=${created.id}`);
+    expect(res.status).toBe(404);
+  });
+
   it('normalizes a charset-suffixed image content-type (image/png; charset=binary -> image/png)', async () => {
     const { core, app, fetchImageSafely } = harness.mod();
     const created = await core.createLink({

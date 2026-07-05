@@ -33,6 +33,15 @@ import { useLibrarySelection } from './SelectionContext';
  * from `createdAt` renders on the right, next to the domain — v3's `it.meta`
  * (`Silo-v3.html:127-129`), restored per user feedback.
  *
+ * Rich line (plan 012 phase 2 — v3's `it.hasRich`/`it.rich`,
+ * `Silo-v3.html:132-134`): un-parked for Hacker News links only — a
+ * `▲{points} points · {comments} comments` line under the title row, in
+ * `--ghost` (v3's `richColor` for the HN case), rendered when
+ * `link.sourceData.kind === 'hacker_news'`. GitHub/YouTube sourceData carry
+ * no row-level rich line in v3 — their richness is hover-preview-only (see
+ * `HoverPreview.tsx`'s `RepoVariant`/`VideoVariant`).
+ *
+
  * Multi-select: hovering (or having the `⋯` menu open, or any row already
  * selected) swaps the chip for a checkbox — `hovered` is tracked locally
  * (needed for that content swap; the row's OWN hover background stays pure
@@ -187,6 +196,21 @@ export function LinkRow({ link }: { link: LinkJson }) {
             ⋯
           </button>
         </span>
+        {link.sourceData.kind === 'hacker_news' && (
+          <span
+            style={{
+              display: 'block',
+              padding: '2px 20px 0 31px',
+              fontSize: '0.78rem',
+              color: 'var(--ghost)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {link.sourceData.points} points · {link.sourceData.comments} comments
+          </span>
+        )}
         {link.notes && (
           <span
             style={{

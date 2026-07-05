@@ -59,6 +59,14 @@ const MAX_CACHE_ENTRIES = 500;
  * MIME; anything else is treated as "no preview image" (404). Paired with
  * `X-Content-Type-Options: nosniff` on the response so a browser can't
  * MIME-sniff the bytes into something executable regardless.
+ *
+ * SVG is DELIBERATELY EXCLUDED (CodeRabbit security review): an
+ * attacker-controlled `og:image` returning `image/svg+xml` can carry inline
+ * `<script>`, and `nosniff` does NOT stop a same-origin SVG from executing if
+ * a browser NAVIGATES to the proxy URL. Preview images are raster (og:image
+ * PNG/JPEG, the YouTube thumbnail JPEG) — no legitimate preview needs SVG, so
+ * dropping it removes the XSS vector outright. `image/x-icon`/`vnd.microsoft.
+ * icon`/`bmp`/`tiff` are kept as inert raster formats.
  */
 const ALLOWED_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
   'image/png',
@@ -66,7 +74,6 @@ const ALLOWED_IMAGE_MIME_TYPES: ReadonlySet<string> = new Set([
   'image/gif',
   'image/webp',
   'image/avif',
-  'image/svg+xml',
   'image/x-icon',
   'image/vnd.microsoft.icon',
   'image/bmp',
@@ -135,11 +142,22 @@ export function registerPreviewImageRoutes(app: Hono): void {
     // above. A trashed/nonexistent link never serves an image (live-scoped
     // via getById, same as every other read).
     const link = await getById(linkId);
-    if (!link?.imageUrl) {
+    // Prefer the captured `imageUrl` (an og:image); fall back to a YouTube
+    // enricher's `sourceData.thumbnailUrl` (the deterministic thumbnail URL —
+    // the enricher stores it in sourceData, not imageUrl). Both are the SAME
+    // server-derived urls the WORKER already validated; neither is client
+    // input (linkId is the only client-supplied value — see the SSRF note).
+    const source = link?.sourceData;
+    const imageTarget =
+      link?.imageUrl ??
+      (source && typeof source === 'object' && 'thumbnailUrl' in source
+        ? (source as { thumbnailUrl?: unknown }).thumbnailUrl
+        : undefined);
+    if (typeof imageTarget !== 'string' || imageTarget.length === 0) {
       return c.json({ error: 'not_found', message: 'No preview image for this link' }, 404);
     }
 
-    const result = await fetchImageSafely(link.imageUrl);
+    const result = await fetchImageSafely(imageTarget);
     if (!result.ok) {
       return c.json({ error: 'not_found', message: 'Preview image unavailable' }, 404);
     }

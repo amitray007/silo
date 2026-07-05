@@ -2,7 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeLink } from '../test/fixtures';
+import { hackerNewsSourceData, makeLink } from '../test/fixtures';
 import { HoverPreviewProvider } from './HoverPreviewContext';
 import { LinkRow } from './LinkRow';
 import { RowMenuProvider } from './RowMenuContext';
@@ -150,6 +150,16 @@ describe('LinkRow', () => {
     const optionsButton = screen.getByTitle('options');
     fireEvent.click(optionsButton);
     expect(screen.getByText('move to trash')).toBeDefined();
+  });
+
+  it('renders the ▲points·comments rich line for a Hacker News link (plan 012 phase 2)', () => {
+    renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />);
+    expect(screen.getByText('342 points · 128 comments')).toBeDefined();
+  });
+
+  it('renders no rich line for a plain link', () => {
+    renderRow(<LinkRow link={link({ sourceData: { kind: 'link' } })} />);
+    expect(screen.queryByText(/points ·/)).toBeNull();
   });
 });
 

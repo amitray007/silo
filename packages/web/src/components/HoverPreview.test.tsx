@@ -1,6 +1,11 @@
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
-import { makeLink } from '../test/fixtures';
+import {
+  githubSourceData,
+  hackerNewsSourceData,
+  makeLink,
+  youtubeSourceData,
+} from '../test/fixtures';
 import { HoverPreview } from './HoverPreview';
 
 const position = { top: 20, left: 40 };
@@ -137,5 +142,149 @@ describe('HoverPreview', () => {
     // baseElement is document.body itself in jsdom; the card should be a
     // direct(ish) child of body, not nested under the render container.
     expect(baseElement.querySelector('div[style*="z-index: 36"]')).not.toBeNull();
+  });
+
+  describe('rich variants (plan 012 phase 2)', () => {
+    it('renders the HN variant: title, ▲points, and comments — the footer still shown', () => {
+      render(
+        <HoverPreview
+          link={makeLink({
+            title: 'Show HN: I built a thing',
+            sourceData: hackerNewsSourceData,
+            url: 'https://news.ycombinator.com/item?id=1',
+          })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      expect(screen.getByText('Show HN: I built a thing')).toBeDefined();
+      expect(screen.getByText('▲ 342 points')).toBeDefined();
+      expect(screen.getByText('128 comments')).toBeDefined();
+      expect(screen.getByRole('link', { name: 'open ↗' })).toBeDefined();
+    });
+
+    it('renders the GitHub variant: title/description, stats row, and a language bar+name', () => {
+      render(
+        <HoverPreview
+          link={makeLink({
+            title: 'modelcontextprotocol/servers',
+            sourceData: githubSourceData,
+            url: 'https://github.com/modelcontextprotocol/servers',
+          })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      expect(screen.getByText('modelcontextprotocol/servers')).toBeDefined();
+      expect(
+        screen.getByText('Reference implementations for the Model Context Protocol'),
+      ).toBeDefined();
+      expect(screen.getByText('58100')).toBeDefined();
+      expect(screen.getByText('6600')).toBeDefined();
+      expect(screen.getByText('412')).toBeDefined();
+      expect(screen.getByText('stars')).toBeDefined();
+      expect(screen.getByText('forks')).toBeDefined();
+      expect(screen.getByText('issues')).toBeDefined();
+      expect(screen.getByText('TypeScript')).toBeDefined();
+    });
+
+    it('GitHub variant omits the language bar entirely when language is absent', () => {
+      render(
+        <HoverPreview
+          link={makeLink({
+            title: 'some/repo',
+            sourceData: { kind: 'github', stars: 1, forks: 0, issues: 0 },
+          })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      expect(screen.queryByText('TypeScript')).toBeNull();
+    });
+
+    it('renders the YouTube variant: a proxied thumbnail img and the channel line', () => {
+      render(
+        <HoverPreview
+          link={makeLink({
+            id: 'abc-123',
+            title: 'A great video',
+            sourceData: youtubeSourceData,
+            url: 'https://youtu.be/abc123',
+          })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      expect(screen.getByText('A great video')).toBeDefined();
+      expect(screen.getByText('Fireship')).toBeDefined();
+      const img = document.querySelector('img') as HTMLImageElement;
+      expect(img).not.toBeNull();
+      expect(img.getAttribute('src')).toBe('/api/preview-image?linkId=abc-123');
+    });
+
+    it('YouTube variant falls back to a placeholder when the proxied image errors', () => {
+      render(
+        <HoverPreview
+          link={makeLink({ id: 'abc-123', title: 'A great video', sourceData: youtubeSourceData })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      const img = document.querySelector('img') as HTMLImageElement;
+      fireEvent.error(img);
+      expect(screen.getByText('video thumbnail')).toBeDefined();
+      expect(document.querySelector('img')).toBeNull();
+    });
+
+    it('resets the image-failed state when the previewed YouTube link changes (no stale placeholder leak)', () => {
+      // Regression (ce-correctness-reviewer): the shared HoverPreview instance
+      // is reused across links without a `key`, so a `true` imageFailed from
+      // link A must not suppress link B's thumbnail. Re-rendering the SAME
+      // element position with a new link id simulates the reuse.
+      const { rerender } = render(
+        <HoverPreview
+          link={makeLink({ id: 'video-a', title: 'Video A', sourceData: youtubeSourceData })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      fireEvent.error(document.querySelector('img') as HTMLImageElement);
+      expect(screen.getByText('video thumbnail')).toBeDefined();
+      expect(document.querySelector('img')).toBeNull();
+
+      rerender(
+        <HoverPreview
+          link={makeLink({ id: 'video-b', title: 'Video B', sourceData: youtubeSourceData })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      // Link B's image must be attempted again, not stuck on A's placeholder.
+      const imgB = document.querySelector('img') as HTMLImageElement;
+      expect(imgB).not.toBeNull();
+      expect(imgB.getAttribute('src')).toBe('/api/preview-image?linkId=video-b');
+      expect(screen.queryByText('video thumbnail')).toBeNull();
+    });
+
+    it('falls back to the generic variant for a plain link (kind: "link")', () => {
+      render(
+        <HoverPreview
+          link={makeLink({ title: 'A plain link', sourceData: { kind: 'link' } })}
+          position={position}
+          onKeep={vi.fn()}
+          onHide={vi.fn()}
+        />,
+      );
+      expect(screen.getByText('A plain link')).toBeDefined();
+      expect(screen.queryByText(/points$/)).toBeNull();
+      expect(document.querySelector('img')).toBeNull();
+    });
   });
 });
