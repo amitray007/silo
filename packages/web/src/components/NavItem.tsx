@@ -36,8 +36,14 @@ export function NavItem({ label, meta, active = false, href, ...anchorProps }: N
         cursor: 'pointer',
         textDecoration: 'none',
         color: active ? 'var(--ink)' : 'var(--mut)',
-        background: active ? 'var(--hov)' : 'transparent',
-        transition: 'background .15s ease, color .15s ease',
+        // Active = ink on the lighter --bg ground (NOT --bg2/--hov, which barely
+        // differ from the sidebar) + a subtle warm shadow, so the active pill
+        // reads as a raised card lifted off the --bg2 sidebar — the prototype's
+        // exact `on` state (Silo-v2.html): b:var(--bg), s:0 1px 3px rgba(40,30,10,.12).
+        // Never amber (tokens.md: "active = ink on raised bg, never amber").
+        background: active ? 'var(--bg)' : 'transparent',
+        boxShadow: active ? '0 1px 3px rgba(40, 30, 10, 0.12)' : 'none',
+        transition: 'background .15s ease, color .15s ease, box-shadow .15s ease',
       }}
     >
       <span>{label}</span>
