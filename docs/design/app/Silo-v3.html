@@ -1,0 +1,1110 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="fonts.css">
+<style>
+html,body{margin:0;height:100%}
+body{background:var(--desk);font-family:'Geist',system-ui,sans-serif;-webkit-font-smoothing:antialiased;transition:background .2s ease}
+:root{--bg:#FBF7EF;--bg2:#F1E9DA;--line:#EBE2D2;--hov:#F1E9DA;--ink:#211B11;--mut:#6E6350;--fnt:#736850;--ghost:#857963;--mark:#C98F2D;--markt:#A87514;--warn:#A8482D;--desk:#E4DAC6}
+body[data-theme="dark"]{--bg:#1A1510;--bg2:#141009;--line:#2E2720;--hov:#241D15;--ink:#EDE5D8;--mut:#A89A87;--fnt:#968871;--ghost:#7E7260;--mark:#D9A441;--markt:#D9A441;--warn:#CE7454;--desk:#0B0906}
+::selection{background:rgba(201,143,45,.22)}
+input::placeholder,textarea::placeholder{color:var(--fnt)}
+a:focus-visible,button:focus-visible{outline:2px solid var(--ghost);outline-offset:2px}
+@keyframes siloPulse{0%,100%{opacity:.3}50%{opacity:1}}
+@keyframes siloIn{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+@keyframes siloFade{from{opacity:0}to{opacity:1}}
+@media (prefers-reduced-motion: reduce){*{animation:none!important;transition:none!important}}
+</style>
+</helmet>
+<div data-screen-label="Silo" style="height:100vh;background:var(--desk);color:var(--ink);font-size:15px;line-height:1.55;padding:clamp(7px,2.1vh,20px) clamp(7px,2.1vw,20px);box-sizing:border-box;display:flex;transition:background .2s ease,color .2s ease">
+  <div style="flex:1;min-height:0;width:100%;max-width:80rem;margin:0 auto;border:1px solid var(--line);border-radius:16px;background:var(--bg);overflow:hidden;display:flex;box-shadow:0 26px 70px -32px rgba(20,12,4,.55);transition:background .2s ease,border-color .2s ease">
+
+    <div style="width:216px;flex:none;min-height:0;overflow-y:auto;background:var(--bg2);border-right:1px solid var(--line);display:flex;flex-direction:column;gap:2px;padding:15px 12px;transition:background .2s ease,border-color .2s ease">
+      <div style="display:flex;align-items:center;gap:9px;padding:6px 9px 15px">
+        <span style="display:inline-block;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#E8B054,var(--mark) 70%)"></span>
+        <span style="font-weight:500;font-size:.95rem;letter-spacing:-.01em">silo</span>
+      </div>
+      <button type="button" onClick="{{ goLibrary }}" style-hover="color:var(--ink)" style="display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;border:0;font-family:inherit;text-align:left;padding:7px 10px;border-radius:8px;font-size:.84rem;font-weight:500;cursor:pointer;color:{{ navLibC }};background:{{ navLibB }};box-shadow:{{ navLibS }};transition:background .15s ease,color .15s ease" data-comment-anchor="5e3298b27b-button">
+        <span style="flex:none;display:grid;place-items:center;width:16px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2.4h8a.6.6 0 0 1 .6.6v10.6l-4.6-2.8-4.6 2.8V3a.6.6 0 0 1 .6-.6Z"></path></svg></span><span>Library</span><span style="margin-left:auto;font-size:.72rem;font-weight:400;color:var(--ghost)">{{ libCount }}</span>
+      </button>
+      <button type="button" onClick="{{ goTrash }}" title="{{ trashTitle }}" style-hover="color:var(--ink)" style="display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;border:0;font-family:inherit;text-align:left;padding:7px 10px;border-radius:8px;font-size:.84rem;font-weight:500;cursor:pointer;color:{{ navTrC }};background:{{ navTrB }};box-shadow:{{ navTrS }};transition:background .15s ease,color .15s ease">
+        <span style="flex:none;display:grid;place-items:center;width:16px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4"></path><path d="M6 4.2V2.8h4v1.4"></path><path d="M4.3 4.2l.6 9h6.2l.6-9"></path><path d="M6.6 7v3.8M9.4 7v3.8"></path></svg></span><span>Trash</span><span style="margin-left:auto;font-size:.72rem;font-weight:400;color:var(--ghost)">{{ trashMeta }}</span>
+      </button>
+      <div style="display:flex;align-items:center;padding:18px 10px 5px">
+        <p style="font-size:.7rem;font-weight:500;color:var(--ghost);margin:0;letter-spacing:.02em" data-comment-anchor="d4cbce14ee-p">Tags</p>
+        <span style="flex:1"></span>
+        <button type="button" onClick="{{ toggleTagFind }}" title="find a tag" style-hover="color:var(--ink)" style="border:0;background:none;font-family:inherit;padding:0 2px;font-size:.95rem;line-height:1;color:{{ tagFindC }};cursor:pointer;transition:color .15s ease">⌕</button>
+      </div>
+      <sc-if value="{{ tagFindOpen }}" hint-placeholder-val="{{ false }}">
+        <input ref="{{ tagFindRef }}" value="{{ tagQ }}" onChange="{{ onTagQ }}" onKeyDown="{{ onTagQKey }}" placeholder="find tag" style-focus="border-color:var(--ghost)" style="margin:0 4px 3px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font:inherit;font-size:.78rem;outline:none;width:calc(100% - 8px);box-sizing:border-box;transition:border-color .15s ease">
+      </sc-if>
+      <sc-for list="{{ tags }}" as="tg" hint-placeholder-count="4">
+        <button type="button" onClick="{{ tg.go }}" style-hover="color:var(--ink)" style="display:flex;align-items:center;gap:10px;width:100%;box-sizing:border-box;border:0;font-family:inherit;text-align:left;padding:5px 10px;border-radius:8px;font-size:.84rem;font-weight:400;cursor:pointer;color:{{ tg.c }};background:{{ tg.b }};transition:background .15s ease,color .15s ease" data-comment-anchor="5507ea64bf-div">
+          <span><span style="color:var(--ghost);margin-right:4px" data-comment-anchor="628d9d9110-span">#</span>{{ tg.name }}</span><span style="margin-left:auto;font-size:.72rem;color:var(--ghost)">{{ tg.n }}</span>
+        </button>
+      </sc-for>
+      <sc-if value="{{ moreTags }}" hint-placeholder-val="{{ false }}">
+        <button type="button" onClick="{{ toggleTagList }}" style-hover="color:var(--mut)" style="border:0;background:none;font-family:inherit;text-align:left;width:100%;box-sizing:border-box;padding:4px 10px;border-radius:8px;font-size:.76rem;font-weight:400;color:var(--fnt);cursor:pointer;transition:color .15s ease">{{ moreLabel }}</button>
+      </sc-if>
+      <sc-if value="{{ newTagOpen }}" hint-placeholder-val="{{ false }}">
+        <input ref="{{ newTagRef }}" value="{{ newTagVal }}" onChange="{{ onNewTagVal }}" onKeyDown="{{ onNewTagKey }}" onBlur="{{ closeNewTag }}" placeholder="tag name" style-focus="border-color:var(--ghost)" style="margin:2px 4px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg);color:var(--ink);font:inherit;font-size:.8rem;outline:none;width:calc(100% - 8px);box-sizing:border-box;transition:border-color .15s ease">
+      </sc-if>
+      <sc-if value="{{ newTagClosed }}" hint-placeholder-val="{{ true }}">
+        <button type="button" onClick="{{ openNewTag }}" style-hover="color:var(--mut)" style="border:0;background:none;font-family:inherit;text-align:left;width:100%;box-sizing:border-box;padding:5px 10px;border-radius:8px;font-size:.84rem;font-weight:400;color:var(--fnt);cursor:pointer;transition:color .15s ease">+ new tag</button>
+      </sc-if>
+      <span style="flex:1"></span>
+      <button type="button" onClick="{{ openSettings }}" style-hover="color:var(--mut)" style="display:flex;align-items:center;gap:10px;border:0;background:none;font-family:inherit;text-align:left;width:100%;box-sizing:border-box;padding:7px 10px;border-radius:8px;font-size:.84rem;font-weight:400;color:var(--fnt);cursor:pointer;transition:color .15s ease"><span style="flex:none;display:grid;place-items:center;width:16px"><svg width="15" height="15" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.5 5.2h6M11 5.2h2.5M2.5 10.8h2.5M7.5 10.8h6"></path><circle cx="9.6" cy="5.2" r="1.7"></circle><circle cx="6.4" cy="10.8" r="1.7"></circle></svg></span><span>Settings</span></button>
+    </div>
+
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;background:var(--bg)">
+      <div style="display:flex;align-items:center;gap:13px;padding:14px clamp(16px,3vw,28px);border-bottom:1px solid var(--line)">
+        <span style="font-size:1rem;font-weight:500;color:var(--ink);white-space:nowrap">{{ viewTitle }}</span>
+        <span style="font-size:.76rem;color:var(--ghost)">{{ viewCount }}</span>
+        <span style="flex:1"></span>
+        <sc-if value="{{ enrichBusy }}" hint-placeholder-val="{{ false }}">
+          <span title="capture continues in the background — you can leave" style="flex:none;display:inline-flex;align-items:center;gap:7px;font-size:.76rem;color:var(--fnt)">
+            <span style="color:var(--markt);font-size:.85rem;animation:siloPulse 1.6s ease-in-out infinite">◌</span><span>{{ enrichDone }} of {{ enrichTotal }}</span>
+          </span>
+        </sc-if>
+        <div style="width:clamp(230px,42%,430px);display:flex;align-items:center;gap:9px;border:1px solid {{ omniBorder }};border-radius:10px;background:var(--bg2);padding:8px 13px;transition:border-color .15s ease,background .2s ease">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="var(--ghost)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round" style="flex:none"><circle cx="7" cy="7" r="4.3"></circle><path d="m10.3 10.3 3 3"></path></svg>
+            <sc-if value="{{ tagActive }}" hint-placeholder-val="{{ false }}">
+              <button type="button" onClick="{{ clearTag }}" title="clear filter" style-hover="border-color:var(--ghost);color:var(--ink)" style="flex:none;display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:2px 10px;font-family:inherit;font-size:.74rem;font-weight:500;color:var(--mut);cursor:pointer;transition:border-color .15s ease,color .15s ease" data-comment-anchor="9b786adcba-button"><span style="color:var(--ghost)">#</span>{{ tagName }}<span style="color:var(--ghost);font-size:.68rem">✕</span></button>
+            </sc-if>
+            <input ref="{{ omniRef }}" value="{{ q }}" onChange="{{ onQ }}" onKeyDown="{{ onQKey }}" onFocus="{{ omniFocus }}" onBlur="{{ omniBlur }}" placeholder="{{ omniPlaceholder }}" style="flex:1;min-width:0;border:0;background:none;outline:none;font:inherit;font-size:.85rem;color:var(--ink);padding:0" data-comment-anchor="66cae19dbd-input">
+            <sc-if value="{{ omniIsUrl }}" hint-placeholder-val="{{ false }}">
+              <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><span style="font-size:.74rem;color:var(--markt);font-weight:500">keep</span><span style="font-size:.66rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:var(--bg)">↵</span></span>
+            </sc-if>
+            <sc-if value="{{ omniIsSearch }}" hint-placeholder-val="{{ false }}">
+              <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><span style="font-size:.72rem;color:var(--fnt)">{{ foundMeta }}</span><span style="font-size:.66rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:var(--bg)">esc</span></span>
+            </sc-if>
+            <sc-if value="{{ omniTagIdle }}" hint-placeholder-val="{{ false }}">
+              <span style="display:inline-flex;align-items:center;gap:6px;white-space:nowrap"><span style="font-size:.72rem;color:var(--fnt)">{{ shownCount }} of {{ libCount }}</span><span style="font-size:.66rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:var(--bg)">esc</span></span>
+            </sc-if>
+            <sc-if value="{{ omniIdle }}" hint-placeholder-val="{{ true }}">
+              <span style="font-size:.66rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:var(--bg)" data-comment-anchor="83a2d94efc-span">⌘ K</span>
+            </sc-if>
+        </div>
+      </div>
+      <div style="flex:1;min-height:0;overflow-y:auto;padding:8px clamp(16px,3vw,28px) 36px">
+
+        <sc-if value="{{ isEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;flex-direction:column;align-items:center;padding:104px 0 40px;text-align:center">
+            <span style="display:inline-block;width:22px;height:22px;border-radius:50%;background:radial-gradient(circle at 32% 30%,#E8B054,var(--mark) 70%)"></span>
+            <p style="margin:22px 0 0;font-size:.92rem;font-weight:500;color:var(--ink)">Nothing kept yet.</p>
+            <p style="margin:6px 0 0;font-size:.84rem;color:var(--mut);max-width:24rem">Paste a link in the bar above — it's saved the moment it lands.</p>
+            <p style="margin:26px 0 0;font-size:.76rem;color:var(--fnt);max-width:24rem">Claude can add links here too, once you connect it in Settings → access.</p>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isLibrary }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ groups }}" as="g" hint-placeholder-count="2">
+            <p style="font-size:.78rem;font-weight:500;color:var(--ghost);padding:20px 11px 6px;margin:0">{{ g.label }}</p>
+            <sc-for list="{{ g.items }}" as="it" hint-placeholder-count="3">
+              <div style="position:relative">
+                <a href="{{ it.url }}" target="_blank" rel="noopener" onMouseEnter="{{ it.enter }}" onMouseLeave="{{ it.leave }}" onFocus="{{ it.enter }}" onBlur="{{ it.leave }}" style="display:block;padding:8px 11px;border-radius:8px;background:{{ it.bg }};text-decoration:none;color:inherit;cursor:pointer;transition:background .15s ease">
+                  <span style="display:flex;align-items:center;gap:13px" data-comment-anchor="a8707fb49f-button">
+                    <sc-if value="{{ it.showCheck }}" hint-placeholder-val="{{ false }}">
+                      <button type="button" onMouseDown="{{ stop }}" onClick="{{ it.toggleSel }}" title="select" style="flex:none;width:18px;height:18px;padding:0;cursor:pointer;border-radius:5px;border:1px solid {{ it.checkBd }};background:{{ it.checkBg }};color:var(--bg);font-size:.6rem;line-height:1;display:grid;place-items:center;transition:background .15s ease,border-color .15s ease">{{ it.checkGlyph }}</button>
+                    </sc-if>
+                    <sc-if value="{{ it.showChip }}" hint-placeholder-val="{{ true }}">
+                      <span style="flex:none;width:18px;height:18px;border-radius:4px;background:var(--line);color:var(--mut);font-size:.5rem;font-weight:500;display:grid;place-items:center;letter-spacing:.01em;position:relative;overflow:hidden">{{ it.chip }}<span style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:{{ it.favBg }}"></span></span>
+                    </sc-if>
+                    <span style="flex:1;min-width:0;display:flex;align-items:baseline;gap:11px" data-comment-anchor="c32da95fe0-span">
+                      <span style="font-weight:500;font-size:.88rem;color:{{ it.titleColor }};white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ it.title }}</span>
+                      <sc-if value="{{ it.hasStatus }}" hint-placeholder-val="{{ false }}">
+                        <span title="{{ it.markTitle }}" style="flex:none;display:inline-flex;align-items:baseline;gap:5px;font-size:.76rem;font-weight:500;color:var(--markt);white-space:nowrap;animation:{{ it.statusAnim }}"><span style="font-size:.84rem">{{ it.statusGlyph }}</span><span>{{ it.statusLabel }}</span></span>
+                      </sc-if>
+                      <span style="flex:none;max-width:14rem;font-size:.84rem;color:var(--fnt);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:400">{{ it.suffix }}</span>
+                    </span>
+                    <sc-if value="{{ it.hovered }}" hint-placeholder-val="{{ false }}">
+                      <span style="flex:none;font-size:.74rem;color:var(--fnt);white-space:nowrap">{{ it.meta }}</span>
+                    </sc-if>
+                    <button type="button" onMouseDown="{{ stop }}" onClick="{{ it.menuFn }}" title="options" style-hover="color:var(--ink)" style="flex:none;border:0;background:none;font-size:.9rem;line-height:1;color:var(--ghost);cursor:pointer;padding:2px 4px;font-family:inherit;font-weight:500;transition:color .15s ease" data-comment-anchor="eebab91d5a-button">⋯</button>
+                  </span>
+                  <sc-if value="{{ it.hasRich }}" hint-placeholder-val="{{ false }}">
+                    <span style="display:block;padding:2px 20px 0 31px;font-size:.78rem;color:{{ it.richColor }};overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ it.rich }}</span>
+                  </sc-if>
+                  <sc-if value="{{ it.hasNote }}" hint-placeholder-val="{{ false }}">
+                    <span style="display:block;padding:2px 20px 0 31px;font-size:.8rem;color:var(--mut);font-style:italic">"{{ it.note }}"</span>
+                  </sc-if>
+                </a>
+                <sc-if value="{{ it.menuOpen }}" hint-placeholder-val="{{ false }}">
+                  <div onMouseDown="{{ stop }}" onClick="{{ stop }}" style="position:absolute;right:8px;top:calc(100% - 3px);z-index:30;width:224px;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px -20px rgba(40,28,8,.45);padding:5px;animation:siloIn .14s ease">
+                    <div onMouseEnter="{{ it.openTagsFly }}" onMouseLeave="{{ it.closeTagsFly }}" style="position:relative">
+                      <button type="button" onClick="{{ it.toggleTags }}" style-hover="color:var(--ink);background:var(--hov)" style="display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;border:0;background:{{ it.tagsRowBg }};font-family:inherit;text-align:left;padding:7px 10px;border-radius:7px;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;transition:background .15s ease,color .15s ease" data-comment-anchor="924dd6e396-button">
+                        <span style="flex:none;width:15px;text-align:center;color:var(--ghost);font-size:.78rem">#</span><span data-comment-anchor="23cfde1649-span">tags</span><span style="font-size:.7rem;color:var(--ghost);font-weight:400">{{ it.tagCount }}</span><span style="margin-left:auto;color:var(--ghost);font-size:.72rem">◂</span>
+                      </button>
+                      <sc-if value="{{ it.tagsOpen }}" hint-placeholder-val="{{ false }}">
+                        <div style="position:absolute;right:calc(100% - 2px);top:-6px;width:200px;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 18px 50px -20px rgba(40,28,8,.45);padding:5px;animation:siloIn .14s ease">
+                          <input value="{{ menuTagQ }}" onChange="{{ onMenuTagQ }}" placeholder="find tag" style-focus="border-color:var(--ghost)" style="width:100%;box-sizing:border-box;margin:0 0 3px;padding:4px 8px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);color:var(--ink);font:inherit;font-size:.76rem;outline:none;transition:border-color .15s ease">
+                          <sc-for list="{{ it.tagOpts }}" as="to" hint-placeholder-count="3">
+                            <button type="button" onClick="{{ to.toggle }}" style-hover="background:var(--hov)" style="display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;border:0;background:none;font-family:inherit;text-align:left;padding:4px 8px;border-radius:6px;font-size:.78rem;font-weight:400;cursor:pointer;color:{{ to.c }};transition:background .15s ease,color .15s ease">
+                              <span style="color:var(--ghost)">#</span><span>{{ to.name }}</span>
+                              <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:{{ to.dot }}"></span>
+                            </button>
+                          </sc-for>
+                          <sc-if value="{{ it.hasMoreTagNote }}" hint-placeholder-val="{{ false }}">
+                            <div style="padding:3px 8px 1px;font-size:.7rem;color:var(--ghost)">{{ it.moreTagNote }}</div>
+                          </sc-if>
+                        </div>
+                      </sc-if>
+                    </div>
+                    <div style="border-top:1px solid var(--line);margin:4px 3px"></div>
+                    <a href="{{ it.url }}" target="_blank" rel="noopener" onClick="{{ it.closeMenu }}" style-hover="color:var(--ink);background:var(--hov)" style="display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:7px;font-size:.78rem;font-weight:500;color:var(--mut);text-decoration:none;cursor:pointer;transition:background .15s ease,color .15s ease"><span style="flex:none;width:15px;text-align:center;color:var(--ghost);font-size:.78rem">↗</span><span>open in new tab</span></a>
+                    <button type="button" onClick="{{ it.copyFn }}" style-hover="color:var(--ink);background:var(--hov)" style="display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;border:0;background:none;font-family:inherit;text-align:left;padding:7px 10px;border-radius:7px;font-size:.78rem;font-weight:500;color:{{ it.copyColor }};cursor:pointer;transition:background .15s ease,color .15s ease"><span style="flex:none;width:15px;text-align:center;color:var(--ghost);font-size:.78rem">⧉</span><span>{{ it.copyLabel }}</span></button>
+                    <div style="border-top:1px solid var(--line);margin:4px 3px"></div>
+                    <button type="button" onClick="{{ it.editFn }}" style-hover="color:var(--ink);background:var(--hov)" style="display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;border:0;background:none;font-family:inherit;text-align:left;padding:7px 10px;border-radius:7px;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;transition:background .15s ease,color .15s ease"><span style="flex:none;width:15px;text-align:center;color:var(--ghost);font-size:.78rem">✎</span><span>edit</span></button>
+                    <button type="button" onClick="{{ it.trashFn }}" style-hover="color:var(--ink);background:var(--hov)" style="display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;border:0;background:none;font-family:inherit;text-align:left;padding:7px 10px;border-radius:7px;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;transition:background .15s ease,color .15s ease"><span style="flex:none;width:15px;display:grid;place-items:center"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--ghost)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4"></path><path d="M6 4.2V2.8h4v1.4"></path><path d="M4.3 4.2l.6 9h6.2l.6-9"></path><path d="M6.6 7v3.8M9.4 7v3.8"></path></svg></span><span>move to trash</span></button>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-for>
+          </sc-for>
+          <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+            <p style="padding:40px 11px;margin:0;font-size:.82rem;color:var(--fnt)">nothing found for "{{ q }}"</p>
+          </sc-if>
+        </sc-if>
+
+        <sc-if value="{{ isTrash }}" hint-placeholder-val="{{ false }}">
+          <div style="height:2px"></div>
+          <sc-for list="{{ trashGroups }}" as="tg" hint-placeholder-count="2">
+            <p style="font-size:.78rem;font-weight:500;color:var(--ghost);padding:20px 11px 6px;margin:0">{{ tg.label }}</p>
+            <sc-for list="{{ tg.items }}" as="tr" hint-placeholder-count="2">
+            <a href="{{ tr.url }}" target="_blank" rel="noopener" onMouseEnter="{{ tr.enter }}" onMouseLeave="{{ tr.leave }}" onFocus="{{ tr.enter }}" onBlur="{{ tr.leave }}" style="display:flex;align-items:center;gap:13px;padding:9px 11px;border-radius:8px;background:{{ tr.bg }};text-decoration:none;color:inherit;cursor:pointer;transition:background .15s ease">
+              <sc-if value="{{ tr.showCheck }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onMouseDown="{{ stop }}" onClick="{{ tr.toggleSel }}" title="select" style="flex:none;width:18px;height:18px;padding:0;cursor:pointer;border-radius:5px;border:1px solid {{ tr.checkBd }};background:{{ tr.checkBg }};color:var(--bg);font-size:.6rem;line-height:1;display:grid;place-items:center;transition:background .15s ease,border-color .15s ease">{{ tr.checkGlyph }}</button>
+              </sc-if>
+              <sc-if value="{{ tr.showChip }}" hint-placeholder-val="{{ true }}">
+                <span style="flex:none;width:18px;height:18px;border-radius:4px;background:var(--line);color:var(--mut);font-size:.5rem;font-weight:500;display:grid;place-items:center;letter-spacing:.01em;position:relative;overflow:hidden">{{ tr.chip }}<span style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:{{ tr.favBg }}"></span></span>
+              </sc-if>
+              <span style="flex:1;min-width:0;display:flex;align-items:baseline;gap:11px" data-comment-anchor="4a575bccbb-span">
+                <span style="font-weight:500;font-size:.88rem;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ tr.title }}</span>
+                <span style="font-size:.84rem;color:var(--fnt);white-space:nowrap;font-weight:400">{{ tr.suffix }}</span>
+              </span>
+              <span title="{{ tr.leftTitle }}" style="flex:none;display:inline-flex;align-items:center;gap:5px;font-size:.74rem;font-weight:500;color:var(--warn)"><span style="font-size:.84rem;line-height:1">◷</span>{{ tr.left }}</span>
+              <button type="button" onMouseDown="{{ stop }}" onClick="{{ tr.restoreFn }}" title="restore" style-hover="color:var(--ink)" style="flex:none;display:grid;place-items:center;border:0;background:none;line-height:1;color:var(--ghost);cursor:pointer;padding:2px 4px;font-family:inherit;transition:color .15s ease"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 8a5 5 0 1 0 1.5-3.6"></path><polyline points="4.6 1.8 4.6 4.6 7.4 4.6"></polyline></svg></button>
+              <button type="button" onMouseDown="{{ stop }}" onClick="{{ tr.deleteFn }}" title="delete now" style-hover="color:var(--ink)" style="flex:none;display:grid;place-items:center;border:0;background:none;line-height:1;color:var(--ghost);cursor:pointer;padding:2px 4px;font-family:inherit;transition:color .15s ease" data-comment-anchor="61663231eb-button"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4"></path><path d="M6 4.2V2.8h4v1.4"></path><path d="M4.3 4.2l.6 9h6.2l.6-9"></path><path d="M6.6 7v3.8M9.4 7v3.8"></path></svg></button>
+            </a>
+            </sc-for>
+          </sc-for>
+          <sc-if value="{{ trashEmpty }}" hint-placeholder-val="{{ false }}">
+            <p style="padding:40px 11px;margin:0;font-size:.82rem;color:var(--fnt)">Trash is empty.</p>
+          </sc-if>
+        </sc-if>
+
+      </div>
+    </div>
+  </div>
+
+  <sc-if value="{{ pvOpen }}" hint-placeholder-val="{{ false }}">
+    <div onMouseEnter="{{ pvKeep }}" onMouseLeave="{{ pvHide }}" style="position:fixed;top:{{ pvTop }};left:{{ pvLeft }};width:288px;z-index:36;background:var(--bg);border:1px solid var(--line);border-radius:12px;box-shadow:0 24px 60px -24px rgba(40,28,8,.5);overflow:hidden;box-sizing:border-box;animation:siloIn .16s ease">
+      <sc-if value="{{ pvIsVideo }}" hint-placeholder-val="{{ false }}">
+        <div style="height:130px;background:repeating-linear-gradient(45deg,var(--bg2) 0 10px,var(--line) 10px 20px);display:grid;place-items:center;border-bottom:1px solid var(--line)">
+          <span style="font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.66rem;color:var(--fnt);background:var(--bg);border:1px solid var(--line);border-radius:5px;padding:2px 8px">video thumbnail</span>
+        </div>
+        <div style="padding:12px 14px 2px">
+          <div style="font-size:.84rem;font-weight:500;color:var(--ink);line-height:1.4">{{ pvTitle }}</div>
+          <div style="font-size:.76rem;color:var(--fnt);margin-top:4px">{{ pvChannel }} · {{ pvDuration }}</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ pvIsRepo }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:13px 14px 2px">
+          <div style="display:flex;gap:11px;align-items:flex-start">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:.84rem;font-weight:500;color:var(--ink);overflow-wrap:break-word">{{ pvTitle }}</div>
+              <div style="font-size:.76rem;color:var(--mut);margin-top:3px;line-height:1.5">{{ pvDesc }}</div>
+            </div>
+            <span style="flex:none;width:26px;height:26px;border-radius:6px;background:var(--line);color:var(--mut);font-size:.6rem;font-weight:500;display:grid;place-items:center;position:relative;overflow:hidden">{{ pvChip }}<span style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:{{ pvFavBg }}"></span></span>
+          </div>
+          <div style="display:flex;gap:18px;margin-top:12px">
+            <sc-for list="{{ pvStats }}" as="pvs" hint-placeholder-count="4">
+              <div>
+                <div style="font-size:.8rem;font-weight:500;color:var(--ink)">{{ pvs.n }}</div>
+                <div style="font-size:.64rem;color:var(--ghost);margin-top:1px">{{ pvs.label }}</div>
+              </div>
+            </sc-for>
+          </div>
+          <div style="display:flex;height:3px;border-radius:2px;overflow:hidden;margin-top:12px">
+            <span style="width:{{ pvLangPct }};background:var(--mark)"></span>
+            <span style="flex:1;background:var(--line)"></span>
+          </div>
+          <div style="font-size:.68rem;color:var(--ghost);margin-top:5px">{{ pvLang }}</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ pvIsTweet }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:13px 14px 2px">
+          <div style="display:flex;align-items:center;gap:9px">
+            <span style="flex:none;width:24px;height:24px;border-radius:50%;background:var(--line);color:var(--mut);font-size:.58rem;font-weight:500;display:grid;place-items:center;position:relative;overflow:hidden">{{ pvChip }}<span style="position:absolute;inset:0;background-size:cover;background-position:center;background-image:{{ pvFavBg }}"></span></span>
+            <span style="font-size:.82rem;font-weight:500;color:var(--ink)">{{ pvAuthor }}</span>
+            <span style="font-size:.74rem;color:var(--ghost)">{{ pvHandle }}</span>
+          </div>
+          <div style="font-size:.8rem;color:var(--mut);line-height:1.55;margin-top:9px">{{ pvTweet }}</div>
+        </div>
+      </sc-if>
+      <sc-if value="{{ pvIsGeneric }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:13px 14px 2px">
+          <div style="font-size:.84rem;font-weight:500;color:var(--ink);line-height:1.4">{{ pvTitle }}</div>
+          <sc-if value="{{ pvHasTags }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:.76rem;color:var(--ghost);margin-top:6px">{{ pvTagLine }}</div>
+          </sc-if>
+          <sc-if value="{{ pvHasNote }}" hint-placeholder-val="{{ false }}">
+            <div style="font-size:.78rem;color:var(--mut);font-style:italic;margin-top:6px">"{{ pvNote }}"</div>
+          </sc-if>
+        </div>
+      </sc-if>
+      <sc-if value="{{ pvIsHn }}" hint-placeholder-val="{{ false }}">
+        <div style="padding:13px 14px 2px">
+          <div style="font-size:.84rem;font-weight:500;color:var(--ink);line-height:1.4">{{ pvTitle }}</div>
+          <div style="display:flex;align-items:baseline;gap:10px;margin-top:7px">
+            <span style="font-size:.78rem;font-weight:500;color:var(--markt)">▲ {{ pvPoints }} points</span>
+            <span style="font-size:.76rem;color:var(--fnt)">{{ pvComments }} comments</span>
+          </div>
+        </div>
+      </sc-if>
+      <div style="display:flex;align-items:center;gap:8px;padding:10px 14px 11px;margin-top:9px;border-top:1px solid var(--line);font-size:.72rem;color:var(--ghost)">
+        <span>{{ pvDomain }}</span><span>·</span><span>{{ pvMeta }}</span>
+        <span style="flex:1"></span>
+        <a href="{{ pvUrl }}" target="_blank" rel="noopener" style-hover="color:var(--ink)" style="color:var(--fnt);text-decoration:none;font-weight:500;transition:color .15s ease">open ↗</a>
+      </div>
+    </div>
+  </sc-if>
+  <sc-if value="{{ selActive }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:0;right:0;margin:0 auto;width:max-content;bottom:32px;z-index:35;display:flex;align-items:center;gap:14px;background:var(--bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 20px 50px -18px rgba(40,28,8,.45);padding:9px 12px 9px 18px;animation:siloIn .16s ease">
+      <span style="font-size:.78rem;font-weight:500;color:var(--ink);white-space:nowrap">{{ selCount }} selected</span>
+      <span style="width:1px;height:14px;background:var(--line)"></span>
+      <button type="button" onClick="{{ selTrash }}" style-hover="color:var(--ink)" style="display:inline-flex;align-items:center;gap:6px;border:0;background:none;font-family:inherit;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;padding:0;white-space:nowrap;transition:color .15s ease"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--ghost)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4"></path><path d="M6 4.2V2.8h4v1.4"></path><path d="M4.3 4.2l.6 9h6.2l.6-9"></path><path d="M6.6 7v3.8M9.4 7v3.8"></path></svg>move to trash</button>
+      <button type="button" onClick="{{ selClear }}" style-hover="color:var(--ink)" style="border:0;background:none;font-family:inherit;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;padding:0;white-space:nowrap;transition:color .15s ease" data-comment-anchor="8e7f56651e-button">clear</button>
+      <span style="font-size:.6rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 5px;background:var(--bg2)">esc</span>
+    </div>
+  </sc-if>
+  <sc-if value="{{ trDockIdle }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:0;right:0;margin:0 auto;width:max-content;max-width:calc(100vw - 40px);bottom:32px;z-index:35;display:flex;align-items:center;gap:14px;background:var(--bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 20px 50px -18px rgba(40,28,8,.45);padding:9px 18px;animation:siloIn .16s ease" data-comment-anchor="c3bbb45ab9-div">
+      <span style="font-size:.74rem;color:var(--fnt);white-space:nowrap">{{ trashLine }}</span>
+      <span style="width:1px;height:14px;background:var(--line)"></span>
+      <button type="button" onClick="{{ trSelectAll }}" style-hover="color:var(--ink)" style="border:0;background:none;font-family:inherit;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;padding:0;white-space:nowrap;transition:color .15s ease">select all</button>
+      <button type="button" onClick="{{ emptyNow }}" style-hover="color:var(--ink)" style="display:inline-flex;align-items:center;gap:6px;border:0;background:none;font-family:inherit;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;padding:0;white-space:nowrap;transition:color .15s ease"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--ghost)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4"></path><path d="M6 4.2V2.8h4v1.4"></path><path d="M4.3 4.2l.6 9h6.2l.6-9"></path><path d="M6.6 7v3.8M9.4 7v3.8"></path></svg>empty all</button>
+    </div>
+  </sc-if>
+  <sc-if value="{{ trSelActive }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;left:0;right:0;margin:0 auto;width:max-content;bottom:32px;z-index:35;display:flex;align-items:center;gap:14px;background:var(--bg);border:1px solid var(--line);border-radius:999px;box-shadow:0 20px 50px -18px rgba(40,28,8,.45);padding:9px 12px 9px 18px;animation:siloIn .16s ease">
+      <span style="font-size:.78rem;font-weight:500;color:var(--ink);white-space:nowrap">{{ trSelCount }} selected</span>
+      <span style="width:1px;height:14px;background:var(--line)"></span>
+      <button type="button" onClick="{{ trRestoreSel }}" style-hover="color:var(--ink)" style="display:inline-flex;align-items:center;gap:6px;border:0;background:none;font-family:inherit;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;padding:0;white-space:nowrap;transition:color .15s ease"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--ghost)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M3.2 8a5 5 0 1 0 1.5-3.6"></path><polyline points="4.6 1.8 4.6 4.6 7.4 4.6"></polyline></svg>restore</button>
+      <button type="button" onClick="{{ trDeleteSel }}" style-hover="color:var(--ink)" style="display:inline-flex;align-items:center;gap:6px;border:0;background:none;font-family:inherit;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;padding:0;white-space:nowrap;transition:color .15s ease"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--ghost)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4"></path><path d="M6 4.2V2.8h4v1.4"></path><path d="M4.3 4.2l.6 9h6.2l.6-9"></path><path d="M6.6 7v3.8M9.4 7v3.8"></path></svg>delete now</button>
+      <button type="button" onClick="{{ trSelClear }}" style-hover="color:var(--ink)" style="border:0;background:none;font-family:inherit;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;padding:0;white-space:nowrap;transition:color .15s ease">clear</button>
+      <span style="font-size:.6rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 5px;background:var(--bg2)">esc</span>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ settingsOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeSettings }}" style="position:fixed;inset:0;background:rgba(24,17,7,.32);display:grid;place-items:center;z-index:40;animation:siloFade .16s ease">
+      <div onClick="{{ stop }}" ref="{{ settingsRef }}" tabindex="-1" onKeyDown="{{ trapKey }}" data-screen-label="Settings" style="width:560px;max-width:calc(100vw - 48px);max-height:80vh;overflow-y:auto;border:1px solid var(--line);border-radius:14px;background:var(--bg);padding:21px 24px;box-shadow:0 24px 60px -28px rgba(40,28,8,.35);box-sizing:border-box;outline:none;animation:siloIn .16s ease">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:13px">
+          <span style="font-size:1rem;font-weight:500">Settings</span>
+          <button type="button" onClick="{{ closeSettings }}" style-hover="color:var(--ink);border-color:var(--ghost)" style="font-family:inherit;font-size:.66rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:var(--bg);cursor:pointer;transition:color .15s ease,border-color .15s ease">esc</button>
+        </div>
+        <div style="display:flex;gap:5px;margin-bottom:16px;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px;width:max-content;max-width:100%;flex-wrap:wrap">
+          <sc-for list="{{ tabs }}" as="tb" hint-placeholder-count="4">
+            <button type="button" onClick="{{ tb.go }}" style="border:0;font-family:inherit;font-size:.76rem;font-weight:500;padding:4px 13px;border-radius:999px;cursor:pointer;white-space:nowrap;color:{{ tb.c }};background:{{ tb.b }};box-shadow:{{ tb.s }};transition:background .15s ease,color .15s ease">{{ tb.name }}</button>
+          </sc-for>
+        </div>
+
+        <sc-if value="{{ tabPlugins }}" hint-placeholder-val="{{ true }}">
+          <sc-for list="{{ pluginRows }}" as="pl" hint-placeholder-count="3">
+            <div style="display:flex;align-items:center;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)">
+              <div style="flex:1">
+                <div style="font-size:.85rem;font-weight:500;color:var(--ink)">{{ pl.name }}</div>
+                <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">{{ pl.desc }}</div>
+              </div>
+              <sc-if value="{{ pl.installed }}" hint-placeholder-val="{{ true }}">
+                <button type="button" onClick="{{ pl.toggle }}" title="{{ pl.state }}" style="width:13px;height:13px;padding:0;border-radius:50%;cursor:pointer;background:{{ pl.dotBg }};border:1px solid {{ pl.dotBd }};box-sizing:border-box;transition:background .15s ease,border-color .15s ease"></button>
+              </sc-if>
+              <sc-if value="{{ pl.setup }}" hint-placeholder-val="{{ false }}">
+                <button type="button" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s ease">Set up</button>
+              </sc-if>
+            </div>
+          </sc-for>
+          <p style="margin:12px 0 0;font-size:.74rem;color:var(--fnt)">Plugins add inline detail and hover previews — they never change what gets saved.</p>
+        </sc-if>
+
+        <sc-if value="{{ tabPrefs }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)">
+            <div style="flex:1">
+              <div style="font-size:.85rem;font-weight:500;color:var(--ink)">Theme</div>
+              <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">oat, in two lights</div>
+            </div>
+            <span style="display:inline-flex;background:var(--bg2);border:1px solid var(--line);border-radius:999px;padding:3px">
+              <button type="button" onClick="{{ setLight }}" style="border:0;font-family:inherit;font-size:.76rem;font-weight:500;padding:4px 14px;border-radius:999px;cursor:pointer;color:{{ thLightC }};background:{{ thLightB }};box-shadow:{{ thLightS }};transition:background .15s ease,color .15s ease">light</button>
+              <button type="button" onClick="{{ setDark }}" style="border:0;font-family:inherit;font-size:.76rem;font-weight:500;padding:4px 14px;border-radius:999px;cursor:pointer;color:{{ thDarkC }};background:{{ thDarkB }};box-shadow:{{ thDarkS }};transition:background .15s ease,color .15s ease">dark</button>
+            </span>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;padding:11px 0">
+            <div style="flex:1">
+              <div style="font-size:.85rem;font-weight:500;color:var(--ink)">Trash</div>
+              <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">auto-empty deleted links after</div>
+            </div>
+            <button type="button" onClick="{{ cyclePurge }}" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s ease">{{ purgeLabel }} ▾</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tabImport }}" hint-placeholder-val="{{ false }}">
+          <sc-if value="{{ importIdle }}" hint-placeholder-val="{{ true }}">
+            <div style="display:flex;align-items:center;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)">
+              <div style="flex:1">
+                <div style="font-size:.85rem;font-weight:500;color:var(--ink)">Import</div>
+                <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">a Pocket, Instapaper, or browser-bookmarks export file</div>
+              </div>
+              <button type="button" onClick="{{ pickFile }}" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s ease">Choose file…</button>
+            </div>
+          </sc-if>
+          <sc-if value="{{ importPicked }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:11px 0;border-bottom:1px solid var(--line)">
+              <div style="display:flex;align-items:baseline;gap:10px">
+                <span style="font-size:.85rem;font-weight:500;color:var(--ink)">{{ demoImportFile }}</span>
+                <span style="font-size:.76rem;color:var(--fnt)">{{ importCount }} links found</span>
+              </div>
+              <div style="margin-top:9px;border:1px solid var(--line);border-radius:8px;background:var(--bg2);padding:9px 13px">
+                <sc-for list="{{ importPreview }}" as="ip" hint-placeholder-count="3">
+                  <div style="font-size:.78rem;color:var(--mut);padding:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{ ip.title }} <span style="color:var(--ghost)">{{ ip.domain }}</span></div>
+                </sc-for>
+                <div style="font-size:.78rem;color:var(--ghost);padding:2px 0">… and {{ importMore }} more</div>
+              </div>
+              <div style="display:flex;gap:10px;margin-top:12px;align-items:center;flex-wrap:wrap">
+                <button type="button" onClick="{{ runImport }}" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s ease">Import {{ importCount }} links</button>
+                <button type="button" onClick="{{ cancelImport }}" style-hover="color:var(--ink)" style="border:0;background:none;font-size:.76rem;font-weight:500;color:var(--mut);padding:0;cursor:pointer;font-family:inherit;transition:color .15s ease">cancel</button>
+                <span style="font-size:.74rem;color:var(--fnt)">links land instantly, raw — titles and text fill in behind you</span>
+              </div>
+            </div>
+          </sc-if>
+          <div style="display:flex;align-items:center;gap:16px;padding:11px 0">
+            <div style="flex:1">
+              <div style="font-size:.85rem;font-weight:500;color:var(--ink)">Export</div>
+              <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">everything as JSON — links, full text, notes, tags</div>
+            </div>
+            <button type="button" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s ease">Download</button>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ tabAccess }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;align-items:center;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)">
+            <div style="flex:1">
+              <div style="font-size:.85rem;font-weight:500;color:var(--ink)">MCP access</div>
+              <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">let an agent add, search, and read your links</div>
+            </div>
+            <button type="button" onClick="{{ toggleMcp }}" title="{{ mcpState }}" style="width:13px;height:13px;padding:0;border-radius:50%;cursor:pointer;background:{{ mcpDotBg }};border:1px solid {{ mcpDotBd }};box-sizing:border-box;transition:background .15s ease,border-color .15s ease"></button>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;padding:11px 0;border-bottom:1px solid var(--line)">
+            <div style="flex:1">
+              <div style="font-size:.85rem;font-weight:500;color:var(--ink)">Client config</div>
+              <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">add silo to Claude's MCP server list</div>
+            </div>
+            <button type="button" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s ease">Copy config</button>
+          </div>
+          <div style="display:flex;align-items:center;gap:16px;padding:11px 0">
+            <div style="flex:1">
+              <div style="font-size:.85rem;font-weight:500;color:var(--ink)">Access token</div>
+              <div style="font-size:.76rem;color:var(--fnt);margin-top:1px">{{ demoToken }}</div>
+            </div>
+            <button type="button" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 14px;cursor:pointer;font-family:inherit;transition:border-color .15s ease">Rotate</button>
+          </div>
+          <p style="margin:12px 0 0;font-size:.74rem;color:var(--fnt)">Links an agent adds look like any other — nothing else changes.</p>
+        </sc-if>
+
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ editOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ cancelEdit }}" style="position:fixed;inset:0;background:rgba(24,17,7,.32);display:grid;place-items:center;z-index:40;animation:siloFade .16s ease">
+      <div onClick="{{ stop }}" ref="{{ editRef }}" tabindex="-1" onKeyDown="{{ trapKey }}" data-screen-label="Edit item" style="width:520px;max-width:calc(100vw - 48px);border:1px solid var(--line);border-radius:14px;background:var(--bg);padding:21px 24px;box-shadow:0 24px 60px -28px rgba(40,28,8,.35);box-sizing:border-box;outline:none;animation:siloIn .16s ease">
+        <div style="display:flex;align-items:center;gap:11px;margin-bottom:15px">
+          <span style="font-size:1rem;font-weight:500">Edit</span>
+          <span style="font-size:.78rem;color:var(--fnt)">{{ efDomain }}</span>
+          <span style="flex:1"></span>
+          <button type="button" onClick="{{ cancelEdit }}" style-hover="color:var(--ink);border-color:var(--ghost)" style="font-family:inherit;font-size:.66rem;color:var(--fnt);border:1px solid var(--line);border-radius:5px;padding:2px 6px;background:var(--bg);cursor:pointer;transition:color .15s ease,border-color .15s ease">esc</button>
+        </div>
+        <p style="margin:0 0 4px;font-size:.72rem;font-weight:500;color:var(--ghost);letter-spacing:.02em">title</p>
+        <input value="{{ efTitle }}" onChange="{{ onEfTitle }}" placeholder="how you'll look for it later" style-focus="border-color:var(--ghost)" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--ink);font:inherit;font-size:.85rem;font-weight:500;padding:8px 11px;outline:none;margin-bottom:13px;transition:border-color .15s ease">
+        <p style="margin:0 0 4px;font-size:.72rem;font-weight:500;color:var(--ghost);letter-spacing:.02em">description</p>
+        <textarea value="{{ efDesc }}" onChange="{{ onEfDesc }}" rows="2" placeholder="what this is, in your words" style-focus="border-color:var(--ghost)" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--mut);font:inherit;font-size:.82rem;padding:8px 11px;outline:none;resize:vertical;margin-bottom:13px;transition:border-color .15s ease"></textarea>
+        <p style="margin:0 0 4px;font-size:.72rem;font-weight:500;color:var(--ghost);letter-spacing:.02em">tags</p>
+        <div style="position:relative;margin-bottom:13px">
+          <button type="button" onClick="{{ toggleEfTags }}" style="display:flex;align-items:center;flex-wrap:wrap;gap:6px;width:100%;box-sizing:border-box;border:1px solid {{ efTagsBd }};border-radius:8px;background:var(--bg2);font-family:inherit;font-size:.82rem;padding:7px 11px;cursor:pointer;text-align:left;transition:border-color .15s ease" data-comment-anchor="61c302da01-input">
+            <sc-for list="{{ efTagChips }}" as="ec" hint-placeholder-count="2">
+              <span style="display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:2px 9px;font-size:.74rem;color:var(--ink)"><span style="color:var(--ghost)">#</span>{{ ec.name }}<span onClick="{{ ec.remove }}" title="remove" style-hover="color:var(--ink)" style="color:var(--ghost);cursor:pointer;transition:color .15s ease">✕</span></span>
+            </sc-for>
+            <sc-if value="{{ efTagsEmpty }}" hint-placeholder-val="{{ false }}">
+              <span style="color:var(--fnt)">choose tags</span>
+            </sc-if>
+            <span style="margin-left:auto;color:var(--ghost);font-size:.72rem">▾</span>
+          </button>
+          <sc-if value="{{ efTagsOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:20;background:var(--bg);border:1px solid var(--line);border-radius:10px;box-shadow:0 18px 50px -20px rgba(40,28,8,.45);padding:5px;animation:siloIn .14s ease">
+              <input ref="{{ efTagQRef }}" value="{{ efTagQ }}" onChange="{{ onEfTagQ }}" onKeyDown="{{ onEfTagKey }}" placeholder="find or create a tag" style-focus="border-color:var(--ghost)" style="width:100%;box-sizing:border-box;margin:0 0 3px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:var(--bg2);color:var(--ink);font:inherit;font-size:.78rem;outline:none;transition:border-color .15s ease">
+              <sc-for list="{{ efTagOpts }}" as="eo" hint-placeholder-count="3">
+                <button type="button" onClick="{{ eo.toggle }}" style-hover="background:var(--hov)" style="display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;border:0;background:none;font-family:inherit;text-align:left;padding:5px 9px;border-radius:6px;font-size:.78rem;font-weight:400;cursor:pointer;color:{{ eo.c }};transition:background .15s ease,color .15s ease">
+                  <span style="color:var(--ghost)">#</span><span>{{ eo.name }}</span>
+                  <span style="margin-left:auto;width:6px;height:6px;border-radius:50%;background:{{ eo.dot }}"></span>
+                </button>
+              </sc-for>
+              <sc-if value="{{ efTagCreate }}" hint-placeholder-val="{{ false }}">
+                <button type="button" onClick="{{ createEfTagFn }}" style-hover="background:var(--hov);color:var(--ink)" style="display:flex;align-items:center;gap:8px;width:100%;box-sizing:border-box;border:0;background:none;font-family:inherit;text-align:left;padding:5px 9px;border-radius:6px;font-size:.78rem;font-weight:500;color:var(--mut);cursor:pointer;transition:background .15s ease,color .15s ease"><span style="color:var(--ghost)">+</span><span>{{ efTagCreateLabel }}</span></button>
+              </sc-if>
+            </div>
+          </sc-if>
+        </div>
+        <p style="margin:0 0 4px;font-size:.72rem;font-weight:500;color:var(--ghost);letter-spacing:.02em"><span style="color:var(--markt)">¶</span> note</p>
+        <textarea value="{{ efNote }}" onChange="{{ onEfNote }}" rows="2" placeholder="why you kept it" style-focus="border-color:var(--ghost)" style="width:100%;box-sizing:border-box;border:1px solid var(--line);border-radius:8px;background:var(--bg2);color:var(--mut);font:inherit;font-size:.82rem;font-style:italic;padding:8px 11px;outline:none;resize:vertical;transition:border-color .15s ease"></textarea>
+        <div style="display:flex;gap:14px;align-items:center;margin-top:17px" data-comment-anchor="586eda522d-div">
+          <button type="button" onClick="{{ editTrash }}" style-hover="color:var(--ink)" style="display:inline-flex;align-items:center;gap:6px;border:0;background:none;font-size:.76rem;font-weight:500;color:var(--fnt);padding:0;cursor:pointer;font-family:inherit;transition:color .15s ease"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="var(--ghost)" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><path d="M2.8 4.2h10.4"></path><path d="M6 4.2V2.8h4v1.4"></path><path d="M4.3 4.2l.6 9h6.2l.6-9"></path><path d="M6.6 7v3.8M9.4 7v3.8"></path></svg>trash</button>
+          <span style="flex:1"></span>
+          <button type="button" onClick="{{ cancelEdit }}" style-hover="color:var(--ink)" style="border:0;background:none;font-size:.76rem;font-weight:500;color:var(--mut);padding:0;cursor:pointer;font-family:inherit;transition:color .15s ease">cancel</button>
+          <button type="button" onClick="{{ saveEdit }}" style-hover="border-color:var(--ghost)" style="border:1px solid var(--line);background:var(--bg2);border-radius:8px;font-size:.76rem;font-weight:500;color:var(--ink);padding:6px 16px;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;gap:6px;transition:border-color .15s ease"><span style="color:var(--markt)">✓</span>Save</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;theme&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;light&quot;,&quot;dark&quot;],&quot;default&quot;:&quot;dark&quot;,&quot;tsType&quot;:&quot;'light' | 'dark'&quot;,&quot;section&quot;:&quot;Appearance&quot;},&quot;startEmpty&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:false,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Demo state&quot;}}">
+class Component extends DCLogic {
+  constructor(props) {
+    super(props);
+    const empty = props.startEmpty ?? false;
+    this.state = {
+      themeOverride: null,
+      view: 'library',
+      tag: null,
+      q: '',
+      omniFocused: false,
+      hover: null,
+      trHover: null,
+      sel: [],
+      trSel: [],
+      links: empty ? [] : Component.seeds(),
+      trash: empty ? [] : Component.trashSeeds(),
+      nextId: 100,
+      settingsOpen: false,
+      tab: 'plugins',
+      plugins: { hn: true, tw: true, yt: true, gh: true },
+      preview: null,
+      mcp: true,
+      purgeDays: 30,
+      editId: null,
+      ef: { title: '', desc: '', tags: '', note: '' },
+      importStage: 'idle',
+      enrichTotal: 0,
+      enrichDone: 0,
+      newTagOpen: false,
+      newTagVal: '',
+      customTags: [],
+      menuId: null,
+      copiedId: null,
+      copiedKind: null,
+      menuTagsOpen: false,
+      menuTagQ: '',
+      tagQ: '',
+      tagFindOpen: false,
+      tagShown: 10,
+      efTagsOpen: false,
+      efTagQ: '',
+    };
+  }
+
+  // ══ DEMO-ONLY MOCK DATA ══════════════════════════════════════════════
+  // Everything in seeds(), trashSeeds(), importSet() and demo() is design-
+  // mock content for the prototype. None of these strings should ship as
+  // hardcoded values in the real component.
+  static seeds() {
+    return [
+      { id: 1, group: 'Today', time: '2h', domain: 'news.ycombinator.com', title: 'Show HN: SQLite as an application file format', url: 'https://news.ycombinator.com', tags: ['local-first'], hn: { points: 412, comments: 208 } },
+      { id: 2, group: 'Today', time: '5h', domain: 'x.com', title: 'Simon Willison', url: 'https://x.com', tags: ['mcp', 'ai'], claude: true, handle: '@simonw', tweet: 'MCP servers are becoming the USB-C of AI tooling — one protocol, every model, and suddenly your local apps are part of the loop.' },
+      { id: 3, group: 'Yesterday', time: '1d', domain: 'field-notes.dev', title: "The Calm Web — tools that don't want your attention", url: 'https://example.com', tags: ['design', 'essays'], note: "the part about ambient reassurance → silo's list view" },
+      { id: 4, group: 'Yesterday', time: '1d', domain: 'paulgraham.com', title: 'How to Do Great Work', url: 'https://paulgraham.com/greatwork.html', tags: ['essays'] },
+      { id: 5, group: 'This week', time: '4d', domain: 'youtube.com', title: 'How Linear builds product', url: 'https://youtube.com', tags: ['product'], yt: { channel: 'Lenny\'s Podcast', duration: '32:14' } },
+      { id: 6, group: 'This week', time: '5d', domain: 'ft.com', title: 'The economics of personal software', url: 'https://ft.com', tags: ['product'] },
+      { id: 7, group: 'This week', time: '6d', domain: 'inkandswitch.com', title: 'Local-first software: you own your data', url: 'https://inkandswitch.com/local-first', tags: ['local-first', 'essays'] },
+      { id: 8, group: 'Earlier', time: '2w', domain: 'github.com', title: 'modelcontextprotocol/servers', url: 'https://github.com/modelcontextprotocol/servers', tags: ['mcp'], claude: true, gh: { desc: 'Reference implementations for the Model Context Protocol', stars: '58.1k', forks: '6.6k', issues: '412', contributors: '580', lang: 'TypeScript', langPct: 72 } },
+      { id: 9, group: 'Earlier', time: '3w', domain: 'press.stripe.com', title: 'Designing for calm — an interview', url: 'https://press.stripe.com', tags: ['design'] },
+    ];
+  }
+
+  static trashSeeds() {
+    return [
+      { id: 901, title: 'Why Figma wins', domain: 'kwokchain.com', url: 'https://kwokchain.com/2020/06/19/why-figma-wins/', tags: ['product'], left: 12, delAgo: 18 },
+      { id: 902, title: 'The rise of the AI wrapper', domain: 'every.to', url: 'https://every.to', tags: ['ai'], left: 27, delAgo: 3 },
+      { id: 903, title: 'Notes on distributed systems', domain: 'brooker.co.za', url: 'https://brooker.co.za', tags: ['essays'], left: 29, delAgo: 1 },
+    ];
+  }
+
+  static importSet() {
+    return [
+      { url: 'https://maggieappleton.com/garden-history', title: 'A Brief History of Digital Gardens', domain: 'maggieappleton.com', tags: ['essays'] },
+      { url: 'https://worrydream.com/refs', title: 'Bret Victor — references', domain: 'worrydream.com', tags: ['design'] },
+      { url: 'https://calmtech.com/principles', title: 'Principles of Calm Technology', domain: 'calmtech.com', tags: ['design'] },
+      { url: 'https://gwern.net/archiving', title: 'Archiving URLs', domain: 'gwern.net', tags: ['local-first'] },
+      { url: 'https://stephango.com/file-over-app', title: 'File over app', domain: 'stephango.com', tags: ['local-first', 'essays'] },
+      { url: 'https://jvns.ca/blog/2024/sqlite-notes', title: 'Some notes on SQLite', domain: 'jvns.ca', tags: [] },
+      { url: 'https://tbray.org/ongoing/quiet-software', title: 'Quiet Software', domain: 'tbray.org', tags: ['essays'] },
+      { url: 'https://spec.modelcontextprotocol.io', title: 'Model Context Protocol — specification', domain: 'modelcontextprotocol.io', tags: ['mcp'] },
+    ];
+  }
+
+  static demo() {
+    return { token: 'silo_sk_ · · · · 4f2a', importFile: 'pocket-export-2026.html' };
+  }
+  // ══ end demo data ════════════════════════════════════════════════════
+
+  // Letter-chip fallback: first two letters of the hostname's first segment.
+  // Shown until the favicon loads (or when it fails). NOTE: favicons are
+  // fetched via Google s2 per team request — this leaks saved domains to a
+  // third party; swap to a self-hosted/proxied favicon service before shipping.
+  static chip(domain) {
+    const seg = String(domain || '').replace(/^www\./, '').split('.')[0].replace(/[^a-z0-9]/gi, '');
+    const s = seg.slice(0, 2);
+    return s ? s.charAt(0).toUpperCase() + s.slice(1) : '·';
+  }
+
+  theme() { return this.state.themeOverride ?? (this.props.theme ?? 'dark'); }
+
+  componentDidMount() {
+    document.body.dataset.theme = this.theme();
+    this.keyFn = (e) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); if (this.omniEl) this.omniEl.focus(); }
+      if (e.key === 'Escape') {
+        if (this.state.preview) this.setState({ preview: null });
+        else if (this.state.efTagsOpen) this.setState({ efTagsOpen: false, efTagQ: '' });
+        else if (this.state.editId != null) { this.setState({ editId: null }); this.restoreFocus(); }
+        else if (this.state.settingsOpen) { this.setState({ settingsOpen: false, importStage: 'idle' }); this.restoreFocus(); }
+        else if (this.state.menuId != null) this.setState({ menuId: null });
+        else if (this.state.sel.length) this.setState({ sel: [] });
+        else if (this.state.trSel.length) this.setState({ trSel: [] });
+        else if (this.state.q) this.setState({ q: '' });
+        else if (this.state.tag) this.setState({ tag: null });
+      }
+    };
+    window.addEventListener('keydown', this.keyFn);
+    this.clickFn = () => { if (this.state.menuId != null) this.setState({ menuId: null, copiedId: null }); };
+    window.addEventListener('mousedown', this.clickFn);
+  }
+  componentDidUpdate() { document.body.dataset.theme = this.theme(); }
+  componentWillUnmount() { window.removeEventListener('keydown', this.keyFn); window.removeEventListener('mousedown', this.clickFn); clearInterval(this.enrichTimer); clearTimeout(this.pvTimer); clearTimeout(this.pvHideTimer); }
+
+  // Focus management: modals trap Tab and restore focus to their trigger.
+  trapFocus(e) {
+    if (e.key !== 'Tab') return;
+    const panel = e.currentTarget;
+    const els = Array.from(panel.querySelectorAll('a[href], button:not([disabled]), input, textarea, select')).filter(el => el.offsetParent !== null);
+    if (!els.length) return;
+    const first = els[0], last = els[els.length - 1];
+    if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) { e.preventDefault(); last.focus(); }
+    else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+  }
+  restoreFocus() {
+    const t = this.trigger; this.trigger = null;
+    if (t && t.focus && document.contains(t)) setTimeout(() => t.focus(), 0);
+  }
+
+  isUrl(s) { s = s.trim(); return !/\s/.test(s) && /^(https?:\/\/)?[\w-]+(\.[a-z]{2,})(\/\S*)?$/i.test(s); }
+
+  startEnrich() {
+    if (this.enrichTimer) return;
+    this.enrichTimer = setInterval(() => {
+      this.setState(st => {
+        const links = st.links.slice();
+        const i = links.findIndex(l => l.status === 'enriching');
+        if (i < 0) { clearInterval(this.enrichTimer); this.enrichTimer = null; return { enrichTotal: 0, enrichDone: 0 }; }
+        const l = { ...links[i] };
+        if (l.pending) { l.title = l.pending.title; l.tags = l.pending.tags || l.tags; delete l.pending; }
+        delete l.status; delete l.partial;
+        links[i] = l;
+        return { links, enrichDone: st.enrichDone + 1 };
+      });
+    }, 1100);
+  }
+
+  addUrl(raw) {
+    let u = raw.trim(); if (!/^https?:/i.test(u)) u = 'https://' + u;
+    let domain = 'link', path = '';
+    try { const p = new URL(u); domain = p.hostname.replace(/^www\./, ''); path = p.pathname; } catch (e) {}
+    const slug = (path.split('/').filter(Boolean).pop() || '').replace(/[-_]+/g, ' ').replace(/\.\w+$/, '').trim();
+    const nice = slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : domain.split('.')[0].charAt(0).toUpperCase() + domain.split('.')[0].slice(1);
+    this.setState(st => ({
+      nextId: st.nextId + 1,
+      q: '', view: 'library', tag: null,
+      enrichTotal: st.enrichTotal + 1,
+      links: [{ id: st.nextId, group: 'Today', time: 'now', domain, title: u.replace(/^https:\/\//, ''), url: u, tags: [], status: 'enriching', pending: { title: nice } }, ...st.links],
+    }), () => this.startEnrich());
+  }
+
+  runImportNow() {
+    const set = Component.importSet();
+    this.setState(st => ({
+      settingsOpen: false, importStage: 'idle', view: 'library', tag: null, q: '',
+      nextId: st.nextId + set.length,
+      enrichTotal: st.enrichTotal + set.length,
+      links: [...set.map((s, k) => ({ id: st.nextId + k, group: 'Today', time: 'now', domain: s.domain, title: s.url.replace(/^https:\/\//, ''), url: s.url, tags: [], status: 'enriching', pending: { title: s.title, tags: s.tags } })), ...st.links],
+    }), () => this.startEnrich());
+  }
+
+  openEdit(id) {
+    const l = this.state.links.find(x => x.id === id); if (!l) return;
+    this.trigger = document.activeElement;
+    this.setState({ editId: id, efTagsOpen: false, efTagQ: '', ef: { title: l.title, desc: l.desc || '', tags: (l.tags || []).slice(), note: l.note || '' } }, () => { if (this.editEl) this.editEl.focus(); });
+  }
+  saveEditNow() {
+    this.setState(st => ({
+      editId: null,
+      links: st.links.map(l => l.id !== st.editId ? l : { ...l, title: st.ef.title || l.title, desc: st.ef.desc, note: st.ef.note.trim(), tags: (st.ef.tags || []).slice() }),
+    }));
+    this.restoreFocus();
+  }
+  createEfTag(name) {
+    if (!name) return;
+    this.setState(st => ({
+      customTags: [...new Set([...st.customTags, name])],
+      ef: { ...st.ef, tags: [...new Set([...(st.ef.tags || []), name])] },
+      efTagQ: '',
+    }));
+  }
+  trashItem(id) {
+    this.setState(st => {
+      const l = st.links.find(x => x.id === id); if (!l) return null;
+      return { links: st.links.filter(x => x.id !== id), trash: [{ ...l, left: st.purgeDays, delAgo: 0 }, ...st.trash], hover: null, editId: null, menuId: null, sel: st.sel.filter(x => x !== id) };
+    });
+    this.restoreFocus();
+  }
+  bulkTrash(ids) {
+    this.setState(st => ({
+      links: st.links.filter(l => !ids.includes(l.id)),
+      trash: [...st.links.filter(l => ids.includes(l.id)).map(l => { const c = { ...l, left: st.purgeDays, delAgo: 0 }; delete c.status; delete c.pending; return c; }), ...st.trash],
+      sel: [], hover: null, menuId: null,
+    }));
+  }
+  bulkRestore(ids) {
+    this.setState(st => ({
+      links: [...st.trash.filter(t => ids.includes(t.id)).map(t => { const { left, ...rest } = t; return { ...rest, group: rest.group || 'Earlier' }; }), ...st.links],
+      trash: st.trash.filter(t => !ids.includes(t.id)),
+      trSel: [], trHover: null,
+    }));
+  }
+
+  renderVals() {
+    const st = this.state, self = this;
+    const theme = this.theme(), dark = theme === 'dark';
+    const on = { c: 'var(--ink)', b: 'var(--bg)', s: '0 1px 3px rgba(40,30,10,.12)' };
+    const off = { c: 'var(--mut)', b: 'transparent', s: 'none' };
+
+    const words = st.q.trim() && !this.isUrl(st.q) ? st.q.trim().toLowerCase().split(/\s+/) : [];
+    const match = (l) => {
+      if (st.tag && !(l.tags || []).includes(st.tag)) return false;
+      if (!words.length) return true;
+      const hay = (l.title + ' ' + l.domain + ' ' + (l.note || '') + ' ' + (l.tags || []).join(' ')).toLowerCase();
+      return words.every(w => hay.includes(w));
+    };
+    const visible = st.links.filter(match);
+
+    const counts = {};
+    st.links.forEach(l => (l.tags || []).forEach(t => { counts[t] = (counts[t] || 0) + 1; }));
+    st.customTags.forEach(t => { if (!(t in counts)) counts[t] = 0; });
+    const orderedNames = [
+      ...st.customTags.slice().reverse(),
+      ...Object.keys(counts).filter(t => !st.customTags.includes(t)).sort((a, b) => counts[b] - counts[a] || a.localeCompare(b)),
+    ];
+
+    const tagOptsFor = (l) => {
+      const mq = st.menuTagQ.trim().toLowerCase();
+      const assigned = l.tags || [];
+      const sorted = [
+        ...orderedNames.filter(n => assigned.includes(n)),
+        ...orderedNames.filter(n => !assigned.includes(n)),
+      ].filter(n => !mq || n.includes(mq));
+      const capped = sorted.slice(0, 6);
+      return {
+        opts: capped.map(name => {
+          const onIt = assigned.includes(name);
+          return {
+            key: name, name,
+            c: onIt ? 'var(--ink)' : 'var(--mut)',
+            dot: onIt ? 'var(--mark)' : 'transparent',
+            toggle: () => self.setState(s2 => ({
+              links: s2.links.map(x => x.id !== l.id ? x : { ...x, tags: onIt ? (x.tags || []).filter(t => t !== name) : [...(x.tags || []), name] }),
+            })),
+          };
+        }),
+        hidden: sorted.length - capped.length,
+      };
+    };
+
+    // Favicon via Google s2 (team request) — letter chip shows until it loads.
+    const fav = (d) => 'url("https://www.google.com/s2/favicons?domain=' + encodeURIComponent(d) + '&sz=64")';
+    const anySel = st.sel.length > 0;
+    const trAnySel = st.trSel.length > 0;
+
+    const groups = ['Today', 'Yesterday', 'This week', 'Earlier']
+      .map(label => ({
+        label,
+        items: visible.filter(l => l.group === label).map(l => {
+          const hov = st.hover === l.id;
+          const menu = st.menuId === l.id;
+          const isSel = st.sel.includes(l.id);
+          // Hover preview kind, decided by which plugin claims the link.
+          const kind = (l.hn && st.plugins.hn) ? 'hn' : (l.tweet && st.plugins.tw) ? 'tweet' : (l.gh && st.plugins.gh) ? 'repo' : (l.yt && st.plugins.yt) ? 'video' : null;
+          // Status mark: enriching = dim pulsing ◌ (transient, resolves on its own).
+          let hasStatus = false, statusGlyph = '', statusLabel = '', statusAnim = 'none', markTitle = '';
+          if (l.status === 'enriching') {
+            hasStatus = true; statusGlyph = '◌'; statusLabel = 'capturing…';
+            statusAnim = 'siloPulse 1.6s ease-in-out infinite';
+            markTitle = 'capturing — fills in behind you';
+          }
+          let rich = '', richColor = 'var(--fnt)';
+          if (l.hn && st.plugins.hn) { rich = l.hn.points + ' points · ' + l.hn.comments + ' comments'; richColor = 'var(--ghost)'; }
+          if (l.tweet && st.plugins.tw) { rich = l.tweet; richColor = 'var(--mut)'; }
+          const mTags = menu ? tagOptsFor(l) : { opts: [], hidden: 0 };
+          return {
+            key: l.id, chip: Component.chip(l.domain), title: l.title, suffix: l.domain, url: l.url,
+            favBg: fav(l.domain),
+            selected: isSel,
+            showCheck: hov || menu || anySel,
+            showChip: !(hov || menu || anySel),
+            checkBd: isSel ? 'var(--mark)' : 'var(--ghost)',
+            checkBg: isSel ? 'var(--mark)' : 'transparent',
+            checkGlyph: isSel ? '✓' : '',
+            toggleSel: (e) => { e.preventDefault(); e.stopPropagation(); self.setState(s2 => ({ sel: s2.sel.includes(l.id) ? s2.sel.filter(x => x !== l.id) : [...s2.sel, l.id] })); },
+            titleColor: l.status === 'enriching' ? 'var(--fnt)' : 'var(--ink)',
+            bg: (hov || menu || isSel) ? 'var(--hov)' : 'transparent', hovered: hov || menu,
+            menuOpen: menu,
+            menuFn: (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(self.pvTimer); self.setState(s2 => ({ menuId: s2.menuId === l.id ? null : l.id, preview: null, copiedId: null, copiedKind: null, menuTagsOpen: false, menuTagQ: '' })); },
+            closeMenu: () => self.setState({ menuId: null }),
+            copyFn: () => {
+              try { navigator.clipboard.writeText(l.url); } catch (err) {}
+              self.setState({ copiedId: l.id, copiedKind: 'link' });
+              setTimeout(() => self.setState(s2 => s2.menuId === l.id ? { menuId: null, copiedId: null, copiedKind: null } : { copiedId: null, copiedKind: null }), 700);
+            },
+            copyLabel: st.copiedId === l.id && st.copiedKind === 'link' ? 'copied' : 'copy link',
+            copyColor: st.copiedId === l.id && st.copiedKind === 'link' ? 'var(--markt)' : 'var(--mut)',
+            toggleTags: () => self.setState(s2 => ({ menuTagsOpen: !s2.menuTagsOpen, menuTagQ: '' })),
+            openTagsFly: () => self.setState({ menuTagsOpen: true }),
+            closeTagsFly: () => self.setState({ menuTagsOpen: false, menuTagQ: '' }),
+            tagsOpen: menu && st.menuTagsOpen,
+            tagsRowBg: (menu && st.menuTagsOpen) ? 'var(--hov)' : 'none',
+            tagCount: (l.tags || []).length || '',
+            tagOpts: mTags.opts,
+            hasMoreTagNote: mTags.hidden > 0,
+            moreTagNote: mTags.hidden + ' more — type to narrow',
+            hasStatus, statusGlyph, statusLabel, statusAnim, markTitle,
+            meta: l.time === 'now' ? 'just now' : l.time + ' ago',
+            hasNote: !!l.note, note: l.note || '',
+            hasRich: !!rich, rich, richColor,
+            enter: (e) => {
+              self.setState({ hover: l.id });
+              if (!kind || !e || !e.currentTarget || !e.currentTarget.getBoundingClientRect) return;
+              const r = e.currentTarget.getBoundingClientRect();
+              clearTimeout(self.pvTimer); clearTimeout(self.pvHideTimer);
+              self.pvTimer = setTimeout(() => {
+                const left = Math.round(Math.min(r.right + 14, window.innerWidth - 304));
+                const top = Math.round(Math.max(14, Math.min(r.top - 4, window.innerHeight - 340)));
+                self.setState({ preview: { id: l.id, top, left } });
+              }, 350);
+            },
+            leave: () => {
+              self.setState(s2 => s2.hover === l.id ? { hover: null } : null);
+              clearTimeout(self.pvTimer);
+              self.pvHideTimer = setTimeout(() => self.setState(s2 => (s2.preview && s2.preview.id === l.id) ? { preview: null } : null), 140);
+            },
+            editFn: () => { self.setState({ menuId: null }); self.openEdit(l.id); },
+            trashFn: () => self.trashItem(l.id),
+          };
+        }),
+      })).filter(g => g.items.length);
+
+    const tq = st.tagQ.trim().toLowerCase();
+    const filteredNames = orderedNames.filter(n => !tq || n.includes(tq));
+    const cappedNames = filteredNames.slice(0, st.tagShown);
+    const tagRemaining = filteredNames.length - cappedNames.length;
+    const tags = cappedNames.map(name => ({
+      key: name, name, n: counts[name],
+      c: st.tag === name ? 'var(--ink)' : 'var(--mut)',
+      b: st.tag === name ? 'var(--bg)' : 'transparent',
+      go: () => self.setState(s2 => ({ tag: s2.tag === name ? null : name, view: 'library' })),
+    }));
+
+    const minLeft = st.trash.length ? Math.min(...st.trash.map(t => t.left)) : null;
+    // Group deleted items by how long ago they were removed, mirroring the library.
+    const delBucket = (d) => d <= 0 ? 'Today' : d === 1 ? 'Yesterday' : d <= 6 ? 'This week' : d <= 29 ? 'This month' : 'Earlier';
+    const trashRows = st.trash.map(t => {
+      const hov = st.trHover === t.id;
+      const isSel = st.trSel.includes(t.id);
+      return {
+        key: t.id, chip: Component.chip(t.domain), title: t.title, suffix: t.domain, url: t.url,
+        favBg: fav(t.domain),
+        selected: isSel,
+        showCheck: hov || trAnySel,
+        showChip: !(hov || trAnySel),
+        checkBd: isSel ? 'var(--mark)' : 'var(--ghost)',
+        checkBg: isSel ? 'var(--mark)' : 'transparent',
+        checkGlyph: isSel ? '✓' : '',
+        toggleSel: (e) => { e.preventDefault(); e.stopPropagation(); self.setState(s2 => ({ trSel: s2.trSel.includes(t.id) ? s2.trSel.filter(x => x !== t.id) : [...s2.trSel, t.id] })); },
+        left: t.left + 'd',
+        leftTitle: 'auto-deletes in ' + t.left + ' days',
+        bg: (hov || isSel) ? 'var(--hov)' : 'transparent',
+        enter: (e) => {
+          self.setState({ trHover: t.id });
+          if (!e || !e.currentTarget || !e.currentTarget.getBoundingClientRect) return;
+          const r = e.currentTarget.getBoundingClientRect();
+          clearTimeout(self.pvTimer); clearTimeout(self.pvHideTimer);
+          self.pvTimer = setTimeout(() => {
+            const left = Math.round(Math.min(r.right + 14, window.innerWidth - 304));
+            const top = Math.round(Math.max(14, Math.min(r.top - 4, window.innerHeight - 340)));
+            self.setState({ preview: { id: t.id, top, left } });
+          }, 350);
+        },
+        leave: () => {
+          self.setState(s2 => s2.trHover === t.id ? { trHover: null } : null);
+          clearTimeout(self.pvTimer);
+          self.pvHideTimer = setTimeout(() => self.setState(s2 => (s2.preview && s2.preview.id === t.id) ? { preview: null } : null), 140);
+        },
+        restoreFn: (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(self.pvTimer); self.setState(s2 => {
+          const it = s2.trash.find(x => x.id === t.id); if (!it) return null;
+          const { left, ...rest } = it;
+          return { trash: s2.trash.filter(x => x.id !== t.id), links: [{ ...rest, group: rest.group || 'Earlier' }, ...s2.links], trHover: null, preview: null, trSel: s2.trSel.filter(x => x !== t.id) };
+        }); },
+        deleteFn: (e) => { e.preventDefault(); e.stopPropagation(); clearTimeout(self.pvTimer); self.setState(s2 => ({ trash: s2.trash.filter(x => x.id !== t.id), trHover: null, preview: null, trSel: s2.trSel.filter(x => x !== t.id) })); },
+        _bucket: delBucket(t.delAgo || 0),
+      };
+    });
+    const trashGroups = ['Today', 'Yesterday', 'This week', 'This month', 'Earlier']
+      .map(label => ({ key: label, label, items: trashRows.filter(r => r._bucket === label) }))
+      .filter(g => g.items.length);
+
+    const tabNames = ['plugins', 'preferences', 'import + export', 'access'];
+    const tabKeys = ['plugins', 'prefs', 'import', 'access'];
+    const tabs = tabNames.map((name, i) => ({
+      key: name, name,
+      c: st.tab === tabKeys[i] ? on.c : off.c, b: st.tab === tabKeys[i] ? on.b : 'transparent', s: st.tab === tabKeys[i] ? on.s : 'none',
+      go: () => self.setState({ tab: tabKeys[i] }),
+    }));
+
+    const dot = (en) => ({
+      dotBg: en ? 'var(--mark)' : 'transparent',
+      dotBd: en ? 'var(--mark)' : 'var(--ghost)',
+      state: en ? 'enabled — click to disable' : 'disabled — click to enable',
+    });
+    const pluginRows = [
+      { key: 'hn', name: 'Hacker News', desc: 'points and comments — inline and on hover', installed: true, setup: false, en: st.plugins.hn },
+      { key: 'tw', name: 'Twitter / X', desc: 'author and post text — inline and on hover', installed: true, setup: false, en: st.plugins.tw },
+      { key: 'gh', name: 'GitHub', desc: 'repo card on hover — stars, forks, issues', installed: true, setup: false, en: st.plugins.gh },
+      { key: 'yt', name: 'YouTube', desc: 'thumbnail and channel preview on hover', installed: true, setup: false, en: st.plugins.yt },
+    ].map(p => ({ ...p, ...dot(p.en), toggle: () => self.setState(s2 => ({ plugins: { ...s2.plugins, [p.key]: !s2.plugins[p.key] } })) }));
+
+    const isEmptyLib = st.links.length === 0 && st.view === 'library' && !words.length && !st.tag;
+    const enrichBusy = st.enrichTotal > 0 && st.links.some(l => l.status === 'enriching');
+
+    const pvLink = st.preview ? (st.links.find(l => l.id === st.preview.id) || st.trash.find(l => l.id === st.preview.id)) : null;
+    const pvFromTrash = !!pvLink && pvLink.left != null;
+    const pvKind = !pvLink ? null
+      : (pvLink.hn && st.plugins.hn) ? 'hn'
+      : (pvLink.tweet && st.plugins.tw) ? 'tweet'
+      : (pvLink.gh && st.plugins.gh) ? 'repo'
+      : (pvLink.yt && st.plugins.yt) ? 'video'
+      : pvFromTrash ? 'generic' : null;
+    const pvGh = (pvLink && pvLink.gh) || {};
+
+    const editItem = st.links.find(l => l.id === st.editId);
+    const efq = st.efTagQ.trim().toLowerCase();
+    const efAssigned = st.ef.tags || [];
+    const efSorted = [
+      ...orderedNames.filter(n => efAssigned.includes(n)),
+      ...orderedNames.filter(n => !efAssigned.includes(n)),
+    ].filter(n => !efq || n.includes(efq));
+    const importSet = Component.importSet();
+    const demo = Component.demo();
+
+    return {
+      goLibrary: () => self.setState({ view: 'library', tag: null }),
+      goTrash: () => self.setState({ view: 'trash' }),
+      navLibC: (st.view === 'library' && !st.tag ? on : off).c, navLibB: (st.view === 'library' && !st.tag ? on : off).b, navLibS: (st.view === 'library' && !st.tag ? on : off).s,
+      navTrC: (st.view === 'trash' ? on : off).c, navTrB: (st.view === 'trash' ? on : off).b, navTrS: (st.view === 'trash' ? on : off).s,
+      libCount: st.links.length,
+      viewTitle: st.view === 'trash' ? 'Trash' : 'Library',
+      viewCount: st.view === 'trash' ? String(st.trash.length) : String(st.links.length),
+      trashMeta: String(st.trash.length),
+      trashTitle: st.trash.length ? 'oldest empties in ' + minLeft + ' days' : 'empty',
+      tags,
+      tagFindOpen: st.tagFindOpen,
+      tagFindC: (st.tagFindOpen || st.tagQ) ? 'var(--ink)' : 'var(--ghost)',
+      toggleTagFind: () => self.setState(s2 => ({ tagFindOpen: !s2.tagFindOpen, tagQ: '' }), () => { if (self.tagFindEl) self.tagFindEl.focus(); }),
+      tagFindRef: (el) => { self.tagFindEl = el; },
+      onTagQKey: (e) => { if (e.key === 'Escape') { e.stopPropagation(); self.setState({ tagFindOpen: false, tagQ: '' }); } },
+      tagQ: st.tagQ,
+      onTagQ: (e) => self.setState({ tagQ: e.target.value }),
+      moreTags: tagRemaining > 0 || st.tagShown > 10,
+      moreLabel: tagRemaining > 0 ? 'show ' + Math.min(10, tagRemaining) + ' more' : 'show less',
+      toggleTagList: () => self.setState(s2 => tagRemaining > 0 ? { tagShown: s2.tagShown + 10 } : { tagShown: 10 }),
+      menuTagQ: st.menuTagQ,
+      onMenuTagQ: (e) => self.setState({ menuTagQ: e.target.value }),
+      newTagOpen: st.newTagOpen, newTagClosed: !st.newTagOpen, newTagVal: st.newTagVal,
+      openNewTag: () => self.setState({ newTagOpen: true }, () => { if (self.newTagEl) self.newTagEl.focus(); }),
+      closeNewTag: () => self.setState({ newTagOpen: false, newTagVal: '' }),
+      onNewTagVal: (e) => self.setState({ newTagVal: e.target.value }),
+      onNewTagKey: (e) => {
+        if (e.key === 'Enter' && st.newTagVal.trim()) self.setState(s2 => ({ customTags: [...new Set([...s2.customTags, s2.newTagVal.trim().toLowerCase()])], newTagOpen: false, newTagVal: '' }));
+        if (e.key === 'Escape') self.setState({ newTagOpen: false, newTagVal: '' });
+      },
+      newTagRef: (el) => { self.newTagEl = el; },
+      enrichBusy, enrichDone: Math.min(st.enrichDone, st.enrichTotal), enrichTotal: st.enrichTotal,
+      openSettings: () => { self.trigger = document.activeElement; self.setState({ settingsOpen: true }, () => { if (self.settingsEl) self.settingsEl.focus(); }); },
+
+      q: st.q,
+      omniRef: (el) => { self.omniEl = el; },
+      onQ: (e) => self.setState({ q: e.target.value }),
+      onQKey: (e) => { if (e.key === 'Enter' && self.isUrl(st.q)) self.addUrl(st.q); },
+      omniFocus: () => self.setState({ omniFocused: true }),
+      omniBlur: () => self.setState({ omniFocused: false }),
+      omniBorder: st.omniFocused ? 'var(--ghost)' : 'var(--line)',
+      omniIsUrl: this.isUrl(st.q),
+      omniIsSearch: words.length > 0,
+      omniIdle: !st.q.trim() && !(st.tag && st.view === 'library'),
+      omniTagIdle: !st.q.trim() && !!st.tag && st.view === 'library',
+      omniPlaceholder: st.tag && st.view === 'library' ? 'search in #' + st.tag : 'paste a link to keep · type to search',
+      foundMeta: visible.length + ' found',
+      tagActive: !!st.tag && st.view === 'library' && !words.length,
+      shownCount: visible.length,
+      tagName: st.tag || '',
+      clearTag: () => self.setState({ tag: null }),
+      selActive: st.sel.length > 0 && st.view === 'library',
+      selCount: st.sel.length,
+      selTrash: () => self.bulkTrash(st.sel),
+      selClear: () => self.setState({ sel: [] }),
+      trSelActive: st.trSel.length > 0 && st.view === 'trash',
+      trSelCount: st.trSel.length,
+      trRestoreSel: () => self.bulkRestore(st.trSel),
+      trDeleteSel: () => self.setState(s2 => ({ trash: s2.trash.filter(x => !s2.trSel.includes(x.id)), trSel: [] })),
+      trSelClear: () => self.setState({ trSel: [] }),
+      trSelectAll: () => self.setState(s2 => ({ trSel: s2.trash.map(x => x.id) })),
+      trDockIdle: st.view === 'trash' && st.trash.length > 0 && st.trSel.length === 0,
+
+      pvOpen: !!pvKind,
+      pvTop: st.preview ? st.preview.top + 'px' : '0px',
+      pvLeft: st.preview ? st.preview.left + 'px' : '0px',
+      pvIsVideo: pvKind === 'video', pvIsRepo: pvKind === 'repo', pvIsTweet: pvKind === 'tweet', pvIsHn: pvKind === 'hn', pvIsGeneric: pvKind === 'generic',
+      pvTitle: pvLink ? pvLink.title : '',
+      pvDomain: pvLink ? pvLink.domain : '',
+      pvMeta: !pvLink ? '' : pvFromTrash ? 'auto-deletes in ' + pvLink.left + 'd' : (pvLink.time === 'now' ? 'just now' : pvLink.time + ' ago'),
+      pvHasTags: !!pvLink && (pvLink.tags || []).length > 0,
+      pvTagLine: pvLink ? (pvLink.tags || []).map(t => '#' + t).join('  ') : '',
+      pvHasNote: !!pvLink && !!pvLink.note,
+      pvNote: pvLink ? (pvLink.note || '') : '',
+      pvUrl: pvLink ? pvLink.url : '#',
+      pvChip: pvLink ? Component.chip(pvLink.domain) : '',
+      pvFavBg: pvLink ? fav(pvLink.domain) : 'none',
+      pvDesc: pvGh.desc || '',
+      pvStats: [
+        { key: 'stars', n: pvGh.stars || '', label: 'stars' },
+        { key: 'forks', n: pvGh.forks || '', label: 'forks' },
+        { key: 'issues', n: pvGh.issues || '', label: 'issues' },
+        { key: 'contributors', n: pvGh.contributors || '', label: 'contributors' },
+      ],
+      pvLang: pvGh.lang || '', pvLangPct: (pvGh.langPct || 70) + '%',
+      pvChannel: pvLink && pvLink.yt ? pvLink.yt.channel : '',
+      pvDuration: pvLink && pvLink.yt ? pvLink.yt.duration : '',
+      pvAuthor: pvLink ? pvLink.title : '',
+      pvHandle: pvLink ? (pvLink.handle || '') : '',
+      pvTweet: pvLink ? (pvLink.tweet || '') : '',
+      pvPoints: pvLink && pvLink.hn ? pvLink.hn.points : '',
+      pvComments: pvLink && pvLink.hn ? pvLink.hn.comments : '',
+      pvKeep: () => { clearTimeout(self.pvHideTimer); },
+      pvHide: () => self.setState({ preview: null }),
+
+      isEmpty: isEmptyLib,
+      isLibrary: st.view === 'library' && !isEmptyLib,
+      isTrash: st.view === 'trash',
+      groups,
+      noResults: visible.length === 0 && (words.length > 0 || !!st.tag) && st.view === 'library',
+
+      trashRows, trashGroups,
+      hasTrash: st.trash.length > 0,
+      trashEmpty: st.trash.length === 0,
+      trashLine: 'deleted links keep their text · auto-empties after ' + st.purgeDays + ' days',
+      emptyNow: () => self.setState({ trash: [], trSel: [] }),
+
+      settingsOpen: st.settingsOpen,
+      settingsRef: (el) => { self.settingsEl = el; },
+      editRef: (el) => { self.editEl = el; },
+      trapKey: (e) => self.trapFocus(e),
+      closeSettings: () => { self.setState({ settingsOpen: false, importStage: 'idle' }); self.restoreFocus(); },
+      stop: (e) => e.stopPropagation(),
+      tabs,
+      tabPlugins: st.tab === 'plugins', tabPrefs: st.tab === 'prefs', tabImport: st.tab === 'import', tabAccess: st.tab === 'access',
+      pluginRows,
+      setLight: () => self.setState({ themeOverride: 'light' }),
+      setDark: () => self.setState({ themeOverride: 'dark' }),
+      thLightC: !dark ? on.c : off.c, thLightB: !dark ? on.b : 'transparent', thLightS: !dark ? on.s : 'none',
+      thDarkC: dark ? on.c : off.c, thDarkB: dark ? on.b : 'transparent', thDarkS: dark ? on.s : 'none',
+      purgeLabel: st.purgeDays + ' days',
+      cyclePurge: () => self.setState(s2 => ({ purgeDays: { 7: 30, 30: 90, 90: 7 }[s2.purgeDays] || 30 })),
+      mcpDotBg: dot(st.mcp).dotBg, mcpDotBd: dot(st.mcp).dotBd, mcpState: dot(st.mcp).state,
+      toggleMcp: () => self.setState(s2 => ({ mcp: !s2.mcp })),
+
+      importIdle: st.importStage === 'idle',
+      importPicked: st.importStage === 'picked',
+      importPreview: importSet.slice(0, 3).map(s => ({ key: s.url, title: s.title, domain: s.domain })),
+      importCount: importSet.length,
+      importMore: importSet.length - 3,
+      demoImportFile: demo.importFile,
+      demoToken: demo.token,
+      pickFile: () => self.setState({ importStage: 'picked' }),
+      cancelImport: () => self.setState({ importStage: 'idle' }),
+      runImport: () => self.runImportNow(),
+
+      editOpen: st.editId != null && !!editItem,
+      efDomain: editItem ? editItem.domain : '',
+      efTitle: st.ef.title, efDesc: st.ef.desc, efNote: st.ef.note,
+      onEfTitle: (e) => self.setState({ ef: { ...st.ef, title: e.target.value } }),
+      onEfDesc: (e) => self.setState({ ef: { ...st.ef, desc: e.target.value } }),
+      onEfNote: (e) => self.setState({ ef: { ...st.ef, note: e.target.value } }),
+      efTagsOpen: st.efTagsOpen,
+      efTagsBd: st.efTagsOpen ? 'var(--ghost)' : 'var(--line)',
+      toggleEfTags: () => self.setState(s2 => ({ efTagsOpen: !s2.efTagsOpen, efTagQ: '' }), () => { if (self.efTagQEl) self.efTagQEl.focus(); }),
+      efTagQ: st.efTagQ,
+      efTagQRef: (el) => { self.efTagQEl = el; },
+      onEfTagQ: (e) => self.setState({ efTagQ: e.target.value }),
+      onEfTagKey: (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); if (efq && !orderedNames.includes(efq)) self.createEfTag(efq); }
+        if (e.key === 'Escape') { e.stopPropagation(); self.setState({ efTagsOpen: false, efTagQ: '' }); }
+      },
+      efTagChips: efAssigned.map(name => ({
+        key: name, name,
+        remove: (e) => { e.stopPropagation(); self.setState(s2 => ({ ef: { ...s2.ef, tags: (s2.ef.tags || []).filter(t => t !== name) } })); },
+      })),
+      efTagsEmpty: efAssigned.length === 0,
+      efTagOpts: efSorted.slice(0, 8).map(name => {
+        const onIt = efAssigned.includes(name);
+        return {
+          key: name, name,
+          c: onIt ? 'var(--ink)' : 'var(--mut)',
+          dot: onIt ? 'var(--mark)' : 'transparent',
+          toggle: () => self.setState(s2 => ({ ef: { ...s2.ef, tags: onIt ? (s2.ef.tags || []).filter(t => t !== name) : [...(s2.ef.tags || []), name] } })),
+        };
+      }),
+      efTagCreate: !!efq && !orderedNames.includes(efq),
+      efTagCreateLabel: 'create "' + efq + '"',
+      createEfTagFn: () => self.createEfTag(efq),
+      cancelEdit: () => { self.setState({ editId: null, efTagsOpen: false, efTagQ: '' }); self.restoreFocus(); },
+      saveEdit: () => self.saveEditNow(),
+      editTrash: () => self.trashItem(st.editId),
+    };
+  }
+}
+</script>
+</body>
+</html>
