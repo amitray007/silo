@@ -109,6 +109,19 @@ describeIfPg('links operations (integration)', () => {
       const found = await ops.findByCanonicalUrl('https://example.com/bad-source-data');
       expect(found).toBeNull();
     });
+
+    it('accepts an explicit rich sourceKind with NO sourceData (floors sourceData until enrichment)', async () => {
+      // A caller (e.g. capture_link with sourceKind:'hacker_news' but no
+      // stats yet) must NOT be rejected — the classification is kept for
+      // enricher routing, sourceData floors to {kind:'link'} until the
+      // enricher writes the real payload (correctness/CodeRabbit review).
+      const created = await ops.createLink({
+        url: 'https://example.com/rich-kind-no-data',
+        sourceKind: 'hacker_news',
+      });
+      expect(created.sourceKind).toBe('hacker_news');
+      expect(created.sourceData).toEqual({ kind: 'link' });
+    });
   });
 
   describe('added_by origin (C1)', () => {
@@ -357,20 +370,85 @@ describeIfPg('links operations (integration)', () => {
     });
 
     it('re-saving a live url with a richer source_data updates the stored payload (no drop)', async () => {
+      // A plain (non-source-detectable) url — this test's intent is the
+      // explicit-sourceData re-save merge, independent of URL-based
+      // auto-detection (covered separately below).
       const created = await ops.createLink({
-        url: 'https://news.ycombinator.com/item?id=1',
+        url: 'https://example.com/plain-then-enriched',
         sourceKind: 'link',
       });
       expect(created.sourceKind).toBe('link');
 
       const enriched = await ops.createLink({
-        url: 'https://news.ycombinator.com/item?id=1',
+        url: 'https://example.com/plain-then-enriched',
         sourceKind: 'hacker_news',
         sourceData: { kind: 'hacker_news', points: 42, comments: 7, author: 'pg' },
       });
       expect(enriched.id).toBe(created.id);
       expect(enriched.sourceKind).toBe('hacker_news');
       expect(enriched.sourceData).toMatchObject({ kind: 'hacker_news', points: 42, author: 'pg' });
+    });
+
+    it('auto-detects sourceKind from a known-source url when the caller leaves it as the default "link"', async () => {
+      const created = await ops.createLink({
+        url: 'https://news.ycombinator.com/item?id=8863',
+        sourceKind: 'link',
+      });
+      // Classified as hacker_news for enricher routing, but sourceData stays
+      // the safe `link` floor until the worker's HN enricher actually runs
+      // (see `resolveSource`'s doc comment in links.ts).
+      expect(created.sourceKind).toBe('hacker_news');
+      expect(created.sourceData).toEqual({ kind: 'link' });
+    });
+
+    it('does not misclassify a plain url with no recognized source shape', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/just-an-article',
+        sourceKind: 'link',
+      });
+      expect(created.sourceKind).toBe('link');
+      expect(created.sourceData).toEqual({ kind: 'link' });
+    });
+
+    it('re-saving a plain link at a now-recognized url upgrades sourceKind without fabricating sourceData', async () => {
+      const created = await ops.createLink({
+        url: 'https://github.com/amitray007/silo-detect-upgrade',
+        sourceKind: 'link',
+      });
+      // Simulate a row saved before this URL's shape was recognized (or the
+      // detector not yet matching it) by resetting sourceKind back to 'link'
+      // directly, then re-saving through createLink to exercise the merge
+      // path's auto-detection upgrade.
+      await rawDb.execute(
+        sql`update links set source_kind = 'link', source_data = '{"kind":"link"}' where id = ${created.id}`,
+      );
+
+      const resaved = await ops.createLink({
+        url: 'https://github.com/amitray007/silo-detect-upgrade',
+        sourceKind: 'link',
+      });
+      expect(resaved.id).toBe(created.id);
+      expect(resaved.sourceKind).toBe('github');
+      expect(resaved.sourceData).toEqual({ kind: 'link' });
+    });
+
+    it('does not downgrade an already-enriched row when re-saved without explicit sourceData', async () => {
+      const created = await ops.createLink({
+        url: 'https://news.ycombinator.com/item?id=99999',
+        sourceKind: 'hacker_news',
+        sourceData: { kind: 'hacker_news', points: 100, comments: 20, author: 'someone' },
+      });
+      expect(created.sourceKind).toBe('hacker_news');
+
+      // Re-save without explicit sourceData (e.g. a plain re-capture) — must
+      // NOT clobber the already-enriched payload with the bare link floor.
+      const resaved = await ops.createLink({
+        url: 'https://news.ycombinator.com/item?id=99999',
+        sourceKind: 'link',
+      });
+      expect(resaved.id).toBe(created.id);
+      expect(resaved.sourceKind).toBe('hacker_news');
+      expect(resaved.sourceData).toMatchObject({ kind: 'hacker_news', points: 100 });
     });
 
     it('restore-collision: folds into the live row, no two live rows, no raw 23505', async () => {
@@ -409,6 +487,44 @@ describeIfPg('links operations (integration)', () => {
       expect(result.link.notes).toContain('original notes');
       const withOldTag = await ops.list({ tag: 'old-tag' });
       expect(withOldTag.links.map((l) => l.id)).toContain(liveReplacement.id);
+    });
+
+    it('restore-collision: a trashed ENRICHED (non-link) row folds into a live plain row without throwing', async () => {
+      // Regression guard (correctness review, plan 012 P0): restore()'s
+      // collision branch used to build a bare `{ kind: trashedRow.sourceKind }`
+      // stub and eagerly `.parse()` it — which throws a ZodError for any
+      // enriched sourceKind (hacker_news/github/youtube all require fields),
+      // violating restore()'s "no raw error reaches the caller" contract.
+      const original = await ops.createLink({
+        url: 'https://news.ycombinator.com/item?id=778899',
+        sourceKind: 'hacker_news',
+        sourceData: { kind: 'hacker_news', points: 321, comments: 45, author: 'dang' },
+        notes: 'original hn notes',
+      });
+      expect(original.sourceKind).toBe('hacker_news');
+      await ops.softDelete(original.id);
+
+      // A colliding live plain-link row at the same canonical_url (inserted at
+      // the db level to bypass createLink's revive, same as the test above).
+      const canonical = 'https://news.ycombinator.com/item?id=778899';
+      const replacementRows = await rawDb.execute<{ id: string }>(
+        sql`insert into links (url, canonical_url, source_kind, source_data, notes)
+            values (${canonical}, ${canonical}, 'link', '{"kind":"link"}', 'replacement notes')
+            returning id`,
+      );
+      const liveReplacement = replacementRows.rows[0];
+      if (!liveReplacement) throw new Error('setup: expected a live replacement row');
+
+      // Must NOT throw — returns a clean merged result.
+      const result = await ops.restore(original.id);
+      expect(result.status).toBe('merged');
+      if (result.status !== 'merged') throw new Error('expected merged');
+      expect(result.link.id).toBe(liveReplacement.id);
+      // The trashed row's real enriched sourceData folds into the live row
+      // (adopted because the live collision row was a plain `link`).
+      expect(result.link.sourceKind).toBe('hacker_news');
+      expect(result.link.sourceData).toMatchObject({ kind: 'hacker_news', points: 321 });
+      expect(result.link.notes).toContain('original hn notes');
     });
 
     it('restore on a link that is not trashed returns not_found', async () => {

@@ -38,6 +38,45 @@ describe('sourceDataSchema', () => {
       });
       expect(result.success).toBe(true);
     });
+
+    it('parses a valid GitHub payload with all optional fields', () => {
+      const payload = {
+        kind: 'github',
+        stars: 12345,
+        forks: 678,
+        issues: 90,
+        description: 'The React Framework',
+        language: 'JavaScript',
+        languagePct: 87.5,
+      };
+      const result = sourceDataSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(payload);
+      }
+    });
+
+    it('parses a valid GitHub payload with only the required fields', () => {
+      const payload = { kind: 'github', stars: 0, forks: 0, issues: 0 };
+      const result = sourceDataSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(payload);
+      }
+    });
+
+    it('parses a valid YouTube payload', () => {
+      const payload = {
+        kind: 'youtube',
+        channel: 'Rick Astley',
+        thumbnailUrl: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      };
+      const result = sourceDataSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(payload);
+      }
+    });
   });
 
   describe('rejection — wrong shape / unknown / missing discriminant', () => {
@@ -176,6 +215,78 @@ describe('sourceDataSchema', () => {
         points: 1,
         comments: 1,
         author: 'a'.repeat(257),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a GitHub payload with an extra unexpected field', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'github',
+        stars: 1,
+        forks: 1,
+        issues: 1,
+        extra: true,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a GitHub payload missing required fields', () => {
+      const result = sourceDataSchema.safeParse({ kind: 'github', stars: 1 });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects negative GitHub stats', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'github',
+        stars: -1,
+        forks: 0,
+        issues: 0,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an empty GitHub description (min 1)', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'github',
+        stars: 1,
+        forks: 1,
+        issues: 1,
+        description: '',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a GitHub languagePct over 100', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'github',
+        stars: 1,
+        forks: 1,
+        issues: 1,
+        languagePct: 101,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a YouTube payload with an extra unexpected field', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'youtube',
+        channel: 'x',
+        thumbnailUrl: 'https://img.youtube.com/vi/x/hqdefault.jpg',
+        extra: true,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a YouTube payload missing required fields', () => {
+      const result = sourceDataSchema.safeParse({ kind: 'youtube', channel: 'x' });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an empty YouTube channel string', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'youtube',
+        channel: '',
+        thumbnailUrl: 'https://img.youtube.com/vi/x/hqdefault.jpg',
       });
       expect(result.success).toBe(false);
     });

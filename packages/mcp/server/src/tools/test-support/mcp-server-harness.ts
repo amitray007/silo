@@ -123,14 +123,16 @@ export function describeMcpTool(
  * Asserts that `obj` (a `structuredContent` payload, or one item from a
  * `results`/`links` array within one) carries none of the internal-only
  * `links` columns that must never leak past `toStructuredContent`'s
- * whitelist construction — `searchVector`, `canonicalUrl`, `sourceData`,
- * `deletedAt`. Shared across `get_link`, `search_links`, and `list_links`
- * tests, which each assert this same leak-absence property.
+ * whitelist construction — `searchVector`, `canonicalUrl`, `deletedAt`.
+ * Shared across `get_link`, `search_links`, and `list_links` tests, which
+ * each assert this same leak-absence property. `sourceData` is DELIBERATELY
+ * NOT checked here (source-data/rich-previews slice, plan 012 whitelisted
+ * it — see `link-shape.ts`'s doc comment): it's now an expected, present
+ * field, asserted positively where relevant instead.
  */
 export function expectNoLeakedFields(obj: unknown): void {
   expect(obj).not.toHaveProperty('searchVector');
   expect(obj).not.toHaveProperty('canonicalUrl');
-  expect(obj).not.toHaveProperty('sourceData');
   expect(obj).not.toHaveProperty('deletedAt');
 }
 

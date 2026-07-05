@@ -50,6 +50,11 @@ describeIfPg('enrichLink (integration)', () => {
     return {
       safeFetch: () => Promise.resolve(fetchResult),
       extract: () => Promise.resolve(extractResult ?? { status: 'bare' }),
+      // No source enrichment in these generic fetch/extract tests — the
+      // source-data dispatcher itself is covered separately (see the
+      // "source enrichment" describe block below, and enrich-source/*.test.ts
+      // for the per-source enrichers).
+      enrichSource: () => Promise.resolve(undefined),
     };
   }
 
@@ -174,9 +179,79 @@ describeIfPg('enrichLink (integration)', () => {
             status: 200,
           }),
         extract: () => Promise.reject(new Error('unexpected extract crash')),
+        enrichSource: () => Promise.resolve(undefined),
       }),
     ).rejects.toThrow('unexpected extract crash');
     // Untouched — the failed attempt recorded nothing; a retry starts fresh.
     expect((await core.getById(id))?.captureStatus).toBe('enriching');
+  });
+
+  describe('source enrichment wiring', () => {
+    it('folds a successful sourceData result into the record on the extract-success branch', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=1');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () =>
+          Promise.resolve({
+            ok: true,
+            html: '<html></html>',
+            contentType: 'text/html',
+            finalUrl: 'https://news.ycombinator.com/item?id=1',
+            status: 200,
+          }),
+        extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
+        enrichSource: () =>
+          Promise.resolve({ kind: 'hacker_news', points: 500, comments: 200, author: 'pg' }),
+      });
+      const link = await core.getById(id);
+      expect(link?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 500,
+        comments: 200,
+        author: 'pg',
+      });
+      expect(link?.sourceKind).toBe('hacker_news');
+      expect(link?.title).toBe('HN thread');
+    });
+
+    it('folds a successful sourceData result into the record on the safeFetch-failure branch', async () => {
+      // The generic page fetch fails (e.g. blocked/dead), but the source's
+      // OWN API (HN Firebase here) is a separate endpoint that can still
+      // succeed — sourceData must still be recorded.
+      const id = await newLink('https://news.ycombinator.com/item?id=2');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve({ ok: false, reason: 'blocked-ip' }),
+        extract: () => Promise.resolve({ status: 'bare' }),
+        enrichSource: () =>
+          Promise.resolve({ kind: 'hacker_news', points: 10, comments: 3, author: 'x' }),
+      });
+      const link = await core.getById(id);
+      expect(link?.captureStatus).toBe('bare');
+      expect(link?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 10,
+        comments: 3,
+        author: 'x',
+      });
+    });
+
+    it('omits sourceData entirely when the enricher degrades (undefined) — no clobber, no crash', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=3');
+      await enrichMod.enrichLink(
+        id,
+        stubDeps({
+          ok: true,
+          html: '<html></html>',
+          contentType: 'text/html',
+          finalUrl: 'https://news.ycombinator.com/item?id=3',
+          status: 200,
+        }),
+      );
+      const link = await core.getById(id);
+      // stubDeps' enrichSource always resolves undefined — sourceData keeps
+      // whatever createLink set (the safe `link` floor for a freshly detected,
+      // not-yet-enriched hacker_news link).
+      expect(link?.sourceData).toEqual({ kind: 'link' });
+      expect(link?.captureStatus).toBe('bare');
+    });
   });
 });

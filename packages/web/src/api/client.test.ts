@@ -10,6 +10,7 @@ import type {
   LinksResponse,
   SearchResponse,
   SearchResultJson,
+  SourceData,
   TagCount,
   TagsResponse,
   TrashLinkJson,
@@ -37,6 +38,7 @@ const linkFixture: LinkJson = {
   siteName: 'example.com',
   extractedText: null,
   sourceKind: 'web',
+  sourceData: { kind: 'link' },
   captureStatus: 'full',
   addedBy: 'user',
   notes: null,
@@ -287,5 +289,23 @@ describe('type fidelity', () => {
   it('shapes a TagCount as GET /api/tags returns it', () => {
     const tag: TagCount = { name: 'mcp', count: 4 };
     expect(tag).toEqual({ name: 'mcp', count: 4 });
+  });
+
+  it('accepts every SourceData variant on a LinkJson (source-data/rich-previews slice)', () => {
+    const variants: SourceData[] = [
+      { kind: 'link' },
+      { kind: 'hacker_news', points: 250, comments: 84, author: 'pg' },
+      { kind: 'twitter', likes: 42, replies: 3, author: 'jack' },
+      { kind: 'github', stars: 120000, forks: 26000, issues: 3000, language: 'JavaScript' },
+      {
+        kind: 'youtube',
+        channel: 'Rick Astley',
+        thumbnailUrl: 'https://img.youtube.com/vi/x/hqdefault.jpg',
+      },
+    ];
+    for (const sourceData of variants) {
+      const link: LinkJson = { ...linkFixture, sourceData };
+      expect(link.sourceData).toEqual(sourceData);
+    }
   });
 });

@@ -21,6 +21,7 @@ const LINK_JSON_FIELDS = [
   'siteName',
   'extractedText',
   'sourceKind',
+  'sourceData',
   'captureStatus',
   'addedBy',
   'notes',
@@ -29,14 +30,13 @@ const LINK_JSON_FIELDS = [
   'updatedAt',
 ] as const;
 
-/** Asserts `json` carries exactly the whitelisted `LinkJson` fields and none of the internal-only ones (`searchVector`/`canonicalUrl`/`sourceData`/`deletedAt`). */
+/** Asserts `json` carries exactly the whitelisted `LinkJson` fields (including `sourceData` — whitelisted since the source-data/rich-previews slice, plan 012) and none of the internal-only ones (`searchVector`/`canonicalUrl`/`deletedAt`). */
 export function expectWhitelistedLinkShape(json: Record<string, unknown>): void {
   for (const field of LINK_JSON_FIELDS) {
     expect(Object.hasOwn(json, field)).toBe(true);
   }
   expect(Object.hasOwn(json, 'searchVector')).toBe(false);
   expect(Object.hasOwn(json, 'canonicalUrl')).toBe(false);
-  expect(Object.hasOwn(json, 'sourceData')).toBe(false);
   expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
 }
 

@@ -4,6 +4,12 @@ export const name = '@silo/core';
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';
 export { canonicalize } from './links/canonicalize.js';
+// Source detection (source-data/rich-previews slice): pure URL -> source-kind
+// classification (HN item / GitHub repo / YouTube video / plain link). Used
+// by `createLink` to auto-derive `sourceKind`, and re-run by the worker's
+// per-source enrichers to recover the parsed id/owner/repo/videoId.
+export type { DetectedSource } from './links/detect-source.js';
+export { detectSource } from './links/detect-source.js';
 // Enrichment enqueue seam (enrichment-worker slice): createLink enqueues via a
 // registered enqueuer (no-op by default). The worker registers the real
 // pg-boss send at startup via setEnrichmentEnqueuer — this keeps core free of

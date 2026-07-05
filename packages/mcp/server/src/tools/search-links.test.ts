@@ -117,7 +117,7 @@ describeMcpTool(
       expect(match?.tags).toEqual(['blorptastic']);
     });
 
-    it('LEAK-ABSENCE: a result never carries searchVector/canonicalUrl/sourceData/deletedAt', async () => {
+    it('LEAK-ABSENCE: a result never carries searchVector/canonicalUrl/deletedAt', async () => {
       const { client } = getContext();
       await seedLink(getContext, 'https://example.com/search-leak-check', {
         title: 'A unique leak-check phrase zzqqxx',

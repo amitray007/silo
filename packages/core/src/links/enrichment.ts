@@ -3,6 +3,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Link } from './links.js';
 import { whereLive } from './live.js';
+import { sourceDataSchema } from './source-data.js';
 
 /**
  * Terminal capture-status values an enrichment result can land on (plan
@@ -32,6 +33,18 @@ export const enrichmentResultSchema = z.object({
   siteName: z.string().max(500).optional(),
   text: z.string().max(2_000_000).optional(),
   status: enrichmentStatus,
+  /**
+   * The per-source enricher's result (HN points/comments, GitHub repo stats,
+   * YouTube channel+thumbnail — source-data/rich-previews slice, plan 012).
+   * Validated against the full `sourceDataSchema` union — a caller can only
+   * ever write a complete, valid payload for whichever `kind` it names, never
+   * a partial/malformed one. Optional: an enricher that fails/degrades (bad
+   * status, timeout, rate-limit, parse error) omits this entirely, and the
+   * COALESCE write below leaves the link's existing `source_data` untouched
+   * — a failed source enrichment must never wipe out a prior good capture,
+   * same don't-clobber policy as every other field here.
+   */
+  sourceData: sourceDataSchema.optional(),
 });
 
 export type EnrichmentResult = z.infer<typeof enrichmentResultSchema>;
@@ -45,7 +58,16 @@ export type EnrichmentResult = z.infer<typeof enrichmentResultSchema>;
  * Don't-clobber: a field the result omits (`undefined`) keeps the link's
  * existing stored value, same policy as `mergeIntoExisting` in `links.ts` —
  * a `partial`/`bare` result (thin or failed capture) must never wipe out
- * previously-captured good metadata.
+ * previously-captured good metadata. `sourceData` follows the same policy:
+ * omitted means keep whatever is already stored (typically the `{kind:'link'}`
+ * floor `createLink` set, or a richer payload from a previous successful
+ * enrichment pass).
+ *
+ * When `sourceData` IS present, `source_kind` is written alongside it in the
+ * SAME statement so the two never observably disagree once this call
+ * completes — the one place `resolveSource` (links.ts) documents as a
+ * transient exception (an auto-detected-but-not-yet-enriched link) is closed
+ * here, by the enricher's successful write.
  *
  * Input is validated with Zod at the boundary before any write is attempted.
  * Returns the updated `Link`, or `null` if `linkId` doesn't exist or is
@@ -56,6 +78,7 @@ export async function recordEnrichment(
   result: EnrichmentResult,
 ): Promise<Link | null> {
   const parsed = enrichmentResultSchema.parse(result);
+  const sourceDataJson = parsed.sourceData ? JSON.stringify(parsed.sourceData) : null;
 
   // Single atomic UPDATE with the don't-clobber fallback expressed as
   // `COALESCE(newValue, column)` in SQL — the fallback reads each column's
@@ -76,6 +99,8 @@ export async function recordEnrichment(
       siteName: sql`coalesce(${parsed.siteName ?? null}, ${links.siteName})`,
       extractedText: sql`coalesce(${parsed.text ?? null}, ${links.extractedText})`,
       captureStatus: parsed.status,
+      sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
+      sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,
     })
     .where(whereLive(eq(links.id, linkId)))
     .returning();

@@ -12,11 +12,17 @@ import { setupPgHarness } from './test-support/pg-harness.js';
  */
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 
-/** Asserts the internal-only fields never appear as own-keys on a shaped JSON object — the leak guard shared by every shaper variant's test. */
+/**
+ * Asserts the internal-only fields never appear as own-keys on a shaped JSON
+ * object — the leak guard shared by every shaper variant's test.
+ * `sourceData` is DELIBERATELY NOT in this list (source-data/rich-previews
+ * slice, plan 012 un-blocked it — see `link-json.ts`'s doc comment): it's
+ * now a whitelisted, display-only field. Its own presence/shape is asserted
+ * positively in the tests below instead of being guarded against here.
+ */
 function expectNoLeakedFields(json: object): void {
   expect(Object.hasOwn(json, 'searchVector')).toBe(false);
   expect(Object.hasOwn(json, 'canonicalUrl')).toBe(false);
-  expect(Object.hasOwn(json, 'sourceData')).toBe(false);
 }
 
 describeIfPg('link-json (integration)', () => {
@@ -53,6 +59,7 @@ describeIfPg('link-json (integration)', () => {
     expect(json.addedBy).toBe('agent');
     expect(json.notes).toBe('a note');
     expect(json.tags.slice().sort()).toEqual(['alpha', 'beta']);
+    expect(json.sourceData).toEqual({ kind: 'link' });
     expect(typeof json.createdAt).toBe('string');
     expect(typeof json.updatedAt).toBe('string');
     // ISO 8601 round-trips through Date without throwing/NaN.
@@ -86,6 +93,53 @@ describeIfPg('link-json (integration)', () => {
     expect(Number.isNaN(new Date(json.deletedAt).getTime())).toBe(false);
     // Still no internal-field leak on the trash variant.
     expectNoLeakedFields(json);
+  });
+
+  it('toLinkJson shapes a real, validated non-link sourceData payload through', async () => {
+    const core = harness.mod();
+    const { toLinkJson } = await import('./link-json.js');
+
+    const created = await core.createLink({
+      url: 'https://news.ycombinator.com/item?id=424242',
+      sourceKind: 'hacker_news',
+      sourceData: { kind: 'hacker_news', points: 250, comments: 84, author: 'pg' },
+    });
+    const link = await core.getById(created.id);
+    expect(link).not.toBeNull();
+    if (!link) return;
+
+    const json = toLinkJson(link);
+    expect(json.sourceKind).toBe('hacker_news');
+    expect(json.sourceData).toEqual({
+      kind: 'hacker_news',
+      points: 250,
+      comments: 84,
+      author: 'pg',
+    });
+  });
+
+  it('toLinkJson falls back to the safe link floor for a malformed/corrupted stored source_data (defense in depth)', async () => {
+    const core = harness.mod();
+    const { toLinkJson } = await import('./link-json.js');
+    const { db } = await import('@silo/db');
+    const { sql } = await import('drizzle-orm');
+
+    const created = await core.createLink({
+      url: 'https://example.com/link-json-corrupted-source-data',
+      sourceKind: 'link',
+    });
+    // Bypass core's write-boundary validation entirely (raw SQL) to simulate
+    // a hand-edited row / pre-migration drift — something `toLinkJson` must
+    // never propagate into an HTTP response as a thrown error.
+    await db.execute(
+      sql`update links set source_data = '{"kind":"hacker_news","points":"not-a-number"}' where id = ${created.id}`,
+    );
+    const link = await core.getById(created.id);
+    expect(link).not.toBeNull();
+    if (!link) return;
+
+    const json = toLinkJson(link);
+    expect(json.sourceData).toEqual({ kind: 'link' });
   });
 
   it('toSearchResultJson carries the whitelist plus rank', async () => {

@@ -179,6 +179,141 @@ describeIfPg('enrichment operations (integration)', () => {
     });
   });
 
+  describe('recordEnrichment — sourceData', () => {
+    it('writes a valid hacker_news sourceData payload and syncs sourceKind', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://news.ycombinator.com/item?id=555',
+        sourceKind: 'link',
+      });
+      // createLink auto-detects the sourceKind for enricher routing but keeps
+      // sourceData at the safe `link` floor until enrichment runs.
+      expect(created.sourceKind).toBe('hacker_news');
+      expect(created.sourceData).toEqual({ kind: 'link' });
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        sourceData: { kind: 'hacker_news', points: 250, comments: 84, author: 'pg' },
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.sourceKind).toBe('hacker_news');
+      expect(updated?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 250,
+        comments: 84,
+        author: 'pg',
+      });
+
+      const fetched = await linksOps.getById(created.id);
+      expect(fetched?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 250,
+        comments: 84,
+        author: 'pg',
+      });
+    });
+
+    it('writes a valid github sourceData payload', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://github.com/vercel/next.js',
+        sourceKind: 'link',
+      });
+      expect(created.sourceKind).toBe('github');
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        sourceData: {
+          kind: 'github',
+          stars: 120000,
+          forks: 26000,
+          issues: 3000,
+          description: 'The React Framework',
+          language: 'JavaScript',
+        },
+      });
+
+      expect(updated?.sourceData).toMatchObject({ kind: 'github', stars: 120000 });
+    });
+
+    it('writes a valid youtube sourceData payload', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        sourceKind: 'link',
+      });
+      expect(created.sourceKind).toBe('youtube');
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        sourceData: {
+          kind: 'youtube',
+          channel: 'Rick Astley',
+          thumbnailUrl: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+        },
+      });
+
+      expect(updated?.sourceData).toMatchObject({ kind: 'youtube', channel: 'Rick Astley' });
+    });
+
+    it('omitting sourceData (a degraded/best-effort enrichment) keeps the existing payload (dont-clobber)', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://news.ycombinator.com/item?id=556',
+        sourceKind: 'hacker_news',
+        sourceData: { kind: 'hacker_news', points: 10, comments: 2, author: 'someone' },
+      });
+
+      // A subsequent enrichment pass that DIDN'T successfully run the source
+      // enricher (e.g. HN Firebase rate-limited) omits sourceData entirely —
+      // the prior good payload must survive untouched.
+      const updated = await enrichmentOps.recordEnrichment(created.id, { status: 'full' });
+
+      expect(updated?.sourceKind).toBe('hacker_news');
+      expect(updated?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 10,
+        comments: 2,
+        author: 'someone',
+      });
+    });
+
+    it('rejects an invalid sourceData shape before any write', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-bad-source-data',
+        sourceKind: 'link',
+      });
+
+      await expect(
+        enrichmentOps.recordEnrichment(created.id, {
+          status: 'full',
+          sourceData: { kind: 'hacker_news', points: 1 } as never,
+        }),
+      ).rejects.toThrow();
+
+      const fetched = await linksOps.getById(created.id);
+      expect(fetched?.sourceData).toEqual({ kind: 'link' });
+      expect(fetched?.captureStatus).toBe('enriching');
+    });
+
+    it('does not write sourceData/sourceKind on a trashed link', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://news.ycombinator.com/item?id=557',
+        sourceKind: 'link',
+      });
+      await linksOps.softDelete(created.id);
+
+      const result = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        sourceData: { kind: 'hacker_news', points: 1, comments: 1, author: 'x' },
+      });
+
+      expect(result).toBeNull();
+      const rows = await rawDb.execute<{ source_kind: string; source_data: unknown }>(
+        sql`select source_kind, source_data from links where id = ${created.id}`,
+      );
+      expect(rows.rows[0]?.source_kind).toBe('hacker_news');
+      expect(rows.rows[0]?.source_data).toEqual({ kind: 'link' });
+    });
+  });
+
   describe('recordEnrichment — nonexistent', () => {
     it('returns null for a random uuid', async () => {
       const result = await enrichmentOps.recordEnrichment('00000000-0000-0000-0000-000000000000', {

@@ -19,6 +19,8 @@
     "@hono/node-server": "catalog:",
     "@silo/core": "workspace:*",
     "hono": "catalog:",
+    "ipaddr.js": "catalog:",
+    "undici": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

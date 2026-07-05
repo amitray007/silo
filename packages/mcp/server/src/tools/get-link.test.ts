@@ -62,6 +62,9 @@ describeMcpTool(
       });
       expect(typeof structured.createdAt).toBe('string');
       expect(typeof structured.updatedAt).toBe('string');
+      // sourceData IS whitelisted (source-data/rich-previews slice, plan
+      // 012) — a plain (non-source-detected) link carries the safe floor.
+      expect(structured.sourceData).toEqual({ kind: 'link' });
 
       // Leak-absence: these internal-only `links` columns must never reach
       // structuredContent (previously leaked via a `{ ...rest }` spread that
@@ -98,6 +101,33 @@ describeMcpTool(
       expect(structured.tags).toEqual([]);
       expect(structured.captureStatus).toBe('enriching');
 
+      expectNoLeakedFields(structured);
+    });
+
+    it('a real HN-detected + enriched link -> structuredContent carries the shaped sourceData', async () => {
+      const { core, client } = getContext();
+      const created = await core.createLink({
+        url: 'https://news.ycombinator.com/item?id=987654',
+        sourceKind: 'link',
+      });
+      // createLink auto-detects sourceKind from the url; recordEnrichment is
+      // what actually populates the rich sourceData payload (worker's job in
+      // production — invoked directly here to test get_link's read path).
+      await core.recordEnrichment(created.id, {
+        status: 'full',
+        sourceData: { kind: 'hacker_news', points: 321, comments: 45, author: 'dang' },
+      });
+
+      const result = await client.callTool({ name: 'get_link', arguments: { id: created.id } });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.sourceKind).toBe('hacker_news');
+      expect(structured.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 321,
+        comments: 45,
+        author: 'dang',
+      });
       expectNoLeakedFields(structured);
     });
 

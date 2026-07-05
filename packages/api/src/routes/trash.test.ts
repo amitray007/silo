@@ -103,7 +103,8 @@ describeIfPg('GET /api/trash (integration)', () => {
     expect(Number.isNaN(new Date(link.deletedAt as string).getTime())).toBe(false);
     expect(Object.hasOwn(link, 'searchVector')).toBe(false);
     expect(Object.hasOwn(link, 'canonicalUrl')).toBe(false);
-    expect(Object.hasOwn(link, 'sourceData')).toBe(false);
+    // sourceData IS whitelisted now (source-data/rich-previews slice, plan 012).
+    expect(Object.hasOwn(link, 'sourceData')).toBe(true);
   });
 
   it('paginates trashed links (limit + nextCursor round-trip, no dup/gap)', async () => {

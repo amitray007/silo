@@ -14,7 +14,9 @@
  * `worker.ts`). A degraded capture is not a bug; an unreachable database is.
  */
 
+import type { SourceData } from '@silo/core';
 import { getById, recordEnrichment } from '@silo/core';
+import { enrichSource } from './enrich-source/index.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
@@ -24,9 +26,17 @@ import { safeFetch } from './fetch/safe-fetch.js';
 export interface EnrichLinkDeps {
   safeFetch: (url: string) => Promise<SafeFetchResult>;
   extract: (input: ExtractInput) => Promise<ExtractResult>;
+  /**
+   * The per-source rich-preview enricher (HN/GitHub/YouTube — source-data/
+   * rich-previews slice, plan 012), run for every link regardless of the
+   * generic fetch/extract outcome (see `enrichLink`'s call site below for
+   * why). Defaults to the real dispatcher; tests inject a stub so the HN/
+   * GitHub/YouTube network calls never actually run.
+   */
+  enrichSource: (sourceKind: string, url: string) => Promise<SourceData | undefined>;
 }
 
-const defaultDeps: EnrichLinkDeps = { safeFetch, extract };
+const defaultDeps: EnrichLinkDeps = { safeFetch, extract, enrichSource };
 
 /**
  * Map a `safeFetch` failure reason to a terminal capture status (plan R10/
@@ -72,6 +82,26 @@ function mapSafeFetchFailureToStatus(
  * this resolves immediately without fetching anything; there is nothing left
  * to enrich, and pg-boss should treat a vanished target as a normal
  * completion, not a failure to retry.
+ *
+ * Source enrichment (source-data/rich-previews slice, plan 012) runs
+ * INDEPENDENTLY of the generic fetch/extract outcome, on both the success AND
+ * failure branches below: an HN/GitHub/YouTube URL is enriched via that
+ * source's OWN API (Firebase/REST/oEmbed), a completely separate endpoint
+ * from the page's own HTML — a generic fetch failure (the target site is
+ * slow/blocked/oversized) says nothing about whether the source's API is
+ * reachable, and vice versa. `deps.enrichSource` already never throws (see
+ * its own contract) and returns `undefined` for a `'link'`/unrecognized kind
+ * or any failure, so it's always safe to fold into `recordEnrichment`'s
+ * optional `sourceData` field — a degraded/absent result simply omits it,
+ * and the coalesce write leaves any existing `source_data` untouched.
+ *
+ * The generic `safeFetch` and the source-API `enrichSource` hit UNRELATED
+ * hosts with no data dependency between them, so they run CONCURRENTLY
+ * (`Promise.all`) — the per-job wall-clock cost is the slower of the two
+ * (~one fetch timeout), not their sum. Both sides resolve rather than throw
+ * for every expected failure, so `Promise.all` never rejects on an expected
+ * degraded outcome; a genuinely unexpected throw (an infra bug) from either
+ * still propagates for pg-boss to retry, exactly as before.
  */
 export async function enrichLink(
   linkId: string,
@@ -82,10 +112,23 @@ export async function enrichLink(
     return;
   }
 
-  const fetchResult = await deps.safeFetch(link.url);
+  const [fetchResult, sourceData] = await Promise.all([
+    deps.safeFetch(link.url),
+    // Defense in depth (reliability review): `enrichSource` is already
+    // contracted never to throw (its dispatcher wraps everything in a
+    // try/catch), but a best-effort rich-preview enricher must NEVER be the
+    // thing that fails an otherwise-fine capture — so a second, cheap
+    // `.catch` here guarantees that even a future regression in that
+    // contract degrades to "no sourceData this pass" rather than propagating
+    // and failing the whole `enrichLink` job.
+    deps.enrichSource(link.sourceKind, link.url).catch(() => undefined),
+  ]);
 
   if (!fetchResult.ok) {
-    await recordEnrichment(linkId, { status: mapSafeFetchFailureToStatus(fetchResult.reason) });
+    await recordEnrichment(linkId, {
+      status: mapSafeFetchFailureToStatus(fetchResult.reason),
+      ...(sourceData ? { sourceData } : {}),
+    });
     return;
   }
 
@@ -95,5 +138,5 @@ export async function enrichLink(
     contentType: fetchResult.contentType,
   });
 
-  await recordEnrichment(linkId, extracted);
+  await recordEnrichment(linkId, { ...extracted, ...(sourceData ? { sourceData } : {}) });
 }

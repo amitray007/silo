@@ -31,6 +31,7 @@ const getLinkOutputShape = {
   siteName: baseLinkShape.siteName.optional(),
   extractedText: baseLinkShape.extractedText.optional(),
   sourceKind: baseLinkShape.sourceKind.optional(),
+  sourceData: baseLinkShape.sourceData.optional(),
   captureStatus: baseLinkShape.captureStatus.optional(),
   addedBy: baseLinkShape.addedBy.optional(),
   notes: baseLinkShape.notes.optional(),
@@ -45,9 +46,8 @@ type GetLinkStructuredContent = z.infer<z.ZodObject<typeof getLinkOutputShape>>;
  * Builds `structuredContent` from the shared whitelist pick
  * (`toBaseLinkContent`) plus `found: true` — never a spread of raw
  * `LinkWithTags`. This makes the leak (`searchVector`/`canonicalUrl`/
- * `sourceData`/`deletedAt`) structurally impossible: adding a field requires
- * a conscious edit to `./link-shape.js`, not an accidental one from a new DB
- * column.
+ * `deletedAt`) structurally impossible: adding a field requires a conscious
+ * edit to `./link-shape.js`, not an accidental one from a new DB column.
  */
 function toStructuredContent(link: LinkWithTags): GetLinkStructuredContent {
   return { found: true, ...toBaseLinkContent(link) };

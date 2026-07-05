@@ -17,6 +17,40 @@ export type CaptureStatus = 'enriching' | 'full' | 'partial' | 'bare';
 export type AddedBy = 'user' | 'agent';
 
 /**
+ * Web's OWN copy of the API's `sourceData` union — mirrors
+ * `@silo/core`'s `SourceData` (`packages/core/src/links/source-data.ts`)
+ * field-for-field, string-safe (no `Date`s appear in this union, so no
+ * divergence needed there). Not imported from `@silo/core` for the same
+ * bundling reason the rest of this file isn't (see the file's top doc
+ * comment) — `@silo/core`'s barrel value-imports `@silo/db` -> `pg` at
+ * module top level, which a browser bundle can never pull in.
+ *
+ * Source-data/rich-previews slice (plan 012): drives the web's rich hover
+ * previews (HN points/comments, GitHub repo stats, a YouTube
+ * channel+thumbnail) once that rendering lands (a later phase) — the API
+ * whitelist change (this type's server-side counterpart) is what un-blocks
+ * it. The universal `{ kind: 'link' }` floor covers both a genuinely plain
+ * link AND a detected-but-not-yet-enriched rich source (see `@silo/core`'s
+ * `links.ts` `resolveSource` doc comment for why those two cases share one
+ * representation) — never assume `kind !== 'link'` implies enriched data
+ * is present elsewhere on the link.
+ */
+export type SourceData =
+  | { kind: 'link' }
+  | { kind: 'hacker_news'; points: number; comments: number; author: string }
+  | { kind: 'twitter'; likes: number; replies: number; author: string }
+  | {
+      kind: 'github';
+      stars: number;
+      forks: number;
+      issues: number;
+      description?: string;
+      language?: string;
+      languagePct?: number;
+    }
+  | { kind: 'youtube'; channel: string; thumbnailUrl: string };
+
+/**
  * Mirrors `LinkJson` in `packages/api/src/link-json.ts` — the whitelisted,
  * JSON-serialized shape of a link. `createdAt`/`updatedAt` are ISO date
  * strings (JSON has no native date type), NOT `Date`.
@@ -30,6 +64,7 @@ export type LinkJson = {
   siteName: string | null;
   extractedText: string | null;
   sourceKind: string;
+  sourceData: SourceData;
   captureStatus: CaptureStatus;
   addedBy: AddedBy;
   notes: string | null;

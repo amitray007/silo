@@ -1,4 +1,5 @@
-import type { LinkWithTags } from '@silo/core';
+import type { LinkWithTags, SourceData } from '@silo/core';
+import { sourceDataSchema } from '@silo/core';
 
 /**
  * The WHITELISTED, JSON-serialized shape of a `LinkWithTags` this API returns
@@ -17,15 +18,22 @@ import type { LinkWithTags } from '@silo/core';
  * it would have to be added to this shape explicitly:
  * - `searchVector` — a raw Postgres tsvector, meaningless over JSON.
  * - `canonicalUrl` — can carry an internal `#unsafe-<uuid>` dedup suffix.
- * - `sourceData` — an internal per-source blob; no UI renders it yet (mirrors
- *   the MCP shape's same watch-item — add it here too if that changes).
  * - `deletedAt` — live-scoping plumbing; excluded from LIVE responses. Trash
  *   responses (`GET /api/trash`) need it for the mockup's delete countdown,
  *   so `toTrashLinkJson` below is a separate, explicit variant that adds it
  *   rather than a flag threaded through `toLinkJson`.
  *
- * `addedBy` IS whitelisted (unlike `sourceData`): it's provenance (backs the
- * mockup's `◆` added-by-claude mark), not an internal-only field.
+ * `addedBy` IS whitelisted: it's provenance (backs the mockup's `◆`
+ * added-by-claude mark), not an internal-only field.
+ *
+ * `sourceData` IS NOW whitelisted (source-data/rich-previews slice, plan
+ * 012 — this was the prior watch-item noted here and on the MCP side): it's
+ * entirely display data (HN points/comments, GitHub repo stats, a YouTube
+ * channel+thumbnail — see `@silo/core`'s `source-data.ts`), no internal
+ * field, and the web rendering (a later phase) needs it to draw the rich
+ * hover previews. `SourceData`'s own `.strict()` discriminated union is
+ * still the enforcement point for "no internal leak inside the payload
+ * itself" — nothing beyond its declared variants can ever be stored there.
  */
 export type LinkJson = {
   id: string;
@@ -36,6 +44,7 @@ export type LinkJson = {
   siteName: string | null;
   extractedText: string | null;
   sourceKind: string;
+  sourceData: SourceData;
   captureStatus: 'enriching' | 'full' | 'partial' | 'bare';
   addedBy: 'user' | 'agent';
   notes: string | null;
@@ -43,6 +52,31 @@ export type LinkJson = {
   createdAt: string;
   updatedAt: string;
 };
+
+/**
+ * Re-validate the DB's loosely-typed `source_data` jsonb (`Record<string,
+ * unknown>` on `LinkWithTags` — the column has no DB-level schema, only the
+ * Zod gate at every core write boundary) into the strict `SourceData` union
+ * before it's ever handed to an HTTP response. `core` only ever WRITES a
+ * validated payload (`createLink`/`recordEnrichment` both `.parse()` before
+ * any write), so this should always succeed — re-parsing on the READ side
+ * too is defense in depth (a hand-edited row, a future migration bug), not
+ * an expectation that it will actually reject in practice. Falls back to the
+ * universal `{ kind: 'link' }` floor (never throws into the response path)
+ * on the unexpected case where it doesn't parse.
+ */
+function shapeSourceData(raw: unknown): SourceData {
+  const parsed = sourceDataSchema.safeParse(raw);
+  if (!parsed.success) {
+    // Should never happen (core only writes validated payloads) — log rather
+    // than silently mask real corruption, then fall back safely.
+    console.warn('[silo/api] stored source_data failed validation; using link floor', {
+      issues: parsed.error.issues,
+    });
+    return { kind: 'link' };
+  }
+  return parsed.data;
+}
 
 /** `LinkJson` plus `deletedAt` — the Trash screen's shape (`GET /api/trash`). */
 export type TrashLinkJson = LinkJson & { deletedAt: string };
@@ -53,11 +87,13 @@ export type SearchResultJson = LinkJson & { rank: number };
 /**
  * Builds the whitelisted, JSON-safe fields as an EXPLICIT field-by-field
  * pick — never a spread of `LinkWithTags`. This makes a leak of
- * `searchVector`/`canonicalUrl`/`sourceData`/`deletedAt` structurally
- * impossible: adding a field to the HTTP response requires a conscious edit
- * here, not an accidental one from a new DB column landing on `LinkWithTags`.
- * Dates are serialized to ISO strings (`Date#toISOString`) since HTTP/JSON
- * has no native date type.
+ * `searchVector`/`canonicalUrl`/`deletedAt` structurally impossible: adding a
+ * field to the HTTP response requires a conscious edit here, not an
+ * accidental one from a new DB column landing on `LinkWithTags`. `sourceData`
+ * IS included (see the `LinkJson` doc comment above) but always through
+ * `shapeSourceData`, never the raw DB value, so an invalid/malformed stored
+ * payload can never reach the response unvalidated. Dates are serialized to
+ * ISO strings (`Date#toISOString`) since HTTP/JSON has no native date type.
  */
 export function toLinkJson(link: LinkWithTags): LinkJson {
   /* jscpd:ignore-start — this field-by-field whitelist necessarily resembles the
@@ -76,6 +112,7 @@ export function toLinkJson(link: LinkWithTags): LinkJson {
     siteName: link.siteName,
     extractedText: link.extractedText,
     sourceKind: link.sourceKind,
+    sourceData: shapeSourceData(link.sourceData),
     captureStatus: link.captureStatus,
     addedBy: link.addedBy,
     notes: link.notes,

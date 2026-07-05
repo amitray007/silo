@@ -41,3 +41,4 @@ yarn-error.log*
 # Machine-local project memory (personal tooling, not committed)
 CLAUDE.local.md
 docs/design/refs/
+.gstack/

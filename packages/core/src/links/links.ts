@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { db, links, linkTags, tags } from '@silo/db';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { canonicalize } from './canonicalize.js';
+import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Executor, Link } from './executor.js';
 import { whereLive } from './live.js';
@@ -28,6 +29,28 @@ export { InvalidCursorError } from './pagination.js';
 
 /** Postgres unique-violation error code (`23505`). */
 const UNIQUE_VIOLATION = '23505';
+
+/**
+ * Re-validate a row's loosely-typed `source_data` jsonb (`Record<string,
+ * unknown>` on `Link`) back into the strict `SourceData` union. `core` only
+ * ever writes validated payloads, so this normally round-trips unchanged —
+ * the safe fallback to the universal `{ kind: 'link' }` floor exists only for
+ * a hand-edited/pre-migration row, and (critically) means a merge that reuses
+ * a stored payload never throws a raw ZodError at the caller (see `restore`'s
+ * collision branch).
+ */
+function safeParseSourceData(raw: unknown): SourceData {
+  const parsed = sourceDataSchema.safeParse(raw);
+  if (!parsed.success) {
+    // Should never happen (core only writes validated payloads) — surface it
+    // rather than silently masking real data corruption, then fall back safely.
+    console.warn('[silo/core] stored source_data failed validation; using link floor', {
+      issues: parsed.error.issues,
+    });
+    return { kind: 'link' };
+  }
+  return parsed.data;
+}
 
 /**
  * True when `error` is a Postgres unique-constraint violation, surfaced by
@@ -157,20 +180,42 @@ async function mergeIntoExisting(
   existing: Link,
   input: CreateLinkInput,
   sourceData: SourceData,
+  resolvedSourceKind: string,
 ): Promise<Link> {
   const mergedNotes = mergeNotes(existing.notes, input.notes);
+
+  // Prefer freshly-provided values, but never clobber existing data with an
+  // absent field on re-save. source_kind/source_data update in two cases:
+  // (1) the caller supplies an explicit, valid sourceData payload (e.g.
+  // re-capturing a plain link as an HN item with real stats) — a richer
+  // payload must never be dropped; (2) auto-DETECTION (no explicit
+  // sourceData; `resolveSource`'s `{ kind: 'link' }` floor) newly classifies a
+  // previously-plain existing row's `sourceKind` (e.g. a link saved before
+  // this URL's shape was recognized) — but ONLY from `existing.sourceKind ===
+  // 'link'`, so an already-enriched row (real stars/points/channel) is never
+  // downgraded by a second, unenriched re-save of the same URL. Re-setting
+  // `sourceKind` here is what lets the worker's enricher pick this link up
+  // correctly on its NEXT enrichment pass.
+  const shouldAdoptDetectedSource =
+    !input.sourceData && resolvedSourceKind !== 'link' && existing.sourceKind === 'link';
+  const nextSourceKind = input.sourceData
+    ? resolvedSourceKind
+    : shouldAdoptDetectedSource
+      ? resolvedSourceKind
+      : existing.sourceKind;
+  const nextSourceData = input.sourceData
+    ? sourceData
+    : shouldAdoptDetectedSource
+      ? sourceData
+      : existing.sourceData;
 
   const [updated] = await exec
     .update(links)
     .set({
       deletedAt: null,
       notes: mergedNotes,
-      // Prefer freshly-provided values, but never clobber existing data with an
-      // absent field on re-save. source_kind/source_data DO update when the
-      // caller supplies a richer payload (e.g. re-capturing a plain link as an
-      // HN item) — dropping them would silently lose validated metadata.
-      sourceKind: input.sourceData ? input.sourceKind : existing.sourceKind,
-      sourceData: input.sourceData ? sourceData : existing.sourceData,
+      sourceKind: nextSourceKind,
+      sourceData: nextSourceData,
       title: input.title ?? existing.title,
       description: input.description ?? existing.description,
       imageUrl: input.imageUrl ?? existing.imageUrl,
@@ -232,6 +277,63 @@ export async function willDedupCapture(url: string): Promise<boolean> {
 }
 
 /**
+ * Resolve the EFFECTIVE `sourceKind`/base `sourceData` for a `createLink`
+ * call, auto-detecting from the URL when the caller left the source
+ * unspecified (source-data/rich-previews slice, plan 012).
+ *
+ * Every existing caller (the API's `POST /links`, `capture_link`) always
+ * passes an explicit `sourceKind` — `'link'` is their own default when the
+ * USER didn't ask for a specific source, not an "omitted" signal — so
+ * `'link'` is treated here as "let silo detect it", while any OTHER explicit
+ * kind (a caller that already supplies a matching, valid `sourceData` — e.g.
+ * a re-capture with real HN stats) is honored as-is, unchanged from before
+ * this slice.
+ *
+ * IMPORTANT — the `sourceKind` column and `sourceData.kind` are allowed to
+ * diverge for exactly one transient window: a freshly auto-DETECTED rich
+ * source (no caller-supplied `sourceData`) is not yet enriched, and
+ * `hacker_news`/`github`/`youtube`'s schemas all REQUIRE real fields
+ * (points/stars/channel/...) that don't exist yet — there is no valid,
+ * honest non-`link` payload to store at capture time. So detection only sets
+ * the STRING `sourceKind` column (which is all the worker's enricher-routing
+ * needs — see `enrich.ts`), while `sourceData` stays the universal
+ * `{ kind: 'link' }` floor until the matching enricher's `recordEnrichment`
+ * call writes the real, validated payload (and per plan 012's write, MUST
+ * update `source_kind`/`source_data` together at that point, closing the
+ * window). This is the one documented exception to source-data.ts's
+ * "`kind` mirrors `source_kind`" invariant — everywhere else (any caller that
+ * supplies `sourceData`) the two always agree.
+ *
+ * When `input.sourceData` IS explicitly supplied, the caller has already made
+ * a complete, valid decision — detection is skipped, and `sourceKind` mirrors
+ * that payload's own `kind` (not a possibly-stale `input.sourceKind`).
+ */
+function resolveSource(input: CreateLinkInput): {
+  sourceKind: string;
+  sourceData: { kind: string };
+} {
+  if (input.sourceData) {
+    return { sourceKind: input.sourceData.kind, sourceData: input.sourceData };
+  }
+  if (input.sourceKind && input.sourceKind !== 'link') {
+    // An explicit rich `sourceKind` with NO `sourceData` (e.g. `capture_link`
+    // called with `sourceKind: 'hacker_news'` but no stats): the rich
+    // variants all REQUIRE fields we don't have yet, so — exactly like the
+    // auto-detected branch below — keep the classification for enricher
+    // routing but store the safe `{ kind: 'link' }` floor until the enricher
+    // writes the real payload. Returning a bare `{ kind: input.sourceKind }`
+    // here would make `createLink`'s `sourceDataSchema.parse` throw and
+    // reject an otherwise-valid capture.
+    return { sourceKind: input.sourceKind, sourceData: { kind: 'link' } };
+  }
+  const detected = detectSource(input.url);
+  // Only the classification (sourceKind) comes from detection — sourceData
+  // stays the safe `link` floor until a real enricher populates it (see the
+  // doc comment above for why the two may transiently disagree here).
+  return { sourceKind: detected.kind, sourceData: { kind: 'link' } };
+}
+
+/**
  * Create a link, or dedup-merge into an existing one (live or trashed) with the
  * same canonical url. Revives a trashed match. `ok:false` urls never dedup and
  * always insert fresh (their stored `canonical_url` is uniquely suffixed so two
@@ -257,9 +359,10 @@ export async function willDedupCapture(url: string): Promise<boolean> {
  */
 export async function createLink(input: CreateLinkInput): Promise<Link> {
   const { canonical, ok } = canonicalize(input.url);
+  const { sourceKind, sourceData: derivedSourceData } = resolveSource(input);
   const sourceData = input.sourceData
     ? sourceDataSchema.parse(input.sourceData)
-    : sourceDataSchema.parse({ kind: input.sourceKind });
+    : sourceDataSchema.parse(derivedSourceData);
 
   const storedCanonicalUrl = ok ? canonical : `${canonical}#unsafe-${randomUUID()}`;
 
@@ -268,7 +371,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (ok) {
         const existing = await findExistingForDedup(tx, input.url);
         if (existing) {
-          const merged = await mergeIntoExisting(tx, existing, input, sourceData);
+          const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
           await enqueueEnrichment(tx, merged.id);
           return merged;
         }
@@ -283,7 +386,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
           imageUrl: input.imageUrl,
           siteName: input.siteName,
           extractedText: input.extractedText,
-          sourceKind: input.sourceKind,
+          sourceKind,
           sourceData,
           notes: input.notes,
           captureStatus: 'enriching',
@@ -311,7 +414,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (!existing) {
         throw error;
       }
-      const merged = await mergeIntoExisting(tx, existing, input, sourceData);
+      const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
       await enqueueEnrichment(tx, merged.id);
       return merged;
     });
@@ -697,9 +800,23 @@ export async function restore(id: string): Promise<RestoreResult> {
         // slot is now free; fall out to retry the plain restore.
         if (!liveCollision) return null;
 
+        // The trashed row's OWN stored source_data is already a validated
+        // payload (core only ever writes validated data). Re-parse it (a
+        // hand-edited/pre-migration row degrades to the safe `link` floor
+        // rather than throwing) and carry it as the merge's explicit,
+        // complete sourceData — NOT a synthesized bare `{ kind }` stub, which
+        // would (a) throw eagerly for any enriched non-`link` sourceKind
+        // (hacker_news/github/youtube all require fields — the whole point of
+        // this fix) and (b) if it didn't throw, downgrade the live row to an
+        // invalid stub. Passing the real payload as `mergeInput.sourceData`
+        // makes `mergeIntoExisting` treat it as the authoritative kind, so
+        // the live collision row correctly inherits the trashed row's real
+        // enriched stats.
+        const trashedSourceData = safeParseSourceData(trashedRow.sourceData);
         const mergeInput: CreateLinkInput = {
           url: trashedRow.url,
-          sourceKind: trashedRow.sourceKind,
+          sourceKind: trashedSourceData.kind,
+          sourceData: trashedSourceData,
           // Carry the trashed row's own origin into the merge so a collision
           // during restore can't silently drop `agent` provenance (the
           // agent-sticky rule in `mergedOrigin` needs to see it as the
@@ -711,7 +828,8 @@ export async function restore(id: string): Promise<RestoreResult> {
           tx,
           liveCollision,
           mergeInput,
-          sourceDataSchema.parse({ kind: trashedRow.sourceKind }),
+          trashedSourceData,
+          trashedSourceData.kind,
         );
 
         const trashedTagRows = await tx

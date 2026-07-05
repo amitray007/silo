@@ -38,8 +38,7 @@ type SearchResultContent = z.infer<z.ZodObject<typeof searchResultShape>>;
  * Builds one result's `structuredContent` entry: the shared whitelist pick
  * (`toBaseLinkContent`) plus `rank` — never a spread of `LinkWithTags & {
  * rank: number }`. Same rationale as `link-shape.ts`'s doc: makes the leak
- * (`searchVector`/`canonicalUrl`/`sourceData`/`deletedAt`) structurally
- * impossible.
+ * (`searchVector`/`canonicalUrl`/`deletedAt`) structurally impossible.
  */
 function toResultContent(result: LinkWithTags & { rank: number }): SearchResultContent {
   return { ...toBaseLinkContent(result), rank: result.rank };

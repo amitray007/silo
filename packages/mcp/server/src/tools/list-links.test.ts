@@ -66,7 +66,7 @@ describeMcpTool(
       expect(content?.text).toContain('newest first');
     });
 
-    it('LEAK-ABSENCE: a link never carries searchVector/canonicalUrl/sourceData/deletedAt', async () => {
+    it('LEAK-ABSENCE: a link never carries searchVector/canonicalUrl/deletedAt', async () => {
       const { client } = getContext();
       await seedLink(getContext, 'https://example.com/list-leak-check', {
         title: 'Leak check unique zzqqxx',
