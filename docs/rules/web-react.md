@@ -9,6 +9,31 @@
 `@silo/api`; all operations live in `@silo/core` behind that API. The SPA holds
 no business logic — it translates `user interaction ↔ API call ↔ rendered view`.
 
+## Layout (the frame)
+
+- **Full-bleed, centered, narrow band — NOT an app-in-a-card.** The app fills the
+  whole viewport (`--bg` ground). The sidebar + content sit as ONE centered band
+  (`AppFrame`), capped (~60rem) so equal empty gutters fall on both far sides on
+  wide windows. There is **no floating bordered/rounded card** around the app.
+  (The captured prototype's outer shell used a 62rem card; the product direction
+  overrides that — the card was a hero-shot artifact. Row/sidebar internals stay
+  faithful to the prototype; only the outer shell diverges.)
+- **The content list is a reading column** (~45rem / ~720px), centered in the
+  content region — rows never stretch edge-to-edge on a wide screen.
+- **Bounded on both sides.** The sidebar has a right border and the content region
+  a symmetric left/right wall, so the band reads as a contained column, not two
+  panes bleeding into the gutter.
+- **Mobile-first responsive, in CSS.** Layout lives in real CSS classes with
+  `@media` breakpoints (`base.css`) — NOT inline styles (inline can't do media
+  queries) and NOT a JS `useMediaQuery` branch (avoids hydration/first-paint
+  shift). On narrow viewports (≤ the mobile breakpoint) the sidebar becomes an
+  **off-canvas drawer** (a ☰ button + brand in a top bar slides it in as an
+  overlay; tap-outside / Escape dismiss; content goes full-width). The drawer is
+  keyboard-operable and focus-managed (see the a11y floor). Everything works with
+  a finger: tap targets ≥ ~40px, no hover-only affordances on touch.
+- Only the layout SHELL moves to CSS classes; leaf components keep their inline
+  token styles.
+
 ## The bundling rule (load-bearing — ENFORCED)
 
 - **Browser code MUST NOT import `@silo/core`, `@silo/db`, or any workspace
