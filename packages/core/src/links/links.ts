@@ -561,6 +561,12 @@ export type SearchPage = {
  * with no tags gets `string_agg(...) = NULL`, coalesced to `''` so
  * `to_tsvector` still returns a (empty, non-matching) vector rather than NULL.
  *
+ * Exported (not module-private) so `trash.ts`'s `searchTrash` can reuse the
+ * EXACT same tag-matching subquery for the trashed-search path, rather than a
+ * second hand-copied definition that could silently drift from this one (and
+ * would trip jscpd at the repo's 1.5% threshold — the two search functions
+ * are otherwise near-identical by design, see `searchTrash`'s doc comment).
+ *
  * Why query-time and not in the generated `search_vector` column: a
  * `GENERATED ALWAYS AS` expression can only reference columns of its OWN row
  * — tags live in a separate m2m join (`link_tags`/`tags`), unreachable from a
@@ -570,7 +576,7 @@ export type SearchPage = {
  * keeps that simplicity at the cost of a per-candidate correlated subquery —
  * acceptable at personal-store scale (see `search`'s doc comment).
  */
-const tagSearchVector = sql`to_tsvector('english', coalesce((
+export const tagSearchVector = sql`to_tsvector('english', coalesce((
   select string_agg(${tags.name}, ' ')
   from ${linkTags}
   inner join ${tags} on ${tags.id} = ${linkTags.tagId}

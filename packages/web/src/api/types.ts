@@ -79,6 +79,14 @@ export type TrashLinkJson = LinkJson & { deletedAt: string };
 /** `LinkJson` plus a search `rank` — `GET /api/links/search`'s per-result shape. */
 export type SearchResultJson = LinkJson & { rank: number };
 
+/**
+ * `TrashLinkJson` plus a search `rank` — `GET /api/trash/search`'s per-result
+ * shape (Trash search slice). Distinct from `SearchResultJson`: it carries
+ * `deletedAt` so the Trash search UI can day-group results (`bucketTrashByDay`)
+ * and show the same purge countdown the plain trash feed shows.
+ */
+export type TrashSearchResultJson = TrashLinkJson & { rank: number };
+
 /** A single tag with its live-link count — an entry in `GET /api/tags`'s list. */
 export type TagCount = { name: string; count: number };
 
@@ -93,6 +101,9 @@ export type SearchResponse = { results: SearchResultJson[]; nextCursor?: string 
 
 /** `GET /api/trash` response envelope. */
 export type TrashResponse = { links: TrashLinkJson[]; nextCursor?: string };
+
+/** `GET /api/trash/search` response envelope (Trash search slice). */
+export type TrashSearchResponse = { results: TrashSearchResultJson[]; nextCursor?: string };
 
 /** `GET /api/links/:id` response envelope. */
 export type LinkResponse = { link: LinkJson };

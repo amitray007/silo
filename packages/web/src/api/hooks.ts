@@ -20,6 +20,7 @@ import type {
   TagsResponse,
   TrashLinkJson,
   TrashResponse,
+  TrashSearchResponse,
 } from './types';
 
 /**
@@ -38,6 +39,7 @@ export const queryKeys = {
   link: (id: string) => ['link', id] as const,
   search: (q: string) => ['search', q] as const,
   trash: () => ['trash'] as const,
+  trashSearch: (q: string) => ['trash-search', q] as const,
 };
 
 /** The sidebar's live/trash counts (`GET /api/counts`) — `useCounts().data` is `Counts | undefined` until loaded. */
@@ -134,6 +136,25 @@ export function useSearchLinks(q: string) {
   return useQuery({
     queryKey: queryKeys.search(trimmed),
     queryFn: () => apiGet<SearchResponse>(`/api/links/search?q=${encodeURIComponent(trimmed)}`),
+    enabled: trimmed.length > 0,
+  });
+}
+
+/**
+ * The Trash screen's server-side search (`GET /api/trash/search?q=`, Trash
+ * search slice) — mirrors `useSearchLinks` exactly (same `enabled:
+ * trimmed.length > 0` no-op-on-empty guard, same trim-before-key discipline
+ * so whitespace-only queries don't fire), hitting the trash-scoped route
+ * instead. Callers are responsible for debouncing keystrokes, same as
+ * `useSearchLinks`'s callers (`Omnibar.tsx`) — see `TrashView.tsx`'s own
+ * debounced input.
+ */
+export function useSearchTrash(q: string) {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: queryKeys.trashSearch(trimmed),
+    queryFn: () =>
+      apiGet<TrashSearchResponse>(`/api/trash/search?q=${encodeURIComponent(trimmed)}`),
     enabled: trimmed.length > 0,
   });
 }
