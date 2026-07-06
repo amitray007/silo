@@ -16,6 +16,7 @@
 import type { SourceData } from '@silo/core';
 import { sourceDataSchema } from '@silo/core';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
+import { fetchJsonObject } from './fetch-json.js';
 
 /** The subset of the Firebase item JSON this enricher actually reads. Every other field on a real HN item (kids, url, type, ...) is ignored. */
 interface HnItemResponse {
@@ -43,19 +44,11 @@ export async function enrichHackerNews(
   itemId: number,
   fetchFn: (url: string) => Promise<SafeFetchResult>,
 ): Promise<HackerNewsSourceData | undefined> {
-  const result = await fetchFn(itemUrl(itemId));
-  if (!result.ok) return undefined;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.html);
-  } catch {
-    return undefined;
-  }
-
   // A nonexistent item id resolves to a bare JSON `null` from Firebase — not
-  // an HTTP error `safeFetch` would have already caught.
-  if (parsed === null || typeof parsed !== 'object') return undefined;
+  // an HTTP error `safeFetch` would have already caught; `fetchJsonObject`
+  // degrades that (and any other non-object body) to `undefined` for us.
+  const parsed = await fetchJsonObject(itemUrl(itemId), fetchFn);
+  if (parsed === undefined) return undefined;
 
   const item = parsed as HnItemResponse;
   if (item.deleted || item.dead) return undefined;

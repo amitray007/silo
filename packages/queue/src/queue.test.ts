@@ -8,10 +8,11 @@ import { Pool } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 /**
- * Integration tests for the transactional enqueue (U5, plan R1/R2): a job sent
- * via core's registered enqueuer rides `createLink`'s transaction, so the job
- * row and the link row commit atomically. Needs a real Postgres (pg-boss
- * creates its own `pgboss` schema in the disposable test DB).
+ * Integration tests for the transactional enqueue (U5, plan R1/R2; moved from
+ * `@silo/worker` to `@silo/queue` in plan 013): a job sent via core's
+ * registered enqueuer rides `createLink`'s transaction, so the job row and
+ * the link row commit atomically. Needs a real Postgres (pg-boss creates its
+ * own `pgboss` schema in the disposable test DB).
  */
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 
@@ -24,7 +25,7 @@ describeIfPg('transactional enqueue (integration)', () => {
   let inspectPool: Pool;
 
   beforeAll(async () => {
-    const database = createDisposableDatabase('silo_worker_queue_test');
+    const database = createDisposableDatabase('silo_queue_test');
     dropDatabase = database.drop;
     dbUrl = database.url;
     const migratePool = new Pool({ connectionString: dbUrl });
@@ -35,7 +36,7 @@ describeIfPg('transactional enqueue (integration)', () => {
     core = await import('@silo/core');
     queueMod = await import('./queue.js');
 
-    boss = queueMod.createWorkerBoss();
+    boss = queueMod.createBoss();
     await boss.start();
     await queueMod.ensureEnrichLinkQueue(boss);
     queueMod.registerEnqueuer(boss);

@@ -12,14 +12,14 @@
  * destructures `([job]) => ...` to make the v12 contract explicit.
  */
 
-import { enrichLink } from './enrich.js';
 import {
-  createWorkerBoss,
+  createBoss,
   ENRICH_LINK_QUEUE,
   ensureEnrichLinkQueue,
   logDlqDepth,
   registerEnqueuer,
-} from './queue.js';
+} from '@silo/queue';
+import { enrichLink } from './enrich.js';
 
 /** Local per-node worker slots (plan: "the worker" — not yet horizontally tuned). */
 const LOCAL_CONCURRENCY = 5;
@@ -43,7 +43,7 @@ export interface WorkerHandle {
  * does (see the main-module guard at the bottom of this file).
  */
 export async function startWorker(): Promise<WorkerHandle> {
-  const boss = createWorkerBoss();
+  const boss = createBoss();
 
   boss.on('error', (error) => {
     // pg-boss's own internal errors (maintenance queries, connection issues)

@@ -1,19 +1,24 @@
 /**
  * pg-boss queue: name + job/queue options shared by BOTH the send side (in
  * `@silo/core`'s `createLink` — see `packages/core/src/links/enqueue.ts`) and
- * the work side (this package's `worker.ts`), plus the WORK-side PgBoss
- * factory used only by the long-lived worker entrypoint.
+ * the work side (`@silo/worker`'s `worker.ts`), plus the shared PgBoss
+ * factory used by ANY process that needs to talk to the `enrich-link` queue —
+ * whether it only sends (the API, a producer) or both sends and works
+ * (the worker, or the `@silo/app` turnkey process that runs both roles
+ * in-process).
  *
- * Split rationale (plan U5 note): `createLink` must enqueue transactionally,
- * but `@silo/core` must never depend on `@silo/worker` (architecture.md — the
- * dependency only runs adapter -> core, never core -> adapter). pg-boss
- * itself is a plain library, so `@silo/core` is allowed to depend on it
- * directly for the send side; only the *queue name + job options constants*
- * need to be shared between the two packages, and those are small enough to
- * duplicate as the single source of truth lives in the plan/docs rather than
- * creating a third shared package for two string constants. To avoid drift,
- * `@silo/core`'s send-side module re-declares the same literal constants with
- * a comment pointing back here — see `packages/core/src/links/enqueue.ts`.
+ * Split rationale (plan U5 note, updated plan 013): `createLink` must enqueue
+ * transactionally, but `@silo/core` must never depend on `@silo/worker` or
+ * `@silo/api` (architecture.md — the dependency only runs adapter -> core,
+ * never core -> adapter, and adapters never depend on each other). Both the
+ * worker (which consumes) and the API (which produces, once it registers the
+ * enqueuer at startup — see `packages/api/src/main.ts`) need the exact same
+ * queue name, job options, and connection factory, so those live here, in a
+ * shared library package that both may import.
+ *
+ * `@silo/queue` is a shared LIBRARY (like `@silo/db` is for data access), not
+ * an adapter: it has no HTTP/MCP/CLI surface of its own, and dependency
+ * direction stays adapter/worker -> queue -> core, never the reverse.
  *
  * pg-boss owns its own `pgboss` schema and gets its OWN connection/pool,
  * separate from `@silo/db`'s app pool (plan KTD) — its polling/maintenance
@@ -51,25 +56,27 @@ export const ENRICH_LINK_QUEUE_OPTIONS = {
 } as const;
 
 /**
- * Build a PgBoss instance for the WORK side (the worker entrypoint only —
- * never imported by `@silo/core`). Reads its connection string from
- * `WORKER_DATABASE_URL`, falling back to `DATABASE_URL` so a single-database
- * local/dev setup doesn't need a second env var; production deployments
- * should set `WORKER_DATABASE_URL` to route pg-boss's own pool away from the
- * app pool's connection budget.
+ * Build a PgBoss instance for the `enrich-link` queue. Any process that needs
+ * to send and/or work this queue calls this — the standalone `@silo/worker`
+ * process (send + work), the `@silo/api` process (send only, the producer),
+ * and the `@silo/app` turnkey process (both, in-process). Reads its
+ * connection string from `WORKER_DATABASE_URL`, falling back to
+ * `DATABASE_URL` so a single-database local/dev setup doesn't need a second
+ * env var; production deployments should set `WORKER_DATABASE_URL` to route
+ * pg-boss's own pool away from the app pool's connection budget.
  */
-export function createWorkerBoss(): PgBoss {
+export function createBoss(): PgBoss {
   const connectionString = process.env.WORKER_DATABASE_URL ?? process.env.DATABASE_URL;
   if (!connectionString) {
     throw new Error(
-      'createWorkerBoss: WORKER_DATABASE_URL (or DATABASE_URL) must be set to connect pg-boss.',
+      'createBoss: WORKER_DATABASE_URL (or DATABASE_URL) must be set to connect pg-boss.',
     );
   }
   return new PgBoss({
     connectionString,
     schema: 'pgboss',
     max: 5,
-    application_name: 'silo-worker',
+    application_name: 'silo-queue',
   });
 }
 
@@ -91,7 +98,7 @@ export async function ensureEnrichLinkQueue(boss: PgBoss): Promise<void> {
  * is a black hole: a sustained DB blip could strand many links invisibly. This
  * makes the count observable at startup; a real alerting hook is deferred (see
  * the plan's deferred list). Best-effort — a failure to read the count must
- * never stop the worker from starting.
+ * never stop the caller from starting.
  */
 export async function logDlqDepth(boss: PgBoss): Promise<void> {
   try {
@@ -101,13 +108,13 @@ export async function logDlqDepth(boss: PgBoss): Promise<void> {
     const size = stats?.totalCount ?? 0;
     if (size > 0) {
       console.warn(
-        `[silo/worker] ${size} job(s) in ${ENRICH_LINK_DLQ} — links stranded at 'enriching' after exhausting retries. Investigate.`,
+        `[silo/queue] ${size} job(s) in ${ENRICH_LINK_DLQ} — links stranded at 'enriching' after exhausting retries. Investigate.`,
       );
     } else {
-      console.log(`[silo/worker] ${ENRICH_LINK_DLQ} is empty.`);
+      console.log(`[silo/queue] ${ENRICH_LINK_DLQ} is empty.`);
     }
   } catch (error) {
-    console.error('[silo/worker] could not read DLQ depth:', error);
+    console.error('[silo/queue] could not read DLQ depth:', error);
   }
 }
 
@@ -115,21 +122,22 @@ export async function logDlqDepth(boss: PgBoss): Promise<void> {
 // module load rather than trusting two hand-kept literals to stay in sync.
 if (ENRICH_LINK_QUEUE !== CORE_ENRICH_LINK_QUEUE) {
   throw new Error(
-    `enrich-link queue name drift: worker="${ENRICH_LINK_QUEUE}" core="${CORE_ENRICH_LINK_QUEUE}"`,
+    `enrich-link queue name drift: queue="${ENRICH_LINK_QUEUE}" core="${CORE_ENRICH_LINK_QUEUE}"`,
   );
 }
 
 /**
- * Register the REAL enrichment enqueuer into `@silo/core` (plan R1/R2, U5).
- * `createLink` enqueues through core's injectable seam (a no-op by default);
- * this wires that seam to a `fromDrizzle`-based `send()` on the STARTED `boss`,
- * so the job INSERT rides `createLink`'s own transaction (`options.db`) and
- * commits atomically with the link row. `singletonKey = linkId` dedups
- * re-saves (plan R2). Call once, after `boss.start()` (the boss must be open
- * for `send()`'s queue-metadata lookup).
+ * Register the REAL enrichment enqueuer into `@silo/core` (plan R1/R2, U5;
+ * plan 013). `createLink` enqueues through core's injectable seam (a no-op by
+ * default); this wires that seam to a `fromDrizzle`-based `send()` on the
+ * STARTED `boss`, so the job INSERT rides `createLink`'s own transaction
+ * (`options.db`) and commits atomically with the link row. `singletonKey =
+ * linkId` dedups re-saves (plan R2). Call once, after `boss.start()` (the
+ * boss must be open for `send()`'s queue-metadata lookup).
  *
- * Dependency direction stays correct: the WORKER imports core and injects into
- * it (`setEnrichmentEnqueuer`); core never imports the worker.
+ * Dependency direction stays correct: the caller (worker OR api) imports
+ * core and injects into it (`setEnrichmentEnqueuer`); core never imports
+ * either.
  */
 export function registerEnqueuer(boss: PgBoss): void {
   setEnrichmentEnqueuer(async (exec, linkId) => {

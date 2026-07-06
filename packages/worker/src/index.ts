@@ -42,16 +42,11 @@ export {
   type SafeFetchResult,
   safeFetch,
 } from './fetch/safe-fetch.js';
-// pg-boss queue (U5): queue name/options shared (by literal duplication —
-// see enqueue.ts in @silo/core) with the send side, and the WORK-side PgBoss
-// factory used only by worker.ts's entrypoint.
-export {
-  createWorkerBoss,
-  ENRICH_LINK_DLQ,
-  ENRICH_LINK_QUEUE,
-  ENRICH_LINK_QUEUE_OPTIONS,
-  ensureEnrichLinkQueue,
-} from './queue.js';
+// pg-boss queue (U5; moved to @silo/queue in plan 013): queue name/options,
+// the boss connection factory, and queue-setup helper now live in
+// `@silo/queue` (shared with `@silo/api` — see that package's index for the
+// same primitives). No longer re-exported here; import `@silo/queue`
+// directly for these.
 // Public runtime API (plan 005, A1): the composable boot sequence a
 // composition-root process calls to start the enrichment worker in-process.
 // Importing this module is side-effect-free — only calling `startWorker()`

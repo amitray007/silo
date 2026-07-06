@@ -23,6 +23,7 @@
 import type { SourceData } from '@silo/core';
 import { sourceDataSchema } from '@silo/core';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
+import { fetchJsonObject } from './fetch-json.js';
 
 /** The subset of GitHub's repo JSON this enricher actually reads. */
 interface GitHubRepoResponse {
@@ -48,16 +49,8 @@ export async function enrichGitHub(
   repo: string,
   fetchFn: (url: string) => Promise<SafeFetchResult>,
 ): Promise<GitHubSourceData | undefined> {
-  const result = await fetchFn(repoUrl(owner, repo));
-  if (!result.ok) return undefined;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.html);
-  } catch {
-    return undefined;
-  }
-  if (parsed === null || typeof parsed !== 'object') return undefined;
+  const parsed = await fetchJsonObject(repoUrl(owner, repo), fetchFn);
+  if (parsed === undefined) return undefined;
 
   const data = parsed as GitHubRepoResponse;
   const candidate: Record<string, unknown> = {

@@ -11,21 +11,24 @@
  * live pg-boss/queue setup in every context it runs (unit tests, a future
  * CLI import, a one-off script) even when no worker is enqueued to consume
  * the job. Instead, core exposes an injectable enqueuer that DEFAULTS TO A
- * NO-OP; the worker package registers the real implementation once, at
- * startup (see `packages/worker/src/queue.ts`'s `registerCoreEnqueuer`).
+ * NO-OP; any process that needs real enqueueing registers the real
+ * implementation once, at startup (see `packages/queue/src/queue.ts`'s
+ * `registerEnqueuer` — shared by both `@silo/worker` and `@silo/api`, plan
+ * 013, since the API is a separate process from the worker and must
+ * register its own enqueuer too).
  *
  * Architecture (docs/rules/architecture.md): this keeps `@silo/core` free of
- * any `@silo/worker` dependency — the worker injects ITS enqueuer INTO core
- * via `setEnrichmentEnqueuer` (dependency flows adapter -> core, never the
- * reverse). The enqueuer receives the open transaction so the real
- * implementation can enqueue the job on the SAME transaction (pg-boss
- * `fromDrizzle`) — job row and link row commit or roll back together
- * (plan R1).
+ * any `@silo/worker`/`@silo/api`/`@silo/queue` dependency — the caller
+ * injects ITS enqueuer INTO core via `setEnrichmentEnqueuer` (dependency
+ * flows adapter/worker -> queue -> core, never the reverse). The enqueuer
+ * receives the open transaction so the real implementation can enqueue the
+ * job on the SAME transaction (pg-boss `fromDrizzle`) — job row and link row
+ * commit or roll back together (plan R1).
  */
 
 import type { Tx } from './executor.js';
 
-/** Mirrors `ENRICH_LINK_QUEUE` in `packages/worker/src/queue.ts` — the canonical definition. */
+/** Mirrors `ENRICH_LINK_QUEUE` in `packages/queue/src/queue.ts` — the canonical definition. */
 export const ENRICH_LINK_QUEUE = 'enrich-link';
 
 /**
