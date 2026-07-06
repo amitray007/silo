@@ -16,10 +16,10 @@ import { useLibrarySelection } from './SelectionContext';
 import { TagOptionsList } from './TagOptionsList';
 
 const labelStyle: React.CSSProperties = {
-  margin: '0 0 4px',
+  margin: '0 0 var(--s1)',
   fontSize: '0.72rem',
   fontWeight: 500,
-  color: 'var(--ghost)',
+  color: 'var(--fnt)',
   letterSpacing: '0.02em',
 };
 
@@ -32,9 +32,11 @@ const fieldStyle: React.CSSProperties = {
   color: 'var(--ink)',
   font: 'inherit',
   fontSize: '0.85rem',
-  padding: '8px 11px',
+  // K3 (oat-conformance audit): 8px → var(--s2) exact; 11px → var(--s2-5)
+  // (rounded to 10px, the nearest step).
+  padding: 'var(--s2) var(--s2-5)',
   outline: 'none',
-  marginBottom: 13,
+  marginBottom: 'var(--s3)',
 };
 
 /**
@@ -121,8 +123,10 @@ function EditTagsFlyout({
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 10,
-        boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
-        padding: 5,
+        // K6 (oat-conformance audit): sourced from the shared elevation
+        // ramp rather than a hardcoded rgba literal.
+        boxShadow: 'var(--elev-2)',
+        padding: 'var(--s1-5)',
         // Drops down from the full-width tags trigger directly above it — a
         // centered top origin reads correctly since the fly-out spans the
         // trigger's exact width (review-animations-STANDARDS.md's
@@ -145,13 +149,17 @@ function EditTagsFlyout({
             onClose();
           }
         }}
-        placeholder="find or create a tag"
+        placeholder="Find or create a tag"
         className="silo-field"
         style={{
           width: '100%',
           boxSizing: 'border-box',
+          // 3px has no clean --s* match (between --s-0-5/2px and --s1/4px) —
+          // left un-tokenized rather than visibly nudging this fly-out's
+          // internal spacing (K3, oat-conformance audit).
           margin: '0 0 3px',
-          padding: '5px 9px',
+          // 5px → var(--s1-5); 9px → var(--s2) (rounded to 8px, nearest step).
+          padding: 'var(--s1-5) var(--s2)',
           border: '1px solid var(--line)',
           borderRadius: 7,
           background: 'var(--bg2)',
@@ -169,14 +177,14 @@ function EditTagsFlyout({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 'var(--s2)',
             width: '100%',
             boxSizing: 'border-box',
             border: 0,
             background: 'none',
             fontFamily: 'inherit',
             textAlign: 'left',
-            padding: '5px 9px',
+            padding: 'var(--s1-5) var(--s2)',
             borderRadius: 6,
             fontSize: '0.78rem',
             fontWeight: 500,
@@ -185,7 +193,7 @@ function EditTagsFlyout({
           }}
         >
           <span style={{ color: 'var(--ghost)' }}>+</span>
-          <span>create "{trimmedQuery}"</span>
+          <span>Create "{trimmedQuery}"</span>
         </button>
       )}
     </div>
@@ -287,27 +295,27 @@ export function EditModal({ link }: { link: LinkJson }) {
         }
       />
 
-      <p style={labelStyle}>title</p>
+      <p style={labelStyle}>Title</p>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="how you'll look for it later"
+        placeholder="How you'll look for it later"
         className="silo-field"
         style={{ ...fieldStyle, fontWeight: 500 }}
       />
 
-      <p style={labelStyle}>description</p>
+      <p style={labelStyle}>Description</p>
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
-        placeholder="what this is, in your words"
+        placeholder="What this is, in your words"
         className="silo-field"
         style={{ ...fieldStyle, color: 'var(--mut)', fontSize: '0.82rem', resize: 'vertical' }}
       />
 
-      <p style={labelStyle}>tags</p>
-      <div style={{ position: 'relative', marginBottom: 13 }}>
+      <p style={labelStyle}>Tags</p>
+      <div style={{ position: 'relative', marginBottom: 'var(--s3)' }}>
         <button
           type="button"
           aria-haspopup="true"
@@ -320,7 +328,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             display: 'flex',
             alignItems: 'center',
             flexWrap: 'wrap',
-            gap: 6,
+            gap: 'var(--s1-5)',
             width: '100%',
             boxSizing: 'border-box',
             border: `1px solid ${tagsOpen ? 'var(--ghost)' : 'var(--line)'}`,
@@ -328,7 +336,9 @@ export function EditModal({ link }: { link: LinkJson }) {
             background: 'var(--bg2)',
             fontFamily: 'inherit',
             fontSize: '0.82rem',
-            padding: '7px 11px',
+            // 7px left un-tokenized (no clean --s* step between --s1-5/6px
+            // and --s2/8px); 11px → var(--s2-5) (K3, oat-conformance audit).
+            padding: '7px var(--s2-5)',
             cursor: 'pointer',
             textAlign: 'left',
           }}
@@ -339,11 +349,11 @@ export function EditModal({ link }: { link: LinkJson }) {
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
-                gap: 5,
+                gap: 'var(--s1-5)',
                 border: '1px solid var(--line)',
                 background: 'var(--bg)',
                 borderRadius: 999,
-                padding: '2px 9px',
+                padding: 'var(--s-0-5) var(--s2)',
                 fontSize: '0.74rem',
                 color: 'var(--ink)',
               }}
@@ -357,7 +367,7 @@ export function EditModal({ link }: { link: LinkJson }) {
                   e.stopPropagation();
                   removeTag.mutate(tag, { onSuccess: () => applyTagToggle(tag, false) });
                 }}
-                title="remove"
+                title="Remove"
                 className="silo-tag-chip-remove"
                 style={{ color: 'var(--ghost)', cursor: 'pointer' }}
               >
@@ -365,7 +375,7 @@ export function EditModal({ link }: { link: LinkJson }) {
               </span>
             </span>
           ))}
-          {tags.length === 0 && <span style={{ color: 'var(--fnt)' }}>choose tags</span>}
+          {tags.length === 0 && <span style={{ color: 'var(--fnt)' }}>Choose tags</span>}
           <span style={{ marginLeft: 'auto', color: 'var(--ghost)', fontSize: '0.72rem' }}>▾</span>
         </button>
         {tagsOpen && (
@@ -384,13 +394,13 @@ export function EditModal({ link }: { link: LinkJson }) {
       </div>
 
       <p style={labelStyle}>
-        <span style={{ color: 'var(--markt)' }}>¶</span> note
+        <span style={{ color: 'var(--markt)' }}>¶</span> Note
       </p>
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={2}
-        placeholder="why you kept it"
+        placeholder="Why you kept it"
         className="silo-field"
         style={{
           ...fieldStyle,
@@ -402,7 +412,11 @@ export function EditModal({ link }: { link: LinkJson }) {
         }}
       />
 
-      <div style={{ display: 'flex', gap: 14, alignItems: 'center', marginTop: 17 }}>
+      {/* K3 (oat-conformance audit): gap 14 → var(--s3-5) exact. marginTop
+          17 is LEFT un-tokenized — nearest step is var(--s4)/16px, but that's
+          a visible 1px shift on the footer's own top gap not worth risking
+          in a token-migration-only pass. */}
+      <div style={{ display: 'flex', gap: 'var(--s3-5)', alignItems: 'center', marginTop: 17 }}>
         <button
           type="button"
           onClick={handleTrash}
@@ -410,7 +424,7 @@ export function EditModal({ link }: { link: LinkJson }) {
           style={{
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 'var(--s1-5)',
             border: 0,
             background: 'none',
             fontSize: '0.76rem',
@@ -437,7 +451,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             <path d="M4.3 4.2l.6 9h6.2l.6-9" />
             <path d="M6.6 7v3.8M9.4 7v3.8" />
           </svg>
-          trash
+          Trash
         </button>
         <span style={{ flex: 1 }} />
         <button
@@ -455,7 +469,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             fontFamily: 'inherit',
           }}
         >
-          cancel
+          Cancel
         </button>
         <button
           type="button"
@@ -468,12 +482,12 @@ export function EditModal({ link }: { link: LinkJson }) {
             fontSize: '0.76rem',
             fontWeight: 500,
             color: 'var(--ink)',
-            padding: '6px 16px',
+            padding: 'var(--s1-5) var(--s4)',
             cursor: 'pointer',
             fontFamily: 'inherit',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 'var(--s1-5)',
           }}
         >
           <span style={{ color: 'var(--markt)' }}>✓</span>

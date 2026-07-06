@@ -93,7 +93,10 @@ export function ModalShell({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(24,17,7,.32)',
+        // K6 (oat-conformance audit): sourced from the shared scrim token
+        // (identical value: rgba(24,17,7,.32)) rather than a hardcoded
+        // literal, so dark mode's deeper scrim applies automatically.
+        background: 'var(--scrim)',
         display: 'grid',
         placeItems: 'center',
         zIndex: 40,
@@ -115,8 +118,14 @@ export function ModalShell({
           border: '1px solid var(--line)',
           borderRadius: 14,
           background: 'var(--bg)',
-          padding: '21px 24px',
-          boxShadow: '0 24px 60px -28px rgba(40,28,8,.35)',
+          // K3: 21px has no clean --s* match (between --s5/20px and
+          // --s6/24px) — left un-tokenized rather than nudging the panel's
+          // vertical padding. 24px → var(--s6) exact.
+          padding: '21px var(--s6)',
+          // K6: sourced from the shared elevation ramp (not pixel-identical
+          // to the old literal, per the brief — the token is now the source
+          // of truth).
+          boxShadow: 'var(--elev-3)',
           boxSizing: 'border-box',
           outline: 'none',
           // transform-origin stays the default `center` here (modals are the
@@ -160,9 +169,13 @@ export function ModalHeader({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 11,
+        gap: 'var(--s2-5)',
         justifyContent: leading ? undefined : 'space-between',
-        marginBottom: leading ? 15 : 13,
+        // K3: 13 → var(--s3) exact; 15 is LEFT un-tokenized (no clean --s*
+        // step between --s3-5/14px and --s4/16px, and this governs a
+        // deliberate visual difference between the `leading`/no-`leading`
+        // cases, not drift).
+        marginBottom: leading ? 15 : 'var(--s3)',
       }}
     >
       {/* `h2` (Rams review: heading hierarchy) — nested one level under each
@@ -171,7 +184,18 @@ export function ModalHeader({
           `ModalShell`'s `aria-label` (unchanged) — this is purely so a
           screen-reader user's heading-navigation actually finds "Edit"/
           "Settings" instead of silence. */}
-      <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 500 }}>{title}</h2>
+      <h2
+        style={{
+          margin: 0,
+          fontSize: '1.05rem',
+          fontWeight: 500,
+          letterSpacing: 'var(--tracking-tight)',
+          lineHeight: 'var(--lh-tight)',
+          textWrap: 'balance',
+        }}
+      >
+        {title}
+      </h2>
       {leading}
       <span style={{ flex: 1 }} />
       <button type="button" onClick={onClose} className="silo-modal-esc">

@@ -64,21 +64,21 @@ describe('EditModal', () => {
 
   it('prefills title/description/note from the link, and shows its current tags as chips', () => {
     renderModal();
-    expect(screen.getByPlaceholderText("how you'll look for it later")).toHaveProperty(
+    expect(screen.getByPlaceholderText("How you'll look for it later")).toHaveProperty(
       'value',
       'Original title',
     );
-    expect(screen.getByPlaceholderText('what this is, in your words')).toHaveProperty(
+    expect(screen.getByPlaceholderText('What this is, in your words')).toHaveProperty(
       'value',
       'Original description',
     );
-    expect(screen.getByPlaceholderText('why you kept it')).toHaveProperty('value', 'Original note');
+    expect(screen.getByPlaceholderText('Why you kept it')).toHaveProperty('value', 'Original note');
     expect(screen.getByText('mcp')).toBeDefined();
   });
 
-  it('shows "choose tags" when the link has no tags', () => {
+  it('shows "Choose tags" when the link has no tags', () => {
     renderModal({ tags: [] });
-    expect(screen.getByText('choose tags')).toBeDefined();
+    expect(screen.getByText('Choose tags')).toBeDefined();
   });
 
   it('shows the domain in the header', () => {
@@ -88,7 +88,7 @@ describe('EditModal', () => {
 
   it('Save PATCHes only the fields that changed', async () => {
     renderModal();
-    fireEvent.change(screen.getByPlaceholderText("how you'll look for it later"), {
+    fireEvent.change(screen.getByPlaceholderText("How you'll look for it later"), {
       target: { value: 'New title' },
     });
 
@@ -113,7 +113,7 @@ describe('EditModal', () => {
 
   it('Save closes the modal', async () => {
     renderModal();
-    fireEvent.change(screen.getByPlaceholderText('why you kept it'), {
+    fireEvent.change(screen.getByPlaceholderText('Why you kept it'), {
       target: { value: 'updated note' },
     });
     fireEvent.click(screen.getByText('Save'));
@@ -122,7 +122,7 @@ describe('EditModal', () => {
 
   it('removing a tag chip calls the remove-tag mutation immediately (live, not buffered until Save)', async () => {
     renderModal({ tags: ['mcp'] });
-    fireEvent.click(screen.getByTitle('remove'));
+    fireEvent.click(screen.getByTitle('Remove'));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -144,7 +144,7 @@ describe('EditModal', () => {
     renderModal({ tags: ['mcp'] });
 
     fireEvent.click(screen.getByText('▾'));
-    await waitFor(() => expect(screen.getByPlaceholderText('find or create a tag')).toBeDefined());
+    await waitFor(() => expect(screen.getByPlaceholderText('Find or create a tag')).toBeDefined());
     await waitFor(() => expect(screen.getByText('design')).toBeDefined());
 
     fireEvent.click(screen.getByText('design').closest('button') as HTMLButtonElement);
@@ -159,14 +159,14 @@ describe('EditModal', () => {
 
   it('typing a query that matches no existing tag shows a create option; clicking it creates + assigns the tag', async () => {
     renderModal({ tags: [] });
-    fireEvent.click(screen.getByText('choose tags'));
-    const input = await screen.findByPlaceholderText('find or create a tag');
+    fireEvent.click(screen.getByText('Choose tags'));
+    const input = await screen.findByPlaceholderText('Find or create a tag');
     fireEvent.change(input, { target: { value: 'brand-new-tag' } });
 
-    await waitFor(() => expect(screen.getByText('create "brand-new-tag"')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Create "brand-new-tag"')).toBeDefined());
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ name: 'brand-new-tag' }, 201));
-    fireEvent.click(screen.getByText('create "brand-new-tag"'));
+    fireEvent.click(screen.getByText('Create "brand-new-tag"'));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -185,13 +185,13 @@ describe('EditModal', () => {
     renderModal({ tags: ['mcp'] });
 
     expect(screen.getByText('mcp')).toBeDefined();
-    fireEvent.click(screen.getByTitle('remove'));
+    fireEvent.click(screen.getByTitle('Remove'));
 
     // The chip disappears from THIS modal's own render — not dependent on a
     // background refetch of `link.tags` (which never happens, since `link`
     // is a one-time snapshot) landing first.
     await waitFor(() => expect(screen.queryByText('mcp')).toBeNull());
-    expect(screen.getByText('choose tags')).toBeDefined();
+    expect(screen.getByText('Choose tags')).toBeDefined();
   });
 
   it('adding a tag via the fly-out shows it as a chip immediately in the same modal instance', async () => {
@@ -223,7 +223,7 @@ describe('EditModal', () => {
 
   it('trash calls the trash mutation and closes the modal', async () => {
     renderModal();
-    fireEvent.click(screen.getByText('trash'));
+    fireEvent.click(screen.getByText('Trash'));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -236,10 +236,10 @@ describe('EditModal', () => {
 
   it('cancel closes the modal without saving', () => {
     renderModal();
-    fireEvent.change(screen.getByPlaceholderText("how you'll look for it later"), {
+    fireEvent.change(screen.getByPlaceholderText("How you'll look for it later"), {
       target: { value: 'Unsaved edit' },
     });
-    fireEvent.click(screen.getByText('cancel'));
+    fireEvent.click(screen.getByText('Cancel'));
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(fetch).not.toHaveBeenCalledWith('/api/links/edit-1', expect.anything());
@@ -290,7 +290,7 @@ describe('EditModal', () => {
     trigger.focus();
     fireEvent.click(trigger);
 
-    fireEvent.click(screen.getByText('cancel'));
+    fireEvent.click(screen.getByText('Cancel'));
     await waitFor(() => expect(document.activeElement).toBe(trigger));
   });
 });

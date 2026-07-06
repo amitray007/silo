@@ -15,18 +15,18 @@ export function ImportExportTab() {
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Import</div>
-          <div style={rowDesc}>a Pocket, Instapaper, or browser-bookmarks export file</div>
+          <div style={rowDesc}>A Pocket, Instapaper, or browser-bookmarks export file</div>
         </div>
-        <button type="button" disabled title="not yet available" className="silo-settings-btn">
+        <button type="button" disabled title="Not yet available" className="silo-settings-btn">
           Choose file…
         </button>
       </div>
       <div style={settingsRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Export</div>
-          <div style={rowDesc}>everything as JSON — links, full text, notes, tags</div>
+          <div style={rowDesc}>Everything as JSON — links, full text, notes, tags</div>
         </div>
-        <button type="button" disabled title="not yet available" className="silo-settings-btn">
+        <button type="button" disabled title="Not yet available" className="silo-settings-btn">
           Download
         </button>
       </div>

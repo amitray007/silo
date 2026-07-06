@@ -4,6 +4,14 @@
 // depend on `@silo/core` but NOT on each other and NOT on `@silo/db` directly.
 // Only `@silo/core` owns data access and may import `@silo/db`.
 //
+// `@silo/queue` (plan 013) is a shared LIBRARY, not an adapter — like
+// `@silo/db`, it's a bit of shared infrastructure both `@silo/api` (the
+// enrichment enqueue producer) and `@silo/worker` (producer + consumer) may
+// import directly, without that making api/worker depend on EACH OTHER.
+// `@silo/queue` itself may only import `@silo/core` (+ pg-boss, a plain
+// library) — never any adapter/worker/app, so the dependency direction stays
+// adapter/worker -> queue -> core, never the reverse.
+//
 // dependency-cruiser resolves the real module graph (following workspace:*
 // symlinks and relative imports), so a violation is a build failure rather than
 // a convention — catching cases Biome's specifier-only noRestrictedImports cannot.
@@ -60,10 +68,22 @@ module.exports = {
       name: 'worker-no-sibling-adapters',
       comment:
         'The worker is a service on the adapter side (it injects into core via the enqueue seam); ' +
-        'like the adapters, it must not import them or @silo/app — only @silo/core (+ its own libs).',
+        'like the adapters, it must not import them or @silo/app — only @silo/core (+ its own libs, ' +
+        'including the shared @silo/queue library).',
       severity: 'error',
       from: { path: '^packages/worker/' },
       to: { path: '^packages/(web|api|mcp|app)/' },
+    },
+    {
+      name: 'queue-no-adapters',
+      comment:
+        '@silo/queue (plan 013) is a shared LIBRARY like @silo/db, not an adapter — it may only ' +
+        'import @silo/core (+ plain libraries like pg-boss/drizzle-orm). It must never import any ' +
+        'adapter, the worker, or the @silo/app composition root, or the dependency direction ' +
+        '(adapter/worker -> queue -> core) would invert.',
+      severity: 'error',
+      from: { path: '^packages/queue/' },
+      to: { path: '^packages/(web|api|mcp|worker|app)/' },
     },
     {
       name: 'no-circular',

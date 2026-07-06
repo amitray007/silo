@@ -19,7 +19,7 @@ describe('ContentHeader', () => {
     expect(screen.getByText('Settings')).toBeDefined();
   });
 
-  it('renders the children slot in place of the default placeholder', () => {
+  it('renders the children slot when given', () => {
     render(
       <ContentHeader title="Library">
         <button type="button">omnibar</button>
@@ -28,10 +28,9 @@ describe('ContentHeader', () => {
     expect(screen.getByRole('button', { name: /omnibar/i })).toBeDefined();
   });
 
-  it('renders an empty right-aligned placeholder when no children are given (reserves the omnibar slot)', () => {
-    const { container } = render(<ContentHeader title="Library" />);
-    const placeholder = container.querySelector('[aria-hidden="true"]');
-    expect(placeholder).not.toBeNull();
+  it('renders no phantom placeholder chrome when no children are given (K1 — silence means complete; TrashView/SettingsView pass no children)', () => {
+    const { container } = render(<ContentHeader title="Trash" />);
+    expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
   });
 
   it('renders no ◌ capturing chrome anywhere (removed per user feedback — no capturing UI)', () => {
@@ -43,7 +42,7 @@ describe('ContentHeader', () => {
   it('shows a calm capture-error message when captureError is set (plan 011, V3-3)', () => {
     render(<ContentHeader title="Library" captureError="Not a valid http(s) URL" />);
     const alert = screen.getByRole('alert');
-    expect(alert.textContent).toContain("couldn't save that");
+    expect(alert.textContent).toContain("Couldn't save that");
     expect(alert.textContent).toContain('Not a valid http(s) URL');
   });
 

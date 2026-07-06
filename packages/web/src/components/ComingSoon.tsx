@@ -7,12 +7,27 @@ import { CenteredPanel } from './CenteredPanel';
 export function ComingSoon({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <CenteredPanel>
-      <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink)' }}>
+      <p
+        style={{
+          margin: 0,
+          fontSize: '0.92rem',
+          fontWeight: 500,
+          color: 'var(--ink)',
+          letterSpacing: 'var(--tracking-tight)',
+          textWrap: 'balance',
+        }}
+      >
         {title}
       </p>
       {subtitle && (
         <p
-          style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--mut)', maxWidth: '24rem' }}
+          style={{
+            margin: '6px 0 0',
+            fontSize: '0.84rem',
+            color: 'var(--mut)',
+            maxWidth: '24rem',
+            textWrap: 'pretty',
+          }}
         >
           {subtitle}
         </p>

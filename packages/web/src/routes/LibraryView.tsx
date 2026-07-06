@@ -13,7 +13,7 @@ function LibraryEmptyState() {
           Paste a link in the bar above — it's saved the moment it lands.
           <br />
           <span style={{ fontSize: '0.9em', color: 'var(--fnt)' }}>
-            Claude can add links here too, once you connect it in Settings → access.
+            Claude can add links here too, once you connect it in Settings → Access.
           </span>
         </>
       }

@@ -50,8 +50,8 @@ function TrashRowActions({ id }: { id: string }) {
     <>
       <button
         type="button"
-        title="restore"
-        aria-label="restore"
+        title="Restore"
+        aria-label="Restore"
         disabled={busy}
         className="silo-trash-row-icon"
         onMouseDown={(e) => e.stopPropagation()}
@@ -68,8 +68,8 @@ function TrashRowActions({ id }: { id: string }) {
       </button>
       <button
         type="button"
-        title="delete now"
-        aria-label="delete now"
+        title="Delete now"
+        aria-label="Delete now"
         disabled={busy}
         className="silo-trash-row-icon"
         onMouseDown={(e) => e.stopPropagation()}
@@ -129,8 +129,12 @@ export function TrashRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 13,
-        padding: '9px 11px',
+        gap: 'var(--s3)',
+        // K3 (oat-conformance audit): was '9px 11px' — LinkRow's `.silo-link-row`
+        // (base.css) rounds its own `10px 11px` to the same `var(--s2-5)`
+        // token, so both rows now share the IDENTICAL row padding and render
+        // at the same height (the drift this increment's audit flagged).
+        padding: 'var(--s2-5) var(--s2-5)',
         borderRadius: 8,
         background: hovered || isSelected ? 'var(--hov)' : 'transparent',
         textDecoration: 'none',
@@ -144,11 +148,19 @@ export function TrashRow({
         onToggle={() => selection.toggle(link.id)}
       />
       {!showCheck && <Chip domain={domain} />}
-      <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 11 }}>
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 'var(--s2-5)',
+        }}
+      >
         <span
           style={{
             fontWeight: 500,
-            fontSize: '0.88rem',
+            fontSize: 'var(--text-base)',
             color: 'var(--ink)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -159,22 +171,25 @@ export function TrashRow({
         </span>
         <span
           style={{
-            fontSize: '0.84rem',
+            fontSize: 'var(--text-base)',
             color: 'var(--fnt)',
             whiteSpace: 'nowrap',
             fontWeight: 400,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '14rem',
           }}
         >
           {domain}
         </span>
       </span>
       <span
-        title={`auto-deletes in ${left} days`}
+        title={`Auto-deletes in ${left} days`}
         style={{
           flex: 'none',
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 5,
+          gap: 'var(--s1-5)',
           fontSize: '0.74rem',
           fontWeight: 500,
           color: 'var(--warn)',

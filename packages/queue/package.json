@@ -1,5 +1,5 @@
 {
-  "name": "@silo/api",
+  "name": "@silo/queue",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -11,27 +11,19 @@
   "types": "./src/index.ts",
   "scripts": {
     "check-types": "tsc --noEmit",
-    "test": "vitest run",
-    "dev": "tsx --env-file-if-exists=../../.env src/main.ts",
-    "start": "tsx --env-file-if-exists=../../.env src/main.ts"
+    "test": "vitest run"
   },
   "dependencies": {
-    "@hono/node-server": "catalog:",
     "@silo/core": "workspace:*",
-    "@silo/queue": "workspace:*",
-    "hono": "catalog:",
-    "ipaddr.js": "catalog:",
-    "undici": "catalog:",
-    "zod": "catalog:"
+    "drizzle-orm": "catalog:",
+    "pg-boss": "catalog:"
   },
   "devDependencies": {
     "@silo/db": "workspace:*",
     "@silo/tsconfig": "workspace:*",
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
-    "drizzle-orm": "catalog:",
     "pg": "catalog:",
-    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

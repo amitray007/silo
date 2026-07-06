@@ -11,12 +11,14 @@
   "types": "./src/index.ts",
   "scripts": {
     "check-types": "tsc --noEmit",
+    "dev": "tsx --env-file-if-exists=../../.env src/worker.ts",
     "start": "tsx src/worker.ts",
     "test": "vitest run"
   },
   "dependencies": {
     "@mozilla/readability": "catalog:",
     "@silo/core": "workspace:*",
+    "@silo/queue": "workspace:*",
     "drizzle-orm": "catalog:",
     "ipaddr.js": "catalog:",
     "jsdom": "catalog:",
@@ -27,7 +29,6 @@
     "metascraper-publisher": "catalog:",
     "metascraper-title": "catalog:",
     "metascraper-url": "catalog:",
-    "pg-boss": "catalog:",
     "undici": "catalog:"
   },
   "devDependencies": {

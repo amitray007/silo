@@ -77,7 +77,10 @@ export { createTag, listTagsWithCounts } from './links/tags.js';
 // Trash reads + counts (plan 007, C2): listTrash is the ONE read in this
 // package deliberately NOT scoped through `whereLive` — see trash.ts's doc
 // comment for why it's quarantined in its own module. getCounts/countLive/
-// countTrash back the mockup's sidebar live/trash counts.
+// countTrash back the mockup's sidebar live/trash counts. searchTrash is the
+// trash-scoped mirror of `search` (Trash search slice) — same ranking/
+// pagination, reusing the live search's `SearchPage` type since the shape is
+// identical.
 // hardDelete/emptyTrash (plan 007, C3): DESTRUCTIVE, trashed-only targeted
 // deletes (the mockup's "delete now"/"empty now") — see trash.ts's doc
 // comments for the atomic WHERE-clause guard that makes a live link
@@ -90,4 +93,5 @@ export {
   getCounts,
   hardDelete,
   listTrash,
+  searchTrash,
 } from './links/trash.js';

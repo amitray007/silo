@@ -81,6 +81,23 @@
       }
     },
     {
+      "includes": ["packages/web/**", "packages/mcp/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@silo/queue": "@silo/queue is server-side pg-boss plumbing for the enrichment enqueuer; only @silo/api and @silo/worker register it. web/mcp must not import it."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/worker/**"],
       "linter": {
         "rules": {

@@ -111,12 +111,21 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
 
   return (
     <div>
-      <div style={{ display: 'flex', alignItems: 'center', padding: '18px 10px 5px' }}>
+      {/* Top padding trimmed (18px → --s-0-5) per user feedback: the
+          SidebarDivider above the Tags section already provides the
+          separation, so the large top gap was redundant. */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          padding: 'var(--s-0-5) var(--s2-5) var(--s1-5)',
+        }}
+      >
         <p
           style={{
             fontSize: '0.7rem',
             fontWeight: 500,
-            color: 'var(--ghost)',
+            color: 'var(--fnt)',
             margin: 0,
             letterSpacing: '0.02em',
           }}
@@ -127,23 +136,40 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         <button
           type="button"
           onClick={toggleTagFind}
-          title="find a tag"
-          aria-label="find a tag"
+          title="Find a tag"
+          aria-label="Find a tag"
           aria-expanded={findOpen}
           className="silo-icon-btn-sm"
           style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
             border: 0,
             background: 'none',
             borderRadius: 6,
-            fontFamily: 'inherit',
-            padding: '2px 3px',
-            fontSize: '1.15rem',
-            lineHeight: 1,
-            color: findOpen ? 'var(--ink)' : 'var(--ghost)',
+            padding: 'var(--s1)',
+            color: findOpen ? 'var(--ink)' : 'var(--fnt)',
             cursor: 'pointer',
           }}
         >
-          ⌕
+          {/* The real magnifier SVG (matching the Omnibar's), not the thin
+              `⌕` Unicode glyph — that rendered undersized and inconsistent
+              across platforms (user feedback: "too small … use a better
+              search icon"). 16px, current stroke color. */}
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="7" cy="7" r="4.3" />
+            <path d="m10.3 10.3 3 3" />
+          </svg>
         </button>
       </div>
 
@@ -152,7 +178,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           ref={findInputRef}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="find tag"
+          placeholder="Find tag"
           className="silo-field"
           style={{
             margin: '0 4px 3px',
@@ -193,7 +219,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             cursor: 'pointer',
           }}
         >
-          {showAll ? 'show less' : `+${moreCount} more`}
+          {showAll ? 'Show less' : `+${moreCount} more`}
         </button>
       )}
 
@@ -205,7 +231,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             onChange={(event) => setNewTagValue(event.target.value)}
             onKeyDown={onNewTagKeyDown}
             onBlur={closeNewTag}
-            placeholder="tag name"
+            placeholder="Tag name"
             className="silo-field"
             style={{
               margin: '2px 4px',
@@ -230,7 +256,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
                 color: 'var(--warn)',
               }}
             >
-              couldn't create — try again
+              Couldn't create — try again
             </p>
           )}
         </>
@@ -254,7 +280,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             cursor: 'pointer',
           }}
         >
-          + new tag
+          + New tag
         </button>
       )}
     </div>

@@ -26,9 +26,9 @@ describe('DayGroup', () => {
   it('renders the label in the Oat style', () => {
     renderWithProviders(<DayGroup label="Today" links={[]} />);
     const label = screen.getByText('Today');
-    expect(label.style.fontSize).toBe('0.78rem');
+    expect(label.style.fontSize).toBe('var(--text-xs)');
     expect(label.style.fontWeight).toBe('500');
-    expect(label.style.color).toBe('var(--ghost)');
+    expect(label.style.color).toBe('var(--fnt)');
   });
 
   it('renders one LinkRow per link, in order', () => {

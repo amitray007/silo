@@ -5,26 +5,33 @@ import {
   listTrash,
   requestRetry,
   restore,
+  searchTrash,
   softDelete,
 } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { toLinkJson, toTrashLinkJson } from '../link-json.js';
+import { toLinkJson, toTrashLinkJson, toTrashSearchResultJson } from '../link-json.js';
 import { pageQuerySchema, toPageParams } from '../query-schemas.js';
 import { respondWithLink } from './mutate-link.js';
 
 /** Shared `id` param schema for the single-link lifecycle routes below — a non-uuid `id` is a 400, not a pointless DB round-trip. */
 const idParamSchema = z.object({ id: z.uuid() });
 
+/** `GET /api/trash/search` query schema — identical shape to `/links/search`'s: `q` is required (min length 1) so an empty/missing query is a 400, not a full unfiltered scan. */
+const trashSearchQuerySchema = pageQuerySchema.extend({
+  q: z.string().min(1),
+});
+
 /**
- * Registers the A2 trash-READ route (`GET /api/trash`) and the A4
- * trash/lifecycle WRITE routes (plan 007) over `core.listTrash` (C2) /
- * `softDelete` / `restore` / `requestRetry` / `hardDelete` / `emptyTrash`
- * (C3). Mounted under `/api` by `app.ts`, alongside the other route modules
- * registered on the same sub-app. Kept in one file (rather than a sibling
- * `trash-write.ts`) since every route here shares the same "trash" resource
- * and the file is still small — mirrors `links.ts` keeping its read routes
- * together rather than one-file-per-route.
+ * Registers the A2 trash-READ routes (`GET /api/trash`, `GET
+ * /api/trash/search` — the latter added by the Trash search slice) and the
+ * A4 trash/lifecycle WRITE routes (plan 007) over `core.listTrash` (C2) /
+ * `core.searchTrash` / `softDelete` / `restore` / `requestRetry` /
+ * `hardDelete` / `emptyTrash` (C3). Mounted under `/api` by `app.ts`,
+ * alongside the other route modules registered on the same sub-app. Kept in
+ * one file (rather than a sibling `trash-write.ts`) since every route here
+ * shares the same "trash" resource and the file is still small — mirrors
+ * `links.ts` keeping its read routes together rather than one-file-per-route.
  */
 export function registerTrashRoutes(app: Hono): void {
   /**
@@ -41,6 +48,28 @@ export function registerTrashRoutes(app: Hono): void {
     const links = result.links.map(toTrashLinkJson);
     return c.json(
       result.nextCursor === undefined ? { links } : { links, nextCursor: result.nextCursor },
+    );
+  });
+
+  /**
+   * `GET /api/trash/search` — server-side full-text search scoped to TRASHED
+   * links (Trash search slice), mirroring `GET /api/links/search` exactly:
+   * same `searchQuerySchema` shape (`q` required, min length 1 -> 400 on
+   * empty/missing), same envelope (`{ results, nextCursor? }`), same
+   * whitelisted-plus-`rank` result shape via `toSearchResultJson`. Backed by
+   * `core.searchTrash` instead of `core.search` — the only difference is
+   * which live/trash predicate the query runs under. Registered before any
+   * `/trash/:id`-shaped route would matter for route-ordering (there is none
+   * on GET today — see `app.ts`'s route list — but this keeps the same
+   * "literal segment before :id" discipline `links.ts` documents for
+   * `/links/search` vs `/links/:id`, in case a `GET /trash/:id` is ever added).
+   */
+  app.get('/trash/search', async (c) => {
+    const query = trashSearchQuerySchema.parse(c.req.query());
+    const result = await searchTrash(query.q, toPageParams(query));
+    const results = result.results.map((link) => toTrashSearchResultJson(link, link.rank));
+    return c.json(
+      result.nextCursor === undefined ? { results } : { results, nextCursor: result.nextCursor },
     );
   });
 

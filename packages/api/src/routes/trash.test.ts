@@ -150,6 +150,114 @@ describeIfPg('GET /api/trash (integration)', () => {
     );
   });
 
+  describe('GET /api/trash/search (Trash search slice)', () => {
+    it('finds a trashed match by title, excludes a live match for the same term', async () => {
+      const { core, app } = harness.mod();
+      const trashed = await core.createLink({
+        url: 'https://example.com/trash-search-title-match',
+        sourceKind: 'link',
+        title: 'UniqueTrashSearchTitleXyz',
+      });
+      await core.softDelete(trashed.id);
+      const live = await core.createLink({
+        url: 'https://example.com/trash-search-live-excluded',
+        sourceKind: 'link',
+        title: 'UniqueTrashSearchTitleXyz but live',
+      });
+
+      const body = await expectOk<{ results: Array<{ id: string }> }>(
+        app,
+        '/api/trash/search?q=UniqueTrashSearchTitleXyz',
+      );
+      const ids = body.results.map((r) => r.id);
+      expect(ids).toContain(trashed.id);
+      expect(ids).not.toContain(live.id);
+    });
+
+    it('each result is the whitelisted shape plus rank AND deletedAt', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/trash-search-shape-check',
+        sourceKind: 'link',
+        title: 'trashsearchshapecheckmarker',
+        origin: 'agent',
+      });
+      await core.softDelete(created.id);
+
+      const body = await expectOk<{ results: Array<Record<string, unknown>> }>(
+        app,
+        '/api/trash/search?q=trashsearchshapecheckmarker',
+      );
+      expect(body.results.length).toBe(1);
+      const result = body.results[0];
+      expect(result).toBeDefined();
+      if (!result) return;
+      // NOT `expectWhitelistedLinkShape` (that helper asserts `deletedAt` is
+      // ABSENT — correct for live `/links/search` results, but a trash search
+      // result legitimately carries `deletedAt`, same as `GET /api/trash`'s
+      // own rows). Check the internal-leak guards directly instead, plus
+      // positively assert `deletedAt`/`rank` are both present.
+      expect(Object.hasOwn(result, 'searchVector')).toBe(false);
+      expect(Object.hasOwn(result, 'canonicalUrl')).toBe(false);
+      expect(typeof result.rank).toBe('number');
+      expect(typeof result.deletedAt).toBe('string');
+      expect(Number.isNaN(new Date(result.deletedAt as string).getTime())).toBe(false);
+    });
+
+    it('paginates search results', async () => {
+      const { core, app } = harness.mod();
+      for (let i = 0; i < 3; i++) {
+        const link = await core.createLink({
+          url: `https://example.com/trash-search-pagination-${i}`,
+          sourceKind: 'link',
+          title: 'trashsearchpaginationmarker',
+        });
+        await core.softDelete(link.id);
+      }
+      const body1 = await expectOk<{ results: Array<{ id: string }>; nextCursor?: string }>(
+        app,
+        '/api/trash/search?q=trashsearchpaginationmarker&limit=2',
+      );
+      expect(body1.results.length).toBe(2);
+      expect(body1.nextCursor).toBeDefined();
+      if (!body1.nextCursor) return;
+
+      const body2 = await expectOk<{ results: Array<{ id: string }> }>(
+        app,
+        `/api/trash/search?q=trashsearchpaginationmarker&limit=2&cursor=${encodeURIComponent(body1.nextCursor)}`,
+      );
+      expect(body2.results.length).toBeGreaterThanOrEqual(1);
+      const firstPageIds = new Set(body1.results.map((r) => r.id));
+      for (const r of body2.results) {
+        expect(firstPageIds.has(r.id)).toBe(false);
+      }
+    });
+
+    it('empty q -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      await expect400(app, '/api/trash/search?q=', 'validation_error');
+    });
+
+    it('missing q -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      await expect400(app, '/api/trash/search', 'validation_error');
+    });
+
+    it('no-match query -> { results: [] }', async () => {
+      const { app } = harness.mod();
+      const body = await expectOk<{ results: unknown[] }>(
+        app,
+        '/api/trash/search?q=nosuchtermwilleverexisttrashsearchxyz123',
+      );
+      expect(body.results).toEqual([]);
+    });
+
+    it('malformed cursor -> 400 invalid_cursor', async () => {
+      const { app } = harness.mod();
+      await expect400(app, '/api/trash/search?q=whatever&cursor=garbage!!!', 'invalid_cursor');
+    });
+  });
+
   describe('POST /api/links/:id/trash', () => {
     it('trashes a live link -> 200, then GET /links/:id -> 404 and GET /trash includes it', async () => {
       const { core, app } = harness.mod();

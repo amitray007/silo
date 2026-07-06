@@ -75,12 +75,12 @@ export function AccessTab() {
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>MCP access</div>
-          <div style={rowDesc}>always on for now — no per-agent toggle yet</div>
+          <div style={rowDesc}>Always on for now — no per-agent toggle yet</div>
         </div>
         <button
           type="button"
           disabled
-          title="always on — no per-agent toggle yet"
+          title="Always on — no per-agent toggle yet"
           style={{
             width: 13,
             height: 13,
@@ -97,10 +97,10 @@ export function AccessTab() {
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Access token</div>
           <div style={rowDesc}>
-            not yet available — MCP access is a local subprocess, not a token
+            Not yet available — MCP access is a local subprocess, not a token
           </div>
         </div>
-        <button type="button" disabled title="not yet available" className="silo-settings-btn">
+        <button type="button" disabled title="Not yet available" className="silo-settings-btn">
           Rotate
         </button>
       </div>

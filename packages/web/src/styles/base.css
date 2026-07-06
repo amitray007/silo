@@ -24,6 +24,14 @@ body {
   line-height: 1.55;
   background: var(--bg);
   color: var(--ink);
+  /* Typography-craft pass: Geist ships tabular figures, so this one
+     root-level declaration gives every changing number in the app (points/
+     comments, countdowns, counts, "N found"/"N selected", tag counts) fixed
+     digit widths without 10 separate inline edits — it only affects digit
+     glyphs, so the wordmark/prose are unaffected. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition:
     background 0.16s ease,
     color 0.16s ease;
@@ -80,16 +88,26 @@ select {
    the Orpheus reference's more comfortable row height. */
 .silo-link-row {
   display: block;
-  padding: 10px 11px;
+  /* K3 (oat-conformance audit): was `10px 11px` — rounded to `var(--s2-5)`
+     (10px) on both axes so this matches TrashRow.tsx's own row padding
+     exactly (that row was `9px 11px`, now also `var(--s2-5)`) — the two rows
+     previously drifted by 1-2px and rendered at very slightly different
+     heights. */
+  padding: var(--s2-5) var(--s2-5);
   border-radius: 8px;
   color: inherit;
   text-decoration: none;
   background: transparent;
 }
 
-.silo-link-row:hover,
 .silo-link-row:focus-visible {
   background: var(--hov);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-link-row:hover {
+    background: var(--hov);
+  }
 }
 
 /* ---------------------------------------------------------------------- */
@@ -142,8 +160,11 @@ select {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
+  /* 3px has no clean --s* match (between --s-0-5/2px and --s1/4px) — left
+     un-tokenized rather than visibly changing the sidebar's tight row gap. */
   gap: 3px;
-  padding: 16px 13px;
+  /* K3: 16px → var(--s4) exact; 13px → var(--s3) (12px, nearest scale step). */
+  padding: var(--s4) var(--s3);
   box-sizing: border-box;
 }
 
@@ -167,12 +188,21 @@ select {
 /* The scrolling body beneath the header bar — v3: `flex:1;min-height:0;
    overflow-y:auto;padding:8px clamp(16px,3vw,28px) 36px`. Each route renders
    its `ContentHeader` (unscrolled, a `.silo-content` flex sibling) followed
-   by this body wrapper, so only the body scrolls. */
+   by this body wrapper, so only the body scrolls.
+   K6 (oat-conformance audit) — top padding tuned to `var(--s2)` (8px). The
+   header→content boundary intentionally gets MORE air than inter-group gaps:
+   `DayGroupHeading`'s own `var(--s5)` (20px) top + this 8px = 28px below the
+   header divider, which reads as a deliberate section break rather than a
+   seam (a completely flush 0 top crowded the first label — and the empty
+   states — against the divider). Inter-group gaps stay at the heading's own
+   20px. The clamp() (horizontal) and 36px (bottom) are left as-is — the
+   horizontal clamp has no --s* match worth breaking, and 36px has no clean
+   scale step either. */
 .silo-content-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px clamp(16px, 3vw, 28px) 36px;
+  padding: var(--s2) clamp(16px, 3vw, 28px) 36px;
   display: flex;
   flex-direction: column;
 }
@@ -246,7 +276,11 @@ select {
     position: fixed;
     inset: 0;
     z-index: 20;
-    background: rgba(20, 15, 5, 0.32);
+    /* K6 (oat-conformance audit; CodeRabbit review): sourced from the shared
+       --scrim token like ModalShell's scrim, so the mobile drawer backdrop
+       gets dark mode's deeper near-black wash instead of staying the light
+       warm value in dark mode. */
+    background: var(--scrim);
   }
 
   .silo-content-col {
@@ -276,7 +310,19 @@ select {
   color: var(--fnt);
   cursor: pointer;
   white-space: nowrap;
-  transition: color 0.14s cubic-bezier(0.23, 1, 0.32, 1);
+  transform: scale(1);
+  /* M4 (motion audit): the COLOR transition uses plain `ease` (the
+     philosophy's prescribed curve for hover/color changes) — it previously
+     rode the strong custom ease-out curve, which is reserved for
+     transform/movement. The ::after underline below keeps that custom curve
+     since IT is on-screen movement (a scaleX growing), not a color change. */
+  transition:
+    color 0.14s ease,
+    transform 0.1s var(--ease-out);
+}
+
+.silo-settings-tab:active {
+  transform: scale(0.97);
 }
 
 .silo-settings-tab::after {
@@ -295,8 +341,10 @@ select {
     opacity 0.18s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.silo-settings-tab:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-settings-tab:hover {
+    color: var(--ink);
+  }
 }
 
 .silo-settings-tab[aria-selected="true"] {
@@ -328,9 +376,11 @@ select {
   flex: none;
 }
 
-.silo-settings-close:hover {
-  background: var(--surface-hover);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-settings-close:hover {
+    background: var(--surface-hover);
+    color: var(--ink);
+  }
 }
 
 .silo-settings-close:active {
@@ -371,9 +421,11 @@ select {
     transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.silo-settings-btn:hover:not(:disabled) {
-  background: var(--surface-hover);
-  border-color: var(--ghost);
+@media (hover: hover) and (pointer: fine) {
+  .silo-settings-btn:hover:not(:disabled) {
+    background: var(--surface-hover);
+    border-color: var(--ghost);
+  }
 }
 
 .silo-settings-btn:active:not(:disabled) {
@@ -411,8 +463,10 @@ select {
     transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.silo-settings-hero-btn-primary:hover {
-  opacity: 0.88;
+@media (hover: hover) and (pointer: fine) {
+  .silo-settings-hero-btn-primary:hover {
+    opacity: 0.88;
+  }
 }
 
 .silo-settings-hero-btn-primary:active {
@@ -439,8 +493,10 @@ select {
     transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
 }
 
-.silo-settings-hero-btn-secondary:hover {
-  background: var(--surface-hover);
+@media (hover: hover) and (pointer: fine) {
+  .silo-settings-hero-btn-secondary:hover {
+    background: var(--surface-hover);
+  }
 }
 
 .silo-settings-hero-btn-secondary:active {
@@ -461,16 +517,24 @@ select {
   padding: 2px 6px;
   background: var(--bg);
   cursor: pointer;
+  transform: scale(1);
   transition:
     background 0.14s ease,
     border-color 0.14s ease,
-    color 0.14s ease;
+    color 0.14s ease,
+    transform 0.1s var(--ease-out);
 }
 
-.silo-modal-esc:hover {
-  background: var(--surface-hover);
-  border-color: var(--ghost);
-  color: var(--ink);
+.silo-modal-esc:active {
+  transform: scale(0.97);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-modal-esc:hover {
+    background: var(--surface-hover);
+    border-color: var(--ghost);
+    color: var(--ink);
+  }
 }
 
 /* Dock actions (clear/select all/empty all/restore/delete now/move to
@@ -487,8 +551,10 @@ select {
     transform 0.12s var(--ease-out);
 }
 
-.silo-dock-action:hover:not(:disabled) {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-dock-action:hover:not(:disabled) {
+    color: var(--ink);
+  }
 }
 
 .silo-dock-action:active:not(:disabled) {
@@ -510,6 +576,42 @@ select {
   transform: scale(0.9);
 }
 
+/* M1a (motion audit): the hover-revealed relative-time meta on `LinkRow`
+   (e.g. "2h ago") previously SNAPPED in/out via a `{hovered && …}`
+   conditional mount with no transition. It still conditionally mounts (the
+   exit is instant, matching the existing behavior/tests), but the entrance
+   now fades in via `@starting-style` — the same "mount already IS entering"
+   pattern `.silo-popover` uses below — rather than an abrupt appearance.
+   Opacity-only, well under the 300ms motion ceiling. */
+.silo-row-reveal {
+  transition: opacity 0.12s var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
+/* M1b/M1c (motion audit): entrance fade for freshly-mounted content. The
+   audit's biggest motion GAP was that the row list SNAPS in with no entrance
+   and route changes (Library→Trash→#tag→Settings) hard-cut. Rather than a
+   per-row nth-child stagger — which is fragile here (each DayGroup interleaves
+   a heading `<p>` with the row `<span>`s, so nth-child can't cleanly index
+   "the Nth row") and re-fires distractingly on every search keystroke — this
+   is the CALMER option the brief allowed: one gentle opacity fade on the
+   mounted content wrapper. It removes the hard snap without a cascade.
+   `@starting-style` means the element fades from its first paint (no JS mount
+   effect); opacity-only + 150ms keeps it cheap and reduced-motion-safe (the
+   reduced-motion block above narrows transitions to opacity/color, so this
+   survives as a gentle fade there rather than being killed — appropriate,
+   since it aids orientation and involves no movement). */
+.silo-route-fade {
+  transition: opacity 0.15s var(--ease-out);
+
+  @starting-style {
+    opacity: 0;
+  }
+}
+
 /* Trash row restore/delete-now icon buttons — previously flat `--ghost` with
    no hover/active feedback (emil-design-eng.md consistency pass). */
 .silo-trash-row-icon {
@@ -520,9 +622,11 @@ select {
     transform 0.1s var(--ease-out);
 }
 
-.silo-trash-row-icon:hover:not(:disabled) {
-  color: var(--ink);
-  background: var(--hov);
+@media (hover: hover) and (pointer: fine) {
+  .silo-trash-row-icon:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--hov);
+  }
 }
 
 .silo-trash-row-icon:active:not(:disabled) {
@@ -538,8 +642,10 @@ select {
     transform 0.1s var(--ease-out);
 }
 
-.silo-tag-chip-remove:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-tag-chip-remove:hover {
+    color: var(--ink);
+  }
 }
 
 .silo-tag-chip-remove:active {
@@ -563,8 +669,10 @@ select {
   background: transparent;
 }
 
-.silo-nav-item:hover:not([aria-current="page"]) {
-  background: var(--hov);
+@media (hover: hover) and (pointer: fine) {
+  .silo-nav-item:hover:not([aria-current="page"]) {
+    background: var(--hov);
+  }
 }
 
 .silo-nav-item:active:not([aria-current="page"]) {
@@ -581,8 +689,10 @@ select {
     transform 0.1s var(--ease-out);
 }
 
-.silo-theme-toggle-btn:hover:not([aria-pressed="true"]) {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-theme-toggle-btn:hover:not([aria-pressed="true"]) {
+    color: var(--ink);
+  }
 }
 
 .silo-theme-toggle-btn:active {
@@ -611,8 +721,10 @@ select {
     transform 0.1s var(--ease-out);
 }
 
-.silo-icon-btn-sm:hover {
-  background: var(--hov);
+@media (hover: hover) and (pointer: fine) {
+  .silo-icon-btn-sm:hover {
+    background: var(--hov);
+  }
 }
 
 .silo-icon-btn-sm:active {
@@ -630,8 +742,10 @@ select {
     transform 0.1s var(--ease-out);
 }
 
-.silo-sidebar-text-btn:hover {
-  color: var(--mut);
+@media (hover: hover) and (pointer: fine) {
+  .silo-sidebar-text-btn:hover {
+    color: var(--mut);
+  }
 }
 
 .silo-sidebar-text-btn:active {
@@ -649,9 +763,11 @@ select {
     transform 0.1s var(--ease-out);
 }
 
-.silo-tag-pill:hover {
-  border-color: var(--ghost);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-tag-pill:hover {
+    border-color: var(--ghost);
+    color: var(--ink);
+  }
 }
 
 .silo-tag-pill:active {
@@ -670,8 +786,10 @@ select {
     transform 0.1s var(--ease-out);
 }
 
-.silo-edit-footer-btn:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-edit-footer-btn:hover {
+    color: var(--ink);
+  }
 }
 
 .silo-edit-footer-btn:active {
@@ -689,9 +807,11 @@ select {
     transform 0.12s var(--ease-out);
 }
 
-.silo-edit-save-btn:hover {
-  background: var(--surface-hover);
-  border-color: var(--ghost);
+@media (hover: hover) and (pointer: fine) {
+  .silo-edit-save-btn:hover {
+    background: var(--surface-hover);
+    border-color: var(--ghost);
+  }
 }
 
 .silo-edit-save-btn:active {
@@ -800,11 +920,27 @@ select {
   }
 }
 
+/* Reduced motion should remove MOVEMENT, not comprehension. Killing
+   `animation` stops every keyframe (spins, pulses, slides, entrance
+   stagger). For `transition`, rather than a blanket kill (which would also
+   swallow the short opacity/color fades that HELP a reduced-motion user
+   track a state change), this narrows `transition-property` to
+   opacity/color-family properties only — a transform-based transition (a
+   press scale, a slide) simply falls outside that property list and so
+   collapses to an instant snap, while opacity/color fades survive at a
+   short, gentle 0.12s.
+   CONVENTION (load-bearing): this narrowing wins because the `*` selector's
+   `!important` beats every non-important author/inline `transition`. It can
+   only be defeated by a MORE-specific `!important` transition — so never
+   write `transition: … !important` on transform in a component rule, or that
+   movement would leak past reduced motion. No such rule exists today. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
   *::after {
     animation: none !important;
-    transition: none !important;
+    transition-property: opacity, color, background-color, border-color !important;
+    transition-duration: 0.12s !important;
+    transition-timing-function: ease !important;
   }
 }

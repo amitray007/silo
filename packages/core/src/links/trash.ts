@@ -1,8 +1,12 @@
 import { db, links } from '@silo/db';
 import { and, desc, sql } from 'drizzle-orm';
+import type { SearchPage } from './links.js';
+import { tagSearchVector } from './links.js';
 import {
+  decodeSearchCursor,
   decodeTrashCursor,
   effectiveLimit,
+  encodeSearchCursor,
   encodeTrashCursor,
   hydrateTags,
   type LinkWithTags,
@@ -93,6 +97,62 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
     page_.map((row) => row.link),
   );
   return nextCursor === undefined ? { links: hydrated } : { links: hydrated, nextCursor };
+}
+
+/**
+ * Full-text search over TRASHED links (`deleted_at IS NOT NULL`) — the
+ * Trash-scoped mirror of `links.ts`'s `search`. Copies that function's
+ * ranking EXACTLY (same `websearch_to_tsquery`, same title+tag combined
+ * `ts_rank`, same offset-cursor pagination) and swaps ONLY the live/trash
+ * predicate: `whereLive(...)` becomes the trashed condition
+ * (`deleted_at IS NOT NULL`) ANDed with the same tsquery match `search` uses.
+ * Reuses `search`'s exported `SearchPage`/`tagSearchVector` rather than a
+ * hand-duplicated copy — see `tagSearchVector`'s doc comment in `links.ts` for
+ * why sharing that subquery matters here specifically (jscpd, drift risk).
+ *
+ * Deliberately quarantined in THIS file, not `links.ts` — same rationale as
+ * `listTrash`: every trash-scoped read lives here, never mixed with the
+ * `whereLive`-scoped reads in `links.ts`, so a query can never accidentally
+ * cross the live/trash boundary. `limit` clamped to `[1, 100]` (default 20)
+ * via `effectiveLimit`; pagination uses the SAME bounded offset cursor as
+ * live `search` (`encodeSearchCursor`/`decodeSearchCursor` — `kind: 'search'`,
+ * so a cursor from `searchTrash` and a cursor from live `search` are
+ * interchangeable, which is fine: an offset is just a row count, not tied to
+ * which predicate produced it).
+ */
+export async function searchTrash(query: string, page: PageParams = {}): Promise<SearchPage> {
+  const limit = effectiveLimit(page.limit);
+  const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
+
+  const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
+  const titleRank = sql`ts_rank(${links.searchVector}, ${tsQuery})`;
+  const tagRank = sql`ts_rank(${tagSearchVector}, ${tsQuery})`;
+  const combinedRank = sql<number>`${titleRank} + ${tagRank}`;
+
+  const trashedCondition = sql`${links.deletedAt} is not null`;
+  const matchCondition = sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`;
+
+  const rows = await db
+    .select({
+      link: links,
+      rank: combinedRank,
+    })
+    .from(links)
+    .where(and(trashedCondition, matchCondition))
+    .orderBy(desc(combinedRank))
+    .limit(limit + 1)
+    .offset(offset);
+
+  const hasMore = rows.length > limit;
+  const page_ = hasMore ? rows.slice(0, limit) : rows;
+  const nextCursor = hasMore ? encodeSearchCursor(offset + limit) : undefined;
+
+  const hydrated = await hydrateTags(
+    db,
+    page_.map((row) => row.link),
+  );
+  const results = hydrated.map((link, i) => ({ ...link, rank: page_[i]?.rank ?? 0 }));
+  return nextCursor === undefined ? { results } : { results, nextCursor };
 }
 
 /** Count of LIVE links (`deleted_at IS NULL`) — the sidebar's total count. */

@@ -15,6 +15,8 @@ const heroTitle: CSSProperties = {
   fontSize: '1rem',
   fontWeight: 500,
   color: 'var(--ink)',
+  letterSpacing: 'var(--tracking-tight)',
+  textWrap: 'balance',
 };
 
 const heroDesc: CSSProperties = {
@@ -23,6 +25,7 @@ const heroDesc: CSSProperties = {
   color: 'var(--fnt)',
   lineHeight: 1.55,
   maxWidth: '34rem',
+  textWrap: 'pretty',
 };
 
 const heroIconWrap: CSSProperties = {

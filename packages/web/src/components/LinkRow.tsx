@@ -22,12 +22,27 @@ import { useLibrarySelection } from './SelectionContext';
  * wrapping `<span>` is `position: relative` so `RowMenu`'s
  * `position:absolute` anchors to this row, not the whole list.
  *
- * Marks: per a direct user-feedback polish pass, the inline `¶`/`◆`/`◌`
- * glyphs (note / added-by-Claude / capturing / degraded) are REMOVED from the
- * row entirely — rows show chip + title + domain only, no status chrome. The
- * quoted note LINE underneath (when `link.notes` is set) stays; only the
- * glyph badge next to the title is gone. `Mark`/`MarkKind` are deleted
- * (unused after this — see `docs/rules/testing.md`/knip).
+ * Marks: per a direct user-feedback polish pass, the inline `¶`/`◆`
+ * glyphs (note / added-by-Claude) are REMOVED from the row entirely — rows
+ * show chip + title + domain only, no status chrome, for `full`/`partial`/
+ * `bare` rows. The quoted note LINE underneath (when `link.notes` is set)
+ * stays; only the glyph badge next to the title is gone. `Mark`/`MarkKind`
+ * are deleted (unused after this — see `docs/rules/testing.md`/knip).
+ *
+ * Live enrichment loading chrome (plan 014): reintroduces ONE piece of
+ * per-row status chrome — the `◌ capturing` pulse — but ONLY while
+ * `link.captureStatus === 'enriching'`. This isn't a reversal of the mark
+ * removal above (those were permanent, settled-state badges on
+ * full/partial/bare rows); this is a transient IN-PROGRESS indicator that
+ * "silence means complete" explicitly carves out room for — it disappears
+ * the instant the row settles to any other status. Matches v3's per-row
+ * status span (`Silo-v3.html:123`): `◌` (the sanctioned incomplete mark)
+ * + "capturing", `color: var(--markt)`, `font-size: .76rem`,
+ * `font-weight: 500`, pulsing via the EXISTING `siloPulse` keyframe
+ * (`base.css:738`) reused via inline style (not a new keyframe). Only
+ * `enriching` pulses — `partial`/`bare` (v3's "degraded") intentionally show
+ * no chrome here; wiring a non-pulsing degraded mark is a follow-up (plan
+ * 014 scope note), not part of this slice.
  *
  * Hover meta: on hover (or focus), a relative-time string ("2h ago") derived
  * from `createdAt` renders on the right, next to the domain — v3's `it.meta`
@@ -120,18 +135,26 @@ export function LinkRow({ link }: { link: LinkJson }) {
         onBlur={handleLeave}
         style={isSelected ? { background: 'var(--hov)' } : undefined}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <RowSelectCheckbox
             visible={showCheck}
             isSelected={isSelected}
             onToggle={() => selection.toggle(link.id)}
           />
           {!showCheck && <Chip domain={domain} />}
-          <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 11 }}>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 'var(--s2-5)',
+            }}
+          >
             <span
               style={{
                 fontWeight: 500,
-                fontSize: '0.88rem',
+                fontSize: 'var(--text-base)',
                 color: link.captureStatus === 'enriching' ? 'var(--fnt)' : 'var(--ink)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -140,11 +163,30 @@ export function LinkRow({ link }: { link: LinkJson }) {
             >
               {title}
             </span>
+            {link.captureStatus === 'enriching' && (
+              <span
+                title="Capture continues in the background — you can leave"
+                style={{
+                  flex: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'baseline',
+                  gap: 'var(--s1-5)',
+                  fontSize: '0.76rem',
+                  fontWeight: 500,
+                  color: 'var(--markt)',
+                  whiteSpace: 'nowrap',
+                  animation: 'siloPulse 1.6s ease-in-out infinite',
+                }}
+              >
+                <span style={{ fontSize: '0.84rem' }}>◌</span>
+                <span>Capturing</span>
+              </span>
+            )}
             <span
               style={{
                 flex: 'none',
                 maxWidth: '14rem',
-                fontSize: '0.84rem',
+                fontSize: 'var(--text-base)',
                 color: 'var(--fnt)',
                 fontWeight: 400,
                 whiteSpace: 'nowrap',
@@ -154,16 +196,29 @@ export function LinkRow({ link }: { link: LinkJson }) {
             >
               {domain}
             </span>
-            {hovered && (
-              <span style={{ flex: 'none', fontSize: '0.74rem', color: 'var(--fnt)' }}>
-                {relativeTimeFromNow(link.createdAt)}
-              </span>
-            )}
           </span>
+          {/* The hover-revealed relative time sits at the row's RIGHT end,
+              just before the ⋯ options button (user feedback: beside options,
+              not beside the link title). `flex:none` + a small right gap keep
+              it from pushing the button; it reveals via the fade class. */}
+          {hovered && (
+            <span
+              className="silo-row-reveal"
+              style={{
+                flex: 'none',
+                fontSize: 'var(--text-xs)',
+                color: 'var(--fnt)',
+                whiteSpace: 'nowrap',
+                marginRight: 'var(--s1)',
+              }}
+            >
+              {relativeTimeFromNow(link.createdAt)}
+            </span>
+          )}
           <button
             type="button"
-            title="options"
-            aria-label="options"
+            title="Options"
+            aria-label="Options"
             aria-haspopup="true"
             aria-expanded={menuOpen}
             onMouseDown={(e) => e.stopPropagation()}
@@ -176,8 +231,19 @@ export function LinkRow({ link }: { link: LinkJson }) {
               flex: 'none',
               display: 'grid',
               placeItems: 'center',
-              width: 28,
-              height: 28,
+              // K5 (oat-conformance audit): this button never paints a
+              // background (color-only ghost→ink feedback, no hover fill —
+              // see the `color` line below), so growing the box itself to
+              // the ≥40px touch-target floor (`var(--s10)`) is visually
+              // identical to the old 28px box — only the glyph's own
+              // fontSize governs its apparent size, and that's unchanged.
+              // A negative margin keeps the row's own layout from shifting
+              // (the extra hit area extends into surrounding whitespace, not
+              // into sibling content — this button is `flex: 'none'` at the
+              // row's end).
+              width: 'var(--s10)',
+              height: 'var(--s10)',
+              margin: 'calc(-1 * var(--s1-5))',
               border: 0,
               borderRadius: 6,
               background: 'none',
@@ -200,9 +266,15 @@ export function LinkRow({ link }: { link: LinkJson }) {
           <span
             style={{
               display: 'block',
-              padding: '2px 20px 0 31px',
+              // Left inset aligns this sub-line's text under the TITLE. These
+              // sub-lines are direct children of the `.silo-link-row` <a>, so
+              // they already sit inside its --s2-5 padding; --row-inset is
+              // measured from the row's OUTER edge, so subtract that padding
+              // here to avoid double-counting it (title = row-pad + chip + gap;
+              // this = the same, expressed relative to the already-padded box).
+              padding: 'var(--s-0-5) var(--s5) 0 calc(var(--row-inset) - var(--s2-5))',
               fontSize: '0.78rem',
-              color: 'var(--ghost)',
+              color: 'var(--fnt)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -214,11 +286,21 @@ export function LinkRow({ link }: { link: LinkJson }) {
         {link.notes && (
           <span
             style={{
-              display: 'block',
-              padding: '2px 20px 0 31px',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              // Left inset aligns this sub-line's text under the TITLE. These
+              // sub-lines are direct children of the `.silo-link-row` <a>, so
+              // they already sit inside its --s2-5 padding; --row-inset is
+              // measured from the row's OUTER edge, so subtract that padding
+              // here to avoid double-counting it (title = row-pad + chip + gap;
+              // this = the same, expressed relative to the already-padded box).
+              padding: 'var(--s-0-5) var(--s5) 0 calc(var(--row-inset) - var(--s2-5))',
               fontSize: '0.8rem',
               color: 'var(--mut)',
               fontStyle: 'italic',
+              maxWidth: '48ch',
             }}
           >
             "{link.notes}"

@@ -50,6 +50,7 @@ export function TagView() {
       count={view.links.length}
       {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
       headerSlot={header}
+      fadeKey={tag}
     >
       {ListBody(view, <TagEmptyState tag={tag} />)}
     </ContentFrame>

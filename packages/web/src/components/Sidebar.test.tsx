@@ -185,10 +185,10 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      expect(screen.queryByPlaceholderText('find tag')).toBeNull();
+      expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
 
-      fireEvent.click(screen.getByTitle('find a tag'));
-      const input = screen.getByPlaceholderText('find tag');
+      fireEvent.click(screen.getByTitle('Find a tag'));
+      const input = screen.getByPlaceholderText('Find tag');
       expect(input).toBeDefined();
 
       fireEvent.change(input, { target: { value: 'DES' } });
@@ -197,8 +197,8 @@ describe('Sidebar', () => {
       expect(screen.queryByText('mcp')).toBeNull();
 
       // Toggling closed again hides the input.
-      fireEvent.click(screen.getByTitle('find a tag'));
-      expect(screen.queryByPlaceholderText('find tag')).toBeNull();
+      fireEvent.click(screen.getByTitle('Find a tag'));
+      expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
     });
   });
 
@@ -225,9 +225,9 @@ describe('Sidebar', () => {
 
       fireEvent.click(more);
       expect(tagRowCount()).toBe(13);
-      expect(screen.getByText('show less')).toBeDefined();
+      expect(screen.getByText('Show less')).toBeDefined();
 
-      fireEvent.click(screen.getByText('show less'));
+      fireEvent.click(screen.getByText('Show less'));
       expect(tagRowCount()).toBe(10);
     });
 
@@ -281,8 +281,8 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -290,8 +290,8 @@ describe('Sidebar', () => {
       const postCall = findPostCall(fetchMock);
       expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toEqual({ name: 'newtag' });
 
-      expect(screen.queryByPlaceholderText('tag name')).toBeNull();
-      expect(screen.getByText('+ new tag')).toBeDefined();
+      expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
+      expect(screen.getByText('+ New tag')).toBeDefined();
     });
 
     it('Escape closes the input without creating a tag', async () => {
@@ -300,12 +300,12 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'abandoned' } });
       fireEvent.keyDown(input, { key: 'Escape' });
 
-      expect(screen.queryByPlaceholderText('tag name')).toBeNull();
+      expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
       expect(findPostCall(fetchMock)).toBeUndefined();
     });
 
@@ -315,11 +315,11 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.keyDown(input, { key: 'Enter' });
 
-      expect(screen.queryByPlaceholderText('tag name')).toBeNull();
+      expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
       expect(findPostCall(fetchMock)).toBeUndefined();
     });
 
@@ -342,16 +342,59 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
-      await waitFor(() => expect(screen.getByText("couldn't create — try again")).toBeDefined());
+      await waitFor(() => expect(screen.getByText("Couldn't create — try again")).toBeDefined());
       // The input stays open with the value intact — a failed create must
       // never look identical to a successful one.
-      expect(screen.getByPlaceholderText('tag name')).toHaveProperty('value', 'newtag');
+      expect(screen.getByPlaceholderText('Tag name')).toHaveProperty('value', 'newtag');
     });
+  });
+
+  it('orders sections brand → Library/Trash → divider → Tags → divider → Settings, with Settings no longer bottom-pinned', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 1, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/tags') {
+        return Promise.resolve(jsonResponse({ tags: tagCounts(['ai', 'design']) }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const { container } = renderSidebar();
+    await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
+
+    const nav = container.querySelector('nav[aria-label="Sidebar"]');
+    expect(nav).not.toBeNull();
+
+    // Order of top-level children: brand, Library, Trash, divider, Tags
+    // section, divider, Settings.
+    const children = Array.from(nav?.children ?? []) as HTMLElement[];
+    const settingsLink = screen.getByRole('link', { name: /settings/i });
+    const tagsHeader = screen.getByText('Tags');
+
+    const dividerIndices = children
+      .map((el, i) => ({ el, i }))
+      .filter(({ el }) => el.style.borderTop === '1px solid var(--line)')
+      .map(({ i }) => i);
+    const settingsIndex = children.findIndex((el) => el.contains(settingsLink));
+    const tagsSectionIndex = children.findIndex((el) => el.contains(tagsHeader));
+
+    // Two dividers: one above Tags, one between Tags and Settings.
+    expect(dividerIndices).toHaveLength(2);
+    const [firstDividerIndex, secondDividerIndex] = dividerIndices;
+    expect(firstDividerIndex).toBeLessThan(tagsSectionIndex);
+    expect(tagsSectionIndex).toBeLessThan(secondDividerIndex as number);
+    expect(secondDividerIndex).toBeLessThan(settingsIndex);
+    // Settings is the very last top-level child now — no flex spacer
+    // pinning it to the bottom anymore (that spacer used to be the last
+    // child, after Settings' own NavItemLink).
+    expect(settingsIndex).toBe(children.length - 1);
   });
 
   it('renders the Tags header + tools calmly with zero tags (not gated on tag count)', async () => {
@@ -369,7 +412,7 @@ describe('Sidebar', () => {
     renderSidebar();
 
     await waitFor(() => expect(screen.getByText('Tags')).toBeDefined());
-    expect(screen.getByText('+ new tag')).toBeDefined();
+    expect(screen.getByText('+ New tag')).toBeDefined();
     expect(screen.queryAllByText(/^#/)).toHaveLength(0);
     expect(screen.queryByText(/more$/)).toBeNull();
   });

@@ -18,6 +18,22 @@
   --bg2: #f1e9da;
   --line: #ebe2d2;
   --hov: #f1e9da;
+
+  /* ─────────────────────────────────────────────────────────────────────
+     TEXT-TONE RAMP (a11y pass, finding B4 — reconciles the ramp's roles):
+       --ink   = titles / primary text.
+       --mut   = secondary text.
+       --fnt   ("faint") = tertiary text — meta, counts, placeholders,
+                 labels; tokens.md's "faint" role. The hex below (#736850 in
+                 light, #94856f in dark) is the source of truth for that
+                 role, not the token name.
+       --ghost = NON-TEXT ONLY. Borders, focus rings, icon/SVG strokes, and
+                 decorative glyphs (#, ◂, ▾, ✕, +). It clears the 3:1 UI-
+                 component contrast floor but NOT the 4.5:1 floor normal text
+                 needs (WCAG AA) — 4.00:1 on --bg / 3.54:1 on --bg2 in light
+                 mode. Any occurrence coloring text a user reads must use
+                 --fnt (5.14:1 on --bg / 4.55:1 on --bg2) instead.
+     ───────────────────────────────────────────────────────────────────── */
   --ink: #211b11;
   --mut: #6e6350;
   --fnt: #736850;
@@ -41,7 +57,9 @@
   --badge-border: #e6dac0;
   /* NOT --ghost (#857963) — that pairing only clears 3.54:1 against
      --badge-bg, short of AA's 4.5:1 for normal text (Rams self-review,
-     redesign pass). --mut's hex clears 4.89:1 on the same background. */
+     redesign pass). --mut's hex clears 4.89:1 on the same background.
+     (Still true, and now the general rule: the later a11y pass reserves
+     --ghost for non-text uses only — see the TEXT-TONE RAMP note above.) */
   --badge-ink: #6e6350;
 
   /* Motion (design-review pass, docs/design/skills/review-animations*.md):
@@ -52,6 +70,70 @@
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+
+  /* ─────────────────────────────────────────────────────────────────────
+     SCALES (design-audit conformance pass). Before this, every leaf
+     component hardcoded its own font-size / padding / tracking inline, so
+     22 near-identical font sizes and 23 padding magnitudes drifted across
+     the app. These tokens are the single source of truth; components
+     reference them so "the same role" is literally the same value and
+     drift becomes impossible to reintroduce. Theme-independent (sizes and
+     spacing don't change between light/dark), so they live only here.
+     ───────────────────────────────────────────────────────────────────── */
+
+  /* Type scale — 6 steps at the 16px root. Collapses the prior 22 sizes.
+     Hierarchy is meant to come from COLOR (the ink/mut/faint/ghost ramp),
+     not size — so this scale is deliberately short. */
+  --text-xs: 0.72rem; /* 11.5px — meta, counts, hints, day labels */
+  --text-sm: 0.8rem; /* 12.8px — secondary labels, settings descriptions */
+  --text-base: 0.875rem; /* 14px   — row titles + domain, body, most UI text */
+  --text-md: 0.95rem; /* 15.2px — brand wordmark, empty-state body */
+  --text-lg: 1.05rem; /* 16.8px — modal titles (h2), section headlines */
+  --text-xl: 1.15rem; /* 18.4px — the largest headline in use */
+
+  /* Line-height roles — headings want tight leading, body wants air. */
+  --lh-tight: 1.2; /* headings (h1/h2/empty-state titles) */
+  --lh-snug: 1.45; /* descriptions, notes, hover-preview copy */
+  --lh-body: 1.55; /* long-form body (matches the global default) */
+
+  /* Tracking — tokens.md mandates "tight tracking" for headlines; before
+     this only the wordmark obeyed it. Uppercase micro-labels get positive
+     tracking so they read as deliberate labels, not shrunk body. */
+  --tracking-tight: -0.01em; /* headlines, wordmark */
+  --tracking-label: 0.04em; /* uppercase eyebrow / section labels */
+
+  /* Spacing scale — 4px base, covers ~95% of the values already in use so
+     migration off the hardcoded px is mechanical (round each to nearest). */
+  --s-0-5: 2px; /* chip inner-y, subline top-pad */
+  --s1: 4px; /* tight chip/pill y, popover offset */
+  --s1-5: 6px; /* button/chip gap, small pill x */
+  --s2: 8px; /* body top-pad, gaps, pill x */
+  --s2-5: 10px; /* row y, nav x, gaps */
+  --s3: 12px; /* modal/card header y, gap-13 rounds here */
+  --s3-5: 14px; /* control x-pad, header y */
+  --s4: 16px; /* sidebar pad, section gap */
+  --s5: 20px; /* day-group top-gap, settings gaps */
+  --s6: 24px; /* modal x-pad */
+  --s7: 28px; /* content clamp max */
+  --s8: 32px; /* dock bottom offset */
+  --s10: 40px; /* empty-state y, min touch target */
+
+  /* Row content-inset — the horizontal grid the list shares. Equals the
+     favicon column so the day-group label, the header title, the row title,
+     the HN rich line, and the note all line up on ONE left edge instead of
+     several hand-guessed insets. Measured against the live row:
+     40px = 10 (row pad, --s2-5) + 18 (chip) + 12 (chip→title gap, --s3). */
+  --row-inset: 40px;
+
+  /* Elevation — one warm shadow family, tokenized so dark mode can tune it
+     independently. In LIGHT mode a soft warm-brown shadow reads as lift.
+     Overridden in dark (see below) toward black, because a warm-brown
+     shadow on a near-black ground has almost no luminance delta and modals
+     lose their float. `--scrim` is the modal/drawer backdrop wash. */
+  --elev-1: 0 1px 3px rgba(40, 30, 10, 0.12);
+  --elev-2: 0 12px 32px -18px rgba(40, 28, 8, 0.4);
+  --elev-3: 0 24px 60px -24px rgba(40, 28, 8, 0.42);
+  --scrim: rgba(24, 17, 7, 0.32);
 
   color-scheme: light;
 }
@@ -89,6 +171,17 @@
   --badge-bg: #201a13;
   --badge-border: #322920;
   --badge-ink: #ad9e89;
+
+  /* Elevation, deepened for the near-black ground (design-audit color pass):
+     a warm-brown shadow is near-invisible on #14100c, so dark leans on a
+     BLACKER shadow — the one place a near-black rgba is correct, since it's a
+     shadow object, never a fill. Raised surfaces additionally get a lighter
+     surface-step fill in components (the dark-UI convention: elevation reads
+     as lightening, not as shadow). Scrim goes deeper for the same reason. */
+  --elev-1: 0 1px 3px rgba(0, 0, 0, 0.4);
+  --elev-2: 0 12px 32px -16px rgba(0, 0, 0, 0.55);
+  --elev-3: 0 24px 60px -22px rgba(0, 0, 0, 0.6);
+  --scrim: rgba(0, 0, 0, 0.55);
 
   color-scheme: dark;
 }

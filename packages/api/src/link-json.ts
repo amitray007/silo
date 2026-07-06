@@ -143,3 +143,18 @@ export function toTrashLinkJson(link: LinkWithTags): TrashLinkJson {
 export function toSearchResultJson(link: LinkWithTags, rank: number): SearchResultJson {
   return { ...toLinkJson(link), rank };
 }
+
+/**
+ * `TrashLinkJson` plus a search `rank` (`GET /api/trash/search`'s per-result
+ * shape, Trash search slice) — a DISTINCT variant from `SearchResultJson`
+ * (which carries no `deletedAt`): the Trash search UI groups its results by
+ * `deletedAt` via the same `bucketTrashByDay` the plain trash feed uses (and
+ * shows the same purge countdown), so a trash search result needs the
+ * trashed-at timestamp the live search result never does.
+ */
+export type TrashSearchResultJson = TrashLinkJson & { rank: number };
+
+/** Builds a `TrashSearchResultJson` — `toTrashLinkJson` (whitelist + `deletedAt`) plus the search `rank`. Used by `GET /api/trash/search`. */
+export function toTrashSearchResultJson(link: LinkWithTags, rank: number): TrashSearchResultJson {
+  return { ...toTrashLinkJson(link), rank };
+}

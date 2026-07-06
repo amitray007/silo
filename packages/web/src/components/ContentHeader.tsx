@@ -12,7 +12,7 @@ interface ContentHeaderProps {
    * `undefined` renders nothing.
    */
   captureError?: string;
-  /** Right-aligned slot — reserved for the omnibar (V3-2); pass nothing to render an empty placeholder sized to match. */
+  /** Right-aligned slot — reserved for the omnibar (V3-2). Renders nothing when omitted (TrashView/SettingsView pass no children — a phantom placeholder box there would be decorative chrome that does nothing, violating "silence means complete"). */
   children?: ReactNode;
 }
 
@@ -47,16 +47,29 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
       <h1
         style={{
           margin: 0,
+          // Indent the title to the FAVICON column so "Library"/"Trash"/"#tag"
+          // sits on the same left line as the row favicons + the "Today" day
+          // label below it (user feedback: align the header to where the
+          // favicons/data start). That column = the row's own left padding
+          // (--s2-5) in from the content edge; the header shares the content
+          // edge, so --s2-5 lands the title exactly above the favicons. The
+          // border-bottom still spans full width — only the text moves.
+          marginLeft: 'var(--s2-5)',
           fontSize: '1rem',
           fontWeight: 500,
           color: 'var(--ink)',
+          // The route title stays on one line (Library / Trash / #tag are
+          // short); `textWrap: 'balance'` was dropped as inert under
+          // `whiteSpace: 'nowrap'` (review fix).
           whiteSpace: 'nowrap',
+          letterSpacing: 'var(--tracking-tight)',
+          lineHeight: 'var(--lh-tight)',
         }}
       >
         {title}
       </h1>
       {count !== undefined && (
-        <span style={{ fontSize: '0.76rem', color: 'var(--ghost)' }}>{count}</span>
+        <span style={{ fontSize: '0.76rem', color: 'var(--fnt)' }}>{count}</span>
       )}
       <span style={{ flex: 1 }} />
       {captureError && (
@@ -72,20 +85,10 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
             maxWidth: '16rem',
           }}
         >
-          couldn't save that — {captureError}
+          Couldn't save that — {captureError}
         </span>
       )}
-      {children ?? (
-        <div
-          aria-hidden="true"
-          style={{
-            width: 'clamp(280px, 46%, 520px)',
-            height: 40,
-            borderRadius: 10,
-            background: 'var(--bg2)',
-          }}
-        />
-      )}
+      {children}
     </div>
   );
 }

@@ -116,8 +116,8 @@ describe('TagView', () => {
 
     renderTagView('mcp', fetchImpl);
 
-    await waitFor(() => expect(screen.getByTitle('clear filter')).toBeDefined());
-    fireEvent.click(screen.getByTitle('clear filter'));
+    await waitFor(() => expect(screen.getByTitle('Clear filter')).toBeDefined());
+    fireEvent.click(screen.getByTitle('Clear filter'));
     await waitFor(() => expect(screen.getByText('landed on library')).toBeDefined());
   });
 
@@ -165,7 +165,7 @@ describe('TagView', () => {
 
     const input = screen.getByPlaceholderText(/search in #mcp/i);
     fireEvent.change(input, { target: { value: 'https://new-example.com' } });
-    await waitFor(() => expect(screen.getByText('keep')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Keep')).toBeDefined());
     fireEvent.keyDown(input, { key: 'Enter' });
 
     await waitFor(() =>

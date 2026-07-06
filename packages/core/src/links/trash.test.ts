@@ -227,6 +227,109 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
     });
   });
 
+  describe('searchTrash (Trash search slice)', () => {
+    it('finds a match among TRASHED links only, excludes a live match for the same term', async () => {
+      const trashedMatch = await ops.createLink({
+        url: 'https://example.com/searchtrash-title-match',
+        title: 'zephyrquokka trashed find',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(trashedMatch.id);
+
+      const liveMatch = await ops.createLink({
+        url: 'https://example.com/searchtrash-live-excluded',
+        title: 'zephyrquokka but still live',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.searchTrash('zephyrquokka');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(trashedMatch.id);
+      expect(ids).not.toContain(liveMatch.id);
+    });
+
+    it('finds a trashed link by a notes-only match', async () => {
+      const trashedNotesMatch = await ops.createLink({
+        url: 'https://example.com/searchtrash-notes-only',
+        title: 'an unrelated title',
+        notes: 'mentions the marker glimmerfaunatrash only here',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(trashedNotesMatch.id);
+
+      const { results } = await ops.searchTrash('glimmerfaunatrash');
+      expect(results.map((r) => r.id)).toContain(trashedNotesMatch.id);
+    });
+
+    it('finds a trashed link by a TAG-only match, tag-hydrated in the result', async () => {
+      const trashedTagMatch = await ops.createLink({
+        url: 'https://example.com/searchtrash-tag-only',
+        title: 'an unrelated title',
+        tags: ['brambleforktrash'],
+        sourceKind: 'link',
+      });
+      await ops.softDelete(trashedTagMatch.id);
+
+      const { results } = await ops.searchTrash('brambleforktrash');
+      const found = results.find((r) => r.id === trashedTagMatch.id);
+      expect(found).toBeDefined();
+      expect(found?.tags).toEqual(['brambleforktrash']);
+    });
+
+    it('ranks a title match above a weaker match for the same term, both trashed', async () => {
+      const strong = await ops.createLink({
+        url: 'https://example.com/searchtrash-rank-strong',
+        title: 'wobbletrashmarker wobbletrashmarker wobbletrashmarker',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(strong.id);
+      const weak = await ops.createLink({
+        url: 'https://example.com/searchtrash-rank-weak',
+        title: 'unrelated',
+        description: 'mentions wobbletrashmarker once',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(weak.id);
+
+      const { results } = await ops.searchTrash('wobbletrashmarker');
+      const byId = new Map(results.map((r) => [r.id, r]));
+      const strongRank = byId.get(strong.id)?.rank ?? -1;
+      const weakRank = byId.get(weak.id)?.rank ?? -1;
+      expect(strongRank).toBeGreaterThan(weakRank);
+    });
+
+    it('paginates via the same bounded offset cursor as live search', async () => {
+      for (let i = 0; i < 3; i++) {
+        const link = await ops.createLink({
+          url: `https://example.com/searchtrash-pagination-${i}`,
+          title: 'searchtrashpaginationmarker',
+          sourceKind: 'link',
+        });
+        await ops.softDelete(link.id);
+      }
+
+      const page1 = await ops.searchTrash('searchtrashpaginationmarker', { limit: 2 });
+      expect(page1.results.length).toBe(2);
+      expect(page1.nextCursor).toBeDefined();
+      if (!page1.nextCursor) return;
+
+      const page2 = await ops.searchTrash('searchtrashpaginationmarker', {
+        limit: 2,
+        cursor: page1.nextCursor,
+      });
+      expect(page2.results.length).toBeGreaterThanOrEqual(1);
+      const firstPageIds = new Set(page1.results.map((r) => r.id));
+      for (const r of page2.results) {
+        expect(firstPageIds.has(r.id)).toBe(false);
+      }
+    });
+
+    it('a no-match query returns an empty result set, not an error', async () => {
+      const { results } = await ops.searchTrash('nosuchtermwilleverexisttrashxyz123');
+      expect(results).toEqual([]);
+    });
+  });
+
   describe('counts', () => {
     it('countLive/countTrash/getCounts are correct as links are created', async () => {
       const before = await ops.getCounts();

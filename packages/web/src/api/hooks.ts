@@ -20,6 +20,7 @@ import type {
   TagsResponse,
   TrashLinkJson,
   TrashResponse,
+  TrashSearchResponse,
 } from './types';
 
 /**
@@ -38,6 +39,7 @@ export const queryKeys = {
   link: (id: string) => ['link', id] as const,
   search: (q: string) => ['search', q] as const,
   trash: () => ['trash'] as const,
+  trashSearch: (q: string) => ['trash-search', q] as const,
 };
 
 /** The sidebar's live/trash counts (`GET /api/counts`) — `useCounts().data` is `Counts | undefined` until loaded. */
@@ -56,6 +58,24 @@ export function useTags() {
   });
 }
 
+/** The shape `useInfiniteLinks`'s cache holds — pages of `LinksResponse`, keyed by `queryKeys.links(filter)`. */
+type LinksInfiniteData = InfiniteData<LinksResponse>;
+
+/**
+ * `true` when at least one link across every cached page is still
+ * `captureStatus === 'enriching'` — the shared predicate behind
+ * `useInfiniteLinks`'s `refetchInterval` (plan 014). Takes the raw
+ * `InfiniteData<LinksResponse> | undefined` (exactly what TanStack's
+ * `query.state.data` hands the function form) rather than a hook result, so
+ * it can be unit-tested with a plain object and reused verbatim inside the
+ * `refetchInterval` callback below.
+ */
+function hasEnrichingLink(data: LinksInfiniteData | undefined): boolean {
+  return (data?.pages ?? []).some((page) =>
+    page.links.some((l) => l.captureStatus === 'enriching'),
+  );
+}
+
 /**
  * The Library/tag list's cursor-paginated feed (`GET /api/links[?tag=]`).
  * `tag` (added plan 011, V3-2) scopes the feed to `/tags/:name` — omitted,
@@ -65,6 +85,25 @@ export function useTags() {
  * `getNextPageParam` reads the next page's cursor off the last-fetched page,
  * so `hasNextPage` flips to `false` the moment a page comes back without one.
  * Callers flatten `data.pages.flatMap(p => p.links)` before rendering.
+ *
+ * Live enrichment smart polling (plan 014): `refetchInterval` uses the
+ * FUNCTION form (`(query) => ...`) specifically so the decision reads
+ * `query.state.data` — the freshest cache at the moment TanStack checks
+ * whether to schedule the next poll — rather than a value captured at
+ * render time, which could go stale between renders. While any cached page
+ * holds a `captureStatus === 'enriching'` row, this returns `1500` (ms),
+ * making the feed re-fetch every 1.5s so the optimistic/placeholder row
+ * picks up the worker's enrichment (title/favicon/sourceData) shortly after
+ * it lands — see `useCaptureLink`'s doc comment for why the initial
+ * `onSettled` invalidate alone isn't enough (it fires once, immediately,
+ * before the worker has finished). The moment every cached row has settled
+ * (`full`/`partial`/`bare`), it returns `false` and polling stops — no
+ * perpetual background polling once nothing is in flight.
+ * `refetchIntervalInBackground` is left at its default (`false`): a
+ * backgrounded tab shouldn't keep polling the API. Deliberately NOT applied
+ * to `useTrashList` (trashed links don't enrich) or `useSearchLinks` (a
+ * transient omnibar view — polling it is a possible follow-up, out of scope
+ * here).
  */
 export function useInfiniteLinks(tag?: string) {
   return useInfiniteQuery({
@@ -78,6 +117,7 @@ export function useInfiniteLinks(tag?: string) {
     },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: LinksResponse) => lastPage.nextCursor,
+    refetchInterval: (query) => (hasEnrichingLink(query.state.data) ? 1500 : false),
   });
 }
 
@@ -96,6 +136,25 @@ export function useSearchLinks(q: string) {
   return useQuery({
     queryKey: queryKeys.search(trimmed),
     queryFn: () => apiGet<SearchResponse>(`/api/links/search?q=${encodeURIComponent(trimmed)}`),
+    enabled: trimmed.length > 0,
+  });
+}
+
+/**
+ * The Trash screen's server-side search (`GET /api/trash/search?q=`, Trash
+ * search slice) — mirrors `useSearchLinks` exactly (same `enabled:
+ * trimmed.length > 0` no-op-on-empty guard, same trim-before-key discipline
+ * so whitespace-only queries don't fire), hitting the trash-scoped route
+ * instead. Callers are responsible for debouncing keystrokes, same as
+ * `useSearchLinks`'s callers (`Omnibar.tsx`) — see `TrashView.tsx`'s own
+ * debounced input.
+ */
+export function useSearchTrash(q: string) {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: queryKeys.trashSearch(trimmed),
+    queryFn: () =>
+      apiGet<TrashSearchResponse>(`/api/trash/search?q=${encodeURIComponent(trimmed)}`),
     enabled: trimmed.length > 0,
   });
 }
@@ -130,9 +189,6 @@ function buildOptimisticLink(input: CaptureRequest): LinkJson {
     updatedAt: now,
   };
 }
-
-/** The shape `useInfiniteLinks`'s cache holds — pages of `LinksResponse`, keyed by `queryKeys.links(filter)`. */
-type LinksInfiniteData = InfiniteData<LinksResponse>;
 
 /**
  * Prepends `link` to the FIRST page of every cached `links` infinite-query

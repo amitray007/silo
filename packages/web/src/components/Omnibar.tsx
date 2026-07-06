@@ -68,23 +68,24 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
   const tagPillVisible = tagFilterActive && !omniIsSearch;
 
   const placeholder = tagFilterActive
-    ? `search in #${tagName}`
-    : 'paste a link to keep · type to search';
+    ? `Search in #${tagName}`
+    : 'Paste a link to keep · type to search';
 
   return (
     <div
       style={{
-        // Bumped from v3's `clamp(230px, 42%, 430px)` per direct user
-        // feedback ("make the omnibar bigger … so 'paste a link to keep' is
-        // more prominent") — wider clamp bounds + roomier padding below.
-        width: 'clamp(280px, 46%, 520px)',
+        // Bigger per repeated user feedback ("increase the size of the input
+        // box"): wider clamp bounds and a taller field so "Paste a link to
+        // keep" reads as the app's primary action. Grown from
+        // clamp(280,46%,520) and --s2-5 vertical padding.
+        width: 'clamp(320px, 52%, 620px)',
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        gap: 'var(--s2-5)',
         border: `1px solid ${focused ? 'var(--ghost)' : 'var(--line)'}`,
         borderRadius: 11,
         background: 'var(--bg2)',
-        padding: '10px 15px',
+        padding: 'var(--s3) var(--s4)',
         transition: 'border-color .15s ease, background .2s ease',
       }}
     >
@@ -100,7 +101,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
         style={{ flex: 'none' }}
         aria-hidden="true"
       >
-        <title>search</title>
+        <title>Search</title>
         <circle cx="7" cy="7" r="4.3" />
         <path d="m10.3 10.3 3 3" />
       </svg>
@@ -109,18 +110,18 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
         <button
           type="button"
           onClick={onClearTag}
-          title="clear filter"
-          aria-label={`clear filter #${tagName}`}
+          title="Clear filter"
+          aria-label={`Clear filter #${tagName}`}
           className="silo-tag-pill"
           style={{
             flex: 'none',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 'var(--s1-5)',
             border: '1px solid var(--line)',
             background: 'var(--bg)',
             borderRadius: 999,
-            padding: '2px 10px',
+            padding: 'var(--s-0-5) var(--s2-5)',
             fontFamily: 'inherit',
             fontSize: '0.74rem',
             fontWeight: 500,
@@ -164,15 +165,25 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
 
       {omniIsUrl && (
         <span
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--s1-5)',
+            whiteSpace: 'nowrap',
+          }}
         >
-          <span style={{ fontSize: '0.74rem', color: 'var(--markt)', fontWeight: 500 }}>keep</span>
+          <span style={{ fontSize: '0.74rem', color: 'var(--markt)', fontWeight: 500 }}>Keep</span>
           <EscChip>↵</EscChip>
         </span>
       )}
       {omniIsSearch && (
         <span
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--s1-5)',
+            whiteSpace: 'nowrap',
+          }}
         >
           <span style={{ fontSize: '0.72rem', color: 'var(--fnt)' }}>{shownCount} found</span>
           <EscChip>esc</EscChip>
@@ -180,7 +191,12 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
       )}
       {omniTagIdle && (
         <span
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--s1-5)',
+            whiteSpace: 'nowrap',
+          }}
         >
           <span style={{ fontSize: '0.72rem', color: 'var(--fnt)' }}>
             {shownCount} of {libCount}
@@ -195,7 +211,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
             color: 'var(--fnt)',
             border: '1px solid var(--line)',
             borderRadius: 5,
-            padding: '2px 6px',
+            padding: 'var(--s-0-5) var(--s1-5)',
             background: 'var(--bg)',
           }}
         >
@@ -215,7 +231,7 @@ function EscChip({ children }: { children: React.ReactNode }) {
         color: 'var(--fnt)',
         border: '1px solid var(--line)',
         borderRadius: 5,
-        padding: '2px 6px',
+        padding: 'var(--s-0-5) var(--s1-5)',
         background: 'var(--bg)',
       }}
     >

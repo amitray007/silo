@@ -18,6 +18,7 @@
 import type { SourceData } from '@silo/core';
 import { sourceDataSchema } from '@silo/core';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
+import { fetchJsonObject } from './fetch-json.js';
 
 /** The subset of the oEmbed JSON response this enricher actually reads. */
 interface YouTubeOEmbedResponse {
@@ -44,16 +45,8 @@ export async function enrichYouTube(
   videoId: string,
   fetchFn: (url: string) => Promise<SafeFetchResult>,
 ): Promise<YouTubeSourceData | undefined> {
-  const result = await fetchFn(oembedUrl(videoId));
-  if (!result.ok) return undefined;
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(result.html);
-  } catch {
-    return undefined;
-  }
-  if (parsed === null || typeof parsed !== 'object') return undefined;
+  const parsed = await fetchJsonObject(oembedUrl(videoId), fetchFn);
+  if (parsed === undefined) return undefined;
 
   const data = parsed as YouTubeOEmbedResponse;
   const candidate = {

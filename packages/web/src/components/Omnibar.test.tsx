@@ -35,7 +35,7 @@ describe('Omnibar', () => {
 
   it('typing URL-looking text -> the "keep ↵" affordance, not the search chip', () => {
     render(<Omnibar {...baseProps({ value: 'example.com', looksLikeUrl: true })} />);
-    expect(screen.getByText('keep')).toBeDefined();
+    expect(screen.getByText('Keep')).toBeDefined();
     expect(screen.getByText('↵')).toBeDefined();
     expect(screen.queryByText(/found/)).toBeNull();
   });
@@ -48,21 +48,21 @@ describe('Omnibar', () => {
 
   it("the tag pill disappears once search text is typed (matches v3's tagActive = !words.length)", () => {
     render(<Omnibar {...baseProps({ tagName: 'mcp', value: 'something', shownCount: 2 })} />);
-    expect(screen.queryByTitle('clear filter')).toBeNull();
+    expect(screen.queryByTitle('Clear filter')).toBeNull();
     expect(screen.getByText('2 found')).toBeDefined();
   });
 
   it('clicking the tag pill calls onClearTag', () => {
     const onClearTag = vi.fn();
     render(<Omnibar {...baseProps({ tagName: 'mcp', onClearTag })} />);
-    fireEvent.click(screen.getByTitle('clear filter'));
+    fireEvent.click(screen.getByTitle('Clear filter'));
     expect(onClearTag).toHaveBeenCalledTimes(1);
   });
 
   it('typing calls onChange with the new value', () => {
     const onChange = vi.fn();
     render(<Omnibar {...baseProps({ onChange })} />);
-    const input = screen.getByPlaceholderText(/paste a link to keep/i);
+    const input = screen.getByPlaceholderText(/Paste a link to keep/i);
     fireEvent.change(input, { target: { value: 'hello' } });
     expect(onChange).toHaveBeenCalledWith('hello');
   });
@@ -94,7 +94,7 @@ describe('Omnibar', () => {
     const onFocus = vi.fn();
     const onBlur = vi.fn();
     render(<Omnibar {...baseProps({ onFocus, onBlur })} />);
-    const input = screen.getByPlaceholderText(/paste a link to keep/i);
+    const input = screen.getByPlaceholderText(/Paste a link to keep/i);
     fireEvent.focus(input);
     expect(onFocus).toHaveBeenCalledTimes(1);
     fireEvent.blur(input);

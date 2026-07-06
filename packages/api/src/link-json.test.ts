@@ -158,4 +158,26 @@ describeIfPg('link-json (integration)', () => {
     expect(json.rank).toBe(0.42);
     expect(json.id).toBe(link.id);
   });
+
+  it('toTrashSearchResultJson carries the whitelist plus rank AND deletedAt (Trash search slice)', async () => {
+    const core = harness.mod();
+    const { toTrashSearchResultJson } = await import('./link-json.js');
+
+    const created = await core.createLink({
+      url: 'https://example.com/link-json-trash-search-path',
+      sourceKind: 'link',
+    });
+    await core.softDelete(created.id);
+    const { links: trashed } = await core.listTrash();
+    const trashedLink = trashed.find((l) => l.id === created.id);
+    expect(trashedLink).toBeDefined();
+    if (!trashedLink) return;
+
+    const json = toTrashSearchResultJson(trashedLink, 0.42);
+    expect(json.rank).toBe(0.42);
+    expect(json.id).toBe(trashedLink.id);
+    expect(typeof json.deletedAt).toBe('string');
+    expect(json.deletedAt.length).toBeGreaterThan(0);
+    expectNoLeakedFields(json);
+  });
 });

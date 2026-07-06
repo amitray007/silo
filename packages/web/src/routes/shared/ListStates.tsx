@@ -37,10 +37,27 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
   return (
     <CenteredPanel>
       <GrainDot size={22} />
-      <p style={{ margin: '22px 0 0', fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink)' }}>
+      <p
+        style={{
+          margin: '22px 0 0',
+          fontSize: '0.92rem',
+          fontWeight: 500,
+          color: 'var(--ink)',
+          letterSpacing: 'var(--tracking-tight)',
+          textWrap: 'balance',
+        }}
+      >
         {title}
       </p>
-      <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--mut)', maxWidth: '24rem' }}>
+      <p
+        style={{
+          margin: '6px 0 0',
+          fontSize: '0.84rem',
+          color: 'var(--mut)',
+          maxWidth: '24rem',
+          textWrap: 'pretty',
+        }}
+      >
         {body}
       </p>
     </CenteredPanel>
@@ -51,7 +68,7 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
 export function NoSearchResults({ q }: { q: string }) {
   return (
     <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--fnt)' }}>
-      nothing found for "{q}"
+      Nothing found for "{q}"
     </p>
   );
 }
@@ -60,10 +77,27 @@ export function NoSearchResults({ q }: { q: string }) {
 export function ErrorState({ error }: { error: ApiError }) {
   return (
     <CenteredPanel>
-      <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500, color: 'var(--warn)' }}>
-        Couldn't load your links
+      <p
+        style={{
+          margin: 0,
+          fontSize: '0.92rem',
+          fontWeight: 500,
+          color: 'var(--warn)',
+          letterSpacing: 'var(--tracking-tight)',
+          textWrap: 'balance',
+        }}
+      >
+        Couldn't load your links.
       </p>
-      <p style={{ margin: '6px 0 0', fontSize: '0.84rem', color: 'var(--mut)', maxWidth: '24rem' }}>
+      <p
+        style={{
+          margin: '6px 0 0',
+          fontSize: '0.84rem',
+          color: 'var(--mut)',
+          maxWidth: '24rem',
+          textWrap: 'pretty',
+        }}
+      >
         {error.message}
       </p>
     </CenteredPanel>

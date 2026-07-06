@@ -21,11 +21,18 @@ type YoutubeSourceData = Extract<SourceData, { kind: 'youtube' }>;
  */
 function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNewsSourceData }) {
   return (
-    <div style={{ padding: '13px 14px 2px' }}>
+    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
       <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
         {title}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 7 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 'var(--s2-5)',
+          marginTop: 'var(--s1-5)',
+        }}
+      >
         <span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--markt)' }}>
           ▲ {sourceData.points} points
         </span>
@@ -50,7 +57,15 @@ function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNew
  * `/languages` fails) — the bar still renders at 0% fill rather than v3's
  * mocked 70% fallback, since a real 0% is honest and a fabricated 70% isn't.
  */
-function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubSourceData }) {
+function RepoVariant({
+  title,
+  linkId,
+  sourceData,
+}: {
+  title: string;
+  linkId: string;
+  sourceData: GithubSourceData;
+}) {
   const stats = [
     { key: 'stars', n: sourceData.stars, label: 'stars' },
     { key: 'forks', n: sourceData.forks, label: 'forks' },
@@ -58,53 +73,103 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
   ];
   const langPct = sourceData.languagePct ?? 0;
 
+  // The repo's OG social-preview image (GitHub's opengraph.githubassets.com
+  // card), captured into the link's `imageUrl` by the extractor and served
+  // through silo's own /api/preview-image proxy (never a third-party fetch
+  // from the browser). Same imageFailed + reset-on-linkId pattern as
+  // VideoVariant — the shared HoverPreview instance is reused across links,
+  // so a 404 from link A must not suppress link B's image. When there's no
+  // image (private repo, proxy 404), the card simply omits it and shows the
+  // stats-only layout as before — no placeholder needed here (unlike video,
+  // a repo card reads fine without the banner).
+  const [imageFailed, setImageFailed] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `linkId` is the intended reset trigger; `setImageFailed` is a stable useState setter.
+  useEffect(() => {
+    setImageFailed(false);
+  }, [linkId]);
+
   return (
-    <div style={{ padding: '13px 14px 2px' }}>
-      <div
-        style={{
-          fontSize: '0.84rem',
-          fontWeight: 500,
-          color: 'var(--ink)',
-          overflowWrap: 'break-word',
-        }}
-      >
-        {title}
-      </div>
-      {sourceData.description && (
-        <div style={{ fontSize: '0.76rem', color: 'var(--mut)', marginTop: 3, lineHeight: 1.5 }}>
-          {sourceData.description}
-        </div>
+    <>
+      {!imageFailed && (
+        // Decorative supplement to the title/stats below — alt="" is
+        // intentional (the title conveys the content).
+        <img
+          src={previewImageUrl(linkId)}
+          alt=""
+          onError={() => setImageFailed(true)}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: 130,
+            objectFit: 'cover',
+            borderBottom: '1px solid var(--line)',
+          }}
+        />
       )}
-      <div style={{ display: 'flex', gap: 18, marginTop: 12 }}>
-        {stats.map((s) => (
-          <div key={s.key}>
-            <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)' }}>{s.n}</div>
-            <div style={{ fontSize: '0.64rem', color: 'var(--ghost)', marginTop: 1 }}>
-              {s.label}
-            </div>
-          </div>
-        ))}
-      </div>
-      {sourceData.language && (
-        <>
+      <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
+        <div
+          style={{
+            fontSize: '0.84rem',
+            fontWeight: 500,
+            color: 'var(--ink)',
+            overflowWrap: 'break-word',
+            lineHeight: 1.4,
+          }}
+        >
+          {title}
+        </div>
+        {sourceData.description && (
           <div
             style={{
-              display: 'flex',
-              height: 3,
-              borderRadius: 2,
+              fontSize: '0.76rem',
+              color: 'var(--mut)',
+              marginTop: 3,
+              lineHeight: 'var(--lh-snug)',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              marginTop: 12,
             }}
           >
-            <span style={{ width: `${langPct}%`, background: 'var(--mark)' }} />
-            <span style={{ flex: 1, background: 'var(--line)' }} />
+            {sourceData.description}
           </div>
-          <div style={{ fontSize: '0.68rem', color: 'var(--ghost)', marginTop: 5 }}>
-            {sourceData.language}
-          </div>
-        </>
-      )}
-    </div>
+        )}
+        {/* K3 (oat-conformance audit): gap 18 is LEFT un-tokenized — it sits
+          between --s4/16px and --s5/20px with no clean step, and this is the
+          stats row's own deliberate breathing room. marginTop 12 → var(--s3)
+          exact (both places below). marginTop 1 is left un-tokenized (a
+          sub-scale optical nudge, no --s* value that small exists). */}
+        <div style={{ display: 'flex', gap: 18, marginTop: 'var(--s3)' }}>
+          {stats.map((s) => (
+            <div key={s.key}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)' }}>{s.n}</div>
+              <div style={{ fontSize: '0.64rem', color: 'var(--fnt)', marginTop: 1 }}>
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+        {sourceData.language && (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                height: 3,
+                borderRadius: 2,
+                overflow: 'hidden',
+                marginTop: 'var(--s3)',
+              }}
+            >
+              <span style={{ width: `${langPct}%`, background: 'var(--mark)' }} />
+              <span style={{ flex: 1, background: 'var(--line)' }} />
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
+              {sourceData.language}
+            </div>
+          </>
+        )}
+      </div>
+    </>
   );
 }
 
@@ -176,10 +241,10 @@ function VideoVariant({
               background: 'var(--bg)',
               border: '1px solid var(--line)',
               borderRadius: 5,
-              padding: '2px 8px',
+              padding: 'var(--s-0-5) var(--s2)',
             }}
           >
-            video thumbnail
+            Video thumbnail
           </span>
         </div>
       ) : (
@@ -198,11 +263,11 @@ function VideoVariant({
           }}
         />
       )}
-      <div style={{ padding: '12px 14px 2px' }}>
+      <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
         <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
           {title}
         </div>
-        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 4 }}>
+        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1)' }}>
           {sourceData.channel}
         </div>
       </div>
@@ -225,16 +290,27 @@ function GenericVariant({
   hasNote: boolean;
 }) {
   return (
-    <div style={{ padding: '13px 14px 2px' }}>
+    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
       <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
         {title}
       </div>
       {hasTags && (
-        <div style={{ fontSize: '0.76rem', color: 'var(--ghost)', marginTop: 6 }}>{tagLine}</div>
+        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
+          {tagLine}
+        </div>
       )}
       {hasNote && (
         <div
-          style={{ fontSize: '0.78rem', color: 'var(--mut)', fontStyle: 'italic', marginTop: 6 }}
+          style={{
+            fontSize: '0.78rem',
+            color: 'var(--mut)',
+            fontStyle: 'italic',
+            marginTop: 'var(--s1-5)',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
         >
           "{notes}"
         </div>
@@ -288,7 +364,7 @@ export function HoverPreview({
   const meta = relativeTimeFromNow(link.createdAt);
 
   return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — every actual control inside (the `open ↗` anchor, the ✕ close button) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
+    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — the only actual control inside (the `open ↗` anchor) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
     <div
       className="silo-popover"
       onMouseEnter={onKeep}
@@ -302,7 +378,8 @@ export function HoverPreview({
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 12,
-        boxShadow: '0 24px 60px -24px rgba(40,28,8,.5)',
+        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
+        boxShadow: 'var(--elev-2)',
         overflow: 'hidden',
         boxSizing: 'border-box',
         // The card is placed to the RIGHT of the hovered row
@@ -313,33 +390,10 @@ export function HoverPreview({
         transformOrigin: 'left center',
       }}
     >
-      <button
-        type="button"
-        title="close"
-        aria-label="close preview"
-        onClick={onHide}
-        className="silo-icon-btn-sm"
-        style={{
-          position: 'absolute',
-          top: 9,
-          right: 9,
-          border: 0,
-          background: 'none',
-          fontFamily: 'inherit',
-          fontSize: '0.72rem',
-          lineHeight: 1,
-          color: 'var(--ghost)',
-          cursor: 'pointer',
-          padding: 4,
-          borderRadius: 6,
-        }}
-      >
-        ✕
-      </button>
       {link.sourceData.kind === 'hacker_news' ? (
         <HnVariant title={title} sourceData={link.sourceData} />
       ) : link.sourceData.kind === 'github' ? (
-        <RepoVariant title={title} sourceData={link.sourceData} />
+        <RepoVariant title={title} linkId={link.id} sourceData={link.sourceData} />
       ) : link.sourceData.kind === 'youtube' ? (
         <VideoVariant title={title} linkId={link.id} sourceData={link.sourceData} />
       ) : (
@@ -355,12 +409,12 @@ export function HoverPreview({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          padding: '10px 14px 11px',
-          marginTop: 9,
+          gap: 'var(--s2)',
+          padding: 'var(--s2-5) var(--s3-5) var(--s2-5)',
+          marginTop: 'var(--s2)',
           borderTop: '1px solid var(--line)',
           fontSize: '0.72rem',
-          color: 'var(--ghost)',
+          color: 'var(--fnt)',
         }}
       >
         <span>{domain}</span>
@@ -378,7 +432,7 @@ export function HoverPreview({
             fontWeight: 500,
           }}
         >
-          open ↗
+          Open ↗
         </a>
       </div>
     </div>,

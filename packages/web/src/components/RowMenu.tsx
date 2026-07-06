@@ -24,14 +24,14 @@ function menuItemStyle(active = false): React.CSSProperties {
   return {
     display: 'flex',
     alignItems: 'center',
-    gap: 9,
+    gap: 'var(--s2)',
     width: '100%',
     boxSizing: 'border-box',
     border: 0,
     background: active ? 'var(--hov)' : 'none',
     fontFamily: 'inherit',
     textAlign: 'left',
-    padding: '8px 10px',
+    padding: 'var(--s2) var(--s2-5)',
     borderRadius: 8,
     fontSize: '0.82rem',
     fontWeight: 500,
@@ -111,7 +111,7 @@ const iconSlotStyle: React.CSSProperties = {
 };
 
 function Divider() {
-  return <div style={{ borderTop: '1px solid var(--line)', margin: '5px 4px' }} />;
+  return <div style={{ borderTop: '1px solid var(--line)', margin: 'var(--s1-5) var(--s1)' }} />;
 }
 
 /** A small, consistent 14px stroke icon — shared sizing for every RowMenu action icon (open/copy/edit), so they read as one deliberate icon set rather than mismatched glyph sizes. */
@@ -186,8 +186,9 @@ function TagsFlyout({ link }: { link: LinkJson }) {
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 12,
-        boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
-        padding: 6,
+        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
+        boxShadow: 'var(--elev-2)',
+        padding: 'var(--s1-5)',
         // Grows leftward from the "tags" trigger it's anchored to (its right
         // edge sits flush against the trigger's left edge) — not the popover's
         // own center, per review-animations-STANDARDS.md's origin-aware rule.
@@ -197,13 +198,13 @@ function TagsFlyout({ link }: { link: LinkJson }) {
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="find tag"
+        placeholder="Find tag"
         className="silo-field"
         style={{
           width: '100%',
           boxSizing: 'border-box',
-          margin: '0 0 4px',
-          padding: '6px 9px',
+          margin: '0 0 var(--s1)',
+          padding: 'var(--s1-5) var(--s2)',
           border: '1px solid var(--line)',
           borderRadius: 7,
           background: 'var(--bg2)',
@@ -227,10 +228,12 @@ function TagsFlyout({ link }: { link: LinkJson }) {
  * The row `⋯` menu popover (plan 011, V3-4; redesigned per a direct
  * user-feedback polish pass — build brief item 11): a tags fly-out row, a
  * divider, open-in-new-tab, copy-link, a divider, edit, move-to-trash. Same
- * action set + lowercase copy as v3, but with a consistent 14px SVG icon set
- * (replacing the mismatched glyph characters `↗`/`⧉`/`✎`), roomier
- * padding/radii, and a `--hov` background on hover/focus so every row reads
- * as an obviously clickable target rather than flat text. Rendered by
+ * action set as v3, but with a consistent 14px SVG icon set (replacing the
+ * mismatched glyph characters `↗`/`⧉`/`✎`), roomier padding/radii, and a
+ * `--hov` background on hover/focus so every row reads as an obviously
+ * clickable target rather than flat text. Copy was lowercase as a "v3"
+ * decision; superseded by the app-wide sentence-case decision (all labels
+ * below now read `Tags`/`Open in new tab`/etc.). Rendered by
  * `LinkRow` only while `useRowMenu().openMenuId === link.id`; the whole
  * popover stops `mousedown`/`click` propagation (mirrors v3's `onMouseDown={{
  * stop }}`) so clicking inside it never bubbles to the row's `<a>` (no
@@ -285,15 +288,16 @@ export function RowMenu({ link }: { link: LinkJson }) {
       onClick={stop}
       style={{
         position: 'absolute',
-        right: 8,
+        right: 'var(--s2)',
         top: 'calc(100% - 3px)',
         zIndex: 30,
         width: 224,
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 12,
-        boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
-        padding: 5,
+        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
+        boxShadow: 'var(--elev-2)',
+        padding: 'var(--s1-5)',
         // Anchored top-right to the row's `⋯` trigger — scales from there,
         // not center (review-animations-STANDARDS.md's origin-aware rule).
         transformOrigin: 'top right',
@@ -313,9 +317,9 @@ export function RowMenu({ link }: { link: LinkJson }) {
           style={menuItemStyle(tagsFlyOpen)}
         >
           <span style={iconSlotStyle}>#</span>
-          <span>tags</span>
+          <span>Tags</span>
           {link.tags.length > 0 && (
-            <span style={{ fontSize: '0.72rem', color: 'var(--ghost)', fontWeight: 400 }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--fnt)', fontWeight: 400 }}>
               {link.tags.length}
             </span>
           )}
@@ -330,7 +334,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
         <span style={iconSlotStyle}>
           <OpenIcon />
         </span>
-        <span>open in new tab</span>
+        <span>Open in new tab</span>
       </MenuItem>
       <MenuItem onClick={handleCopy}>
         <span style={iconSlotStyle}>
@@ -342,7 +346,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
             marks that used to justify `--markt` here (note/claude/enriching)
             were removed in this same polish pass. */}
         <span style={{ color: copied ? 'var(--ink)' : 'var(--mut)' }}>
-          {copied ? 'copied' : 'copy link'}
+          {copied ? 'Copied' : 'Copy link'}
         </span>
       </MenuItem>
 
@@ -352,13 +356,13 @@ export function RowMenu({ link }: { link: LinkJson }) {
         <span style={iconSlotStyle}>
           <EditIcon />
         </span>
-        <span>edit</span>
+        <span>Edit</span>
       </MenuItem>
       <MenuItem onClick={handleTrash}>
         <span style={iconSlotStyle}>
           <TrashIcon size={14} stroke="var(--ghost)" />
         </span>
-        <span>move to trash</span>
+        <span>Move to trash</span>
       </MenuItem>
     </div>
   );
