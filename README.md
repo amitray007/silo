@@ -26,9 +26,22 @@ All of it over **10 MCP tools**: `capture_link`, `get_link`, `search_links`,
 `retry_capture` — and over an **HTTP API** (`@silo/api`) that the human web UI
 uses (the same operations; adapters never drift because both call one core).
 
-The **web UI** (`@silo/web`, React + Vite in the "Oat" design system) is taking
-shape: the app frame + a live, themed sidebar are in; the library/list screens
-land incrementally. See [Web UI](#web-ui) below to run it.
+Beyond the core loop, silo also:
+
+- **Enriches by source** — Hacker News, GitHub, and YouTube links get
+  source-specific data (points/comments, stars/forks/language, channel/
+  thumbnail) via a small plugin registry; each source is togglable in Settings.
+- **Maintains itself** — scheduled background jobs purge old trash on a cycle,
+  re-enqueue any capture stranded mid-enrichment, and alert on the dead-letter
+  queue.
+- **Persists preferences** — theme, trash-purge cycle (7/30/90 days), and the
+  per-source plugin toggles are stored server-side.
+
+The **web UI** (`@silo/web`, React + Vite in the "Oat" design system) is a
+complete app: a day-grouped library list with live-updating capture (paste a
+link and watch it enrich in place), rich hover previews, tags, notes, full-text
+search, trash with restore/purge, and a settings screen — in light or dark. See
+[Web UI](#web-ui) below to run it.
 
 ## Why
 
@@ -93,34 +106,36 @@ pnpm db:migrate       # apply the schema
 pnpm dev              # runs @silo/api (:8787) + @silo/web (Vite :5173)
 ```
 
-Then open **http://localhost:5173**. Vite proxies `/api/*` to the API, so the SPA
-is same-origin in dev (no CORS). The API binds to **loopback** (`127.0.0.1`) and
-has **no auth** — it's a single-user localhost surface (set `HOST` to bind wider,
-which prints a warning). The `PORT`/`HOST` for the API are documented in
-`.env.example`.
+`pnpm dev` runs **all three** — the API, the SPA, **and the enrichment worker** —
+together, so a pasted link enriches end-to-end with nothing else to start. Then
+open **http://localhost:5173**. Vite proxies `/api/*` to the API, so the SPA is
+same-origin in dev (no CORS). The API binds to **loopback** (`127.0.0.1`) and has
+**no auth** — it's a single-user localhost surface (set `HOST` to bind wider,
+which prints a warning). `PORT`/`HOST` and the worker's job cadences are
+documented in `.env.example`.
 
 Two ways to run silo, for two audiences:
 
 - **`pnpm start`** — the turnkey `silo` process (MCP server + worker, one binary)
   for an **agent** to drive over MCP. No web server.
-- **`pnpm dev`** — the API + web UI for a **human**, plus you'll want the worker
-  for enrichment (run `pnpm start` alongside, or a standalone `@silo/worker`).
+- **`pnpm dev`** — the API + web UI + worker for a **human**. Everything the app
+  needs, one command.
 
-The UI is early — the app frame + a live sidebar are in; the library/list screens
-land incrementally. It renders in light or dark (the toggle top-left).
+It renders in light or dark (the toggle top-left).
 
 ## Architecture
 
 A TypeScript monorepo. Every human- or agent-facing operation goes through **one
-core**, so the (future) UI and the agent can never drift.
+core**, so the web UI and the agent can never drift.
 
 ```
 packages/
   core/        the brain — all operations + data access
   db/          Postgres schema, migrations, queries (Drizzle)
-  worker/      background enrichment (SSRF-safe fetch → extract) service ─▶ core
-  mcp/server/  MCP adapter (stdio) — 10 tools                            ─▶ core
-  api/         HTTP adapter (Hono) — the full read/write surface          ─▶ core
+  worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
+  queue/       pg-boss setup shared by the worker and API (enqueue seam)   ─▶ core
+  mcp/server/  MCP adapter (stdio) — 10 tools                              ─▶ core
+  api/         HTTP adapter (Hono) — the full read/write surface           ─▶ core
   web/         React SPA (Vite, "Oat" design) — talks to the API over HTTP
   app/         composition root — runs the MCP server + worker as `silo`
   tsconfig/    shared strict TypeScript config

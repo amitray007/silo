@@ -29,7 +29,7 @@
 **Brand:** one amber "grain" dot (radial `#E8B054→#C98F2D`) + lowercase `silo` wordmark, weight 500, tight tracking. The dot never becomes a button fill or UI chrome.
 
 ## Components (as designed)
-- **Row:** favicon + title (ink 500) + domain suffix (ghost 400) — nothing else at rest. Hover reveals `domain · time`, edit, trash. Marks whisper: ¶ note (amber) · ◆ claude (ghost) · ◌ incomplete (amber, reason+retry in hover meta). Notes reveal under the row, italic muted.
+- **Row:** favicon + title (ink 500) + domain suffix (ghost 400) — nothing else at rest. Hover reveals `domain · time`, edit, trash. The settled-state title badges (¶ note · ◆ claude) were **removed** in a later polish pass — a `full`/`partial`/`bare` row carries no status glyph. The one surviving mark is the transient `◌ capturing` pulse, shown next to the domain **only while a row is `enriching`** and gone the instant it settles ("silence means complete" carves out room for an in-progress indicator, not a resting badge). Notes still reveal under the row as an italic muted line when set.
 - **Omnibar:** one soft field on bg-2 — paste = keep, type = find, ⌘K.
 - **Filters:** tag pills (soft, counts as ghosts); segmented pill reserved for true either/or (library/trash, light/dark). Active state = ink on raised bg, never amber.
 - **Day labels:** Today / Yesterday / This week / Earlier — small warm 500.
