@@ -20,6 +20,7 @@ import {
   registerEnqueuer,
 } from '@silo/queue';
 import { enrichLink } from './enrich.js';
+import { registerScheduledJobs } from './jobs/index.js';
 
 /** Local per-node worker slots (plan: "the worker" — not yet horizontally tuned). */
 const LOCAL_CONCURRENCY = 5;
@@ -63,6 +64,15 @@ export async function startWorker(): Promise<WorkerHandle> {
   // in THIS process (or any process that imported and registered) enqueue
   // transactionally. (The API process, when it exists, registers the same way.)
   registerEnqueuer(boss);
+
+  // Register the three scheduled maintenance jobs (scheduling-jobs slice):
+  // purge-trash (daily), sweep-enriching (~5min), dlq-alert (~10min). Each
+  // creates its own queue, schedules its cron (idempotent upsert-by-name —
+  // re-running startWorker never stacks a duplicate schedule), and installs
+  // its work handler. See packages/worker/src/jobs/ for cadence + handler
+  // details; failures inside a job are caught there and never crash this
+  // process.
+  await registerScheduledJobs(boss);
 
   await boss.work<{ linkId: string }>(
     ENRICH_LINK_QUEUE,

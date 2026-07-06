@@ -479,6 +479,9 @@ importers:
       metascraper-url:
         specifier: 'catalog:'
         version: 5.51.1(debug@4.4.3)
+      pg-boss:
+        specifier: 'catalog:'
+        version: 12.25.0
       undici:
         specifier: 'catalog:'
         version: 8.6.0
