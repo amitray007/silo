@@ -68,7 +68,7 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
 export function NoSearchResults({ q }: { q: string }) {
   return (
     <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--fnt)' }}>
-      nothing found for "{q}"
+      Nothing found for "{q}"
     </p>
   );
 }
@@ -87,7 +87,7 @@ export function ErrorState({ error }: { error: ApiError }) {
           textWrap: 'balance',
         }}
       >
-        Couldn't load your links
+        Couldn't load your links.
       </p>
       <p
         style={{

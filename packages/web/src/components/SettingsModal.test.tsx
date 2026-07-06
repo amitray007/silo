@@ -64,7 +64,7 @@ describe('SettingsModal', () => {
     const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
     expect(pluginsTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Preferences' })).toBeDefined();
-    expect(screen.getByRole('tab', { name: 'Import/Export' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Import / export' })).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Access' })).toBeDefined();
     expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
   });
@@ -85,7 +85,7 @@ describe('SettingsModal', () => {
     expect(screen.getAllByText('Theme').length).toBeGreaterThan(0);
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Import/Export' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Import / export' }));
     expect(screen.getByText('Import')).toBeDefined();
     expect(screen.getByText('Export')).toBeDefined();
     expect(screen.queryByText('Theme')).toBeNull();
@@ -158,10 +158,10 @@ describe('SettingsModal', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'dark' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
 
-      fireEvent.click(screen.getByRole('button', { name: 'light' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Light' }));
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
     });
 
@@ -189,7 +189,7 @@ describe('SettingsModal', () => {
   describe('Import/Export tab (stubbed)', () => {
     it('renders Import/Export rows with disabled buttons', () => {
       renderModal();
-      fireEvent.click(screen.getByRole('tab', { name: 'Import/Export' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Import / export' }));
 
       const chooseFile = screen.getByRole('button', { name: /choose file/i });
       const download = screen.getByRole('button', { name: /download/i });

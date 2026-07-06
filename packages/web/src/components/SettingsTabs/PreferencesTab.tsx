@@ -27,14 +27,14 @@ export function PreferencesTab() {
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Theme</div>
-          <div style={rowDesc}>oat, in two lights</div>
+          <div style={rowDesc}>Oat, in two lights</div>
         </div>
         <ThemeToggle />
       </div>
       <div style={settingsRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Trash</div>
-          <div style={rowDesc}>auto-empty deleted links after</div>
+          <div style={rowDesc}>Auto-empty deleted links after</div>
         </div>
         <button
           type="button"

@@ -127,8 +127,8 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         <button
           type="button"
           onClick={toggleTagFind}
-          title="find a tag"
-          aria-label="find a tag"
+          title="Find a tag"
+          aria-label="Find a tag"
           aria-expanded={findOpen}
           className="silo-icon-btn-sm"
           style={{
@@ -152,7 +152,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           ref={findInputRef}
           value={query}
           onChange={(event) => setQuery(event.target.value)}
-          placeholder="find tag"
+          placeholder="Find tag"
           className="silo-field"
           style={{
             margin: '0 4px 3px',
@@ -193,7 +193,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             cursor: 'pointer',
           }}
         >
-          {showAll ? 'show less' : `+${moreCount} more`}
+          {showAll ? 'Show less' : `+${moreCount} more`}
         </button>
       )}
 
@@ -205,7 +205,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             onChange={(event) => setNewTagValue(event.target.value)}
             onKeyDown={onNewTagKeyDown}
             onBlur={closeNewTag}
-            placeholder="tag name"
+            placeholder="Tag name"
             className="silo-field"
             style={{
               margin: '2px 4px',
@@ -230,7 +230,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
                 color: 'var(--warn)',
               }}
             >
-              couldn't create — try again
+              Couldn't create — try again
             </p>
           )}
         </>
@@ -254,7 +254,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             cursor: 'pointer',
           }}
         >
-          + new tag
+          + New tag
         </button>
       )}
     </div>

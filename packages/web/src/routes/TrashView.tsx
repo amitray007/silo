@@ -56,12 +56,12 @@ function TrashSelectionDock({ selectedIds }: { selectedIds: string[] }) {
       <DockSelectedLabel count={selectedIds.length} />
       <DockDivider />
       <DockIconAction onClick={handleRestore} icon={<DockRestoreIcon />} disabled={busy}>
-        restore
+        Restore
       </DockIconAction>
       <DockIconAction onClick={handleDeleteNow} icon={<DockTrashIcon />} disabled={busy}>
-        delete now
+        Delete now
       </DockIconAction>
-      <DockAction onClick={selection.clear}>clear</DockAction>
+      <DockAction onClick={selection.clear}>Clear</DockAction>
       <DockEscHint />
     </Dock>
   );
@@ -81,10 +81,10 @@ function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; a
   return (
     <Dock padding="9px 18px">
       <span style={{ fontSize: '0.74rem', color: 'var(--fnt)', whiteSpace: 'nowrap' }}>
-        deleted links keep their text · auto-empties after {purgeWindowDays} days
+        Deleted links keep their text · auto-empties after {purgeWindowDays} days
       </span>
       <DockDivider />
-      <DockAction onClick={() => selection.selectAll(allIds)}>select all</DockAction>
+      <DockAction onClick={() => selection.selectAll(allIds)}>Select all</DockAction>
       <DockIconAction
         onClick={() => {
           if (!emptyTrash.isPending) emptyTrash.mutate();
@@ -92,7 +92,7 @@ function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; a
         icon={<DockTrashIcon />}
         disabled={emptyTrash.isPending}
       >
-        empty all
+        Empty all
       </DockIconAction>
     </Dock>
   );

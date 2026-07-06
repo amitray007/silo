@@ -50,8 +50,8 @@ function TrashRowActions({ id }: { id: string }) {
     <>
       <button
         type="button"
-        title="restore"
-        aria-label="restore"
+        title="Restore"
+        aria-label="Restore"
         disabled={busy}
         className="silo-trash-row-icon"
         onMouseDown={(e) => e.stopPropagation()}
@@ -68,8 +68,8 @@ function TrashRowActions({ id }: { id: string }) {
       </button>
       <button
         type="button"
-        title="delete now"
-        aria-label="delete now"
+        title="Delete now"
+        aria-label="Delete now"
         disabled={busy}
         className="silo-trash-row-icon"
         onMouseDown={(e) => e.stopPropagation()}
@@ -184,7 +184,7 @@ export function TrashRow({
         </span>
       </span>
       <span
-        title={`auto-deletes in ${left} days`}
+        title={`Auto-deletes in ${left} days`}
         style={{
           flex: 'none',
           display: 'inline-flex',

@@ -97,7 +97,7 @@ describe('HoverPreview', () => {
     }
   });
 
-  it('the footer "open ↗" is a real anchor with the correct href/target/rel', () => {
+  it('the footer "Open ↗" is a real anchor with the correct href/target/rel', () => {
     render(
       <HoverPreview
         link={makeLink({ url: 'https://example.com/x' })}
@@ -106,7 +106,7 @@ describe('HoverPreview', () => {
         onHide={vi.fn()}
       />,
     );
-    const anchor = screen.getByRole('link', { name: 'open ↗' }) as HTMLAnchorElement;
+    const anchor = screen.getByRole('link', { name: 'Open ↗' }) as HTMLAnchorElement;
     expect(anchor.getAttribute('href')).toBe('https://example.com/x');
     expect(anchor.getAttribute('target')).toBe('_blank');
     expect(anchor.getAttribute('rel')).toBe('noopener');
@@ -161,7 +161,7 @@ describe('HoverPreview', () => {
       expect(screen.getByText('Show HN: I built a thing')).toBeDefined();
       expect(screen.getByText('▲ 342 points')).toBeDefined();
       expect(screen.getByText('128 comments')).toBeDefined();
-      expect(screen.getByRole('link', { name: 'open ↗' })).toBeDefined();
+      expect(screen.getByRole('link', { name: 'Open ↗' })).toBeDefined();
     });
 
     it('renders the GitHub variant: title/description, stats row, and a language bar+name', () => {
@@ -237,7 +237,7 @@ describe('HoverPreview', () => {
       );
       const img = document.querySelector('img') as HTMLImageElement;
       fireEvent.error(img);
-      expect(screen.getByText('video thumbnail')).toBeDefined();
+      expect(screen.getByText('Video thumbnail')).toBeDefined();
       expect(document.querySelector('img')).toBeNull();
     });
 
@@ -255,7 +255,7 @@ describe('HoverPreview', () => {
         />,
       );
       fireEvent.error(document.querySelector('img') as HTMLImageElement);
-      expect(screen.getByText('video thumbnail')).toBeDefined();
+      expect(screen.getByText('Video thumbnail')).toBeDefined();
       expect(document.querySelector('img')).toBeNull();
 
       rerender(
@@ -270,7 +270,7 @@ describe('HoverPreview', () => {
       const imgB = document.querySelector('img') as HTMLImageElement;
       expect(imgB).not.toBeNull();
       expect(imgB.getAttribute('src')).toBe('/api/preview-image?linkId=video-b');
-      expect(screen.queryByText('video thumbnail')).toBeNull();
+      expect(screen.queryByText('Video thumbnail')).toBeNull();
     });
 
     it('falls back to the generic variant for a plain link (kind: "link")', () => {

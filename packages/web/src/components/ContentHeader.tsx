@@ -75,7 +75,7 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
             maxWidth: '16rem',
           }}
         >
-          couldn't save that — {captureError}
+          Couldn't save that — {captureError}
         </span>
       )}
       {children}

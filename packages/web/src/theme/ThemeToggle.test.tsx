@@ -22,8 +22,8 @@ describe('ThemeToggle', () => {
         <ThemeToggle />
       </ThemeProvider>,
     );
-    expect(screen.getByRole('button', { name: 'light' })).toBeDefined();
-    expect(screen.getByRole('button', { name: 'dark' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Light' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Dark' })).toBeDefined();
   });
 
   it('reflects the current theme as the active/pressed option', () => {
@@ -32,8 +32,8 @@ describe('ThemeToggle', () => {
         <ThemeToggle />
       </ThemeProvider>,
     );
-    expect(screen.getByRole('button', { name: 'light' }).getAttribute('aria-pressed')).toBe('true');
-    expect(screen.getByRole('button', { name: 'dark' }).getAttribute('aria-pressed')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Light' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('false');
   });
 
   it('clicking an option sets the theme and updates the pressed state', () => {
@@ -44,10 +44,10 @@ describe('ThemeToggle', () => {
     );
 
     act(() => {
-      screen.getByRole('button', { name: 'dark' }).click();
+      screen.getByRole('button', { name: 'Dark' }).click();
     });
 
-    expect(screen.getByRole('button', { name: 'dark' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('button', { name: 'Dark' }).getAttribute('aria-pressed')).toBe('true');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
@@ -58,7 +58,7 @@ describe('ThemeToggle', () => {
       </ThemeProvider>,
     );
 
-    const darkButton = screen.getByRole('button', { name: 'dark' });
+    const darkButton = screen.getByRole('button', { name: 'Dark' });
     darkButton.focus();
     expect(document.activeElement).toBe(darkButton);
 
@@ -75,7 +75,7 @@ describe('ThemeToggle', () => {
         <ThemeToggle />
       </ThemeProvider>,
     );
-    const active = screen.getByRole('button', { name: 'light' });
+    const active = screen.getByRole('button', { name: 'Light' });
     const bg = active.style.background;
     expect(bg).not.toMatch(/#c98f2d|#d9a441|#a87514/i);
     expect(bg).toBe('var(--hov)');

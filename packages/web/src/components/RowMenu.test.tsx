@@ -55,22 +55,22 @@ describe('RowMenu', () => {
 
   it('renders every v3 menu item: tags row, open-in-new-tab, copy link, edit, move to trash', () => {
     renderMenu();
-    expect(screen.getByText('tags')).toBeDefined();
-    expect(screen.getByText('open in new tab')).toBeDefined();
-    expect(screen.getByText('copy link')).toBeDefined();
-    expect(screen.getByText('edit')).toBeDefined();
-    expect(screen.getByText('move to trash')).toBeDefined();
+    expect(screen.getByText('Tags')).toBeDefined();
+    expect(screen.getByText('Open in new tab')).toBeDefined();
+    expect(screen.getByText('Copy link')).toBeDefined();
+    expect(screen.getByText('Edit')).toBeDefined();
+    expect(screen.getByText('Move to trash')).toBeDefined();
   });
 
-  it('shows the assigned tag count next to "tags"', () => {
+  it('shows the assigned tag count next to "Tags"', () => {
     renderMenu({ tags: ['mcp', 'ai'] });
-    // The count sits in its own span right after "tags".
+    // The count sits in its own span right after "Tags".
     expect(screen.getByText('2')).toBeDefined();
   });
 
   it('"open in new tab" is a real anchor to the link url', () => {
     renderMenu({ url: 'https://example.com/specific-path' });
-    const anchor = screen.getByText('open in new tab').closest('a') as HTMLAnchorElement;
+    const anchor = screen.getByText('Open in new tab').closest('a') as HTMLAnchorElement;
     expect(anchor.getAttribute('href')).toBe('https://example.com/specific-path');
     expect(anchor.getAttribute('target')).toBe('_blank');
     expect(anchor.getAttribute('rel')).toBe('noopener');
@@ -80,27 +80,27 @@ describe('RowMenu', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const { link } = renderMenu({ url: 'https://example.com/copy-me' });
 
-    fireEvent.click(screen.getByText('copy link'));
+    fireEvent.click(screen.getByText('Copy link'));
 
     expect(navigator.clipboard.writeText).toHaveBeenCalledWith(link.url);
-    expect(screen.getByText('copied')).toBeDefined();
+    expect(screen.getByText('Copied')).toBeDefined();
 
     act(() => {
       vi.advanceTimersByTime(700);
     });
-    await waitFor(() => expect(screen.getByText('copy link')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Copy link')).toBeDefined());
     vi.useRealTimers();
   });
 
   it('clicking "edit" opens the edit modal for this link (via context) and does not itself close via closeMenu call errors', () => {
     renderMenu();
-    fireEvent.click(screen.getByText('edit'));
+    fireEvent.click(screen.getByText('Edit'));
     expect(screen.getByTestId('editing-link-id').textContent).toBe('row-1');
   });
 
   it('clicking "move to trash" calls the trash mutation (POSTs /api/links/:id/trash)', async () => {
     renderMenu();
-    fireEvent.click(screen.getByText('move to trash'));
+    fireEvent.click(screen.getByText('Move to trash'));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -112,15 +112,15 @@ describe('RowMenu', () => {
 
   it('opening the tags fly-out (hover or click) shows the find-tag input and toggle list', () => {
     renderMenu({ tags: ['mcp'] });
-    fireEvent.click(screen.getByText('tags'));
-    expect(screen.getByPlaceholderText('find tag')).toBeDefined();
+    fireEvent.click(screen.getByText('Tags'));
+    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
     // 'mcp' appears once in the trigger row's count area's sibling list item too.
     expect(screen.getAllByText('mcp').length).toBeGreaterThan(0);
   });
 
   it('toggling an assigned tag off calls the remove-tag mutation (DELETE)', async () => {
     renderMenu({ tags: ['mcp'] });
-    fireEvent.click(screen.getByText('tags'));
+    fireEvent.click(screen.getByText('Tags'));
 
     const tagOption = screen.getAllByText('mcp').find((el) => el.closest('button'));
     const button = tagOption?.closest('button');
@@ -145,7 +145,7 @@ describe('RowMenu', () => {
       }),
     );
     renderMenu({ tags: ['mcp'] });
-    fireEvent.click(screen.getByText('tags'));
+    fireEvent.click(screen.getByText('Tags'));
 
     await waitFor(() => expect(screen.getByText('design')).toBeDefined());
     fireEvent.click(screen.getByText('design').closest('button') as HTMLButtonElement);
@@ -161,22 +161,22 @@ describe('RowMenu', () => {
   it('gives every action row a --hov background on hover, not just "tags" (review fix: menuItemStyle() was called with no argument for these rows)', () => {
     renderMenu();
 
-    const openRow = screen.getByText('open in new tab').closest('a') as HTMLElement;
+    const openRow = screen.getByText('Open in new tab').closest('a') as HTMLElement;
     expect(openRow.style.background).not.toBe('var(--hov)');
     fireEvent.mouseEnter(openRow);
     expect(openRow.style.background).toBe('var(--hov)');
     fireEvent.mouseLeave(openRow);
     expect(openRow.style.background).not.toBe('var(--hov)');
 
-    const copyRow = screen.getByText('copy link').closest('button') as HTMLElement;
+    const copyRow = screen.getByText('Copy link').closest('button') as HTMLElement;
     fireEvent.mouseEnter(copyRow);
     expect(copyRow.style.background).toBe('var(--hov)');
 
-    const editRow = screen.getByText('edit').closest('button') as HTMLElement;
+    const editRow = screen.getByText('Edit').closest('button') as HTMLElement;
     fireEvent.mouseEnter(editRow);
     expect(editRow.style.background).toBe('var(--hov)');
 
-    const trashRow = screen.getByText('move to trash').closest('button') as HTMLElement;
+    const trashRow = screen.getByText('Move to trash').closest('button') as HTMLElement;
     fireEvent.mouseEnter(trashRow);
     expect(trashRow.style.background).toBe('var(--hov)');
   });
@@ -199,7 +199,7 @@ describe('RowMenu', () => {
       </div>,
     );
 
-    fireEvent.click(screen.getByText('copy link'));
+    fireEvent.click(screen.getByText('Copy link'));
     expect(outerHandler).not.toHaveBeenCalled();
   });
 });

@@ -42,7 +42,7 @@ describe('ContentHeader', () => {
   it('shows a calm capture-error message when captureError is set (plan 011, V3-3)', () => {
     render(<ContentHeader title="Library" captureError="Not a valid http(s) URL" />);
     const alert = screen.getByRole('alert');
-    expect(alert.textContent).toContain("couldn't save that");
+    expect(alert.textContent).toContain("Couldn't save that");
     expect(alert.textContent).toContain('Not a valid http(s) URL');
   });
 

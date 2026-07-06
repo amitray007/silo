@@ -201,7 +201,7 @@ function VideoVariant({
               padding: 'var(--s-0-5) var(--s2)',
             }}
           >
-            video thumbnail
+            Video thumbnail
           </span>
         </div>
       ) : (
@@ -349,8 +349,8 @@ export function HoverPreview({
     >
       <button
         type="button"
-        title="close"
-        aria-label="close preview"
+        title="Close"
+        aria-label="Close preview"
         onClick={onHide}
         className="silo-icon-btn-sm"
         style={{
@@ -412,7 +412,7 @@ export function HoverPreview({
             fontWeight: 500,
           }}
         >
-          open ↗
+          Open ↗
         </a>
       </div>
     </div>,

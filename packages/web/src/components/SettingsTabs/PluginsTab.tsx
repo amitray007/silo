@@ -1,10 +1,10 @@
 import { badgeChip, rowDesc, rowLabel, settingsRowDivided, tabNote } from './rowStyles';
 
 const PLUGIN_ROWS = [
-  { key: 'hn', name: 'Hacker News', desc: 'points and comments — inline and on hover' },
-  { key: 'tw', name: 'Twitter / X', desc: 'author and post text — inline and on hover' },
-  { key: 'gh', name: 'GitHub', desc: 'repo card on hover — stars, forks, issues' },
-  { key: 'yt', name: 'YouTube', desc: 'thumbnail and channel preview on hover' },
+  { key: 'hn', name: 'Hacker News', desc: 'Points and comments — inline and on hover' },
+  { key: 'tw', name: 'Twitter / X', desc: 'Author and post text — inline and on hover' },
+  { key: 'gh', name: 'GitHub', desc: 'Repo card on hover — stars, forks, issues' },
+  { key: 'yt', name: 'YouTube', desc: 'Thumbnail and channel preview on hover' },
 ] as const;
 
 /**
@@ -26,7 +26,7 @@ export function PluginsTab() {
             <div style={rowLabel}>{plugin.name}</div>
             <div style={rowDesc}>{plugin.desc}</div>
           </div>
-          <span style={badgeChip}>soon</span>
+          <span style={badgeChip}>Soon</span>
         </div>
       ))}
       <p style={tabNote}>

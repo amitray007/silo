@@ -68,8 +68,8 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
   const tagPillVisible = tagFilterActive && !omniIsSearch;
 
   const placeholder = tagFilterActive
-    ? `search in #${tagName}`
-    : 'paste a link to keep · type to search';
+    ? `Search in #${tagName}`
+    : 'Paste a link to keep · type to search';
 
   return (
     <div
@@ -104,7 +104,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
         style={{ flex: 'none' }}
         aria-hidden="true"
       >
-        <title>search</title>
+        <title>Search</title>
         <circle cx="7" cy="7" r="4.3" />
         <path d="m10.3 10.3 3 3" />
       </svg>
@@ -113,8 +113,8 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
         <button
           type="button"
           onClick={onClearTag}
-          title="clear filter"
-          aria-label={`clear filter #${tagName}`}
+          title="Clear filter"
+          aria-label={`Clear filter #${tagName}`}
           className="silo-tag-pill"
           style={{
             flex: 'none',
@@ -175,7 +175,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
             whiteSpace: 'nowrap',
           }}
         >
-          <span style={{ fontSize: '0.74rem', color: 'var(--markt)', fontWeight: 500 }}>keep</span>
+          <span style={{ fontSize: '0.74rem', color: 'var(--markt)', fontWeight: 500 }}>Keep</span>
           <EscChip>↵</EscChip>
         </span>
       )}

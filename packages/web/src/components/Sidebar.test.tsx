@@ -185,10 +185,10 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      expect(screen.queryByPlaceholderText('find tag')).toBeNull();
+      expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
 
-      fireEvent.click(screen.getByTitle('find a tag'));
-      const input = screen.getByPlaceholderText('find tag');
+      fireEvent.click(screen.getByTitle('Find a tag'));
+      const input = screen.getByPlaceholderText('Find tag');
       expect(input).toBeDefined();
 
       fireEvent.change(input, { target: { value: 'DES' } });
@@ -197,8 +197,8 @@ describe('Sidebar', () => {
       expect(screen.queryByText('mcp')).toBeNull();
 
       // Toggling closed again hides the input.
-      fireEvent.click(screen.getByTitle('find a tag'));
-      expect(screen.queryByPlaceholderText('find tag')).toBeNull();
+      fireEvent.click(screen.getByTitle('Find a tag'));
+      expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
     });
   });
 
@@ -225,9 +225,9 @@ describe('Sidebar', () => {
 
       fireEvent.click(more);
       expect(tagRowCount()).toBe(13);
-      expect(screen.getByText('show less')).toBeDefined();
+      expect(screen.getByText('Show less')).toBeDefined();
 
-      fireEvent.click(screen.getByText('show less'));
+      fireEvent.click(screen.getByText('Show less'));
       expect(tagRowCount()).toBe(10);
     });
 
@@ -281,8 +281,8 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -290,8 +290,8 @@ describe('Sidebar', () => {
       const postCall = findPostCall(fetchMock);
       expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toEqual({ name: 'newtag' });
 
-      expect(screen.queryByPlaceholderText('tag name')).toBeNull();
-      expect(screen.getByText('+ new tag')).toBeDefined();
+      expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
+      expect(screen.getByText('+ New tag')).toBeDefined();
     });
 
     it('Escape closes the input without creating a tag', async () => {
@@ -300,12 +300,12 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'abandoned' } });
       fireEvent.keyDown(input, { key: 'Escape' });
 
-      expect(screen.queryByPlaceholderText('tag name')).toBeNull();
+      expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
       expect(findPostCall(fetchMock)).toBeUndefined();
     });
 
@@ -315,11 +315,11 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.keyDown(input, { key: 'Enter' });
 
-      expect(screen.queryByPlaceholderText('tag name')).toBeNull();
+      expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
       expect(findPostCall(fetchMock)).toBeUndefined();
     });
 
@@ -342,15 +342,15 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ new tag'));
-      const input = screen.getByPlaceholderText('tag name');
+      fireEvent.click(screen.getByText('+ New tag'));
+      const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
-      await waitFor(() => expect(screen.getByText("couldn't create — try again")).toBeDefined());
+      await waitFor(() => expect(screen.getByText("Couldn't create — try again")).toBeDefined());
       // The input stays open with the value intact — a failed create must
       // never look identical to a successful one.
-      expect(screen.getByPlaceholderText('tag name')).toHaveProperty('value', 'newtag');
+      expect(screen.getByPlaceholderText('Tag name')).toHaveProperty('value', 'newtag');
     });
   });
 
@@ -369,7 +369,7 @@ describe('Sidebar', () => {
     renderSidebar();
 
     await waitFor(() => expect(screen.getByText('Tags')).toBeDefined());
-    expect(screen.getByText('+ new tag')).toBeDefined();
+    expect(screen.getByText('+ New tag')).toBeDefined();
     expect(screen.queryAllByText(/^#/)).toHaveLength(0);
     expect(screen.queryByText(/more$/)).toBeNull();
   });

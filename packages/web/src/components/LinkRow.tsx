@@ -165,7 +165,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
             </span>
             {link.captureStatus === 'enriching' && (
               <span
-                title="capture continues in the background — you can leave"
+                title="Capture continues in the background — you can leave"
                 style={{
                   flex: 'none',
                   display: 'inline-flex',
@@ -179,7 +179,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
                 }}
               >
                 <span style={{ fontSize: '0.84rem' }}>◌</span>
-                <span>capturing</span>
+                <span>Capturing</span>
               </span>
             )}
             <span
@@ -207,8 +207,8 @@ export function LinkRow({ link }: { link: LinkJson }) {
           </span>
           <button
             type="button"
-            title="options"
-            aria-label="options"
+            title="Options"
+            aria-label="Options"
             aria-haspopup="true"
             aria-expanded={menuOpen}
             onMouseDown={(e) => e.stopPropagation()}

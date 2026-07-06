@@ -2,8 +2,8 @@ import { useTheme } from './ThemeProvider';
 import type { Theme } from './theme';
 
 const OPTIONS: { value: Theme; label: string }[] = [
-  { value: 'light', label: 'light' },
-  { value: 'dark', label: 'dark' },
+  { value: 'light', label: 'Light' },
+  { value: 'dark', label: 'Dark' },
 ];
 
 /**

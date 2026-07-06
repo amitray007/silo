@@ -44,9 +44,9 @@ function LibrarySelectionDock({ selectedIds }: { selectedIds: string[] }) {
       <DockSelectedLabel count={selectedIds.length} />
       <DockDivider />
       <DockIconAction onClick={handleTrash} icon={<DockTrashIcon />} disabled={bulkTrash.isPending}>
-        move to trash
+        Move to trash
       </DockIconAction>
-      <DockAction onClick={selection.clear}>clear</DockAction>
+      <DockAction onClick={selection.clear}>Clear</DockAction>
       <DockEscHint />
     </Dock>
   );

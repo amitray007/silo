@@ -323,7 +323,7 @@ describe('LibraryView capture (plan 011, V3-3)', () => {
 
     const input = screen.getByPlaceholderText(/paste a link to keep/i);
     fireEvent.change(input, { target: { value: 'https://new-example.com' } });
-    await waitFor(() => expect(screen.getByText('keep')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Keep')).toBeDefined());
 
     fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -388,7 +388,7 @@ describe('LibraryView capture (plan 011, V3-3)', () => {
 
     const input = screen.getByPlaceholderText(/paste a link to keep/i);
     fireEvent.change(input, { target: { value: 'https://bad-example.com' } });
-    await waitFor(() => expect(screen.getByText('keep')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Keep')).toBeDefined());
     fireEvent.keyDown(input, { key: 'Enter' });
 
     // The bar clears optimistically, but the failure is surfaced, not silent.
@@ -441,14 +441,14 @@ describe('LibraryView multi-select (plan 011, V3-5)', () => {
     renderLibraryView();
 
     const rowAAnchor = screen.getByText('Row A').closest('a') as HTMLElement;
-    expect(screen.queryByTitle('select')).toBeNull();
+    expect(screen.queryByTitle('Select')).toBeNull();
 
     fireEvent.mouseEnter(rowAAnchor);
-    const checkbox = screen.getByTitle('select');
+    const checkbox = screen.getByTitle('Select');
     fireEvent.click(checkbox);
 
     expect(screen.getByText('1 selected')).toBeDefined();
-    expect(screen.getByText('move to trash')).toBeDefined();
+    expect(screen.getByText('Move to trash')).toBeDefined();
   });
 
   it('once any row is selected, every row shows its checkbox (not just the hovered one)', () => {
@@ -460,10 +460,10 @@ describe('LibraryView multi-select (plan 011, V3-5)', () => {
     renderLibraryView();
 
     fireEvent.mouseEnter(screen.getByText('Row A').closest('a') as HTMLElement);
-    fireEvent.click(screen.getByTitle('select'));
+    fireEvent.click(screen.getByTitle('Select'));
 
     // Both rows' checkboxes are now present, even though only Row A is hovered.
-    expect(screen.getAllByTitle('select')).toHaveLength(2);
+    expect(screen.getAllByTitle('Select')).toHaveLength(2);
   });
 
   it('"move to trash" bulk-trashes every selected row and clears the selection', async () => {
@@ -475,12 +475,12 @@ describe('LibraryView multi-select (plan 011, V3-5)', () => {
     renderLibraryView();
 
     fireEvent.mouseEnter(screen.getByText('Row A').closest('a') as HTMLElement);
-    fireEvent.click(screen.getByTitle('select'));
+    fireEvent.click(screen.getByTitle('Select'));
     fireEvent.mouseEnter(screen.getByText('Row B').closest('a') as HTMLElement);
-    fireEvent.click(screen.getAllByTitle('select')[1] as HTMLElement);
+    fireEvent.click(screen.getAllByTitle('Select')[1] as HTMLElement);
     expect(screen.getByText('2 selected')).toBeDefined();
 
-    fireEvent.click(screen.getByText('move to trash'));
+    fireEvent.click(screen.getByText('Move to trash'));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -505,10 +505,10 @@ describe('LibraryView multi-select (plan 011, V3-5)', () => {
     renderLibraryView();
 
     fireEvent.mouseEnter(screen.getByText('Row A').closest('a') as HTMLElement);
-    fireEvent.click(screen.getByTitle('select'));
+    fireEvent.click(screen.getByTitle('Select'));
     expect(screen.getByText('1 selected')).toBeDefined();
 
-    fireEvent.click(screen.getByText('clear'));
+    fireEvent.click(screen.getByText('Clear'));
 
     expect(screen.queryByText('1 selected')).toBeNull();
     expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/trash'), expect.anything());

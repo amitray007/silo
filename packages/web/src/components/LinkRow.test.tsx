@@ -64,7 +64,7 @@ describe('LinkRow', () => {
   it('shows the pulsing ◌ capturing chrome while enriching (plan 014 — live enrichment loading state)', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
     expect(screen.getByText('◌')).toBeDefined();
-    const label = screen.getByText('capturing');
+    const label = screen.getByText('Capturing');
     expect(label).toBeDefined();
     const statusSpan = label.parentElement as HTMLElement;
     expect(statusSpan.style.color).toBe('var(--markt)');
@@ -74,14 +74,14 @@ describe('LinkRow', () => {
   it('does NOT show the capturing chrome once the row is full (silence means complete)', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'full' })} />);
     expect(screen.queryByText('◌')).toBeNull();
-    expect(screen.queryByText('capturing')).toBeNull();
+    expect(screen.queryByText('Capturing')).toBeNull();
   });
 
   it('does NOT show the capturing chrome for partial or bare captures (only enriching pulses)', () => {
     const { rerender, container } = renderRow(
       <LinkRow link={link({ captureStatus: 'partial' })} />,
     );
-    expect(screen.queryByText('capturing')).toBeNull();
+    expect(screen.queryByText('Capturing')).toBeNull();
 
     rerender(
       <QueryClientProvider
@@ -96,7 +96,7 @@ describe('LinkRow', () => {
         </RowMenuProvider>
       </QueryClientProvider>,
     );
-    expect(screen.queryByText('capturing')).toBeNull();
+    expect(screen.queryByText('Capturing')).toBeNull();
     expect(container).toBeDefined();
   });
 
@@ -186,9 +186,9 @@ describe('LinkRow', () => {
 
   it('the ⋯ button opens the row menu without navigating (stopPropagation on mousedown+click)', () => {
     renderRow(<LinkRow link={link()} />);
-    const optionsButton = screen.getByTitle('options');
+    const optionsButton = screen.getByTitle('Options');
     fireEvent.click(optionsButton);
-    expect(screen.getByText('move to trash')).toBeDefined();
+    expect(screen.getByText('Move to trash')).toBeDefined();
   });
 
   it('renders the ▲points·comments rich line for a Hacker News link (plan 012 phase 2)', () => {
@@ -237,17 +237,17 @@ describe('LinkRow hover preview', () => {
     const anchor = screen.getByRole('link', { name: /Hover target/ });
 
     fireEvent.mouseEnter(anchor);
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(349);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByText('open ↗')).toBeDefined();
+    expect(screen.getByText('Open ↗')).toBeDefined();
   });
 
   it('hides the preview after the 140ms leave delay once the pointer leaves the row', () => {
@@ -258,18 +258,18 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    expect(screen.getByText('open ↗')).toBeDefined();
+    expect(screen.getByText('Open ↗')).toBeDefined();
 
     fireEvent.mouseLeave(anchor);
     act(() => {
       vi.advanceTimersByTime(139);
     });
-    expect(screen.getByText('open ↗')).toBeDefined();
+    expect(screen.getByText('Open ↗')).toBeDefined();
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 
   it('a quick pass over the row (leave before the show delay elapses) never opens the preview', () => {
@@ -284,7 +284,7 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 
   it('moving from the row into the card cancels the pending hide (row→card handoff)', () => {
@@ -295,7 +295,7 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    const card = screen.getByText('open ↗').closest('div[style*="position: fixed"]') as HTMLElement;
+    const card = screen.getByText('Open ↗').closest('div[style*="position: fixed"]') as HTMLElement;
     expect(card).not.toBeNull();
 
     fireEvent.mouseLeave(anchor);
@@ -305,25 +305,25 @@ describe('LinkRow hover preview', () => {
     });
     // The hide that was scheduled on mouseLeave must have been cancelled by
     // entering the card — the preview stays open well past the hide delay.
-    expect(screen.getByText('open ↗')).toBeDefined();
+    expect(screen.getByText('Open ↗')).toBeDefined();
 
     fireEvent.mouseLeave(card);
     act(() => {
       vi.advanceTimersByTime(140);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 
   it('is suppressed while this row’s ⋯ menu is open', () => {
     renderRow(<LinkRow link={link({ title: 'A post' })} />);
-    fireEvent.click(screen.getByTitle('options'));
-    expect(screen.getByText('move to trash')).toBeDefined();
+    fireEvent.click(screen.getByTitle('Options'));
+    expect(screen.getByText('Move to trash')).toBeDefined();
 
     fireEvent.mouseEnter(screen.getByRole('link', { name: /A post/ }));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 
   it('opening the ⋯ menu while the preview is already showing dismisses it (after the hide delay)', () => {
@@ -334,16 +334,16 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    expect(screen.getByText('open ↗')).toBeDefined();
+    expect(screen.getByText('Open ↗')).toBeDefined();
 
-    fireEvent.click(screen.getByTitle('options'));
+    fireEvent.click(screen.getByTitle('Options'));
     // The dismiss goes through the same `scheduleHide` path as a normal
     // mouse-leave (140ms) — opening the menu doesn't special-case an
     // instant close, it just guarantees a hide gets scheduled.
     act(() => {
       vi.advanceTimersByTime(140);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 
   it('does not schedule a preview when the pointer is not hover-capable (coarse/touch)', () => {
@@ -363,7 +363,7 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 
   // Review fix (ce-correctness + ce-julik-frontend-races): a row can vanish
@@ -389,7 +389,7 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    expect(screen.getByText('open ↗')).toBeDefined();
+    expect(screen.getByText('Open ↗')).toBeDefined();
 
     // Unmount the row WITHOUT firing mouseLeave first (simulates the row
     // disappearing out from under the pointer — e.g. trashed, or filtered
@@ -408,7 +408,7 @@ describe('LinkRow hover preview', () => {
     );
 
     // No hide delay to wait out — dismiss-on-unmount is immediate.
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 
   it('cancels a pending (not-yet-shown) preview when the row unmounts before the show delay elapses', () => {
@@ -448,6 +448,6 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('open ↗')).toBeNull();
+    expect(screen.queryByText('Open ↗')).toBeNull();
   });
 });

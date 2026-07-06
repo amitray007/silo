@@ -39,8 +39,8 @@ export function RowSelectCheckbox({
     // even at this visual size.
     <button
       type="button"
-      title="select"
-      aria-label={isSelected ? 'deselect' : 'select'}
+      title="Select"
+      aria-label={isSelected ? 'Deselect' : 'Select'}
       aria-pressed={isSelected}
       className="silo-row-checkbox"
       onMouseDown={(e) => e.stopPropagation()}

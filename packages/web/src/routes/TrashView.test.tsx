@@ -47,8 +47,8 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('Trash is empty.')).toBeDefined());
-    expect(screen.queryByText('select all')).toBeNull();
-    expect(screen.queryByText('empty all')).toBeNull();
+    expect(screen.queryByText('Select all')).toBeNull();
+    expect(screen.queryByText('Empty all')).toBeNull();
   });
 
   it('renders day-grouped trash rows with the purge countdown', async () => {
@@ -98,7 +98,7 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('Restore me')).toBeDefined());
-    fireEvent.click(screen.getByTitle('restore'));
+    fireEvent.click(screen.getByTitle('Restore'));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith(
@@ -126,7 +126,7 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('Delete me')).toBeDefined());
-    fireEvent.click(screen.getByTitle('delete now'));
+    fireEvent.click(screen.getByTitle('Delete now'));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith('/api/trash/1', { method: 'DELETE' }),
@@ -148,8 +148,8 @@ describe('TrashView', () => {
 
     await waitFor(() => expect(screen.getByText('One')).toBeDefined());
     expect(screen.getByText(/auto-empties after 30 days/)).toBeDefined();
-    expect(screen.getByText('select all')).toBeDefined();
-    expect(screen.getByText('empty all')).toBeDefined();
+    expect(screen.getByText('Select all')).toBeDefined();
+    expect(screen.getByText('Empty all')).toBeDefined();
   });
 
   it('"empty all" calls the empty-trash endpoint', async () => {
@@ -170,7 +170,7 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('One')).toBeDefined());
-    fireEvent.click(screen.getByText('empty all'));
+    fireEvent.click(screen.getByText('Empty all'));
 
     await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/trash', { method: 'DELETE' }));
   });
@@ -211,12 +211,12 @@ describe('TrashView', () => {
       renderTrashView(twoLinkFetch());
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('select all'));
+      fireEvent.click(screen.getByText('Select all'));
 
       expect(screen.getByText('2 selected')).toBeDefined();
-      expect(screen.getByText('restore')).toBeDefined();
-      expect(screen.getByText('delete now')).toBeDefined();
-      expect(screen.getByText('clear')).toBeDefined();
+      expect(screen.getByText('Restore')).toBeDefined();
+      expect(screen.getByText('Delete now')).toBeDefined();
+      expect(screen.getByText('Clear')).toBeDefined();
     });
 
     it('the selection dock\'s "restore" bulk-restores every selected row', async () => {
@@ -224,8 +224,8 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('select all'));
-      fireEvent.click(screen.getByText('restore'));
+      fireEvent.click(screen.getByText('Select all'));
+      fireEvent.click(screen.getByText('Restore'));
 
       await waitFor(() =>
         expect(fetchImpl).toHaveBeenCalledWith(
@@ -246,8 +246,8 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('select all'));
-      fireEvent.click(screen.getByText('delete now'));
+      fireEvent.click(screen.getByText('Select all'));
+      fireEvent.click(screen.getByText('Delete now'));
 
       await waitFor(() =>
         expect(fetchImpl).toHaveBeenCalledWith('/api/trash/a', { method: 'DELETE' }),
@@ -261,13 +261,13 @@ describe('TrashView', () => {
       renderTrashView(twoLinkFetch());
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('select all'));
+      fireEvent.click(screen.getByText('Select all'));
       expect(screen.getByText('2 selected')).toBeDefined();
 
-      fireEvent.click(screen.getByText('clear'));
+      fireEvent.click(screen.getByText('Clear'));
 
       expect(screen.queryByText('2 selected')).toBeNull();
-      expect(screen.getByText('select all')).toBeDefined();
+      expect(screen.getByText('Select all')).toBeDefined();
     });
 
     it("acting on a row's own restore button drops it from the selection (no stale count)", async () => {
@@ -278,14 +278,14 @@ describe('TrashView', () => {
       renderTrashView(twoLinkFetch());
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('select all'));
+      fireEvent.click(screen.getByText('Select all'));
       expect(screen.getByText('2 selected')).toBeDefined();
 
-      // Row A's per-row restore button — `getAllByTitle('restore')` returns the
+      // Row A's per-row restore button — `getAllByTitle('Restore')` returns the
       // two rows' buttons plus, once a selection is active, the dock's own
-      // "restore" is a text action (not title="restore"), so the two here are
+      // "Restore" is a text action (not title="Restore"), so the two here are
       // the per-row ones in DOM order (A then B).
-      const rowRestoreButtons = screen.getAllByTitle('restore');
+      const rowRestoreButtons = screen.getAllByTitle('Restore');
       fireEvent.click(rowRestoreButtons[0] as HTMLElement);
 
       await waitFor(() => expect(screen.getByText('1 selected')).toBeDefined());
@@ -322,14 +322,14 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('select all'));
+      fireEvent.click(screen.getByText('Select all'));
 
-      const dockRestore = screen.getByText('restore').closest('button') as HTMLButtonElement;
+      const dockRestore = screen.getByText('Restore').closest('button') as HTMLButtonElement;
       fireEvent.click(dockRestore);
 
       // While the batch is in flight, the dock's restore/delete-now are disabled.
       await waitFor(() => expect(dockRestore.disabled).toBe(true));
-      const dockDelete = screen.getByText('delete now').closest('button') as HTMLButtonElement;
+      const dockDelete = screen.getByText('Delete now').closest('button') as HTMLButtonElement;
       expect(dockDelete.disabled).toBe(true);
 
       releaseA(new Response(null, { status: 204 }));

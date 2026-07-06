@@ -198,7 +198,7 @@ function TagsFlyout({ link }: { link: LinkJson }) {
       <input
         value={query}
         onChange={(e) => setQuery(e.target.value)}
-        placeholder="find tag"
+        placeholder="Find tag"
         className="silo-field"
         style={{
           width: '100%',
@@ -228,10 +228,12 @@ function TagsFlyout({ link }: { link: LinkJson }) {
  * The row `⋯` menu popover (plan 011, V3-4; redesigned per a direct
  * user-feedback polish pass — build brief item 11): a tags fly-out row, a
  * divider, open-in-new-tab, copy-link, a divider, edit, move-to-trash. Same
- * action set + lowercase copy as v3, but with a consistent 14px SVG icon set
- * (replacing the mismatched glyph characters `↗`/`⧉`/`✎`), roomier
- * padding/radii, and a `--hov` background on hover/focus so every row reads
- * as an obviously clickable target rather than flat text. Rendered by
+ * action set as v3, but with a consistent 14px SVG icon set (replacing the
+ * mismatched glyph characters `↗`/`⧉`/`✎`), roomier padding/radii, and a
+ * `--hov` background on hover/focus so every row reads as an obviously
+ * clickable target rather than flat text. Copy was lowercase as a "v3"
+ * decision; superseded by the app-wide sentence-case decision (all labels
+ * below now read `Tags`/`Open in new tab`/etc.). Rendered by
  * `LinkRow` only while `useRowMenu().openMenuId === link.id`; the whole
  * popover stops `mousedown`/`click` propagation (mirrors v3's `onMouseDown={{
  * stop }}`) so clicking inside it never bubbles to the row's `<a>` (no
@@ -315,7 +317,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
           style={menuItemStyle(tagsFlyOpen)}
         >
           <span style={iconSlotStyle}>#</span>
-          <span>tags</span>
+          <span>Tags</span>
           {link.tags.length > 0 && (
             <span style={{ fontSize: '0.72rem', color: 'var(--fnt)', fontWeight: 400 }}>
               {link.tags.length}
@@ -332,7 +334,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
         <span style={iconSlotStyle}>
           <OpenIcon />
         </span>
-        <span>open in new tab</span>
+        <span>Open in new tab</span>
       </MenuItem>
       <MenuItem onClick={handleCopy}>
         <span style={iconSlotStyle}>
@@ -344,7 +346,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
             marks that used to justify `--markt` here (note/claude/enriching)
             were removed in this same polish pass. */}
         <span style={{ color: copied ? 'var(--ink)' : 'var(--mut)' }}>
-          {copied ? 'copied' : 'copy link'}
+          {copied ? 'Copied' : 'Copy link'}
         </span>
       </MenuItem>
 
@@ -354,13 +356,13 @@ export function RowMenu({ link }: { link: LinkJson }) {
         <span style={iconSlotStyle}>
           <EditIcon />
         </span>
-        <span>edit</span>
+        <span>Edit</span>
       </MenuItem>
       <MenuItem onClick={handleTrash}>
         <span style={iconSlotStyle}>
           <TrashIcon size={14} stroke="var(--ghost)" />
         </span>
-        <span>move to trash</span>
+        <span>Move to trash</span>
       </MenuItem>
     </div>
   );

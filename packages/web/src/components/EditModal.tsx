@@ -149,7 +149,7 @@ function EditTagsFlyout({
             onClose();
           }
         }}
-        placeholder="find or create a tag"
+        placeholder="Find or create a tag"
         className="silo-field"
         style={{
           width: '100%',
@@ -193,7 +193,7 @@ function EditTagsFlyout({
           }}
         >
           <span style={{ color: 'var(--ghost)' }}>+</span>
-          <span>create "{trimmedQuery}"</span>
+          <span>Create "{trimmedQuery}"</span>
         </button>
       )}
     </div>
@@ -295,26 +295,26 @@ export function EditModal({ link }: { link: LinkJson }) {
         }
       />
 
-      <p style={labelStyle}>title</p>
+      <p style={labelStyle}>Title</p>
       <input
         value={title}
         onChange={(e) => setTitle(e.target.value)}
-        placeholder="how you'll look for it later"
+        placeholder="How you'll look for it later"
         className="silo-field"
         style={{ ...fieldStyle, fontWeight: 500 }}
       />
 
-      <p style={labelStyle}>description</p>
+      <p style={labelStyle}>Description</p>
       <textarea
         value={description}
         onChange={(e) => setDescription(e.target.value)}
         rows={2}
-        placeholder="what this is, in your words"
+        placeholder="What this is, in your words"
         className="silo-field"
         style={{ ...fieldStyle, color: 'var(--mut)', fontSize: '0.82rem', resize: 'vertical' }}
       />
 
-      <p style={labelStyle}>tags</p>
+      <p style={labelStyle}>Tags</p>
       <div style={{ position: 'relative', marginBottom: 'var(--s3)' }}>
         <button
           type="button"
@@ -367,7 +367,7 @@ export function EditModal({ link }: { link: LinkJson }) {
                   e.stopPropagation();
                   removeTag.mutate(tag, { onSuccess: () => applyTagToggle(tag, false) });
                 }}
-                title="remove"
+                title="Remove"
                 className="silo-tag-chip-remove"
                 style={{ color: 'var(--ghost)', cursor: 'pointer' }}
               >
@@ -375,7 +375,7 @@ export function EditModal({ link }: { link: LinkJson }) {
               </span>
             </span>
           ))}
-          {tags.length === 0 && <span style={{ color: 'var(--fnt)' }}>choose tags</span>}
+          {tags.length === 0 && <span style={{ color: 'var(--fnt)' }}>Choose tags</span>}
           <span style={{ marginLeft: 'auto', color: 'var(--ghost)', fontSize: '0.72rem' }}>▾</span>
         </button>
         {tagsOpen && (
@@ -394,13 +394,13 @@ export function EditModal({ link }: { link: LinkJson }) {
       </div>
 
       <p style={labelStyle}>
-        <span style={{ color: 'var(--markt)' }}>¶</span> note
+        <span style={{ color: 'var(--markt)' }}>¶</span> Note
       </p>
       <textarea
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={2}
-        placeholder="why you kept it"
+        placeholder="Why you kept it"
         className="silo-field"
         style={{
           ...fieldStyle,
@@ -451,7 +451,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             <path d="M4.3 4.2l.6 9h6.2l.6-9" />
             <path d="M6.6 7v3.8M9.4 7v3.8" />
           </svg>
-          trash
+          Trash
         </button>
         <span style={{ flex: 1 }} />
         <button
@@ -469,7 +469,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             fontFamily: 'inherit',
           }}
         >
-          cancel
+          Cancel
         </button>
         <button
           type="button"
