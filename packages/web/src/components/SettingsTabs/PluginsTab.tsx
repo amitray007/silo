@@ -36,13 +36,13 @@ const TOGGLEABLE_PLUGIN_ROWS = [
  * markup, not an external-API enricher the worker can skip) — see the plan's
  * `plugins` schema note (`{ hacker_news, github, youtube }`, no `twitter`).
  *
- * IMPORTANT scope boundary (plan 016 hand-off, documented per the build
- * brief): toggling a plugin off HERE persists the preference and is exposed
- * to any reader, but nothing in the enrichment WORKER reads it yet — no
- * enricher is actually skipped when its toggle is off. Wiring worker
- * enforcement risks touching the same `packages/worker/src/enrich*` files a
- * parallel scheduling slice owns, so it's deliberately left as a documented,
- * tiny follow-up rather than done here.
+ * ENFORCED as of plan 017: the worker (`packages/worker/src/enrich.ts`)
+ * reads this same `plugins` map once per enrichment pass and skips the
+ * matching source enricher when its toggle is off — no new web surface
+ * needed for that (this tab's keys already matched the worker's registry
+ * kinds one-for-one; see `packages/worker/src/enrich-source/index.ts`'s
+ * `PLUGINS` registry). Toggling a plugin off here now actually stops new
+ * hover/inline detail for that source; existing saved links are unaffected.
  */
 export function PluginsTab() {
   const { data: settings } = useSettings();

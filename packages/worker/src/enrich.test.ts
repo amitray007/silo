@@ -55,6 +55,9 @@ describeIfPg('enrichLink (integration)', () => {
       // "source enrichment" describe block below, and enrich-source/*.test.ts
       // for the per-source enrichers).
       enrichSource: () => Promise.resolve(undefined),
+      // Plugin-toggle enforcement is covered in its own describe block below
+      // — these generic tests don't care about the toggle state.
+      getPluginsSetting: () => Promise.resolve({ hacker_news: true, github: true, youtube: true }),
     };
   }
 
@@ -180,6 +183,8 @@ describeIfPg('enrichLink (integration)', () => {
           }),
         extract: () => Promise.reject(new Error('unexpected extract crash')),
         enrichSource: () => Promise.resolve(undefined),
+        getPluginsSetting: () =>
+          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
       }),
     ).rejects.toThrow('unexpected extract crash');
     // Untouched — the failed attempt recorded nothing; a retry starts fresh.
@@ -201,6 +206,8 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
         enrichSource: () =>
           Promise.resolve({ kind: 'hacker_news', points: 500, comments: 200, author: 'pg' }),
+        getPluginsSetting: () =>
+          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
       });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
@@ -223,6 +230,8 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.resolve({ status: 'bare' }),
         enrichSource: () =>
           Promise.resolve({ kind: 'hacker_news', points: 10, comments: 3, author: 'x' }),
+        getPluginsSetting: () =>
+          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
       });
       const link = await core.getById(id);
       expect(link?.captureStatus).toBe('bare');
@@ -252,6 +261,130 @@ describeIfPg('enrichLink (integration)', () => {
       // not-yet-enriched hacker_news link).
       expect(link?.sourceData).toEqual({ kind: 'link' });
       expect(link?.captureStatus).toBe('bare');
+    });
+  });
+
+  describe('plugin toggle enforcement (plan 017)', () => {
+    /** A stubbed `enrichSource` that records the `enabledPlugins` it was called with. */
+    function spyingEnrichSource(calls: Array<Parameters<EnrichLinkDeps['enrichSource']>>) {
+      return (
+        sourceKind: string,
+        url: string,
+        enabledPlugins?: Parameters<EnrichLinkDeps['enrichSource']>[2],
+      ) => {
+        calls.push([sourceKind, url, enabledPlugins]);
+        return Promise.resolve(
+          enabledPlugins?.hacker_news === false
+            ? undefined
+            : { kind: 'hacker_news' as const, points: 1, comments: 1, author: 'x' },
+        );
+      };
+    }
+
+    const okFetch: SafeFetchResult = {
+      ok: true,
+      html: '<html></html>',
+      contentType: 'text/html',
+      finalUrl: 'https://news.ycombinator.com/item?id=10',
+      status: 200,
+    };
+
+    it('reads the plugins setting ONCE per pass and threads it into enrichSource', async () => {
+      const calls: Array<Parameters<EnrichLinkDeps['enrichSource']>> = [];
+      let getPluginsSettingCallCount = 0;
+      const id = await newLink('https://news.ycombinator.com/item?id=10');
+
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okFetch),
+        extract: () => Promise.resolve({ status: 'bare' }),
+        enrichSource: spyingEnrichSource(calls),
+        getPluginsSetting: () => {
+          getPluginsSettingCallCount += 1;
+          return Promise.resolve({ hacker_news: false, github: true, youtube: true });
+        },
+      });
+
+      expect(getPluginsSettingCallCount).toBe(1);
+      expect(calls).toHaveLength(1);
+      expect(calls[0]?.[2]).toEqual({ hacker_news: false, github: true, youtube: true });
+    });
+
+    it('disabled plugin -> enrichSource degrades -> no sourceData recorded (generic capture only)', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=11');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okFetch),
+        extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
+        enrichSource: spyingEnrichSource([]),
+        getPluginsSetting: () =>
+          Promise.resolve({ hacker_news: false, github: true, youtube: true }),
+      });
+      const link = await core.getById(id);
+      // No sourceData folded in — createLink's safe `link` floor stands, and
+      // the generic capture (title) still landed.
+      expect(link?.sourceData).toEqual({ kind: 'link' });
+      expect(link?.title).toBe('HN thread');
+      expect(link?.captureStatus).toBe('partial');
+    });
+
+    it('enabled plugin -> sourceData populates normally', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=12');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okFetch),
+        extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
+        enrichSource: spyingEnrichSource([]),
+        getPluginsSetting: () =>
+          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+      });
+      const link = await core.getById(id);
+      expect(link?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 1,
+        comments: 1,
+        author: 'x',
+      });
+    });
+
+    it('a settings-read failure DEGRADES to enabled (SETTINGS_DEFAULTS.plugins), never fails the job', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=13');
+      const calls: Array<Parameters<EnrichLinkDeps['enrichSource']>> = [];
+      await expect(
+        enrichMod.enrichLink(id, {
+          safeFetch: () => Promise.resolve(okFetch),
+          extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
+          enrichSource: spyingEnrichSource(calls),
+          getPluginsSetting: () => Promise.reject(new Error('settings db unreachable')),
+        }),
+      ).resolves.toBeUndefined();
+
+      // Degraded to the all-enabled default, not left undefined/false.
+      expect(calls[0]?.[2]).toEqual({ hacker_news: true, github: true, youtube: true });
+      const link = await core.getById(id);
+      expect(link?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 1,
+        comments: 1,
+        author: 'x',
+      });
+      expect(link?.captureStatus).toBe('partial');
+    });
+
+    it('a missing/unset plugins setting also degrades to enabled (matches SETTINGS_DEFAULTS)', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=14');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okFetch),
+        extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
+        enrichSource: spyingEnrichSource([]),
+        // Mirrors core.getSetting's own real behavior for an unset key:
+        // resolves the default, never throws/undefined.
+        getPluginsSetting: () => Promise.resolve(core.SETTINGS_DEFAULTS.plugins),
+      });
+      const link = await core.getById(id);
+      expect(link?.sourceData).toEqual({
+        kind: 'hacker_news',
+        points: 1,
+        comments: 1,
+        author: 'x',
+      });
     });
   });
 });
