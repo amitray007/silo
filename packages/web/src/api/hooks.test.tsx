@@ -208,6 +208,63 @@ describe('useInfiniteLinks', () => {
     expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp');
     expect(fetch).toHaveBeenCalledWith('/api/links?tag=ai');
   });
+
+  /**
+   * Smart polling (plan 014) — `refetchInterval`'s function form must poll
+   * every 1500ms while ANY cached page holds an `enriching` row, and STOP
+   * (no further `/api/links` calls) the instant every row has settled. Real
+   * timers are used (not `vi.useFakeTimers()`) because TanStack Query's
+   * internal poll scheduling doesn't reliably advance under fake timers in
+   * this setup; the interval (1500ms) is short enough for a real-timer test
+   * to stay fast while still proving the behavior end-to-end.
+   */
+  describe('smart polling (refetchInterval)', () => {
+    it('polls again ~1.5s later while a cached link is still enriching', async () => {
+      const enrichingPage = { links: [makeLink({ id: '1', captureStatus: 'enriching' })] };
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse(enrichingPage))
+        .mockResolvedValueOnce(jsonResponse(enrichingPage));
+
+      const { result } = renderHook(() => useInfiniteLinks(), { wrapper });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2), { timeout: 3000 });
+    });
+
+    it('stops polling once every cached link has settled to full', async () => {
+      const fullPage = { links: [makeLink({ id: '1', captureStatus: 'full' })] };
+      vi.mocked(fetch).mockResolvedValue(jsonResponse(fullPage));
+
+      const { result } = renderHook(() => useInfiniteLinks(), { wrapper });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(fetch).toHaveBeenCalledTimes(1);
+
+      // Give a full 1500ms+ window a chance to have fired a poll — it must not have.
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+      expect(fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('stops polling once a previously-enriching link across pages settles (multi-page cache)', async () => {
+      const page1Enriching = { links: [makeLink({ id: '1', captureStatus: 'enriching' })] };
+      const page1Full = { links: [makeLink({ id: '1', captureStatus: 'full' })] };
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse(page1Enriching))
+        .mockResolvedValue(jsonResponse(page1Full));
+
+      const { result } = renderHook(() => useInfiniteLinks(), { wrapper });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2), { timeout: 3000 });
+
+      // Now settled to full — no third poll should ever land.
+      const callsAfterSettle = vi.mocked(fetch).mock.calls.length;
+      await new Promise((resolve) => setTimeout(resolve, 1800));
+      expect(vi.mocked(fetch).mock.calls.length).toBe(callsAfterSettle);
+    });
+  });
 });
 
 describe('useSearchLinks', () => {

@@ -22,12 +22,27 @@ import { useLibrarySelection } from './SelectionContext';
  * wrapping `<span>` is `position: relative` so `RowMenu`'s
  * `position:absolute` anchors to this row, not the whole list.
  *
- * Marks: per a direct user-feedback polish pass, the inline `¶`/`◆`/`◌`
- * glyphs (note / added-by-Claude / capturing / degraded) are REMOVED from the
- * row entirely — rows show chip + title + domain only, no status chrome. The
- * quoted note LINE underneath (when `link.notes` is set) stays; only the
- * glyph badge next to the title is gone. `Mark`/`MarkKind` are deleted
- * (unused after this — see `docs/rules/testing.md`/knip).
+ * Marks: per a direct user-feedback polish pass, the inline `¶`/`◆`
+ * glyphs (note / added-by-Claude) are REMOVED from the row entirely — rows
+ * show chip + title + domain only, no status chrome, for `full`/`partial`/
+ * `bare` rows. The quoted note LINE underneath (when `link.notes` is set)
+ * stays; only the glyph badge next to the title is gone. `Mark`/`MarkKind`
+ * are deleted (unused after this — see `docs/rules/testing.md`/knip).
+ *
+ * Live enrichment loading chrome (plan 014): reintroduces ONE piece of
+ * per-row status chrome — the `◌ capturing` pulse — but ONLY while
+ * `link.captureStatus === 'enriching'`. This isn't a reversal of the mark
+ * removal above (those were permanent, settled-state badges on
+ * full/partial/bare rows); this is a transient IN-PROGRESS indicator that
+ * "silence means complete" explicitly carves out room for — it disappears
+ * the instant the row settles to any other status. Matches v3's per-row
+ * status span (`Silo-v3.html:123`): `◌` (the sanctioned incomplete mark)
+ * + "capturing", `color: var(--markt)`, `font-size: .76rem`,
+ * `font-weight: 500`, pulsing via the EXISTING `siloPulse` keyframe
+ * (`base.css:738`) reused via inline style (not a new keyframe). Only
+ * `enriching` pulses — `partial`/`bare` (v3's "degraded") intentionally show
+ * no chrome here; wiring a non-pulsing degraded mark is a follow-up (plan
+ * 014 scope note), not part of this slice.
  *
  * Hover meta: on hover (or focus), a relative-time string ("2h ago") derived
  * from `createdAt` renders on the right, next to the domain — v3's `it.meta`
@@ -140,6 +155,25 @@ export function LinkRow({ link }: { link: LinkJson }) {
             >
               {title}
             </span>
+            {link.captureStatus === 'enriching' && (
+              <span
+                title="capture continues in the background — you can leave"
+                style={{
+                  flex: 'none',
+                  display: 'inline-flex',
+                  alignItems: 'baseline',
+                  gap: 5,
+                  fontSize: '0.76rem',
+                  fontWeight: 500,
+                  color: 'var(--markt)',
+                  whiteSpace: 'nowrap',
+                  animation: 'siloPulse 1.6s ease-in-out infinite',
+                }}
+              >
+                <span style={{ fontSize: '0.84rem' }}>◌</span>
+                <span>capturing</span>
+              </span>
+            )}
             <span
               style={{
                 flex: 'none',

@@ -61,6 +61,45 @@ describe('LinkRow', () => {
     expect(screen.getByText('A post').style.color).toBe('var(--fnt)');
   });
 
+  it('shows the pulsing ◌ capturing chrome while enriching (plan 014 — live enrichment loading state)', () => {
+    renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
+    expect(screen.getByText('◌')).toBeDefined();
+    const label = screen.getByText('capturing');
+    expect(label).toBeDefined();
+    const statusSpan = label.parentElement as HTMLElement;
+    expect(statusSpan.style.color).toBe('var(--markt)');
+    expect(statusSpan.style.animation).toBe('siloPulse 1.6s ease-in-out infinite');
+  });
+
+  it('does NOT show the capturing chrome once the row is full (silence means complete)', () => {
+    renderRow(<LinkRow link={link({ captureStatus: 'full' })} />);
+    expect(screen.queryByText('◌')).toBeNull();
+    expect(screen.queryByText('capturing')).toBeNull();
+  });
+
+  it('does NOT show the capturing chrome for partial or bare captures (only enriching pulses)', () => {
+    const { rerender, container } = renderRow(
+      <LinkRow link={link({ captureStatus: 'partial' })} />,
+    );
+    expect(screen.queryByText('capturing')).toBeNull();
+
+    rerender(
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        <RowMenuProvider>
+          <SelectionProvider>
+            <HoverPreviewProvider>
+              <LinkRow link={link({ captureStatus: 'bare' })} />
+            </HoverPreviewProvider>
+          </SelectionProvider>
+        </RowMenuProvider>
+      </QueryClientProvider>,
+    );
+    expect(screen.queryByText('capturing')).toBeNull();
+    expect(container).toBeDefined();
+  });
+
   it('shows no mark glyph for a partial capture', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'partial' })} />);
     expect(screen.queryByRole('img')).toBeNull();
