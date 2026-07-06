@@ -196,15 +196,25 @@ export function LinkRow({ link }: { link: LinkJson }) {
             >
               {domain}
             </span>
-            {hovered && (
-              <span
-                className="silo-row-reveal"
-                style={{ flex: 'none', fontSize: 'var(--text-xs)', color: 'var(--fnt)' }}
-              >
-                {relativeTimeFromNow(link.createdAt)}
-              </span>
-            )}
           </span>
+          {/* The hover-revealed relative time sits at the row's RIGHT end,
+              just before the ⋯ options button (user feedback: beside options,
+              not beside the link title). `flex:none` + a small right gap keep
+              it from pushing the button; it reveals via the fade class. */}
+          {hovered && (
+            <span
+              className="silo-row-reveal"
+              style={{
+                flex: 'none',
+                fontSize: 'var(--text-xs)',
+                color: 'var(--fnt)',
+                whiteSpace: 'nowrap',
+                marginRight: 'var(--s1)',
+              }}
+            >
+              {relativeTimeFromNow(link.createdAt)}
+            </span>
+          )}
           <button
             type="button"
             title="Options"
