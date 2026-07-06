@@ -32,9 +32,47 @@ const HIDE_DELAY_MS = 140;
  * card off the LEFT edge instead of the intended right edge. `top` already
  * clamped both bounds; `left` didn't, purely by omission — this makes them
  * symmetric.
+ *
+ * QA finding (full end-to-end drive): at a completely ordinary 1280px-wide
+ * desktop viewport, a row's right edge (where the row's own "⋯" Options
+ * trigger lives) regularly sits close enough to `window.innerWidth` that the
+ * upper clamp above pulls `left` back to BEFORE `rect.right` — i.e. the card
+ * renders on top of the row it's anchored to instead of beside it, covering
+ * that row's own Options button so it can't be clicked while the preview is
+ * showing (reproduced with a real Playwright click timing out because the
+ * hover-preview's `<img>` sat at the button's coordinates). Fix: when the
+ * clamped right-side placement would land before the row's right edge (no
+ * real room to its right), flip the card to the row's LEFT instead of
+ * squeezing it on top — mirrors the same `14`px gap.
+ *
+ * Independent review caught a residual case in that first fix: naively
+ * flipping left isn't enough on a narrow viewport with a WIDE row (e.g. a
+ * ~320px window with a row spanning most of it) — there may be no 14px-gap
+ * slot on EITHER side wide enough for the 288px card without overlapping the
+ * row again, just from the other direction. Below, both candidate positions
+ * are clamped into `[14, viewport]` first, then whichever candidate leaves
+ * more real (non-overlapping) clearance from the row wins — so on a
+ * comfortable viewport this is exactly the right-or-left flip above, and on
+ * a viewport too narrow to avoid overlap entirely, it degrades to "the least
+ * bad of two overlaps" rather than silently assuming the left flip always
+ * fully escapes the row.
  */
-function computePosition(rect: DOMRect): HoverPreviewPosition {
-  const left = Math.round(Math.max(14, Math.min(rect.right + 14, window.innerWidth - 304)));
+export function computePosition(rect: DOMRect): HoverPreviewPosition {
+  const CARD_WIDTH = 288;
+  const GAP = 14;
+
+  const rightCandidate = Math.round(
+    Math.max(14, Math.min(rect.right + GAP, window.innerWidth - CARD_WIDTH - 16)),
+  );
+  const leftCandidate = Math.round(Math.max(14, rect.left - GAP - CARD_WIDTH));
+
+  // Clearance = how much of the card sits clear of the row on that side;
+  // negative means the card overlaps the row by that many pixels.
+  const rightClearance = rightCandidate - rect.right;
+  const leftClearance = rect.left - (leftCandidate + CARD_WIDTH);
+
+  const left =
+    rightClearance >= 0 || rightClearance >= leftClearance ? rightCandidate : leftCandidate;
   const top = Math.round(Math.max(14, Math.min(rect.top - 4, window.innerHeight - 340)));
   return { top, left };
 }
