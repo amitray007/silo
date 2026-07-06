@@ -24,6 +24,14 @@ body {
   line-height: 1.55;
   background: var(--bg);
   color: var(--ink);
+  /* Typography-craft pass: Geist ships tabular figures, so this one
+     root-level declaration gives every changing number in the app (points/
+     comments, countdowns, counts, "N found"/"N selected", tag counts) fixed
+     digit widths without 10 separate inline edits — it only affects digit
+     glyphs, so the wordmark/prose are unaffected. */
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   transition:
     background 0.16s ease,
     color 0.16s ease;

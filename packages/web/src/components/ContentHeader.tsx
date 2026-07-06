@@ -51,6 +51,9 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
           fontWeight: 500,
           color: 'var(--ink)',
           whiteSpace: 'nowrap',
+          letterSpacing: 'var(--tracking-tight)',
+          lineHeight: 'var(--lh-tight)',
+          textWrap: 'balance',
         }}
       >
         {title}

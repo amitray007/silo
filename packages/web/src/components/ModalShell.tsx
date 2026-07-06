@@ -171,7 +171,18 @@ export function ModalHeader({
           `ModalShell`'s `aria-label` (unchanged) — this is purely so a
           screen-reader user's heading-navigation actually finds "Edit"/
           "Settings" instead of silence. */}
-      <h2 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 500 }}>{title}</h2>
+      <h2
+        style={{
+          margin: 0,
+          fontSize: '1.05rem',
+          fontWeight: 500,
+          letterSpacing: 'var(--tracking-tight)',
+          lineHeight: 'var(--lh-tight)',
+          textWrap: 'balance',
+        }}
+      >
+        {title}
+      </h2>
       {leading}
       <span style={{ flex: 1 }} />
       <button type="button" onClick={onClose} className="silo-modal-esc">

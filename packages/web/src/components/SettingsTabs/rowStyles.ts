@@ -41,7 +41,8 @@ export const rowDesc: CSSProperties = {
   fontSize: '0.78rem',
   color: 'var(--fnt)',
   marginTop: 3,
-  lineHeight: 1.45,
+  lineHeight: 'var(--lh-snug)',
+  textWrap: 'pretty',
 };
 
 /** The calm footer note some tabs end with. */

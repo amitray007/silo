@@ -148,7 +148,7 @@ export function TrashRow({
         <span
           style={{
             fontWeight: 500,
-            fontSize: '0.88rem',
+            fontSize: 'var(--text-base)',
             color: 'var(--ink)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',
@@ -159,10 +159,13 @@ export function TrashRow({
         </span>
         <span
           style={{
-            fontSize: '0.84rem',
+            fontSize: 'var(--text-base)',
             color: 'var(--fnt)',
             whiteSpace: 'nowrap',
             fontWeight: 400,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            maxWidth: '14rem',
           }}
         >
           {domain}

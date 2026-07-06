@@ -66,12 +66,24 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
           fontWeight: 500,
           color: 'var(--ink)',
           overflowWrap: 'break-word',
+          lineHeight: 1.4,
         }}
       >
         {title}
       </div>
       {sourceData.description && (
-        <div style={{ fontSize: '0.76rem', color: 'var(--mut)', marginTop: 3, lineHeight: 1.5 }}>
+        <div
+          style={{
+            fontSize: '0.76rem',
+            color: 'var(--mut)',
+            marginTop: 3,
+            lineHeight: 'var(--lh-snug)',
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
           {sourceData.description}
         </div>
       )}
@@ -232,7 +244,16 @@ function GenericVariant({
       )}
       {hasNote && (
         <div
-          style={{ fontSize: '0.78rem', color: 'var(--mut)', fontStyle: 'italic', marginTop: 6 }}
+          style={{
+            fontSize: '0.78rem',
+            color: 'var(--mut)',
+            fontStyle: 'italic',
+            marginTop: 6,
+            display: '-webkit-box',
+            WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
         >
           "{notes}"
         </div>

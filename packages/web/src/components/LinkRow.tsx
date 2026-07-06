@@ -146,7 +146,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
             <span
               style={{
                 fontWeight: 500,
-                fontSize: '0.88rem',
+                fontSize: 'var(--text-base)',
                 color: link.captureStatus === 'enriching' ? 'var(--fnt)' : 'var(--ink)',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
@@ -178,7 +178,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
               style={{
                 flex: 'none',
                 maxWidth: '14rem',
-                fontSize: '0.84rem',
+                fontSize: 'var(--text-base)',
                 color: 'var(--fnt)',
                 fontWeight: 400,
                 whiteSpace: 'nowrap',
@@ -248,11 +248,15 @@ export function LinkRow({ link }: { link: LinkJson }) {
         {link.notes && (
           <span
             style={{
-              display: 'block',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
               padding: '2px 20px 0 31px',
               fontSize: '0.8rem',
               color: 'var(--mut)',
               fontStyle: 'italic',
+              maxWidth: '48ch',
             }}
           >
             "{link.notes}"
