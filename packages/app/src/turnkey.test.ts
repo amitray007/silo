@@ -93,67 +93,71 @@ describeIfPg('@silo/app turnkey composition (integration)', () => {
     return rows.rows[0]?.n ?? 0;
   }
 
-  it(
-    'one process, capture -> enqueue -> same-process worker enriches -> get_link ' +
-      'shows a terminal status (the turnkey loop, no separate worker)',
-    async () => {
-      expect(await pgBossSchemaExists()).toBe(false);
+  it('one process, capture -> enqueue -> same-process worker enriches -> get_link ' +
+    'shows a terminal status (the turnkey loop, no separate worker)', async () => {
+    expect(await pgBossSchemaExists()).toBe(false);
 
-      // Mirror main.ts's exact order: worker first (registers the enqueuer,
-      // core's seam goes live in THIS process), THEN the MCP server.
-      const { startWorker } = await import('@silo/worker');
-      const { createSiloMcpServer } = await import('@silo/mcp-server');
+    // Mirror main.ts's exact order: worker first (registers the enqueuer,
+    // core's seam goes live in THIS process), THEN the MCP server.
+    const { startWorker } = await import('@silo/worker');
+    const { createSiloMcpServer } = await import('@silo/mcp-server');
 
-      const worker = await startWorker();
-      expect(await pgBossSchemaExists()).toBe(true);
+    const worker = await startWorker();
+    expect(await pgBossSchemaExists()).toBe(true);
 
-      const server = createSiloMcpServer();
-      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-      const client = new Client({ name: 'app-turnkey-test-client', version: '0.0.0' });
-      await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
+    const server = createSiloMcpServer();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const client = new Client({ name: 'app-turnkey-test-client', version: '0.0.0' });
+    await Promise.all([client.connect(clientTransport), server.connect(serverTransport)]);
 
-      try {
-        // A loopback/link-local literal (same rationale as A1's worker.test.ts):
-        // safeFetch's IP-rules check classifies it as blocked-ip with no real
-        // network round trip, so this resolves fast and deterministically —
-        // proving the real enrichLink pipeline ran end-to-end through the
-        // same-process work loop, not a stub.
-        const captureResult = await client.callTool({
-          name: 'capture_link',
-          arguments: { url: 'http://127.0.0.1:1/app-turnkey' },
-        });
-        expect(captureResult.isError).toBeFalsy();
-        const captured = captureResult.structuredContent as Record<string, unknown>;
-        expect(captured.captureStatus).toBe('enriching');
-        const id = captured.id as string;
+    try {
+      // A loopback/link-local literal (same rationale as A1's worker.test.ts):
+      // safeFetch's IP-rules check classifies it as blocked-ip with no real
+      // network round trip, so this resolves fast and deterministically —
+      // proving the real enrichLink pipeline ran end-to-end through the
+      // same-process work loop, not a stub.
+      const captureResult = await client.callTool({
+        name: 'capture_link',
+        arguments: { url: 'http://127.0.0.1:1/app-turnkey' },
+      });
+      expect(captureResult.isError).toBeFalsy();
+      const captured = captureResult.structuredContent as Record<string, unknown>;
+      expect(captured.captureStatus).toBe('enriching');
+      const id = captured.id as string;
 
-        // Proves the enqueue actually happened via THIS process's MCP
-        // capture_link call (not merely that some other test enqueued it).
-        expect(await anyJobCount(id)).toBe(1);
+      // Proves the enqueue actually happened via THIS process's MCP
+      // capture_link call (not merely that some other test enqueued it).
+      expect(await anyJobCount(id)).toBe(1);
 
-        // Poll get_link (over the same in-memory MCP client) until the
-        // same-process worker has driven it to a terminal status.
-        let finalStatus: string | undefined;
-        for (let i = 0; i < 100; i += 1) {
-          const getResult = await client.callTool({ name: 'get_link', arguments: { id } });
-          expect(getResult.isError).toBeFalsy();
-          const structured = getResult.structuredContent as Record<string, unknown>;
-          finalStatus = structured.captureStatus as string | undefined;
-          if (finalStatus !== undefined && finalStatus !== 'enriching') break;
-          await new Promise((resolve) => setTimeout(resolve, 100));
-        }
-
-        // A blocked-IP URL resolves to 'bare' (safeFetch never succeeds) —
-        // terminal and non-'enriching', proving the full loop closed without
-        // any separate worker process ever running.
-        expect(finalStatus).toBe('bare');
-      } finally {
-        await worker.stop();
-        const { resetEnrichmentEnqueuer } = await import('@silo/core');
-        resetEnrichmentEnqueuer();
+      // Poll get_link (over the same in-memory MCP client) until the
+      // same-process worker has driven it to a terminal status.
+      let finalStatus: string | undefined;
+      for (let i = 0; i < 100; i += 1) {
+        const getResult = await client.callTool({ name: 'get_link', arguments: { id } });
+        expect(getResult.isError).toBeFalsy();
+        const structured = getResult.structuredContent as Record<string, unknown>;
+        finalStatus = structured.captureStatus as string | undefined;
+        if (finalStatus !== undefined && finalStatus !== 'enriching') break;
+        await new Promise((resolve) => setTimeout(resolve, 100));
       }
-    },
-  );
+
+      // A blocked-IP URL resolves to 'bare' (safeFetch never succeeds) —
+      // terminal and non-'enriching', proving the full loop closed without
+      // any separate worker process ever running.
+      expect(finalStatus).toBe('bare');
+    } finally {
+      await worker.stop();
+      const { resetEnrichmentEnqueuer } = await import('@silo/core');
+      resetEnrichmentEnqueuer();
+    }
+    // biome-ignore format: keep the timeout arg + its rationale on their own lines
+  }, 30_000);
+  // ^ 30s (not Vitest's 5s default): this integration test starts a real
+  // pg-boss worker + MCP server, then polls up to 100×100ms = 10s for the
+  // same-process work loop to reach a terminal status. The 5s default was
+  // TIGHTER than the poll budget itself, so under CI's slower/contended
+  // Postgres the test timed out before the loop finished — a flaky failure
+  // unrelated to the code under test.
 
   it('retry_capture re-enriches in the same process (degraded link -> enriching -> terminal again)', async () => {
     const { startWorker } = await import('@silo/worker');

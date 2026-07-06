@@ -37,6 +37,10 @@ jobs:
       # upload path that isn't needed for a private repo.
       - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
         env:
+          # Required for the action to scan `pull_request` events (it fetches
+          # the PR's commit range via the API) — without it the action errors
+          # out on every PR with "GITHUB_TOKEN is now required to scan pull
+          # requests". The automatically-provisioned token is read-only here
+          # (permissions: contents: read above), which is all gitleaks needs.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
-        with:
-          args: detect --source . --redact --no-git
