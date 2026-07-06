@@ -31,16 +31,22 @@ jobs:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
-      # Scan the full working tree rather than the push commit range — the
-      # range form breaks on the initial push (parent of the first commit
-      # doesn't exist). GITLEAKS_ENABLE_UPLOAD_ARTIFACT off avoids the SARIF
-      # upload path that isn't needed for a private repo.
-      - uses: gitleaks/gitleaks-action@ff98106e4c7b2bc287b24eaf42907196329070c7 # v2.3.9
-        env:
-          # Required for the action to scan `pull_request` events (it fetches
-          # the PR's commit range via the API) — without it the action errors
-          # out on every PR with "GITHUB_TOKEN is now required to scan pull
-          # requests". The automatically-provisioned token is read-only here
-          # (permissions: contents: read above), which is all gitleaks needs.
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          GITLEAKS_ENABLE_UPLOAD_ARTIFACT: "false"
+      # Run the gitleaks CLI directly rather than the gitleaks-action wrapper.
+      # We only ever want a plain filesystem scan of the working tree
+      # (`detect --no-git`), but the action's `pull_request` code path insists
+      # on calling the GitHub API (to fetch the PR commit range / post a
+      # summary comment). That path needs a GITHUB_TOKEN and elevated
+      # permissions (`pull-requests: write`) and still fails on this repo with
+      # "Resource not accessible by integration" — none of which a tree scan
+      # needs. Invoking the CLI keeps this job token-free, permission-free, and
+      # identical on push and PR events. Pinned to the same version the action
+      # used (8.24.x). `|| gitleaks detect ...` — non-zero exit means a leak
+      # was found, which correctly fails the job.
+      - name: Install gitleaks
+        run: |
+          GITLEAKS_VERSION=8.24.3
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C /usr/local/bin gitleaks
+          gitleaks version
+      - name: Scan for secrets
+        run: gitleaks detect --source . --redact --no-git --verbose
