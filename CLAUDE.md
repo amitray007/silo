@@ -62,6 +62,7 @@ After **every major code change / implementation unit**, before moving to the ne
 - **Commit promptly and continuously** the moment a unit of work is complete — don't wait for confirmation. Keep committing as work proceeds; each completed slice (or meaningful step) is its own commit. Never let finished work sit uncommitted.
 - **Stage by explicit path.** Never `git add -A`, `git add .`, or `git commit -a` when the tree may hold unrelated changes. Leave untouched files as found.
 - Branch off `main` for feature work; `main` always passes the quality gate (typecheck + lint + test).
+- **Worktrees go in `.claude/worktrees/`.** Every git worktree (e.g. per-slice parallel builds) is created under `.claude/worktrees/<name>` — never as a sibling of the repo root. That path is already gitignored, so worktree checkouts never leak into the tree.
 - End commit messages with:
 
   `Co-Authored-By: Claude <noreply@anthropic.com>`
