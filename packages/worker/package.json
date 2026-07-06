@@ -29,6 +29,7 @@
     "metascraper-publisher": "catalog:",
     "metascraper-title": "catalog:",
     "metascraper-url": "catalog:",
+    "pg-boss": "catalog:",
     "undici": "catalog:"
   },
   "devDependencies": {

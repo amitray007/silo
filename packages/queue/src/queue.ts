@@ -96,15 +96,23 @@ export async function ensureEnrichLinkQueue(boss: PgBoss): Promise<void> {
  * Log how many jobs sit in the dead-letter queue (enrichments that exhausted
  * their retries — each is a link stranded at `enriching`). Without this the DLQ
  * is a black hole: a sustained DB blip could strand many links invisibly. This
- * makes the count observable at startup; a real alerting hook is deferred (see
- * the plan's deferred list). Best-effort — a failure to read the count must
- * never stop the caller from starting.
+ * makes the count observable at startup, and (scheduling-jobs slice) is also
+ * the handler the `dlq-alert` scheduled job calls every ~10 minutes for
+ * ongoing alerting. Best-effort — a failure to read the count must never
+ * stop the caller from starting (or crash the scheduled job).
  */
 export async function logDlqDepth(boss: PgBoss): Promise<void> {
   try {
-    // getQueueStats returns a snapshot array; with persistQueueStats off it's a
-    // single fresh reading. `totalCount` is the pending job count for the queue.
-    const [stats] = await boss.getQueueStats(ENRICH_LINK_DLQ);
+    // getQueueStats returns a snapshot array. With `persistQueueStats` off
+    // (this app's config — see createBoss), pg-boss serves a CACHED count
+    // from the queue table unless it's stale (default budget: one hour) or
+    // `{ force: true }` is passed — it is NOT a fresh reading on every call,
+    // despite what an earlier version of this comment claimed. `force: true`
+    // is load-bearing here: a periodic alert that can silently serve an
+    // hour-old "0" is worse than useless, so every call recomputes (subject
+    // to pg-boss's own much tighter force-budget of ~1 minute between forced
+    // calls, which is fine at this job's ~10-minute cadence).
+    const [stats] = await boss.getQueueStats(ENRICH_LINK_DLQ, { force: true });
     const size = stats?.totalCount ?? 0;
     if (size > 0) {
       console.warn(
