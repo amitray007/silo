@@ -136,7 +136,7 @@ export function TrashView() {
     <>
       <ContentHeader title="Trash" count={links.length} />
       <div className="silo-content-body">
-        <div className="silo-content-col">
+        <div className="silo-content-col silo-route-fade">
           {isLoading && (
             <div style={{ padding: '20px 11px' }} role="status" aria-label="Loading…">
               {[0, 1].map((i) => (

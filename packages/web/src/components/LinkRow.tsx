@@ -197,7 +197,10 @@ export function LinkRow({ link }: { link: LinkJson }) {
               {domain}
             </span>
             {hovered && (
-              <span style={{ flex: 'none', fontSize: '0.74rem', color: 'var(--fnt)' }}>
+              <span
+                className="silo-row-reveal"
+                style={{ flex: 'none', fontSize: 'var(--text-xs)', color: 'var(--fnt)' }}
+              >
                 {relativeTimeFromNow(link.createdAt)}
               </span>
             )}
