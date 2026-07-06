@@ -6,6 +6,7 @@ import {
   useTrashList,
 } from '../api/hooks';
 import { ContentHeader } from '../components';
+import { CenteredPanel } from '../components/CenteredPanel';
 import {
   Dock,
   DockAction,
@@ -16,6 +17,7 @@ import {
   DockSelectedLabel,
   DockTrashIcon,
 } from '../components/Dock';
+import { TrashIcon } from '../components/NavIcons';
 import { useTrashSelection } from '../components/SelectionContext';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
@@ -98,12 +100,45 @@ function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; a
   );
 }
 
-/** v3's `trashEmpty` copy (`Silo-v3.html:198-200`) — a plain left-aligned line, matching the Library's `noResults` treatment rather than the full centered `EmptyState` (reserved for "nothing in the whole store"). */
-function TrashEmptyState() {
+/**
+ * The trash empty state — a proper centered composition (user feedback:
+ * "add a better empty state for trash"), matching the Library's rich
+ * `EmptyState` shell (`CenteredPanel` + mark + headline + body) rather than
+ * the previous bare left-aligned line. Uses the trash-can mark (a permitted
+ * icon) instead of the grain dot, and the body explains the auto-empty
+ * behavior so an empty trash reads as reassuring, not blank.
+ */
+function TrashEmptyState({ purgeWindowDays }: { purgeWindowDays: number }) {
   return (
-    <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--fnt)' }}>
-      Trash is empty.
-    </p>
+    <CenteredPanel>
+      <span style={{ color: 'var(--fnt)', display: 'inline-flex' }}>
+        <TrashIcon size={26} stroke="currentColor" />
+      </span>
+      <p
+        style={{
+          margin: 'var(--s5) 0 0',
+          fontSize: 'var(--text-md)',
+          fontWeight: 500,
+          color: 'var(--ink)',
+          letterSpacing: 'var(--tracking-tight)',
+          textWrap: 'balance',
+        }}
+      >
+        Trash is empty
+      </p>
+      <p
+        style={{
+          margin: 'var(--s1-5) 0 0',
+          fontSize: 'var(--text-sm)',
+          color: 'var(--mut)',
+          maxWidth: '30ch',
+          lineHeight: 'var(--lh-snug)',
+          textWrap: 'pretty',
+        }}
+      >
+        Deleted links land here and keep their text. They auto-empty after {purgeWindowDays} days.
+      </p>
+    </CenteredPanel>
   );
 }
 
@@ -163,7 +198,7 @@ export function TrashView() {
           {!isLoading &&
             !isError &&
             (links.length === 0 ? (
-              <TrashEmptyState />
+              <TrashEmptyState purgeWindowDays={purgeWindowDays} />
             ) : (
               groups.map((group) => (
                 <TrashDayGroup

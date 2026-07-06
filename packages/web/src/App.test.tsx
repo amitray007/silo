@@ -55,7 +55,7 @@ describe('App routing', () => {
 
   it('renders the Trash view + active nav item at /trash', async () => {
     renderApp(['/trash']);
-    await waitFor(() => expect(screen.getByText('Trash is empty.')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
     const trashLink = screen.getByRole('link', { name: /trash/i });
     expect(trashLink.getAttribute('aria-current')).toBe('page');
   });

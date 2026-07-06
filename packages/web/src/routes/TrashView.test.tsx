@@ -46,7 +46,7 @@ describe('TrashView', () => {
 
     renderTrashView(fetchImpl);
 
-    await waitFor(() => expect(screen.getByText('Trash is empty.')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
     expect(screen.queryByText('Select all')).toBeNull();
     expect(screen.queryByText('Empty all')).toBeNull();
   });
