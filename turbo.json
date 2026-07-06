@@ -13,7 +13,15 @@
     },
     "dev": {
       "cache": false,
-      "persistent": true
+      "persistent": true,
+      "passThroughEnv": [
+        "DATABASE_URL",
+        "TEST_DATABASE_URL",
+        "CI_REQUIRE_DB",
+        "WORKER_DATABASE_URL",
+        "SILO_TRASH_PURGE_DAYS",
+        "SILO_ENRICHING_STALE_MINUTES"
+      ]
     },
     "test": {
       "dependsOn": ["^build"],
