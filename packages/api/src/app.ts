@@ -6,6 +6,7 @@ import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
+import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTagsRoutes } from './routes/tags.js';
 import { registerTrashRoutes } from './routes/trash.js';
 
@@ -69,6 +70,7 @@ export function createApp(): Hono {
   registerCountsRoutes(api);
   registerFaviconRoutes(api);
   registerPreviewImageRoutes(api);
+  registerSettingsRoutes(api);
   app.route('/api', api);
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import { usePasteCapture } from '../lib/usePasteCapture';
+import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
 import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
 import { HoverPreviewProvider } from './HoverPreviewContext';
@@ -218,6 +219,11 @@ export function AppFrame() {
     // a sibling — the sidebar needs `useSettings()` too, so the provider has
     // to sit above both.
     <SettingsProvider>
+      {/* Reconciles the persisted `theme` setting in on load (plan 016) — see
+          `ThemeSettingsSync`'s doc comment. Renders nothing; mounted once
+          here (inside every provider it needs: QueryClientProvider sits
+          above AppFrame in main.tsx, ThemeProvider likewise). */}
+      <ThemeSettingsSync />
       <div className="silo-frame">
         <div className="silo-band">
           <div className="silo-topbar">
