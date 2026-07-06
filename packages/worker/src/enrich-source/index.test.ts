@@ -1,3 +1,4 @@
+import { SETTINGS_DEFAULTS } from '@silo/core';
 import { describe, expect, it } from 'vitest';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
 import { enrichSource } from './index.js';
@@ -82,5 +83,95 @@ describe('enrichSource', () => {
     // Not a network test — just proves the default-deps wiring is well-typed
     // and callable; a plain-link url never reaches the network at all.
     await expect(enrichSource('link', 'https://example.com')).resolves.toBeUndefined();
+  });
+
+  describe('registry dispatch (plan 017 — the switch -> registry extraction)', () => {
+    it('still dispatches all 3 registered kinds to their own enricher (github)', async () => {
+      const result = await enrichSource('github', 'https://github.com/vercel/next.js', {
+        fetchFn: () =>
+          Promise.resolve(okResult({ stargazers_count: 5, forks_count: 6, open_issues_count: 7 })),
+      });
+      expect(result).toEqual({ kind: 'github', stars: 5, forks: 6, issues: 7 });
+    });
+
+    it('still dispatches all 3 registered kinds to their own enricher (youtube)', async () => {
+      const result = await enrichSource('youtube', 'https://www.youtube.com/watch?v=dQw4w9WgXcQ', {
+        fetchFn: () => Promise.resolve(okResult({ author_name: 'Someone' })),
+      });
+      expect(result).toEqual({
+        kind: 'youtube',
+        channel: 'Someone',
+        thumbnailUrl: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
+      });
+    });
+
+    it('still dispatches all 3 registered kinds to their own enricher (hacker_news)', async () => {
+      const result = await enrichSource('hacker_news', 'https://news.ycombinator.com/item?id=42', {
+        fetchFn: () => Promise.resolve(okResult({ score: 42, descendants: 7, by: 'dang' })),
+      });
+      expect(result).toEqual({ kind: 'hacker_news', points: 42, comments: 7, author: 'dang' });
+    });
+  });
+
+  describe('plugin toggle enforcement (plan 017)', () => {
+    it('a disabled plugin skips its enricher (resolves undefined, degrades like no source enrichment)', async () => {
+      const result = await enrichSource(
+        'hacker_news',
+        'https://news.ycombinator.com/item?id=1',
+        { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
+        { hacker_news: false, github: true, youtube: true },
+      );
+      expect(result).toBeUndefined();
+    });
+
+    it('an enabled plugin still enriches normally', async () => {
+      const result = await enrichSource(
+        'hacker_news',
+        'https://news.ycombinator.com/item?id=1',
+        { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
+        { hacker_news: true, github: true, youtube: true },
+      );
+      expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
+    });
+
+    it('disabling one plugin does not affect another (github stays enabled while hacker_news is off)', async () => {
+      const result = await enrichSource(
+        'github',
+        'https://github.com/vercel/next.js',
+        {
+          fetchFn: () =>
+            Promise.resolve(
+              okResult({ stargazers_count: 1, forks_count: 2, open_issues_count: 3 }),
+            ),
+        },
+        { hacker_news: false, github: true, youtube: true },
+      );
+      expect(result).toEqual({ kind: 'github', stars: 1, forks: 2, issues: 3 });
+    });
+
+    it('a missing enabledPlugins map defaults to enabled (matches SETTINGS_DEFAULTS.plugins semantics)', async () => {
+      const result = await enrichSource('hacker_news', 'https://news.ycombinator.com/item?id=1', {
+        fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })),
+      });
+      // No 4th arg at all — same as production code paths that haven't
+      // determined a toggle state; must not silently disable everything.
+      expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
+    });
+  });
+
+  describe('registry-kinds-vs-settings-keys drift guard (plan 017)', () => {
+    it('the registry kinds match the settings-schema plugin keys exactly (module-load assertion, mirrors queue.ts — this module having imported successfully at the top of this file IS the guard passing)', () => {
+      // The guard runs once, at import time, in enrich-source/index.ts itself
+      // (`if (registry kinds !== settings keys) throw`) — the same pattern
+      // `packages/queue/src/queue.ts` uses for its queue-name-drift check.
+      // There is nothing left to assert here beyond "this test file's own
+      // `import { enrichSource } from './index.js'` at the top didn't throw"
+      // — which every other test in this file already proves by running at
+      // all. This test exists so the guard's EXISTENCE is discoverable from
+      // the test file, not just from reading the source.
+      expect(Object.keys(SETTINGS_DEFAULTS.plugins).sort()).toEqual(
+        ['github', 'hacker_news', 'youtube'].sort(),
+      );
+    });
   });
 });

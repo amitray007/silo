@@ -14,8 +14,8 @@
  * `worker.ts`). A degraded capture is not a bug; an unreachable database is.
  */
 
-import type { SourceData } from '@silo/core';
-import { getById, recordEnrichment } from '@silo/core';
+import type { SettingsMap, SourceData } from '@silo/core';
+import { getById, getSetting, recordEnrichment, SETTINGS_DEFAULTS } from '@silo/core';
 import { enrichSource } from './enrich-source/index.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
@@ -33,10 +33,33 @@ export interface EnrichLinkDeps {
    * why). Defaults to the real dispatcher; tests inject a stub so the HN/
    * GitHub/YouTube network calls never actually run.
    */
-  enrichSource: (sourceKind: string, url: string) => Promise<SourceData | undefined>;
+  enrichSource: (
+    sourceKind: string,
+    url: string,
+    enabledPlugins?: SettingsMap['plugins'],
+  ) => Promise<SourceData | undefined>;
+  /**
+   * Reads the CURRENT `plugins` toggle map (plan 017 — "enforce the toggle").
+   * Defaults to the real `core.getSetting`; tests inject a stub so a toggle
+   * state can be asserted without a real settings row. Read ONCE per
+   * `enrichLink` call (not per source) — see the call site below.
+   */
+  getPluginsSetting: () => Promise<SettingsMap['plugins']>;
 }
 
-const defaultDeps: EnrichLinkDeps = { safeFetch, extract, enrichSource };
+const defaultDeps: EnrichLinkDeps = {
+  safeFetch,
+  extract,
+  // Adapter, not just a re-export: the real `enrichSource` takes its fetch
+  // deps as a 3rd positional param (its own injectable seam, for ITS unit
+  // tests) — `EnrichLinkDeps.enrichSource` has no such param (this module has
+  // no reason to override the fetcher), so this closes over the default and
+  // forwards only `enabledPlugins` in the 3rd slot `enrichSource` actually
+  // expects it in.
+  enrichSource: (sourceKind, url, enabledPlugins) =>
+    enrichSource(sourceKind, url, undefined, enabledPlugins),
+  getPluginsSetting: () => getSetting('plugins'),
+};
 
 /**
  * Map a `safeFetch` failure reason to a terminal capture status (plan R10/
@@ -102,6 +125,17 @@ function mapSafeFetchFailureToStatus(
  * for every expected failure, so `Promise.all` never rejects on an expected
  * degraded outcome; a genuinely unexpected throw (an infra bug) from either
  * still propagates for pg-boss to retry, exactly as before.
+ *
+ * Plugin toggle enforcement (plan 017): the `plugins` setting is read via
+ * `deps.getPluginsSetting()` ONCE per call (not once per source, and not
+ * inside `enrichSource` itself, which stays a pure/no-DB dispatcher) — a
+ * single settings read per job, not a hot-loop DB call. A read failure
+ * (setting corrupted, database hiccup) DEGRADES to `SETTINGS_DEFAULTS
+ * .plugins` (all enabled) rather than failing the job — a plugin toggle is a
+ * nice-to-have UX feature; it must never be the reason a capture fails.
+ * `core.getSetting` itself already degrades an invalid/missing STORED value
+ * to the default, so the only failure this guards against is the read
+ * itself throwing (e.g. the database being briefly unreachable).
  */
 export async function enrichLink(
   linkId: string,
@@ -112,6 +146,8 @@ export async function enrichLink(
     return;
   }
 
+  const enabledPlugins = await deps.getPluginsSetting().catch(() => SETTINGS_DEFAULTS.plugins);
+
   const [fetchResult, sourceData] = await Promise.all([
     deps.safeFetch(link.url),
     // Defense in depth (reliability review): `enrichSource` is already
@@ -121,7 +157,7 @@ export async function enrichLink(
     // `.catch` here guarantees that even a future regression in that
     // contract degrades to "no sourceData this pass" rather than propagating
     // and failing the whole `enrichLink` job.
-    deps.enrichSource(link.sourceKind, link.url).catch(() => undefined),
+    deps.enrichSource(link.sourceKind, link.url, enabledPlugins).catch(() => undefined),
   ]);
 
   if (!fetchResult.ok) {
