@@ -129,8 +129,12 @@ export function TrashRow({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 13,
-        padding: '9px 11px',
+        gap: 'var(--s3)',
+        // K3 (oat-conformance audit): was '9px 11px' — LinkRow's `.silo-link-row`
+        // (base.css) rounds its own `10px 11px` to the same `var(--s2-5)`
+        // token, so both rows now share the IDENTICAL row padding and render
+        // at the same height (the drift this increment's audit flagged).
+        padding: 'var(--s2-5) var(--s2-5)',
         borderRadius: 8,
         background: hovered || isSelected ? 'var(--hov)' : 'transparent',
         textDecoration: 'none',
@@ -144,7 +148,15 @@ export function TrashRow({
         onToggle={() => selection.toggle(link.id)}
       />
       {!showCheck && <Chip domain={domain} />}
-      <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 11 }}>
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 'var(--s2-5)',
+        }}
+      >
         <span
           style={{
             fontWeight: 500,
@@ -177,7 +189,7 @@ export function TrashRow({
           flex: 'none',
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 5,
+          gap: 'var(--s1-5)',
           fontSize: '0.74rem',
           fontWeight: 500,
           color: 'var(--warn)',

@@ -21,11 +21,18 @@ type YoutubeSourceData = Extract<SourceData, { kind: 'youtube' }>;
  */
 function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNewsSourceData }) {
   return (
-    <div style={{ padding: '13px 14px 2px' }}>
+    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
       <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
         {title}
       </div>
-      <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, marginTop: 7 }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 'var(--s2-5)',
+          marginTop: 'var(--s1-5)',
+        }}
+      >
         <span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--markt)' }}>
           ▲ {sourceData.points} points
         </span>
@@ -59,7 +66,7 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
   const langPct = sourceData.languagePct ?? 0;
 
   return (
-    <div style={{ padding: '13px 14px 2px' }}>
+    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
       <div
         style={{
           fontSize: '0.84rem',
@@ -87,7 +94,12 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
           {sourceData.description}
         </div>
       )}
-      <div style={{ display: 'flex', gap: 18, marginTop: 12 }}>
+      {/* K3 (oat-conformance audit): gap 18 is LEFT un-tokenized — it sits
+          between --s4/16px and --s5/20px with no clean step, and this is the
+          stats row's own deliberate breathing room. marginTop 12 → var(--s3)
+          exact (both places below). marginTop 1 is left un-tokenized (a
+          sub-scale optical nudge, no --s* value that small exists). */}
+      <div style={{ display: 'flex', gap: 18, marginTop: 'var(--s3)' }}>
         {stats.map((s) => (
           <div key={s.key}>
             <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)' }}>{s.n}</div>
@@ -103,13 +115,13 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
               height: 3,
               borderRadius: 2,
               overflow: 'hidden',
-              marginTop: 12,
+              marginTop: 'var(--s3)',
             }}
           >
             <span style={{ width: `${langPct}%`, background: 'var(--mark)' }} />
             <span style={{ flex: 1, background: 'var(--line)' }} />
           </div>
-          <div style={{ fontSize: '0.68rem', color: 'var(--fnt)', marginTop: 5 }}>
+          <div style={{ fontSize: '0.68rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
             {sourceData.language}
           </div>
         </>
@@ -186,7 +198,7 @@ function VideoVariant({
               background: 'var(--bg)',
               border: '1px solid var(--line)',
               borderRadius: 5,
-              padding: '2px 8px',
+              padding: 'var(--s-0-5) var(--s2)',
             }}
           >
             video thumbnail
@@ -208,11 +220,11 @@ function VideoVariant({
           }}
         />
       )}
-      <div style={{ padding: '12px 14px 2px' }}>
+      <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
         <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
           {title}
         </div>
-        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 4 }}>
+        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1)' }}>
           {sourceData.channel}
         </div>
       </div>
@@ -235,12 +247,14 @@ function GenericVariant({
   hasNote: boolean;
 }) {
   return (
-    <div style={{ padding: '13px 14px 2px' }}>
+    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
       <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
         {title}
       </div>
       {hasTags && (
-        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 6 }}>{tagLine}</div>
+        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
+          {tagLine}
+        </div>
       )}
       {hasNote && (
         <div
@@ -248,7 +262,7 @@ function GenericVariant({
             fontSize: '0.78rem',
             color: 'var(--mut)',
             fontStyle: 'italic',
-            marginTop: 6,
+            marginTop: 'var(--s1-5)',
             display: '-webkit-box',
             WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical',
@@ -321,7 +335,8 @@ export function HoverPreview({
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 12,
-        boxShadow: '0 24px 60px -24px rgba(40,28,8,.5)',
+        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
+        boxShadow: 'var(--elev-2)',
         overflow: 'hidden',
         boxSizing: 'border-box',
         // The card is placed to the RIGHT of the hovered row
@@ -340,8 +355,8 @@ export function HoverPreview({
         className="silo-icon-btn-sm"
         style={{
           position: 'absolute',
-          top: 9,
-          right: 9,
+          top: 'var(--s2)',
+          right: 'var(--s2)',
           border: 0,
           background: 'none',
           fontFamily: 'inherit',
@@ -349,7 +364,7 @@ export function HoverPreview({
           lineHeight: 1,
           color: 'var(--ghost)',
           cursor: 'pointer',
-          padding: 4,
+          padding: 'var(--s1)',
           borderRadius: 6,
         }}
       >
@@ -374,9 +389,9 @@ export function HoverPreview({
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 8,
-          padding: '10px 14px 11px',
-          marginTop: 9,
+          gap: 'var(--s2)',
+          padding: 'var(--s2-5) var(--s3-5) var(--s2-5)',
+          marginTop: 'var(--s2)',
           borderTop: '1px solid var(--line)',
           fontSize: '0.72rem',
           color: 'var(--fnt)',

@@ -135,14 +135,22 @@ export function LinkRow({ link }: { link: LinkJson }) {
         onBlur={handleLeave}
         style={isSelected ? { background: 'var(--hov)' } : undefined}
       >
-        <span style={{ display: 'flex', alignItems: 'center', gap: 13 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>
           <RowSelectCheckbox
             visible={showCheck}
             isSelected={isSelected}
             onToggle={() => selection.toggle(link.id)}
           />
           {!showCheck && <Chip domain={domain} />}
-          <span style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 11 }}>
+          <span
+            style={{
+              flex: 1,
+              minWidth: 0,
+              display: 'flex',
+              alignItems: 'baseline',
+              gap: 'var(--s2-5)',
+            }}
+          >
             <span
               style={{
                 fontWeight: 500,
@@ -162,7 +170,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
                   flex: 'none',
                   display: 'inline-flex',
                   alignItems: 'baseline',
-                  gap: 5,
+                  gap: 'var(--s1-5)',
                   fontSize: '0.76rem',
                   fontWeight: 500,
                   color: 'var(--markt)',
@@ -210,8 +218,19 @@ export function LinkRow({ link }: { link: LinkJson }) {
               flex: 'none',
               display: 'grid',
               placeItems: 'center',
-              width: 28,
-              height: 28,
+              // K5 (oat-conformance audit): this button never paints a
+              // background (color-only ghost→ink feedback, no hover fill —
+              // see the `color` line below), so growing the box itself to
+              // the ≥40px touch-target floor (`var(--s10)`) is visually
+              // identical to the old 28px box — only the glyph's own
+              // fontSize governs its apparent size, and that's unchanged.
+              // A negative margin keeps the row's own layout from shifting
+              // (the extra hit area extends into surrounding whitespace, not
+              // into sibling content — this button is `flex: 'none'` at the
+              // row's end).
+              width: 'var(--s10)',
+              height: 'var(--s10)',
+              margin: 'calc(-1 * var(--s1-5))',
               border: 0,
               borderRadius: 6,
               background: 'none',
@@ -234,7 +253,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
           <span
             style={{
               display: 'block',
-              padding: '2px 20px 0 31px',
+              padding: 'var(--s-0-5) var(--s5) 0 var(--row-inset)',
               fontSize: '0.78rem',
               color: 'var(--fnt)',
               overflow: 'hidden',
@@ -252,7 +271,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              padding: '2px 20px 0 31px',
+              padding: 'var(--s-0-5) var(--s5) 0 var(--row-inset)',
               fontSize: '0.8rem',
               color: 'var(--mut)',
               fontStyle: 'italic',

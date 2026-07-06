@@ -15,9 +15,19 @@ const VARIANT_STYLE: Record<
   NavItemVariant,
   { fontWeight: number; inactiveColor: string; padding: string }
 > = {
-  default: { fontWeight: 500, inactiveColor: 'var(--mut)', padding: '7px 10px' },
-  settings: { fontWeight: 400, inactiveColor: 'var(--fnt)', padding: '7px 10px' },
-  tag: { fontWeight: 400, inactiveColor: 'var(--mut)', padding: '5px 10px' },
+  // K3 (oat-conformance audit): 10px → var(--s2-5) exact on every variant.
+  // The vertical value intentionally stays DIFFERENT between variants (7px
+  // vs. 5px) — that's the deliberate row-height distinction the class doc
+  // comment above describes (default/settings rows taller than tag rows),
+  // not drift to fix. 7px has no clean --s* match (between --s1-5/6px and
+  // --s2/8px) — left un-tokenized rather than changing the row height;
+  // same for 5px, which stays literal (NOT rounded to --s1-5/6px here,
+  // unlike NavItem's own doc-comment guidance for OTHER 5/6 gaps — rounding
+  // it would nudge tag rows 1px taller, a real visible change to leave out
+  // of a token-migration-only pass).
+  default: { fontWeight: 500, inactiveColor: 'var(--mut)', padding: '7px var(--s2-5)' },
+  settings: { fontWeight: 400, inactiveColor: 'var(--fnt)', padding: '7px var(--s2-5)' },
+  tag: { fontWeight: 400, inactiveColor: 'var(--mut)', padding: '5px var(--s2-5)' },
 };
 
 interface NavItemProps extends AnchorHTMLAttributes<HTMLAnchorElement> {
@@ -59,7 +69,7 @@ export function NavItem({
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        gap: 'var(--s2-5)',
         width: '100%',
         boxSizing: 'border-box',
         textAlign: 'left',
@@ -73,7 +83,10 @@ export function NavItem({
         // Active = ink on the lighter --bg ground (NOT --bg2/--hov, which barely
         // differ from the sidebar) + a subtle warm shadow, so the active pill
         // reads as a raised card lifted off the --bg2 sidebar — the prototype's
-        // exact `on` state (Silo-v2.html): b:var(--bg), s:0 1px 3px rgba(40,30,10,.12).
+        // exact `on` state (Silo-v2.html): b:var(--bg), s:0 1px 3px rgba(40,30,10,.12),
+        // now sourced from `var(--elev-1)` (K6, oat-conformance audit) so this
+        // shadow tracks the shared elevation ramp (and gets dark-mode's deeper
+        // black-based shadow) instead of a hardcoded light-mode-only rgba.
         // Never amber (tokens.md: "active = ink on raised bg, never amber").
         // The INACTIVE background is intentionally omitted here (review fix,
         // CodeRabbit): inline styles always beat CSS class rules regardless
@@ -83,9 +96,7 @@ export function NavItem({
         // actually paint. Only the ACTIVE case sets an inline background
         // (it's a per-instance boolean CSS can't express); the resting/hover
         // background for every other row is CSS-owned.
-        ...(active
-          ? { background: 'var(--bg)', boxShadow: '0 1px 3px rgba(40, 30, 10, 0.12)' }
-          : {}),
+        ...(active ? { background: 'var(--bg)', boxShadow: 'var(--elev-1)' } : {}),
         transform: 'scale(1)',
         transition:
           'background .15s ease, color .15s ease, box-shadow .15s ease, transform .1s var(--ease-out)',

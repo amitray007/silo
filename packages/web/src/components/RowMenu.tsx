@@ -24,14 +24,14 @@ function menuItemStyle(active = false): React.CSSProperties {
   return {
     display: 'flex',
     alignItems: 'center',
-    gap: 9,
+    gap: 'var(--s2)',
     width: '100%',
     boxSizing: 'border-box',
     border: 0,
     background: active ? 'var(--hov)' : 'none',
     fontFamily: 'inherit',
     textAlign: 'left',
-    padding: '8px 10px',
+    padding: 'var(--s2) var(--s2-5)',
     borderRadius: 8,
     fontSize: '0.82rem',
     fontWeight: 500,
@@ -111,7 +111,7 @@ const iconSlotStyle: React.CSSProperties = {
 };
 
 function Divider() {
-  return <div style={{ borderTop: '1px solid var(--line)', margin: '5px 4px' }} />;
+  return <div style={{ borderTop: '1px solid var(--line)', margin: 'var(--s1-5) var(--s1)' }} />;
 }
 
 /** A small, consistent 14px stroke icon — shared sizing for every RowMenu action icon (open/copy/edit), so they read as one deliberate icon set rather than mismatched glyph sizes. */
@@ -186,8 +186,9 @@ function TagsFlyout({ link }: { link: LinkJson }) {
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 12,
-        boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
-        padding: 6,
+        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
+        boxShadow: 'var(--elev-2)',
+        padding: 'var(--s1-5)',
         // Grows leftward from the "tags" trigger it's anchored to (its right
         // edge sits flush against the trigger's left edge) — not the popover's
         // own center, per review-animations-STANDARDS.md's origin-aware rule.
@@ -202,8 +203,8 @@ function TagsFlyout({ link }: { link: LinkJson }) {
         style={{
           width: '100%',
           boxSizing: 'border-box',
-          margin: '0 0 4px',
-          padding: '6px 9px',
+          margin: '0 0 var(--s1)',
+          padding: 'var(--s1-5) var(--s2)',
           border: '1px solid var(--line)',
           borderRadius: 7,
           background: 'var(--bg2)',
@@ -285,15 +286,16 @@ export function RowMenu({ link }: { link: LinkJson }) {
       onClick={stop}
       style={{
         position: 'absolute',
-        right: 8,
+        right: 'var(--s2)',
         top: 'calc(100% - 3px)',
         zIndex: 30,
         width: 224,
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 12,
-        boxShadow: '0 18px 50px -20px rgba(40,28,8,.45)',
-        padding: 5,
+        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
+        boxShadow: 'var(--elev-2)',
+        padding: 'var(--s1-5)',
         // Anchored top-right to the row's `⋯` trigger — scales from there,
         // not center (review-animations-STANDARDS.md's origin-aware rule).
         transformOrigin: 'top right',

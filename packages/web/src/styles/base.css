@@ -88,7 +88,12 @@ select {
    the Orpheus reference's more comfortable row height. */
 .silo-link-row {
   display: block;
-  padding: 10px 11px;
+  /* K3 (oat-conformance audit): was `10px 11px` — rounded to `var(--s2-5)`
+     (10px) on both axes so this matches TrashRow.tsx's own row padding
+     exactly (that row was `9px 11px`, now also `var(--s2-5)`) — the two rows
+     previously drifted by 1-2px and rendered at very slightly different
+     heights. */
+  padding: var(--s2-5) var(--s2-5);
   border-radius: 8px;
   color: inherit;
   text-decoration: none;
@@ -150,8 +155,11 @@ select {
   border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
+  /* 3px has no clean --s* match (between --s-0-5/2px and --s1/4px) — left
+     un-tokenized rather than visibly changing the sidebar's tight row gap. */
   gap: 3px;
-  padding: 16px 13px;
+  /* K3: 16px → var(--s4) exact; 13px → var(--s3) (12px, nearest scale step). */
+  padding: var(--s4) var(--s3);
   box-sizing: border-box;
 }
 
@@ -175,12 +183,21 @@ select {
 /* The scrolling body beneath the header bar — v3: `flex:1;min-height:0;
    overflow-y:auto;padding:8px clamp(16px,3vw,28px) 36px`. Each route renders
    its `ContentHeader` (unscrolled, a `.silo-content` flex sibling) followed
-   by this body wrapper, so only the body scrolls. */
+   by this body wrapper, so only the body scrolls.
+   K6 (oat-conformance audit) — top padding tuned to `var(--s2)` (8px). The
+   header→content boundary intentionally gets MORE air than inter-group gaps:
+   `DayGroupHeading`'s own `var(--s5)` (20px) top + this 8px = 28px below the
+   header divider, which reads as a deliberate section break rather than a
+   seam (a completely flush 0 top crowded the first label — and the empty
+   states — against the divider). Inter-group gaps stay at the heading's own
+   20px. The clamp() (horizontal) and 36px (bottom) are left as-is — the
+   horizontal clamp has no --s* match worth breaking, and 36px has no clean
+   scale step either. */
 .silo-content-body {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
-  padding: 8px clamp(16px, 3vw, 28px) 36px;
+  padding: var(--s2) clamp(16px, 3vw, 28px) 36px;
   display: flex;
   flex-direction: column;
 }

@@ -27,7 +27,10 @@ describe('NavItem', () => {
     // clearly. NOT --hov (barely differs from the sidebar) and NEVER amber.
     expect(link.style.background).toBe('var(--bg)');
     expect(link.style.boxShadow).not.toBe('none');
-    expect(link.style.boxShadow).toContain('rgba');
+    // K6 (oat-conformance audit): sourced from the shared elevation token
+    // rather than a hardcoded rgba literal, so both themes get the right
+    // shadow depth from one place.
+    expect(link.style.boxShadow).toBe('var(--elev-1)');
     expect(link.getAttribute('aria-current')).toBe('page');
     // assert no amber token anywhere in the active row's chrome
     expect(link.style.color).not.toContain('--mark');
@@ -88,17 +91,17 @@ describe('NavItem', () => {
     expect(link.style.fontWeight).toBe('400');
   });
 
-  it('the default variant is weight 500 with --mut inactive color and 7px 10px padding', () => {
+  it('the default variant is weight 500 with --mut inactive color and 7px var(--s2-5) padding (K3 token migration)', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
     expect(link.style.fontWeight).toBe('500');
     expect(link.style.color).toBe('var(--mut)');
-    expect(link.style.padding).toBe('7px 10px');
+    expect(link.style.padding).toBe('7px var(--s2-5)');
   });
 
-  it('the "tag" variant uses 5px 10px padding (v3)', () => {
+  it('the "tag" variant uses 5px var(--s2-5) padding (v3; K3 token migration)', () => {
     render(<NavItem label="#ai" href="/tags/ai" variant="tag" />);
     const link = screen.getByRole('link', { name: /ai/i });
-    expect(link.style.padding).toBe('5px 10px');
+    expect(link.style.padding).toBe('5px var(--s2-5)');
   });
 });

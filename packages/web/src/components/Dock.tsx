@@ -26,7 +26,11 @@ import { TrashIcon } from './NavIcons';
  */
 export function Dock({
   children,
-  padding = '9px 12px 9px 18px',
+  // K3 (oat-conformance audit): 9px → var(--s2) (rounded to 8px); 12px →
+  // var(--s3) exact. The 18px left offset is LEFT un-tokenized (no clean
+  // --s* step between --s4/16px and --s5/20px, and it's the deliberate
+  // asymmetric "room for the label" inset the class doc comment describes).
+  padding = 'var(--s2) var(--s3) var(--s2) 18px',
 }: {
   children: ReactNode;
   padding?: string;
@@ -40,15 +44,18 @@ export function Dock({
         margin: '0 auto',
         width: 'max-content',
         maxWidth: 'calc(100vw - 40px)',
-        bottom: 32,
+        bottom: 'var(--s8)',
         zIndex: 35,
         display: 'flex',
         alignItems: 'center',
-        gap: 14,
+        gap: 'var(--s3-5)',
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 999,
-        boxShadow: '0 20px 50px -18px rgba(40,28,8,.45)',
+        // K6: dock is a fixed-position overlay (highest prominence, like a
+        // modal), so it takes the strongest elevation step rather than the
+        // mid-tier --elev-2 popovers use.
+        boxShadow: 'var(--elev-3)',
         padding,
         // Bottom-anchored: it slides/scales up off the bottom edge it's
         // pinned to, not its own center (review-animations-STANDARDS.md's
@@ -76,7 +83,7 @@ export function DockSelectedLabel({ count }: { count: number }) {
 
 /** The `|` divider between a dock's label and its actions — one shared style for the vertical rule every dock uses. */
 export function DockDivider() {
-  return <span style={{ width: 1, height: 14, background: 'var(--line)' }} />;
+  return <span style={{ width: 1, height: 'var(--s3-5)', background: 'var(--line)' }} />;
 }
 
 /** A text-only dock action (v3's `clear`/`select all`/`empty all`/`restore`/`delete now` buttons, minus the icon ones — see `DockIconAction` for those). `disabled` dims + inactivates it (used to block a double-fire while a bulk op is pending). */
@@ -134,7 +141,7 @@ export function DockIconAction({
       style={{
         display: 'inline-flex',
         alignItems: 'center',
-        gap: 6,
+        gap: 'var(--s1-5)',
         border: 0,
         background: 'none',
         fontFamily: 'inherit',
@@ -162,7 +169,7 @@ export function DockEscHint() {
         color: 'var(--fnt)',
         border: '1px solid var(--line)',
         borderRadius: 5,
-        padding: '2px 5px',
+        padding: 'var(--s-0-5) var(--s1-5)',
         background: 'var(--bg2)',
       }}
     >

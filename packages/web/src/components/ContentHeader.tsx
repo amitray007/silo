@@ -12,7 +12,7 @@ interface ContentHeaderProps {
    * `undefined` renders nothing.
    */
   captureError?: string;
-  /** Right-aligned slot — reserved for the omnibar (V3-2); pass nothing to render an empty placeholder sized to match. */
+  /** Right-aligned slot — reserved for the omnibar (V3-2). Renders nothing when omitted (TrashView/SettingsView pass no children — a phantom placeholder box there would be decorative chrome that does nothing, violating "silence means complete"). */
   children?: ReactNode;
 }
 
@@ -78,17 +78,7 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
           couldn't save that — {captureError}
         </span>
       )}
-      {children ?? (
-        <div
-          aria-hidden="true"
-          style={{
-            width: 'clamp(280px, 46%, 520px)',
-            height: 40,
-            borderRadius: 10,
-            background: 'var(--bg2)',
-          }}
-        />
-      )}
+      {children}
     </div>
   );
 }

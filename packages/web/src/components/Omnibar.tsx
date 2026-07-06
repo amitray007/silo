@@ -80,11 +80,15 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
         width: 'clamp(280px, 46%, 520px)',
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        gap: 'var(--s2-5)',
         border: `1px solid ${focused ? 'var(--ghost)' : 'var(--line)'}`,
         borderRadius: 11,
         background: 'var(--bg2)',
-        padding: '10px 15px',
+        // K3 (oat-conformance audit): 10px → var(--s2-5) exact. The 15px
+        // horizontal value is LEFT un-tokenized — the nearest step
+        // (var(--s3-5), 14px) would nudge the bar's side padding in a way
+        // that's not worth the risk in a spacing-migration-only pass.
+        padding: 'var(--s2-5) 15px',
         transition: 'border-color .15s ease, background .2s ease',
       }}
     >
@@ -116,11 +120,11 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
             flex: 'none',
             display: 'inline-flex',
             alignItems: 'center',
-            gap: 6,
+            gap: 'var(--s1-5)',
             border: '1px solid var(--line)',
             background: 'var(--bg)',
             borderRadius: 999,
-            padding: '2px 10px',
+            padding: 'var(--s-0-5) var(--s2-5)',
             fontFamily: 'inherit',
             fontSize: '0.74rem',
             fontWeight: 500,
@@ -164,7 +168,12 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
 
       {omniIsUrl && (
         <span
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--s1-5)',
+            whiteSpace: 'nowrap',
+          }}
         >
           <span style={{ fontSize: '0.74rem', color: 'var(--markt)', fontWeight: 500 }}>keep</span>
           <EscChip>↵</EscChip>
@@ -172,7 +181,12 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
       )}
       {omniIsSearch && (
         <span
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--s1-5)',
+            whiteSpace: 'nowrap',
+          }}
         >
           <span style={{ fontSize: '0.72rem', color: 'var(--fnt)' }}>{shownCount} found</span>
           <EscChip>esc</EscChip>
@@ -180,7 +194,12 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
       )}
       {omniTagIdle && (
         <span
-          style={{ display: 'inline-flex', alignItems: 'center', gap: 6, whiteSpace: 'nowrap' }}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 'var(--s1-5)',
+            whiteSpace: 'nowrap',
+          }}
         >
           <span style={{ fontSize: '0.72rem', color: 'var(--fnt)' }}>
             {shownCount} of {libCount}
@@ -195,7 +214,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
             color: 'var(--fnt)',
             border: '1px solid var(--line)',
             borderRadius: 5,
-            padding: '2px 6px',
+            padding: 'var(--s-0-5) var(--s1-5)',
             background: 'var(--bg)',
           }}
         >
@@ -215,7 +234,7 @@ function EscChip({ children }: { children: React.ReactNode }) {
         color: 'var(--fnt)',
         border: '1px solid var(--line)',
         borderRadius: 5,
-        padding: '2px 6px',
+        padding: 'var(--s-0-5) var(--s1-5)',
         background: 'var(--bg)',
       }}
     >
