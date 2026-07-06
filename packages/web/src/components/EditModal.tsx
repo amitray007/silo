@@ -19,7 +19,7 @@ const labelStyle: React.CSSProperties = {
   margin: '0 0 4px',
   fontSize: '0.72rem',
   fontWeight: 500,
-  color: 'var(--ghost)',
+  color: 'var(--fnt)',
   letterSpacing: '0.02em',
 };
 

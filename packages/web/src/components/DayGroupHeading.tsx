@@ -5,7 +5,7 @@ export function DayGroupHeading({ label }: { label: string }) {
       style={{
         fontSize: '0.78rem',
         fontWeight: 500,
-        color: 'var(--ghost)',
+        color: 'var(--fnt)',
         padding: '20px 11px 6px',
         margin: 0,
       }}

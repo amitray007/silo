@@ -74,7 +74,7 @@ export function TagOptionsList({
         </button>
       ))}
       {hidden > 0 && (
-        <div style={{ padding: notePadding, fontSize: '0.7rem', color: 'var(--ghost)' }}>
+        <div style={{ padding: notePadding, fontSize: '0.7rem', color: 'var(--fnt)' }}>
           {hidden} more — type to narrow
         </div>
       )}

@@ -56,7 +56,7 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
         {title}
       </h1>
       {count !== undefined && (
-        <span style={{ fontSize: '0.76rem', color: 'var(--ghost)' }}>{count}</span>
+        <span style={{ fontSize: '0.76rem', color: 'var(--fnt)' }}>{count}</span>
       )}
       <span style={{ flex: 1 }} />
       {captureError && (

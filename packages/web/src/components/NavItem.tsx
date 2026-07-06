@@ -103,7 +103,7 @@ export function NavItem({
             marginLeft: 'auto',
             fontSize: '0.72rem',
             fontWeight: 400,
-            color: 'var(--ghost)',
+            color: 'var(--fnt)',
           }}
         >
           {meta}

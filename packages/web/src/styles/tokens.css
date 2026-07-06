@@ -18,6 +18,22 @@
   --bg2: #f1e9da;
   --line: #ebe2d2;
   --hov: #f1e9da;
+
+  /* ─────────────────────────────────────────────────────────────────────
+     TEXT-TONE RAMP (a11y pass, finding B4 — reconciles the ramp's roles):
+       --ink   = titles / primary text.
+       --mut   = secondary text.
+       --fnt   ("faint") = tertiary text — meta, counts, placeholders,
+                 labels; tokens.md's "faint" role. The hex below (#736850 in
+                 light, #94856f in dark) is the source of truth for that
+                 role, not the token name.
+       --ghost = NON-TEXT ONLY. Borders, focus rings, icon/SVG strokes, and
+                 decorative glyphs (#, ◂, ▾, ✕, +). It clears the 3:1 UI-
+                 component contrast floor but NOT the 4.5:1 floor normal text
+                 needs (WCAG AA) — 4.00:1 on --bg / 3.54:1 on --bg2 in light
+                 mode. Any occurrence coloring text a user reads must use
+                 --fnt (5.14:1 on --bg / 4.55:1 on --bg2) instead.
+     ───────────────────────────────────────────────────────────────────── */
   --ink: #211b11;
   --mut: #6e6350;
   --fnt: #736850;
@@ -41,7 +57,9 @@
   --badge-border: #e6dac0;
   /* NOT --ghost (#857963) — that pairing only clears 3.54:1 against
      --badge-bg, short of AA's 4.5:1 for normal text (Rams self-review,
-     redesign pass). --mut's hex clears 4.89:1 on the same background. */
+     redesign pass). --mut's hex clears 4.89:1 on the same background.
+     (Still true, and now the general rule: the later a11y pass reserves
+     --ghost for non-text uses only — see the TEXT-TONE RAMP note above.) */
   --badge-ink: #6e6350;
 
   /* Motion (design-review pass, docs/design/skills/review-animations*.md):

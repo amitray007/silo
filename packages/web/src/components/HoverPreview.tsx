@@ -79,9 +79,7 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
         {stats.map((s) => (
           <div key={s.key}>
             <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)' }}>{s.n}</div>
-            <div style={{ fontSize: '0.64rem', color: 'var(--ghost)', marginTop: 1 }}>
-              {s.label}
-            </div>
+            <div style={{ fontSize: '0.64rem', color: 'var(--fnt)', marginTop: 1 }}>{s.label}</div>
           </div>
         ))}
       </div>
@@ -99,7 +97,7 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
             <span style={{ width: `${langPct}%`, background: 'var(--mark)' }} />
             <span style={{ flex: 1, background: 'var(--line)' }} />
           </div>
-          <div style={{ fontSize: '0.68rem', color: 'var(--ghost)', marginTop: 5 }}>
+          <div style={{ fontSize: '0.68rem', color: 'var(--fnt)', marginTop: 5 }}>
             {sourceData.language}
           </div>
         </>
@@ -230,7 +228,7 @@ function GenericVariant({
         {title}
       </div>
       {hasTags && (
-        <div style={{ fontSize: '0.76rem', color: 'var(--ghost)', marginTop: 6 }}>{tagLine}</div>
+        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 6 }}>{tagLine}</div>
       )}
       {hasNote && (
         <div
@@ -360,7 +358,7 @@ export function HoverPreview({
           marginTop: 9,
           borderTop: '1px solid var(--line)',
           fontSize: '0.72rem',
-          color: 'var(--ghost)',
+          color: 'var(--fnt)',
         }}
       >
         <span>{domain}</span>

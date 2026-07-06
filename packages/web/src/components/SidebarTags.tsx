@@ -116,7 +116,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           style={{
             fontSize: '0.7rem',
             fontWeight: 500,
-            color: 'var(--ghost)',
+            color: 'var(--fnt)',
             margin: 0,
             letterSpacing: '0.02em',
           }}

@@ -315,7 +315,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
           <span style={iconSlotStyle}>#</span>
           <span>tags</span>
           {link.tags.length > 0 && (
-            <span style={{ fontSize: '0.72rem', color: 'var(--ghost)', fontWeight: 400 }}>
+            <span style={{ fontSize: '0.72rem', color: 'var(--fnt)', fontWeight: 400 }}>
               {link.tags.length}
             </span>
           )}

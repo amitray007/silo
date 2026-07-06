@@ -236,7 +236,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
               display: 'block',
               padding: '2px 20px 0 31px',
               fontSize: '0.78rem',
-              color: 'var(--ghost)',
+              color: 'var(--fnt)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
