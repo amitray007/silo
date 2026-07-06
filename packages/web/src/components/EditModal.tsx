@@ -13,7 +13,7 @@ import { deriveDomain } from '../lib/url';
 import { ModalHeader, ModalShell } from './ModalShell';
 import { useRowMenu } from './RowMenuContext';
 import { useLibrarySelection } from './SelectionContext';
-import { TagOptionsList } from './TagOptionsList';
+import { TagOptionsList, tagSearchFieldStyle } from './TagOptionsList';
 
 const labelStyle: React.CSSProperties = {
   margin: '0 0 var(--s1)',
@@ -151,23 +151,10 @@ function EditTagsFlyout({
         }}
         placeholder="Find or create a tag"
         className="silo-field"
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          // 3px has no clean --s* match (between --s-0-5/2px and --s1/4px) —
-          // left un-tokenized rather than visibly nudging this fly-out's
-          // internal spacing (K3, oat-conformance audit).
-          margin: '0 0 3px',
-          // 5px → var(--s1-5); 9px → var(--s2) (rounded to 8px, nearest step).
-          padding: 'var(--s1-5) var(--s2)',
-          border: '1px solid var(--line)',
-          borderRadius: 7,
-          background: 'var(--bg2)',
-          color: 'var(--ink)',
-          font: 'inherit',
-          fontSize: '0.78rem',
-          outline: 'none',
-        }}
+        // 3px has no clean --s* match (between --s-0-5/2px and --s1/4px) —
+        // left un-tokenized rather than visibly nudging this fly-out's
+        // internal spacing (K3, oat-conformance audit).
+        style={tagSearchFieldStyle('0 0 3px')}
       />
       <TagOptionsList opts={opts} hidden={hidden} size="md" onToggle={handleToggle} />
       {canCreate && (

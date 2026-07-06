@@ -14,17 +14,17 @@ import {
   Dock,
   DockAction,
   DockDivider,
-  DockEscHint,
   DockIconAction,
   DockRestoreIcon,
-  DockSelectedLabel,
   DockTrashIcon,
+  SelectionDock,
 } from '../components/Dock';
-import { TrashIcon } from '../components/NavIcons';
+import { SearchIcon, TrashIcon } from '../components/NavIcons';
 import { useTrashSelection } from '../components/SelectionContext';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
+import { NoSearchResults } from './shared/ListStates';
 
 /** Matches the omnibar's search debounce (`useOmnibarState.ts`'s `SEARCH_DEBOUNCE_MS`) — kept as its own constant here since this input has no shared state hook of its own. */
 const TRASH_SEARCH_DEBOUNCE_MS = 200;
@@ -53,22 +53,7 @@ function TrashSearchInput({ value, onChange }: { value: string; onChange: (v: st
         padding: 'var(--s3) var(--s4)',
       }}
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="var(--ghost)"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ flex: 'none' }}
-        aria-hidden="true"
-      >
-        <title>Search</title>
-        <circle cx="7" cy="7" r="4.3" />
-        <path d="m10.3 10.3 3 3" />
-      </svg>
+      <SearchIcon />
       <input
         value={value}
         onChange={(e) => onChange(e.target.value)}
@@ -128,18 +113,14 @@ function TrashSelectionDock({ selectedIds }: { selectedIds: string[] }) {
   };
 
   return (
-    <Dock>
-      <DockSelectedLabel count={selectedIds.length} />
-      <DockDivider />
+    <SelectionDock selectedCount={selectedIds.length} onClear={selection.clear}>
       <DockIconAction onClick={handleRestore} icon={<DockRestoreIcon />} disabled={busy}>
         Restore
       </DockIconAction>
       <DockIconAction onClick={handleDeleteNow} icon={<DockTrashIcon />} disabled={busy}>
         Delete now
       </DockIconAction>
-      <DockAction onClick={selection.clear}>Clear</DockAction>
-      <DockEscHint />
-    </Dock>
+    </SelectionDock>
   );
 }
 
@@ -216,15 +197,6 @@ function TrashEmptyState({ purgeWindowDays }: { purgeWindowDays: number }) {
   );
 }
 
-/** v3's `noResults`-style state (`ListStates.tsx`'s `NoSearchResults`), Trash-scoped copy — a plain left-aligned line, not the full centered empty-state treatment (that's reserved for "trash has nothing in it at all"). */
-function NoTrashSearchResults({ q }: { q: string }) {
-  return (
-    <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--fnt)' }}>
-      Nothing found for "{q}"
-    </p>
-  );
-}
-
 /**
  * The Trash body's loading/error/empty/results branches (Trash search slice)
  * — pulled out of `TrashView` itself so that component's own complexity stays
@@ -280,7 +252,7 @@ function TrashBody({
 
   if (shownLinks.length === 0) {
     return searchEnabled ? (
-      <NoTrashSearchResults q={query} />
+      <NoSearchResults q={query} />
     ) : (
       <TrashEmptyState purgeWindowDays={purgeWindowDays} />
     );

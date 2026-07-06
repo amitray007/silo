@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { LinkJson, SourceData } from '../api/types';
 import { previewImageUrl } from '../lib/previewImage';
@@ -13,6 +13,55 @@ type GithubSourceData = Extract<SourceData, { kind: 'github' }>;
 type YoutubeSourceData = Extract<SourceData, { kind: 'youtube' }>;
 
 /**
+ * The body padding + title line every variant (`HnVariant`/`RepoVariant`/
+ * `VideoVariant`/`GenericVariant`) opens with — same `var(--s3) var(--s3-5)
+ * var(--s-0-5)` padding, same 0.84rem/500/`--ink` title treatment, every
+ * time. `children` is the variant-specific content below the title (stats
+ * row, description, tags/note, etc.) — the one part that's genuinely
+ * different per source kind. Pulled out so the four variants don't each
+ * repeat this exact wrapper (jscpd guards production src at 1.5%).
+ */
+function VariantBody({ title, children }: { title: string; children?: ReactNode }) {
+  return (
+    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
+      <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
+        {title}
+      </div>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The 130px cover image atop the `RepoVariant`/`VideoVariant` cards, served
+ * through silo's own `/api/preview-image` proxy (never a third-party fetch
+ * from the browser — see each variant's doc comment for why). Both variants
+ * reset `imageFailed` on `linkId` change (the shared `HoverPreview` instance
+ * is reused across links, so a stale failure from link A must not suppress
+ * link B's image) and swap to a caller-supplied fallback on `onError` —
+ * `RepoVariant` simply omits the image, `VideoVariant` shows a dashed
+ * placeholder, so the fallback stays a prop rather than being baked in here.
+ */
+function PreviewCoverImage({ linkId, onError }: { linkId: string; onError: () => void }) {
+  return (
+    // Decorative supplement to the title/stats below — alt="" is
+    // intentional (the title conveys the content).
+    <img
+      src={previewImageUrl(linkId)}
+      alt=""
+      onError={onError}
+      style={{
+        display: 'block',
+        width: '100%',
+        height: 130,
+        objectFit: 'cover',
+        borderBottom: '1px solid var(--line)',
+      }}
+    />
+  );
+}
+
+/**
  * The `pvIsHn` variant (`Silo-v3.html:263-271`): title, then a line with
  * `▲ {points} points` in `--markt` (the amber-adjacent data-viz accent v3
  * uses for this exact stat — not button/chrome fill, so it's within the
@@ -21,10 +70,7 @@ type YoutubeSourceData = Extract<SourceData, { kind: 'youtube' }>;
  */
 function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNewsSourceData }) {
   return (
-    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
-      <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
-        {title}
-      </div>
+    <VariantBody title={title}>
       <div
         style={{
           display: 'flex',
@@ -40,7 +86,7 @@ function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNew
           {sourceData.comments} comments
         </span>
       </div>
-    </div>
+    </VariantBody>
   );
 }
 
@@ -90,22 +136,7 @@ function RepoVariant({
 
   return (
     <>
-      {!imageFailed && (
-        // Decorative supplement to the title/stats below — alt="" is
-        // intentional (the title conveys the content).
-        <img
-          src={previewImageUrl(linkId)}
-          alt=""
-          onError={() => setImageFailed(true)}
-          style={{
-            display: 'block',
-            width: '100%',
-            height: 130,
-            objectFit: 'cover',
-            borderBottom: '1px solid var(--line)',
-          }}
-        />
-      )}
+      {!imageFailed && <PreviewCoverImage linkId={linkId} onError={() => setImageFailed(true)} />}
       <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
         <div
           style={{
@@ -248,29 +279,13 @@ function VideoVariant({
           </span>
         </div>
       ) : (
-        // Decorative supplement to the title text below — alt="" is
-        // intentional (satisfies useAltText); the title conveys the content.
-        <img
-          src={previewImageUrl(linkId)}
-          alt=""
-          onError={() => setImageFailed(true)}
-          style={{
-            display: 'block',
-            width: '100%',
-            height: 130,
-            objectFit: 'cover',
-            borderBottom: '1px solid var(--line)',
-          }}
-        />
+        <PreviewCoverImage linkId={linkId} onError={() => setImageFailed(true)} />
       )}
-      <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
-        <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
-          {title}
-        </div>
+      <VariantBody title={title}>
         <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1)' }}>
           {sourceData.channel}
         </div>
-      </div>
+      </VariantBody>
     </>
   );
 }
@@ -290,10 +305,7 @@ function GenericVariant({
   hasNote: boolean;
 }) {
   return (
-    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
-      <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
-        {title}
-      </div>
+    <VariantBody title={title}>
       {hasTags && (
         <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
           {tagLine}
@@ -315,7 +327,7 @@ function GenericVariant({
           "{notes}"
         </div>
       )}
-    </div>
+    </VariantBody>
   );
 }
 

@@ -5,7 +5,7 @@ import { buildTagOptions } from '../lib/tagOptions';
 import { TrashIcon } from './NavIcons';
 import { useRowMenu } from './RowMenuContext';
 import { useLibrarySelection } from './SelectionContext';
-import { TagOptionsList } from './TagOptionsList';
+import { TagOptionsList, tagSearchFieldStyle } from './TagOptionsList';
 
 const COPY_RESET_MS = 700;
 
@@ -200,19 +200,7 @@ function TagsFlyout({ link }: { link: LinkJson }) {
         onChange={(e) => setQuery(e.target.value)}
         placeholder="Find tag"
         className="silo-field"
-        style={{
-          width: '100%',
-          boxSizing: 'border-box',
-          margin: '0 0 var(--s1)',
-          padding: 'var(--s1-5) var(--s2)',
-          border: '1px solid var(--line)',
-          borderRadius: 7,
-          background: 'var(--bg2)',
-          color: 'var(--ink)',
-          font: 'inherit',
-          fontSize: '0.78rem',
-          outline: 'none',
-        }}
+        style={tagSearchFieldStyle('0 0 var(--s1)')}
       />
       <TagOptionsList
         opts={opts}

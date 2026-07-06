@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { SearchIcon } from './NavIcons';
 
 export type OmnibarProps = {
   /** The raw (undebounced) input value — always what the user is actually typing. */
@@ -89,22 +90,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
         transition: 'border-color .15s ease, background .2s ease',
       }}
     >
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="var(--ghost)"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        style={{ flex: 'none' }}
-        aria-hidden="true"
-      >
-        <title>Search</title>
-        <circle cx="7" cy="7" r="4.3" />
-        <path d="m10.3 10.3 3 3" />
-      </svg>
+      <SearchIcon />
 
       {tagPillVisible && (
         <button

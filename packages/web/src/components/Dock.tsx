@@ -70,8 +70,8 @@ export function Dock({
   );
 }
 
-/** The `{n} selected` label shared by the two selection docks (`selActive`/`trSelActive`) — same size/weight/color both places. */
-export function DockSelectedLabel({ count }: { count: number }) {
+/** The `{n} selected` label shared by the two selection docks (`selActive`/`trSelActive`) — same size/weight/color both places. Internal to `SelectionDock` below; not used standalone since both docks now go through that shell. */
+function DockSelectedLabel({ count }: { count: number }) {
   return (
     <span
       style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap' }}
@@ -84,6 +84,53 @@ export function DockSelectedLabel({ count }: { count: number }) {
 /** The `|` divider between a dock's label and its actions — one shared style for the vertical rule every dock uses. */
 export function DockDivider() {
   return <span style={{ width: 1, height: 'var(--s3-5)', background: 'var(--line)' }} />;
+}
+
+/**
+ * The selection-dock shell (`selActive`/`trSelActive`) shared by the
+ * Library's `LibrarySelectionDock` (`routes/shared/ListHeader.tsx`) and the
+ * Trash's `TrashSelectionDock` (`routes/TrashView.tsx`): label · divider ·
+ * caller-specific action(s) · clear · esc, every time. `children` is the
+ * batch-action button(s) between the divider and "Clear" — the one part
+ * that's genuinely different per screen (Library only has "move to trash";
+ * Trash has both "restore" and "delete now"). Pulled out so the two docks
+ * don't each re-lay the identical label/divider/clear/esc-hint chrome
+ * (jscpd guards production src at 1.5%).
+ */
+export function SelectionDock({
+  selectedCount,
+  onClear,
+  children,
+}: {
+  selectedCount: number;
+  onClear: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Dock>
+      <DockSelectedLabel count={selectedCount} />
+      <DockDivider />
+      {children}
+      <DockAction onClick={onClear}>Clear</DockAction>
+      <DockEscHint />
+    </Dock>
+  );
+}
+
+/** The text/color/cursor styling every dock action button shares (text-only `DockAction` and icon-leading `DockIconAction` alike) — only `display`/`gap` differ (the icon variant needs a flex row to lay out its leading icon + label), so those two stay per-caller rather than folding into this shared base. */
+function dockActionStyle(disabled: boolean) {
+  return {
+    border: 0,
+    background: 'none',
+    fontFamily: 'inherit',
+    fontSize: '0.78rem',
+    fontWeight: 500,
+    color: 'var(--mut)',
+    cursor: disabled ? 'default' : ('pointer' as const),
+    opacity: disabled ? 0.5 : 1,
+    padding: 0,
+    whiteSpace: 'nowrap' as const,
+  };
 }
 
 /** A text-only dock action (v3's `clear`/`select all`/`empty all`/`restore`/`delete now` buttons, minus the icon ones — see `DockIconAction` for those). `disabled` dims + inactivates it (used to block a double-fire while a bulk op is pending). */
@@ -102,18 +149,7 @@ export function DockAction({
       onClick={onClick}
       disabled={disabled}
       className="silo-dock-action"
-      style={{
-        border: 0,
-        background: 'none',
-        fontFamily: 'inherit',
-        fontSize: '0.78rem',
-        fontWeight: 500,
-        color: 'var(--mut)',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        padding: 0,
-        whiteSpace: 'nowrap',
-      }}
+      style={dockActionStyle(disabled)}
     >
       {children}
     </button>
@@ -142,16 +178,7 @@ export function DockIconAction({
         display: 'inline-flex',
         alignItems: 'center',
         gap: 'var(--s1-5)',
-        border: 0,
-        background: 'none',
-        fontFamily: 'inherit',
-        fontSize: '0.78rem',
-        fontWeight: 500,
-        color: 'var(--mut)',
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.5 : 1,
-        padding: 0,
-        whiteSpace: 'nowrap',
+        ...dockActionStyle(disabled),
       }}
     >
       {icon}
@@ -160,8 +187,8 @@ export function DockIconAction({
   );
 }
 
-/** The `esc` hint chip every dock ends with (v3's `<span>esc</span>` — not a button, purely informational). */
-export function DockEscHint() {
+/** The `esc` hint chip every dock ends with (v3's `<span>esc</span>` — not a button, purely informational). Internal to `SelectionDock` below (the idle trash dock, `TrashView.tsx`'s `TrashIdleDock`, doesn't end with an esc hint). */
+function DockEscHint() {
   return (
     <span
       style={{
