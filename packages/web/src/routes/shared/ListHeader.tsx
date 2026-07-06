@@ -1,15 +1,7 @@
 import type { ReactNode } from 'react';
 import { useBulkTrash } from '../../api/hooks';
 import { ContentHeader } from '../../components/ContentHeader';
-import {
-  Dock,
-  DockAction,
-  DockDivider,
-  DockEscHint,
-  DockIconAction,
-  DockSelectedLabel,
-  DockTrashIcon,
-} from '../../components/Dock';
+import { DockIconAction, DockTrashIcon, SelectionDock } from '../../components/Dock';
 import { Omnibar } from '../../components/Omnibar';
 import { useLibrarySelection } from '../../components/SelectionContext';
 import type { useOmnibarState } from '../../lib/useOmnibarState';
@@ -40,15 +32,11 @@ function LibrarySelectionDock({ selectedIds }: { selectedIds: string[] }) {
   };
 
   return (
-    <Dock>
-      <DockSelectedLabel count={selectedIds.length} />
-      <DockDivider />
+    <SelectionDock selectedCount={selectedIds.length} onClear={selection.clear}>
       <DockIconAction onClick={handleTrash} icon={<DockTrashIcon />} disabled={bulkTrash.isPending}>
         Move to trash
       </DockIconAction>
-      <DockAction onClick={selection.clear}>Clear</DockAction>
-      <DockEscHint />
-    </Dock>
+    </SelectionDock>
   );
 }
 

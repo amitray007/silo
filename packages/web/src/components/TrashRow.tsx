@@ -23,12 +23,23 @@ import { useTrashSelection } from './SelectionContext';
  * "N selected" count and letting a later bulk action fire against a
  * no-longer-present id.
  */
-function TrashRowActions({ id }: { id: string }) {
-  const restore = useRestoreLink(id);
-  const deleteNow = useDeleteNow(id);
-  const selection = useTrashSelection();
-  const busy = restore.isPending || deleteNow.isPending;
-
+/**
+ * One of `TrashRowActions`' two ghost icon buttons (restore / delete now) —
+ * same 26×26 shell, same `onMouseDown`-stopped/disabled-while-busy behavior,
+ * differing only in the label/icon/click handler. Pulled out so the two
+ * buttons don't each repeat the shell (jscpd guards production src at 1.5%).
+ */
+function TrashRowIconButton({
+  label,
+  icon,
+  busy,
+  onAct,
+}: {
+  label: string;
+  icon: React.ReactNode;
+  busy: boolean;
+  onAct: () => void;
+}) {
   const iconButtonStyle: React.CSSProperties = {
     flex: 'none',
     display: 'grid',
@@ -47,43 +58,52 @@ function TrashRowActions({ id }: { id: string }) {
   };
 
   return (
+    <button
+      type="button"
+      title={label}
+      aria-label={label}
+      disabled={busy}
+      className="silo-trash-row-icon"
+      onMouseDown={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (busy) return;
+        onAct();
+      }}
+      style={iconButtonStyle}
+    >
+      {icon}
+    </button>
+  );
+}
+
+function TrashRowActions({ id }: { id: string }) {
+  const restore = useRestoreLink(id);
+  const deleteNow = useDeleteNow(id);
+  const selection = useTrashSelection();
+  const busy = restore.isPending || deleteNow.isPending;
+
+  return (
     <>
-      <button
-        type="button"
-        title="Restore"
-        aria-label="Restore"
-        disabled={busy}
-        className="silo-trash-row-icon"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (busy) return;
+      <TrashRowIconButton
+        label="Restore"
+        icon={<DockRestoreIcon />}
+        busy={busy}
+        onAct={() => {
           selection.deselect([id]);
           restore.mutate();
         }}
-        style={iconButtonStyle}
-      >
-        <DockRestoreIcon />
-      </button>
-      <button
-        type="button"
-        title="Delete now"
-        aria-label="Delete now"
-        disabled={busy}
-        className="silo-trash-row-icon"
-        onMouseDown={(e) => e.stopPropagation()}
-        onClick={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          if (busy) return;
+      />
+      <TrashRowIconButton
+        label="Delete now"
+        icon={<DockTrashIcon />}
+        busy={busy}
+        onAct={() => {
           selection.deselect([id]);
           deleteNow.mutate();
         }}
-        style={iconButtonStyle}
-      >
-        <DockTrashIcon />
-      </button>
+      />
     </>
   );
 }

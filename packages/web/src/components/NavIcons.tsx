@@ -82,3 +82,33 @@ export function SettingsIcon() {
     </svg>
   );
 }
+
+/**
+ * The magnifier glyph shared by every search-style input's leading icon —
+ * `Omnibar` and the Trash screen's search input (`TrashView.tsx`'s
+ * `TrashSearchInput`) both render this exact 15×15 `stroke="var(--ghost)"`
+ * SVG (path data copied from the prototype). Pulled out so the two call
+ * sites don't each carry their own copy (jscpd guards production src at
+ * 1.5%) — the icon itself is identical everywhere it's used; only the
+ * surrounding input shell differs per screen, so only the glyph moves here.
+ */
+export function SearchIcon() {
+  return (
+    <svg
+      width="15"
+      height="15"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="var(--ghost)"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ flex: 'none' }}
+      aria-hidden="true"
+    >
+      <title>Search</title>
+      <circle cx="7" cy="7" r="4.3" />
+      <path d="m10.3 10.3 3 3" />
+    </svg>
+  );
+}

@@ -2,6 +2,31 @@ import { useState } from 'react';
 import type { TagOption } from '../lib/tagOptions';
 
 /**
+ * The find-tag input styling shared by `RowMenu`'s `TagsFlyout` and
+ * `EditModal`'s `EditTagsFlyout` — same `silo-field` box (border/radius/bg/
+ * font), only the bottom margin differs (RowMenu's `var(--s1)` vs
+ * EditModal's un-tokenized 3px, which has no clean `--s*` match between
+ * `--s-0-5`/2px and `--s1`/4px — see `EditTagsFlyout`'s own K3 comment).
+ * Takes `margin` as a param rather than forking the whole style object
+ * (jscpd guards production src at 1.5%).
+ */
+export function tagSearchFieldStyle(margin: string): React.CSSProperties {
+  return {
+    width: '100%',
+    boxSizing: 'border-box',
+    margin,
+    padding: 'var(--s1-5) var(--s2)',
+    border: '1px solid var(--line)',
+    borderRadius: 7,
+    background: 'var(--bg2)',
+    color: 'var(--ink)',
+    font: 'inherit',
+    fontSize: '0.78rem',
+    outline: 'none',
+  };
+}
+
+/**
  * The shared toggle-list row rendered inside both `RowMenu`'s `TagsFlyout`
  * and `EditModal`'s `EditTagsFlyout` (plan 011, V3-4) — pulled out once both
  * popovers needed the exact same "# {name} · active dot" button (`jscpd`
