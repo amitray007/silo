@@ -82,8 +82,14 @@ function readHost(): string {
  * serving (see the RELIABILITY note above the module doc comment).
  */
 async function startEnqueuer(): Promise<ReturnType<typeof createBoss> | undefined> {
+  // Declared outside the try so the catch can stop a boss that already
+  // STARTED before a LATER step (ensureEnrichLinkQueue / registerEnqueuer)
+  // threw — otherwise that started instance's DB connections/listeners leak
+  // for the process lifetime, since main() only ever holds the returned value
+  // (review fix, was: `const boss` scoped inside try).
+  let boss: ReturnType<typeof createBoss> | undefined;
   try {
-    const boss = createBoss();
+    boss = createBoss();
     boss.on('error', (error) => {
       // Mirror the worker's own pg-boss error handling: log rather than let
       // an unhandled 'error' event crash the process.
@@ -111,6 +117,11 @@ async function startEnqueuer(): Promise<ReturnType<typeof createBoss> | undefine
     );
     console.error('[silo/api] Underlying error:', error);
     console.error(banner);
+    // boss.start() may have already succeeded before the failing step — stop
+    // it (non-graceful is fine, it never began working jobs) so a degraded
+    // startup doesn't leak the open connection. Swallow any stop error: we're
+    // already on the failure path and about to return `undefined` regardless.
+    await boss?.stop({ graceful: false }).catch(() => {});
     return undefined;
   }
 }
@@ -144,19 +155,28 @@ async function main(): Promise<void> {
     stopping = true;
     console.error(`[silo/api] received ${signal}, stopping gracefully...`);
     (async () => {
+      // Order matters (review fix): close the SERVER first — stop accepting
+      // new connections and let in-flight requests finish — THEN stop the
+      // enqueuer boss. The reverse order left a race window: while
+      // `boss.stop()` was in flight the server was still serving, so a request
+      // reaching the registered enqueue seam could call `.send()` on a
+      // stopping boss and throw outside any handled path.
+      let exitCode = 0;
+      try {
+        await new Promise<void>((resolve, reject) => {
+          server.close((closeError) => (closeError ? reject(closeError) : resolve()));
+        });
+      } catch (error: unknown) {
+        console.error('[silo/api] error closing server:', error);
+        exitCode = 1;
+      }
       try {
         await boss?.stop({ graceful: true });
       } catch (error: unknown) {
         console.error('[silo/api] error stopping enqueuer boss:', error);
-      } finally {
-        server.close((closeError) => {
-          if (closeError) {
-            console.error('[silo/api] error closing server:', closeError);
-            process.exit(1);
-          }
-          process.exit(0);
-        });
+        exitCode = 1;
       }
+      process.exit(exitCode);
     })().catch((error: unknown) => {
       console.error('[silo/api] unexpected error during shutdown:', error);
       process.exit(1);

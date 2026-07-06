@@ -58,10 +58,12 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
           fontSize: '1rem',
           fontWeight: 500,
           color: 'var(--ink)',
+          // The route title stays on one line (Library / Trash / #tag are
+          // short); `textWrap: 'balance'` was dropped as inert under
+          // `whiteSpace: 'nowrap'` (review fix).
           whiteSpace: 'nowrap',
           letterSpacing: 'var(--tracking-tight)',
           lineHeight: 'var(--lh-tight)',
-          textWrap: 'balance',
         }}
       >
         {title}
