@@ -256,7 +256,13 @@ export function LinkRow({ link }: { link: LinkJson }) {
           <span
             style={{
               display: 'block',
-              padding: 'var(--s-0-5) var(--s5) 0 var(--row-inset)',
+              // Left inset aligns this sub-line's text under the TITLE. These
+              // sub-lines are direct children of the `.silo-link-row` <a>, so
+              // they already sit inside its --s2-5 padding; --row-inset is
+              // measured from the row's OUTER edge, so subtract that padding
+              // here to avoid double-counting it (title = row-pad + chip + gap;
+              // this = the same, expressed relative to the already-padded box).
+              padding: 'var(--s-0-5) var(--s5) 0 calc(var(--row-inset) - var(--s2-5))',
               fontSize: '0.78rem',
               color: 'var(--fnt)',
               overflow: 'hidden',
@@ -274,7 +280,13 @@ export function LinkRow({ link }: { link: LinkJson }) {
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              padding: 'var(--s-0-5) var(--s5) 0 var(--row-inset)',
+              // Left inset aligns this sub-line's text under the TITLE. These
+              // sub-lines are direct children of the `.silo-link-row` <a>, so
+              // they already sit inside its --s2-5 padding; --row-inset is
+              // measured from the row's OUTER edge, so subtract that padding
+              // here to avoid double-counting it (title = row-pad + chip + gap;
+              // this = the same, expressed relative to the already-padded box).
+              padding: 'var(--s-0-5) var(--s5) 0 calc(var(--row-inset) - var(--s2-5))',
               fontSize: '0.8rem',
               color: 'var(--mut)',
               fontStyle: 'italic',

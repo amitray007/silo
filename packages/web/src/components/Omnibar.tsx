@@ -74,21 +74,18 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
   return (
     <div
       style={{
-        // Bumped from v3's `clamp(230px, 42%, 430px)` per direct user
-        // feedback ("make the omnibar bigger … so 'paste a link to keep' is
-        // more prominent") — wider clamp bounds + roomier padding below.
-        width: 'clamp(280px, 46%, 520px)',
+        // Bigger per repeated user feedback ("increase the size of the input
+        // box"): wider clamp bounds and a taller field so "Paste a link to
+        // keep" reads as the app's primary action. Grown from
+        // clamp(280,46%,520) and --s2-5 vertical padding.
+        width: 'clamp(320px, 52%, 620px)',
         display: 'flex',
         alignItems: 'center',
         gap: 'var(--s2-5)',
         border: `1px solid ${focused ? 'var(--ghost)' : 'var(--line)'}`,
         borderRadius: 11,
         background: 'var(--bg2)',
-        // K3 (oat-conformance audit): 10px → var(--s2-5) exact. The 15px
-        // horizontal value is LEFT un-tokenized — the nearest step
-        // (var(--s3-5), 14px) would nudge the bar's side padding in a way
-        // that's not worth the risk in a spacing-migration-only pass.
-        padding: 'var(--s2-5) 15px',
+        padding: 'var(--s3) var(--s4)',
         transition: 'border-color .15s ease, background .2s ease',
       }}
     >

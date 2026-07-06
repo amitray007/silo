@@ -119,12 +119,11 @@
   --s10: 40px; /* empty-state y, min touch target */
 
   /* Row content-inset — the horizontal grid the list shares. Equals the
-     favicon column: row padding-left + chip width + chip→title gap. The
-     day-group label, the row title, the HN rich line, and the note all
-     reference THIS so they line up on one edge instead of four hand-guessed
-     insets (the old magic `31px` note-indent missed the ~42px title-left).
-     42px = 11 (row pad) + 18 (chip) + 13 (gap). */
-  --row-inset: 42px;
+     favicon column so the day-group label, the header title, the row title,
+     the HN rich line, and the note all line up on ONE left edge instead of
+     several hand-guessed insets. Measured against the live row:
+     40px = 10 (row pad, --s2-5) + 18 (chip) + 12 (chip→title gap, --s3). */
+  --row-inset: 40px;
 
   /* Elevation — one warm shadow family, tokenized so dark mode can tune it
      independently. In LIGHT mode a soft warm-brown shadow reads as lift.

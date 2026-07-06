@@ -13,10 +13,14 @@ export function DayGroupHeading({ label }: { label: string }) {
   return (
     <p
       style={{
-        fontSize: '0.78rem',
+        fontSize: 'var(--text-xs)',
         fontWeight: 500,
         color: 'var(--fnt)',
-        padding: 'var(--s5) var(--s2-5) var(--s1-5) var(--row-inset)',
+        // Top gap reduced from --s5 (20px) to --s3 (12px) per user feedback
+        // ("too much padding on top"). Left = --s2-5 so "Today" aligns to the
+        // FAVICON column (where the row favicons + the header title sit), per
+        // user feedback — the whole left column shares one edge.
+        padding: 'var(--s3) var(--s2-5) var(--s1-5) var(--s2-5)',
         margin: 0,
       }}
     >

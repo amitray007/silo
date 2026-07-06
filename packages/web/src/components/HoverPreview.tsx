@@ -321,7 +321,7 @@ export function HoverPreview({
   const meta = relativeTimeFromNow(link.createdAt);
 
   return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — every actual control inside (the `open ↗` anchor, the ✕ close button) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
+    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — the only actual control inside (the `open ↗` anchor) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
     <div
       className="silo-popover"
       onMouseEnter={onKeep}
@@ -347,29 +347,6 @@ export function HoverPreview({
         transformOrigin: 'left center',
       }}
     >
-      <button
-        type="button"
-        title="Close"
-        aria-label="Close preview"
-        onClick={onHide}
-        className="silo-icon-btn-sm"
-        style={{
-          position: 'absolute',
-          top: 'var(--s2)',
-          right: 'var(--s2)',
-          border: 0,
-          background: 'none',
-          fontFamily: 'inherit',
-          fontSize: '0.72rem',
-          lineHeight: 1,
-          color: 'var(--ghost)',
-          cursor: 'pointer',
-          padding: 'var(--s1)',
-          borderRadius: 6,
-        }}
-      >
-        ✕
-      </button>
       {link.sourceData.kind === 'hacker_news' ? (
         <HnVariant title={title} sourceData={link.sourceData} />
       ) : link.sourceData.kind === 'github' ? (

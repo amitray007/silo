@@ -127,11 +127,20 @@ describe('HoverPreview', () => {
     expect((card as HTMLElement).style.left).toBe('88px');
   });
 
-  it('renders a ✕ close button that calls onHide when clicked', () => {
+  it('does not render a close button — the popover dismisses on mouse-leave', () => {
+    render(
+      <HoverPreview link={makeLink()} position={position} onKeep={vi.fn()} onHide={vi.fn()} />,
+    );
+    expect(screen.queryByRole('button', { name: /close preview/i })).toBeNull();
+  });
+
+  it('calls onHide when the pointer leaves the card', () => {
     const onHide = vi.fn();
     render(<HoverPreview link={makeLink()} position={position} onKeep={vi.fn()} onHide={onHide} />);
-    const closeButton = screen.getByRole('button', { name: /close preview/i });
-    fireEvent.click(closeButton);
+    const card = screen
+      .getByText('Example')
+      .closest('div[style*="position: fixed"]') as HTMLElement;
+    fireEvent.mouseLeave(card);
     expect(onHide).toHaveBeenCalledTimes(1);
   });
 

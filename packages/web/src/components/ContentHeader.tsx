@@ -47,6 +47,14 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
       <h1
         style={{
           margin: 0,
+          // Indent the title to the FAVICON column so "Library"/"Trash"/"#tag"
+          // sits on the same left line as the row favicons + the "Today" day
+          // label below it (user feedback: align the header to where the
+          // favicons/data start). That column = the row's own left padding
+          // (--s2-5) in from the content edge; the header shares the content
+          // edge, so --s2-5 lands the title exactly above the favicons. The
+          // border-bottom still spans full width — only the text moves.
+          marginLeft: 'var(--s2-5)',
           fontSize: '1rem',
           fontWeight: 500,
           color: 'var(--ink)',

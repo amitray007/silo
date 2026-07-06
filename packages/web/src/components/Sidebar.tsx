@@ -11,6 +11,15 @@ import { SidebarTags } from './SidebarTags';
 const noop = () => {};
 
 /**
+ * A thin divider between sidebar sections (matches `RowMenu.tsx`'s own
+ * `Divider` — `1px solid var(--line)` with a small vertical margin so the
+ * rule reads as a section break, not a heavy rule).
+ */
+function SidebarDivider() {
+  return <div style={{ borderTop: '1px solid var(--line)', margin: 'var(--s2) 0' }} />;
+}
+
+/**
  * A `NavItem` wired to react-router: `useMatch` computes whether the current
  * location matches `to` (mirroring `NavLink`'s own `end`-aware matching) and
  * drives `NavItem`'s `active` prop; a client-side `navigate` on click keeps
@@ -97,11 +106,12 @@ interface SidebarProps {
  * The real, data-bound sidebar (`docs/design/app/library-sidebar-light.png`):
  * brand row, Library (live count), Trash (count only — v3's `trashMeta`,
  * per direct user feedback: the `· {purgeWindowDays}d` suffix was dropped),
- * a Tags
- * section built from `useTags()` (count-desc order preserved as returned by
- * the API), and Settings pinned to the bottom via flex (the Tags section
- * grows to fill available space). The Settings button opens the shared
- * Settings modal (plan 011, V3-7) via `useSettings().openSettings()` WITHOUT
+ * a divider, a Tags section built from `useTags()` (count-desc order
+ * preserved as returned by the API), another divider, then Settings —
+ * flowing directly below Tags rather than pinned to the bottom (per direct
+ * user feedback: Settings moved up so it reads as part of the same nav
+ * block, not a footer). The Settings button opens the shared Settings modal
+ * (plan 011, V3-7) via `useSettings().openSettings()` WITHOUT
  * navigating to `/settings` (`skipNavigate`, per a direct user-feedback fix:
  * "don't navigate to /settings when opening the modal" — Settings is a
  * popover, not a screen, so clicking it from the sidebar must not change the
@@ -166,6 +176,8 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         onNavigate={onNavigate}
       />
 
+      <SidebarDivider />
+
       <SidebarTags
         tags={tags}
         renderTagLink={(tag: TagCount) => (
@@ -185,7 +197,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         )}
       />
 
-      <span style={{ flex: 1 }} />
+      <SidebarDivider />
 
       <NavItemLink
         to="/settings"

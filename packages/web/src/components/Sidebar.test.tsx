@@ -354,6 +354,49 @@ describe('Sidebar', () => {
     });
   });
 
+  it('orders sections brand → Library/Trash → divider → Tags → divider → Settings, with Settings no longer bottom-pinned', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 1, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/tags') {
+        return Promise.resolve(jsonResponse({ tags: tagCounts(['ai', 'design']) }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    const { container } = renderSidebar();
+    await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
+
+    const nav = container.querySelector('nav[aria-label="Sidebar"]');
+    expect(nav).not.toBeNull();
+
+    // Order of top-level children: brand, Library, Trash, divider, Tags
+    // section, divider, Settings.
+    const children = Array.from(nav?.children ?? []) as HTMLElement[];
+    const settingsLink = screen.getByRole('link', { name: /settings/i });
+    const tagsHeader = screen.getByText('Tags');
+
+    const dividerIndices = children
+      .map((el, i) => ({ el, i }))
+      .filter(({ el }) => el.style.borderTop === '1px solid var(--line)')
+      .map(({ i }) => i);
+    const settingsIndex = children.findIndex((el) => el.contains(settingsLink));
+    const tagsSectionIndex = children.findIndex((el) => el.contains(tagsHeader));
+
+    // Two dividers: one above Tags, one between Tags and Settings.
+    expect(dividerIndices).toHaveLength(2);
+    const [firstDividerIndex, secondDividerIndex] = dividerIndices;
+    expect(firstDividerIndex).toBeLessThan(tagsSectionIndex);
+    expect(tagsSectionIndex).toBeLessThan(secondDividerIndex as number);
+    expect(secondDividerIndex).toBeLessThan(settingsIndex);
+    // Settings is the very last top-level child now — no flex spacer
+    // pinning it to the bottom anymore (that spacer used to be the last
+    // child, after Settings' own NavItemLink).
+    expect(settingsIndex).toBe(children.length - 1);
+  });
+
   it('renders the Tags header + tools calmly with zero tags (not gated on tag count)', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
