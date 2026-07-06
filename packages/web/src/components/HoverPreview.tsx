@@ -57,7 +57,15 @@ function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNew
  * `/languages` fails) — the bar still renders at 0% fill rather than v3's
  * mocked 70% fallback, since a real 0% is honest and a fabricated 70% isn't.
  */
-function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubSourceData }) {
+function RepoVariant({
+  title,
+  linkId,
+  sourceData,
+}: {
+  title: string;
+  linkId: string;
+  sourceData: GithubSourceData;
+}) {
   const stats = [
     { key: 'stars', n: sourceData.stars, label: 'stars' },
     { key: 'forks', n: sourceData.forks, label: 'forks' },
@@ -65,68 +73,103 @@ function RepoVariant({ title, sourceData }: { title: string; sourceData: GithubS
   ];
   const langPct = sourceData.languagePct ?? 0;
 
+  // The repo's OG social-preview image (GitHub's opengraph.githubassets.com
+  // card), captured into the link's `imageUrl` by the extractor and served
+  // through silo's own /api/preview-image proxy (never a third-party fetch
+  // from the browser). Same imageFailed + reset-on-linkId pattern as
+  // VideoVariant — the shared HoverPreview instance is reused across links,
+  // so a 404 from link A must not suppress link B's image. When there's no
+  // image (private repo, proxy 404), the card simply omits it and shows the
+  // stats-only layout as before — no placeholder needed here (unlike video,
+  // a repo card reads fine without the banner).
+  const [imageFailed, setImageFailed] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `linkId` is the intended reset trigger; `setImageFailed` is a stable useState setter.
+  useEffect(() => {
+    setImageFailed(false);
+  }, [linkId]);
+
   return (
-    <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
-      <div
-        style={{
-          fontSize: '0.84rem',
-          fontWeight: 500,
-          color: 'var(--ink)',
-          overflowWrap: 'break-word',
-          lineHeight: 1.4,
-        }}
-      >
-        {title}
-      </div>
-      {sourceData.description && (
+    <>
+      {!imageFailed && (
+        // Decorative supplement to the title/stats below — alt="" is
+        // intentional (the title conveys the content).
+        <img
+          src={previewImageUrl(linkId)}
+          alt=""
+          onError={() => setImageFailed(true)}
+          style={{
+            display: 'block',
+            width: '100%',
+            height: 130,
+            objectFit: 'cover',
+            borderBottom: '1px solid var(--line)',
+          }}
+        />
+      )}
+      <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
         <div
           style={{
-            fontSize: '0.76rem',
-            color: 'var(--mut)',
-            marginTop: 3,
-            lineHeight: 'var(--lh-snug)',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
+            fontSize: '0.84rem',
+            fontWeight: 500,
+            color: 'var(--ink)',
+            overflowWrap: 'break-word',
+            lineHeight: 1.4,
           }}
         >
-          {sourceData.description}
+          {title}
         </div>
-      )}
-      {/* K3 (oat-conformance audit): gap 18 is LEFT un-tokenized — it sits
+        {sourceData.description && (
+          <div
+            style={{
+              fontSize: '0.76rem',
+              color: 'var(--mut)',
+              marginTop: 3,
+              lineHeight: 'var(--lh-snug)',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+          >
+            {sourceData.description}
+          </div>
+        )}
+        {/* K3 (oat-conformance audit): gap 18 is LEFT un-tokenized — it sits
           between --s4/16px and --s5/20px with no clean step, and this is the
           stats row's own deliberate breathing room. marginTop 12 → var(--s3)
           exact (both places below). marginTop 1 is left un-tokenized (a
           sub-scale optical nudge, no --s* value that small exists). */}
-      <div style={{ display: 'flex', gap: 18, marginTop: 'var(--s3)' }}>
-        {stats.map((s) => (
-          <div key={s.key}>
-            <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)' }}>{s.n}</div>
-            <div style={{ fontSize: '0.64rem', color: 'var(--fnt)', marginTop: 1 }}>{s.label}</div>
-          </div>
-        ))}
+        <div style={{ display: 'flex', gap: 18, marginTop: 'var(--s3)' }}>
+          {stats.map((s) => (
+            <div key={s.key}>
+              <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)' }}>{s.n}</div>
+              <div style={{ fontSize: '0.64rem', color: 'var(--fnt)', marginTop: 1 }}>
+                {s.label}
+              </div>
+            </div>
+          ))}
+        </div>
+        {sourceData.language && (
+          <>
+            <div
+              style={{
+                display: 'flex',
+                height: 3,
+                borderRadius: 2,
+                overflow: 'hidden',
+                marginTop: 'var(--s3)',
+              }}
+            >
+              <span style={{ width: `${langPct}%`, background: 'var(--mark)' }} />
+              <span style={{ flex: 1, background: 'var(--line)' }} />
+            </div>
+            <div style={{ fontSize: '0.68rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
+              {sourceData.language}
+            </div>
+          </>
+        )}
       </div>
-      {sourceData.language && (
-        <>
-          <div
-            style={{
-              display: 'flex',
-              height: 3,
-              borderRadius: 2,
-              overflow: 'hidden',
-              marginTop: 'var(--s3)',
-            }}
-          >
-            <span style={{ width: `${langPct}%`, background: 'var(--mark)' }} />
-            <span style={{ flex: 1, background: 'var(--line)' }} />
-          </div>
-          <div style={{ fontSize: '0.68rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
-            {sourceData.language}
-          </div>
-        </>
-      )}
-    </div>
+    </>
   );
 }
 
@@ -350,7 +393,7 @@ export function HoverPreview({
       {link.sourceData.kind === 'hacker_news' ? (
         <HnVariant title={title} sourceData={link.sourceData} />
       ) : link.sourceData.kind === 'github' ? (
-        <RepoVariant title={title} sourceData={link.sourceData} />
+        <RepoVariant title={title} linkId={link.id} sourceData={link.sourceData} />
       ) : link.sourceData.kind === 'youtube' ? (
         <VideoVariant title={title} linkId={link.id} sourceData={link.sourceData} />
       ) : (
