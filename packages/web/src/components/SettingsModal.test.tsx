@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { SettingsProvider, useSettings } from './SettingsContext';
@@ -9,6 +9,42 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { 'content-type': 'application/json' },
+  });
+}
+
+/** The default `/api/settings` GET response — every field at its server-side default (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`). */
+const DEFAULT_SETTINGS = {
+  theme: 'system',
+  trashPurgeDays: 30,
+  plugins: { hacker_news: true, github: true, youtube: true },
+};
+
+/**
+ * Route-aware, STATEFUL fetch stub — `PreferencesTab`/`PluginsTab` now hit
+ * `GET /api/settings` (plan 016) alongside the pre-existing `GET
+ * /api/counts` `PreferencesTab` also reads; a single fixed mock response
+ * (the old approach) would hand `/api/settings` the counts shape and vice
+ * versa. Stateful because `useUpdateSettings`'s `onSettled` re-invalidates
+ * `settings` after every PATCH, firing a follow-up GET — a stateLESS mock
+ * would hand that GET the ORIGINAL defaults back, silently reverting
+ * whatever the PATCH just "persisted" and making every toggle/cycle test
+ * flake against a stale read. `store` is reset per-test via `beforeEach`
+ * (mirrors the real API's per-request-fresh-DB isolation closely enough for
+ * these UI tests, which don't hit the real API).
+ */
+function mockFetchRouter() {
+  let store = { ...DEFAULT_SETTINGS };
+  return vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = typeof input === 'string' ? input : input.toString();
+    if (url.includes('/api/settings')) {
+      if (init?.method === 'PATCH') {
+        const patch = JSON.parse((init.body as string) ?? '{}');
+        store = { ...store, ...patch };
+        return Promise.resolve(jsonResponse(store));
+      }
+      return Promise.resolve(jsonResponse(store));
+    }
+    return Promise.resolve(jsonResponse({ live: 4, trash: 1, purgeWindowDays: 30 }));
   });
 }
 
@@ -47,10 +83,7 @@ function renderModal() {
 
 describe('SettingsModal', () => {
   beforeEach(() => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(jsonResponse({ live: 4, trash: 1, purgeWindowDays: 30 })),
-    );
+    vi.stubGlobal('fetch', mockFetchRouter());
   });
 
   afterEach(() => {
@@ -165,24 +198,58 @@ describe('SettingsModal', () => {
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
     });
 
-    it('shows the real purge window from /api/counts, disabled (non-functional)', async () => {
+    it('shows the persisted purge window from /api/settings, and cycling it PATCHes the next value (plan 016)', async () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
       const purgeButton = await screen.findByRole('button', { name: /30 days/i });
-      expect(purgeButton).toHaveProperty('disabled', true);
+      expect(purgeButton).not.toHaveProperty('disabled', true);
+
+      fireEvent.click(purgeButton);
+      // Cycles 30 -> 90 (v3's cyclePurge order: 7 -> 30 -> 90 -> 7).
+      expect(await screen.findByRole('button', { name: /90 days/i })).toBeDefined();
     });
   });
 
-  describe('Plugins tab (parked)', () => {
-    it('renders all four plugin rows with no functional toggle', () => {
+  describe('Plugins tab (plan 016 — hacker_news/github/youtube now functional)', () => {
+    it('renders all four rows; three are functional toggles, Twitter/X stays a "Soon" chip', async () => {
       renderModal();
+      fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
+
       expect(screen.getByText('Hacker News')).toBeDefined();
       expect(screen.getByText('Twitter / X')).toBeDefined();
       expect(screen.getByText('GitHub')).toBeDefined();
       expect(screen.getByText('YouTube')).toBeDefined();
-      // No dot/checkbox-style toggle controls — just calm "soon" chips (text, not <button role>s with on/off state).
-      expect(screen.queryAllByRole('button', { name: /set up/i })).toHaveLength(0);
+
+      // Toggles hydrate from GET /api/settings (all on by default).
+      const hnToggle = await screen.findByTitle(/Hacker News is on/i);
+      expect(hnToggle.getAttribute('aria-pressed')).toBe('true');
+      expect(screen.getByTitle(/GitHub is on/i)).toBeDefined();
+      expect(screen.getByTitle(/YouTube is on/i)).toBeDefined();
+
+      // Twitter/X has no toggle — just the calm "Soon" chip.
+      expect(screen.queryByTitle(/Twitter/i)).toBeNull();
+      expect(screen.getByText('Soon')).toBeDefined();
+    });
+
+    it('clicking a plugin dot toggles it off and PATCHes the full plugins record', async () => {
+      renderModal();
+
+      // Wait for the toggle to become ENABLED (not just present) — while
+      // `useSettings()` is still loading, the row renders with `enabled ??
+      // true` (so the title already reads "is on") but `disabled` is true;
+      // asserting on `not.toHaveProperty('disabled', true)` (rather than
+      // just finding the title) is what proves hydration actually finished
+      // before this test clicks it.
+      const hnToggle = await screen.findByTitle(/Hacker News is on/i);
+      await waitFor(() => expect(hnToggle).not.toHaveProperty('disabled', true));
+
+      fireEvent.click(hnToggle);
+
+      await waitFor(() => {
+        expect(screen.getByTitle(/Hacker News is off/i)).toBeDefined();
+      });
+      expect(screen.getByTitle(/Hacker News is off/i).getAttribute('aria-pressed')).toBe('false');
     });
   });
 

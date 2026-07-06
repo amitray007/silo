@@ -95,3 +95,12 @@ export {
   listTrash,
   searchTrash,
 } from './links/trash.js';
+
+// Settings persistence (plan 016): a single-user key -> value store —
+// theme/trash-purge-cycle/plugin-toggle settings the web Settings modal
+// reads + writes. Appended as its own minimal block (this barrel is shared
+// with the parallel scheduling slice) — see `settings/schema.ts` for the
+// per-key allowlist + defaults.
+export type { SettingKey, SettingsMap, SettingValue } from './settings/schema.js';
+export { SETTINGS_DEFAULTS } from './settings/schema.js';
+export { getAllSettings, getSetting, setSetting, updateSettings } from './settings/settings.js';

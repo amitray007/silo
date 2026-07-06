@@ -140,6 +140,25 @@ export type EditLinkRequest = { title?: string; description?: string; note?: str
 export type TagsResponse = { tags: TagCount[] };
 
 /**
+ * Web's OWN copy of `@silo/core`'s settings allowlist (plan 016) — mirrors
+ * `packages/core/src/settings/schema.ts`'s `SettingsMap`/`plugins` shape
+ * field-for-field, same "not imported from core" rule the rest of this file
+ * follows (see the file's top doc comment — `@silo/core`'s barrel pulls in
+ * `pg` at module scope, which a browser bundle can never load). Both `GET
+ * /api/settings` and `PATCH /api/settings` share this exact shape — the
+ * PATCH response is the full, freshly-merged map, not just the changed
+ * fields (see `settings.ts`'s route doc comment).
+ */
+export type SettingsMap = {
+  theme: 'light' | 'dark' | 'system';
+  trashPurgeDays: 7 | 30 | 90;
+  plugins: { hacker_news: boolean; github: boolean; youtube: boolean };
+};
+
+/** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
+export type UpdateSettingsRequest = Partial<SettingsMap>;
+
+/**
  * Mirrors `ErrorEnvelope` in `packages/api/src/app.ts` — every non-2xx JSON
  * body the API returns has this shape. `error` is a short machine-stable
  * code; `message` is human-readable; `details` is optional structured extra

@@ -17,10 +17,12 @@ import type {
   LinksResponse,
   RestoreResponse,
   SearchResponse,
+  SettingsMap,
   TagsResponse,
   TrashLinkJson,
   TrashResponse,
   TrashSearchResponse,
+  UpdateSettingsRequest,
 } from './types';
 
 /**
@@ -40,6 +42,7 @@ export const queryKeys = {
   search: (q: string) => ['search', q] as const,
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
+  settings: () => ['settings'] as const,
 };
 
 /** The sidebar's live/trash counts (`GET /api/counts`) — `useCounts().data` is `Counts | undefined` until loaded. */
@@ -627,5 +630,46 @@ export function useBulkDeleteNow() {
   return useMutation({
     mutationFn: (ids: string[]) => runBulk(ids, (id) => apiDelete(`/api/trash/${id}`)),
     onSettled: () => invalidateTrashQueries(queryClient),
+  });
+}
+
+/**
+ * The Settings modal's read (`GET /api/settings`, plan 016) — hydrates the
+ * theme picker, the 7/30/90 trash-purge-cycle picker, and the plugin
+ * toggles. `useSettings().data` is `SettingsMap | undefined` until loaded;
+ * the API itself never omits a key (every unset key falls back to its
+ * server-side default — see `core.getAllSettings`'s doc comment), so once
+ * loaded every field is always present.
+ */
+export function useSettings() {
+  return useQuery({
+    queryKey: queryKeys.settings(),
+    queryFn: () => apiGet<SettingsMap>('/api/settings'),
+  });
+}
+
+/**
+ * The Settings modal's write (`PATCH /api/settings`, plan 016) — every field
+ * of `UpdateSettingsRequest` is optional, so a caller patches just the one
+ * control the user touched (e.g. `{ theme: 'dark' }`). No optimistic
+ * update: unlike capture/trash, a settings change has no list to feel
+ * "instant" against, and the mutation is a single local round-trip — a
+ * plain invalidate-on-settle (mirrors `useEditLink`'s reasoning) keeps this
+ * hook simple. On success the server returns the FULL merged map, which is
+ * written directly into the cache (`onSuccess`) so the modal reflects the
+ * change without waiting on a second round-trip; `onSettled` still
+ * invalidates as a safety net (e.g. a concurrent PATCH from another tab).
+ */
+export function useUpdateSettings() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (patch: UpdateSettingsRequest) => apiPatch<SettingsMap>('/api/settings', patch),
+    onSuccess: (settings) => {
+      queryClient.setQueryData(queryKeys.settings(), settings);
+    },
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+    },
   });
 }

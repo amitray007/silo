@@ -1,26 +1,34 @@
-import { useCounts } from '../../api/hooks';
+import { useSettings, useUpdateSettings } from '../../api/hooks';
 import { ThemeToggle } from '../../theme/ThemeToggle';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
 
+/** The 7/30/90 cycle order (v3's `cyclePurge`: `{ 7: 30, 30: 90, 90: 7 }`) — clicking the button advances to the next value, wrapping back to 7 after 90. */
+const NEXT_PURGE_DAYS: Record<7 | 30 | 90, 7 | 30 | 90> = { 7: 30, 30: 90, 90: 7 };
+
 /**
- * Settings → Preferences (v3's `tabPrefs`): the Theme row (WIRED to the real
- * theme system via `ThemeToggle`, which already renders the same segmented
- * light/dark pill as v3's `thLightC`/`thDarkC` pair — ink-on-`--hov` active,
- * never amber, per the Oat anti-slop rule) and the Trash auto-purge cycle
+ * Settings → Preferences (v3's `tabPrefs`): the Theme row (wired to the real
+ * theme system via `ThemeToggle`, which now ALSO persists to `/api/settings`
+ * — see `ThemeToggle`'s doc comment, plan 016) and the Trash auto-purge cycle
  * row.
  *
- * The purge cycle is NON-functional: there is no settings API to persist a
- * chosen window (`docs/rules` / the API only exposes the read-only
- * `PURGE_WINDOW_DAYS` core constant via `GET /api/counts`), so `cyclePurge`
- * has nothing to write to. Rather than fake a working `▾` cycle (v3's
- * `cyclePurge` rotates 7→30→90 purely in demo state), this shows the REAL
- * current window from `useCounts().purgeWindowDays` and disables the button
- * with a "fixed at Nd for now" title — honest about today's limit without
- * inventing client-side state that would silently do nothing server-side.
+ * The purge cycle is NOW FUNCTIONAL (plan 016 — previously deferred, see
+ * `api/routes/counts.ts`'s pre-slice deferral note): clicking the button
+ * cycles 7 -> 30 -> 90 -> 7 (matching v3's `cyclePurge` exactly) and PATCHes
+ * `/api/settings`. It reads from `useSettings()` (the persisted store), NOT
+ * `useCounts().purgeWindowDays` (the still-env-driven constant the actual
+ * purge JOB reads today) — the two can legitimately disagree until a later
+ * fast-follow points the purge job at this setting instead of its env var
+ * (see the plan's "Purge cycle" hand-off note); this control is honest about
+ * what IT persists, not a promise about when the job will pick it up.
  */
 export function PreferencesTab() {
-  const { data: counts } = useCounts();
-  const purgeDays = counts?.purgeWindowDays ?? 30;
+  const { data: settings } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const purgeDays = settings?.trashPurgeDays ?? 30;
+
+  function cyclePurge(): void {
+    updateSettings.mutate({ trashPurgeDays: NEXT_PURGE_DAYS[purgeDays] });
+  }
 
   return (
     <>
@@ -36,12 +44,7 @@ export function PreferencesTab() {
           <div style={rowLabel}>Trash</div>
           <div style={rowDesc}>Auto-empty deleted links after</div>
         </div>
-        <button
-          type="button"
-          disabled
-          title={`fixed at ${purgeDays} days for now`}
-          className="silo-settings-btn"
-        >
+        <button type="button" onClick={cyclePurge} className="silo-settings-btn">
           {purgeDays} days ▾
         </button>
       </div>
