@@ -313,7 +313,18 @@ export function RowMenu({ link }: { link: LinkJson }) {
           type="button"
           aria-haspopup="true"
           aria-expanded={tagsFlyOpen}
-          onClick={() => setTagsFlyOpen((open) => !open)}
+          // Opens (never toggles-closed) on click. A real pointer click always
+          // fires `mouseenter` on the wrapper div (line below) immediately
+          // before `click` — that mouseenter already sets `tagsFlyOpen` true,
+          // so a naive `(open) => !open` toggle here would immediately flip
+          // it back to false on every single mouse click, making the flyout
+          // un-openable by mouse (QA finding: reproduced with a real click,
+          // not just RTL's bare `fireEvent.click` which skips the mouseenter
+          // and so never caught this). Closing for mouse users is
+          // `onMouseLeave` below; for keyboard users (no hover) this still
+          // opens it on Enter/Space with no toggle-closed path needed since
+          // Escape/click-outside close the whole row menu anyway.
+          onClick={() => setTagsFlyOpen(true)}
           style={menuItemStyle(tagsFlyOpen)}
         >
           <span style={iconSlotStyle}>#</span>
