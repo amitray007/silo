@@ -158,59 +158,97 @@ list` and `pwd`. All work happens here on a branch like `feat/capture-extensions
 > (standard/fast/expected), NOT a side panel or floating widget.
 
 ### Builder 1 — Chrome extension (`extensions/chrome/`) — Tier 1
-Manifest V3. All of:
-- **One-keystroke save**: a toolbar action + a keyboard command (`commands` API,
-  e.g. Cmd/Ctrl+Shift+S) that captures the active tab's URL + title and POSTs
-  `{ url, title-as-nothing (server derives title), note?, tags? }` to
-  `/api/links`. The zero-friction primary path. Badge/toast feedback:
-  success ✓ / "already saved (updated)" on dedup-fold / clear error if silo is
+Manifest V3. **PHILOSOPHY (binding): capture is instant and QUIET. The extension
+NEVER shows enrichment/source data — enrichment happens silently in silo's
+backend; the extension's whole job is "save this, fast, and confirm it landed."**
+All of:
+- **One-keystroke save (quiet)**: a toolbar action + a keyboard command
+  (`commands` API, e.g. Cmd/Ctrl+Shift+S) captures the active tab's URL + title
+  and POSTs `{ url, note?, tags? }` to `/api/links`. The extension does NOT wait
+  for or display enrichment — it fires the capture and immediately confirms. The
+  ONLY feedback is a **well-designed toast** (see below): "Link saved in silo" ✓,
+  or "Already in silo (updated)" on dedup-fold, or a clear error if silo is
   unreachable (never a silent fail). Non-http tabs (chrome://, about:) →
   disabled/skipped.
-- **Popup (the enrich-at-capture path)**: clicking the toolbar opens a small
-  popup showing the page title + optional **note** field + **tags** field with
-  autocomplete from `GET /api/tags`. Save from here sends note/tags too.
-- **Right-click context menu**: "Save to silo" on a link (saves the link's href)
-  and on the page (saves the page URL) — quick capture without the popup.
+- **The toast — design it properly, not a default browser notification.** An
+  injected in-page toast (content script) or a polished popup confirmation:
+  silo's mark/brand (the amber dot), "Link saved in silo", the page title it
+  saved, a subtle slide-in + auto-dismiss (~2s), respects the "Oat" restraint
+  (no slop). This is the primary UX surface — it should feel crafted. Provide a
+  light + dark variant (follow the page or system theme). Screenshot it.
+- **Popup (optional enrich-at-capture)**: clicking the toolbar opens a small
+  popup — page title + optional **note** + **tags** (autocomplete from
+  `GET /api/tags`) — for the "I want to annotate as I save" case. This is
+  SECONDARY to the one-keystroke quiet save; keep it minimal.
+- **Right-click context menu**: "Save to silo" on a link (saves the href) and on
+  the page (saves the page URL) — quick quiet capture + the same toast.
   `contextMenus` API.
-- **"Already saved?" indicator**: on tab change, check `GET /api/links/search`
-  (or a targeted lookup) for the current URL and reflect saved/not-saved in the
-  toolbar icon/badge. Debounce; don't hammer the API on every tab flick.
+- **Recent captures (last 5)** — NOT a full link browser (the web UI/CLI are for
+  reading). The popup shows a small "recently saved" list: the last 5 links this
+  extension captured, with their title + note + current status, fetched fresh
+  from silo (`GET /api/links/:id` for each tracked id, or a small recent lookup).
+  Store the 5 captured ids in `chrome.storage.local`; on popup open, fetch their
+  current data so the user sees enrichment HAS happened (title filled in) without
+  the extension itself being a reader. A tap opens the link. Keep it to 5, simple.
 - **Config**: an options page with a **base URL** (default `http://localhost:8787`)
-  AND an optional **API token** (empty default; sent as `Authorization: Bearer`
-  when set — the prod seam). `host_permissions`/`optional_host_permissions` for
-  the configured origin. Service worker does the fetches.
-- **Build**: bundle the MV3 service worker + popup + options + context-menu
-  registration (Vite or esbuild — lightest). `build` outputs a `dist/` loadable
-  via chrome://extensions "Load unpacked" + a zip.
+  + optional **API token** (empty default; `Authorization: Bearer` when set — the
+  prod seam). `host_permissions`/`optional_host_permissions` for the configured
+  origin. Service worker does the fetches.
+- **Build**: bundle the MV3 service worker + popup + options + the toast content
+  script + context-menu registration (Vite or esbuild). `build` outputs a `dist/`
+  loadable via chrome://extensions "Load unpacked" + a zip.
 - **Tests** (Vitest, mock `chrome.*` + fetch): the capture client (base URL +
-  token), tab→payload mapping, the already-saved lookup, context-menu handlers,
-  and every error path (unreachable/401/dupe-fold/non-http).
+  token), tab→payload mapping, the recent-5 tracking + fetch, context-menu
+  handlers, and every error path (unreachable/401/dupe-fold/non-http). Confirm the
+  capture path does NOT block on or render enrichment.
 
-### Builder 2 — Raycast extension (`extensions/raycast/`) — Tier 1 (fuller: capture + find)
-TypeScript + `@raycast/api`. All of:
-- **Capture form**: URL (prefilled from clipboard if it looks like a URL) +
-  **note** + **tags** fields → POST `/api/links`. `showToast`/`showHUD` feedback.
-- **Paste-a-link auto-saves**: a "Save URL" command where pasting/typing a URL
-  saves it immediately, then reflects **enriching → enriched** state — after the
-  201, poll `GET /api/links/:id` (or search) until `captureStatus` settles and
-  show the enriched title/source data (mirrors the web UI's live-enrichment
-  loop). Show as much of the returned link data as Raycast comfortably renders
-  (title, domain, status, source-specific fields, note, tags).
-- **Capture frontmost browser tab**: read the frontmost browser's URL+title
-  (AppleScript for Safari/Chrome/Arc, or Raycast's browser integration if
-  present) → save. One keystroke, no copy. If the environment can't read the
-  frontmost tab, degrade gracefully to clipboard/arg.
-- **Search + open**: a search command → `GET /api/links/search?q=` → a Raycast
-  list of results (title / domain / status / enriched fields) → Enter opens the
-  link in the browser; actions for copy-URL, open-in-silo, etc.
+### Builder 2 — Raycast extension (`extensions/raycast/`) — Tier 1 (capture + find)
+TypeScript + `@raycast/api`. **PHILOSOPHY (binding): the PRIMARY goal is
+instant capture — one keystroke, saved, done. Notes/tags are SECONDARY (an
+optional detail action / a secondary command), never in the way of the fast
+path.** All of:
+- **Instant capture (the primary command)**: a "Save to silo" command that
+  captures with ZERO friction — it resolves a URL (frontmost browser tab first,
+  else clipboard if it looks like a URL) and POSTs `{ url }` immediately, then a
+  `showHUD("✓ Saved to silo")`. No form, no confirmation step for the fast path.
+  Enrichment happens in silo's backend; the command does NOT block on it (it may
+  optionally show a brief "enriching…" then the settled title via a background
+  poll, but the SAVE returns instantly — do not gate the HUD on enrichment).
+- **Frontmost browser tab — support the Chromium family explicitly**: read the
+  frontmost browser's URL+title via AppleScript for **Chrome, Brave, Arc, Dia,
+  Helium** (all Chromium-based; Arc/Dia/Helium/Brave respond to the same
+  `tell application "<Name>" to get URL of active tab of front window` shape as
+  Chrome — verify each at build; Dia is newer, treat as best-effort and degrade
+  gracefully if its AppleScript surface differs). Also Safari if trivial. If no
+  supported browser is frontmost / the env can't read it, fall back to clipboard.
+- **Note/tags as SECONDARY**: a separate "Save with details" command (or a
+  Raycast Action on the primary command) opens the form (URL prefilled + note +
+  tags). Not the default path — the default is instant.
+- **Search + open (find surface)**: a search command → `GET /api/links/search?q=`
+  → a Raycast **List** with rich detail, modeled on the reference UI (see below):
+  a left results list (favicon/source icon + title/domain, "Today"/date section
+  headers) and a right **detail pane** showing the link's rich data — title,
+  a source card (e.g. GitHub stars/forks/issues, HN points/comments), an
+  Information section (Source, Type, URL, Title, saved-at). Enter opens in the
+  browser; Actions (⌘K) for copy-URL, open-in-silo, add-tag, trash.
+- **Reference UI (match or exceed):** see
+  `docs/plans/refs/raycast-search-detail-reference.png` — a Raycast-style
+  list+detail mock — a filterable left list with section headers ("Today"),
+  source-typed row icons, and a right detail pane with a white rich card (repo
+  name, description, a stat row: Contributors/Issues/Stars/Forks, a language
+  bar) over an Information table (Source/Type/URL/Title/Copied-at) and a bottom
+  action bar (primary action ⏎ + "Actions ⌘K"). Build the silo search/detail
+  view in this shape (adapt fields to silo's link + sourceData). Aim to match its
+  polish or improve on it. Screenshot the result.
 - **Config**: Raycast **preferences** for base URL (default localhost:8787) +
   optional API token (sent as Bearer when set).
-- **Build**: per Raycast's `ray build`/`ray develop`. It's a workspace package;
-  ensure `pnpm turbo run check-types test` covers its TS + unit tests even though
-  `ray` handles packaging.
+- **Build**: per Raycast's `ray build`/`ray develop`. Workspace package; ensure
+  `pnpm turbo run check-types test` covers its TS + unit tests even though `ray`
+  handles packaging.
 - **Tests** (mock `@raycast/api` + fetch): the capture client (base URL + token),
-  URL resolution (clipboard/arg/frontmost-tab), the enrichment-poll loop, the
-  search→list mapping, and error paths (unreachable/401/dupe/bad-URL).
+  URL resolution (frontmost-tab per browser / clipboard fallback), the
+  instant-save path (does NOT block on enrichment), the search→list+detail
+  mapping, and error paths (unreachable/401/dupe/bad-URL/no-browser).
 
 ### Testing / building / gate (BOTH builders + you, the lead)
 - Per-package during build: `pnpm --filter @silo/extension-chrome test` /
