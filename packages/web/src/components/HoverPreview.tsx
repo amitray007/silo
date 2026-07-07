@@ -291,40 +291,24 @@ function VideoVariant({
 }
 
 /** The `pvIsGeneric` variant (`Silo-v3.html:252-261`) — unchanged from before this un-parking. */
+// The note is deliberately NOT shown here — the row already renders it (the
+// quoted line under the title, `LinkRow.tsx`), and the hover card sits right
+// beside the row, so repeating the note was pure duplication (both visible in
+// one eyeful). The hover shows tags; the note lives on the row.
 function GenericVariant({
   title,
   tagLine,
   hasTags,
-  notes,
-  hasNote,
 }: {
   title: string;
   tagLine: string;
   hasTags: boolean;
-  notes: string | null;
-  hasNote: boolean;
 }) {
   return (
     <VariantBody title={title}>
       {hasTags && (
         <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
           {tagLine}
-        </div>
-      )}
-      {hasNote && (
-        <div
-          style={{
-            fontSize: '0.78rem',
-            color: 'var(--mut)',
-            fontStyle: 'italic',
-            marginTop: 'var(--s1-5)',
-            display: '-webkit-box',
-            WebkitLineClamp: 2,
-            WebkitBoxOrient: 'vertical',
-            overflow: 'hidden',
-          }}
-        >
-          "{notes}"
         </div>
       )}
     </VariantBody>
@@ -372,7 +356,6 @@ export function HoverPreview({
   const title = link.title ?? deriveTitleFromUrl(link.url);
   const hasTags = link.tags.length > 0;
   const tagLine = link.tags.map((t) => `#${t}`).join('  ');
-  const hasNote = !!link.notes;
   const meta = relativeTimeFromNow(link.createdAt);
 
   return createPortal(
@@ -409,13 +392,7 @@ export function HoverPreview({
       ) : link.sourceData.kind === 'youtube' ? (
         <VideoVariant title={title} linkId={link.id} sourceData={link.sourceData} />
       ) : (
-        <GenericVariant
-          title={title}
-          tagLine={tagLine}
-          hasTags={hasTags}
-          notes={link.notes}
-          hasNote={hasNote}
-        />
+        <GenericVariant title={title} tagLine={tagLine} hasTags={hasTags} />
       )}
       <div
         style={{

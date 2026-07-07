@@ -40,7 +40,10 @@ describe('HoverPreview', () => {
     expect(screen.getByText((_, node) => node?.textContent === '#ai  #mcp')).toBeDefined();
   });
 
-  it('renders the quoted, italicized note when present', () => {
+  it('does NOT render the note (the row already shows it — no double display)', () => {
+    // The note lives on the row (LinkRow's quoted line); the hover card sits
+    // right beside the row, so showing the note in both was pure duplication.
+    // Guard against it regressing back into the hover.
     render(
       <HoverPreview
         link={makeLink({ notes: 'read this later' })}
@@ -49,9 +52,7 @@ describe('HoverPreview', () => {
         onHide={vi.fn()}
       />,
     );
-    const note = screen.getByText('"read this later"');
-    expect(note).toBeDefined();
-    expect(note.style.fontStyle).toBe('italic');
+    expect(screen.queryByText('"read this later"')).toBeNull();
   });
 
   it('falls back to the scheme-stripped url as the title when title is null', () => {
