@@ -42,9 +42,9 @@ describe('sourceDataSchema', () => {
     it('parses a full Field-Theory-shaped Twitter payload (all optional fields present)', () => {
       const payload = {
         kind: 'twitter',
-        text: 'Check out http://originkit.dev — big update today',
-        authorHandle: 'AdhamDannaway',
-        authorName: 'Adham Dannaway',
+        text: 'Check out https://example.com/tool — big update today',
+        authorHandle: 'alice_dev',
+        authorName: 'Alice Developer',
         authorAvatarUrl: 'https://pbs.twimg.com/profile_images/123/avatar.jpg',
         likes: 120,
         reposts: 15,
@@ -55,7 +55,7 @@ describe('sourceDataSchema', () => {
         language: 'en',
         possiblySensitive: false,
         mediaUrls: ['https://pbs.twimg.com/media/abc123.jpg'],
-        externalLinks: ['http://originkit.dev'],
+        externalLinks: ['https://example.com/tool'],
       };
       const result = sourceDataSchema.safeParse(payload);
       expect(result.success).toBe(true);

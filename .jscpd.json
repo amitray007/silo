@@ -12,6 +12,9 @@
     "**/.turbo/**",
     "**/docs/**",
     "**/test-support/**",
-    "**/*.test.{ts,tsx}"
+    "**/*.test.{ts,tsx}",
+    "packages/cli/src/types.ts",
+    "packages/cli/src/client.ts",
+    "packages/cli/src/buckets.ts"
   ]
 }

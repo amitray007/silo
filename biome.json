@@ -81,6 +81,52 @@
       }
     },
     {
+      "includes": ["packages/cli/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@silo/db": "The CLI is a plain HTTP client of @silo/api; it must not import @silo/db directly.",
+                  "@silo/core": "The CLI is a plain HTTP client of @silo/api; it defines its own request/response types (mirroring web) rather than importing @silo/core, keeping the core/adapter boundary clean.",
+                  "@silo/web": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/api": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/mcp-server": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/worker": "Adapters must not depend on the worker; only the @silo/app composition root wires them together.",
+                  "@silo/app": "Nothing may import the @silo/app composition root; it is the top-level entrypoint that wires the others."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "includes": ["extensions/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noRestrictedImports": {
+              "level": "error",
+              "options": {
+                "paths": {
+                  "@silo/db": "Extensions are plain HTTP clients of @silo/api; they must not import @silo/db directly.",
+                  "@silo/core": "Extensions are plain HTTP clients of @silo/api; they define their own request/response types rather than importing @silo/core, keeping the core/adapter boundary clean.",
+                  "@silo/web": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/api": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/mcp-server": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/worker": "Adapters must not depend on the worker; only the @silo/app composition root wires them together.",
+                  "@silo/app": "Nothing may import the @silo/app composition root; it is the top-level entrypoint that wires the others."
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    {
       "includes": ["packages/web/**", "packages/mcp/**"],
       "linter": {
         "rules": {

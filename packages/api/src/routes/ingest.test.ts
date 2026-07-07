@@ -45,9 +45,9 @@ async function postJson(
 function ftTwitterSourceData(): CoreOps.SourceData {
   return {
     kind: 'twitter',
-    text: 'Check out http://originkit.dev — big update today',
-    authorHandle: 'AdhamDannaway',
-    authorName: 'Adham Dannaway',
+    text: 'Check out https://example.com/tool — big update today',
+    authorHandle: 'alice_dev',
+    authorName: 'Alice Developer',
     authorAvatarUrl: 'https://pbs.twimg.com/profile_images/123/avatar.jpg',
     likes: 120,
     reposts: 15,
@@ -58,7 +58,7 @@ function ftTwitterSourceData(): CoreOps.SourceData {
     language: 'en',
     possiblySensitive: false,
     mediaUrls: ['https://pbs.twimg.com/media/abc123.jpg'],
-    externalLinks: ['http://originkit.dev'],
+    externalLinks: ['https://example.com/tool'],
   };
 }
 
@@ -163,7 +163,7 @@ describeIfPg('POST /api/ingest (integration)', () => {
         app,
         '/api/ingest',
         {
-          url: 'https://x.com/AdhamDannaway/status/1234567890123456789',
+          url: 'https://x.com/alice_dev/status/1234567890123456789',
           sourceKind: 'twitter',
           note: sourceData.kind === 'twitter' ? sourceData.text : undefined,
           sourceData,
