@@ -295,7 +295,17 @@ describe('type fidelity', () => {
     const variants: SourceData[] = [
       { kind: 'link' },
       { kind: 'hacker_news', points: 250, comments: 84, author: 'pg' },
-      { kind: 'twitter', likes: 42, replies: 3, author: 'jack' },
+      {
+        kind: 'twitter',
+        text: 'hello world',
+        authorHandle: 'jack',
+        authorName: 'Jack',
+        likes: 42,
+        reposts: 5,
+        replies: 3,
+        quotes: 1,
+        bookmarks: 7,
+      },
       { kind: 'github', stars: 120000, forks: 26000, issues: 3000, language: 'JavaScript' },
       {
         kind: 'youtube',

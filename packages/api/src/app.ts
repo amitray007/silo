@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
+import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
@@ -65,6 +66,7 @@ export function createApp(): Hono {
   const api = new Hono();
   registerLinksRoutes(api);
   registerLinksWriteRoutes(api);
+  registerIngestRoutes(api);
   registerTrashRoutes(api);
   registerTagsRoutes(api);
   registerCountsRoutes(api);

@@ -20,8 +20,43 @@ describe('sourceDataSchema', () => {
       }
     });
 
-    it('parses a valid Twitter payload', () => {
-      const payload = { kind: 'twitter', likes: 42, replies: 3, author: 'jack' };
+    it('parses a valid Twitter payload (minimal required fields)', () => {
+      const payload = {
+        kind: 'twitter',
+        text: 'hello world',
+        authorHandle: 'jack',
+        authorName: 'Jack',
+        likes: 42,
+        reposts: 5,
+        replies: 3,
+        quotes: 1,
+        bookmarks: 7,
+      };
+      const result = sourceDataSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(payload);
+      }
+    });
+
+    it('parses a full Field-Theory-shaped Twitter payload (all optional fields present)', () => {
+      const payload = {
+        kind: 'twitter',
+        text: 'Check out http://originkit.dev — big update today',
+        authorHandle: 'AdhamDannaway',
+        authorName: 'Adham Dannaway',
+        authorAvatarUrl: 'https://pbs.twimg.com/profile_images/123/avatar.jpg',
+        likes: 120,
+        reposts: 15,
+        replies: 8,
+        quotes: 2,
+        bookmarks: 34,
+        postedAt: 'Mon Jul 06 14:25:00 +0000 2026',
+        language: 'en',
+        possiblySensitive: false,
+        mediaUrls: ['https://pbs.twimg.com/media/abc123.jpg'],
+        externalLinks: ['http://originkit.dev'],
+      };
       const result = sourceDataSchema.safeParse(payload);
       expect(result.success).toBe(true);
       if (result.success) {
@@ -95,6 +130,11 @@ describe('sourceDataSchema', () => {
       expect(result.success).toBe(false);
     });
 
+    it('rejects a Twitter payload missing required fields', () => {
+      const result = sourceDataSchema.safeParse({ kind: 'twitter', text: 'hi' });
+      expect(result.success).toBe(false);
+    });
+
     it('rejects an unknown source kind', () => {
       const result = sourceDataSchema.safeParse({ kind: 'reddit', author: 'x' });
       expect(result.success).toBe(false);
@@ -164,9 +204,14 @@ describe('sourceDataSchema', () => {
     it('rejects negative counts', () => {
       const result = sourceDataSchema.safeParse({
         kind: 'twitter',
+        text: 'hi',
+        authorHandle: 'x',
+        authorName: 'X',
         likes: -1,
+        reposts: 0,
         replies: 0,
-        author: 'x',
+        quotes: 0,
+        bookmarks: 0,
       });
       expect(result.success).toBe(false);
     });
@@ -181,14 +226,84 @@ describe('sourceDataSchema', () => {
       expect(result.success).toBe(false);
     });
 
-    it('rejects an empty-string author', () => {
+    it('rejects an empty-string authorHandle', () => {
       const result = sourceDataSchema.safeParse({
         kind: 'twitter',
+        text: 'hi',
+        authorHandle: '',
+        authorName: 'X',
         likes: 1,
+        reposts: 0,
         replies: 1,
-        author: '',
+        quotes: 0,
+        bookmarks: 0,
       });
       expect(result.success).toBe(false);
+    });
+
+    it('rejects an oversized twitter text (>4000 chars) — no unbounded jsonb bloat', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'twitter',
+        text: 'a'.repeat(4_001),
+        authorHandle: 'x',
+        authorName: 'X',
+        likes: 1,
+        reposts: 0,
+        replies: 1,
+        quotes: 0,
+        bookmarks: 0,
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a twitter language code that is not exactly 2 letters', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'twitter',
+        text: 'hi',
+        authorHandle: 'x',
+        authorName: 'X',
+        likes: 1,
+        reposts: 0,
+        replies: 1,
+        quotes: 0,
+        bookmarks: 0,
+        language: 'eng',
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects an oversized twitter mediaUrls array (>64 entries) — bounded external jsonb', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'twitter',
+        text: 'hi',
+        authorHandle: 'x',
+        authorName: 'X',
+        likes: 1,
+        reposts: 0,
+        replies: 1,
+        quotes: 0,
+        bookmarks: 0,
+        mediaUrls: Array.from({ length: 65 }, (_, i) => `https://pbs.twimg.com/${i}.jpg`),
+      });
+      expect(result.success).toBe(false);
+    });
+
+    it('rejects a twitter payload with the old-shape "author" field (removed, not renamed-and-kept)', () => {
+      const result = sourceDataSchema.safeParse({
+        kind: 'twitter',
+        text: 'hi',
+        authorHandle: 'x',
+        authorName: 'X',
+        author: 'x',
+        likes: 1,
+        reposts: 0,
+        replies: 1,
+        quotes: 0,
+        bookmarks: 0,
+      });
+      expect(result.success).toBe(false);
+      if (result.success) return;
+      expect(result.error.issues.some((issue) => issue.code === 'unrecognized_keys')).toBe(true);
     });
 
     it('rejects a numeric kind', () => {

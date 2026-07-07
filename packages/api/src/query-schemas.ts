@@ -1,4 +1,5 @@
 import type { PageParams } from '@silo/core';
+import { sourceDataSchema } from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -43,6 +44,27 @@ export const captureBodySchema = z.object({
   note: z.string().optional(),
   sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
 });
+
+/**
+ * `POST /api/ingest` (trusted, token-gated ingest — CLI foundation slice,
+ * plan 020) body schema. THE ONE PLACE `sourceData` IS ACCEPTED ON A CAPTURE
+ * BODY: `captureBodySchema` above (the PUBLIC `POST /api/links`) deliberately
+ * does NOT expose it — see `routes/ingest.ts`'s doc comment for the full
+ * trust-gate design this schema is one half of. `sourceData` is validated
+ * against the FULL `sourceDataSchema` union (not just the twitter variant):
+ * a trusted local ingest tool may reasonably want to supply pre-extracted
+ * data for any source, not only twitter, without a schema change here.
+ */
+export const ingestBodySchema = z.object({
+  url: z.string(),
+  sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
+  note: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  sourceData: sourceDataSchema.optional(),
+});
+
+/** The parsed `POST /api/ingest` body shape. */
+export type IngestBody = z.infer<typeof ingestBodySchema>;
 
 /** `PATCH /api/links/:id` (edit) body schema — every field optional; an empty body is a valid no-op (returns the current link, per `core.editLink`'s own empty-patch branch). */
 export const editBodySchema = z.object({
