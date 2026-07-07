@@ -141,6 +141,10 @@ describe('AppFrame', () => {
       // real browser click does — focus it explicitly so the modal's
       // focus-restore-on-close has a real "trigger" element to return to.
       settingsLink.focus();
+      // ModalShell restores focus on close only for KEYBOARD opens (a
+      // mouse-opened modal restoring focus paints a noisy ring). This test
+      // verifies the keyboard restore path, so open via keyboard.
+      fireEvent.keyDown(settingsLink, { key: 'Enter' });
       fireEvent.click(settingsLink);
       expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
 

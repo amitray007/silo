@@ -77,6 +77,11 @@ function renderModal() {
   // real browser click does — focus it explicitly so the modal's
   // focus-restore-on-close has a real "trigger" element to return to.
   trigger.focus();
+  // ModalShell restores focus on close ONLY for keyboard opens (modality-aware
+  // — a mouse-opened modal restoring focus paints a noisy focus ring). These
+  // tests verify that keyboard-user restore path, so open via keyboard: a
+  // keydown sets keyboard modality before the activating click.
+  fireEvent.keyDown(trigger, { key: 'Enter' });
   fireEvent.click(trigger);
   return utils;
 }
@@ -137,6 +142,35 @@ describe('SettingsModal', () => {
 
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('a MOUSE-opened modal does NOT restore focus to the trigger on close (no noisy focus ring)', () => {
+    // The modality-aware counterpart to the keyboard test above: when the
+    // modal was opened by a pointer, closing it must NOT refocus the trigger,
+    // so a mouse user is never left with a `:focus-visible` ring on a button
+    // they clicked and moved on from.
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <SettingsProvider>
+            <Harness />
+          </SettingsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    const trigger = screen.getByText('trigger');
+    trigger.focus();
+    // Pointer modality (no preceding keydown) — mirrors a real mouse open.
+    fireEvent.pointerDown(trigger);
+    fireEvent.click(trigger);
+    expect(screen.getByRole('dialog')).toBeDefined();
+
+    fireEvent.click(screen.getByRole('button', { name: 'esc' }));
+
+    expect(screen.queryByRole('dialog')).toBeNull();
+    // Focus was NOT forced back to the trigger.
+    expect(document.activeElement).not.toBe(trigger);
   });
 
   it('the ✕ close button closes the modal and restores focus to the trigger', () => {

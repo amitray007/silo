@@ -1,6 +1,35 @@
 import { type ReactNode, useEffect, useRef } from 'react';
 
 /**
+ * Tracks whether the user's most recent interaction was via keyboard, so
+ * focus-restore-on-close can be modality-aware: refocusing the trigger is
+ * correct+necessary for a KEYBOARD user (they must land back where they were,
+ * with the focus ring), but for a MOUSE user it just paints a `:focus-visible`
+ * ring on a button they clicked and moved on from — visual noise they never
+ * asked for. A single set of passive document listeners (registered once,
+ * lazily) keeps `lastWasKeyboard` current for every modal. `keydown` flips it
+ * true; any pointer interaction flips it false.
+ */
+let lastWasKeyboard = false;
+let modalityListenersAttached = false;
+function ensureModalityListeners(): void {
+  if (modalityListenersAttached || typeof document === 'undefined') return;
+  modalityListenersAttached = true;
+  document.addEventListener(
+    'keydown',
+    () => {
+      lastWasKeyboard = true;
+    },
+    true,
+  );
+  const pointer = () => {
+    lastWasKeyboard = false;
+  };
+  document.addEventListener('pointerdown', pointer, true);
+  document.addEventListener('mousedown', pointer, true);
+}
+
+/**
  * The scrim + panel shell shared by every v3 centered modal (`editOpen`,
  * `settingsOpen` — `Silo-v3.html`): fixed-inset `rgba(24,17,7,.32)` scrim
  * with `siloFade`, a `siloIn` panel with the focus-trap host (`tabIndex={-1}`
@@ -44,9 +73,16 @@ export function ModalShell({
   const triggerRef = useRef<Element | null>(null);
 
   useEffect(() => {
+    ensureModalityListeners();
     triggerRef.current = document.activeElement;
+    // Snapshot the modality that OPENED the modal — restore-on-close is only
+    // for keyboard users (see the tracker above). A mouse-opened modal
+    // restoring focus just paints a `:focus-visible` ring on the clicked
+    // trigger, which reads as noise.
+    const openedViaKeyboard = lastWasKeyboard;
     panelRef.current?.focus();
     return () => {
+      if (!openedViaKeyboard) return;
       const trigger = triggerRef.current;
       if (trigger instanceof HTMLElement && document.contains(trigger)) {
         trigger.focus();
