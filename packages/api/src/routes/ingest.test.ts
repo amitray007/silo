@@ -178,7 +178,13 @@ describeIfPg('POST /api/ingest (integration)', () => {
       expect(body.link.sourceData).toEqual(sourceData);
       expect(body.link.addedBy).toBe('user');
 
-      const getRes = await app.request(`/api/links/${body.link.id}`);
+      // SILO_API_TOKEN is set for this whole describe block (beforeEach
+      // above) — since plan 021, that same env var also gates every OTHER
+      // /api/* route via the general token middleware (`general-auth.ts`),
+      // not just /api/ingest. Send it here too, or this GET 401s.
+      const getRes = await app.request(`/api/links/${body.link.id}`, {
+        headers: { Authorization: `Bearer ${TEST_TOKEN}` },
+      });
       expect(getRes.status).toBe(200);
       const getBody = (await getRes.json()) as { link: Record<string, unknown> };
       expect(getBody.link.sourceData).toEqual(sourceData);
@@ -274,11 +280,21 @@ describeIfPg('POST /api/ingest (integration)', () => {
   describe('regression — the public capture route never accepts sourceData', () => {
     it('POST /api/links with a sourceData field in the body -> saved as a plain link, sourceData ignored (no injection)', async () => {
       const { app } = harness.mod();
-      const res = await postJson(app, '/api/links', {
-        url: 'https://example.com/public-capture-sourcedata-attempt',
-        sourceKind: 'link',
-        sourceData: ftTwitterSourceData(),
-      });
+      // SILO_API_TOKEN is set for this whole describe block (beforeEach
+      // above) — since plan 021, that same env var also gates every OTHER
+      // /api/* route via the general token middleware, not just
+      // /api/ingest. Send it here too, or this POST 401s before it ever
+      // reaches the sourceData-ignored assertion this test exists to prove.
+      const res = await postJson(
+        app,
+        '/api/links',
+        {
+          url: 'https://example.com/public-capture-sourcedata-attempt',
+          sourceKind: 'link',
+          sourceData: ftTwitterSourceData(),
+        },
+        `Bearer ${TEST_TOKEN}`,
+      );
       expect(res.status).toBe(201);
       const body = (await res.json()) as { link: Record<string, unknown> };
       // The public route's schema has no `sourceData` field to bind to, so
@@ -290,11 +306,18 @@ describeIfPg('POST /api/ingest (integration)', () => {
 
     it('POST /api/links with sourceKind twitter + a sourceData field -> sourceKind is honored for routing, but sourceData is still ignored (stays the safe link floor)', async () => {
       const { app } = harness.mod();
-      const res = await postJson(app, '/api/links', {
-        url: 'https://example.com/public-capture-sourcedata-attempt-2',
-        sourceKind: 'twitter',
-        sourceData: ftTwitterSourceData(),
-      });
+      // See the previous test's comment: SILO_API_TOKEN is set for this
+      // describe block, so the general token gate requires it here too.
+      const res = await postJson(
+        app,
+        '/api/links',
+        {
+          url: 'https://example.com/public-capture-sourcedata-attempt-2',
+          sourceKind: 'twitter',
+          sourceData: ftTwitterSourceData(),
+        },
+        `Bearer ${TEST_TOKEN}`,
+      );
       expect(res.status).toBe(201);
       const body = (await res.json()) as { link: Record<string, unknown> };
       expect(body.link.sourceKind).toBe('twitter');
