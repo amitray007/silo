@@ -4,6 +4,7 @@ import { isHoverCapable } from '../lib/pointer';
 import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { Chip } from './Chip';
+import { EnrichingLoader } from './EnrichingLoader';
 import { useHoverPreview } from './HoverPreviewContext';
 import { RowMenu } from './RowMenu';
 import { useRowMenu } from './RowMenuContext';
@@ -141,7 +142,8 @@ export function LinkRow({ link }: { link: LinkJson }) {
             isSelected={isSelected}
             onToggle={() => selection.toggle(link.id)}
           />
-          {!showCheck && <Chip domain={domain} />}
+          {!showCheck &&
+            (link.captureStatus === 'enriching' ? <EnrichingLoader /> : <Chip domain={domain} />)}
           <span
             style={{
               flex: 1,
@@ -163,39 +165,30 @@ export function LinkRow({ link }: { link: LinkJson }) {
             >
               {title}
             </span>
-            {link.captureStatus === 'enriching' && (
+            {/* Enriching rows show NO status chrome (user-picked, reference-
+                studied): just favicon + title + domain, identical to a settled
+                row. The title is the URL until live polling (plan 014) fills in
+                the real one. The old ◌ Capturing pulse chip was removed. */}
+            {/* The domain suffix is hidden WHILE enriching: the title is the
+                full URL then, which already contains the domain — showing both
+                is redundant (user feedback). Once enriched, the title becomes
+                the real page title and the domain suffix returns, distinct. */}
+            {link.captureStatus !== 'enriching' && (
               <span
-                title="Capture continues in the background — you can leave"
                 style={{
                   flex: 'none',
-                  display: 'inline-flex',
-                  alignItems: 'baseline',
-                  gap: 'var(--s1-5)',
-                  fontSize: '0.76rem',
-                  fontWeight: 500,
-                  color: 'var(--markt)',
+                  maxWidth: '14rem',
+                  fontSize: 'var(--text-base)',
+                  color: 'var(--fnt)',
+                  fontWeight: 400,
                   whiteSpace: 'nowrap',
-                  animation: 'siloPulse 1.6s ease-in-out infinite',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
-                <span style={{ fontSize: '0.84rem' }}>◌</span>
-                <span>Capturing</span>
+                {domain}
               </span>
             )}
-            <span
-              style={{
-                flex: 'none',
-                maxWidth: '14rem',
-                fontSize: 'var(--text-base)',
-                color: 'var(--fnt)',
-                fontWeight: 400,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {domain}
-            </span>
           </span>
           {/* The hover-revealed relative time sits at the row's RIGHT end,
               just before the ⋯ options button (user feedback: beside options,

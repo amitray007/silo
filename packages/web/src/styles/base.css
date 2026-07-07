@@ -117,7 +117,9 @@ select {
 /* ---------------------------------------------------------------------- */
 
 /* Full-viewport ground; centers the band with equal empty gutters on wide
-   windows. Not a card — no border, no radius on this outer layer. */
+   windows. Gives the band breathing margin on every side so the content
+   panel below reads as "a panel on a desk," not a wall-to-wall page
+   (user-picked corner layout from the dark-craft study). */
 .silo-frame {
   min-height: 100vh;
   background: var(--bg);
@@ -125,19 +127,20 @@ select {
   box-sizing: border-box;
   display: flex;
   justify-content: center;
+  padding: var(--s6);
 }
 
-/* The centered band: sidebar + content column sit as one bounded unit,
-   capped at ~60rem. Bounded on BOTH sides via a left/right wall so the band
-   reads as a contained column, not two panes bleeding into the gutter —
-   vertical side walls only (no top/bottom border, no radius: not a card). */
+/* The centered band: a transparent sidebar (sits directly on --bg, no fill —
+   the "sidebar matches background" the user picked) beside the floating
+   content panel (`.silo-content`, below). No band walls — the old left/right
+   borders are retired; the floating panel now owns the only visible edge via
+   its radius + hairline. Kept at 60rem (size unchanged per the user's scope). */
 .silo-band {
   display: flex;
   width: 100%;
   max-width: 60rem;
-  min-height: 100vh;
-  border-left: 1px solid var(--line);
-  border-right: 1px solid var(--line);
+  min-height: 0;
+  gap: var(--s4);
 }
 
 /* Mobile top bar (☰ + brand): hidden on desktop, shown ≤ the mobile
@@ -156,8 +159,7 @@ select {
   flex: none;
   min-height: 0;
   overflow-y: auto;
-  background: var(--bg2);
-  border-right: 1px solid var(--line);
+  background: transparent;
   display: flex;
   flex-direction: column;
   /* 3px has no clean --s* match (between --s-0-5/2px and --s1/4px) — left
@@ -181,8 +183,17 @@ select {
   flex: 1;
   min-width: 0;
   min-height: 0;
+  max-height: calc(100vh - var(--s6) * 2);
   display: flex;
   flex-direction: column;
+  /* The one floating panel (user-picked corner layout): --bg2 surface fill,
+     a gentle radius, a hairline light-edge + soft elevation off the deep bg. */
+  background: var(--bg2);
+  border-radius: 16px;
+  box-shadow:
+    var(--elev-2),
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  overflow: hidden;
 }
 
 /* The scrolling body beneath the header bar — v3: `flex:1;min-height:0;
@@ -862,6 +873,19 @@ select {
   }
   50% {
     opacity: 1;
+  }
+}
+
+/* The enriching-row dot-grid loader (EnrichingLoader): each dot fades between
+   a dim and near-full opacity; a per-dot animation-delay staggers them into a
+   soft diagonal shimmer. */
+@keyframes siloDotPulse {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  50% {
+    opacity: 0.9;
   }
 }
 

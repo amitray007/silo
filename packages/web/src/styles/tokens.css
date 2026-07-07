@@ -147,11 +147,14 @@
  * ground. Same token NAMES/roles as light — only the dark hex values move.
  */
 :root[data-theme="dark"] {
-  --bg: #14100c;
-  --bg2: #0c0906;
+  /* Deep warm-black ground (user-picked from the dark-craft study). `--bg2`
+     is now the raised-SURFACE colour (the floating content panel below), one
+     warm step up from `--bg`, since the sidebar goes transparent-on-`--bg`. */
+  --bg: #0c0606;
+  --bg2: #17110b;
   --line: #292219;
   --hov: #201a13;
-  --ink: #f2e9db;
+  --ink: #f1ddc5;
   --mut: #ad9e89;
   --fnt: #94856f;
   --ghost: #85795f;
