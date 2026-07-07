@@ -196,6 +196,25 @@ async function mergeIntoExisting(
   // downgraded by a second, unenriched re-save of the same URL. Re-setting
   // `sourceKind` here is what lets the worker's enricher pick this link up
   // correctly on its NEXT enrichment pass.
+  //
+  // IMPORTANT — sourceData is WHOLE-PAYLOAD replace, NOT the per-field
+  // don't-clobber `input.x ?? existing.x` fallback the metadata fields below
+  // (title/description/...) use (ce-data-integrity review DI-6). When case (1)
+  // fires (caller supplied `input.sourceData`), the new payload REPLACES the
+  // stored one as a single atomic unit — there is no field-level merge and no
+  // "prefer the richer of the two" comparison. This is deliberate: sourceData
+  // is one indivisible per-source record whose fields are only meaningful
+  // together (e.g. a tweet's engagement counts + author + media as of one
+  // scrape), and the supplier (the `/api/ingest` seam, or an enricher's
+  // `recordEnrichment`) is by construction the authoritative, current source
+  // of truth for the whole record. A CONSEQUENCE a caller must understand: a
+  // re-supply with a THINNER or older payload (e.g. a stale re-ingest, or a
+  // hand-typed minimal sourceData for a URL that already has a rich one)
+  // OVERWRITES the richer stored payload — it is not silently field-merged to
+  // keep the previously-stored extras. Both payloads independently pass the
+  // strict `sourceDataSchema` Zod gate, so this is never corruption, only a
+  // deliberate replace; the "never clobber" phrasing above applies to the
+  // metadata fields, not to this atomic sourceData swap.
   const shouldAdoptDetectedSource =
     !input.sourceData && resolvedSourceKind !== 'link' && existing.sourceKind === 'link';
   const nextSourceKind = input.sourceData

@@ -1,24 +1,14 @@
 import type { CreateLinkInput } from '@silo/core';
-import {
-  addTag,
-  canonicalize,
-  createLink,
-  createTag,
-  editLink,
-  getById,
-  removeTag,
-  willDedupCapture,
-} from '@silo/core';
+import { addTag, createTag, editLink, getById, removeTag } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { toLinkJson } from '../link-json.js';
 import {
   addTagBodySchema,
   captureBodySchema,
   createTagBodySchema,
   editBodySchema,
 } from '../query-schemas.js';
-import { respondWithLink } from './mutate-link.js';
+import { performCapture, respondWithLink } from './mutate-link.js';
 
 /** `POST /api/links/:id/tags` and `DELETE /api/links/:id/tags/:tag`'s shared `id` param schema — a non-uuid `id` is a 400, not a pointless DB round-trip. */
 const idParamSchema = z.object({ id: z.uuid() });
@@ -52,23 +42,16 @@ export function registerLinksWriteRoutes(app: Hono): void {
    *    `origin: 'agent'`).
    * 4. A `ZodError` from `createLink` (an invalid `sourceKind`/`sourceData`
    *    combination — unreachable given the enum above, guarded anyway for
-   *    parity with the MCP tool) maps to `400 validation_error` via the
-   *    same `onError` path edge-validation failures already take.
-   * 5. `respondWithLink` re-fetches (hydrates tags) and responds `201` with
-   *    `{ link, deduped }`.
+   *    parity with the MCP tool) maps to `400 validation_error`.
+   * 5. Re-fetches (hydrates tags) and responds `201` with `{ link, deduped }`.
+   *
+   * Steps 1-5 are `performCapture` (`mutate-link.ts`) — shared with
+   * `POST /api/ingest` (`ingest.ts`, plan 020), which builds the same kind of
+   * `CreateLinkInput` but may additionally set `sourceData` (this route's
+   * body schema has no such field, so `input` here never carries one).
    */
   app.post('/links', async (c) => {
     const body = captureBodySchema.parse(await c.req.json());
-
-    const canon = canonicalize(body.url);
-    if (!canon.ok) {
-      return c.json(
-        { error: 'invalid_url', message: 'Not a valid http(s) URL; nothing was saved.' },
-        400,
-      );
-    }
-
-    const deduped = await willDedupCapture(body.url);
 
     // Built conditionally, not via object-literal spread: `exactOptionalPropertyTypes`
     // makes `CreateLinkInput`'s optional fields reject an explicit `undefined`,
@@ -83,27 +66,7 @@ export function registerLinksWriteRoutes(app: Hono): void {
     if (body.tags !== undefined) input.tags = body.tags;
     if (body.note !== undefined) input.notes = body.note;
 
-    let created: Awaited<ReturnType<typeof createLink>>;
-    try {
-      created = await createLink(input);
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return c.json(
-          { error: 'validation_error', message: 'Invalid capture input', details: error.issues },
-          400,
-        );
-      }
-      throw error;
-    }
-
-    const link = await getById(created.id);
-    if (!link) {
-      return c.json(
-        { error: 'not_found', message: `Saved (id ${created.id}) but could not re-fetch it.` },
-        404,
-      );
-    }
-    return c.json({ link: toLinkJson(link), deduped }, 201);
+    return performCapture(c, input, 'Invalid capture input');
   });
 
   /**

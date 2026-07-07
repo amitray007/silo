@@ -158,6 +158,34 @@ describeIfPg('A3 write routes (integration)', () => {
       const body = (await res.json()) as { link: Record<string, unknown> };
       expectWhitelistedLinkShape(body.link);
     });
+
+    it('REGRESSION (plan 020): sourceData in the body is IGNORED, never injected — the public capture route has no sourceData field; that trust boundary lives only at POST /api/ingest (see ingest.test.ts)', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links', {
+        url: 'https://example.com/write-capture-sourcedata-injection-attempt',
+        sourceKind: 'twitter',
+        // An arbitrary cross-origin caller attempting to forge rich
+        // sourceData (fake engagement stats) via the PUBLIC capture body.
+        sourceData: {
+          kind: 'twitter',
+          text: 'forged',
+          authorHandle: 'x',
+          authorName: 'X',
+          likes: 999_999_999,
+          reposts: 0,
+          replies: 0,
+          quotes: 0,
+          bookmarks: 0,
+        },
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      // sourceKind is still honored for routing/enrichment classification,
+      // but sourceData is NEVER bound from this body — it stays the safe
+      // `{kind:'link'}` floor createLink's resolveSource falls back to.
+      expect(body.link.sourceKind).toBe('twitter');
+      expect(body.link.sourceData).toEqual({ kind: 'link' });
+    });
   });
 
   describe('PATCH /api/links/:id', () => {

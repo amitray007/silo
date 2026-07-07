@@ -38,7 +38,23 @@ export type AddedBy = 'user' | 'agent';
 export type SourceData =
   | { kind: 'link' }
   | { kind: 'hacker_news'; points: number; comments: number; author: string }
-  | { kind: 'twitter'; likes: number; replies: number; author: string }
+  | {
+      kind: 'twitter';
+      text: string;
+      authorHandle: string;
+      authorName: string;
+      authorAvatarUrl?: string;
+      likes: number;
+      reposts: number;
+      replies: number;
+      quotes: number;
+      bookmarks: number;
+      postedAt?: string;
+      language?: string;
+      possiblySensitive?: boolean;
+      mediaUrls?: string[];
+      externalLinks?: string[];
+    }
   | {
       kind: 'github';
       stars: number;

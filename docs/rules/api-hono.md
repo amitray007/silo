@@ -130,6 +130,7 @@ whitelist — no route ever returns a raw `LinkWithTags`.
 | `/links/:id/retry`                 | POST   | 200 `{link}` (status `enriching`) | 404 `not_found` | unknown, trashed, or already `full` (never downgrades a good capture) |
 | `/trash/:id` (hard-delete one)     | DELETE | 204 (no body)   | 404 `not_found`            | TRASHED-ONLY guard — a live id is a no-op 404, live row untouched     |
 | `/trash` (empty all)               | DELETE | 200 `{deleted}` | —                           | hard-deletes every currently-trashed link, regardless of age          |
+| `/ingest`                          | POST   | 201 `{link, deduped}` | 401 `unauthorized`, 400 `invalid_url`/`validation_error` | TOKEN-GATED (see below) — the only route this API auths |
 
 POST is used for the state-transition actions (trash/restore/retry, capture,
 tag add, create-tag) — they're actions or creates, not idempotent PUTs, so a
@@ -172,16 +173,44 @@ collapse to the same safe outcome, because the alternative (trying to
 distinguish them) would require a second query that a concurrent trash/
 restore could race anyway — the atomic guard is the only thing that matters.
 
-## Auth (there is none — v1 is localhost, single-user)
+## Auth (there is none — v1 is localhost, single-user — EXCEPT `/api/ingest`)
 
 **This API has no authentication or authorization in v1.** Every route above
-is reachable by any client that can reach the process — there is no API key,
-session, or user scoping anywhere in `@silo/api`. This is an explicit,
-recorded decision, not an oversight: silo's whole premise (see the top-level
-`CLAUDE.md`) is a **personal, single-user, self-owned store** meant to run on
-`localhost` (or a private network the user controls) behind no public
-ingress. Multi-user support, an API key/token, or any request-scoping by
-identity is out of scope for this slice and not planned until a concrete
-multi-user need arises — if this API is ever exposed beyond localhost, an
-auth layer must be added first; nothing here should be treated as safe to
-expose directly to the public internet.
+except `/api/ingest` is reachable by any client that can reach the process —
+there is no API key, session, or user scoping anywhere else in `@silo/api`.
+This is an explicit, recorded decision, not an oversight: silo's whole
+premise (see the top-level `CLAUDE.md`) is a **personal, single-user,
+self-owned store** meant to run on `localhost` (or a private network the
+user controls) behind no public ingress. Multi-user support, a general API
+key/token, or any request-scoping by identity is out of scope for this slice
+and not planned until a concrete multi-user need arises — if this API is
+ever exposed beyond localhost, a full auth layer must be added first;
+nothing here should be treated as safe to expose directly to the public
+internet.
+
+### The one exception: `POST /api/ingest` is token-gated
+
+`POST /api/ingest` (CLI foundation slice, plan 020) is the ONE route with
+real auth, because it's the ONE route that accepts `sourceData` on a capture
+— every other route (including the public `POST /api/links`) has no
+`sourceData` field in its request schema at all, so there is nothing to
+inject there regardless of auth. `sourceData` lets a caller write rich,
+displayed metadata (engagement counts, author info, etc.) that silo cannot
+independently verify (e.g. a tweet — X blocks silo's own server-side fetch),
+so this one route is closed by default:
+
+- Requires `Authorization: Bearer <SILO_API_TOKEN>` matching the
+  `SILO_API_TOKEN` env var configured on the process (see `.env.example`).
+- If `SILO_API_TOKEN` is unset, `/api/ingest` returns `401` on EVERY
+  request — it does not fall open on a default loopback-only local dev
+  setup the way the rest of this API does. The operator must explicitly opt
+  in.
+- This is TOKEN-ALWAYS, not "loopback-trusted, token-required-when-exposed"
+  (a design considered and rejected — see `src/ingest-auth.ts`'s module doc
+  comment for the full rationale: reliable loopback detection needs a real
+  Node socket, which doesn't exist under this package's own
+  `app.request(...)`-based test harness, so a socket-based trust branch
+  would be untestable via this repo's documented testing pattern).
+- See `src/ingest-auth.ts` (`checkIngestAuth`) for the implementation and
+  `src/routes/ingest.ts`/`src/routes/ingest.test.ts` for the route and its
+  security tests.
