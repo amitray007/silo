@@ -170,7 +170,23 @@ being the same code path.
   `docs/design/tokens.md` (the design restraint to translate into the TUI),
   the `opentui` + `tui-mcp` skills (TUI build + test) if a TUI lib fits.
 
-## The ONE blocker before ingest can be built
-Run `ft sync` once, inspect a `~/.fieldtheory/bookmarks/bookmarks.jsonl` line,
-learn the real field names (esp. the tweet URL + text). Everything else in the
-CLI (capture/search/list/open, the TUI) is UNBLOCKED and can be built now.
+## Field Theory schema — RESOLVED (2026-07-07)
+The blocker is cleared. The real `bookmarks.jsonl` schema is captured in
+**`docs/plans/refs/fieldtheory-bookmarks-schema.md`** (from a live `ft sync`,
+1381 bookmarks). Key facts for the builder:
+- `url` = the tweet permalink (all bookmarks are tweet-status URLs); FT provides
+  rich `text`/`author`/`engagement`/`media`/`links[]`/`postedAt` that silo can't
+  fetch itself (X blocks server fetches).
+- Mapping (LOCKED): 1 bookmark → 1 silo link (the tweet); external `links[]` kept
+  as metadata in the twitter sourceData, NOT split into separate entries.
+- `bookmarkedAt` is null for all → use `id`/`sortIndex`/`syncedAt` for the
+  incremental seen-set. 1381 in one import → batch/throttle/resumable.
+
+### Silo-side prerequisite (a small core unit)
+The existing `twitter` sourceData variant is minimal (`likes/replies/author`);
+it must be EXTENDED to carry FT's rich payload, and the ingest path must be able
+to supply pre-extracted sourceData (X can't be re-fetched). See the schema doc
+for the API-design sub-decision (accept `sourceData` at capture for the trusted
+local ingest vs POST-then-PATCH — builder resolves + gets it security-reviewed:
+do NOT let arbitrary web callers inject sourceData). Rendering a rich twitter
+card in the web/CLI/Raycast is a separate small follow-on, NOT blocking ingest.
