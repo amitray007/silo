@@ -11,8 +11,24 @@ import {
 import type { LinkJson } from '../api/types';
 import { HoverPreview, type HoverPreviewPosition } from './HoverPreview';
 
-/** v3's exact timing (`Silo-v3.html:817`/`:822`) — a show delay long enough that a quick mouse pass over several rows never flickers a preview open, and a short hide delay so moving the pointer row→card doesn't close it mid-transit. */
-const SHOW_DELAY_MS = 350;
+/**
+ * Hover-preview timing. Two show delays instead of v3's single 350ms — the
+ * "warm switch" case (a preview is ALREADY open and the pointer moves to
+ * another row) is what felt laggy: you've clearly committed to browsing
+ * previews, so re-waiting the full cold-start delay on every row switch is
+ * dead time. So:
+ * - COLD (nothing open yet): a short delay so a quick pass over rows doesn't
+ *   flicker a preview open on a row you're just passing over. Trimmed from
+ *   v3's 350ms to 160ms — enough to swallow an incidental pass, snappy on a
+ *   deliberate hover.
+ * - WARM (a preview is open, switching rows): near-instant — the card just
+ *   moves to the new row. A tiny 30ms debounce still coalesces a fast drag
+ *   across several rows into one settle, without any perceptible wait.
+ * Hide delay is unchanged (short, so moving pointer row→card doesn't close it
+ * mid-transit).
+ */
+const SHOW_DELAY_COLD_MS = 160;
+const SHOW_DELAY_WARM_MS = 30;
 const HIDE_DELAY_MS = 140;
 
 /**
@@ -127,6 +143,11 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
   );
   const showTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const hideTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Tracks whether a preview is currently on screen, read synchronously inside
+  // the `[]`-deps `scheduleShow` callback (which can't see `preview` state
+  // without going stale) to pick the warm vs cold show delay. Kept in sync
+  // with `preview` via the effect below.
+  const isShowingRef = useRef(false);
 
   // Belt-and-suspenders cleanup: clears any timer still pending if the
   // provider itself ever unmounts (it doesn't, in practice — mounted once at
@@ -141,15 +162,28 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
     [],
   );
 
+  // Keep `isShowingRef` in lockstep with whether a preview is on screen, so
+  // `scheduleShow` can read it synchronously (its `[]` deps can't see the
+  // `preview` state directly). Cheap: runs only when `preview` toggles.
+  useEffect(() => {
+    isShowingRef.current = preview !== null;
+  }, [preview]);
+
   const scheduleShow = useCallback(
     (link: LinkJson, rect: DOMRect, options?: { suppress?: boolean }) => {
       if (showTimer.current) clearTimeout(showTimer.current);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (options?.suppress) return;
 
+      // WARM (a preview already open → just move it to this row) is near-
+      // instant; COLD (opening the first preview) keeps a short delay so a
+      // quick pass over rows doesn't flicker one open. This is the fix for
+      // "switching between links takes too long": the wait only ever applies
+      // to the first open, not to every subsequent row switch.
+      const delay = isShowingRef.current ? SHOW_DELAY_WARM_MS : SHOW_DELAY_COLD_MS;
       showTimer.current = setTimeout(() => {
         setPreview({ link, position: computePosition(rect) });
-      }, SHOW_DELAY_MS);
+      }, delay);
     },
     [],
   );

@@ -203,8 +203,10 @@ describe('LinkRow', () => {
 });
 
 /**
- * The hover-preview trigger (plan 011, V3-8) — v3's `it.enter`/`it.leave`
- * timing (`Silo-v3.html:813-822`: a 350ms show delay, a 140ms hide delay).
+ * The hover-preview trigger (plan 011, V3-8) — a 160ms COLD show delay (v3's
+ * single 350ms was split into warm/cold; see HoverPreviewContext) + a 140ms
+ * hide delay. Tests that advance 350ms just to OPEN the preview before testing
+ * something else are fine (350 > the 160ms cold delay).
  * jsdom's `matchMedia` stub (`test-setup.ts`) defaults every query's
  * `matches` to `false`, which would make `isHoverCapable()` read `false` and
  * suppress the preview outright — these tests stub `matchMedia` themselves so
@@ -232,7 +234,9 @@ describe('LinkRow hover preview', () => {
     window.matchMedia = originalMatchMedia;
   });
 
-  it('shows the preview after the 350ms hover delay, not before', () => {
+  it('shows the preview after the 160ms cold hover delay, not before', () => {
+    // Cold delay: this is the FIRST hover (no preview open yet), so it uses
+    // SHOW_DELAY_COLD_MS (160ms) — see HoverPreviewContext's warm/cold split.
     renderRow(<LinkRow link={link({ title: 'Hover target' })} />);
     const anchor = screen.getByRole('link', { name: /Hover target/ });
 
@@ -240,7 +244,7 @@ describe('LinkRow hover preview', () => {
     expect(screen.queryByText('Open ↗')).toBeNull();
 
     act(() => {
-      vi.advanceTimersByTime(349);
+      vi.advanceTimersByTime(159);
     });
     expect(screen.queryByText('Open ↗')).toBeNull();
 
