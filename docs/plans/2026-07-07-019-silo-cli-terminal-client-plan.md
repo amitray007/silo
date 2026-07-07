@@ -129,13 +129,23 @@ they'd fight the abstraction). A platform *name* may appear in both lists (e.g.
 `hn` could someday be an ingest plugin AND HN links get enriched) without them
 being the same code path.
 
-## Relationship to other work
-- **Depends on plan 018's API changes** (the CORS + token seam on `@silo/api`).
-  The CLI needs the token seam; CORS is browser-only (the CLI is a Node process,
-  no CORS), but the token/base-URL config is shared. So: build 018's API seam
-  FIRST (or in coordination), then the CLI consumes it. If the CLI is built before
-  018 lands, it works against the current no-auth localhost API and adds the token
-  path when 018's seam exists.
+## Build sequencing (decided): TWO independent foundations, not one shared base
+The extensions and the CLI are different efforts; each owns its OWN foundation —
+there is no single monolithic "base" both wait on.
+- **Extensions' foundation** (built in the extensions session, plan 018): CORS +
+  optional token on `@silo/api`. CORS is browser-only — the CLI (a Node process)
+  does NOT need it.
+- **CLI's foundation** (built here, this plan): the rich `twitter` sourceData
+  variant + the trusted pre-extracted-sourceData ingest seam. The extensions do
+  NOT need this. This is the CLI's own foundation-solo step before its commands
+  fan out.
+- **The only overlap** is the optional **token** (both touch `@silo/api` to honor
+  `SILO_API_TOKEN`). It's small + additive: whichever effort lands it first, the
+  other consumes it (trivial merge). Neither is a hard blocker on the other. If
+  the CLI is built before the token seam exists, it works against the current
+  no-auth localhost API and adds the token path when the seam lands.
+So: the extensions session and the CLI effort can proceed in PARALLEL, each
+building its own foundation, coordinating only on the shared token env var.
 - This **supersedes the "Twitter via Chrome DOM-scraping" idea entirely** — the
   Field Theory ingest path is the Twitter story now (cleaner, decoupled, FT owns
   the fragile X-auth part). The Chrome extension stays Tier-1 capture only (plan
