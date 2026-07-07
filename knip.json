@@ -6,6 +6,12 @@
     "packages/db": {
       "drizzle": true,
       "ignoreBinaries": ["psql"]
+    },
+    "packages/cli": {
+      "entry": ["src/main.ts"],
+      "project": ["src/**/*.ts"],
+      "ignoreDependencies": ["tsx"],
+      "ignoreBinaries": ["tsx", "tsc", "vitest"]
     }
   }
 }

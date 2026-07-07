@@ -11,7 +11,7 @@
     "check-types": "tsc --noEmit",
     "test": "vitest run",
     "build": "tsc -p tsconfig.build.json",
-    "silo": "tsx src/main.ts"
+    "start": "tsx src/main.ts"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
