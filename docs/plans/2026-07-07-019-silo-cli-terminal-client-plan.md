@@ -114,6 +114,21 @@ only ever types `silo ingest x`.
   the TUI testing tools (the repo has `tui-mcp` available) in both a light/dark
   terminal if feasible.
 
+## Plugin identity (decided): two DISTINCT plugin concepts, both platform-named
+silo has two plugin notions and they stay SEPARATE (do not unify into one
+framework — they do genuinely different things):
+- **Enrichment plugins** (already built): enrich a captured link's source data on
+  capture — `hacker_news`, `github`, `youtube`. Live in the worker's enrich
+  registry (plan 017).
+- **Ingest plugins** (new, this plan): import links FROM a platform — `x` (via
+  Field Theory), later `pocket`, `hn`, etc. Live in the CLI.
+Both are NAMED for the platform (that's the shared "silo is known for its
+platform plugins" story), but they are distinct mechanisms with distinct
+lifecycles — do NOT design a unified plugin abstraction spanning both (YAGNI;
+they'd fight the abstraction). A platform *name* may appear in both lists (e.g.
+`hn` could someday be an ingest plugin AND HN links get enriched) without them
+being the same code path.
+
 ## Relationship to other work
 - **Depends on plan 018's API changes** (the CORS + token seam on `@silo/api`).
   The CLI needs the token seam; CORS is browser-only (the CLI is a Node process,
