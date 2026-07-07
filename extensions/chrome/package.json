@@ -1,0 +1,22 @@
+{
+  "name": "@silo/extension-chrome",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "vite build && node scripts/zip.mjs"
+  },
+  "devDependencies": {
+    "@silo/tsconfig": "workspace:*",
+    "@types/chrome": "0.1.12",
+    "@types/jsdom": "catalog:",
+    "@types/node": "catalog:",
+    "jsdom": "catalog:",
+    "typescript": "catalog:",
+    "vite": "catalog:",
+    "vitest": "catalog:"
+  }
+}

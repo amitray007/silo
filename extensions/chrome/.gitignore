@@ -1,0 +1,4 @@
+# The packed zip artifact from `pnpm build` (scripts/zip.mjs) — a build
+# output alongside dist/ (already covered by the root .gitignore), never
+# committed.
+dist-zip/

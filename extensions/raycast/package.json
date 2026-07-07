@@ -1,0 +1,69 @@
+{
+  "name": "@silo/extension-raycast",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "title": "silo",
+  "description": "Save links to silo and search your library, without leaving Raycast.",
+  "icon": "icon.png",
+  "author": "amitray007",
+  "categories": [
+    "Productivity",
+    "Web"
+  ],
+  "commands": [
+    {
+      "name": "save-to-silo",
+      "title": "Save to Silo",
+      "description": "Instantly save the frontmost browser tab (or clipboard URL) to silo.",
+      "mode": "no-view"
+    },
+    {
+      "name": "save-with-details",
+      "title": "Save to Silo with Details",
+      "description": "Save a URL to silo with a note and tags.",
+      "mode": "view"
+    },
+    {
+      "name": "search-silo",
+      "title": "Search Silo",
+      "description": "Search your silo library and open a result.",
+      "mode": "view"
+    }
+  ],
+  "preferences": [
+    {
+      "name": "baseUrl",
+      "title": "Base URL",
+      "description": "The silo API this extension talks to.",
+      "type": "textfield",
+      "default": "http://localhost:8787",
+      "required": false
+    },
+    {
+      "name": "token",
+      "title": "API Token",
+      "description": "Only needed if the silo server sets SILO_API_TOKEN.",
+      "type": "password",
+      "required": false
+    }
+  ],
+  "scripts": {
+    "check-types": "tsc --noEmit",
+    "test": "vitest run",
+    "build": "ray build",
+    "develop": "ray develop"
+  },
+  "dependencies": {
+    "@raycast/api": "^1.104.21",
+    "@raycast/utils": "^2.2.7"
+  },
+  "devDependencies": {
+    "@silo/tsconfig": "workspace:*",
+    "@types/node": "catalog:",
+    "@types/react": "catalog:",
+    "react": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  }
+}

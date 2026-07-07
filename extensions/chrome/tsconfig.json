@@ -1,0 +1,9 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@silo/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM", "DOM.Iterable"],
+    "types": ["chrome", "node", "vite/client"]
+  },
+  "include": ["src", "vite.config.ts", "scripts"]
+}

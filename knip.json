@@ -12,6 +12,10 @@
       "project": ["src/**/*.ts"],
       "ignoreDependencies": ["tsx"],
       "ignoreBinaries": ["tsx", "tsc", "vitest"]
+    },
+    "extensions/chrome": {
+      "entry": ["src/background/service-worker.ts", "src/popup/popup.ts", "src/options/options.ts"],
+      "project": ["src/**/*.ts"]
     }
   }
 }
