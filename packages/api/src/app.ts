@@ -1,6 +1,8 @@
 import { InvalidCursorError } from '@silo/core';
 import { Hono } from 'hono';
 import { ZodError } from 'zod';
+import { corsMiddleware } from './cors.js';
+import { generalTokenAuth } from './general-auth.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerIngestRoutes } from './routes/ingest.js';
@@ -64,6 +66,15 @@ export function createApp(): Hono {
   app.get('/health', (c) => c.json({ ok: true }));
 
   const api = new Hono();
+  // CORS first (the browser-facing gate — an allowlist-rejected origin gets
+  // no CORS headers, so the browser refuses to expose the response, before
+  // any route or the token gate ever runs), THEN the optional bearer-token
+  // gate (the caller-identity gate — see `general-auth.ts`'s doc comment for
+  // why this ordering matters and what each layer stops). `/api/ingest`'s
+  // own always-closed gate (`ingest-auth.ts`) runs INSIDE its route handler,
+  // independent of and in addition to this optional general gate.
+  api.use('*', corsMiddleware());
+  api.use('*', generalTokenAuth);
   registerLinksRoutes(api);
   registerLinksWriteRoutes(api);
   registerIngestRoutes(api);

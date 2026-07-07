@@ -173,28 +173,57 @@ collapse to the same safe outcome, because the alternative (trying to
 distinguish them) would require a second query that a concurrent trash/
 restore could race anyway — the atomic guard is the only thing that matters.
 
-## Auth (there is none — v1 is localhost, single-user — EXCEPT `/api/ingest`)
+## Auth (no auth BY DEFAULT — v1 is localhost, single-user — with two gates)
 
-**This API has no authentication or authorization in v1.** Every route above
-except `/api/ingest` is reachable by any client that can reach the process —
-there is no API key, session, or user scoping anywhere else in `@silo/api`.
-This is an explicit, recorded decision, not an oversight: silo's whole
-premise (see the top-level `CLAUDE.md`) is a **personal, single-user,
-self-owned store** meant to run on `localhost` (or a private network the
-user controls) behind no public ingress. Multi-user support, a general API
-key/token, or any request-scoping by identity is out of scope for this slice
-and not planned until a concrete multi-user need arises — if this API is
-ever exposed beyond localhost, a full auth layer must be added first;
-nothing here should be treated as safe to expose directly to the public
-internet.
+**This API has no authentication BY DEFAULT.** On a default local setup (the
+`SILO_API_TOKEN` env var unset), every route above except `/api/ingest` is
+reachable by any client that can reach the process — no API key, session, or
+user scoping. This is an explicit, recorded decision, not an oversight:
+silo's whole premise (see the top-level `CLAUDE.md`) is a **personal,
+single-user, self-owned store** meant to run on `localhost` (or a private
+network the user controls) behind no public ingress. Full multi-user
+support / per-identity request-scoping is out of scope and not planned until
+a concrete need arises.
 
-### The one exception: `POST /api/ingest` is token-gated
+There are two token gates layered on top of this default, both keyed on the
+one `SILO_API_TOKEN` env var (see `.env.example`):
 
-`POST /api/ingest` (CLI foundation slice, plan 020) is the ONE route with
-real auth, because it's the ONE route that accepts `sourceData` on a capture
-— every other route (including the public `POST /api/links`) has no
-`sourceData` field in its request schema at all, so there is nothing to
-inject there regardless of auth. `sourceData` lets a caller write rich,
+1. **`POST /api/ingest` — always closed (below).** Independent of everything
+   else: unset token ⇒ 401 on every request. It never falls open.
+2. **The rest of `/api/*` — optional, off by default (the extensions/prod
+   seam, plan 021).** A middleware (`src/general-auth.ts`, mounted on the
+   `/api` sub-app after CORS — see `src/app.ts`) that, WHEN `SILO_API_TOKEN`
+   is set, requires `Authorization: Bearer <token>` on every `/api/*` route
+   (401 otherwise); WHEN unset, it's a pure no-op (today's no-auth-on-
+   localhost behavior, exactly). `GET /health` and `GET /` sit on the OUTER
+   app (outside the `/api` sub-app) so they're never gated — a liveness
+   probe stays reachable without the token. Setting `SILO_API_TOKEN` is the
+   prerequisite before exposing the API beyond localhost; note that a prod
+   web UI must then also send the token on its own `/api/*` calls (or be
+   served from a trusted origin that injects it) — that web-UI auth story is
+   a separate later slice, deliberately not solved by this var alone.
+
+CORS is the browser-facing companion to gate 2: `SILO_ALLOWED_ORIGINS` (see
+`src/cors.ts` + `.env.example`) is an origin allowlist — **never `*`** — that
+decides which cross-origin pages a browser will let read `/api/*` responses.
+Even with no token, the allowlist is what keeps an arbitrary web page from
+reading the store via a visitor's browser. It runs BEFORE the token gate, so
+a disallowed origin is refused CORS headers first, and an allowed-origin-
+but-tokenless request is 401'd second.
+
+If this API is ever exposed beyond localhost, set `SILO_API_TOKEN` and a
+tight `SILO_ALLOWED_ORIGINS` first; nothing here is safe to expose to the
+public internet unauthenticated.
+
+### The one always-closed gate: `POST /api/ingest` is token-gated
+
+`POST /api/ingest` (CLI foundation slice, plan 020) is the ONE route whose
+auth is ALWAYS on (unset token ⇒ 401), because it's the ONE route that
+accepts `sourceData` on a capture — every other route (including the public
+`POST /api/links`) has no `sourceData` field in its request schema at all, so
+there is nothing to inject there regardless of auth. (The optional general
+gate above may ALSO cover this route when `SILO_API_TOKEN` is set, but
+ingest's own always-closed check is independent and runs regardless.) `sourceData` lets a caller write rich,
 displayed metadata (engagement counts, author info, etc.) that silo cannot
 independently verify (e.g. a tweet — X blocks silo's own server-side fetch),
 so this one route is closed by default:

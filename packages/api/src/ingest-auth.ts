@@ -38,43 +38,14 @@
  * than open until someone remembers to lock it down.
  */
 
-import { timingSafeEqual as nodeTimingSafeEqual } from 'node:crypto';
 import type { Context } from 'hono';
+import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
 
-/** Reads `SILO_API_TOKEN` fresh from the environment on every call (not
- * cached at module load) — so a test that sets/unsets `process.env` between
- * cases (see `ingest.test.ts`) observes the change without a module reload,
- * and an operator setting it via a process manager after boot doesn't need
- * this module reimported either. */
+/** Reads `SILO_API_TOKEN` fresh from the environment on every call — see
+ * `token-auth.ts`'s `readTokenEnv` doc comment for why this isn't cached at
+ * module load. */
 function configuredToken(): string | undefined {
-  const raw = process.env.SILO_API_TOKEN;
-  return raw !== undefined && raw.length > 0 ? raw : undefined;
-}
-
-/** Parses `Authorization: Bearer <token>`, returning the token or `undefined`
- * if the header is absent or not in the exact `Bearer <token>` form. */
-function bearerToken(c: Context): string | undefined {
-  const header = c.req.header('authorization') ?? c.req.header('Authorization');
-  if (!header) return undefined;
-  const match = /^Bearer (.+)$/.exec(header);
-  return match?.[1];
-}
-
-/** Constant-time string comparison — an ingest token is a secret credential,
- * so comparing it must not leak timing information about how many leading
- * bytes matched (a naive `===` short-circuits on the first mismatched byte).
- * Delegates to Node's audited `crypto.timingSafeEqual` (ce-security review
- * SEC-1: prefer the hardened primitive over a hand-rolled XOR loop, which is
- * a known footgun class — a JIT could in principle reintroduce
- * data-dependent branching a vetted primitive avoids). `timingSafeEqual`
- * THROWS on a length mismatch rather than returning false, so we guard the
- * length first: that early return leaks only the token's LENGTH (not its
- * content), the same accepted/standard tradeoff Node's own docs describe. */
-function timingSafeEqual(a: string, b: string): boolean {
-  const aBuf = Buffer.from(a, 'utf8');
-  const bBuf = Buffer.from(b, 'utf8');
-  if (aBuf.length !== bBuf.length) return false;
-  return nodeTimingSafeEqual(aBuf, bBuf);
+  return readTokenEnv('SILO_API_TOKEN');
 }
 
 export type IngestAuthResult =
