@@ -266,6 +266,40 @@ describeIfPg('enrichment operations (integration)', () => {
     });
   });
 
+  describe('recordEnrichment — tsvector bound (search_vector must never overflow Postgres 1MB limit)', () => {
+    it('a ~2M-char, high-lexeme extracted_text writes clean and search_vector is non-null', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-tsvector-bound',
+        sourceKind: 'link',
+      });
+
+      // High-lexeme-density text: ~200,000 UNIQUE tokens (not a repeated
+      // single char, which Postgres's tsvector collapses to ~1 lexeme and
+      // wouldn't stress serialization at all). This is the pathological case
+      // the schema's `left(...)` bounds guard against — see the doc comment
+      // on `searchVector` in packages/db/src/schema/links.ts and migration
+      // 0006_gorgeous_makkari.sql: WITHOUT those bounds, this same write
+      // throws "string is too long for tsvector" (verified manually by
+      // temporarily reverting the schema's left() wrapping and re-running
+      // this test — it failed with that exact error; restored after).
+      const text = Array.from({ length: 200_000 }, (_, i) => `lex${i}`).join(' ');
+      expect(text.length).toBeGreaterThan(1_000_000);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        text,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.captureStatus).toBe('full');
+
+      const rows = await rawDb.execute<{ search_vector: string | null }>(
+        sql`select search_vector from links where id = ${created.id}`,
+      );
+      expect(rows.rows[0]?.search_vector).not.toBeNull();
+    });
+  });
+
   describe('recordEnrichment — sourceData', () => {
     it('writes a valid hacker_news sourceData payload and syncs sourceKind', async () => {
       const created = await linksOps.createLink({

@@ -67,9 +67,27 @@ export const links = pgTable(
     // (`link_tags`/`tags`) reached by a join. Tag-name matching is therefore
     // done at query time in `core`'s `search()`, not here — see that
     // function's doc comment for the query-time approach and its tradeoffs.
+    //
+    // Each coalesce'd input is also wrapped in `left(..., N)` — a HARD Postgres
+    // limit, not a style choice: a single tsvector's serialized form must stay
+    // under 1,048,576 bytes, and exceeding it is an ERROR ("string is too long
+    // for tsvector") on INSERT/UPDATE, not a truncation. The enrichment clamp
+    // (see `@silo/core`'s `enrichment.ts`) allows `extracted_text` up to
+    // 5,000,000 chars — dense/high-lexeme text (code, base64, non-English,
+    // unique tokens) around 1MB+ of source can push the generated vector past
+    // the limit, which throws inside `recordEnrichment`'s UPDATE, dead-letters
+    // the enrich-link job, and stranded the link at `capture_status
+    // ='enriching'` — the SAME failure class the clamp fix closed, reintroduced
+    // one layer down at the DB. The `left()` bounds below cap only the FTS
+    // INPUT per field, never the stored value — `extracted_text` itself stays
+    // unbounded for display/MCP. Worst case ~830K chars of source text across
+    // all four fields keeps the serialized tsvector comfortably under the
+    // 1,048,575-byte ceiling even for pathological all-unique-tokens input;
+    // typical prose is far smaller, and nobody searches for a term that
+    // appears only past ~½MB into one document.
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('english', coalesce(${links.title}, '')), 'A') || setweight(to_tsvector('english', coalesce(${links.description}, '')), 'B') || setweight(to_tsvector('english', coalesce(${links.extractedText}, '')), 'C') || setweight(to_tsvector('english', coalesce(${links.notes}, '')), 'D')`,
+        sql`setweight(to_tsvector('english', left(coalesce(${links.title}, ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce(${links.description}, ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce(${links.extractedText}, ''), 600000)), 'C') || setweight(to_tsvector('english', left(coalesce(${links.notes}, ''), 100000)), 'D')`,
     ),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
