@@ -94,77 +94,75 @@ function NavItemLink({
 }
 
 /**
- * The Search nav row (plan 024, command center): a plain button, NOT routed
- * through `NavItemLink` — unlike every other sidebar row, Search has no
- * dedicated `/route` at all (it opens the floating palette in place, exactly
- * like the Settings item's `skipNavigate` case, but simpler still since
- * there's no `/search` URL to keep linkable either). Reuses `NavItem`'s
- * shared row look (icon/label/meta slots, `variant="default"` to match
- * Library/Trash's weight-500 styling) so it reads as part of the same nav
- * block, not a second visual language. The `/` shortcut hint renders via
- * `meta` (the same right-aligned slot Library/Trash use for their counts) —
- * `NavItem`'s `meta` accepts any `ReactNode`, so a short text hint fits
- * without a dedicated prop.
+ * The `/` shortcut hint chip that sits in the Search row's `meta` slot.
+ * Visually a small bordered pill (unlike Library/Trash's borderless count
+ * text) but sized/centered to land on the SAME right-hand column as those
+ * counts: `lineHeight: 1` + `display: inline-flex` centering (direct user
+ * feedback fix: "the `/` chip is not vertically aligned with the
+ * Library/Trash count numbers") means the chip's border+padding center on
+ * the glyph's own collapsed line-box rather than an inherited 1.55
+ * line-height, landing it on the identical row-center baseline as
+ * `NavItem`'s borderless meta spans.
+ *
+ * The `margin: -3px 0` (a negative vertical margin equal to the chip's own
+ * border+padding, `1px` border + `2px` padding per edge) is a row-parity
+ * fix: without it, the chip's border+padding grow its layout box taller
+ * than a bare count span, and since `NavItem`'s row is a flex container
+ * with `align-items: center`, the ROW itself stretches to fit the tallest
+ * child — making the Search row ~4px taller than Library/Trash despite
+ * identical padding/font on the row itself. The negative margin lets the
+ * border/padding still PAINT (margin never clips rendered content) while
+ * removing the chip's layout footprint beyond its glyph's own line-box, so
+ * it no longer inflates the row's flex-computed height.
+ */
+function SearchShortcutChip() {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        lineHeight: 1,
+        fontSize: '0.66rem',
+        color: 'var(--fnt)',
+        border: '1px solid var(--line)',
+        borderRadius: 5,
+        padding: 'var(--s-0-5) var(--s1-5)',
+        margin: '-3px 0',
+        background: 'var(--bg)',
+      }}
+    >
+      /
+    </span>
+  );
+}
+
+/**
+ * The Search nav row (plan 024, command center): rendered through the SAME
+ * shared `NavItem` component Library/Trash use, in its button mode (no
+ * `href` — Search has no dedicated `/route` at all, it opens the floating
+ * palette in place, exactly like the Settings item's `skipNavigate` case,
+ * but simpler still since there's no `/search` URL to keep linkable
+ * either). This used to be a hand-rolled `<button>` that duplicated
+ * `NavItem`'s inline styles — that duplication drifted (e.g. its meta font
+ * was 0.66rem vs. `NavItem`'s 0.72rem), which is why the row rendered at a
+ * visibly different size/weight than Library/Trash despite looking
+ * "close." Going through `NavItem` directly makes that drift structurally
+ * impossible: icon size (18px, matching Library/Trash), label font/weight,
+ * padding, and row height are all the ONE shared implementation. The `/`
+ * shortcut hint renders via `meta` (the same right-aligned slot
+ * Library/Trash use for their counts) — `NavItem`'s `meta` accepts any
+ * `ReactNode`, so the chip fits without a dedicated prop, and it lands in
+ * the same right-hand column as the counts below it.
  */
 function SidebarSearchItem({ onOpenSearch }: { onOpenSearch: () => void }) {
   return (
-    <button
-      type="button"
+    <NavItem
+      label="Search"
+      icon={<SearchIcon size={18} stroke="currentColor" />}
+      meta={<SearchShortcutChip />}
       onClick={onOpenSearch}
-      className="silo-nav-item"
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--s2-5)',
-        width: '100%',
-        boxSizing: 'border-box',
-        textAlign: 'left',
-        padding: '7px var(--s2-5)',
-        border: 0,
-        borderRadius: 8,
-        fontSize: '0.84rem',
-        fontWeight: 500,
-        color: 'var(--mut)',
-        cursor: 'pointer',
-        font: 'inherit',
-        background: 'transparent',
-      }}
-    >
-      <span style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 18 }}>
-        <SearchIcon size={18} stroke="currentColor" />
-      </span>
-      <span>Search</span>
-      {/* `lineHeight: 1` + `display: inline-flex` centering (direct user
-          feedback fix: "the `/` chip is not vertically aligned with the
-          Library/Trash count numbers"). Without an explicit line-height the
-          chip inherited the body's 1.55 line-height, which gives its own
-          text node a taller-than-glyph line box — the chip's border+padding
-          then centers on THAT inflated box instead of the glyph itself, so
-          the visible `/` sits a couple px off the row's true vertical
-          center that the borderless, `lineHeight`-unset meta count spans
-          (NavItem's `meta`) land on by not having the same tall line-box
-          problem masked by a border. Collapsing to `lineHeight: 1` and
-          flex-centering the glyph inside the chip's own box makes both
-          land on the identical row-center baseline, so the chip and the
-          counts below it form one clean right column. */}
-      <span
-        style={{
-          marginLeft: 'auto',
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1,
-          fontSize: '0.66rem',
-          color: 'var(--fnt)',
-          border: '1px solid var(--line)',
-          borderRadius: 5,
-          padding: 'var(--s-0-5) var(--s1-5)',
-          background: 'var(--bg)',
-        }}
-      >
-        /
-      </span>
-    </button>
+    />
   );
 }
 

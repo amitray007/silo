@@ -716,6 +716,18 @@ select {
    background for the active case, leaving every other state CSS-owned. */
 .silo-nav-item {
   background: transparent;
+  /* `NavItem` (ui/fix-search-nav) now renders EITHER an `<a>` or a
+     `<button type="button">` from one shared component (button mode: the
+     Search row, which has no `/route` to link to). Anchors have no
+     UA-stylesheet `line-height` override, so they inherit `body`'s 1.55;
+     `<button>` DOES carry a UA default of `line-height: normal`, which wins
+     over the inherited value and made a button-mode row render ~1px
+     shorter than an anchor-mode row with byte-identical padding/font —
+     the last sliver of the Search-vs-Library row-height drift. Forcing
+     `inherit` here makes both element types size their row exactly the
+     same for the same padding, closing that gap structurally rather than
+     leaving it to whichever element type a given row happens to render as. */
+  line-height: inherit;
 }
 
 @media (hover: hover) and (pointer: fine) {
