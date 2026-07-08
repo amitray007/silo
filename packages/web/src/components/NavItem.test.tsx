@@ -18,19 +18,19 @@ describe('NavItem', () => {
     expect(link.getAttribute('aria-current')).toBeNull();
   });
 
-  it('renders an active item: ink on the raised --bg ground + shadow, never amber', () => {
+  it('renders an active item: ink on a filled --surface-active box with a hairline edge, never amber', () => {
     render(<NavItem label="Library" href="/" active />);
     const link = screen.getByRole('link', { name: /library/i });
     expect(link.style.color).toBe('var(--ink)');
-    // Active = ink on the lighter --bg ground (raised off the --bg2 sidebar) with
-    // a subtle warm shadow — the prototype's `on` state, so the active pill reads
-    // clearly. NOT --hov (barely differs from the sidebar) and NEVER amber.
-    expect(link.style.background).toBe('var(--bg)');
+    // Active = ink on a filled --surface-active box (the SAME family as the
+    // hover pill's --hov/--surface-hover fill, one step further) with a
+    // hairline --line inset edge + a subtle elevation shadow, so the active
+    // row reads as a clearly highlighted BOX matching the hover-pill look —
+    // NOT `var(--bg)` (invisible in dark mode: the sidebar sits transparent
+    // directly on the app's own --bg ground) and NEVER amber.
+    expect(link.style.background).toBe('var(--surface-active)');
     expect(link.style.boxShadow).not.toBe('none');
-    // K6 (oat-conformance audit): sourced from the shared elevation token
-    // rather than a hardcoded rgba literal, so both themes get the right
-    // shadow depth from one place.
-    expect(link.style.boxShadow).toBe('var(--elev-1)');
+    expect(link.style.boxShadow).toBe('var(--elev-1), inset 0 0 0 1px var(--line)');
     expect(link.getAttribute('aria-current')).toBe('page');
     // assert no amber token anywhere in the active row's chrome
     expect(link.style.color).not.toContain('--mark');

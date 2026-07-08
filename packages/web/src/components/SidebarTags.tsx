@@ -2,9 +2,6 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
 
-/** v3's sidebar tag-list truncation threshold (`Silo-v3.html`'s `tagShown`). */
-const TAG_SHOWN = 10;
-
 /**
  * A `NavItemLink`-shaped callback the caller (`Sidebar`) supplies so this
  * component stays router-agnostic — it renders the tag row via `NavItem` but
@@ -19,25 +16,24 @@ interface SidebarTagsProps {
 
 /**
  * The Tags section's interactive chrome (`docs/design/app/Silo-v3.html`,
- * lines 40-61 — `toggleTagFind`/`tagFindOpen`, `moreTags`/`toggleTagList`,
- * `newTagClosed`/`newTagOpen`): a `⌕` find-a-tag toggle that reveals a
- * client-side filter input, `+N more` truncation to the first `TAG_SHOWN`
- * tags, and an inline `+ new tag` create flow. Extracted out of `Sidebar` so
- * that component doesn't have to carry five extra pieces of local state on
- * top of routing/counts — this owns everything about "the tags list as an
+ * lines 40-61 — `toggleTagFind`/`tagFindOpen`, `newTagClosed`/`newTagOpen`):
+ * a `⌕` find-a-tag toggle that reveals a client-side filter input, a
+ * scrollable tag list, and an inline `+ new tag` create flow. Extracted out
+ * of `Sidebar` so that component doesn't have to carry the extra local state
+ * on top of routing/counts — this owns everything about "the tags list as an
  * interactive tool", `Sidebar` just supplies the tag data + a link renderer.
  *
- * Filtering and truncation compose in the v3-specified order: the raw tag
- * list is filtered by `tagQ` first (case-insensitive substring match), and
- * ONLY when no filter is active does the `+N more` truncation apply — a
- * filtered result set always shows every match, however many, matching v3's
- * behavior (filtering already narrows the list, so there's nothing left to
- * truncate).
+ * Redesign (direct user feedback): the tag list used to truncate to the
+ * first `TAG_SHOWN` tags behind a "+N more" toggle. It now renders EVERY
+ * tag (filtered set included) inside its own fixed-`max-height`,
+ * hidden-scrollbar scroll region (`.silo-tag-scroll`, base.css) — a long tag
+ * list scrolls independently instead of pushing Settings off-screen, and
+ * nothing is hidden behind a click. Filtering (case-insensitive substring
+ * match on `tagQ`) still narrows the list before it renders.
  */
 export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [showAll, setShowAll] = useState(false);
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
 
@@ -65,14 +61,9 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
   }
 
   const trimmedQuery = query.trim().toLowerCase();
-  const filtered = trimmedQuery
+  const visibleTags = trimmedQuery
     ? tags.filter((tag) => tag.name.toLowerCase().includes(trimmedQuery))
     : tags;
-
-  const isFiltering = trimmedQuery.length > 0;
-  const hasMore = !isFiltering && tags.length > TAG_SHOWN;
-  const visibleTags = hasMore && !showAll ? filtered.slice(0, TAG_SHOWN) : filtered;
-  const moreCount = tags.length - TAG_SHOWN;
 
   function openNewTag() {
     setNewTagOpen(true);
@@ -121,9 +112,14 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           padding: 'var(--s-0-5) var(--s2-5) var(--s1-5)',
         }}
       >
+        {/* Bumped 0.7rem → 0.8rem (direct user feedback: "too small vs the
+            search icon next to it") — the 16px icon dwarfed the old size;
+            0.8rem balances against it while staying a step below the
+            0.84rem row-text scale, so "Tags" still reads as a section
+            label, not a row. */}
         <p
           style={{
-            fontSize: '0.7rem',
+            fontSize: '0.8rem',
             fontWeight: 500,
             color: 'var(--fnt)',
             margin: 0,
@@ -133,6 +129,13 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           Tags
         </p>
         <span style={{ flex: 1 }} />
+        {/* Negative right margin cancels the button's own hit-target padding
+            (`--s1`) so the 16px glyph's visual right edge lands flush with
+            the row's right padding edge — the same flush-right baseline
+            NavItem's meta counts sit on (direct user feedback: "search icon
+            is not aligned well with the tag counts on the right"). The hit
+            target itself stays full-sized (padding untouched), only the
+            box's outer edge is pulled in. */}
         <button
           type="button"
           onClick={toggleTagFind}
@@ -148,6 +151,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             background: 'none',
             borderRadius: 6,
             padding: 'var(--s1)',
+            marginRight: 'calc(var(--s1) * -1)',
             color: findOpen ? 'var(--ink)' : 'var(--fnt)',
             cursor: 'pointer',
           }}
@@ -197,31 +201,12 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         />
       )}
 
-      {visibleTags.map((tag) => renderTagLink(tag))}
-
-      {hasMore && (
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="silo-sidebar-text-btn"
-          style={{
-            border: 0,
-            background: 'none',
-            fontFamily: 'inherit',
-            textAlign: 'left',
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '4px 10px',
-            borderRadius: 8,
-            fontSize: '0.76rem',
-            fontWeight: 400,
-            color: 'var(--fnt)',
-            cursor: 'pointer',
-          }}
-        >
-          {showAll ? 'Show less' : `+${moreCount} more`}
-        </button>
-      )}
+      {/* The scrollable tag-list region (fix, direct user feedback): a fixed
+          `max-height` + hidden scrollbar (`.silo-tag-scroll`, base.css) so a
+          long tag list scrolls in place instead of pushing Settings
+          off-screen — every tag (or every filtered match) renders here, no
+          truncation. */}
+      <div className="silo-tag-scroll">{visibleTags.map((tag) => renderTagLink(tag))}</div>
 
       {newTagOpen ? (
         <>

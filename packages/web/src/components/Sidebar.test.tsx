@@ -128,6 +128,31 @@ describe('Sidebar', () => {
     expect(libraryLink.getAttribute('aria-current')).toBeNull();
   });
 
+  it('an active tag row gets the same filled --surface-active box as an active Library/Trash row', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/tags') {
+        return Promise.resolve(jsonResponse({ tags: tagCounts(['ai', 'design']) }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    renderSidebar(['/tags/ai']);
+
+    await waitFor(() => {
+      const aiLink = screen.getByRole('link', { name: /ai/i });
+      expect(aiLink.getAttribute('aria-current')).toBe('page');
+      expect(aiLink.style.background).toBe('var(--surface-active)');
+      expect(aiLink.style.boxShadow).toBe('var(--elev-1), inset 0 0 0 1px var(--line)');
+    });
+    const designLink = screen.getByRole('link', { name: /design/i });
+    expect(designLink.getAttribute('aria-current')).toBeNull();
+    expect(designLink.style.background).toBe('');
+  });
+
   it('does not crash and renders no tag rows (but keeps the Tags tools) when the tags request errors', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -202,8 +227,8 @@ describe('Sidebar', () => {
     });
   });
 
-  describe('+N more truncation', () => {
-    it('shows only the first 10 tags with a "+N more" toggle when there are more than 10', async () => {
+  describe('scrollable tag list (redesign — no more "+N more" truncation)', () => {
+    it('renders every tag, however many, inside the scroll region — nothing hidden behind a click', async () => {
       const names = Array.from({ length: 13 }, (_, i) => `tag${i}`);
       vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
@@ -219,19 +244,12 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('tag0')).toBeDefined());
 
-      expect(tagRowCount()).toBe(10);
-      const more = screen.getByText('+3 more');
-      expect(more).toBeDefined();
-
-      fireEvent.click(more);
       expect(tagRowCount()).toBe(13);
-      expect(screen.getByText('Show less')).toBeDefined();
-
-      fireEvent.click(screen.getByText('Show less'));
-      expect(tagRowCount()).toBe(10);
+      expect(screen.queryByText(/more$/)).toBeNull();
+      expect(screen.queryByText('Show less')).toBeNull();
     });
 
-    it('shows no "+N more" toggle when there are 10 or fewer tags', async () => {
+    it('puts the tag rows inside the hidden-scrollbar, fixed-max-height scroll container', async () => {
       vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
         if (url === '/api/counts') {
@@ -243,9 +261,12 @@ describe('Sidebar', () => {
         throw new Error(`unexpected fetch: ${url}`);
       });
 
-      renderSidebar();
+      const { container } = renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
-      expect(screen.queryByText(/more$/)).toBeNull();
+
+      const scrollRegion = container.querySelector('.silo-tag-scroll');
+      expect(scrollRegion).not.toBeNull();
+      expect(scrollRegion?.contains(screen.getByRole('link', { name: /ai/i }))).toBe(true);
     });
   });
 

@@ -1,6 +1,6 @@
 /**
  * The sidebar nav's inline SVG icons (v3, `docs/design/app/Silo-v3.html`):
- * Library (bookmark), Trash (trash can), Settings (sliders). 18×18,
+ * Library (bookmark), Trash (trash can), Settings (gear). 18×18,
  * `viewBox="0 0 16 16"`, `stroke="currentColor"` (so they inherit the nav
  * item's ink/mut color — no hardcoded hex), stroke-width 1.4, round caps/
  * joins — path data copied from the prototype. Bumped from v3's original
@@ -63,22 +63,33 @@ export function TrashIcon({
   );
 }
 
+/**
+ * A clean gear/cog glyph (swapped in from the previous sliders/adjust icon —
+ * direct user feedback: "change the Settings icon to a gear icon"). A single
+ * closed gear-silhouette path (a center hole ring + 8 teeth, drawn as one
+ * outline rather than a ring with separate spoke strokes) filled with
+ * `currentColor` and no stroke — a first attempt drawing the ring and teeth
+ * as SEPARATE stroked primitives left a visible gap between the ring's edge
+ * and each tooth's inner end, reading as a disconnected sunburst instead of
+ * a gear; a single connected silhouette avoids that gap entirely. The two
+ * concentric circles (outer gear body, inner hole) use `fillRule="evenodd"`
+ * so the hole actually punches through instead of filling solid.
+ */
 export function SettingsIcon() {
   return (
     <svg
       width="18"
       height="18"
       viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      fill="currentColor"
+      stroke="none"
       aria-hidden="true"
     >
-      <path d="M2.5 5.2h6M11 5.2h2.5M2.5 10.8h2.5M7.5 10.8h6" />
-      <circle cx="9.6" cy="5.2" r="1.7" />
-      <circle cx="6.4" cy="10.8" r="1.7" />
+      <path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M6.85 1.4h2.3l.32 1.66c.34.1.66.24.97.4l1.4-.94 1.63 1.63-.94 1.4c.16.31.3.63.4.97l1.66.32v2.3l-1.66.32a4.6 4.6 0 0 1-.4.97l.94 1.4-1.63 1.63-1.4-.94a4.6 4.6 0 0 1-.97.4l-.32 1.66h-2.3l-.32-1.66a4.6 4.6 0 0 1-.97-.4l-1.4.94-1.63-1.63.94-1.4a4.6 4.6 0 0 1-.4-.97L1.4 9.15v-2.3l1.66-.32c.1-.34.24-.66.4-.97l-.94-1.4L4.15 2.53l1.4.94c.31-.16.63-.3.97-.4L6.85 1.4Zm1.15 4.1a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"
+      />
     </svg>
   );
 }
