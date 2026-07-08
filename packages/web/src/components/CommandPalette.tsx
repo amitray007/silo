@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo } from 'react';
 import { useInfiniteLinks, useLinksByTag, useSearchLinks, useTags } from '../api/hooks';
 import type { LinkJson, SearchResultJson, TagCount } from '../api/types';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
@@ -185,8 +185,23 @@ function usePaletteResults(
   const { data: tagsData } = useTags();
   const allTags = tagsData?.tags ?? [];
 
-  const showTagSuggestions = parsed.partialTag !== undefined;
-  const tagPrefix = (parsed.partialTag ?? '').toLowerCase();
+  // MODE selection (tag-suggestions vs. link-search/list) and the actual
+  // QUERY args below both derive from the SAME source — `parsedDebounced` —
+  // never a mix of raw `parsed` for one and debounced for the other
+  // (bugfix, plan 024 review: `showTagSuggestions` used to read raw
+  // `parsed.partialTag` while `settledTag`/`searchText` read
+  // `parsedDebounced`. For up to `SEARCH_DEBOUNCE_MS` after a keystroke that
+  // settles a tag — e.g. typing a trailing space after `#frontend` — the two
+  // could disagree: the UI would flip out of "tag suggestion" mode
+  // instantly, but the debounced parse hadn't caught up yet, so the query
+  // that actually fired was an UNSCOPED text search rather than the
+  // tag-scoped one, and Enter in that window could act on the wrong
+  // result). `parsed` (raw, undebounced) is used ONLY below for the
+  // tag-prefix CLIENT-SIDE filter text — that's a cheap, already-loaded-data
+  // filter, not a network request, so keeping it instant-reactive is a pure
+  // UX win with no query-consistency risk.
+  const showTagSuggestions = parsedDebounced.partialTag !== undefined;
+  const tagPrefix = (parsed.partialTag ?? parsedDebounced.partialTag ?? '').toLowerCase();
   const matchingTags = useMemo(
     () =>
       showTagSuggestions ? allTags.filter((t) => t.name.toLowerCase().startsWith(tagPrefix)) : [],
@@ -250,13 +265,47 @@ function selectLinkResults(args: {
  * `usePaletteResults` above.
  */
 export function CommandPalette({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
-  const { open, closePalette, q, setQ, parsed, parsedDebounced, activeIndex, moveActive } = palette;
+  const {
+    open,
+    closePalette,
+    q,
+    setQ,
+    parsed,
+    parsedDebounced,
+    activeIndex,
+    setActiveIndex,
+    moveActive,
+  } = palette;
   const { results, showTagSuggestions } = usePaletteResults(parsed, parsedDebounced);
   const isFullyEmpty = !showTagSuggestions && !parsedDebounced.text.trim() && !parsedDebounced.tag;
 
+  // Clamp `activeIndex` against the CURRENT `results` length (bugfix, plan
+  // 024 review): `activeIndex` only gets explicitly reset to 0 on a
+  // keystroke (the input's `onChange`) or on close — it is NOT reset when
+  // `results` itself shrinks WITHOUT a keystroke, which happens routinely
+  // here: `useInfiniteLinks()` (the empty-query "recent links" view) polls
+  // every 1.5s while anything is still enriching, and any debounced query
+  // settling can resolve to fewer rows than the previous render. Left
+  // unclamped, a stale `activeIndex` past the new `results.length` makes
+  // `results[activeIndex]` `undefined` — Enter then silently no-ops (dead
+  // keyboard shortcut) and `aria-activedescendant` points at a DOM id that
+  // no longer exists. Clamping at RENDER time (not only via an effect) means
+  // there's no one-frame flash of a broken highlighted/actionable row.
+  const clampedActiveIndex = results.length === 0 ? 0 : Math.min(activeIndex, results.length - 1);
+
+  // Persist the clamp into state too (not just the render-time view above),
+  // so a SUBSEQUENT relative move (`moveActive(1, results.length)` on the
+  // next ArrowDown) starts from the corrected index rather than silently
+  // reading a stale out-of-range `activeIndex` on its next call.
+  useEffect(() => {
+    if (activeIndex !== clampedActiveIndex) {
+      setActiveIndex(clampedActiveIndex);
+    }
+  }, [activeIndex, clampedActiveIndex, setActiveIndex]);
+
   if (!open) return null;
 
-  const activeOption = results[activeIndex];
+  const activeOption = results[clampedActiveIndex];
   const activeOptionId = activeOption
     ? activeOption.kind === 'link'
       ? optionId('link', activeOption.link.id)
@@ -265,7 +314,17 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
 
   const openLinkResult = (link: LinkJson | SearchResultJson) => {
     // Mirrors `LinkRow`'s own anchor semantics (`target="_blank" rel="noopener"`).
-    window.open(link.url, '_blank', 'noopener');
+    // Scheme guard (defense-in-depth, review fix): `link.url` is stored,
+    // agent-writable data (the `capture_link` MCP tool can set an arbitrary
+    // `url`), not something this component itself validated. Modern browsers
+    // already refuse to navigate `window.open` to a `javascript:`/`data:`
+    // scheme from a cross-origin-ish call, but that's a browser mitigation,
+    // not a guarantee this codebase should lean on — only ever actually
+    // OPEN an http(s) url; anything else is silently ignored (still closes
+    // the palette, matching the "Enter acted" feel, but navigates nowhere).
+    if (/^https?:\/\//i.test(link.url)) {
+      window.open(link.url, '_blank', 'noopener');
+    }
     closePalette();
   };
 
@@ -371,14 +430,14 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
               <PaletteLinkRow
                 key={result.link.id}
                 link={result.link}
-                active={index === activeIndex}
+                active={index === clampedActiveIndex}
                 onSelect={() => openLinkResult(result.link)}
               />
             ) : (
               <PaletteTagRow
                 key={result.tag.name}
                 tag={result.tag}
-                active={index === activeIndex}
+                active={index === clampedActiveIndex}
                 onSelect={() => applyTagSuggestion(result.tag)}
               />
             ),

@@ -18,6 +18,7 @@ import {
   useEditLink,
   useEmptyTrash,
   useInfiniteLinks,
+  useLinksByTag,
   useRemoveTag,
   useRestoreLink,
   useRetryCapture,
@@ -264,6 +265,89 @@ describe('useInfiniteLinks', () => {
       await new Promise((resolve) => setTimeout(resolve, 1800));
       expect(vi.mocked(fetch).mock.calls.length).toBe(callsAfterSettle);
     });
+  });
+});
+
+describe('useLinksByTag', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('is disabled (never fetches) when tag is undefined', () => {
+    renderHook(() => useLinksByTag(undefined), { wrapper });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('fetches GET /api/links?tag= for a given tag', async () => {
+    const response = { links: [{ id: '1' }] };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(response));
+
+    const { result } = renderHook(() => useLinksByTag('frontend'), { wrapper });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=frontend');
+    expect(result.current.data).toEqual(response);
+  });
+
+  it('uses a distinct query key from queryKeys.links({ tag }) (regression: cache-shape collision, plan 024 review)', () => {
+    // useInfiniteLinks(tag) and useLinksByTag(tag) must NEVER key onto the
+    // same cache entry — useInfiniteLinks writes InfiniteData<LinksResponse>
+    // ({ pages, pageParams }), useLinksByTag writes a bare LinksResponse
+    // ({ links, nextCursor }). Sharing a key means whichever resolves last
+    // silently overwrites the other's shape, and a consumer reading
+    // `data.pages` off the clobbered entry (e.g. useListView.ts) throws.
+    expect(queryKeys.tagOnlyList('frontend')).not.toEqual(queryKeys.links({ tag: 'frontend' }));
+  });
+
+  it('mounting useInfiniteLinks(tag) and useLinksByTag(tag) together for the SAME tag does not corrupt either cache entry', async () => {
+    // Both hooks hit the identical GET /api/links?tag=frontend URL, so the
+    // response body is the same page either way — the regression this test
+    // guards is about the CACHE KEY/SHAPE, not the payload content.
+    const page: LinksResponse = { links: [makeLink({ id: 'shared-1' })] };
+    // A fresh Response per call (not mockResolvedValue reusing one instance)
+    // — both hooks fetch the identical URL concurrently, and a Response body
+    // can only be consumed once (a shared instance would throw "Body is
+    // unusable" on whichever hook reads it second).
+    vi.mocked(fetch).mockImplementation(() => Promise.resolve(jsonResponse(page)));
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const sharedWrapper = ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    );
+
+    const infinite = renderHook(() => useInfiniteLinks('frontend'), { wrapper: sharedWrapper });
+    const tagOnly = renderHook(() => useLinksByTag('frontend'), { wrapper: sharedWrapper });
+
+    await waitFor(() => expect(infinite.result.current.isSuccess).toBe(true));
+    await waitFor(() => expect(tagOnly.result.current.isSuccess).toBe(true));
+
+    // The infinite query's OWN cache entry (queryKeys.links({tag})) is
+    // InfiniteData-shaped (has `pages`) — proves useLinksByTag's write never
+    // landed on useInfiniteLinks's key and clobbered it into a bare
+    // LinksResponse (the pre-fix crash: useListView.ts's `data?.pages.flatMap`
+    // would throw on a clobbered entry).
+    const infiniteCacheEntry = queryClient.getQueryData<{ pages?: unknown }>(
+      queryKeys.links({ tag: 'frontend' }),
+    );
+    expect(infiniteCacheEntry?.pages).toBeDefined();
+    expect(Array.isArray(infiniteCacheEntry?.pages)).toBe(true);
+
+    // The tag-only query's OWN cache entry (queryKeys.tagOnlyList) is a bare
+    // LinksResponse — no `pages` field, proves it never wrote INTO the
+    // infinite query's key either.
+    const tagOnlyCacheEntry = queryClient.getQueryData<{ pages?: unknown; links?: unknown }>(
+      queryKeys.tagOnlyList('frontend'),
+    );
+    expect(tagOnlyCacheEntry?.pages).toBeUndefined();
+    expect(tagOnlyCacheEntry?.links).toBeDefined();
+
+    // Sanity: the two keys are genuinely distinct entries in the cache, not
+    // the same object read twice.
+    expect(queryKeys.links({ tag: 'frontend' })).not.toEqual(queryKeys.tagOnlyList('frontend'));
   });
 });
 

@@ -704,7 +704,7 @@ describeIfPg('links operations (integration)', () => {
         sourceKind: 'link',
       });
 
-      const { results } = await ops.search('flibbertigibbet', 'scopealpha');
+      const { results } = await ops.search('flibbertigibbet', { tag: 'scopealpha' });
       const ids = results.map((r) => r.id);
       expect(ids).toContain(matching.id);
       expect(ids).not.toContain(wrongTag.id);
@@ -718,7 +718,7 @@ describeIfPg('links operations (integration)', () => {
         sourceKind: 'link',
       });
 
-      const { results } = await ops.search('wigglesnout', 'nonexistenttagxyz');
+      const { results } = await ops.search('wigglesnout', { tag: 'nonexistenttagxyz' });
       expect(results).toEqual([]);
     });
 
@@ -741,7 +741,7 @@ describeIfPg('links operations (integration)', () => {
         sourceKind: 'link',
       });
 
-      const { results } = await ops.search('moonquibble', 'moonquibble');
+      const { results } = await ops.search('moonquibble', { tag: 'moonquibble' });
       const ids = results.map((r) => r.id);
       // `both` matches text "moonquibble" AND carries tag "moonquibble".
       expect(ids).toContain(both.id);
@@ -765,8 +765,19 @@ describeIfPg('links operations (integration)', () => {
         sourceKind: 'link',
       });
 
-      const { results } = await ops.search('plunkerfish', 'casetag');
+      const { results } = await ops.search('plunkerfish', { tag: 'casetag' });
       expect(results.map((r) => r.id)).toContain(link.id);
+    });
+
+    it('an empty-string tag ({ tag: "" }) is treated as no scope, matching filter omitted entirely (documents the falsy-check boundary; the API route rejects an empty ?tag= before this layer is ever reached — see links.test.ts (api))', async () => {
+      const plain = await ops.createLink({
+        url: 'https://example.com/search-tagscope-empty-string',
+        title: 'wizzlepop empty tag scope string',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('wizzlepop', { tag: '' });
+      expect(results.map((r) => r.id)).toContain(plain.id);
     });
   });
 
@@ -1610,7 +1621,7 @@ describeIfPg('links operations (integration)', () => {
     });
 
     it('a search cursor fed to list throws InvalidCursorError (not a silent wrong result)', async () => {
-      const { nextCursor } = await ops.search('nonexistent-query-xyz', undefined, { limit: 1 });
+      const { nextCursor } = await ops.search('nonexistent-query-xyz', {}, { limit: 1 });
       // No results, so nextCursor is undefined; build a well-formed *search*
       // cursor directly to prove the cross-tool-cursor rejection, since we
       // need a payload with kind: 'search' to feed into `list`.
@@ -1642,7 +1653,7 @@ describeIfPg('links operations (integration)', () => {
       do {
         const { results, nextCursor } = await ops.search(
           'searchword',
-          undefined,
+          {},
           cursor === undefined ? { limit: 2 } : { limit: 2, cursor },
         );
         seenIds.push(...results.map((r) => r.id));
@@ -1661,7 +1672,7 @@ describeIfPg('links operations (integration)', () => {
         sourceKind: 'link',
       });
 
-      const { nextCursor } = await ops.search('uniquesearchtermonly', undefined, { limit: 10 });
+      const { nextCursor } = await ops.search('uniquesearchtermonly', {}, { limit: 10 });
       expect(nextCursor).toBeUndefined();
 
       const empty = await ops.search('termnobodywrote');
@@ -1735,18 +1746,18 @@ describeIfPg('links operations (integration)', () => {
         });
       }
 
-      const zeroLimit = await ops.search('clampsearchterm', undefined, { limit: 0 });
+      const zeroLimit = await ops.search('clampsearchterm', {}, { limit: 0 });
       expect(zeroLimit.results).toHaveLength(1);
 
-      const hugeLimit = await ops.search('clampsearchterm', undefined, { limit: 1000 });
+      const hugeLimit = await ops.search('clampsearchterm', {}, { limit: 1000 });
       expect(hugeLimit.results.length).toBeLessThanOrEqual(100);
       expect(hugeLimit.results.length).toBe(3);
     });
 
     it('a malformed cursor throws InvalidCursorError', async () => {
-      await expect(
-        ops.search('anything', undefined, { cursor: '!!!not-base64!!!' }),
-      ).rejects.toThrow(ops.InvalidCursorError);
+      await expect(ops.search('anything', {}, { cursor: '!!!not-base64!!!' })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
     });
 
     it('a forged cursor with a fractional offset throws InvalidCursorError', async () => {
@@ -1755,9 +1766,9 @@ describeIfPg('links operations (integration)', () => {
         'utf8',
       ).toString('base64url');
 
-      await expect(
-        ops.search('anything', undefined, { cursor: fractionalOffsetCursor }),
-      ).rejects.toThrow(ops.InvalidCursorError);
+      await expect(ops.search('anything', {}, { cursor: fractionalOffsetCursor })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
     });
 
     it('BUG 3 regression: a forged offset beyond the maximum throws InvalidCursorError', async () => {
@@ -1769,9 +1780,9 @@ describeIfPg('links operations (integration)', () => {
         'utf8',
       ).toString('base64url');
 
-      await expect(
-        ops.search('anything', undefined, { cursor: beyondMaxOffsetCursor }),
-      ).rejects.toThrow(ops.InvalidCursorError);
+      await expect(ops.search('anything', {}, { cursor: beyondMaxOffsetCursor })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
     });
 
     it('an offset at or under the maximum still round-trips normally', async () => {
@@ -1782,9 +1793,13 @@ describeIfPg('links operations (integration)', () => {
 
       // No rows at that depth, but decode/validate must succeed and just
       // return an empty page — never throw for a within-bounds offset.
-      const { results, nextCursor } = await ops.search('anything', undefined, {
-        cursor: atMaxOffsetCursor,
-      });
+      const { results, nextCursor } = await ops.search(
+        'anything',
+        {},
+        {
+          cursor: atMaxOffsetCursor,
+        },
+      );
       expect(results).toEqual([]);
       expect(nextCursor).toBeUndefined();
     });
@@ -1796,9 +1811,9 @@ describeIfPg('links operations (integration)', () => {
       const { nextCursor } = await ops.list({}, { limit: 1 });
       expect(nextCursor).toBeDefined();
 
-      await expect(
-        ops.search('anything', undefined, { cursor: nextCursor as string }),
-      ).rejects.toThrow(ops.InvalidCursorError);
+      await expect(ops.search('anything', {}, { cursor: nextCursor as string })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
     });
 
     it('trashed links never appear in search pages', async () => {

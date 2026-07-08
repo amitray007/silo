@@ -123,7 +123,7 @@ export function registerSearchLinks(server: McpServer): void {
 
       let page: Awaited<ReturnType<typeof search>>;
       try {
-        page = await search(query, undefined, pageParams);
+        page = await search(query, {}, pageParams);
       } catch (error) {
         if (error instanceof InvalidCursorError) {
           return {

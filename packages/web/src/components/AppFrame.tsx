@@ -43,7 +43,7 @@ const DRAWER_ID = 'silo-drawer';
  * "click outside clears selection" behavior — the docks are dismissed via
  * their own `clear` button or Escape only).
  */
-function RowMenuLayer() {
+function RowMenuLayer({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
   const { openMenuId, closeMenu, editingLink, closeEdit } = useRowMenu();
   const librarySelection = useLibrarySelection();
   const trashSelection = useTrashSelection();
@@ -70,6 +70,41 @@ function RowMenuLayer() {
       closeEdit();
     }
   }, [settingsOpen, editingLink, closeEdit]);
+
+  // Mutual exclusion with the command palette (plan 024 review fix): the
+  // palette is ALSO a `ModalShell`-based scrim'd, focus-trapped overlay
+  // (`CommandPalette.tsx`), with its own capture-phase Escape listener. Two
+  // `ModalShell` overlays open together means TWO capture-phase Escape
+  // listeners both firing on one keypress plus nested/fighting scrims —
+  // the exact problem the Edit-vs-Settings effect above already guards
+  // against. The palette's ⌘K/`/` triggers are GLOBAL keydown listeners
+  // that fire regardless of what's already on screen, so every combination
+  // is reachable (palette-then-Settings, Settings-then-palette,
+  // palette-then-Edit, Edit-then-palette), unlike Edit-vs-Settings where the
+  // UI structurally prevents one direction.
+  //
+  // Rule: the palette YIELDS to any other `ModalShell`-based overlay
+  // (Edit/Settings) — it never opens over one, and if one opens while the
+  // palette is up, the palette closes. Between two `ModalShell` overlays,
+  // "whoever's newest wins" is fine (per the Edit-vs-Settings precedent);
+  // here it's simpler and just as correct to make the palette always the
+  // one that backs off, since it never holds user input worth preserving.
+  //
+  // The row `⋯` menu is DIFFERENT in kind: `RowMenu.tsx` is a lightweight
+  // popover, not a `ModalShell` (no scrim, no focus-trap, no Escape
+  // listener of its own) — there's no dueling-listener risk, so the palette
+  // is free to WIN over it (closing the menu) rather than refusing to open.
+  useEffect(() => {
+    if ((settingsOpen || editingLink) && palette.open) {
+      palette.closePalette();
+    }
+  }, [settingsOpen, editingLink, palette.open, palette.closePalette]);
+
+  useEffect(() => {
+    if (palette.open && openMenuId !== null) {
+      closeMenu();
+    }
+  }, [palette.open, openMenuId, closeMenu]);
 
   useEffect(() => {
     if (openMenuId === null) return;
@@ -305,7 +340,7 @@ export function AppFrame() {
               <SelectionProvider>
                 <HoverPreviewProvider>
                   <Outlet />
-                  <RowMenuLayer />
+                  <RowMenuLayer palette={commandPalette} />
                 </HoverPreviewProvider>
               </SelectionProvider>
             </RowMenuProvider>

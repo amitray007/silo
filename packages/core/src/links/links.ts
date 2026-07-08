@@ -615,16 +615,23 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * a link matching on both signals ranks above one matching on only one,
  * which a `GREATEST`/max-of-two would not distinguish.
  *
- * `tag` (optional, command-center search plan 024): an ADDITIONAL scope on
- * top of the text match above — when given, a result must also carry that
- * exact tag (`tags.normalizedKey = normalizeTagKey(tag)`, joined through
- * `linkTags`/`tags`, mirroring `list()`'s tag-filter branch). This is an
- * `EXISTS` membership check, layered on top of (ANDed with) the existing
+ * `filter.tag` (optional, command-center search plan 024): an ADDITIONAL
+ * scope on top of the text match above — when given, a result must also
+ * carry that exact tag (`tags.normalizedKey = normalizeTagKey(tag)`, joined
+ * through `linkTags`/`tags`, mirroring `list()`'s tag-filter branch). This is
+ * an `EXISTS` membership check, layered on top of (ANDed with) the existing
  * OR-based text/tag-name match — it does NOT replace or widen that match, so
  * a `tag` scope never surfaces a link that fails the text query. Omitting
- * `tag` leaves every existing caller's behavior byte-for-byte unchanged (the
- * predicate below degrades to exactly the prior query when `tag` is
- * `undefined` — see the regression test).
+ * `filter` (or `filter.tag`) leaves every existing caller's behavior
+ * byte-for-byte unchanged (the predicate below degrades to exactly the prior
+ * query — see the regression test).
+ *
+ * `filter` is an OPTIONS OBJECT (`SearchFilter`, mirroring `list()`'s own
+ * `ListFilter` third… second parameter shape) rather than a positional
+ * string, specifically so adding a future filter dimension (matching
+ * `list()`'s `status`, say) never forces every existing call site to thread
+ * an extra positional `undefined` through — a review flagged the original
+ * positional `tag?: string` design (plan 024) for exactly this churn risk.
  *
  * Rank is not unique/keyset-able, so pagination uses a bounded offset cursor
  * — capped at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is
@@ -644,13 +651,18 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * built now (adds a write-side trigger to keep in sync, out of scope for this
  * increment).
  */
+export type SearchFilter = {
+  tag?: string;
+};
+
 export async function search(
   query: string,
-  tag?: string,
+  filter: SearchFilter = {},
   page: PageParams = {},
 ): Promise<SearchPage> {
   const limit = effectiveLimit(page.limit);
   const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
+  const tag = filter.tag;
 
   const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
   const titleRank = sql`ts_rank(${links.searchVector}, ${tsQuery})`;

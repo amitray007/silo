@@ -277,6 +277,92 @@ describe('AppFrame', () => {
    * `RowMenuLayer` that `AppFrame` mounts (via `EscapeProbe`), not a
    * hand-rolled reimplementation of the priority logic.
    */
+  describe('command palette mutual exclusion (review fix #1, plan 024)', () => {
+    /** Routes fetch by path so the palette's own hooks (useTags/useSearchLinks/useLinksByTag/useInfiniteLinks) get sane, empty responses instead of the counts-shaped default every other AppFrame test uses — needed here because these tests actually open the palette, not just probe row-menu/selection state. */
+    /** The per-URL routing table for `mockAppFrameFetch`, split out purely to keep that function's cognitive complexity under the lint ceiling. */
+    function respondToAppFrameUrl(url: string): Response {
+      if (url.startsWith('/api/counts')) {
+        return jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 });
+      }
+      if (url.startsWith('/api/tags')) {
+        return jsonResponse({ tags: [] });
+      }
+      if (url.startsWith('/api/links')) {
+        return jsonResponse({ links: [] });
+      }
+      return jsonResponse({ error: 'not_found', message: url }, 404);
+    }
+
+    function mockAppFrameFetch() {
+      vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        return Promise.resolve(respondToAppFrameUrl(url));
+      });
+    }
+
+    function pressCmdK() {
+      fireEvent.keyDown(document, { key: 'k', metaKey: true });
+    }
+
+    it('opening the palette (⌘K) while the row ⋯ menu is open closes the menu', () => {
+      mockAppFrameFetch();
+      renderAppFrame(['/probe']);
+
+      fireEvent.click(screen.getByText('open menu'));
+      expect(screen.getByText('menu: row-1')).toBeDefined();
+
+      pressCmdK();
+
+      expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeDefined();
+      expect(screen.getByText('menu: none')).toBeDefined();
+    });
+
+    it('⌘K while the Edit modal is open does NOT open the palette (the palette yields to a real ModalShell overlay, never stacking two)', () => {
+      mockAppFrameFetch();
+      renderAppFrame(['/probe']);
+
+      fireEvent.click(screen.getByText('open edit'));
+      expect(screen.getByRole('dialog', { name: /edit/i })).toBeDefined();
+
+      pressCmdK();
+
+      // Still exactly ONE dialog — Edit, untouched. The palette never
+      // stacked on top (which would have meant two ModalShell instances,
+      // each with its own capture-phase Escape listener, fighting).
+      const dialogs = screen.getAllByRole('dialog');
+      expect(dialogs).toHaveLength(1);
+      expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/edit/i);
+    });
+
+    it('⌘K while the Settings modal is open does NOT open the palette (same yield rule)', () => {
+      mockAppFrameFetch();
+      renderAppFrame();
+
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+
+      pressCmdK();
+
+      const dialogs = screen.getAllByRole('dialog');
+      expect(dialogs).toHaveLength(1);
+      expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/settings/i);
+    });
+
+    it('opening Settings while the palette is already open closes the palette (the reverse direction)', () => {
+      mockAppFrameFetch();
+      renderAppFrame();
+
+      pressCmdK();
+      expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeDefined();
+
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+
+      const dialogs = screen.getAllByRole('dialog');
+      expect(dialogs).toHaveLength(1);
+      expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/settings/i);
+    });
+  });
+
   describe('Escape priority (row menu > library selection > trash selection)', () => {
     it('closes the row menu on the first Escape, leaving a concurrent library selection untouched', () => {
       renderAppFrame(['/probe']);

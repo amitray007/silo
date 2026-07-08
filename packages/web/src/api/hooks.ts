@@ -46,6 +46,25 @@ export const queryKeys = {
    * 'frontend')` are distinct cache entries.
    */
   search: (q: string, tag?: string) => ['search', q, tag ?? null] as const,
+  /**
+   * The command palette's tag-only list view (`useLinksByTag`, plan 024) —
+   * deliberately its OWN key family, NOT `links({ tag })`. `links({ tag })`
+   * is written by `useInfiniteLinks(tag)` as `InfiniteData<LinksResponse>`
+   * (`{ pages: [...], pageParams: [...] }`); `useLinksByTag` is a plain
+   * `useQuery` that would write a bare `LinksResponse` (`{ links, nextCursor
+   * }`) onto that SAME key. TanStack keys one query cache entry per key
+   * regardless of which hook/observer type wrote it — whichever of the two
+   * resolves last silently overwrites the other's shape. Concretely: open
+   * `/tags/react` (mounts `useInfiniteLinks('react')`), then ⌘K a `#react`
+   * query (mounts `useLinksByTag('react')` on the SAME key pre-fix) — the
+   * plain response clobbers the infinite-query shape, and
+   * `useListView.ts`'s `data?.pages.flatMap(...)` throws on the now-missing
+   * `pages` field, crashing `TagView`. A distinct key family removes the
+   * collision entirely (at the cost of a possible duplicate fetch when both
+   * views are open for the same tag — a correct, cheap tradeoff over a
+   * shared-cache "optimization" that can crash a screen).
+   */
+  tagOnlyList: (tag: string) => ['links-tag-only', tag] as const,
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
@@ -163,15 +182,23 @@ export function useSearchLinks(q: string, tag?: string) {
  * tag-only filter has to go through the plain list route instead). A
  * one-shot `useQuery` (not `useInfiniteLinks`'s paginated machinery) — the
  * palette shows a first page of results, not a "load more" affordance, so
- * the simpler non-infinite hook is enough; reuses the same `LinksResponse`
- * shape and the SAME `queryKeys.links({ tag })` cache entry `useInfiniteLinks`
- * writes its first page into, so switching between the palette and a
- * `/tags/:name` browse of the same tag shares one cache entry rather than
- * fetching it twice. Disabled when `tag` is empty/undefined.
+ * the simpler non-infinite hook is enough.
+ *
+ * Keyed on `queryKeys.tagOnlyList(tag)` — its OWN key family, deliberately
+ * NOT `queryKeys.links({ tag })` (bugfix, see that key's doc comment):
+ * `useInfiniteLinks(tag)` writes `InfiniteData<LinksResponse>` onto
+ * `links({ tag })`, and this hook writes a bare `LinksResponse` — sharing
+ * that key let whichever hook resolved last silently corrupt the other's
+ * cached shape (`TagView` would crash reading `.pages` off a
+ * non-infinite-shaped cache entry). A distinct key means opening the
+ * palette for a tag that's also open as a `/tags/:name` browse fetches the
+ * data twice rather than sharing one cache entry — a correct, cheap
+ * tradeoff over a "shared cache" optimization that could crash a screen.
+ * Disabled when `tag` is empty/undefined.
  */
 export function useLinksByTag(tag: string | undefined) {
   return useQuery({
-    queryKey: queryKeys.links(tag ? { tag } : undefined),
+    queryKey: queryKeys.tagOnlyList(tag ?? ''),
     queryFn: () => apiGet<LinksResponse>(`/api/links?tag=${encodeURIComponent(tag ?? '')}`),
     enabled: Boolean(tag),
   });
