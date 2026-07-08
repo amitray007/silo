@@ -200,6 +200,13 @@ select {
    below it. No padding lives on this outer wrapper, so the header's
    border-bottom reaches the content region's full width, matching v3. */
 .silo-content {
+  /* `position: relative` anchors `Dock.tsx`'s `position: absolute` bottom
+     dock (the Trash "empty all"/selection dock + the Library selection dock,
+     both render as direct children here via `Outlet`/`ContentFrame`) — so it
+     centers over THIS panel's own width, not the viewport's (the sidebar +
+     frame padding otherwise skew a viewport-centered dock off-axis; see
+     Dock.tsx's doc comment). */
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
