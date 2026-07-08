@@ -175,6 +175,26 @@ select {
   display: none;
 }
 
+/* The Tags section's own scroll region (sidebar redesign, direct user
+   feedback: "the tag list must be scrollable within a fixed vertical
+   max-height so many tags don't push Settings off-screen, with the
+   scrollbar hidden"). `max-height` caps it to a comfortable number of rows
+   before it scrolls independently of the rest of the sidebar (which no
+   longer needs its own `+N more` truncation once this exists); the
+   scrollbar is hidden cross-browser (Firefox's `scrollbar-width`, WebKit/
+   Blink's `::-webkit-scrollbar`) while the region stays fully scrollable via
+   wheel/trackpad/keyboard/touch — hiding the bar is cosmetic only, it never
+   disables scrolling itself. */
+.silo-tag-scroll {
+  max-height: 264px;
+  overflow-y: auto;
+  scrollbar-width: none;
+}
+
+.silo-tag-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 /* The content region: a flex column of TWO stacked children — the header bar
    (v3: `ContentHeader`, full width, NOT scrolled) and the scrolling body
    below it. No padding lives on this outer wrapper, so the header's

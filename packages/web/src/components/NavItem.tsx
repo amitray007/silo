@@ -80,13 +80,16 @@ export function NavItem({
         cursor: 'pointer',
         textDecoration: 'none',
         color: active ? 'var(--ink)' : inactiveColor,
-        // Active = ink on the lighter --bg ground (NOT --bg2/--hov, which barely
-        // differ from the sidebar) + a subtle warm shadow, so the active pill
-        // reads as a raised card lifted off the --bg2 sidebar — the prototype's
-        // exact `on` state (Silo-v2.html): b:var(--bg), s:0 1px 3px rgba(40,30,10,.12),
-        // now sourced from `var(--elev-1)` (K6, oat-conformance audit) so this
-        // shadow tracks the shared elevation ramp (and gets dark-mode's deeper
-        // black-based shadow) instead of a hardcoded light-mode-only rgba.
+        // Active = ink on a filled `--surface-active` box with a hairline
+        // `--line` edge — the SAME family as the hover pill's `--hov`/
+        // `--surface-hover` fill, one step darker/more saturated so the
+        // active row reads as a clearly highlighted BOX, not just bold/ink
+        // text (direct user feedback fix: the previous `background:
+        // var(--bg)` was literally invisible in dark mode — the sidebar rail
+        // sits `transparent` directly on the app's own `--bg` ground, so
+        // painting the active row the same color as its own backdrop
+        // produced no visible box at all). `--elev-1` keeps a subtle lift so
+        // the active pill still reads as raised, not flat-painted.
         // Never amber (tokens.md: "active = ink on raised bg, never amber").
         // The INACTIVE background is intentionally omitted here (review fix,
         // CodeRabbit): inline styles always beat CSS class rules regardless
@@ -96,7 +99,12 @@ export function NavItem({
         // actually paint. Only the ACTIVE case sets an inline background
         // (it's a per-instance boolean CSS can't express); the resting/hover
         // background for every other row is CSS-owned.
-        ...(active ? { background: 'var(--bg)', boxShadow: 'var(--elev-1)' } : {}),
+        ...(active
+          ? {
+              background: 'var(--surface-active)',
+              boxShadow: `var(--elev-1), inset 0 0 0 1px var(--line)`,
+            }
+          : {}),
         transform: 'scale(1)',
         transition:
           'background .15s ease, color .15s ease, box-shadow .15s ease, transform .1s var(--ease-out)',
@@ -109,9 +117,15 @@ export function NavItem({
       )}
       <span>{label}</span>
       {meta !== undefined && (
+        // `lineHeight: 1` matches the Search row's `/` shortcut chip (fix,
+        // direct user feedback) — both sit on the identical collapsed
+        // line-box baseline instead of the body's inherited 1.55, so the
+        // count column and the chip above it land on one shared vertical
+        // center.
         <span
           style={{
             marginLeft: 'auto',
+            lineHeight: 1,
             fontSize: '0.72rem',
             fontWeight: 400,
             color: 'var(--fnt)',

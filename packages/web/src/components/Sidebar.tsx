@@ -134,9 +134,26 @@ function SidebarSearchItem({ onOpenSearch }: { onOpenSearch: () => void }) {
         <SearchIcon size={18} stroke="currentColor" />
       </span>
       <span>Search</span>
+      {/* `lineHeight: 1` + `display: inline-flex` centering (direct user
+          feedback fix: "the `/` chip is not vertically aligned with the
+          Library/Trash count numbers"). Without an explicit line-height the
+          chip inherited the body's 1.55 line-height, which gives its own
+          text node a taller-than-glyph line box — the chip's border+padding
+          then centers on THAT inflated box instead of the glyph itself, so
+          the visible `/` sits a couple px off the row's true vertical
+          center that the borderless, `lineHeight`-unset meta count spans
+          (NavItem's `meta`) land on by not having the same tall line-box
+          problem masked by a border. Collapsing to `lineHeight: 1` and
+          flex-centering the glyph inside the chip's own box makes both
+          land on the identical row-center baseline, so the chip and the
+          counts below it form one clean right column. */}
       <span
         style={{
           marginLeft: 'auto',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: 1,
           fontSize: '0.66rem',
           color: 'var(--fnt)',
           border: '1px solid var(--line)',
