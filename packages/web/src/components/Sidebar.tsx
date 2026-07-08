@@ -94,15 +94,19 @@ function NavItemLink({
 }
 
 /**
- * The `/` shortcut hint chip that sits in the Search row's `meta` slot.
- * Visually a small bordered pill (unlike Library/Trash's borderless count
- * text) but sized/centered to land on the SAME right-hand column as those
- * counts: `lineHeight: 1` + `display: inline-flex` centering (direct user
- * feedback fix: "the `/` chip is not vertically aligned with the
- * Library/Trash count numbers") means the chip's border+padding center on
- * the glyph's own collapsed line-box rather than an inherited 1.55
- * line-height, landing it on the identical row-center baseline as
- * `NavItem`'s borderless meta spans.
+ * The `⌘K` shortcut hint chip that sits in the Search row's `meta` slot —
+ * shows the palette's PRIMARY trigger (⌘K/Ctrl+K still work identically;
+ * `/` remains a secondary global trigger too, see `useCommandPalette.ts`,
+ * but the displayed hint is the one every other command-palette-style app
+ * (Linear, Raycast, Vercel) surfaces, and it's unambiguous cross-platform in
+ * a way a bare `/` glyph isn't). Visually a small bordered pill (unlike
+ * Library/Trash's borderless count text) but sized/centered to land on the
+ * SAME right-hand column as those counts: `lineHeight: 1` + `display:
+ * inline-flex` centering (direct user feedback fix, preserved from the `/`
+ * chip: "the chip is not vertically aligned with the Library/Trash count
+ * numbers") means the chip's border+padding center on the glyph's own
+ * collapsed line-box rather than an inherited 1.55 line-height, landing it
+ * on the identical row-center baseline as `NavItem`'s borderless meta spans.
  *
  * The `margin: -3px 0` (a negative vertical margin equal to the chip's own
  * border+padding, `1px` border + `2px` padding per edge) is a row-parity
@@ -113,7 +117,9 @@ function NavItemLink({
  * identical padding/font on the row itself. The negative margin lets the
  * border/padding still PAINT (margin never clips rendered content) while
  * removing the chip's layout footprint beyond its glyph's own line-box, so
- * it no longer inflates the row's flex-computed height.
+ * it no longer inflates the row's flex-computed height — this is purely a
+ * font-metrics fix (line-height/baseline), so it applies identically
+ * whether the chip's content is one glyph (`/`) or two (`⌘K`).
  */
 function SearchShortcutChip() {
   return (
@@ -122,6 +128,7 @@ function SearchShortcutChip() {
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
+        gap: 1,
         lineHeight: 1,
         fontSize: '0.66rem',
         color: 'var(--fnt)',
@@ -132,7 +139,8 @@ function SearchShortcutChip() {
         background: 'var(--bg)',
       }}
     >
-      /
+      <span aria-hidden="true">⌘</span>
+      <span>K</span>
     </span>
   );
 }
@@ -149,7 +157,7 @@ function SearchShortcutChip() {
  * visibly different size/weight than Library/Trash despite looking
  * "close." Going through `NavItem` directly makes that drift structurally
  * impossible: icon size (18px, matching Library/Trash), label font/weight,
- * padding, and row height are all the ONE shared implementation. The `/`
+ * padding, and row height are all the ONE shared implementation. The `⌘K`
  * shortcut hint renders via `meta` (the same right-aligned slot
  * Library/Trash use for their counts) — `NavItem`'s `meta` accepts any
  * `ReactNode`, so the chip fits without a dedicated prop, and it lands in
