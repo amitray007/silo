@@ -277,15 +277,15 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
 });
 
 /**
- * Capture (plan 011, V3-3): Enter on a URL-looking omnibar query calls
- * `POST /api/links` and clears the bar, with the new row appearing instantly
- * (the optimistic insert) ahead of any server response. The `◌ N capturing`
- * header indicator that used to reflect the resulting `enriching` row was
- * REMOVED per a direct user-feedback polish pass (no capturing UI anywhere).
- * Drives the real `useListView`/`useCaptureLink`/`Omnibar` stack end to end
- * (only `fetch` is mocked), matching the "real hook" style above.
+ * Header box (later user-feedback pass): the omnibar is now a static,
+ * non-interactive hint box — no input, no Enter-to-keep, no click-to-search.
+ * The former "Capture (plan 011, V3-3)" suite that drove Enter-to-keep
+ * through this box's `<input>` no longer applies (there is no input left to
+ * drive); paste-to-capture is covered end to end by
+ * `usePasteCapture.test.tsx` instead, which is unaffected by this
+ * component-scoped header change.
  */
-describe('LibraryView capture (plan 011, V3-3)', () => {
+describe('LibraryView header box (non-interactive omnibar)', () => {
   beforeEach(() => {
     FakeIntersectionObserver.instances = [];
     vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
@@ -297,107 +297,28 @@ describe('LibraryView capture (plan 011, V3-3)', () => {
     vi.restoreAllMocks();
   });
 
-  it('Enter on a URL query POSTs to /api/links, clears the bar, and shows the optimistic row instantly', async () => {
-    let resolveCapture!: (value: Response) => void;
-    const capturePromise = new Promise<Response>((resolve) => {
-      resolveCapture = resolve;
-    });
-
-    // Route by method (not just URL) since the capture POST and the feed's
-    // GET both target `/api/links` — the never-resolving capture promise
-    // must not block the feed's own GET/refetches.
-    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? 'GET';
-      if (method === 'POST' && url === '/api/links') return capturePromise;
-      if (url === '/api/counts') {
-        return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
-      }
-      if (url === '/api/links') return Promise.resolve(jsonResponse({ links: [] }));
-      if (url === '/api/tags') return Promise.resolve(jsonResponse({ tags: [] }));
-      throw new Error(`unexpected fetch: ${method} ${url}`);
-    });
-
-    renderLibraryView();
-    await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
-
-    const input = screen.getByPlaceholderText(/paste a link to keep/i);
-    fireEvent.change(input, { target: { value: 'https://new-example.com' } });
-    await waitFor(() => expect(screen.getByText('Keep')).toBeDefined());
-
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    // Cleared instantly, independent of the (still in-flight) server response.
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe(''));
-    // The optimistic row renders before the server has responded (title + domain both read "new-example.com").
-    await waitFor(() => expect(screen.getAllByText('new-example.com').length).toBeGreaterThan(0));
-
-    resolveCapture(
-      jsonResponse(
-        { link: link({ id: 'server-1', url: 'https://new-example.com' }), deduped: false },
-        201,
-      ),
-    );
-    await waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/counts'));
-  });
-
-  it('Enter on non-URL search text does not capture (no POST fired)', async () => {
+  it('renders the "Paste a link to keep" hint with no input/button inside it', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
         return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
       }
       if (url === '/api/links') return Promise.resolve(jsonResponse({ links: [] }));
-      if (url.startsWith('/api/links/search')) {
-        return Promise.resolve(jsonResponse({ results: [] }));
-      }
       throw new Error(`unexpected fetch: ${url}`);
     });
 
     renderLibraryView();
     await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
 
-    const input = screen.getByPlaceholderText(/paste a link to keep/i);
-    fireEvent.change(input, { target: { value: 'react hooks' } });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    const hint = screen.getByText('Paste a link to keep');
+    expect(hint).toBeDefined();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    expect(screen.queryByRole('button', { name: /paste a link/i })).toBeNull();
 
-    // The bar is untouched (no clear) and no POST was ever issued.
-    expect((input as HTMLInputElement).value).toBe('react hooks');
+    // No POST is ever fired by this box on its own — it carries no click/key handlers.
+    fireEvent.click(hint);
+    fireEvent.keyDown(hint, { key: 'Enter' });
     expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
-  });
-
-  it('a failed capture surfaces a calm error in the header (capture failure is never silent)', async () => {
-    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? 'GET';
-      if (method === 'POST' && url === '/api/links') {
-        return Promise.resolve(
-          jsonResponse({ error: 'invalid_url', message: 'Not a valid http(s) URL' }, 400),
-        );
-      }
-      if (url === '/api/counts') {
-        return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
-      }
-      if (url === '/api/links') return Promise.resolve(jsonResponse({ links: [] }));
-      if (url === '/api/tags') return Promise.resolve(jsonResponse({ tags: [] }));
-      throw new Error(`unexpected fetch: ${method} ${url}`);
-    });
-
-    renderLibraryView();
-    await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
-
-    const input = screen.getByPlaceholderText(/paste a link to keep/i);
-    fireEvent.change(input, { target: { value: 'https://bad-example.com' } });
-    await waitFor(() => expect(screen.getByText('Keep')).toBeDefined());
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    // The bar clears optimistically, but the failure is surfaced, not silent.
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe(''));
-    await waitFor(() =>
-      expect(screen.getByRole('alert').textContent).toContain('Not a valid http(s) URL'),
-    );
-    // The rolled-back optimistic row is gone — no lingering "enriching" ghost.
-    expect(screen.queryByText('bad-example.com')).toBeNull();
   });
 });
 

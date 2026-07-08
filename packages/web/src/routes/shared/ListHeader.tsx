@@ -2,9 +2,7 @@ import type { ReactNode } from 'react';
 import { useBulkTrash } from '../../api/hooks';
 import { ContentHeader } from '../../components/ContentHeader';
 import { DockIconAction, DockTrashIcon, SelectionDock } from '../../components/Dock';
-import { Omnibar } from '../../components/Omnibar';
 import { useLibrarySelection } from '../../components/SelectionContext';
-import type { useOmnibarState } from '../../lib/useOmnibarState';
 
 /**
  * The Library selection dock (v3's `selActive`, `Silo-v3.html:279-287`) — "N
@@ -94,52 +92,5 @@ export function ContentFrame({
       </div>
       {selectedIds.length > 0 && <LibrarySelectionDock selectedIds={selectedIds} />}
     </>
-  );
-}
-
-/**
- * The omnibar bound to `useOmnibarState`, shared by `LibraryView` (no tag
- * filter — `tagName` omitted) and `TagView` (`tagName` set, `onClearTag`
- * navigates back to `/`). `onKeep` (plan 011, V3-3) is `useListView`'s real
- * capture handler — this component no longer owns any capture logic itself,
- * it only wires the callback through so neither view has to repeat it.
- *
- * Paste-only (plan 024): no `searchEnabled`/`shownCount` — the omnibar no
- * longer has an inline search mode. `tagCount`/`libCount` still feed the
- * tag-idle "{tagCount} of {libCount}" chip (unrelated to search — that's
- * tag-scoped BROWSING via `/tags/:name`, which stays); `LibraryView` (no
- * tag filter) passes `tagCount={0}` since `Omnibar` never reads it without
- * an active `tagName`.
- */
-export function ListOmnibar({
-  omnibar,
-  tagCount,
-  libCount,
-  onKeep,
-  tagName,
-  onClearTag,
-}: {
-  omnibar: ReturnType<typeof useOmnibarState>;
-  tagCount: number;
-  libCount: number;
-  onKeep: () => void;
-  tagName?: string;
-  onClearTag?: () => void;
-}) {
-  return (
-    <Omnibar
-      ref={omnibar.inputRef}
-      value={omnibar.q}
-      onChange={omnibar.setQ}
-      onKeep={onKeep}
-      focused={omnibar.focused}
-      onFocus={omnibar.onFocus}
-      onBlur={omnibar.onBlur}
-      looksLikeUrl={omnibar.isUrl}
-      {...(tagName !== undefined ? { tagName } : {})}
-      onClearTag={onClearTag ?? (() => {})}
-      tagCount={tagCount}
-      libCount={libCount}
-    />
   );
 }
