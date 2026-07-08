@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
+import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeLink } from '../test/fixtures';
+import { makeLink, makeTrashLink } from '../test/fixtures';
 import { CommandPalette } from './CommandPalette';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -12,12 +13,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function wrapper({ children }: { children: ReactNode }) {
-  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-}
-
-/** Routes fetch to a canned response by matching the request path prefix — the palette fires useTags/useSearchLinks/useLinksByTag/useInfiniteLinks concurrently, so a single mockResolvedValueOnce chain can't express "whichever fires first." A fresh Response is built per call (never a shared instance — Response bodies can only be consumed once). */
+/** Routes fetch to a canned response by matching the request path prefix — the palette fires useTags/useSearchLinks/useLinksByTag/useInfiniteLinks (or their trash equivalents) concurrently, so a single mockResolvedValueOnce chain can't express "whichever fires first." A fresh Response is built per call (never a shared instance — Response bodies can only be consumed once). */
 function mockFetchByPath(routes: Record<string, unknown>) {
   vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
     const url = typeof input === 'string' ? input : input.toString();
@@ -30,18 +26,45 @@ function mockFetchByPath(routes: Record<string, unknown>) {
   });
 }
 
-/** Renders `CommandPalette` behind a live `useCommandPalette()` instance so the real debounce timer and parse-on-every-render behavior are exercised, not a hand-built stand-in — the very fix under test (#3, raw-vs-debounced parse divergence) only exists if the real hook's timing is in play. Exposes an `openViaKeydown` helper so tests can drive ⌘K exactly like a real user. */
-async function renderPalette() {
+/**
+ * Renders `CommandPalette` behind a live `useCommandPalette()` instance so
+ * the real debounce timer and parse-on-every-render behavior are exercised,
+ * not a hand-built stand-in — the very fix under test (#3, raw-vs-debounced
+ * parse divergence) only exists if the real hook's timing is in play.
+ * Wrapped in a `MemoryRouter` (page-scoping, direct user decision post-cmdk-
+ * rebuild: the palette reads its scope via `usePaletteScope`'s `useMatch`
+ * calls, which throw outside a Router) — `route` sets the CURRENT path the
+ * palette scopes off, defaulting to `/` (library scope, the pre-scoping
+ * behavior every non-scoping test in this file still exercises). Exposes an
+ * `openViaKeydown` helper so tests can drive ⌘K exactly like a real user.
+ */
+async function renderPalette(route = '/') {
   const { useCommandPalette } = await import('../lib/useCommandPalette');
   function Harness() {
     const palette = useCommandPalette();
     return <CommandPalette palette={palette} />;
   }
-  return render(<Harness />, { wrapper });
+  return render(<Harness />, { wrapper: (props) => wrapper({ ...props, route }) });
+}
+
+function wrapper({ children, route = '/' }: { children: ReactNode; route?: string }) {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return (
+    <QueryClientProvider client={queryClient}>
+      <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+    </QueryClientProvider>
+  );
 }
 
 function pressCmdK() {
   fireEvent.keyDown(document, { key: 'k', metaKey: true });
+}
+
+/** cmdk assigns its own opaque `id`s to each `Command.Item`/`Command.Input` (a `useId()` value, not one containing the underlying link id/tag name) — result rows are found by their VISIBLE text instead of a `link:<id>` DOM id, mirroring how a real user (or a screen reader) would locate them. `closest('[role="option"]')` recovers the row element itself for `aria-selected`/click assertions. */
+function optionRowFor(text: string): HTMLElement {
+  const row = screen.getByText(text).closest('[role="option"]');
+  if (!row) throw new Error(`no [role="option"] ancestor for text ${JSON.stringify(text)}`);
+  return row as HTMLElement;
 }
 
 describe('CommandPalette', () => {
@@ -164,7 +187,7 @@ describe('CommandPalette', () => {
     await waitFor(() => expect((input as HTMLInputElement).value).toBe('#frontend '));
   });
 
-  it('Escape closes the palette (via ModalShell)', async () => {
+  it('Escape closes the palette', async () => {
     mockFetchByPath({ '/api/tags': { tags: [] }, '/api/links': { links: [] } });
     await renderPalette();
     pressCmdK();
@@ -173,7 +196,7 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
-  it('ArrowDown/ArrowUp move the active option, wrapping at both ends', async () => {
+  it('ArrowDown/ArrowUp move the active option, wrapping at both ends (cmdk-driven keyboard nav)', async () => {
     mockFetchByPath({
       '/api/tags': { tags: [] },
       '/api/links/search': {
@@ -189,22 +212,32 @@ describe('CommandPalette', () => {
     fireEvent.change(input, { target: { value: 'x' } });
     await waitFor(() => expect(screen.getByText('Link A')).toBeDefined(), { timeout: 2000 });
 
-    expect(input.getAttribute('aria-activedescendant')).toContain('a');
+    // cmdk defaults the first row active; assert via `aria-selected` on each
+    // row (not `aria-activedescendant`'s VALUE, which is cmdk's own opaque
+    // generated id, not the link id) — the input's `aria-activedescendant`
+    // still tracks whichever row carries `aria-selected="true"`.
+    expect(optionRowFor('Link A').getAttribute('aria-selected')).toBe('true');
+    expect(optionRowFor('Link B').getAttribute('aria-selected')).toBe('false');
+
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(input.getAttribute('aria-activedescendant')).toContain('b');
+    expect(optionRowFor('Link B').getAttribute('aria-selected')).toBe('true');
+    expect(optionRowFor('Link A').getAttribute('aria-selected')).toBe('false');
+
+    // loop={true} wraps past the last row back to the first.
     fireEvent.keyDown(input, { key: 'ArrowDown' });
-    expect(input.getAttribute('aria-activedescendant')).toContain('a');
+    expect(optionRowFor('Link A').getAttribute('aria-selected')).toBe('true');
+
     fireEvent.keyDown(input, { key: 'ArrowUp' });
-    expect(input.getAttribute('aria-activedescendant')).toContain('b');
+    expect(optionRowFor('Link B').getAttribute('aria-selected')).toBe('true');
   });
 
   describe('activeIndex clamping on an async results shrink (review fix #2)', () => {
     it('Enter still acts on a valid row after the result list shrinks WITHOUT a keystroke', async () => {
-      // Two results at first (activeIndex moved to the second, index 1), then
-      // the SAME query re-resolves (e.g. TanStack's own refetch/settle) with
-      // only ONE result — activeIndex is never reset by a keystroke in this
-      // scenario, so a real bug here would leave activeIndex=1 pointing past
-      // the end of a 1-item array, and Enter would silently no-op.
+      // Two results at first (the active row moved to the second), then the
+      // SAME query re-resolves (e.g. TanStack's own refetch/settle) with
+      // only ONE result — cmdk keeps its own active-item state in sync as
+      // items unmount, so a real bug here would leave Enter targeting a row
+      // that no longer exists and silently no-op.
       let resultCount = 2;
       vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
         const url = typeof input === 'string' ? input : input.toString();
@@ -227,7 +260,9 @@ describe('CommandPalette', () => {
       }
       render(
         <QueryClientProvider client={queryClient}>
-          <Harness />
+          <MemoryRouter initialEntries={['/']}>
+            <Harness />
+          </MemoryRouter>
         </QueryClientProvider>,
       );
 
@@ -236,9 +271,9 @@ describe('CommandPalette', () => {
       fireEvent.change(input, { target: { value: 'x' } });
       await waitFor(() => expect(screen.getByText('Link B')).toBeDefined(), { timeout: 2000 });
 
-      // Move active to the SECOND row (index 1).
+      // Move active to the SECOND row.
       fireEvent.keyDown(input, { key: 'ArrowDown' });
-      expect(input.getAttribute('aria-activedescendant')).toContain('b');
+      expect(optionRowFor('Link B').getAttribute('aria-selected')).toBe('true');
 
       // Now shrink the result set out from under the palette WITHOUT any
       // keystroke — invalidate + refetch, exactly like a live TanStack
@@ -249,8 +284,7 @@ describe('CommandPalette', () => {
       });
       await waitFor(() => expect(screen.queryByText('Link B')).toBeNull(), { timeout: 2000 });
 
-      // activeIndex must have clamped down to the new last (only) row — Enter
-      // opens IT, not a no-op.
+      // The remaining row is active — Enter opens IT, not a no-op.
       fireEvent.keyDown(input, { key: 'Enter' });
       expect(window.open).toHaveBeenCalledWith('https://example.com/a', '_blank', 'noopener');
     });
@@ -346,7 +380,7 @@ describe('CommandPalette', () => {
       // "#frontend" then a trailing space settles the tag INSTANTLY in the
       // raw parse, but for up to the debounce window the debounced parse
       // could still lag — if the two disagree, the fired query is an
-      // unscoped text search instead of the tag-scoped list. Asserts that
+      // unscoped text search instead of the tag-scoped one. Asserts that
       // whenever the UI is showing something other than "tag suggestions",
       // the fetch it fires is never a bare, unscoped q= search sitting where
       // a tag-list fetch should be.
@@ -394,6 +428,194 @@ describe('CommandPalette', () => {
         (u) => u.startsWith('/api/links/search') && !u.includes('tag=frontend'),
       );
       expect(unscopedSearchCalls).toEqual([]);
+    });
+  });
+
+  /**
+   * Page-scoping (direct user decision, post-cmdk-rebuild): the palette now
+   * searches whatever surface it was opened from, per `usePaletteScope`.
+   * These tests assert which HOOK/ENDPOINT fires for each page, not just
+   * that SOME result renders — the whole point of scoping is that library
+   * text search and trash text search hit different endpoints, and a tag
+   * page's empty-query default is that TAG's recent links, not the whole
+   * library's.
+   */
+  describe('page scoping (library vs trash vs tag)', () => {
+    it('on the Library route (/), an empty query shows recent LIBRARY links via GET /api/links (unscoped)', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/links': { links: [makeLink({ id: 'lib1', title: 'Library recent' })] },
+      });
+      await renderPalette('/');
+      pressCmdK();
+      await waitFor(() => expect(screen.getByText('Library recent')).toBeDefined());
+    });
+
+    it('on the Library route, typed text hits GET /api/links/search?q= (never /api/trash/search)', async () => {
+      const fetchedUrls: string[] = [];
+      vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        fetchedUrls.push(url);
+        if (url.startsWith('/api/tags')) return Promise.resolve(jsonResponse({ tags: [] }));
+        if (url.startsWith('/api/links/search')) {
+          return Promise.resolve(
+            jsonResponse({
+              results: [{ ...makeLink({ id: 'lib2', title: 'Library match' }), rank: 1 }],
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse({ error: 'not_found', message: url }, 404));
+      });
+      await renderPalette('/');
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'match' } });
+      await waitFor(() => expect(screen.getByText('Library match')).toBeDefined(), {
+        timeout: 2000,
+      });
+      expect(fetchedUrls.some((u) => u.startsWith('/api/trash/search'))).toBe(false);
+    });
+
+    it('on the Trash route (/trash), an empty query shows recent TRASHED links via GET /api/trash (not /api/links)', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/trash': { links: [makeTrashLink({ id: 't1', title: 'Trashed recent' })] },
+      });
+      await renderPalette('/trash');
+      pressCmdK();
+      await waitFor(() => expect(screen.getByText('Trashed recent')).toBeDefined());
+      expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Search trash…');
+    });
+
+    it('on the Trash route, typed text hits GET /api/trash/search?q= (never /api/links/search)', async () => {
+      const fetchedUrls: string[] = [];
+      vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        fetchedUrls.push(url);
+        if (url.startsWith('/api/tags')) return Promise.resolve(jsonResponse({ tags: [] }));
+        if (url.startsWith('/api/trash/search')) {
+          return Promise.resolve(
+            jsonResponse({
+              results: [{ ...makeTrashLink({ id: 't2', title: 'Trash match' }), rank: 1 }],
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse({ error: 'not_found', message: url }, 404));
+      });
+      await renderPalette('/trash');
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'match' } });
+      await waitFor(() => expect(screen.getByText('Trash match')).toBeDefined(), {
+        timeout: 2000,
+      });
+      expect(fetchedUrls.some((u) => u.startsWith('/api/links/search'))).toBe(false);
+    });
+
+    it('Enter on a trash result still opens it in a new tab (the open/scheme-guard path is scope-agnostic)', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/trash': {
+          links: [
+            makeTrashLink({ id: 't3', url: 'https://example.com/trashed', title: 'Open trash' }),
+          ],
+        },
+      });
+      await renderPalette('/trash');
+      pressCmdK();
+      await waitFor(() => expect(screen.getByText('Open trash')).toBeDefined());
+      fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+      expect(window.open).toHaveBeenCalledWith('https://example.com/trashed', '_blank', 'noopener');
+    });
+
+    it("on a Tag route (/tags/:name), an empty query shows that TAG's recent links via GET /api/links?tag=", async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [{ name: 'frontend', count: 1 }] },
+        '/api/links?tag=frontend': {
+          links: [makeLink({ id: 'tag1', title: 'Frontend recent' })],
+        },
+      });
+      await renderPalette('/tags/frontend');
+      pressCmdK();
+      await waitFor(() => expect(screen.getByText('Frontend recent')).toBeDefined());
+      expect(screen.getByRole('combobox').getAttribute('placeholder')).toBe('Search #frontend…');
+    });
+
+    it('on a Tag route, typed text is scoped to that tag via GET /api/links/search?q=&tag=<current>', async () => {
+      const fetchedUrls: string[] = [];
+      vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        fetchedUrls.push(url);
+        if (url.startsWith('/api/tags')) {
+          return Promise.resolve(jsonResponse({ tags: [{ name: 'frontend', count: 1 }] }));
+        }
+        if (url.startsWith('/api/links/search')) {
+          return Promise.resolve(
+            jsonResponse({
+              results: [{ ...makeLink({ id: 'tag2', title: 'Scoped match' }), rank: 1 }],
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse({ error: 'not_found', message: url }, 404));
+      });
+      await renderPalette('/tags/frontend');
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'match' } });
+      await waitFor(() => expect(screen.getByText('Scoped match')).toBeDefined(), {
+        timeout: 2000,
+      });
+      const searchCalls = fetchedUrls.filter((u) => u.startsWith('/api/links/search'));
+      expect(searchCalls.length).toBeGreaterThan(0);
+      expect(searchCalls.every((u) => u.includes('tag=frontend'))).toBe(true);
+    });
+
+    /** The per-URL routing table for the "explicit #tag overrides route scope" test below, split out purely to keep the `mockImplementation` callback's cognitive complexity under the lint ceiling (same pattern as `respondToSettlingUrl`/`respondToRekeyingUrl` above). */
+    function respondToTagOverrideUrl(url: string): Response {
+      if (url.startsWith('/api/tags')) {
+        return jsonResponse({
+          tags: [
+            { name: 'frontend', count: 1 },
+            { name: 'backend', count: 2 },
+          ],
+        });
+      }
+      // The route's own implicit scope ("frontend") legitimately fires once
+      // on mount for the empty-query recent-list — that's expected, not the
+      // bug under test. What matters is what's SHOWING once the user's
+      // explicit #backend settles.
+      if (url.startsWith('/api/links?tag=frontend')) {
+        return jsonResponse({ links: [makeLink({ id: 'fe1', title: 'Frontend recent' })] });
+      }
+      if (url.startsWith('/api/links?tag=backend')) {
+        return jsonResponse({ links: [makeLink({ id: 'be1', title: 'Backend link' })] });
+      }
+      return jsonResponse({ error: 'not_found', message: url }, 404);
+    }
+
+    it("on a Tag route, typing an EXPLICIT #othertag overrides the route's implicit tag scope", async () => {
+      const fetchedUrls: string[] = [];
+      vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        fetchedUrls.push(url);
+        return Promise.resolve(respondToTagOverrideUrl(url));
+      });
+      // Route scope is "frontend" (/tags/frontend), but the user explicitly
+      // types #backend — the explicit tag must win per usePaletteResults'
+      // doc comment ("the user's own explicit #tag wins when present").
+      await renderPalette('/tags/frontend');
+      pressCmdK();
+      await waitFor(() => expect(screen.getByText('Frontend recent')).toBeDefined());
+
+      const input = screen.getByRole('combobox');
+      fireEvent.change(input, { target: { value: '#backend ' } });
+      await waitFor(() => expect(screen.getByText('Backend link')).toBeDefined(), {
+        timeout: 2000,
+      });
+      // Once #backend has settled, the frontend-scoped row is gone — the
+      // explicit tag fully replaced the route's implicit one, not merged
+      // with or appended to it.
+      expect(screen.queryByText('Frontend recent')).toBeNull();
     });
   });
 });

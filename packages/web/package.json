@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@tanstack/react-query": "catalog:",
+    "cmdk": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router-dom": "catalog:"
@@ -19,10 +20,10 @@
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
     "@testing-library/react": "catalog:",
-    "agentation": "catalog:",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "catalog:",
+    "agentation": "catalog:",
     "jsdom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",

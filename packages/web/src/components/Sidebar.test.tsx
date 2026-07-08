@@ -222,12 +222,13 @@ describe('Sidebar', () => {
       expect(searchIcon?.getAttribute('width')).toBe(libraryIcon?.getAttribute('width'));
     });
 
-    it('renders the "/" shortcut chip in the same right-aligned meta column as counts', async () => {
+    it('renders the "⌘K" shortcut chip in the same right-aligned meta column as counts', async () => {
       vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 0, purgeWindowDays: 30 }));
       renderSidebar();
 
       await waitFor(() => expect(screen.getByText('3')).toBeDefined());
-      expect(screen.getByText('/')).toBeDefined();
+      expect(screen.getByText('⌘')).toBeDefined();
+      expect(screen.getByText('K')).toBeDefined();
     });
   });
 
