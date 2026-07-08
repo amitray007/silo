@@ -110,6 +110,35 @@ describe('RowMenu', () => {
     );
   });
 
+  it('shows "Enrich" for a bare or partial link, and "Re-enrich" while already enriching', () => {
+    renderMenu({ captureStatus: 'bare' });
+    expect(screen.getByText('Enrich')).toBeDefined();
+
+    renderMenu({ id: 'row-2', captureStatus: 'partial' });
+    expect(screen.getAllByText('Enrich').length).toBeGreaterThan(0);
+
+    renderMenu({ id: 'row-3', captureStatus: 'enriching' });
+    expect(screen.getByText('Re-enrich')).toBeDefined();
+  });
+
+  it('hides the enrich action entirely for a full link (nothing to re-enrich)', () => {
+    renderMenu({ captureStatus: 'full' });
+    expect(screen.queryByText('Enrich')).toBeNull();
+    expect(screen.queryByText('Re-enrich')).toBeNull();
+  });
+
+  it('clicking "Enrich" calls the retry mutation (POSTs /api/links/:id/retry)', async () => {
+    renderMenu({ captureStatus: 'partial' });
+    fireEvent.click(screen.getByText('Enrich'));
+
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/links/row-1/retry',
+        expect.objectContaining({ method: 'POST' }),
+      ),
+    );
+  });
+
   it('opening the tags fly-out (hover or click) shows the find-tag input and toggle list', () => {
     renderMenu({ tags: ['mcp'] });
     fireEvent.click(screen.getByText('Tags'));

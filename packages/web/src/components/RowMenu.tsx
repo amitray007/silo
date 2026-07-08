@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useAddTag, useRemoveTag, useTags, useTrashLink } from '../api/hooks';
+import { useAddTag, useRemoveTag, useRetryCapture, useTags, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import { buildTagOptions } from '../lib/tagOptions';
 import { TrashIcon } from './NavIcons';
@@ -160,6 +160,18 @@ function EditIcon() {
   );
 }
 
+/** A circular-arrows "retry" glyph for the "Enrich"/"Re-enrich" action — same 14px stroke set as the other RowMenu icons above. */
+function EnrichIcon() {
+  return (
+    <MenuIcon>
+      <path d="M3 8a5 5 0 0 1 8.5-3.5L13 6" />
+      <path d="M13 3v3h-3" />
+      <path d="M13 8a5 5 0 0 1-8.5 3.5L3 10" />
+      <path d="M3 13v-3h3" />
+    </MenuIcon>
+  );
+}
+
 /**
  * The tags fly-out (v3's left-positioned `menuTagsOpen` panel) — find-tag
  * input + toggle list + "+N more" note, opened via hover/click on the "tags"
@@ -234,6 +246,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
   const [tagsFlyOpen, setTagsFlyOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const trashLink = useTrashLink(link.id);
+  const retryCapture = useRetryCapture(link.id);
   const copyResetRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(
@@ -265,6 +278,11 @@ export function RowMenu({ link }: { link: LinkJson }) {
 
   const handleEdit = () => {
     openEdit(link);
+  };
+
+  const handleEnrich = () => {
+    closeMenu();
+    retryCapture.mutate();
   };
 
   return (
@@ -357,6 +375,19 @@ export function RowMenu({ link }: { link: LinkJson }) {
         </span>
         <span>Edit</span>
       </MenuItem>
+      {/* Hidden (not disabled) once a link is `full` — there's nothing left
+          to re-enrich, and "silence means complete" (CLAUDE.md) means a
+          finished link shows no leftover chrome for an action it can't take,
+          rather than a grayed-out row. Mirrors the `retry_capture` MCP tool
+          so a user can do everything an agent can (agent-native parity). */}
+      {link.captureStatus !== 'full' && (
+        <MenuItem onClick={handleEnrich}>
+          <span style={iconSlotStyle}>
+            <EnrichIcon />
+          </span>
+          <span>{link.captureStatus === 'enriching' ? 'Re-enrich' : 'Enrich'}</span>
+        </MenuItem>
+      )}
       <MenuItem onClick={handleTrash}>
         <span style={iconSlotStyle}>
           <TrashIcon size={14} stroke="var(--ghost)" />
