@@ -1,0 +1,16 @@
+-- Enrichment lifecycle (plan 025): attempt-cap tracking. `enrich_attempts`
+-- counts recorded enrichment attempts (see `links.ts`'s doc comment);
+-- `NOT NULL DEFAULT 0` backfills every existing row to 0 with no separate
+-- backfill statement needed.
+--
+-- NOTE: drizzle-kit's raw generated output for this migration also included
+-- a spurious `DROP TYPE "public"."link_origin";` statement — the same
+-- verified drizzle-kit snapshot-diffing bug 0005/0006's comments document
+-- (the generator's enum tracking momentarily lost `link_origin` from its
+-- diff even though `links.added_by` still uses it). `link_origin` remains
+-- very much in use; the wrong `DROP TYPE` line was removed by hand before
+-- this migration was applied, and `meta/0007_snapshot.json` was
+-- hand-corrected to keep `public.link_origin` in its `enums` map so the NEXT
+-- `db:generate` diffs against the true state instead of re-proposing the
+-- same bogus drop.
+ALTER TABLE "links" ADD COLUMN "enrich_attempts" integer DEFAULT 0 NOT NULL;

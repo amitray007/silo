@@ -1,6 +1,15 @@
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
-import { index, jsonb, pgTable, text, timestamp, uniqueIndex, uuid } from 'drizzle-orm/pg-core';
+import {
+  index,
+  integer,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { tsvector } from '../types.js';
 import { captureStatus, linkOrigin } from './enums.js';
 
@@ -49,6 +58,14 @@ export const links = pgTable(
     // fills the default for pre-existing rows on an `ADD COLUMN ... NOT NULL
     // DEFAULT`. See `enums.ts`'s `linkOrigin` doc comment for the merge rule.
     addedBy: linkOrigin('added_by').notNull().default('user'),
+
+    // Enrichment lifecycle (plan 025): counts recorded enrichment attempts.
+    // `recordEnrichment` increments this on every attempt; `requestRetry`
+    // resets it to 0 (a fresh start). `findStrandedEnriching` excludes rows
+    // at ENRICH_ATTEMPT_CAP so a persistently-failing link stops being
+    // re-kicked forever — it settles instead (see `@silo/core`'s
+    // `settleGiveUp`). `NOT NULL DEFAULT 0` backfills every existing row.
+    enrichAttempts: integer('enrich_attempts').notNull().default(0),
 
     notes: text('notes'),
 
