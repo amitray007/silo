@@ -1,5 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, expect, it, vi } from 'vitest';
 import { NavItem } from './NavItem';
 
 describe('NavItem', () => {
@@ -103,5 +103,63 @@ describe('NavItem', () => {
     render(<NavItem label="#ai" href="/tags/ai" variant="tag" />);
     const link = screen.getByRole('link', { name: /ai/i });
     expect(link.style.padding).toBe('5px var(--s2-5)');
+  });
+
+  describe('button mode (no href — plan 024, the Search row)', () => {
+    it('renders a <button type="button"> instead of an <a> when href is omitted', () => {
+      render(<NavItem label="Search" />);
+      const button = screen.getByRole('button', { name: /search/i });
+      expect(button.tagName).toBe('BUTTON');
+      expect(button.getAttribute('type')).toBe('button');
+      expect(screen.queryByRole('link')).toBeNull();
+    });
+
+    it('fires onClick like any other button', () => {
+      const onClick = vi.fn();
+      render(<NavItem label="Search" onClick={onClick} />);
+      fireEvent.click(screen.getByRole('button', { name: /search/i }));
+      expect(onClick).toHaveBeenCalledTimes(1);
+    });
+
+    it('never sets aria-current — a button has no "current page" to mark', () => {
+      render(<NavItem label="Search" active />);
+      const button = screen.getByRole('button', { name: /search/i });
+      expect(button.getAttribute('aria-current')).toBeNull();
+    });
+
+    it('renders byte-identical row chrome to the anchor form: same padding, font, icon slot', () => {
+      render(<NavItem label="Search" icon={<svg aria-hidden="true" />} meta="/" />);
+      const button = screen.getByRole('button', { name: /search/i });
+      expect(button.style.padding).toBe('7px var(--s2-5)');
+      expect(button.style.fontWeight).toBe('500');
+      expect(button.style.fontSize).toBe('0.84rem');
+      expect(button.style.color).toBe('var(--mut)');
+      expect(button.className).toContain('silo-nav-item');
+      expect(button.querySelector('svg')).not.toBeNull();
+      expect(screen.getByText('/')).toBeDefined();
+    });
+
+    it('is keyboard-focusable', () => {
+      render(<NavItem label="Search" />);
+      const button = screen.getByRole('button', { name: /search/i });
+      button.focus();
+      expect(document.activeElement).toBe(button);
+    });
+  });
+
+  it('anchor and button modes render identical row geometry for the same props (Search vs. Library parity)', () => {
+    const icon = <svg aria-hidden="true" />;
+    render(
+      <>
+        <NavItem label="Library" href="/" icon={icon} meta={12} />
+        <NavItem label="Search" icon={icon} meta="/" />
+      </>,
+    );
+    const link = screen.getByRole('link', { name: /library/i });
+    const button = screen.getByRole('button', { name: /search/i });
+    expect(button.style.padding).toBe(link.style.padding);
+    expect(button.style.fontSize).toBe(link.style.fontSize);
+    expect(button.style.fontWeight).toBe(link.style.fontWeight);
+    expect(button.style.color).toBe(link.style.color);
   });
 });

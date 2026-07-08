@@ -24,14 +24,14 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function renderSidebar(initialEntries: string[] = ['/']) {
+function renderSidebar(initialEntries: string[] = ['/'], onOpenSearch?: () => void) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={initialEntries}>
           <SettingsProvider>
-            <Sidebar />
+            {onOpenSearch ? <Sidebar onOpenSearch={onOpenSearch} /> : <Sidebar />}
           </SettingsProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -189,6 +189,45 @@ describe('Sidebar', () => {
       const libraryLink = screen.getByRole('link', { name: /library/i });
       expect(libraryLink.style.color).not.toContain('--mark');
       expect(libraryLink.style.background).not.toContain('--mark');
+    });
+  });
+
+  describe('Search nav row (rewritten to render through shared NavItem — parity with Library/Trash)', () => {
+    it('renders as a button (not a link — no /search route) that fires onOpenSearch', async () => {
+      const onOpenSearch = vi.fn();
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+      renderSidebar(['/'], onOpenSearch);
+
+      const searchButton = screen.getByRole('button', { name: /search/i });
+      expect(searchButton.tagName).toBe('BUTTON');
+      fireEvent.click(searchButton);
+      expect(onOpenSearch).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders the same icon size, font size/weight, and padding as the Library row', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 0, purgeWindowDays: 30 }));
+      renderSidebar();
+
+      const searchButton = screen.getByRole('button', { name: /search/i });
+      const libraryLink = await screen.findByRole('link', { name: /library/i });
+
+      expect(searchButton.style.padding).toBe(libraryLink.style.padding);
+      expect(searchButton.style.fontSize).toBe(libraryLink.style.fontSize);
+      expect(searchButton.style.fontWeight).toBe(libraryLink.style.fontWeight);
+      expect(searchButton.className).toBe(libraryLink.className);
+
+      const searchIcon = searchButton.querySelector('svg');
+      const libraryIcon = libraryLink.querySelector('svg');
+      expect(searchIcon?.getAttribute('width')).toBe('18');
+      expect(searchIcon?.getAttribute('width')).toBe(libraryIcon?.getAttribute('width'));
+    });
+
+    it('renders the "/" shortcut chip in the same right-aligned meta column as counts', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 0, purgeWindowDays: 30 }));
+      renderSidebar();
+
+      await waitFor(() => expect(screen.getByText('3')).toBeDefined());
+      expect(screen.getByText('/')).toBeDefined();
     });
   });
 
