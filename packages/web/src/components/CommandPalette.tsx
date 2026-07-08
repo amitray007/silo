@@ -1,10 +1,44 @@
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { useInfiniteLinks, useLinksByTag, useSearchLinks, useTags } from '../api/hooks';
 import type { LinkJson, SearchResultJson, TagCount } from '../api/types';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import type { useCommandPalette } from '../lib/useCommandPalette';
 import { Chip } from './Chip';
 import { ModalShell } from './ModalShell';
+
+/** The default number of "most recent" links shown when the palette opens with an empty query — deliberately a short list (not the full library), so the empty state reads as "here's what you were just doing" rather than becoming a second Library view. */
+const RECENT_DEFAULT_COUNT = 5;
+
+/**
+ * Holds onto the last non-empty `results` array while a NEW one is still
+ * settling (`isPending`/`isFetching` for the in-flight query behind it) —
+ * the actual fix for the reported "flicker while typing": `usePaletteResults`
+ * derives `results` fresh from whichever TanStack query is active for the
+ * current mode, and each keystroke's debounced re-parse can briefly point at
+ * a DIFFERENT query object (e.g. `useSearchLinks('reac')` vs
+ * `useSearchLinks('react')` are distinct cache entries) that hasn't resolved
+ * yet — naively rendering that query's `data` mid-flight blanks the list to
+ * empty for a frame, then pops back in once the fetch lands, which reads as a
+ * jump/flicker. This hook is the `placeholderData: keepPreviousData`
+ * equivalent for a value that isn't itself a single `useQuery` call (it's
+ * assembled from up to three different hooks depending on parse mode) —
+ * TanStack's own `placeholderData` option can't be bolted onto that
+ * cross-hook selection from here, so the same "hold the last real value
+ * across a pending refetch" behavior is reproduced by hand: `isSettling`
+ * (true while the CURRENT mode's underlying query has no data yet) selects
+ * between the fresh `results` and whatever was last shown, and the ref only
+ * ever updates when `isSettling` is false — never with a mid-flight blank.
+ */
+function useStableResults(
+  results: CommandPaletteResult[],
+  isSettling: boolean,
+): CommandPaletteResult[] {
+  const lastRef = useRef<CommandPaletteResult[]>([]);
+  if (!isSettling) {
+    lastRef.current = results;
+  }
+  return isSettling ? lastRef.current : results;
+}
 
 /** A link result row's stable DOM id, for `aria-activedescendant`. */
 function optionId(prefix: string, id: string): string {
@@ -170,13 +204,18 @@ export type CommandPaletteResult =
  *   `text` present fires `useSearchLinks(text, tag)` (AND); `text` absent
  *   fires `useLinksByTag(tag)` (all of that tag's links).
  * - Else `text` only -> `useSearchLinks(text)`.
- * - Else (fully empty query) -> the most recent N links (`useInfiniteLinks()`,
- *   first page only — no "load more" chrome here), so the palette isn't
- *   just a blank box the instant it opens. Chosen over a bare empty-state
- *   hint per the plan's own "showing recent/all is friendly" steer.
+ * - Else (fully empty query) -> the `RECENT_DEFAULT_COUNT` (5) most recent
+ *   links (`useInfiniteLinks()`, first page only, sliced down — no "load
+ *   more" chrome here), so the palette isn't just a blank box the instant it
+ *   opens, but also doesn't become a second scrollable Library view. Chosen
+ *   over a bare empty-state hint per the plan's own "showing recent/all is
+ *   friendly" steer; capped at 5 per direct user feedback (the full first
+ *   page was too much for a "here's what you just did" default).
  *
- * All data hooks key off `debouncedQ`/`parsedDebounced` (200ms), never the
- * raw per-keystroke `q` — the visible input itself is never debounced.
+ * All data hooks key off `debouncedQ`/`parsedDebounced`, never the raw
+ * per-keystroke `q` — the visible input itself is never debounced. The
+ * RESULTS returned here are additionally smoothed through `useStableResults`
+ * (below) so a debounce/fetch cycle never blanks the list mid-type.
  */
 function usePaletteResults(
   parsed: ReturnType<typeof useCommandPalette>['parsed'],
@@ -230,12 +269,24 @@ function usePaletteResults(
         isFullyEmpty,
         searchResults: searchQuery.data?.results,
         tagResults: tagOnlyQuery.data?.links,
-        recentResults: recentQuery.data?.pages[0]?.links,
+        recentResults: recentQuery.data?.pages[0]?.links?.slice(0, RECENT_DEFAULT_COUNT),
       });
 
-  const results: CommandPaletteResult[] = showTagSuggestions
+  const rawResults: CommandPaletteResult[] = showTagSuggestions
     ? matchingTags.map((tag) => ({ kind: 'tag', tag }) as const)
     : linkResults.map((link) => ({ kind: 'link', link }) as const);
+
+  const isSettling = selectIsSettling({
+    showTagSuggestions,
+    hasText,
+    hasSettledTag,
+    isFullyEmpty,
+    searchPending: searchQuery.isPending,
+    tagOnlyPending: tagOnlyQuery.isPending,
+    recentPending: recentQuery.isPending,
+  });
+
+  const results = useStableResults(rawResults, isSettling);
 
   return { results, showTagSuggestions };
 }
@@ -253,6 +304,36 @@ function selectLinkResults(args: {
   if (args.hasSettledTag) return args.tagResults ?? [];
   if (args.isFullyEmpty) return args.recentResults ?? [];
   return [];
+}
+
+/**
+ * "Settling" = the query backing the CURRENT mode is still on its first (or
+ * a re-keyed) fetch with no data yet — the exact window where blanking to
+ * empty would read as flicker (`useStableResults`, above, holds the previous
+ * results while this is true). Split out of `usePaletteResults` purely to
+ * keep both functions under the lint's cognitive-complexity ceiling, same as
+ * `selectLinkResults`. Tag suggestions are filtered client-side off
+ * `useTags()` (already-loaded data, no per-keystroke fetch), so they're
+ * never "settling" in this sense. `*Pending` (v5 `isPending` — no cached
+ * data at all for this query key) is used over `isFetching` deliberately:
+ * refetches of an ALREADY-populated key (e.g. the recent list's background
+ * poll) should keep showing that query's own fresh data immediately, not
+ * fall back to a stale snapshot from a previous render.
+ */
+function selectIsSettling(args: {
+  showTagSuggestions: boolean;
+  hasText: boolean;
+  hasSettledTag: boolean;
+  isFullyEmpty: boolean;
+  searchPending: boolean;
+  tagOnlyPending: boolean;
+  recentPending: boolean;
+}): boolean {
+  if (args.showTagSuggestions) return false;
+  if (args.hasText) return args.searchPending;
+  if (args.hasSettledTag) return args.tagOnlyPending;
+  if (args.isFullyEmpty) return args.recentPending;
+  return false;
 }
 
 /**

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
@@ -27,11 +27,10 @@ class FakeIntersectionObserver {
 
 /**
  * Renders `TagView` at `/tags/:name` with a real router (so `useParams`
- * resolves) plus a landing route at `/` (so the pill's `onClearTag`
- * navigation is observable) and a real `QueryClient` (only `fetch` mocked) —
- * mirrors `LibraryView.test.tsx`'s "drive the real hook" style rather than
- * mocking `useInfiniteLinks` by hand, since this view's whole point is the
- * `tag` param actually reaching the request URL.
+ * resolves) and a real `QueryClient` (only `fetch` mocked) — mirrors
+ * `LibraryView.test.tsx`'s "drive the real hook" style rather than mocking
+ * `useInfiniteLinks` by hand, since this view's whole point is the `tag`
+ * param actually reaching the request URL.
  */
 function renderTagView(tagName: string, fetchImpl: typeof fetch) {
   vi.stubGlobal('fetch', fetchImpl);
@@ -64,7 +63,7 @@ describe('TagView', () => {
     vi.restoreAllMocks();
   });
 
-  it('requests the tag-scoped feed and renders its title + count', async () => {
+  it('requests the tag-scoped feed and renders its title (# tag, spaced) + count', async () => {
     const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
@@ -81,11 +80,13 @@ describe('TagView', () => {
     renderTagView('mcp', fetchImpl);
 
     await waitFor(() => expect(screen.getByText('MCP post')).toBeDefined());
-    expect(screen.getByText('#mcp')).toBeDefined();
+    // A space after the `#` (bugfix, user report) — `#mcp` (no space) must
+    // NOT be present as the heading text.
+    expect(screen.getByRole('heading', { name: '# mcp' })).toBeDefined();
     expect(fetchImpl).toHaveBeenCalledWith('/api/links?tag=mcp');
   });
 
-  it('shows the tag-specific empty state when the tag has no live links', async () => {
+  it('shows the tag-specific empty state (spaced # tag) when the tag has no live links', async () => {
     const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
@@ -99,10 +100,10 @@ describe('TagView', () => {
 
     renderTagView('empty-tag', fetchImpl);
 
-    await waitFor(() => expect(screen.getByText('No links tagged #empty-tag yet.')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('No links tagged # empty-tag yet.')).toBeDefined());
   });
 
-  it('renders the #tag ✕ pill in the omnibar, and clicking it navigates back to /', async () => {
+  it('renders no search/paste input in the tag page header (bugfix: redundant search box removed)', async () => {
     const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
@@ -116,9 +117,12 @@ describe('TagView', () => {
 
     renderTagView('mcp', fetchImpl);
 
-    await waitFor(() => expect(screen.getByTitle('Clear filter')).toBeDefined());
-    fireEvent.click(screen.getByTitle('Clear filter'));
-    await waitFor(() => expect(screen.getByText('landed on library')).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('heading', { name: '# mcp' })).toBeDefined());
+    // No Omnibar (search-icon "Paste a link to keep" bar) and no `#tag ✕`
+    // clear-filter pill anywhere in the header — the header renders
+    // title+count only for TagView now (LibraryView/TrashView keep theirs).
+    expect(screen.queryByPlaceholderText('Paste a link to keep')).toBeNull();
+    expect(screen.queryByTitle('Clear filter')).toBeNull();
   });
 
   it('a failed fetch surfaces the calm error state', async () => {
@@ -137,46 +141,13 @@ describe('TagView', () => {
     await waitFor(() => expect(screen.getByText('Internal server error')).toBeDefined());
   });
 
-  it('capturing from a tag view applies that tag to the capture request (plan 011, V3-3)', async () => {
-    const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      const method = init?.method ?? 'GET';
-      if (method === 'POST' && url === '/api/links') {
-        return Promise.resolve(
-          jsonResponse(
-            {
-              link: link({ id: 's1', url: 'https://new-example.com', tags: ['mcp'] }),
-              deduped: false,
-            },
-            201,
-          ),
-        );
-      }
-      if (url === '/api/counts') {
-        return Promise.resolve(jsonResponse({ live: 5, trash: 0, purgeWindowDays: 30 }));
-      }
-      if (url === '/api/links?tag=mcp') return Promise.resolve(jsonResponse({ links: [] }));
-      if (url === '/api/tags') return Promise.resolve(jsonResponse({ tags: [] }));
-      throw new Error(`unexpected fetch: ${method} ${url}`);
-    }) as unknown as typeof fetch;
-
-    renderTagView('mcp', fetchImpl);
-    await waitFor(() => expect(screen.getByText('No links tagged #mcp yet.')).toBeDefined());
-
-    const input = screen.getByPlaceholderText('Paste a link to keep');
-    fireEvent.change(input, { target: { value: 'https://new-example.com' } });
-    await waitFor(() => expect(screen.getByText('Keep')).toBeDefined());
-    fireEvent.keyDown(input, { key: 'Enter' });
-
-    await waitFor(() =>
-      expect(fetchImpl).toHaveBeenCalledWith(
-        '/api/links',
-        expect.objectContaining({
-          method: 'POST',
-          body: JSON.stringify({ url: 'https://new-example.com', tags: ['mcp'] }),
-        }),
-      ),
-    );
-    await waitFor(() => expect((input as HTMLInputElement).value).toBe(''));
-  });
+  // The former "capturing from a tag view applies that tag to the capture
+  // request" test drove capture through the tag page's own Omnibar input
+  // (`getByPlaceholderText('Paste a link to keep')`) — that input no longer
+  // renders on `TagView` (this file's "no search/paste input" test above
+  // covers its removal). Capture-from-a-tag-page still works via the
+  // document-level paste-anywhere listener (`usePasteCapture`, mounted once
+  // in `AppFrame` and covered by its own `usePasteCapture.test.tsx`), which
+  // is unaffected by this component-scoped header change — there's just no
+  // `TagView`-local input left to drive that flow through in THIS file.
 });
