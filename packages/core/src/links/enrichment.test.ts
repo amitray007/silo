@@ -174,14 +174,21 @@ describeIfPg('enrichment operations (integration)', () => {
   });
 
   describe('recordEnrichment — clamping (total write, no field size can throw)', () => {
-    it('an oversized imageUrl (TS-docs data: URI repro) does not throw and records the link, clamped to the ceiling', async () => {
+    it('an oversized imageUrl (TS-docs data: URI repro) does not throw, and DROPS the field rather than storing a truncated/corrupt value', async () => {
+      const { FIELD_MAX } = enrichmentOps;
       const created = await linksOps.createLink({
         url: 'https://www.typescriptlang.org/docs/handbook/intro.html',
         sourceKind: 'link',
       });
+      // Seed a prior good imageUrl first, so this proves drop-not-clobber —
+      // not merely "ends up null", which truncation-to-empty could also do.
+      await enrichmentOps.recordEnrichment(created.id, {
+        status: 'partial',
+        imageUrl: 'https://www.typescriptlang.org/prior-og-image.png',
+      });
 
-      const oversizedImageUrl = `data:image/png;base64,${'A'.repeat(70_000)}`;
-      expect(oversizedImageUrl.length).toBeGreaterThan(65_536);
+      const oversizedImageUrl = `data:image/png;base64,${'A'.repeat(FIELD_MAX.imageUrl + 4_464)}`;
+      expect(oversizedImageUrl.length).toBeGreaterThan(FIELD_MAX.imageUrl);
 
       const updated = await enrichmentOps.recordEnrichment(created.id, {
         status: 'full',
@@ -192,22 +199,45 @@ describeIfPg('enrichment operations (integration)', () => {
 
       expect(updated).not.toBeNull();
       expect(updated?.captureStatus).toBe('full');
-      expect(updated?.imageUrl).not.toBeNull();
-      expect(updated?.imageUrl?.length).toBe(65_536);
-      expect(updated?.imageUrl?.startsWith('data:image/png;base64,')).toBe(true);
+      expect(updated?.title).toBe('TypeScript: Documentation');
+      // Dropped, not truncated: a sliced base64 data: URI would be a
+      // permanently corrupt image string — worse than no image at all. The
+      // prior stored value survives instead (COALESCE falls through because
+      // the clamped write carries no imageUrl key at all).
+      expect(updated?.imageUrl).toBe('https://www.typescriptlang.org/prior-og-image.png');
 
       const fetched = await linksOps.getById(created.id);
       expect(fetched?.captureStatus).toBe('full');
-      expect(fetched?.imageUrl?.length).toBe(65_536);
+      expect(fetched?.imageUrl).toBe('https://www.typescriptlang.org/prior-og-image.png');
+    });
+
+    it('an oversized imageUrl with no prior value drops to null (not truncated)', async () => {
+      const { FIELD_MAX } = enrichmentOps;
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-oversized-image-no-prior',
+        sourceKind: 'link',
+      });
+
+      const oversizedImageUrl = `data:image/png;base64,${'B'.repeat(FIELD_MAX.imageUrl + 1_000)}`;
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        imageUrl: oversizedImageUrl,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.captureStatus).toBe('full');
+      expect(updated?.imageUrl).toBeNull();
     });
 
     it('oversized text is clamped to the ceiling, not rejected', async () => {
+      const { FIELD_MAX } = enrichmentOps;
       const created = await linksOps.createLink({
         url: 'https://example.com/enrich-oversized-text',
         sourceKind: 'link',
       });
 
-      const oversizedText = 'a'.repeat(5_000_001);
+      const oversizedText = 'a'.repeat(FIELD_MAX.text + 1);
 
       const updated = await enrichmentOps.recordEnrichment(created.id, {
         status: 'full',
@@ -216,7 +246,81 @@ describeIfPg('enrichment operations (integration)', () => {
 
       expect(updated).not.toBeNull();
       expect(updated?.captureStatus).toBe('full');
-      expect(updated?.extractedText?.length).toBe(5_000_000);
+      expect(updated?.extractedText?.length).toBe(FIELD_MAX.text);
+    });
+
+    it('oversized description is clamped to the ceiling, not rejected', async () => {
+      const { FIELD_MAX } = enrichmentOps;
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-oversized-description',
+        sourceKind: 'link',
+      });
+
+      const oversizedDescription = 'd'.repeat(FIELD_MAX.description + 1_000);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        description: oversizedDescription,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.description?.length).toBe(FIELD_MAX.description);
+    });
+
+    it('oversized siteName is clamped to the ceiling, not rejected', async () => {
+      const { FIELD_MAX } = enrichmentOps;
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-oversized-sitename',
+        sourceKind: 'link',
+      });
+
+      const oversizedSiteName = 's'.repeat(FIELD_MAX.siteName + 1_000);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        siteName: oversizedSiteName,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.siteName?.length).toBe(FIELD_MAX.siteName);
+    });
+
+    it('oversized title is clamped to the ceiling, not rejected', async () => {
+      const { FIELD_MAX } = enrichmentOps;
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-oversized-title',
+        sourceKind: 'link',
+      });
+
+      const oversizedTitle = 't'.repeat(FIELD_MAX.title + 1_000);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        title: oversizedTitle,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.title?.length).toBe(FIELD_MAX.title);
+    });
+
+    it('a title of exactly the ceiling length passes through byte-for-byte unmodified (exact boundary)', async () => {
+      const { FIELD_MAX } = enrichmentOps;
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-title-exact-boundary',
+        sourceKind: 'link',
+      });
+
+      const exactTitle = 't'.repeat(FIELD_MAX.title);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        title: exactTitle,
+      });
+
+      expect(updated).not.toBeNull();
+      // Equality (not just length) — proves the exact-boundary value isn't
+      // touched by the clamp at all, not merely clamped to the same length.
+      expect(updated?.title).toBe(exactTitle);
     });
 
     it('in-bounds values pass through unchanged (regression guard)', async () => {
@@ -244,6 +348,7 @@ describeIfPg('enrichment operations (integration)', () => {
     });
 
     it('a data: URI within the ceiling is preserved verbatim, not dropped', async () => {
+      const { FIELD_MAX } = enrichmentOps;
       const created = await linksOps.createLink({
         url: 'https://example.com/enrich-inline-image',
         sourceKind: 'link',
@@ -251,7 +356,7 @@ describeIfPg('enrichment operations (integration)', () => {
 
       const shortDataUri =
         'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-      expect(shortDataUri.length).toBeLessThanOrEqual(65_536);
+      expect(shortDataUri.length).toBeLessThanOrEqual(FIELD_MAX.imageUrl);
 
       const updated = await enrichmentOps.recordEnrichment(created.id, {
         status: 'full',
@@ -263,6 +368,36 @@ describeIfPg('enrichment operations (integration)', () => {
 
       const fetched = await linksOps.getById(created.id);
       expect(fetched?.imageUrl).toBe(shortDataUri);
+    });
+
+    it('a surrogate pair straddling the clamp boundary is dropped whole, never split into a lone high surrogate', async () => {
+      const { FIELD_MAX } = enrichmentOps;
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-surrogate-boundary',
+        sourceKind: 'link',
+      });
+
+      // FIELD_MAX.text - 1 ASCII chars, then one astral emoji (2 UTF-16 code
+      // units) — the emoji's surrogate pair straddles exactly the clamp
+      // boundary (its high surrogate would land at index FIELD_MAX.text - 1,
+      // the exact last slot `slice(0, FIELD_MAX.text)` keeps).
+      const text = `${'a'.repeat(FIELD_MAX.text - 1)}\u{1F600}`;
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        text,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.captureStatus).toBe('full');
+      const stored = updated?.extractedText ?? '';
+      // Never ends on a lone high surrogate (0xD800-0xDBFF) — that would
+      // otherwise round-trip through node-postgres as U+FFFD.
+      expect(/[\uD800-\uDBFF]$/.test(stored)).toBe(false);
+      // The whole surrogate pair was dropped (one code unit under budget),
+      // not just its trailing half — length is FIELD_MAX.text - 1, all ASCII.
+      expect(stored.length).toBe(FIELD_MAX.text - 1);
+      expect(stored).toBe('a'.repeat(FIELD_MAX.text - 1));
     });
   });
 

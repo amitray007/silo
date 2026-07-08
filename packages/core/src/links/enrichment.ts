@@ -44,7 +44,7 @@ const enrichmentStatus = z.enum(['full', 'partial', 'bare']);
  * so the two can never drift apart (the guarantee is "clamp first, so parse
  * can never throw on size" — it only holds while clamp value === schema max).
  */
-const FIELD_MAX = {
+export const FIELD_MAX = {
   title: 5_000,
   description: 20_000,
   imageUrl: 65_536,
@@ -85,7 +85,19 @@ export type EnrichmentResult = z.infer<typeof enrichmentResultSchema>;
  * ever fail on size" guarantee; a fixed cap alone can always be exceeded.
  */
 function clampToMax(value: string | undefined, max: number): string | undefined {
-  return value !== undefined && value.length > max ? value.slice(0, max) : value;
+  if (value === undefined || value.length <= max) return value;
+  const sliced = value.slice(0, max);
+  // `slice` cuts by UTF-16 code unit, not code point — it can land exactly
+  // between a surrogate pair's two halves, leaving a lone high surrogate
+  // (0xD800-0xDBFF) as the final code unit. node-postgres then writes that
+  // as U+FFFD (replacement character) rather than storing the mangled half.
+  // One code unit of budget is a fair price for never storing a broken final
+  // character.
+  const lastCode = sliced.charCodeAt(sliced.length - 1);
+  if (lastCode >= 0xd800 && lastCode <= 0xdbff) {
+    return sliced.slice(0, -1);
+  }
+  return sliced;
 }
 
 /**
@@ -122,15 +134,35 @@ export async function recordEnrichment(
   // Clamp every string field to its ceiling BEFORE validating, so an
   // over-limit value (e.g. TS docs' base64 data: URI og:image) is truncated
   // rather than throwing a ZodError and stranding the link at `enriching`.
+  //
+  // `imageUrl` is the one exception: it's DROPPED, not truncated, when over
+  // ceiling (result carries no `imageUrl` key at all, so the write's COALESCE
+  // falls through to the link's existing stored value). A truncated URL or
+  // data: URI is never a usable value — slicing base64 mid-stream stores a
+  // permanently corrupt image string, while dropping keeps whatever good
+  // value the row already has. In-ceiling data: URIs are still stored
+  // verbatim (deliberate — silo's privacy rule forbids third-party image
+  // proxies, and a self-contained data: URI may become servable once the
+  // preview path learns the data: scheme).
+  //
+  // Conditional spreads (rather than direct assignment) are required here,
+  // not just style: the repo builds with `exactOptionalPropertyTypes`, so an
+  // optional field's type is `string`, never `string | undefined` — writing
+  // `title: clampToMax(...)` directly would type-error whenever clampToMax's
+  // return includes `undefined`. Omitting the key entirely is the only way to
+  // express "not present" under that setting.
+  //
+  // `imageUrl` is destructured off separately so the base spread below can
+  // never carry the original, unclamped value through — it's only added back
+  // when in-bounds (see the drop-over-ceiling note above).
+  const { imageUrl, ...resultWithoutImageUrl } = result;
   const clamped: EnrichmentResult = {
-    ...result,
+    ...resultWithoutImageUrl,
     ...(result.title !== undefined ? { title: clampToMax(result.title, FIELD_MAX.title) } : {}),
     ...(result.description !== undefined
       ? { description: clampToMax(result.description, FIELD_MAX.description) }
       : {}),
-    ...(result.imageUrl !== undefined
-      ? { imageUrl: clampToMax(result.imageUrl, FIELD_MAX.imageUrl) }
-      : {}),
+    ...(imageUrl !== undefined && imageUrl.length <= FIELD_MAX.imageUrl ? { imageUrl } : {}),
     ...(result.siteName !== undefined
       ? { siteName: clampToMax(result.siteName, FIELD_MAX.siteName) }
       : {}),

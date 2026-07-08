@@ -135,26 +135,39 @@ function hostnameOf(url: string): string | undefined {
 }
 
 /**
+ * Build the VirtualConsole extractReadableText's jsdom DOM is constructed
+ * with. Exported so extract.test.ts can exercise the REAL production
+ * listener directly (emitting a jsdomError through it) rather than a copy
+ * that merely claims to be wired "the same way" — a regression in this
+ * listener would otherwise go uncaught by that test.
+ *
+ * jsdom's default virtual console forwards internal `jsdomError` events
+ * (including CSS-parser failures) straight to `console.error`. jsdom's CSS
+ * parser (rrweb-cssom) chokes on some modern CSS constructs (e.g. nested
+ * selectors) and emits "Could not parse CSS stylesheet" for pages that use
+ * them — a real-world example is the TypeScript docs site. This is purely
+ * cosmetic noise: jsdom never needs the CSS to build the DOM, and
+ * Readability only reads text/DOM structure, never styles. Suppress only
+ * that specific message; forward every other jsdom-internal error to the
+ * real console so genuine problems stay visible.
+ */
+export function buildExtractVirtualConsole(): VirtualConsole {
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (error) => {
+    if (error.message === 'Could not parse CSS stylesheet') return;
+    console.error(error);
+  });
+  return virtualConsole;
+}
+
+/**
  * Run Readability over a script-and-remote-resource-disabled jsdom DOM.
  * Returns the trimmed/normalized text (or undefined if Readability found
  * nothing / the DOM is not "readerable"), plus the DOM itself (reused by the
  * embedded-JSON tier so the HTML is only parsed once).
  */
 function extractReadableText(url: string, html: string): { dom: JSDOM; text: string | undefined } {
-  // jsdom's default virtual console forwards internal `jsdomError` events
-  // (including CSS-parser failures) straight to `console.error`. jsdom's CSS
-  // parser (rrweb-cssom) chokes on some modern CSS constructs (e.g. nested
-  // selectors) and emits "Could not parse CSS stylesheet" for pages that use
-  // them — a real-world example is the TypeScript docs site. This is purely
-  // cosmetic noise: jsdom never needs the CSS to build the DOM, and
-  // Readability below only reads text/DOM structure, never styles. Suppress
-  // only that specific message; forward every other jsdom-internal error to
-  // the real console so genuine problems stay visible.
-  const virtualConsole = new VirtualConsole();
-  virtualConsole.on('jsdomError', (error) => {
-    if (error.message === 'Could not parse CSS stylesheet') return;
-    console.error(error);
-  });
+  const virtualConsole = buildExtractVirtualConsole();
 
   // No `runScripts` / `resources` option set — this is jsdom's default and
   // means embedded <script> tags are parsed into the DOM but NEVER

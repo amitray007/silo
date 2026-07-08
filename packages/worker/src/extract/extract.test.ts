@@ -1,9 +1,9 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JSDOM, VirtualConsole } from 'jsdom';
+import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
-import { extract } from './extract.js';
+import { buildExtractVirtualConsole, extract } from './extract.js';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__');
 
@@ -274,24 +274,27 @@ describe('extract — jsdom CSS-parse noise is suppressed', () => {
 
   it('still forwards a genuine jsdom-internal error to console.error (not blanket-suppressed)', () => {
     // Guard against an overly broad fix (e.g. suppressing ALL `jsdomError`s
-    // rather than only the specific CSS-parse message). Builds a real
-    // `VirtualConsole` wired up exactly the way `extractReadableText` wires
-    // its own — same `jsdomError` listener, same filter — then emits a real
-    // `jsdomError` event through jsdom's own EventEmitter-based API (not a
-    // reimplemented predicate called directly) with a message OTHER than
-    // "Could not parse CSS stylesheet". It must still reach console.error.
+    // rather than only the specific CSS-parse message). Builds the REAL
+    // production `VirtualConsole` via `buildExtractVirtualConsole` — the
+    // exact listener extractReadableText wires up, not a copy that merely
+    // claims to be wired "the same way" — then emits a real `jsdomError`
+    // event through jsdom's own EventEmitter-based API (not a reimplemented
+    // predicate called directly) with a message OTHER than "Could not parse
+    // CSS stylesheet". It must still reach console.error.
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
-    const virtualConsole = new VirtualConsole();
-    virtualConsole.on('jsdomError', (error) => {
-      if (error.message === 'Could not parse CSS stylesheet') return;
-      console.error(error);
-    });
+    const virtualConsole = buildExtractVirtualConsole();
 
     const otherError = new Error('some other jsdom-internal failure');
     virtualConsole.emit('jsdomError', otherError);
-
     expect(consoleErrorSpy).toHaveBeenCalledWith(otherError);
+
+    // Same real listener, the CSS-parse message specifically — still
+    // suppressed, proving the filter targets that one message rather than
+    // having been broadened/narrowed by this refactor.
+    consoleErrorSpy.mockClear();
+    virtualConsole.emit('jsdomError', new Error('Could not parse CSS stylesheet'));
+    expect(consoleErrorSpy).not.toHaveBeenCalled();
 
     consoleErrorSpy.mockRestore();
   });
