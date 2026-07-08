@@ -110,6 +110,12 @@ export type SearchResponse = { results: SearchResultJson[]; nextCursor?: string 
 /** `GET /api/trash` response envelope. */
 export type TrashResponse = { links: TrashLinkJson[]; nextCursor?: string };
 
+/** A trashed link plus a search `rank` — `GET /api/trash/search`'s per-result shape. */
+export type TrashSearchResultJson = TrashLinkJson & { rank: number };
+
+/** `GET /api/trash/search` response envelope (Trash search slice — consumed by the command palette's Trash scope). */
+export type TrashSearchResponse = { results: TrashSearchResultJson[]; nextCursor?: string };
+
 /** `GET /api/links/:id` response envelope. */
 export type LinkResponse = { link: LinkJson };
 

@@ -21,6 +21,7 @@ import type {
   TagsResponse,
   TrashLinkJson,
   TrashResponse,
+  TrashSearchResponse,
   UpdateSettingsRequest,
 } from './types';
 
@@ -65,6 +66,7 @@ export const queryKeys = {
    */
   tagOnlyList: (tag: string) => ['links-tag-only', tag] as const,
   trash: () => ['trash'] as const,
+  trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
 };
 
@@ -467,6 +469,26 @@ export function useTrashList() {
   return useQuery({
     queryKey: queryKeys.trash(),
     queryFn: () => apiGet<TrashResponse>('/api/trash'),
+  });
+}
+
+/**
+ * The command palette's trash-scoped server search (`GET /api/trash/search?q=`,
+ * Trash search slice) — mirrors `useSearchLinks` exactly (same `enabled:
+ * trimmed.length > 0` no-op-on-empty guard, same trim-before-key discipline
+ * so whitespace-only queries don't fire), hitting the trash-scoped route
+ * instead. The palette (`CommandPalette.tsx`) is the sole caller since the
+ * Trash view's own inline search box was removed — when the palette opens on
+ * the Trash page it scopes to this endpoint (`usePaletteScope`). Callers
+ * debounce keystrokes, same as `useSearchLinks`'s callers.
+ */
+export function useSearchTrash(q: string) {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: queryKeys.trashSearch(trimmed),
+    queryFn: () =>
+      apiGet<TrashSearchResponse>(`/api/trash/search?q=${encodeURIComponent(trimmed)}`),
+    enabled: trimmed.length > 0,
   });
 }
 
