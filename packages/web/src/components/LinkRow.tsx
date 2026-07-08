@@ -23,6 +23,16 @@ import { useLibrarySelection } from './SelectionContext';
  * wrapping `<span>` is `position: relative` so `RowMenu`'s
  * `position:absolute` anchors to this row, not the whole list.
  *
+ * Right-click (`onContextMenu`, `handleContextMenu` below) opens the SAME
+ * menu via the SAME `toggleMenu` call as the `⋯` button — a build-brief
+ * request so the row's options are reachable without hunting for the
+ * trigger button. `preventDefault` suppresses the browser's own native
+ * context menu (which would otherwise show a redundant "open link in new
+ * tab / copy link" list one layer below this app's own). A right-click also
+ * dismisses any pending/showing hover preview for this row first (mirrors
+ * the `⋯` button's own `useEffect` below) since the two popovers would
+ * otherwise fight for the same on-screen space.
+ *
  * Marks: per a direct user-feedback polish pass, the inline `¶`/`◆`
  * glyphs (note / added-by-Claude) are REMOVED from the row entirely — rows
  * show chip + title + domain only, no status chrome, for `full`/`partial`/
@@ -123,6 +133,20 @@ export function LinkRow({ link }: { link: LinkJson }) {
   // `scheduleHide`; this one is unmount-only and bypasses it).
   useEffect(() => () => dismiss(link.id), [dismiss, link.id]);
 
+  // Right-click opens the SAME `⋯` menu as the button (user-feedback request)
+  // — suppress the browser's native context menu and reuse `toggleMenu`
+  // (never a bespoke "open" call) so right-click and the `⋯` button share one
+  // toggle path: right-clicking an already-open row's menu closes it, exactly
+  // like clicking `⋯` again would. A right-click on a plain `<a>` would
+  // otherwise show the browser's own "open link in new tab / copy link"
+  // menu — which duplicates this app's own menu one layer down, so it's
+  // suppressed here in favor of ours.
+  const handleContextMenu = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    scheduleHide(link.id);
+    toggleMenu(link.id);
+  };
+
   return (
     <span style={{ position: 'relative', display: 'block' }}>
       <a
@@ -134,6 +158,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
         onMouseLeave={handleLeave}
         onFocus={handleEnter}
         onBlur={handleLeave}
+        onContextMenu={handleContextMenu}
         style={isSelected ? { background: 'var(--hov)' } : undefined}
       >
         <span style={{ display: 'flex', alignItems: 'center', gap: 'var(--s3)' }}>

@@ -100,7 +100,7 @@ function MenuItem({
   );
 }
 
-/** The leading icon slot — fixed 16px so every row's label starts at the same x, whatever icon (SVG or a lone glyph like `#`) sits in it. */
+/** The leading icon slot — fixed 16px so every row's label starts at the same x, whatever 14px SVG icon sits in it. */
 const iconSlotStyle: React.CSSProperties = {
   flex: 'none',
   width: 16,
@@ -133,29 +133,33 @@ function MenuIcon({ children }: { children: React.ReactNode }) {
   );
 }
 
+/** An arrow escaping a square "window" corner — reads unambiguously as "open elsewhere" (open-in-new-tab), same 14px stroke set as every other RowMenu icon. */
 function OpenIcon() {
   return (
     <MenuIcon>
-      <path d="M6.5 9.5 13 3" />
-      <path d="M8.5 3h4.5v4.5" />
-      <path d="M11.5 8.5V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3.5" />
+      <path d="M6.8 9.2 13 3" />
+      <path d="M9.2 3H13v3.8" />
+      <path d="M11.3 8.7V12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h3.3" />
     </MenuIcon>
   );
 }
 
+/** Two overlapping rounded squares — the standard "copy/duplicate" glyph, offset enough at 14px to read as two distinct sheets rather than a smudge. */
 function CopyIcon() {
   return (
     <MenuIcon>
-      <rect x="6" y="6" width="7.2" height="7.2" rx="1.3" />
-      <path d="M3.8 9.8V3.7A1 1 0 0 1 4.8 2.7h6" />
+      <rect x="5.6" y="5.6" width="7" height="7" rx="1.4" />
+      <path d="M3.4 9.4V4.4a1.4 1.4 0 0 1 1.4-1.4h5" />
     </MenuIcon>
   );
 }
 
+/** A pencil with a distinct nib break (v.s. a single diagonal stroke) — reads as "edit" at a glance. */
 function EditIcon() {
   return (
     <MenuIcon>
-      <path d="M10.2 2.9a1.3 1.3 0 0 1 1.9 1.9L4.8 12.1l-2.3.5.5-2.3Z" />
+      <path d="M9.9 3.1a1.35 1.35 0 0 1 1.9 1.9l-6.6 6.6-2.5.6.6-2.5Z" />
+      <path d="M8.6 4.4l2 2" />
     </MenuIcon>
   );
 }
@@ -168,6 +172,18 @@ function EnrichIcon() {
       <path d="M13 3v3h-3" />
       <path d="M13 8a5 5 0 0 1-8.5 3.5L3 10" />
       <path d="M3 13v-3h3" />
+    </MenuIcon>
+  );
+}
+
+/** A hash/`#` glyph built from the same 14px stroke set as every other RowMenu icon — replaces the old lone-text `#` character next to "Tags" so it leads with a real icon, not a differently-weighted glyph borrowed from body type. */
+function TagsIcon() {
+  return (
+    <MenuIcon>
+      <path d="M5.9 2.6 4.3 13.4" />
+      <path d="M11.7 2.6 10.1 13.4" />
+      <path d="M2.6 6.2h10.8" />
+      <path d="M2.2 9.8h10.8" />
     </MenuIcon>
   );
 }
@@ -195,7 +211,13 @@ function TagsFlyout({ link }: { link: LinkJson }) {
         right: 'calc(100% - 2px)',
         top: -6,
         width: 216,
-        background: 'var(--bg)',
+        // Dark-craft raised-surface convention (tokens.md): floating panels
+        // sit one step up from the page ground on `--bg2` + a hairline
+        // `--line` edge — this popover renders inside `.silo-content`, which
+        // is ITSELF `--bg2`, so a plain `--bg2` fill would vanish into its
+        // parent; the app's own elevation ramp handles that (--elev-2's
+        // shadow + this hairline border) rather than a third surface token.
+        background: 'var(--bg2)',
         border: '1px solid var(--line)',
         borderRadius: 12,
         // K6 (oat-conformance audit): sourced from the shared elevation ramp.
@@ -225,20 +247,25 @@ function TagsFlyout({ link }: { link: LinkJson }) {
 }
 
 /**
- * The row `⋯` menu popover (plan 011, V3-4; redesigned per a direct
- * user-feedback polish pass — build brief item 11): a tags fly-out row, a
- * divider, open-in-new-tab, copy-link, a divider, edit, move-to-trash. Same
- * action set as v3, but with a consistent 14px SVG icon set (replacing the
- * mismatched glyph characters `↗`/`⧉`/`✎`), roomier padding/radii, and a
- * `--hov` background on hover/focus so every row reads as an obviously
- * clickable target rather than flat text. Copy was lowercase as a "v3"
- * decision; superseded by the app-wide sentence-case decision (all labels
- * below now read `Tags`/`Open in new tab`/etc.). Rendered by
- * `LinkRow` only while `useRowMenu().openMenuId === link.id`; the whole
- * popover stops `mousedown`/`click` propagation (mirrors v3's `onMouseDown={{
- * stop }}`) so clicking inside it never bubbles to the row's `<a>` (no
- * navigation) or to the document-level "click outside closes the menu"
- * listener.
+ * The row `⋯` menu popover (plan 011, V3-4; icon/craft redesign per a direct
+ * user-feedback polish pass — build brief item 11, deepened again below to
+ * a full icon-set + right-click-to-open pass): a tags fly-out row, a
+ * divider, open-in-new-tab, copy-link, a divider, edit, move-to-trash — the
+ * SAME layout and action set throughout every pass, never restructured. One
+ * consistent 14px SVG stroke icon set (an arrow-out-of-window for open, two
+ * overlapping squares for copy, a broken-nib pencil for edit, a hash grid for
+ * tags, all replacing earlier mismatched glyph weights/characters), roomier
+ * padding/radii, and a `--hov` background on hover/focus so every row reads
+ * as an obviously clickable target rather than flat text. Copy was lowercase
+ * as a "v3" decision; superseded by the app-wide sentence-case decision (all
+ * labels below now read `Tags`/`Open in new tab`/etc.). Rendered by
+ * `LinkRow` while `useRowMenu().openMenuId === link.id` — opened either by
+ * the row's `⋯` button OR a right-click anywhere on the row (`LinkRow`'s
+ * `onContextMenu`, which suppresses the browser's native menu and calls the
+ * same `toggleMenu`); the whole popover stops `mousedown`/`click` propagation
+ * (mirrors v3's `onMouseDown={{ stop }}`) so clicking inside it never bubbles
+ * to the row's `<a>` (no navigation) or to the document-level "click outside
+ * closes the menu" listener.
  */
 export function RowMenu({ link }: { link: LinkJson }) {
   const { closeMenu, openEdit } = useRowMenu();
@@ -298,7 +325,10 @@ export function RowMenu({ link }: { link: LinkJson }) {
         top: 'calc(100% - 3px)',
         zIndex: 30,
         width: 224,
-        background: 'var(--bg)',
+        // Dark-craft raised-surface convention (tokens.md) — see the matching
+        // comment on `TagsFlyout` above for why `--bg2` (not `--bg`) is
+        // correct here even though this popover's own parent is `--bg2` too.
+        background: 'var(--bg2)',
         border: '1px solid var(--line)',
         borderRadius: 12,
         // K6 (oat-conformance audit): sourced from the shared elevation ramp.
@@ -333,14 +363,34 @@ export function RowMenu({ link }: { link: LinkJson }) {
           onClick={() => setTagsFlyOpen(true)}
           style={menuItemStyle(tagsFlyOpen)}
         >
-          <span style={iconSlotStyle}>#</span>
+          <span style={iconSlotStyle}>
+            <TagsIcon />
+          </span>
           <span>Tags</span>
           {link.tags.length > 0 && (
             <span style={{ fontSize: '0.72rem', color: 'var(--fnt)', fontWeight: 400 }}>
               {link.tags.length}
             </span>
           )}
-          <span style={{ marginLeft: 'auto', color: 'var(--ghost)', fontSize: '0.74rem' }}>◂</span>
+          {/* A small SVG chevron (same 14px stroke set as every other RowMenu
+              icon) pointing at the fly-out it discloses — replaces the old
+              lone `◂` text character, which sat at a visibly different
+              stroke weight than the icon set around it. */}
+          <span style={{ marginLeft: 'auto', color: 'var(--ghost)', display: 'grid' }}>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 16 16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M10 3.5 5 8l5 4.5" />
+            </svg>
+          </span>
         </button>
         {tagsFlyOpen && <TagsFlyout link={link} />}
       </div>
