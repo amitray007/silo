@@ -77,6 +77,12 @@ const defaultDeps: EnrichLinkDeps = {
  * Both are retryable (see `recordEnrichment`'s RETRYABLE_STATUSES) — the
  * distinction is about honesty of what silo actually captured, not about
  * whether a future retry is allowed.
+ *
+ * `not-found` (a true 404/410) is handled here only to keep this switch
+ * exhaustive (`satisfies never`) — the worker branches on it BEFORE this
+ * function is ever called (plan 025 U4: 404/410 → silent trash, never
+ * recorded as a capture status), so `'bare'` is never actually observed
+ * for this reason in practice.
  */
 function mapSafeFetchFailureToStatus(
   reason: Exclude<SafeFetchResult, { ok: true }>['reason'],
@@ -91,6 +97,8 @@ function mapSafeFetchFailureToStatus(
     case 'dns-error':
     case 'http-error':
     case 'fetch-error':
+      return 'bare';
+    case 'not-found':
       return 'bare';
     default:
       return reason satisfies never;

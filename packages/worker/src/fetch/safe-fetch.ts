@@ -76,6 +76,7 @@ export type SafeFetchFailureReason =
   | 'body-too-large'
   | 'timeout'
   | 'http-error'
+  | 'not-found'
   | 'fetch-error';
 
 export type SafeFetchResult =
@@ -342,6 +343,16 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
     return interpretRedirect(response, url, ctx.isLastHop);
   }
   if (response.status >= 400) {
+    // A true 404/410 means the resource genuinely no longer exists — the
+    // worker branches on this to silently trash the link (plan 025). Every
+    // other 4xx/5xx (403/429/500/503/...) is "couldn't fetch right now", not
+    // "gone", and stays `http-error` so the link is kept + retried.
+    if (response.status === 404 || response.status === 410) {
+      return {
+        kind: 'done',
+        result: { ok: false, reason: 'not-found', detail: String(response.status) },
+      };
+    }
     return {
       kind: 'done',
       result: { ok: false, reason: 'http-error', detail: String(response.status) },

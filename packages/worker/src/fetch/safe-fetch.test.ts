@@ -162,7 +162,7 @@ describe('safeFetch — happy path (via loopback test server, allowLoopbackForTe
     }
   });
 
-  it('returns http-error for a 404', async () => {
+  it('returns not-found for a 404', async () => {
     handler = (_req, res) => {
       res.writeHead(404, { 'content-type': 'text/html' });
       res.end('not found');
@@ -173,7 +173,7 @@ describe('safeFetch — happy path (via loopback test server, allowLoopbackForTe
     });
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.reason).toBe('http-error');
+      expect(result.reason).toBe('not-found');
       expect(result.detail).toBe('404');
     }
   });
@@ -189,6 +189,38 @@ describe('safeFetch — happy path (via loopback test server, allowLoopbackForTe
     });
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('http-error');
+  });
+
+  it('returns not-found for a 410 (distinct from http-error)', async () => {
+    handler = (_req, res) => {
+      res.writeHead(410, { 'content-type': 'text/html' });
+      res.end('gone');
+    };
+    const result = await safeFetch(`http://example.test:${port}/gone`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('not-found');
+      expect(result.detail).toBe('410');
+    }
+  });
+
+  it.each([403, 429, 500, 503])('returns http-error (not not-found) for a %i', async (status) => {
+    handler = (_req, res) => {
+      res.writeHead(status, { 'content-type': 'text/html' });
+      res.end('nope');
+    };
+    const result = await safeFetch(`http://example.test:${port}/status-${status}`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.reason).toBe('http-error');
+      expect(result.detail).toBe(String(status));
+    }
   });
 
   it('captures a non-html content-type and still returns ok:true (caller classifies)', async () => {
