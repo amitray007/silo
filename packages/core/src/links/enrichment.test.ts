@@ -160,22 +160,109 @@ describeIfPg('enrichment operations (integration)', () => {
       expect(fetched?.captureStatus).toBe('enriching');
     });
 
-    it('rejects an oversized string field before write', async () => {
+    it('rejects a title that exceeds even the clamp ceiling — impossible via recordEnrichment, proven directly against the schema', () => {
+      // recordEnrichment clamps every string field to its ceiling BEFORE
+      // parsing (see enrichment.ts), so no caller can ever trigger a
+      // too_big ZodError through the public function — that's the whole
+      // point of this fix. This asserts the schema's own max is still
+      // enforced when called directly (bypassing the clamp), so the ceiling
+      // itself isn't silently regressed to "no limit".
+      expect(() =>
+        enrichmentOps.enrichmentResultSchema.parse({ title: 'x'.repeat(5_001), status: 'full' }),
+      ).toThrow();
+    });
+  });
+
+  describe('recordEnrichment — clamping (total write, no field size can throw)', () => {
+    it('an oversized imageUrl (TS-docs data: URI repro) does not throw and records the link, clamped to the ceiling', async () => {
       const created = await linksOps.createLink({
-        url: 'https://example.com/enrich-oversized',
+        url: 'https://www.typescriptlang.org/docs/handbook/intro.html',
         sourceKind: 'link',
       });
 
-      await expect(
-        enrichmentOps.recordEnrichment(created.id, {
-          title: 'x'.repeat(2001),
-          status: 'full',
-        }),
-      ).rejects.toThrow();
+      const oversizedImageUrl = `data:image/png;base64,${'A'.repeat(70_000)}`;
+      expect(oversizedImageUrl.length).toBeGreaterThan(65_536);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        title: 'TypeScript: Documentation',
+        text: 'The TypeScript handbook.',
+        imageUrl: oversizedImageUrl,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.captureStatus).toBe('full');
+      expect(updated?.imageUrl).not.toBeNull();
+      expect(updated?.imageUrl?.length).toBe(65_536);
+      expect(updated?.imageUrl?.startsWith('data:image/png;base64,')).toBe(true);
 
       const fetched = await linksOps.getById(created.id);
-      expect(fetched?.title).toBeNull();
-      expect(fetched?.captureStatus).toBe('enriching');
+      expect(fetched?.captureStatus).toBe('full');
+      expect(fetched?.imageUrl?.length).toBe(65_536);
+    });
+
+    it('oversized text is clamped to the ceiling, not rejected', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-oversized-text',
+        sourceKind: 'link',
+      });
+
+      const oversizedText = 'a'.repeat(5_000_001);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        text: oversizedText,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.captureStatus).toBe('full');
+      expect(updated?.extractedText?.length).toBe(5_000_000);
+    });
+
+    it('in-bounds values pass through unchanged (regression guard)', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-in-bounds',
+        sourceKind: 'link',
+      });
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        title: 'A Normal Title',
+        description: 'A normal, short description.',
+        imageUrl: 'https://example.com/og-image.png',
+        siteName: 'Example Site',
+        text: 'Some normal, in-bounds article text.',
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.title).toBe('A Normal Title');
+      expect(updated?.description).toBe('A normal, short description.');
+      expect(updated?.imageUrl).toBe('https://example.com/og-image.png');
+      expect(updated?.siteName).toBe('Example Site');
+      expect(updated?.extractedText).toBe('Some normal, in-bounds article text.');
+      expect(updated?.captureStatus).toBe('full');
+    });
+
+    it('a data: URI within the ceiling is preserved verbatim, not dropped', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-inline-image',
+        sourceKind: 'link',
+      });
+
+      const shortDataUri =
+        'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+      expect(shortDataUri.length).toBeLessThanOrEqual(65_536);
+
+      const updated = await enrichmentOps.recordEnrichment(created.id, {
+        status: 'full',
+        imageUrl: shortDataUri,
+      });
+
+      expect(updated).not.toBeNull();
+      expect(updated?.imageUrl).toBe(shortDataUri);
+
+      const fetched = await linksOps.getById(created.id);
+      expect(fetched?.imageUrl).toBe(shortDataUri);
     });
   });
 

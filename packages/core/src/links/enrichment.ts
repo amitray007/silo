@@ -21,17 +21,43 @@ const enrichmentStatus = z.enum(['full', 'partial', 'bare']);
  * shape of U3's `ExtractResult`; the worker (U5) maps its own extraction type
  * onto this schema at the call site.
  *
- * Bounds mirror the discipline in `source-data.ts` — generous but finite, so
- * a pathological extraction (e.g. a multi-megabyte "description") can't bloat
- * a row unbounded. `text` (mapped to the `extracted_text` column) gets a much
- * larger ceiling since full article bodies are expected there.
+ * Bounds are generous ceilings, not tight limits — the point is NOT to reject
+ * pathological input, it's to guarantee `recordEnrichment` can never throw on
+ * field size. `recordEnrichment` CLAMPS (truncates) every string field to
+ * these exact maxes BEFORE `.parse()`, so `.parse()` can never fail with a
+ * `too_big` ZodError. This was a real production incident: the TypeScript
+ * docs page (`typescriptlang.org/docs/handbook/intro.html`) ships an `og:image`
+ * that is a 3698-char base64 `data:` URI, which blew through the old
+ * `imageUrl` max(2000). The resulting ZodError failed the `enrich-link`
+ * pg-boss job, which retried 3x and dead-lettered — stranding the link at
+ * `capture_status='enriching'` forever, because a periodic sweep-retry can't
+ * fix a *deterministic* throw; it just re-runs the same failure. Truncation is
+ * the only real "no field can ever fail on size" guarantee: a fixed cap alone
+ * can always be exceeded by a large enough input. `text` (mapped to the
+ * `extracted_text` column) gets a much larger ceiling since full article
+ * bodies are expected there.
  */
+
+/**
+ * Per-field ceilings — the single source of truth for both the schema maxes
+ * and the pre-parse clamp in `recordEnrichment`. Both read these same consts,
+ * so the two can never drift apart (the guarantee is "clamp first, so parse
+ * can never throw on size" — it only holds while clamp value === schema max).
+ */
+const FIELD_MAX = {
+  title: 5_000,
+  description: 20_000,
+  imageUrl: 65_536,
+  siteName: 2_000,
+  text: 5_000_000,
+} as const;
+
 export const enrichmentResultSchema = z.object({
-  title: z.string().max(2000).optional(),
-  description: z.string().max(5000).optional(),
-  imageUrl: z.string().max(2000).optional(),
-  siteName: z.string().max(500).optional(),
-  text: z.string().max(2_000_000).optional(),
+  title: z.string().max(FIELD_MAX.title).optional(),
+  description: z.string().max(FIELD_MAX.description).optional(),
+  imageUrl: z.string().max(FIELD_MAX.imageUrl).optional(),
+  siteName: z.string().max(FIELD_MAX.siteName).optional(),
+  text: z.string().max(FIELD_MAX.text).optional(),
   status: enrichmentStatus,
   /**
    * The per-source enricher's result (HN points/comments, GitHub repo stats,
@@ -48,6 +74,19 @@ export const enrichmentResultSchema = z.object({
 });
 
 export type EnrichmentResult = z.infer<typeof enrichmentResultSchema>;
+
+/**
+ * Truncate a string to `max` chars (or pass through undefined). This makes the
+ * enrichment write TOTAL: a pathological over-limit field (e.g. TS docs' 3698-char
+ * base64 data: URI og:image, or a multi-MB "description") is truncated to a generous
+ * ceiling rather than throwing a ZodError — which would fail the enrich-link job and
+ * strand the link at `enriching` forever (the sweep-enriching retry can't recover a
+ * DETERMINISTIC throw, it just re-runs it). Truncation is the only real "no field can
+ * ever fail on size" guarantee; a fixed cap alone can always be exceeded.
+ */
+function clampToMax(value: string | undefined, max: number): string | undefined {
+  return value !== undefined && value.length > max ? value.slice(0, max) : value;
+}
 
 /**
  * Record an enrichment result onto a LIVE link: updates title/description/
@@ -69,7 +108,10 @@ export type EnrichmentResult = z.infer<typeof enrichmentResultSchema>;
  * transient exception (an auto-detected-but-not-yet-enriched link) is closed
  * here, by the enricher's successful write.
  *
- * Input is validated with Zod at the boundary before any write is attempted.
+ * Input is validated with Zod at the boundary before any write is attempted —
+ * but every string field is first CLAMPED to its ceiling (see `FIELD_MAX` /
+ * `clampToMax` above), so an over-limit field is truncated rather than
+ * rejected: this write is total, no field size can ever throw.
  * Returns the updated `Link`, or `null` if `linkId` doesn't exist or is
  * trashed.
  */
@@ -77,7 +119,24 @@ export async function recordEnrichment(
   linkId: string,
   result: EnrichmentResult,
 ): Promise<Link | null> {
-  const parsed = enrichmentResultSchema.parse(result);
+  // Clamp every string field to its ceiling BEFORE validating, so an
+  // over-limit value (e.g. TS docs' base64 data: URI og:image) is truncated
+  // rather than throwing a ZodError and stranding the link at `enriching`.
+  const clamped: EnrichmentResult = {
+    ...result,
+    ...(result.title !== undefined ? { title: clampToMax(result.title, FIELD_MAX.title) } : {}),
+    ...(result.description !== undefined
+      ? { description: clampToMax(result.description, FIELD_MAX.description) }
+      : {}),
+    ...(result.imageUrl !== undefined
+      ? { imageUrl: clampToMax(result.imageUrl, FIELD_MAX.imageUrl) }
+      : {}),
+    ...(result.siteName !== undefined
+      ? { siteName: clampToMax(result.siteName, FIELD_MAX.siteName) }
+      : {}),
+    ...(result.text !== undefined ? { text: clampToMax(result.text, FIELD_MAX.text) } : {}),
+  };
+  const parsed = enrichmentResultSchema.parse(clamped);
   const sourceDataJson = parsed.sourceData ? JSON.stringify(parsed.sourceData) : null;
 
   // Single atomic UPDATE with the don't-clobber fallback expressed as
