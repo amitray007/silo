@@ -387,4 +387,80 @@ describeIfPg('enrichLink (integration)', () => {
       });
     });
   });
+
+  describe('404-trash + attempt-cap give-up (plan 025 U4)', () => {
+    it('a confirmed 404/410 (reason: not-found) silently trashes the link, never records a status', async () => {
+      const id = await newLink('https://example.com/vanished');
+      await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'not-found' }));
+
+      // Bypassed recordEnrichment entirely — captureStatus is untouched at
+      // `enriching` (not left at, or overwritten to, any capture status),
+      // and the link is soft-deleted (deletedAt set).
+      const rows = await pool.query('select capture_status, deleted_at from links where id = $1', [
+        id,
+      ]);
+      expect(rows.rows[0]?.deleted_at).not.toBeNull();
+      expect(rows.rows[0]?.capture_status).toBe('enriching');
+    });
+
+    it('a persistently-failing non-404 link settles bare with url-as-title once it hits the attempt cap', async () => {
+      const id = await newLink('https://example.com/always-times-out');
+      const deps = stubDeps({ ok: false, reason: 'timeout' });
+
+      // Drive enrichLink ENRICH_ATTEMPT_CAP times: recordEnrichment increments
+      // enrich_attempts each pass (core, U3); the cap-th pass's post-increment
+      // count triggers settleGiveUp inline (recordThenMaybeSettle), no extra
+      // sweep needed.
+      for (let i = 0; i < core.ENRICH_ATTEMPT_CAP; i++) {
+        await enrichMod.enrichLink(id, deps);
+      }
+
+      const link = await core.getById(id);
+      expect(link?.captureStatus).toBe('bare');
+      expect(link?.title).toBe('https://example.com/always-times-out');
+      expect(link?.siteName).toBe('example.com');
+    });
+
+    it('a normal successful (full) enrich never settles or trashes, even coincidentally at the cap', async () => {
+      const id = await newLink('https://example.com/eventually-succeeds');
+      const failing = stubDeps({ ok: false, reason: 'timeout' });
+      const succeeding = stubDeps(
+        { ok: true, html: '<html></html>', contentType: 'text/html', finalUrl: id, status: 200 },
+        { title: 'Real title', status: 'full' },
+      );
+
+      // Fail up to one short of the cap, then succeed on the cap-th attempt —
+      // `full` must stand even though enrich_attempts has reached the cap.
+      for (let i = 0; i < core.ENRICH_ATTEMPT_CAP - 1; i++) {
+        await enrichMod.enrichLink(id, failing);
+      }
+      await enrichMod.enrichLink(id, succeeding);
+
+      const link = await core.getById(id);
+      expect(link?.captureStatus).toBe('full');
+      expect(link?.title).toBe('Real title');
+      expect(link?.deletedAt).toBeNull();
+    });
+
+    it('a non-404 fetch failure (http-error) still records degraded status and is subject to the same cap', async () => {
+      const id = await newLink('https://example.com/permanently-500s');
+      const deps = stubDeps({ ok: false, reason: 'http-error', detail: '503' });
+
+      await enrichMod.enrichLink(id, deps);
+      // Existing degraded-recording behavior preserved: below the cap, it's
+      // just a normal bare capture, not yet settled/trashed.
+      let link = await core.getById(id);
+      expect(link?.captureStatus).toBe('bare');
+      expect(link?.deletedAt).toBeNull();
+
+      for (let i = 1; i < core.ENRICH_ATTEMPT_CAP; i++) {
+        await enrichMod.enrichLink(id, deps);
+      }
+
+      // Same cap->settle path as any other non-full terminal status.
+      link = await core.getById(id);
+      expect(link?.captureStatus).toBe('bare');
+      expect(link?.title).toBe('https://example.com/permanently-500s');
+    });
+  });
 });

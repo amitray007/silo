@@ -27,7 +27,13 @@ export {
 // retry. Both are live-scoped — trashed links are never touched/resurrected.
 // The actual fetch/extract/enqueue is the worker's job (U2/U3/U5).
 export type { EnrichmentResult } from './links/enrichment.js';
-export { enrichmentResultSchema, recordEnrichment, requestRetry } from './links/enrichment.js';
+export {
+  ENRICH_ATTEMPT_CAP,
+  enrichmentResultSchema,
+  recordEnrichment,
+  requestRetry,
+  settleGiveUp,
+} from './links/enrichment.js';
 // Executor types (shared db/tx handle) — the worker's real enqueuer is typed
 // against these.
 export type { Db, Executor, Tx } from './links/executor.js';

@@ -172,9 +172,15 @@ describeIfPg('@silo/app turnkey composition (integration)', () => {
 
     try {
       // Seed a degraded ('partial') link directly via core, bypassing the
-      // worker's own enrichment so its status is under test control.
+      // worker's own enrichment so its status is under test control. Uses the
+      // same loopback/link-local literal as the turnkey test above (not a
+      // real hostname, e.g. example.com): safeFetch's IP-rules check
+      // classifies it as blocked-ip with no real network round trip, so the
+      // re-enrich below is deterministic — a real 404-able host would now
+      // (plan 025 U4) trigger 404-trash rather than a terminal capture
+      // status, which is a different behavior than this test is exercising.
       const link = await core.createLink({
-        url: 'https://example.com/app-turnkey-retry',
+        url: 'http://127.0.0.1:1/app-turnkey-retry',
         sourceKind: 'link',
       });
       await core.recordEnrichment(link.id, { title: 'partial capture', status: 'partial' });
@@ -188,9 +194,9 @@ describeIfPg('@silo/app turnkey composition (integration)', () => {
       expect(retried).toMatchObject({ found: true, captureStatus: 'enriching' });
 
       // The same-process worker picks the retry's enqueue back up and drives
-      // it to a terminal status again (the URL is a real fetchable host, so
-      // it may land 'full' or 'partial' depending on live network — either
-      // way, "no longer enriching" proves the loop re-ran).
+      // it to a terminal status again — blocked-ip always lands 'bare'
+      // (safeFetch never succeeds), so "no longer enriching" here proves the
+      // loop re-ran, not just that the seeded 'partial' status persisted.
       let finalStatus: string | undefined;
       for (let i = 0; i < 100; i += 1) {
         const fetched = await core.getById(link.id);
@@ -198,8 +204,7 @@ describeIfPg('@silo/app turnkey composition (integration)', () => {
         if (finalStatus !== undefined && finalStatus !== 'enriching') break;
         await new Promise((resolve) => setTimeout(resolve, 100));
       }
-      expect(finalStatus).not.toBe('enriching');
-      expect(finalStatus).toBeDefined();
+      expect(finalStatus).toBe('bare');
     } finally {
       await worker.stop();
       core.resetEnrichmentEnqueuer();

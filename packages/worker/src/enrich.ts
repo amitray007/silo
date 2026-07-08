@@ -15,7 +15,15 @@
  */
 
 import type { SettingsMap, SourceData } from '@silo/core';
-import { getById, getSetting, recordEnrichment, SETTINGS_DEFAULTS } from '@silo/core';
+import {
+  ENRICH_ATTEMPT_CAP,
+  getById,
+  getSetting,
+  recordEnrichment,
+  SETTINGS_DEFAULTS,
+  settleGiveUp,
+  softDelete,
+} from '@silo/core';
 import { enrichSource } from './enrich-source/index.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
@@ -106,6 +114,33 @@ function mapSafeFetchFailureToStatus(
 }
 
 /**
+ * Record an enrichment `result`, then decide whether this link has just used
+ * up its last attempt (plan 025 U4 — "cap reached, still not full -> settle").
+ *
+ * Chosen flow (simplest correct shape, per the plan's U4 note): `recordEnrichment`
+ * already increments `enrich_attempts` on every call (core, U3) and returns the
+ * UPDATED row — so the post-increment count is read straight off its return
+ * value, no extra query. If that count has reached `ENRICH_ATTEMPT_CAP` and the
+ * just-recorded status isn't `full`, `settleGiveUp` fires immediately: a link
+ * whose Nth attempt is the cap-th settles on THIS pass rather than waiting for
+ * a future sweep to notice it's stuck. There is no second/"final" fetch here —
+ * the plan explicitly avoids one; the cap check piggybacks on the attempt that
+ * just ran. `full` is always terminal and skips this regardless of count.
+ *
+ * Shared by both the fetch-failure branch and the extract-success branch below
+ * so the cap logic exists in exactly one place.
+ */
+async function recordThenMaybeSettle(
+  linkId: string,
+  result: Parameters<typeof recordEnrichment>[1],
+): Promise<void> {
+  const updated = await recordEnrichment(linkId, result);
+  if (updated && updated.captureStatus !== 'full' && updated.enrichAttempts >= ENRICH_ATTEMPT_CAP) {
+    await settleGiveUp(linkId);
+  }
+}
+
+/**
  * Run the enrichment pipeline for `linkId`: fetch -> extract -> record.
  *
  * If the link no longer exists (deleted between enqueue and processing —
@@ -168,8 +203,20 @@ export async function enrichLink(
     deps.enrichSource(link.sourceKind, link.url, enabledPlugins).catch(() => undefined),
   ]);
 
+  // A confirmed 404/410 (plan 025 U4): the target genuinely no longer exists,
+  // not merely unreachable/blocked/slow — silently trash it and stop. This is
+  // terminal, so it bypasses `recordEnrichment` entirely (there is no capture
+  // status to record; the link is gone). Every OTHER fetch failure (blocked,
+  // rate-limited, 5xx, timeout, DNS, etc.) still flows to the existing
+  // `mapSafeFetchFailureToStatus` -> `recordEnrichment` degraded path below —
+  // those mean "couldn't fetch right now", not "doesn't exist".
+  if (!fetchResult.ok && fetchResult.reason === 'not-found') {
+    await softDelete(linkId);
+    return;
+  }
+
   if (!fetchResult.ok) {
-    await recordEnrichment(linkId, {
+    await recordThenMaybeSettle(linkId, {
       status: mapSafeFetchFailureToStatus(fetchResult.reason),
       ...(sourceData ? { sourceData } : {}),
     });
@@ -182,5 +229,5 @@ export async function enrichLink(
     contentType: fetchResult.contentType,
   });
 
-  await recordEnrichment(linkId, { ...extracted, ...(sourceData ? { sourceData } : {}) });
+  await recordThenMaybeSettle(linkId, { ...extracted, ...(sourceData ? { sourceData } : {}) });
 }
