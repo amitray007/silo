@@ -64,15 +64,6 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
   );
 }
 
-/** v3's `noResults` state (`Silo-v3.html:171-173`) — a plain left-aligned line, not the full centered empty-state treatment (that's reserved for "nothing here at all"). */
-export function NoSearchResults({ q }: { q: string }) {
-  return (
-    <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--fnt)' }}>
-      Nothing found for "{q}"
-    </p>
-  );
-}
-
 /** A calm inline error message (not a white screen — the `ErrorBoundary` still backstops render errors). */
 export function ErrorState({ error }: { error: ApiError }) {
   return (

@@ -1,5 +1,6 @@
+import { Omnibar } from '../components/Omnibar';
 import { ListBody } from './shared/ListBodies';
-import { ContentFrame, ListOmnibar } from './shared/ListHeader';
+import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
 import { useListView } from './shared/useListView';
 
@@ -28,26 +29,17 @@ function LibraryEmptyState() {
  * `useListView()` (no tag scope), with pagination (the "load more" button +
  * prefetch sentinel). Shares its orchestration/header/body/state chrome with
  * `TagView` via `./shared/*` — see those modules' doc comments.
+ *
+ * The header's `<Omnibar/>` is a static, non-interactive hint box (later
+ * user-feedback pass) — it no longer drives capture itself; pasting a URL
+ * anywhere on the page already captures it via the document-level
+ * `usePasteCapture` listener (mounted once in `AppFrame`).
  */
 export function LibraryView() {
   const view = useListView();
 
-  const header = (
-    <ListOmnibar
-      omnibar={view.omnibar}
-      tagCount={0}
-      libCount={view.liveCount ?? 0}
-      onKeep={view.onKeep}
-    />
-  );
-
   return (
-    <ContentFrame
-      title="Library"
-      count={view.liveCount}
-      {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
-      headerSlot={header}
-    >
+    <ContentFrame title="Library" count={view.liveCount} headerSlot={<Omnibar />}>
       {ListBody(view, <LibraryEmptyState />)}
     </ContentFrame>
   );

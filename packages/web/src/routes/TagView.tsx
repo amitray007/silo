@@ -41,13 +41,7 @@ export function TagView() {
   const view = useListView(tag);
 
   return (
-    <ContentFrame
-      title={`# ${tag}`}
-      count={view.links.length}
-      {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
-      headerSlot={undefined}
-      fadeKey={tag}
-    >
+    <ContentFrame title={`# ${tag}`} count={view.links.length} headerSlot={undefined} fadeKey={tag}>
       {ListBody(view, <TagEmptyState tag={tag} />)}
     </ContentFrame>
   );
