@@ -1,6 +1,6 @@
-import { useNavigate, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { ListBody } from './shared/ListBodies';
-import { ContentFrame, ListOmnibar } from './shared/ListHeader';
+import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
 import { useListView } from './shared/useListView';
 
@@ -8,7 +8,7 @@ import { useListView } from './shared/useListView';
 function TagEmptyState({ tag }: { tag: string }) {
   return (
     <EmptyState
-      title={`No links tagged #${tag} yet.`}
+      title={`No links tagged # ${tag} yet.`}
       body="Tag a link from its ⋯ menu, or paste one here — it'll pick up this tag once you assign it."
     />
   );
@@ -19,36 +19,33 @@ function TagEmptyState({ tag }: { tag: string }) {
  * `ComingSoon` placeholder from W5). Reuses the exact same orchestration
  * (`useListView(tag)`) and header/body/state chrome as `LibraryView`
  * (`./shared/*`) — the only real differences are: the tag scope on the
- * browse feed, the header title (`#{name}`), the omnibar's `#{name} ✕`
- * clear-filter pill, and tag-specific empty-state copy. The omnibar's OWN
- * inline search is gone (plan 024 — it moved to the command palette, which
- * DOES support a tag-scoped search via `#tag text`); this view's `tagCount`
- * feeds the omnibar's tag-idle "{tagCount} of {libCount}" chip, unrelated to
- * search — that's the tag's own browse-feed count vs. the library total.
+ * browse feed, the header title (`# {name}`), and tag-specific empty-state
+ * copy.
+ *
+ * The header's `ListOmnibar` (the "Paste a link to keep" bar + its `#tag ✕`
+ * pill) is DELIBERATELY OMITTED here (bugfix, user report: the tag page
+ * showed a search-icon input carrying the SAME `#{tag}` the page title
+ * already states, reading as a redundant search box). `ContentFrame`'s
+ * `headerSlot` is left `undefined` so the header renders title+count only,
+ * matching `TrashView`'s/`SettingsView`'s own "no children" convention
+ * (`ContentHeader`'s doc comment: an omitted slot renders nothing, not a
+ * phantom placeholder box). This does NOT remove capture-from-a-tag-page:
+ * `usePasteCapture` (mounted once in `AppFrame`) captures a pasted URL
+ * anywhere on the page regardless of which route is active, and search is
+ * now exclusively the command palette's job (⌘K / `/`) — scoped ONLY to
+ * `TagView`; `LibraryView`/`TrashView` keep their own headers untouched.
  */
 export function TagView() {
   const { name } = useParams<{ name: string }>();
   const tag = name ?? '';
-  const navigate = useNavigate();
   const view = useListView(tag);
-
-  const header = (
-    <ListOmnibar
-      omnibar={view.omnibar}
-      tagCount={view.links.length}
-      libCount={view.liveCount ?? 0}
-      onKeep={view.onKeep}
-      tagName={tag}
-      onClearTag={() => navigate('/')}
-    />
-  );
 
   return (
     <ContentFrame
-      title={`#${tag}`}
+      title={`# ${tag}`}
       count={view.links.length}
       {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
-      headerSlot={header}
+      headerSlot={undefined}
       fadeKey={tag}
     >
       {ListBody(view, <TagEmptyState tag={tag} />)}

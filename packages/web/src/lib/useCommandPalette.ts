@@ -3,7 +3,20 @@ import { parseSearchQuery } from './parseSearchQuery';
 import { useDebouncedValue } from './useDebouncedValue';
 import { isTextEntryElement } from './usePasteCapture';
 
-const SEARCH_DEBOUNCE_MS = 200;
+// Tuned down from 200ms (bugfix, user report: "flicker while typing" — the
+// palette's `debouncedQ` drove EVERY keystroke through a fresh query cycle
+// close enough together that the fetch's own loading gap between keystrokes
+// was visible as a jump. 120ms is the same "feels instant, doesn't fire a
+// request per keystroke" tradeoff most command palettes land on (VS Code's
+// Quick Open, Raycast) — short enough that typing at normal speed still
+// coalesces into one fetch per pause, but the window between a keystroke and
+// its query firing is no longer perceptible as a stall. Paired with
+// `usePaletteResults`' own "hold the previous results while the debounced
+// query resettles" logic in `CommandPalette.tsx` — the debounce tuning alone
+// doesn't fix flicker (a fetch still takes network time even at 0ms
+// debounce), holding stale-but-present data during that fetch is what
+// actually keeps the list from blanking between keystrokes.
+const SEARCH_DEBOUNCE_MS = 120;
 
 /**
  * The command palette's own interaction state (plan 024) — deliberately

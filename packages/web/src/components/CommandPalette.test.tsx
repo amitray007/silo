@@ -256,6 +256,89 @@ describe('CommandPalette', () => {
     });
   });
 
+  it('an empty query shows only the 5 most recent links, not the full library (bugfix: default recent-5)', async () => {
+    const sevenLinks = Array.from({ length: 7 }, (_, i) =>
+      makeLink({ id: `l${i}`, title: `Link ${i}` }),
+    );
+    mockFetchByPath({
+      '/api/tags': { tags: [] },
+      '/api/links': { links: sevenLinks },
+    });
+    await renderPalette();
+    pressCmdK();
+    await screen.findByRole('combobox');
+
+    // All 7 exist in the mocked API response, but the palette's empty-query
+    // default must show only the first `RECENT_DEFAULT_COUNT` (5) of them.
+    await waitFor(() => expect(screen.getByText('Link 0')).toBeDefined());
+    expect(screen.getByText('Link 4')).toBeDefined();
+    expect(screen.queryByText('Link 5')).toBeNull();
+    expect(screen.queryByText('Link 6')).toBeNull();
+  });
+
+  describe('flicker fix: previous results stay visible while a debounced query resettles (bugfix)', () => {
+    it('never renders the "No results" empty state between two queries that both have real results', async () => {
+      // A deferred second response — the FIRST query ("re") resolves
+      // immediately with one result; the SECOND query ("react"), fired after
+      // the debounce settles on more typing, is held open deliberately so
+      // the test can assert on what's on screen WHILE it's still in flight
+      // (the exact window the flicker bug lived in: a naive implementation
+      // would render the "No results" / blank empty-state here, since
+      // `results` for the new query key has no data yet).
+      let resolveSecond: ((value: Response) => void) | undefined;
+      const secondPromise = new Promise<Response>((resolve) => {
+        resolveSecond = resolve;
+      });
+      // Split out of the mockImplementation callback purely to keep that
+      // callback's own cognitive complexity under the lint ceiling (same
+      // pattern as `respondToSettlingUrl` below).
+      function respondToRekeyingUrl(url: string): Promise<Response> {
+        if (url.startsWith('/api/tags')) return Promise.resolve(jsonResponse({ tags: [] }));
+        if (url.startsWith('/api/links/search?q=react')) return secondPromise;
+        if (url.startsWith('/api/links/search')) {
+          return Promise.resolve(
+            jsonResponse({
+              results: [{ ...makeLink({ id: 'stale', title: 'Stale but real' }), rank: 1 }],
+            }),
+          );
+        }
+        return Promise.resolve(jsonResponse({ error: 'not_found', message: url }, 404));
+      }
+      vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        return respondToRekeyingUrl(url);
+      });
+
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+
+      fireEvent.change(input, { target: { value: 're' } });
+      await waitFor(() => expect(screen.getByText('Stale but real')).toBeDefined(), {
+        timeout: 2000,
+      });
+
+      // Type further so the debounced query re-keys to a DIFFERENT,
+      // not-yet-resolved query ("react") — the previous row must still be
+      // showing right now, not a blank/"No results" flash.
+      fireEvent.change(input, { target: { value: 'react' } });
+      // Give the debounce timer + microtask queue room to actually re-key
+      // the query without waiting for the (deliberately unresolved) fetch.
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 250));
+      });
+      expect(screen.getByText('Stale but real')).toBeDefined();
+      expect(screen.queryByText('No results')).toBeNull();
+
+      // Resolve the second query — the stale row is replaced by the real one.
+      resolveSecond?.(jsonResponse({ results: [] }));
+      await waitFor(() => expect(screen.getByText('No results')).toBeDefined(), {
+        timeout: 2000,
+      });
+      expect(screen.queryByText('Stale but real')).toBeNull();
+    });
+  });
+
   describe('raw-vs-debounced parse consistency (review fix #3)', () => {
     it('typing a trailing space that settles a #tag never fires an unscoped search in the settling window', async () => {
       // The regression: showTagSuggestions used to read the RAW (undebounced)
