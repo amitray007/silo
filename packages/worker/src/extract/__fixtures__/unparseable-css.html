@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <title>Nested CSS Trips jsdom's Parser</title>
+    <!--
+      jsdom's CSS parser (rrweb-cssom) cannot parse native CSS nesting
+      (a selector nested directly inside another rule's block, as browsers
+      now support). Parsing this stylesheet emits a jsdom-internal
+      "Could not parse CSS stylesheet" `jsdomError` event, which jsdom's
+      default virtual console forwards straight to `console.error` — this
+      fixture exists to reproduce that cosmetic noise deterministically in
+      tests (see extract.test.ts "extract — jsdom CSS-parse noise").
+    -->
+    <style>
+      .card {
+        color: red;
+
+        .title {
+          color: blue;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <article>
+      <h1>Nested CSS Trips jsdom's Parser</h1>
+      <p>
+        This is a normal, readable article body. It exists only to give
+        Readability enough prose to extract text from, so the test can prove
+        that a stylesheet jsdom cannot parse does not prevent DOM
+        construction or readable-text extraction — only the noisy log line
+        is suppressed, nothing about parsing behavior changes.
+      </p>
+      <p>
+        The stylesheet above is never applied to this text in any way that
+        matters here: jsdom does not run layout or apply CSS when Readability
+        reads the DOM, so an unparseable stylesheet has zero effect on the
+        extracted content itself, only on what gets logged while jsdom builds
+        the document.
+      </p>
+    </article>
+  </body>
+</html>

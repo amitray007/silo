@@ -29,7 +29,7 @@
  */
 
 import { isProbablyReaderable, Readability } from '@mozilla/readability';
-import { JSDOM } from 'jsdom';
+import { JSDOM, VirtualConsole } from 'jsdom';
 import metascraper from 'metascraper';
 import metascraperDescription from 'metascraper-description';
 import metascraperImage from 'metascraper-image';
@@ -141,12 +141,28 @@ function hostnameOf(url: string): string | undefined {
  * embedded-JSON tier so the HTML is only parsed once).
  */
 function extractReadableText(url: string, html: string): { dom: JSDOM; text: string | undefined } {
+  // jsdom's default virtual console forwards internal `jsdomError` events
+  // (including CSS-parser failures) straight to `console.error`. jsdom's CSS
+  // parser (rrweb-cssom) chokes on some modern CSS constructs (e.g. nested
+  // selectors) and emits "Could not parse CSS stylesheet" for pages that use
+  // them — a real-world example is the TypeScript docs site. This is purely
+  // cosmetic noise: jsdom never needs the CSS to build the DOM, and
+  // Readability below only reads text/DOM structure, never styles. Suppress
+  // only that specific message; forward every other jsdom-internal error to
+  // the real console so genuine problems stay visible.
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (error) => {
+    if (error.message === 'Could not parse CSS stylesheet') return;
+    console.error(error);
+  });
+
   // No `runScripts` / `resources` option set — this is jsdom's default and
   // means embedded <script> tags are parsed into the DOM but NEVER
   // executed, and no remote resource (image, stylesheet, subresource
   // script) is fetched. This is load-bearing: `html` is untrusted,
-  // attacker-influenced content.
-  const dom = new JSDOM(html, { url });
+  // attacker-influenced content. `virtualConsole` above only filters logging
+  // output and does not affect this security property.
+  const dom = new JSDOM(html, { url, virtualConsole });
 
   if (!isProbablyReaderable(dom.window.document)) {
     return { dom, text: undefined };

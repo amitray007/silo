@@ -1,8 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JSDOM } from 'jsdom';
-import { describe, expect, it } from 'vitest';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { describe, expect, it, vi } from 'vitest';
 import { extract } from './extract.js';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__');
@@ -236,6 +236,64 @@ describe('extract — JS-wall field preservation (regression)', () => {
     expect(result.status).toBe('partial');
     expect(result.imageUrl).toBe('https://cdn.example.com/hero.png');
     expect(result.siteName).toBe('Acme');
+  });
+});
+
+describe('extract — jsdom CSS-parse noise is suppressed', () => {
+  it('does not log "Could not parse CSS stylesheet" for a page whose CSS jsdom cannot parse', async () => {
+    // `unparseable-css.html` uses native CSS nesting, which jsdom's CSS
+    // parser (rrweb-cssom) cannot parse — verified directly against jsdom's
+    // OWN default virtual console (no fix applied) before this fixture was
+    // committed: it deterministically logs exactly "Could not parse CSS
+    // stylesheet" to console.error. This is cosmetic noise (see the
+    // `virtualConsole` comment in extractReadableText) — the DOM and
+    // readable text extract fine regardless — so extract() must not let it
+    // reach the worker's stderr.
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      html: fixture('unparseable-css.html'),
+      contentType: 'text/html',
+    });
+
+    const cssParseNoise = consoleErrorSpy.mock.calls.filter(([arg]) =>
+      typeof arg === 'string'
+        ? arg === 'Could not parse CSS stylesheet'
+        : arg instanceof Error && arg.message === 'Could not parse CSS stylesheet',
+    );
+    expect(cssParseNoise).toHaveLength(0);
+
+    // Extraction itself must be unaffected — the CSS jsdom couldn't parse
+    // never mattered to Readability, which only reads text/DOM structure.
+    expect(result.title).toContain('Nested CSS Trips');
+    expect(result.text).toContain('does not prevent DOM construction');
+
+    consoleErrorSpy.mockRestore();
+  });
+
+  it('still forwards a genuine jsdom-internal error to console.error (not blanket-suppressed)', () => {
+    // Guard against an overly broad fix (e.g. suppressing ALL `jsdomError`s
+    // rather than only the specific CSS-parse message). Builds a real
+    // `VirtualConsole` wired up exactly the way `extractReadableText` wires
+    // its own — same `jsdomError` listener, same filter — then emits a real
+    // `jsdomError` event through jsdom's own EventEmitter-based API (not a
+    // reimplemented predicate called directly) with a message OTHER than
+    // "Could not parse CSS stylesheet". It must still reach console.error.
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const virtualConsole = new VirtualConsole();
+    virtualConsole.on('jsdomError', (error) => {
+      if (error.message === 'Could not parse CSS stylesheet') return;
+      console.error(error);
+    });
+
+    const otherError = new Error('some other jsdom-internal failure');
+    virtualConsole.emit('jsdomError', otherError);
+
+    expect(consoleErrorSpy).toHaveBeenCalledWith(otherError);
+
+    consoleErrorSpy.mockRestore();
   });
 });
 
