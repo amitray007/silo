@@ -615,6 +615,17 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * a link matching on both signals ranks above one matching on only one,
  * which a `GREATEST`/max-of-two would not distinguish.
  *
+ * `tag` (optional, command-center search plan 024): an ADDITIONAL scope on
+ * top of the text match above — when given, a result must also carry that
+ * exact tag (`tags.normalizedKey = normalizeTagKey(tag)`, joined through
+ * `linkTags`/`tags`, mirroring `list()`'s tag-filter branch). This is an
+ * `EXISTS` membership check, layered on top of (ANDed with) the existing
+ * OR-based text/tag-name match — it does NOT replace or widen that match, so
+ * a `tag` scope never surfaces a link that fails the text query. Omitting
+ * `tag` leaves every existing caller's behavior byte-for-byte unchanged (the
+ * predicate below degrades to exactly the prior query when `tag` is
+ * `undefined` — see the regression test).
+ *
  * Rank is not unique/keyset-able, so pagination uses a bounded offset cursor
  * — capped at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is
  * rejected with `InvalidCursorError` rather than run, since each page past
@@ -633,7 +644,11 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * built now (adds a write-side trigger to keep in sync, out of scope for this
  * increment).
  */
-export async function search(query: string, page: PageParams = {}): Promise<SearchPage> {
+export async function search(
+  query: string,
+  tag?: string,
+  page: PageParams = {},
+): Promise<SearchPage> {
   const limit = effectiveLimit(page.limit);
   const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
 
@@ -642,6 +657,20 @@ export async function search(query: string, page: PageParams = {}): Promise<Sear
   const tagRank = sql`ts_rank(${tagSearchVector}, ${tsQuery})`;
   const combinedRank = sql<number>`${titleRank} + ${tagRank}`;
 
+  // The additive tag-membership scope (see doc comment above): an `EXISTS`
+  // over the same `linkTags`/`tags` join `list()`'s tag-filter branch uses,
+  // correlated on THIS row's id. Kept as a bare `undefined` (not folded into
+  // the OR-match sql template) when `tag` is omitted, so the WHERE clause
+  // below is textually identical to the pre-existing query in that case.
+  const tagScopeCondition = tag
+    ? sql`exists (
+        select 1 from ${linkTags}
+        inner join ${tags} on ${tags.id} = ${linkTags.tagId}
+        where ${linkTags.linkId} = ${links.id}
+          and ${tags.normalizedKey} = ${normalizeTagKey(tag)}
+      )`
+    : undefined;
+
   const rows = await db
     .select({
       link: links,
@@ -649,7 +678,10 @@ export async function search(query: string, page: PageParams = {}): Promise<Sear
     })
     .from(links)
     .where(
-      whereLive(sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`),
+      whereLive(
+        sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`,
+        ...(tagScopeCondition ? [tagScopeCondition] : []),
+      ),
     )
     .orderBy(desc(combinedRank))
     .limit(limit + 1)

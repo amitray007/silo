@@ -17,9 +17,15 @@ const listQuerySchema = pageQuerySchema.extend({
   status: z.enum(['enriching', 'full', 'partial', 'bare']).optional(),
 });
 
-/** `GET /api/links/search` query schema: `q` is required (min length 1) so an empty/missing query is a 400, not a full unfiltered scan. */
+/**
+ * `GET /api/links/search` query schema: `q` is required (min length 1) so an
+ * empty/missing query is a 400, not a full unfiltered scan. `tag` (optional,
+ * command-center search plan 024) additively scopes results to that exact
+ * tag — see `core.search`'s doc comment for the AND semantics.
+ */
 const searchQuerySchema = pageQuerySchema.extend({
   q: z.string().min(1),
+  tag: z.string().optional(),
 });
 
 /** `GET /api/links/:id` param schema — a non-uuid `id` is a 400, not a pointless DB round-trip that would always miss. */
@@ -40,7 +46,7 @@ const idParamSchema = z.object({
 export function registerLinksRoutes(app: Hono): void {
   app.get('/links/search', async (c) => {
     const query = searchQuerySchema.parse(c.req.query());
-    const result = await search(query.q, toPageParams(query));
+    const result = await search(query.q, query.tag, toPageParams(query));
     const results = result.results.map((link) => toSearchResultJson(link, link.rank));
     return c.json(
       result.nextCursor === undefined ? { results } : { results, nextCursor: result.nextCursor },

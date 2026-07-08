@@ -272,7 +272,7 @@ describeMcpTool(
         title: 'wrongkindsearch beta',
         text: 'wrongkindsearch beta text',
       });
-      const searchPage = await core.search('wrongkindsearch', { limit: 1 });
+      const searchPage = await core.search('wrongkindsearch', undefined, { limit: 1 });
       expect(searchPage.nextCursor).toBeDefined();
 
       const result = await client.callTool({

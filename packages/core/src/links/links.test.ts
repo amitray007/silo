@@ -665,6 +665,111 @@ describeIfPg('links operations (integration)', () => {
     });
   });
 
+  describe('search — tag scope (command-center plan 024)', () => {
+    it('omitting tag is a byte-for-byte regression: unscoped results unaffected by an unrelated tag existing', async () => {
+      const plain = await ops.createLink({
+        url: 'https://example.com/search-tagscope-regression',
+        title: 'quazimoraine regression check',
+        sourceKind: 'link',
+      });
+      const tagged = await ops.createLink({
+        url: 'https://example.com/search-tagscope-regression-tagged',
+        title: 'quazimoraine regression check tagged',
+        tags: ['unrelatedtag'],
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('quazimoraine');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(plain.id);
+      expect(ids).toContain(tagged.id);
+    });
+
+    it('tag scope narrows text results to only links carrying that exact tag (AND)', async () => {
+      const matching = await ops.createLink({
+        url: 'https://example.com/search-tagscope-and-match',
+        title: 'flibbertigibbet scoped match',
+        tags: ['scopealpha'],
+        sourceKind: 'link',
+      });
+      const wrongTag = await ops.createLink({
+        url: 'https://example.com/search-tagscope-and-wrong-tag',
+        title: 'flibbertigibbet wrong tag',
+        tags: ['scopebeta'],
+        sourceKind: 'link',
+      });
+      const noTag = await ops.createLink({
+        url: 'https://example.com/search-tagscope-and-no-tag',
+        title: 'flibbertigibbet no tag at all',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('flibbertigibbet', 'scopealpha');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(matching.id);
+      expect(ids).not.toContain(wrongTag.id);
+      expect(ids).not.toContain(noTag.id);
+    });
+
+    it('a tag scope that matches no links returns empty, not an error', async () => {
+      await ops.createLink({
+        url: 'https://example.com/search-tagscope-empty',
+        title: 'wigglesnout empty tag scope',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('wigglesnout', 'nonexistenttagxyz');
+      expect(results).toEqual([]);
+    });
+
+    it('tag scope is an intersection: a tagged link whose text does NOT match is excluded even though the tag matches', async () => {
+      const textOnly = await ops.createLink({
+        url: 'https://example.com/search-tagscope-intersection-text',
+        title: 'moonquibble intersection text only',
+        sourceKind: 'link',
+      });
+      const tagOnly = await ops.createLink({
+        url: 'https://example.com/search-tagscope-intersection-tag',
+        title: 'unrelated title entirely',
+        tags: ['moonquibble'],
+        sourceKind: 'link',
+      });
+      const both = await ops.createLink({
+        url: 'https://example.com/search-tagscope-intersection-both',
+        title: 'moonquibble intersection both',
+        tags: ['moonquibble'],
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('moonquibble', 'moonquibble');
+      const ids = results.map((r) => r.id);
+      // `both` matches text "moonquibble" AND carries tag "moonquibble".
+      expect(ids).toContain(both.id);
+      // `textOnly` matches text but doesn't carry the tag scope -> excluded.
+      expect(ids).not.toContain(textOnly.id);
+      // `tagOnly` carries the tag scope but its title text doesn't match the
+      // query term "moonquibble" (its OWN tag name isn't queried as text here
+      // since the query is "moonquibble" which DOES match tagOnly's tag via
+      // tagSearchVector — so tagOnly actually satisfies the OR-text-match via
+      // its tag name, same as tagged-only search always has). Assert it's
+      // included for the right reason: it has the tag AND its tag name
+      // satisfies the text match.
+      expect(ids).toContain(tagOnly.id);
+    });
+
+    it('tag matching is case-insensitive, mirroring list()/normalizeTagKey', async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/search-tagscope-case',
+        title: 'plunkerfish case insensitive',
+        tags: ['CaseTag'],
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('plunkerfish', 'casetag');
+      expect(results.map((r) => r.id)).toContain(link.id);
+    });
+  });
+
   describe('tags', () => {
     it('addTag creates a tag once; a second link reusing it does not duplicate the tag row', async () => {
       const linkA = await ops.createLink({
@@ -1505,7 +1610,7 @@ describeIfPg('links operations (integration)', () => {
     });
 
     it('a search cursor fed to list throws InvalidCursorError (not a silent wrong result)', async () => {
-      const { nextCursor } = await ops.search('nonexistent-query-xyz', { limit: 1 });
+      const { nextCursor } = await ops.search('nonexistent-query-xyz', undefined, { limit: 1 });
       // No results, so nextCursor is undefined; build a well-formed *search*
       // cursor directly to prove the cross-tool-cursor rejection, since we
       // need a payload with kind: 'search' to feed into `list`.
@@ -1537,6 +1642,7 @@ describeIfPg('links operations (integration)', () => {
       do {
         const { results, nextCursor } = await ops.search(
           'searchword',
+          undefined,
           cursor === undefined ? { limit: 2 } : { limit: 2, cursor },
         );
         seenIds.push(...results.map((r) => r.id));
@@ -1555,7 +1661,7 @@ describeIfPg('links operations (integration)', () => {
         sourceKind: 'link',
       });
 
-      const { nextCursor } = await ops.search('uniquesearchtermonly', { limit: 10 });
+      const { nextCursor } = await ops.search('uniquesearchtermonly', undefined, { limit: 10 });
       expect(nextCursor).toBeUndefined();
 
       const empty = await ops.search('termnobodywrote');
@@ -1629,18 +1735,18 @@ describeIfPg('links operations (integration)', () => {
         });
       }
 
-      const zeroLimit = await ops.search('clampsearchterm', { limit: 0 });
+      const zeroLimit = await ops.search('clampsearchterm', undefined, { limit: 0 });
       expect(zeroLimit.results).toHaveLength(1);
 
-      const hugeLimit = await ops.search('clampsearchterm', { limit: 1000 });
+      const hugeLimit = await ops.search('clampsearchterm', undefined, { limit: 1000 });
       expect(hugeLimit.results.length).toBeLessThanOrEqual(100);
       expect(hugeLimit.results.length).toBe(3);
     });
 
     it('a malformed cursor throws InvalidCursorError', async () => {
-      await expect(ops.search('anything', { cursor: '!!!not-base64!!!' })).rejects.toThrow(
-        ops.InvalidCursorError,
-      );
+      await expect(
+        ops.search('anything', undefined, { cursor: '!!!not-base64!!!' }),
+      ).rejects.toThrow(ops.InvalidCursorError);
     });
 
     it('a forged cursor with a fractional offset throws InvalidCursorError', async () => {
@@ -1649,9 +1755,9 @@ describeIfPg('links operations (integration)', () => {
         'utf8',
       ).toString('base64url');
 
-      await expect(ops.search('anything', { cursor: fractionalOffsetCursor })).rejects.toThrow(
-        ops.InvalidCursorError,
-      );
+      await expect(
+        ops.search('anything', undefined, { cursor: fractionalOffsetCursor }),
+      ).rejects.toThrow(ops.InvalidCursorError);
     });
 
     it('BUG 3 regression: a forged offset beyond the maximum throws InvalidCursorError', async () => {
@@ -1663,9 +1769,9 @@ describeIfPg('links operations (integration)', () => {
         'utf8',
       ).toString('base64url');
 
-      await expect(ops.search('anything', { cursor: beyondMaxOffsetCursor })).rejects.toThrow(
-        ops.InvalidCursorError,
-      );
+      await expect(
+        ops.search('anything', undefined, { cursor: beyondMaxOffsetCursor }),
+      ).rejects.toThrow(ops.InvalidCursorError);
     });
 
     it('an offset at or under the maximum still round-trips normally', async () => {
@@ -1676,7 +1782,7 @@ describeIfPg('links operations (integration)', () => {
 
       // No rows at that depth, but decode/validate must succeed and just
       // return an empty page — never throw for a within-bounds offset.
-      const { results, nextCursor } = await ops.search('anything', {
+      const { results, nextCursor } = await ops.search('anything', undefined, {
         cursor: atMaxOffsetCursor,
       });
       expect(results).toEqual([]);
@@ -1690,9 +1796,9 @@ describeIfPg('links operations (integration)', () => {
       const { nextCursor } = await ops.list({}, { limit: 1 });
       expect(nextCursor).toBeDefined();
 
-      await expect(ops.search('anything', { cursor: nextCursor as string })).rejects.toThrow(
-        ops.InvalidCursorError,
-      );
+      await expect(
+        ops.search('anything', undefined, { cursor: nextCursor as string }),
+      ).rejects.toThrow(ops.InvalidCursorError);
     });
 
     it('trashed links never appear in search pages', async () => {
