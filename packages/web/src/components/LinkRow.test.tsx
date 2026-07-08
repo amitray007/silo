@@ -205,6 +205,32 @@ describe('LinkRow', () => {
     expect(screen.getByText('Move to trash')).toBeDefined();
   });
 
+  it('right-clicking anywhere on the row opens the same options menu, suppressing the browser context menu', () => {
+    renderRow(<LinkRow link={link({ title: 'A post' })} />);
+    const anchor = screen.getByRole('link', { name: /A post/ });
+    expect(screen.queryByText('Move to trash')).toBeNull();
+
+    const event = fireEvent.contextMenu(anchor);
+
+    // jsdom/RTL's fireEvent returns `false` when a handler called
+    // preventDefault — this pins that the browser's own native context menu
+    // was suppressed, not just that a menu happens to appear alongside it.
+    expect(event).toBe(false);
+    expect(screen.getByText('Move to trash')).toBeDefined();
+    expect(screen.getByText('Open in new tab')).toBeDefined();
+  });
+
+  it('right-clicking an already-open row toggles its menu closed (same toggleMenu path as ⋯)', () => {
+    renderRow(<LinkRow link={link({ title: 'A post' })} />);
+    const anchor = screen.getByRole('link', { name: /A post/ });
+
+    fireEvent.contextMenu(anchor);
+    expect(screen.getByText('Move to trash')).toBeDefined();
+
+    fireEvent.contextMenu(anchor);
+    expect(screen.queryByText('Move to trash')).toBeNull();
+  });
+
   it('renders the ▲points·comments rich line for a Hacker News link (plan 012 phase 2)', () => {
     renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />);
     expect(screen.getByText('342 points · 128 comments')).toBeDefined();
