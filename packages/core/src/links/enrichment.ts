@@ -52,6 +52,15 @@ export const FIELD_MAX = {
   text: 5_000_000,
 } as const;
 
+/**
+ * Max enrichment attempts before a link is given up on (plan R2/R4, U3).
+ * `recordEnrichment` increments `enrich_attempts` on every recorded attempt;
+ * once a link hits this cap without reaching `full`, `sweep-enriching`
+ * (`findStrandedEnriching`) stops re-kicking it and the worker settles it via
+ * `settleGiveUp` instead of retrying forever.
+ */
+export const ENRICH_ATTEMPT_CAP = 10;
+
 export const enrichmentResultSchema = z.object({
   title: z.string().max(FIELD_MAX.title).optional(),
   description: z.string().max(FIELD_MAX.description).optional(),
@@ -192,6 +201,11 @@ export async function recordEnrichment(
       captureStatus: parsed.status,
       sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
       sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,
+      // Every recorded attempt counts toward ENRICH_ATTEMPT_CAP, success or
+      // not — this is the only write path a real enrichment attempt goes
+      // through, so incrementing here (rather than at the worker call site)
+      // can't be bypassed or double-counted by a caller.
+      enrichAttempts: sql`${links.enrichAttempts} + 1`,
     })
     .where(whereLive(eq(links.id, linkId)))
     .returning();
@@ -218,12 +232,85 @@ const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
  * Excludes `full` (terminal) so a good capture can't be downgraded by a
  * re-fetch. Live-scoped via `whereLive`: a trashed link is never resurrected.
  * Returns `null` if `linkId` doesn't exist, is trashed, or is already `full`.
+ *
+ * Also resets `enrich_attempts` to 0 (plan R3, U3): a user/agent-triggered
+ * retry is a deliberate fresh start, not another automatic sweep re-kick — it
+ * should get the full `ENRICH_ATTEMPT_CAP` budget again, not inherit whatever
+ * count a prior failing streak left behind.
  */
 export async function requestRetry(linkId: string): Promise<Link | null> {
   const [updated] = await db
     .update(links)
-    .set({ captureStatus: 'enriching' })
+    .set({ captureStatus: 'enriching', enrichAttempts: 0 })
     .where(whereLive(eq(links.id, linkId), inArray(links.captureStatus, RETRYABLE_STATUSES)))
+    .returning();
+
+  return updated ?? null;
+}
+
+/**
+ * `url`'s hostname with a leading `www.` stripped, or `undefined` if `url`
+ * doesn't parse. Deliberately duplicated here (not imported) from the
+ * worker's `hostnameOf` (`packages/worker/src/extract/extract.ts`) — the
+ * architecture rule (`docs/rules/architecture.md`) is one-directional, only
+ * adapters may depend on `@silo/core`, never the reverse, so core cannot
+ * import from `@silo/worker`. The two implementations must be kept in sync
+ * by hand; this one is intentionally tiny (a single `new URL(...).hostname`
+ * + regex) so drift risk is low.
+ */
+function domainOf(url: string): string | undefined {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Give up gracefully on a link that hit `ENRICH_ATTEMPT_CAP` without ever
+ * reaching `full` (plan R5, U3): settles it as a usable `bare` link rather
+ * than leaving it to be re-kicked forever. `bare` is a real terminal status,
+ * not a new enum value — "silence means complete" (docs/design/tokens.md)
+ * applies here too, a settled link carries no error chrome.
+ *
+ * Don't-clobber, same policy as `recordEnrichment`: `title`/`siteName` are
+ * only filled when currently EMPTY (`coalesce`) — an existing value (even a
+ * thin one from a prior partial enrichment) is never overwritten. The floor
+ * values are the link's own full `url` for `title`, and its www-stripped
+ * hostname for `siteName` — always derivable, so this can never fail to
+ * produce a usable row.
+ *
+ * Reads `url` in a live SELECT first, then writes in one live-scoped UPDATE —
+ * a plain two-step read-then-write, not a single self-referential SQL
+ * expression, because the domain-of-url computation isn't reasonably
+ * expressible in SQL and doesn't need to be: this settles a link exactly
+ * once, at end-of-life, so the small TOCTOU window (a concurrent edit
+ * between the SELECT and UPDATE) is not the same lost-update hazard
+ * `recordEnrichment` guards against on its hot, repeatable write path. The
+ * final UPDATE is still `whereLive`, so a link trashed in that window is
+ * simply not touched (returns `null`), never resurrected.
+ *
+ * Returns the updated `Link`, or `null` if `linkId` doesn't exist or is
+ * (already, or concurrently) trashed.
+ */
+export async function settleGiveUp(linkId: string): Promise<Link | null> {
+  const [row] = await db
+    .select({ url: links.url })
+    .from(links)
+    .where(whereLive(eq(links.id, linkId)))
+    .limit(1);
+  if (!row) return null;
+
+  const domain = domainOf(row.url);
+
+  const [updated] = await db
+    .update(links)
+    .set({
+      captureStatus: 'bare',
+      title: sql`coalesce(${links.title}, ${row.url})`,
+      siteName: sql`coalesce(${links.siteName}, ${domain ?? null})`,
+    })
+    .where(whereLive(eq(links.id, linkId)))
     .returning();
 
   return updated ?? null;

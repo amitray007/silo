@@ -658,6 +658,102 @@ describeIfPg('enrichment operations (integration)', () => {
     });
   });
 
+  describe('enrich_attempts — increment + reset', () => {
+    it('recordEnrichment increments enrich_attempts by 1 each call (0 -> 1 -> 2)', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-attempts-increment',
+        sourceKind: 'link',
+      });
+      expect(created.enrichAttempts).toBe(0);
+
+      const once = await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
+      expect(once?.enrichAttempts).toBe(1);
+
+      const twice = await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
+      expect(twice?.enrichAttempts).toBe(2);
+    });
+
+    it('requestRetry resets enrich_attempts to 0', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/enrich-attempts-reset',
+        sourceKind: 'link',
+      });
+      await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
+      await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
+      const beforeRetry = await linksOps.getById(created.id);
+      expect(beforeRetry?.enrichAttempts).toBe(2);
+
+      const retried = await enrichmentOps.requestRetry(created.id);
+
+      expect(retried?.enrichAttempts).toBe(0);
+      const fetched = await linksOps.getById(created.id);
+      expect(fetched?.enrichAttempts).toBe(0);
+    });
+  });
+
+  describe('settleGiveUp', () => {
+    it('settles a link with no title/siteName as bare, with url-as-title and domain-as-siteName', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://www.example.com/settle-no-metadata',
+        sourceKind: 'link',
+      });
+      expect(created.title).toBeNull();
+      expect(created.siteName).toBeNull();
+
+      const settled = await enrichmentOps.settleGiveUp(created.id);
+
+      expect(settled).not.toBeNull();
+      expect(settled?.captureStatus).toBe('bare');
+      expect(settled?.title).toBe('https://www.example.com/settle-no-metadata');
+      // www. stripped, matching the worker's own hostnameOf.
+      expect(settled?.siteName).toBe('example.com');
+
+      const fetched = await linksOps.getById(created.id);
+      expect(fetched?.captureStatus).toBe('bare');
+      expect(fetched?.title).toBe('https://www.example.com/settle-no-metadata');
+      expect(fetched?.siteName).toBe('example.com');
+    });
+
+    it('does not clobber existing title/siteName — only fills in what is empty', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://www.example.com/settle-existing-metadata',
+        title: 'Existing Title',
+        siteName: 'Existing Site',
+        sourceKind: 'link',
+      });
+
+      const settled = await enrichmentOps.settleGiveUp(created.id);
+
+      expect(settled).not.toBeNull();
+      expect(settled?.captureStatus).toBe('bare');
+      expect(settled?.title).toBe('Existing Title');
+      expect(settled?.siteName).toBe('Existing Site');
+    });
+
+    it('returns null for a trashed link and does not touch it', async () => {
+      const created = await linksOps.createLink({
+        url: 'https://example.com/settle-trashed',
+        sourceKind: 'link',
+      });
+      await linksOps.softDelete(created.id);
+      expect(await isTrashed(created.id)).toBe(true);
+
+      const result = await enrichmentOps.settleGiveUp(created.id);
+
+      expect(result).toBeNull();
+      expect(await isTrashed(created.id)).toBe(true);
+      const rows = await rawDb.execute<{ capture_status: string }>(
+        sql`select capture_status from links where id = ${created.id}`,
+      );
+      expect(rows.rows[0]?.capture_status).toBe('enriching');
+    });
+
+    it('returns null for a random uuid', async () => {
+      const result = await enrichmentOps.settleGiveUp('00000000-0000-0000-0000-000000000000');
+      expect(result).toBeNull();
+    });
+  });
+
   describe('recordEnrichment — concurrent-edit safety (COALESCE, no lost update)', () => {
     it('does not clobber a field edited after enrichment started (coalesce reads live value)', async () => {
       const link = await linksOps.createLink({

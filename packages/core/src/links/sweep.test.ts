@@ -34,14 +34,15 @@ describeIfPg('findStrandedEnriching (integration)', () => {
   async function insertEnrichingLink(
     canonicalUrl: string,
     updatedAt: Date,
-    overrides: { deletedAt?: Date; captureStatus?: string } = {},
+    overrides: { deletedAt?: Date; captureStatus?: string; enrichAttempts?: number } = {},
   ): Promise<{ id: string }> {
     const created = await linksOps.createLink({ url: canonicalUrl, sourceKind: 'link' });
     await rawDb.execute(sql`
       update links
       set capture_status = ${overrides.captureStatus ?? 'enriching'},
           updated_at = ${updatedAt.toISOString()}::timestamptz,
-          deleted_at = ${overrides.deletedAt ? overrides.deletedAt.toISOString() : null}::timestamptz
+          deleted_at = ${overrides.deletedAt ? overrides.deletedAt.toISOString() : null}::timestamptz,
+          enrich_attempts = ${overrides.enrichAttempts ?? 0}
       where id = ${created.id}
     `);
     return created;
@@ -83,6 +84,28 @@ describeIfPg('findStrandedEnriching (integration)', () => {
       const ids = result.map((r) => r.id);
       expect(ids).not.toContain(full.id);
       expect(ids).not.toContain(partial.id);
+    });
+  });
+
+  describe('attempt cap', () => {
+    it('excludes a row whose enrich_attempts has reached ENRICH_ATTEMPT_CAP; a row below the cap is still returned', async () => {
+      const { ENRICH_ATTEMPT_CAP } = await import('./enrichment.js');
+      const capped = await insertEnrichingLink(
+        'https://example.com/capped-enriching',
+        new Date(Date.now() - 30 * MINUTE_MS),
+        { enrichAttempts: ENRICH_ATTEMPT_CAP },
+      );
+      const belowCap = await insertEnrichingLink(
+        'https://example.com/below-cap-enriching',
+        new Date(Date.now() - 30 * MINUTE_MS),
+        { enrichAttempts: ENRICH_ATTEMPT_CAP - 1 },
+      );
+
+      const result = await sweepOps.findStrandedEnriching({ staleMinutes: 15 });
+
+      const ids = result.map((r) => r.id);
+      expect(ids).not.toContain(capped.id);
+      expect(ids).toContain(belowCap.id);
     });
   });
 

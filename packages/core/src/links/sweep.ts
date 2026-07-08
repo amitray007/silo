@@ -1,5 +1,6 @@
 import { db, links } from '@silo/db';
 import { sql } from 'drizzle-orm';
+import { ENRICH_ATTEMPT_CAP } from './enrichment.js';
 
 /**
  * Options for `findStrandedEnriching`.
@@ -61,6 +62,11 @@ export type StrandedLink = {
  * that returns trashed ids in the first place is a footgun this avoids at
  * the source).
  *
+ * Also excludes rows at/past `ENRICH_ATTEMPT_CAP` (plan R4, U3): a link that
+ * has failed `ENRICH_ATTEMPT_CAP` times isn't "stranded" anymore in the
+ * re-kick sense — the worker gives up on it via `settleGiveUp` instead, and
+ * re-including it here would just re-enqueue a job that re-fails forever.
+ *
  * Ordered oldest-`updated_at`-first so, under the `limit` bound, the most
  * badly-stranded links are the ones re-kicked first across repeated sweep
  * ticks.
@@ -92,6 +98,7 @@ export async function findStrandedEnriching(
     where ${links.captureStatus} = 'enriching'
       and ${links.deletedAt} is null
       and ${links.updatedAt} < ${cutoff}
+      and ${links.enrichAttempts} < ${ENRICH_ATTEMPT_CAP}
     order by ${links.updatedAt} asc
     limit ${limit}
   `);
