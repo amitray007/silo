@@ -1,20 +1,25 @@
 import { useCallback } from 'react';
 import type { ApiError } from '../../api/client';
-import { useCaptureLink, useCounts, useInfiniteLinks, useSearchLinks } from '../../api/hooks';
-import type { LinkJson, SearchResultJson } from '../../api/types';
+import { useCaptureLink, useCounts, useInfiniteLinks } from '../../api/hooks';
+import type { LinkJson } from '../../api/types';
 import { useOmnibarState } from '../../lib/useOmnibarState';
 
 /**
  * The shared list-view orchestration behind `LibraryView` (`/`) and `TagView`
- * (`/tags/:name`) — plan 011, V3-2. Both screens are the same day-grouped feed
- * with the omnibar's live search on top; the only differences are the optional
- * `tag` scope on the browse feed and each view's title / empty-state / tag-pill
- * chrome (which the route components supply). This hook owns everything else so
- * that orchestration isn't duplicated across the two routes.
+ * (`/tags/:name`) — plan 011, V3-2. Both screens are the same day-grouped
+ * browse feed; the only differences are the optional `tag` scope and each
+ * view's title / empty-state / tag-pill chrome (which the route components
+ * supply). This hook owns everything else so that orchestration isn't
+ * duplicated across the two routes.
  *
- * Search is global in both views (matching v3 — the `/api/links/search` `q`
- * param has no `tag` filter yet), so `results` is the same regardless of `tag`;
- * `tag` only scopes the non-search `links` feed.
+ * Search removed (plan 024, command center): the omnibar's inline search
+ * mode (and this hook's `results`/`searchEnabled`/`isSearching` fields) is
+ * GONE — search now lives entirely in the command palette
+ * (`CommandPalette.tsx`, mounted once at the app root), which hits the same
+ * `/api/links/search` endpoint directly rather than routing through a list
+ * view's state. `omnibar` here is the now-paste-only `useOmnibarState`
+ * (`isUrl`/`q`/`clear` for the `keep ↵` capture path + the tag-pill's
+ * clear-on-Escape) — it no longer drives any list filtering.
  */
 export interface ListViewState {
   omnibar: ReturnType<typeof useOmnibarState>;
@@ -22,14 +27,9 @@ export interface ListViewState {
   liveCount: number | undefined;
   /** The browse feed (day-grouped, paginated), scoped to `tag` when given. */
   links: LinkJson[];
-  /** Global search results while a non-URL query is active. */
-  results: SearchResultJson[];
-  /** True when the omnibar carries a non-empty, non-URL query (search mode). */
-  searchEnabled: boolean;
   isLoading: boolean;
   isError: boolean;
   error: ApiError | undefined;
-  isSearching: boolean;
   hasNextPage: boolean | undefined;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
@@ -61,11 +61,6 @@ export function useListView(tag?: string): ListViewState {
   const omnibar = useOmnibarState();
   const captureLink = useCaptureLink();
 
-  const searchEnabled = omnibar.debouncedQ.trim().length > 0 && !omnibar.isUrl;
-  const { data: searchData, isLoading: isSearching } = useSearchLinks(
-    searchEnabled ? omnibar.debouncedQ : '',
-  );
-
   const links = data?.pages.flatMap((page) => page.links) ?? [];
 
   // Stable across renders (the mutate/clear functions TanStack Query and
@@ -88,12 +83,9 @@ export function useListView(tag?: string): ListViewState {
     omnibar,
     liveCount: counts?.live,
     links,
-    results: searchData?.results ?? [],
-    searchEnabled,
     isLoading,
     isError,
     error: error as ApiError | undefined,
-    isSearching,
     hasNextPage,
     isFetchingNextPage,
     fetchNextPage: triggerFetchNextPage,

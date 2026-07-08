@@ -163,7 +163,7 @@ describe('TagView', () => {
     renderTagView('mcp', fetchImpl);
     await waitFor(() => expect(screen.getByText('No links tagged #mcp yet.')).toBeDefined());
 
-    const input = screen.getByPlaceholderText(/search in #mcp/i);
+    const input = screen.getByPlaceholderText('Paste a link to keep');
     fireEvent.change(input, { target: { value: 'https://new-example.com' } });
     await waitFor(() => expect(screen.getByText('Keep')).toBeDefined());
     fireEvent.keyDown(input, { key: 'Enter' });

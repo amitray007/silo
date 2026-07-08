@@ -3,7 +3,7 @@ import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
 import type { TagCount } from '../api/types';
 import { GrainDot } from './GrainDot';
-import { LibraryIcon, SettingsIcon, TrashIcon } from './NavIcons';
+import { LibraryIcon, SearchIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { useSettings } from './SettingsContext';
 import { SidebarTags } from './SidebarTags';
@@ -93,6 +93,64 @@ function NavItemLink({
   );
 }
 
+/**
+ * The Search nav row (plan 024, command center): a plain button, NOT routed
+ * through `NavItemLink` — unlike every other sidebar row, Search has no
+ * dedicated `/route` at all (it opens the floating palette in place, exactly
+ * like the Settings item's `skipNavigate` case, but simpler still since
+ * there's no `/search` URL to keep linkable either). Reuses `NavItem`'s
+ * shared row look (icon/label/meta slots, `variant="default"` to match
+ * Library/Trash's weight-500 styling) so it reads as part of the same nav
+ * block, not a second visual language. The `/` shortcut hint renders via
+ * `meta` (the same right-aligned slot Library/Trash use for their counts) —
+ * `NavItem`'s `meta` accepts any `ReactNode`, so a short text hint fits
+ * without a dedicated prop.
+ */
+function SidebarSearchItem({ onOpenSearch }: { onOpenSearch: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpenSearch}
+      className="silo-nav-item"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 'var(--s2-5)',
+        width: '100%',
+        boxSizing: 'border-box',
+        textAlign: 'left',
+        padding: '7px var(--s2-5)',
+        border: 0,
+        borderRadius: 8,
+        fontSize: '0.84rem',
+        fontWeight: 500,
+        color: 'var(--mut)',
+        cursor: 'pointer',
+        font: 'inherit',
+        background: 'transparent',
+      }}
+    >
+      <span style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 18 }}>
+        <SearchIcon size={18} stroke="currentColor" />
+      </span>
+      <span>Search</span>
+      <span
+        style={{
+          marginLeft: 'auto',
+          fontSize: '0.66rem',
+          color: 'var(--fnt)',
+          border: '1px solid var(--line)',
+          borderRadius: 5,
+          padding: 'var(--s-0-5) var(--s1-5)',
+          background: 'var(--bg)',
+        }}
+      >
+        /
+      </span>
+    </button>
+  );
+}
+
 interface SidebarProps {
   /** DOM id the mobile ☰ button's `aria-controls` points at. */
   id?: string;
@@ -100,6 +158,8 @@ interface SidebarProps {
   open?: boolean;
   /** Fires after a nav item navigates — closes the mobile drawer. */
   onNavigate?: () => void;
+  /** Opens the command palette (plan 024) — the Search nav item's click handler. */
+  onOpenSearch?: () => void;
 }
 
 /**
@@ -134,7 +194,7 @@ interface SidebarProps {
  * failed tags fetch renders nothing rather than crashing the sidebar.
  */
 export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar(
-  { id, open = false, onNavigate = noop },
+  { id, open = false, onNavigate = noop, onOpenSearch = noop },
   ref,
 ) {
   const { data: counts } = useCounts();
@@ -159,6 +219,8 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         <GrainDot size={16} />
         <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>silo</span>
       </div>
+
+      <SidebarSearchItem onOpenSearch={onOpenSearch} />
 
       <NavItemLink
         to="/"

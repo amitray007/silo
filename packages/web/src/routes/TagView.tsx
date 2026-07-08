@@ -20,11 +20,11 @@ function TagEmptyState({ tag }: { tag: string }) {
  * (`useListView(tag)`) and header/body/state chrome as `LibraryView`
  * (`./shared/*`) — the only real differences are: the tag scope on the
  * browse feed, the header title (`#{name}`), the omnibar's `#{name} ✕`
- * clear-filter pill, and tag-specific empty-state copy. Search (the
- * omnibar's `omniIsSearch` state) is NOT tag-scoped in this slice — same as
- * `LibraryView`, it queries the global `/api/links/search`, matching v3
- * (search re-filters the already-loaded list rather than being a second,
- * tag-aware endpoint).
+ * clear-filter pill, and tag-specific empty-state copy. The omnibar's OWN
+ * inline search is gone (plan 024 — it moved to the command palette, which
+ * DOES support a tag-scoped search via `#tag text`); this view's `tagCount`
+ * feeds the omnibar's tag-idle "{tagCount} of {libCount}" chip, unrelated to
+ * search — that's the tag's own browse-feed count vs. the library total.
  */
 export function TagView() {
   const { name } = useParams<{ name: string }>();
@@ -35,8 +35,7 @@ export function TagView() {
   const header = (
     <ListOmnibar
       omnibar={view.omnibar}
-      searchEnabled={view.searchEnabled}
-      shownCount={view.searchEnabled ? view.results.length : view.links.length}
+      tagCount={view.links.length}
       libCount={view.liveCount ?? 0}
       onKeep={view.onKeep}
       tagName={tag}

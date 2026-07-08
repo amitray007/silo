@@ -26,7 +26,7 @@ import { bucketTrashByDay } from '../lib/buckets';
 import { useDebouncedValue } from '../lib/useDebouncedValue';
 import { NoSearchResults } from './shared/ListStates';
 
-/** Matches the omnibar's search debounce (`useOmnibarState.ts`'s `SEARCH_DEBOUNCE_MS`) — kept as its own constant here since this input has no shared state hook of its own. */
+/** Matches the command palette's search debounce (`useCommandPalette.ts`'s `SEARCH_DEBOUNCE_MS`) — kept as its own constant here since this input has no shared state hook of its own. */
 const TRASH_SEARCH_DEBOUNCE_MS = 200;
 
 /**

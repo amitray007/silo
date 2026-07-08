@@ -91,15 +91,27 @@ export function SettingsIcon() {
  * sites don't each carry their own copy (jscpd guards production src at
  * 1.5%) — the icon itself is identical everywhere it's used; only the
  * surrounding input shell differs per screen, so only the glyph moves here.
+ *
+ * `size`/`stroke` are overridable (mirroring `TrashIcon`'s own pattern),
+ * defaulting to the original 15px/`var(--ghost)` so every existing caller is
+ * unaffected — the sidebar's Search nav item (plan 024) is the first caller
+ * to override both, sizing up to 18px/`currentColor` to match Library/Trash's
+ * nav-row icon convention.
  */
-export function SearchIcon() {
+export function SearchIcon({
+  size = 15,
+  stroke = 'var(--ghost)',
+}: {
+  size?: number;
+  stroke?: string;
+} = {}) {
   return (
     <svg
-      width="15"
-      height="15"
+      width={size}
+      height={size}
       viewBox="0 0 16 16"
       fill="none"
-      stroke="var(--ghost)"
+      stroke={stroke}
       strokeWidth="1.4"
       strokeLinecap="round"
       strokeLinejoin="round"

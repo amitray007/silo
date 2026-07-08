@@ -39,7 +39,13 @@ export const queryKeys = {
   tags: () => ['tags'] as const,
   links: (filter?: { tag?: string; status?: string }) => ['links', filter ?? {}] as const,
   link: (id: string) => ['link', id] as const,
-  search: (q: string) => ['search', q] as const,
+  /**
+   * `tag` (optional, command-center search plan 024) is folded into the key
+   * so a `q`-only search and the SAME `q` scoped to a tag never collide in
+   * the cache — `useSearchLinks('react')` and `useSearchLinks('react',
+   * 'frontend')` are distinct cache entries.
+   */
+  search: (q: string, tag?: string) => ['search', q, tag ?? null] as const,
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
@@ -125,21 +131,49 @@ export function useInfiniteLinks(tag?: string) {
 }
 
 /**
- * The omnibar's live search (`GET /api/links/search?q=`) — plan 011, V3-2.
- * `enabled: q.trim().length > 0` means an empty/blank query never fires a
- * request (mirrors the API's own `q` min-length-1 guard — a client-side
- * no-op is cheaper than a request that would just 400). Callers are
- * responsible for debouncing keystrokes (`Omnibar.tsx`) and for not calling
- * this when the query looks like a URL (the `keep` capture path, not
- * search) — this hook itself has no opinion on that, it just fetches for
- * whatever `q` it's given.
+ * The command palette's / (formerly the omnibar's) live search (`GET
+ * /api/links/search?q=&tag=`) — plan 011, V3-2; `tag` added plan 024
+ * (command center). `enabled: q.trim().length > 0` means an empty/blank
+ * query never fires a request (mirrors the API's own `q` min-length-1
+ * guard — a client-side no-op is cheaper than a request that would just
+ * 400) — `tag` alone with no `q` is NOT enough to fire this hook; that case
+ * is the palette's tag-only list query instead (`useLinksByTag`), since
+ * `GET /api/links/search` always requires `q`. Callers are responsible for
+ * debouncing keystrokes and for not calling this when the query looks like
+ * a URL (the `keep` capture path, not search) — this hook itself has no
+ * opinion on that, it just fetches for whatever `q`/`tag` it's given.
  */
-export function useSearchLinks(q: string) {
+export function useSearchLinks(q: string, tag?: string) {
   const trimmed = q.trim();
   return useQuery({
-    queryKey: queryKeys.search(trimmed),
-    queryFn: () => apiGet<SearchResponse>(`/api/links/search?q=${encodeURIComponent(trimmed)}`),
+    queryKey: queryKeys.search(trimmed, tag),
+    queryFn: () => {
+      const params = new URLSearchParams({ q: trimmed });
+      if (tag) params.set('tag', tag);
+      return apiGet<SearchResponse>(`/api/links/search?${params.toString()}`);
+    },
     enabled: trimmed.length > 0,
+  });
+}
+
+/**
+ * The command palette's tag-only view (plan 024): the first page of
+ * `GET /api/links?tag=`, for when the parsed query is JUST a settled `#tag`
+ * with no free text (`GET /api/links/search` always requires `q`, so a
+ * tag-only filter has to go through the plain list route instead). A
+ * one-shot `useQuery` (not `useInfiniteLinks`'s paginated machinery) — the
+ * palette shows a first page of results, not a "load more" affordance, so
+ * the simpler non-infinite hook is enough; reuses the same `LinksResponse`
+ * shape and the SAME `queryKeys.links({ tag })` cache entry `useInfiniteLinks`
+ * writes its first page into, so switching between the palette and a
+ * `/tags/:name` browse of the same tag shares one cache entry rather than
+ * fetching it twice. Disabled when `tag` is empty/undefined.
+ */
+export function useLinksByTag(tag: string | undefined) {
+  return useQuery({
+    queryKey: queryKeys.links(tag ? { tag } : undefined),
+    queryFn: () => apiGet<LinksResponse>(`/api/links?tag=${encodeURIComponent(tag ?? '')}`),
+    enabled: Boolean(tag),
   });
 }
 

@@ -1,8 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import { looksLikeUrl } from './url';
-import { useDebouncedValue } from './useDebouncedValue';
-
-const SEARCH_DEBOUNCE_MS = 200;
 
 /**
  * The omnibar's shared interaction state (plan 011, V3-2) — lifted out of any
@@ -11,17 +8,21 @@ const SEARCH_DEBOUNCE_MS = 200;
  * state shape without prop-drilling through `ContentHeader`. Owns:
  *
  * - `q` (raw, every-keystroke value) / `setQ`.
- * - `debouncedQ` — `q` after `SEARCH_DEBOUNCE_MS` of quiet, the value handed
- *   to `useSearchLinks` so search doesn't fire a request per keystroke.
  * - `focused` + `focus`/`blur` handlers for the border-color state.
- * - `isUrl` — v3's `omniIsUrl` heuristic over the RAW `q` (not debounced —
- *   the `keep ↵` affordance must react instantly, unlike the network-backed
- *   search count).
- * - `inputRef` + a global `⌘K`/`Ctrl+K` keydown listener that focuses the
- *   omnibar input from anywhere on the page (v3's implied shortcut — the
- *   idle chip literally reads "⌘ K").
+ * - `isUrl` — v3's `omniIsUrl` heuristic over `q`, driving the `keep ↵`
+ *   affordance.
+ * - `inputRef` — forwarded to the underlying `<input>` (no longer paired
+ *   with a global ⌘K listener here; see below).
  * - `clear()` — resets `q` (used by the Escape key and the tag-pill's clear
  *   affordance so both go through one code path).
+ *
+ * Paste-only (plan 024, command center): the omnibar's inline search role
+ * (and the `debouncedQ` value that fed it) is GONE — search now lives
+ * entirely in the command palette, which owns its OWN separate query state
+ * (`useCommandPalette`, `lib/useCommandPalette.ts`) and its own debounce.
+ * The global `⌘K`/`Ctrl+K` listener also MOVED there — ⌘K no longer focuses
+ * this input, it opens the palette instead, since the omnibar isn't a search
+ * target anymore. This hook now only owns paste-to-capture's input state.
  *
  * The returned object + its callbacks are memoized so `q`'s per-keystroke
  * update doesn't hand every consumer (`ListOmnibar`, `useListView`) a brand
@@ -32,18 +33,6 @@ export function useOmnibarState() {
   const [q, setQ] = useState('');
   const [focused, setFocused] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const debouncedQ = useDebouncedValue(q, SEARCH_DEBOUNCE_MS);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
-        event.preventDefault();
-        inputRef.current?.focus();
-      }
-    };
-    document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, []);
 
   const onFocus = useCallback(() => setFocused(true), []);
   const onBlur = useCallback(() => setFocused(false), []);
@@ -53,7 +42,6 @@ export function useOmnibarState() {
     () => ({
       q,
       setQ,
-      debouncedQ,
       focused,
       onFocus,
       onBlur,
@@ -61,6 +49,6 @@ export function useOmnibarState() {
       inputRef,
       clear,
     }),
-    [q, debouncedQ, focused, onFocus, onBlur, clear],
+    [q, focused, onFocus, onBlur, clear],
   );
 }

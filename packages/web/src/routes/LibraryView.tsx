@@ -22,14 +22,12 @@ function LibraryEmptyState() {
 }
 
 /**
- * `/` — the Library list (plan 010, extended by plan 011 V3-2 with the
- * omnibar's live search). Day-grouped, read-only rows via `useListView()`
- * (no tag scope); when the omnibar carries a non-empty, non-URL query, the
- * body switches to the search results (`ListBody`). Pagination (the "load
- * more" button + prefetch sentinel) is Library-only — search results aren't
- * paginated in this slice (matches v3, which searches the already-loaded
- * list). Shares its orchestration/header/body/state chrome with `TagView`
- * via `./shared/*` — see those modules' doc comments.
+ * `/` — the Library list (plan 010; the omnibar's live search that plan 011
+ * V3-2 added here has since moved OUT to the command palette, plan 024 —
+ * this view is just the day-grouped browse feed now). Read-only rows via
+ * `useListView()` (no tag scope), with pagination (the "load more" button +
+ * prefetch sentinel). Shares its orchestration/header/body/state chrome with
+ * `TagView` via `./shared/*` — see those modules' doc comments.
  */
 export function LibraryView() {
   const view = useListView();
@@ -37,8 +35,7 @@ export function LibraryView() {
   const header = (
     <ListOmnibar
       omnibar={view.omnibar}
-      searchEnabled={view.searchEnabled}
-      shownCount={view.searchEnabled ? view.results.length : view.links.length}
+      tagCount={0}
       libCount={view.liveCount ?? 0}
       onKeep={view.onKeep}
     />

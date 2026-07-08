@@ -15,34 +15,41 @@ export type OmnibarProps = {
   /** The active tag filter's name (`/tags/:name`), or `undefined` when none is active. */
   tagName?: string;
   onClearTag: () => void;
-  /** How many results/rows are currently shown — feeds both the `{found} esc` (search) and `{shown} of {libCount} esc` (tag-idle) chips. */
-  shownCount: number;
-  /** The Library's total live-link count (`{shown} of {libCount}`). */
+  /** How many live links carry the active tag — the tag-idle chip's `{tagCount} of {libCount}`. Unused (and unread) when no tag filter is active. */
+  tagCount: number;
+  /** The Library's total live-link count — the tag-idle chip's `{tagCount} of {libCount}`. */
   libCount: number;
 };
 
 /**
- * The v3 content-header omnibar (`Silo-v3.html` lines 76-94, plan 011 V3-2).
- * A controlled input matching v3's exact box model
+ * The v3 content-header omnibar (`Silo-v3.html` lines 76-94, plan 011 V3-2) —
+ * PASTE-ONLY as of plan 024 (command center): its inline search role moved
+ * entirely to the command palette (⌘K/`/`), so this component no longer has
+ * a search mode at all. A controlled input matching v3's exact box model
  * (`width:clamp(230px,42%,430px)`, `gap:9px`, `border-radius:10px`,
  * `padding:8px 13px`, `--bg2` fill) with the magnifier SVG on the left and
- * one of four mutually-exclusive right-side states, mirroring v3's state
- * derivation exactly (`Silo-v3.html`'s render function):
+ * TWO mutually-exclusive right-side states (down from v3's four —
+ * `omniIsSearch` is gone, and the idle state now renders nothing rather than
+ * a named chip):
  *
  * - `omniIsUrl = isUrl(q)` — typed text looks like a URL → the `keep ↵`
- *   affordance. THIS SLICE renders it but wires no capture (V3-3 owns
- *   `POST /links`); `onKeep` is a stub the caller may no-op.
- * - `omniIsSearch = words.length > 0` (i.e. `q` non-empty AND not a URL —
- *   v3's `words` array is empty whenever `isUrl(q)`, so these two states are
- *   naturally mutually exclusive) → `{shownCount} found · esc`.
- * - `omniTagIdle = !q.trim() && tag active` → `{shownCount} of {libCount} esc`.
- * - `omniIdle = !q.trim() && no tag active` → the `⌘ K` hint chip.
+ *   affordance (V3-3 wires the real `POST /links` capture).
+ * - `omniTagIdle = !q.trim() && tag active` → `{tagCount} of {libCount} esc`
+ *   (the tag's own live-link count vs. the library total — UNRELATED to
+ *   search, this is tag-scoped BROWSING via `/tags/:name`, which is
+ *   untouched by the search-removal).
+ * - Otherwise (idle, no query, no tag) → renders NOTHING in the right-side
+ *   slot. The old `⌘ K` hint chip is REMOVED here (plan 024):
+ *   ⌘K no longer focuses this input, it opens the command palette instead —
+ *   showing "⌘ K" on the omnibar as if it still does something for THIS
+ *   field would be misleading now that the shortcut's target moved
+ *   elsewhere. The sidebar's Search nav item carries the palette's own `/`
+ *   hint instead.
  *
  * The tag-filter pill (`#tag ✕`) renders INSIDE the bar, left of the input,
- * per v3's `tagActive = !!tag && !words.length` — visible only while a tag
- * filter is active AND there's no search text typed (typing a search hides
- * the pill even though the tag scoping is still logically in effect for
- * "what's being searched").
+ * whenever a tag filter is active — tag-scoped browsing (not search) is
+ * unaffected by the search-removal, so the pill's visibility is no longer
+ * gated on "no search text typed" (there's no search text to type anymore).
  */
 export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnibar(
   {
@@ -55,22 +62,17 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
     looksLikeUrl,
     tagName,
     onClearTag,
-    shownCount,
+    tagCount,
     libCount,
   },
   ref,
 ) {
   const hasQuery = value.trim().length > 0;
   const omniIsUrl = hasQuery && looksLikeUrl;
-  const omniIsSearch = hasQuery && !looksLikeUrl;
   const tagFilterActive = tagName !== undefined;
   const omniTagIdle = !hasQuery && tagFilterActive;
-  const omniIdle = !hasQuery && !tagFilterActive;
-  const tagPillVisible = tagFilterActive && !omniIsSearch;
 
-  const placeholder = tagFilterActive
-    ? `Search in #${tagName}`
-    : 'Paste a link to keep · type to search';
+  const placeholder = 'Paste a link to keep';
 
   return (
     <div
@@ -92,7 +94,7 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
     >
       <SearchIcon />
 
-      {tagPillVisible && (
+      {tagFilterActive && (
         <button
           type="button"
           onClick={onClearTag}
@@ -162,19 +164,6 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
           <EscChip>↵</EscChip>
         </span>
       )}
-      {omniIsSearch && (
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 'var(--s1-5)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <span style={{ fontSize: '0.72rem', color: 'var(--fnt)' }}>{shownCount} found</span>
-          <EscChip>esc</EscChip>
-        </span>
-      )}
       {omniTagIdle && (
         <span
           style={{
@@ -185,30 +174,21 @@ export const Omnibar = forwardRef<HTMLInputElement, OmnibarProps>(function Omnib
           }}
         >
           <span style={{ fontSize: '0.72rem', color: 'var(--fnt)' }}>
-            {shownCount} of {libCount}
+            {tagCount} of {libCount}
           </span>
           <EscChip>esc</EscChip>
         </span>
       )}
-      {omniIdle && (
-        <span
-          style={{
-            fontSize: '0.66rem',
-            color: 'var(--fnt)',
-            border: '1px solid var(--line)',
-            borderRadius: 5,
-            padding: 'var(--s-0-5) var(--s1-5)',
-            background: 'var(--bg)',
-          }}
-        >
-          ⌘ K
-        </span>
-      )}
+      {/* The idle right-side slot (no query, no tag filter) renders nothing
+          (plan 024): the old `⌘ K` hint chip is gone — ⌘K no longer focuses
+          THIS input, it opens the command palette instead, so showing the
+          hint here would be misleading now that the shortcut's target moved
+          elsewhere. */}
     </div>
   );
 });
 
-/** The small bordered `esc`/`↵` pill shared by the URL and search right-side states. */
+/** The small bordered `esc`/`↵` pill shared by the URL and tag-idle right-side states. */
 function EscChip({ children }: { children: React.ReactNode }) {
   return (
     <span

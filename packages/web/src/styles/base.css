@@ -548,6 +548,24 @@ select {
   }
 }
 
+/* Command palette result rows (CommandPalette.tsx, plan 024): the resting
+   background is transparent (CSS-owned, not inline — see the component's
+   own doc comment for why); a hovered row picks up `--hov`, same token the
+   keyboard-active row uses inline, so hover and keyboard-highlight read as
+   the same "this is the one that'll fire on Enter/click" affordance rather
+   than two different visual languages. `:not([aria-selected="true"])` avoids
+   a redundant identical background paint on the already-active row (no
+   visible difference, just a cheaper no-op repaint skipped). */
+.silo-palette-row {
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-palette-row:hover:not([aria-selected="true"]) {
+    background: var(--hov);
+  }
+}
+
 /* Dock actions (clear/select all/empty all/restore/delete now/move to
    trash) — previously flat text with no hover or press feedback at all
    (design-review pass, emil-design-eng.md's "every interactive element needs

@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { useCommandPalette } from '../lib/useCommandPalette';
 import { usePasteCapture } from '../lib/usePasteCapture';
 import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
+import { CommandPalette } from './CommandPalette';
 import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
 import { HoverPreviewProvider } from './HoverPreviewContext';
@@ -153,6 +155,12 @@ export function AppFrame() {
   // anywhere on the page (not just inside the omnibar) can be caught.
   usePasteCapture();
 
+  // The command palette (plan 024) — ONE instance mounted here, alongside
+  // the other document-level singletons, so its ⌘K/`/` global listeners
+  // exist for the app's whole lifetime rather than per-route. `Sidebar`'s
+  // Search nav item and every other trigger call `commandPalette.openPalette`.
+  const commandPalette = useCommandPalette();
+
   const closeDrawer = () => {
     // Only steal focus back to the (offscreen-on-desktop) ☰ button when the
     // drawer was actually open — `Sidebar`'s `onNavigate` calls this after
@@ -268,7 +276,13 @@ export function AppFrame() {
             onClick={closeDrawer}
           />
 
-          <Sidebar id={DRAWER_ID} ref={sidebarRef} open={drawerOpen} onNavigate={closeDrawer} />
+          <Sidebar
+            id={DRAWER_ID}
+            ref={sidebarRef}
+            open={drawerOpen}
+            onNavigate={closeDrawer}
+            onOpenSearch={commandPalette.openPalette}
+          />
 
           {/* Content region: a flex column of two stacked children, both
               supplied by the routed view via <Outlet/> — the header bar
@@ -298,6 +312,7 @@ export function AppFrame() {
           </main>
         </div>
         <SettingsLayer />
+        <CommandPalette palette={commandPalette} />
       </div>
     </SettingsProvider>
   );

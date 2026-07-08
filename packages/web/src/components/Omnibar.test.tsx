@@ -14,42 +14,50 @@ function baseProps(overrides: Partial<React.ComponentProps<typeof Omnibar>> = {}
     onBlur: vi.fn(),
     looksLikeUrl: false,
     onClearTag: vi.fn(),
-    shownCount: 0,
+    tagCount: 0,
     libCount: 0,
     ...overrides,
   };
 }
 
-describe('Omnibar', () => {
-  it('idle state: empty query, no tag filter -> the ⌘ K hint chip', () => {
+describe('Omnibar (paste-only, plan 024)', () => {
+  it('the placeholder reads "Paste a link to keep" (no "· type to search" suffix)', () => {
     render(<Omnibar {...baseProps()} />);
-    expect(screen.getByText('⌘ K')).toBeDefined();
+    expect(screen.getByPlaceholderText('Paste a link to keep')).toBeDefined();
   });
 
-  it('typing non-URL search text -> the {found} chip + esc, no ⌘ K chip', () => {
-    render(<Omnibar {...baseProps({ value: 'react hooks', shownCount: 3 })} />);
-    expect(screen.getByText('3 found')).toBeDefined();
-    expect(screen.getByText('esc')).toBeDefined();
+  it('idle state: empty query, no tag filter -> no ⌘ K hint chip (removed, plan 024)', () => {
+    render(<Omnibar {...baseProps()} />);
     expect(screen.queryByText('⌘ K')).toBeNull();
   });
 
-  it('typing URL-looking text -> the "keep ↵" affordance, not the search chip', () => {
+  it('typing non-URL text -> no search chip, no "found" text (search removed)', () => {
+    render(<Omnibar {...baseProps({ value: 'react hooks' })} />);
+    expect(screen.queryByText(/found/)).toBeNull();
+    expect(screen.queryByText('esc')).toBeNull();
+  });
+
+  it('typing URL-looking text -> the "keep ↵" affordance', () => {
     render(<Omnibar {...baseProps({ value: 'example.com', looksLikeUrl: true })} />);
     expect(screen.getByText('Keep')).toBeDefined();
     expect(screen.getByText('↵')).toBeDefined();
-    expect(screen.queryByText(/found/)).toBeNull();
   });
 
-  it('a tag filter active + empty query -> the {shown} of {libCount} chip, and the #tag pill', () => {
-    render(<Omnibar {...baseProps({ tagName: 'mcp', shownCount: 12, libCount: 40 })} />);
+  it('a tag filter active + empty query -> the {tagCount} of {libCount} chip, and the #tag pill', () => {
+    render(<Omnibar {...baseProps({ tagName: 'mcp', tagCount: 12, libCount: 40 })} />);
     expect(screen.getByText('12 of 40')).toBeDefined();
     expect(screen.getByText('mcp')).toBeDefined();
   });
 
-  it("the tag pill disappears once search text is typed (matches v3's tagActive = !words.length)", () => {
-    render(<Omnibar {...baseProps({ tagName: 'mcp', value: 'something', shownCount: 2 })} />);
-    expect(screen.queryByTitle('Clear filter')).toBeNull();
-    expect(screen.getByText('2 found')).toBeDefined();
+  it('the tag pill stays visible regardless of query content — it is no longer gated on "no search text typed" (search mode is gone)', () => {
+    render(<Omnibar {...baseProps({ tagName: 'mcp', value: 'something' })} />);
+    expect(screen.getByTitle('Clear filter')).toBeDefined();
+
+    render(
+      <Omnibar {...baseProps({ tagName: 'mcp', value: 'example.com', looksLikeUrl: true })} />,
+    );
+    // Two renders, so `getAllByTitle` — both pills are visible simultaneously.
+    expect(screen.getAllByTitle('Clear filter').length).toBeGreaterThan(0);
   });
 
   it('clicking the tag pill calls onClearTag', () => {
@@ -62,7 +70,7 @@ describe('Omnibar', () => {
   it('typing calls onChange with the new value', () => {
     const onChange = vi.fn();
     render(<Omnibar {...baseProps({ onChange })} />);
-    const input = screen.getByPlaceholderText(/Paste a link to keep/i);
+    const input = screen.getByPlaceholderText('Paste a link to keep');
     fireEvent.change(input, { target: { value: 'hello' } });
     expect(onChange).toHaveBeenCalledWith('hello');
   });
@@ -94,7 +102,7 @@ describe('Omnibar', () => {
     const onFocus = vi.fn();
     const onBlur = vi.fn();
     render(<Omnibar {...baseProps({ onFocus, onBlur })} />);
-    const input = screen.getByPlaceholderText(/Paste a link to keep/i);
+    const input = screen.getByPlaceholderText('Paste a link to keep');
     fireEvent.focus(input);
     expect(onFocus).toHaveBeenCalledTimes(1);
     fireEvent.blur(input);
@@ -111,7 +119,7 @@ describe('Omnibar', () => {
     expect(barFocused.style.border).toContain('var(--ghost)');
   });
 
-  it('forwards the ref to the underlying input element (for the ⌘K focus wiring)', () => {
+  it('forwards the ref to the underlying input element', () => {
     const ref = createRef<HTMLInputElement>();
     render(<Omnibar {...baseProps()} ref={ref} />);
     expect(ref.current).toBeInstanceOf(HTMLInputElement);

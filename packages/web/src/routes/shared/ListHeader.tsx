@@ -103,19 +103,24 @@ export function ContentFrame({
  * navigates back to `/`). `onKeep` (plan 011, V3-3) is `useListView`'s real
  * capture handler — this component no longer owns any capture logic itself,
  * it only wires the callback through so neither view has to repeat it.
+ *
+ * Paste-only (plan 024): no `searchEnabled`/`shownCount` — the omnibar no
+ * longer has an inline search mode. `tagCount`/`libCount` still feed the
+ * tag-idle "{tagCount} of {libCount}" chip (unrelated to search — that's
+ * tag-scoped BROWSING via `/tags/:name`, which stays); `LibraryView` (no
+ * tag filter) passes `tagCount={0}` since `Omnibar` never reads it without
+ * an active `tagName`.
  */
 export function ListOmnibar({
   omnibar,
-  searchEnabled,
-  shownCount,
+  tagCount,
   libCount,
   onKeep,
   tagName,
   onClearTag,
 }: {
   omnibar: ReturnType<typeof useOmnibarState>;
-  searchEnabled: boolean;
-  shownCount: number;
+  tagCount: number;
   libCount: number;
   onKeep: () => void;
   tagName?: string;
@@ -133,7 +138,7 @@ export function ListOmnibar({
       looksLikeUrl={omnibar.isUrl}
       {...(tagName !== undefined ? { tagName } : {})}
       onClearTag={onClearTag ?? (() => {})}
-      shownCount={searchEnabled ? shownCount : libCount}
+      tagCount={tagCount}
       libCount={libCount}
     />
   );
