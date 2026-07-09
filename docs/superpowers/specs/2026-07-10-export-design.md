@@ -74,11 +74,15 @@ subset — so CSV is offered as an explicitly-partial convenience, not the point
 
 ## Architecture (core/adapter boundary honored)
 
-### 1. `@silo/core` — `exportLinks(exec, { format })`
+### 1. `@silo/core` — `exportLinks({ format })`
 
-- **One** query for all live links ordered `(createdAt, id) DESC`, then the
-  existing `hydrateTags(exec, rows)` (batched, no N+1) — the same hydration
-  `list` uses. No new query pattern invented.
+- Uses the `db` singleton from `@silo/db` directly — the **same convention** as
+  `list()` / `listTagsWithCounts()` (core functions take no executor arg; they
+  import `db`). `hydrateTags(db, rows)` is called with that same `db`.
+- **One** query for all live links ordered `(createdAt, id) DESC`
+  (`whereLive(...)`, `desc(links.createdAt), desc(links.id)`), then the existing
+  `hydrateTags(db, rows)` (batched, no N+1) — the same hydration `list` uses.
+  No new query pattern, no pagination (export is the whole library).
 - Owns per-format serialization. Returns a typed result:
 
   ```ts
@@ -91,8 +95,7 @@ subset — so CSV is offered as an explicitly-partial convenience, not the point
     body: string;
   };
   export async function exportLinks(
-    exec: Executor,
-    opts: { format: ExportFormat },
+    opts?: { format?: ExportFormat },   // default 'json'
   ): Promise<ExportResult>;
   ```
 
