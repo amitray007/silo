@@ -19,7 +19,7 @@ function defaultSettings() {
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
     },
   };
 }
@@ -130,14 +130,14 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     expect(screen.queryByText('Inline on the row')).toBeNull();
   });
 
-  it('clicking the Twitter/X card expands its panel showing hover-only (no inline toggle)', async () => {
+  it('clicking the Twitter/X card expands its panel showing BOTH inline and hover toggles (mirrors hacker_news)', async () => {
     renderTab();
 
     fireEvent.click(getSourceCard(/Twitter \/ X/i));
 
     await waitFor(() => expect(screen.getByTitle(/Twitter \/ X is on/i)).toBeDefined());
     expect(screen.getByText('On hover (preview card)')).toBeDefined();
-    expect(screen.queryByText('Inline on the row')).toBeNull();
+    expect(screen.getByText('Inline on the row')).toBeDefined();
     expect(screen.queryByText('Soon')).toBeNull();
   });
 
@@ -159,7 +159,31 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: false },
+          twitter: { enabled: true, inline: true, hover: false },
+        },
+      });
+    });
+  });
+
+  it('toggling Twitter/X inline calls updateSettings with only twitter.inline flipped, enabled/hover untouched', async () => {
+    const { fetchMock } = renderTab();
+
+    fireEvent.click(getSourceCard(/Twitter \/ X/i));
+    const inlineToggle = await screen.findByTitle(/Inline on the row is on/i);
+    fireEvent.click(inlineToggle);
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
+      expect(body).toEqual({
+        plugins: {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: false, hover: true },
         },
       });
     });
@@ -183,7 +207,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: false, hover: true },
+          twitter: { enabled: false, inline: true, hover: true },
         },
       });
     });
@@ -208,7 +232,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: false, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       });
     });
@@ -231,7 +255,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: true, inline: false, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       });
     });
@@ -255,7 +279,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: false },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       });
     });
@@ -274,7 +298,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
         hacker_news: { enabled: true, inline: false, hover: false },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       },
     });
 
@@ -334,7 +358,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       },
     });
 
@@ -355,7 +379,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       },
     });
 

@@ -175,7 +175,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: false, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       );
       expect(result).toBeUndefined();
@@ -190,7 +190,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       );
       expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
@@ -205,7 +205,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: true, inline: false, hover: false },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       );
       expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
@@ -225,7 +225,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: false, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       );
       expect(result).toEqual({ kind: 'github', stars: 1, forks: 2, issues: 3 });
@@ -265,7 +265,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       );
       expect(result).toMatchObject({ kind: 'twitter', text: 'hello' });
@@ -286,7 +286,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: false, hover: true },
+          twitter: { enabled: false, inline: true, hover: true },
         },
       );
       expect(result).toBeUndefined();
@@ -302,7 +302,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       );
       expect(result).toBeUndefined();

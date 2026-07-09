@@ -26,7 +26,7 @@ type SettingsBody = {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
     github: { enabled: boolean; hover: boolean };
     youtube: { enabled: boolean; hover: boolean };
-    twitter: { enabled: boolean; hover: boolean };
+    twitter: { enabled: boolean; inline: boolean; hover: boolean };
   };
 };
 
@@ -56,7 +56,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       },
     });
   });
@@ -104,7 +104,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       },
     });
     expect(patchRes.status).toBe(200);
@@ -114,7 +114,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       hacker_news: { enabled: false, inline: true, hover: true },
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
     });
   });
 
@@ -171,7 +171,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
         evilPlugin: true,
       },
     });

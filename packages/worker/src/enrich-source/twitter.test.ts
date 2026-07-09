@@ -207,4 +207,75 @@ describe('enrichTwitter', () => {
     });
     expect(calledUrl).toBe('https://api.fxtwitter.com/status/123%20456');
   });
+
+  describe("thumbnailUrl (command-center polish slice — the tweet's real media thumbnail)", () => {
+    it('a tweet with a video captures media.all[0].thumbnail_url as thumbnailUrl', async () => {
+      const result = await enrichTwitter('1234567890123456789', () =>
+        Promise.resolve(
+          okResult(
+            fxEmbedEnvelope({
+              media: {
+                all: [
+                  {
+                    type: 'video',
+                    url: 'https://video.twimg.com/ext_tw_video/123/pu/vid/720x1280/abc.mp4',
+                    thumbnail_url: 'https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/xyz.jpg',
+                  },
+                ],
+              },
+            }),
+          ),
+        ),
+      );
+      expect(result?.thumbnailUrl).toBe(
+        'https://pbs.twimg.com/ext_tw_video_thumb/123/pu/img/xyz.jpg',
+      );
+    });
+
+    it('a tweet with a photo (no video) captures media.photos[0].url as thumbnailUrl', async () => {
+      const result = await enrichTwitter('1234567890123456789', () =>
+        Promise.resolve(
+          okResult(
+            fxEmbedEnvelope({
+              media: {
+                all: [{ type: 'photo', url: 'https://pbs.twimg.com/media/photo1.jpg' }],
+                photos: [{ type: 'photo', url: 'https://pbs.twimg.com/media/photo1.jpg' }],
+              },
+            }),
+          ),
+        ),
+      );
+      expect(result?.thumbnailUrl).toBe('https://pbs.twimg.com/media/photo1.jpg');
+    });
+
+    it('falls back to media.all[0].url when neither thumbnail_url nor photos[0].url is present', async () => {
+      const result = await enrichTwitter('1234567890123456789', () =>
+        Promise.resolve(
+          okResult(
+            fxEmbedEnvelope({
+              media: {
+                all: [{ type: 'photo', url: 'https://pbs.twimg.com/media/fallback.jpg' }],
+              },
+            }),
+          ),
+        ),
+      );
+      expect(result?.thumbnailUrl).toBe('https://pbs.twimg.com/media/fallback.jpg');
+    });
+
+    it('a text-only tweet (no media field at all) omits thumbnailUrl', async () => {
+      const result = await enrichTwitter('1234567890123456789', () =>
+        Promise.resolve(okResult(fxEmbedEnvelope())),
+      );
+      expect(result?.thumbnailUrl).toBeUndefined();
+    });
+
+    it('a malformed media shape (not an object) omits thumbnailUrl without failing the candidate', async () => {
+      const result = await enrichTwitter('1234567890123456789', () =>
+        Promise.resolve(okResult(fxEmbedEnvelope({ media: 'not-an-object' }))),
+      );
+      expect(result?.thumbnailUrl).toBeUndefined();
+      expect(result?.kind).toBe('twitter');
+    });
+  });
 });

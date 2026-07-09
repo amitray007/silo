@@ -20,7 +20,7 @@ const DEFAULT_SETTINGS = {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },
     youtube: { enabled: true, hover: true },
-    twitter: { enabled: true, hover: true },
+    twitter: { enabled: true, inline: true, hover: true },
   },
 };
 

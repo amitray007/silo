@@ -62,7 +62,7 @@ describeIfPg('enrichLink (integration)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         }),
     };
   }
@@ -194,7 +194,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
           }),
       }),
     ).rejects.toThrow('unexpected extract crash');
@@ -222,7 +222,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -251,7 +251,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -282,6 +282,123 @@ describeIfPg('enrichLink (integration)', () => {
       // not-yet-enriched hacker_news link).
       expect(link?.sourceData).toEqual({ kind: 'link' });
       expect(link?.captureStatus).toBe('bare');
+    });
+  });
+
+  describe('twitter thumbnail override (command-center polish slice)', () => {
+    const okTwitterFetch: SafeFetchResult = {
+      ok: true,
+      html: '<html></html>',
+      contentType: 'text/html',
+      finalUrl: 'https://x.com/someone/status/123',
+      status: 200,
+    };
+
+    it('overrides the extracted (placeholder) imageUrl with sourceData.thumbnailUrl when present', async () => {
+      const id = await newLink('https://x.com/someone/status/123');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okTwitterFetch),
+        extract: () =>
+          Promise.resolve({
+            status: 'full',
+            title: 'Someone on X',
+            // The generic x.com og:image extraction — a useless placeholder.
+            imageUrl: 'https://abs.twimg.com/errors/logo46x38.png',
+          }),
+        enrichSource: () =>
+          Promise.resolve({
+            kind: 'twitter',
+            text: 'a tweet with a video',
+            authorHandle: 'someone',
+            authorName: 'Someone',
+            likes: 1,
+            reposts: 0,
+            replies: 0,
+            quotes: 0,
+            bookmarks: 0,
+            thumbnailUrl: 'https://pbs.twimg.com/ext_tw_video_thumb/123/thumb.jpg',
+          }),
+        getPluginsSetting: () =>
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
+      });
+      const link = await core.getById(id);
+      expect(link?.imageUrl).toBe('https://pbs.twimg.com/ext_tw_video_thumb/123/thumb.jpg');
+      expect(link?.sourceData).toMatchObject({
+        kind: 'twitter',
+        thumbnailUrl: 'https://pbs.twimg.com/ext_tw_video_thumb/123/thumb.jpg',
+      });
+    });
+
+    it('leaves the extracted imageUrl untouched when the tweet has no media (text-only)', async () => {
+      const id = await newLink('https://x.com/someone/status/456');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okTwitterFetch),
+        extract: () =>
+          Promise.resolve({
+            status: 'full',
+            title: 'Someone on X',
+            imageUrl: 'https://abs.twimg.com/errors/logo46x38.png',
+          }),
+        enrichSource: () =>
+          Promise.resolve({
+            kind: 'twitter',
+            text: 'a text-only tweet, no media',
+            authorHandle: 'someone',
+            authorName: 'Someone',
+            likes: 1,
+            reposts: 0,
+            replies: 0,
+            quotes: 0,
+            bookmarks: 0,
+            // No thumbnailUrl — a text-only tweet.
+          }),
+        getPluginsSetting: () =>
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
+      });
+      const link = await core.getById(id);
+      // The placeholder og:image is what gets stored — no override to apply.
+      expect(link?.imageUrl).toBe('https://abs.twimg.com/errors/logo46x38.png');
+    });
+
+    it('does not apply the override for a non-twitter sourceData kind', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=999');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () =>
+          Promise.resolve({
+            ok: true,
+            html: '<html></html>',
+            contentType: 'text/html',
+            finalUrl: 'https://news.ycombinator.com/item?id=999',
+            status: 200,
+          }),
+        extract: () =>
+          Promise.resolve({
+            status: 'full',
+            title: 'HN thread',
+            imageUrl: 'https://example.com/og.png',
+          }),
+        enrichSource: () =>
+          Promise.resolve({ kind: 'hacker_news', points: 5, comments: 1, author: 'x' }),
+        getPluginsSetting: () =>
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
+      });
+      const link = await core.getById(id);
+      expect(link?.imageUrl).toBe('https://example.com/og.png');
     });
   });
 
@@ -325,7 +442,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: false, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
           });
         },
       });
@@ -336,7 +453,7 @@ describeIfPg('enrichLink (integration)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
     });
 
@@ -351,7 +468,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: false, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -373,7 +490,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -402,7 +519,7 @@ describeIfPg('enrichLink (integration)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({

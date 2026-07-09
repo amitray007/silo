@@ -22,7 +22,7 @@ describe('normalizePluginsValue (plan 026 migration)', () => {
       hacker_news: { enabled: true, inline: false, hover: true },
       github: { enabled: false, hover: false },
       youtube: { enabled: true, hover: false },
-      twitter: { enabled: false, hover: true },
+      twitter: { enabled: false, inline: true, hover: true },
     };
     expect(normalizePluginsValue(value)).toEqual(value);
   });
@@ -33,13 +33,13 @@ describe('normalizePluginsValue (plan 026 migration)', () => {
         hacker_news: true,
         github: { enabled: false, hover: true },
         youtube: false,
-        twitter: { enabled: true, hover: false },
+        twitter: { enabled: true, inline: false, hover: false },
       }),
     ).toEqual({
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: false, hover: true },
       youtube: { enabled: false, hover: false },
-      twitter: { enabled: true, hover: false },
+      twitter: { enabled: true, inline: false, hover: false },
     });
   });
 
@@ -77,13 +77,13 @@ describe('normalizePluginsValue (plan 026 migration)', () => {
         hacker_news: { enabled: true }, // missing inline/hover — partial
         github: true,
         youtube: { enabled: 'yes', hover: true }, // wrong types — garbage
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       }),
     ).toEqual({
       hacker_news: SETTINGS_DEFAULTS.plugins.hacker_news,
       github: { enabled: true, hover: true },
       youtube: SETTINGS_DEFAULTS.plugins.youtube,
-      twitter: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
     });
   });
 
@@ -93,13 +93,29 @@ describe('normalizePluginsValue (plan 026 migration)', () => {
         hacker_news: { enabled: true, inline: true, hover: true, extra: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       }),
     ).toEqual({
       hacker_news: SETTINGS_DEFAULTS.plugins.hacker_news,
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
+    });
+  });
+
+  it('a pre-inline stored twitter blob (`{enabled,hover}`, written before the inline field existed) has the wrong arity and falls back to the twitter default (all-on) rather than partially upgrading — correct for a feature addition, since there is no legacy value to preserve for a flag that did not exist yet', () => {
+    expect(
+      normalizePluginsValue({
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+        twitter: { enabled: false, hover: false }, // pre-inline twitter shape (2 keys)
+      }),
+    ).toEqual({
+      hacker_news: { enabled: true, inline: true, hover: true },
+      github: { enabled: true, hover: true },
+      youtube: { enabled: true, hover: true },
+      twitter: SETTINGS_DEFAULTS.plugins.twitter, // falls back to default, includes inline
     });
   });
 
@@ -116,7 +132,7 @@ describe('plugins schema validation (via parseSettingValue)', () => {
       hacker_news: { enabled: true, inline: false, hover: true },
       github: { enabled: false, hover: false },
       youtube: { enabled: true, hover: true },
-      twitter: { enabled: false, hover: true },
+      twitter: { enabled: false, inline: true, hover: true },
     };
     expect(parseSettingValue('plugins', value)).toEqual(value);
   });
@@ -127,13 +143,13 @@ describe('plugins schema validation (via parseSettingValue)', () => {
         hacker_news: { enabled: true, inline: true, hover: true, evil: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       }),
     ).toEqual({
       hacker_news: SETTINGS_DEFAULTS.plugins.hacker_news,
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
     });
   });
 
@@ -143,7 +159,7 @@ describe('plugins schema validation (via parseSettingValue)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
         evil: { enabled: true },
       }),
     ).toThrow();
@@ -165,7 +181,7 @@ describe('plugins schema validation (via parseSettingValue)', () => {
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
     });
   });
 });

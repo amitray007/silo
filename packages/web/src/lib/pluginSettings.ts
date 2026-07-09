@@ -9,8 +9,8 @@ export type PluginSource = keyof PluginsMap;
 /**
  * The fields settable on a given plugin source, keyed by source — mirrors
  * `@silo/core`'s `settingsSchema.plugins` shape per source EXACTLY:
- * `hacker_news` has `enabled`/`inline`/`hover`, `github`/`youtube` have only
- * `enabled`/`hover` (no `inline` — they're hover-only sources, see
+ * `hacker_news`/`twitter` have `enabled`/`inline`/`hover`, `github`/`youtube`
+ * have only `enabled`/`hover` (no `inline` — they're hover-only sources, see
  * `packages/core/src/settings/schema.ts`'s doc comment). Keying the field
  * type by source is what makes `setPluginField('github', 'inline', ...)` a
  * COMPILE error rather than a runtime footgun.

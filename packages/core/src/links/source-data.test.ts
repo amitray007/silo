@@ -56,6 +56,27 @@ describe('sourceDataSchema', () => {
         possiblySensitive: false,
         mediaUrls: ['https://pbs.twimg.com/media/abc123.jpg'],
         externalLinks: ['https://example.com/tool'],
+        thumbnailUrl: 'https://pbs.twimg.com/media/abc123.jpg',
+      };
+      const result = sourceDataSchema.safeParse(payload);
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.data).toEqual(payload);
+      }
+    });
+
+    it("parses a Twitter payload with only thumbnailUrl set (the live enricher's media-thumbnail field, independent of the CLI's mediaUrls)", () => {
+      const payload = {
+        kind: 'twitter',
+        text: 'a tweet with a video',
+        authorHandle: 'someone',
+        authorName: 'Someone',
+        likes: 1,
+        reposts: 0,
+        replies: 0,
+        quotes: 0,
+        bookmarks: 0,
+        thumbnailUrl: 'https://pbs.twimg.com/ext_tw_video_thumb/123/thumb.jpg',
       };
       const result = sourceDataSchema.safeParse(payload);
       expect(result.success).toBe(true);

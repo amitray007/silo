@@ -16,7 +16,7 @@ const LOADING_PLUGINS: PluginsMap = {
   hacker_news: { enabled: true, inline: true, hover: true },
   github: { enabled: true, hover: true },
   youtube: { enabled: true, hover: true },
-  twitter: { enabled: true, hover: true },
+  twitter: { enabled: true, inline: true, hover: true },
 };
 
 /**
@@ -24,10 +24,10 @@ const LOADING_PLUGINS: PluginsMap = {
  * `@silo/core`'s `settingsSchema.plugins` allowlist EXACTLY (`link` excluded:
  * it has no enricher/card to toggle — see `packages/core/src/settings/
  * schema.ts`'s doc comment). `twitter` joined the real allowlist in plan 026
- * (previously a static "Soon" card): it has no worker enricher (its rich data
- * comes from the `silo ingest x` CLI, not a fetched API), so its `enabled`/
- * `hover` are RENDER-only — gating the hover card, not a worker fetch. `key`
- * indexes directly into `SettingsMap['plugins']`.
+ * (previously a static "Soon" card) and now has a live worker enricher too
+ * (`api.fxtwitter.com`) alongside the `silo ingest x` CLI path — `enabled`
+ * gates the worker fetch, `inline`/`hover` gate its two render surfaces,
+ * mirroring `hacker_news`. `key` indexes directly into `SettingsMap['plugins']`.
  */
 const PLUGIN_SOURCES = [
   { key: 'hacker_news', name: 'Hacker News' },
@@ -36,7 +36,7 @@ const PLUGIN_SOURCES = [
   { key: 'twitter', name: 'Twitter / X' },
 ] as const satisfies ReadonlyArray<{ key: PluginSource; name: string }>;
 
-/** The feature toggles a given source supports — HN renders both an inline row line and a hover preview; GitHub/YouTube/Twitter are hover-only today (see `packages/core/src/settings/schema.ts`'s doc comment). Keyed so the panel only ever shows toggles the source's schema actually has. */
+/** The feature toggles a given source supports — HN and Twitter render both an inline row line and a hover preview; GitHub/YouTube are hover-only (see `packages/core/src/settings/schema.ts`'s doc comment). Keyed so the panel only ever shows toggles the source's schema actually has. */
 const FEATURE_ROWS_BY_SOURCE: Record<
   PluginSource,
   ReadonlyArray<{ field: 'inline' | 'hover'; name: string; desc: string }>
@@ -68,6 +68,11 @@ const FEATURE_ROWS_BY_SOURCE: Record<
     },
   ],
   twitter: [
+    {
+      field: 'inline',
+      name: 'Inline on the row',
+      desc: 'Author and tweet text shown directly in the list',
+    },
     {
       field: 'hover',
       name: 'On hover (preview card)',
@@ -319,10 +324,10 @@ function FeatureToggleRow({
  * (`core.setSetting('plugins', ...)` replaces the whole stored value, no
  * sub-key merge).
  *
- * All four sources render identically here — twitter has no worker enricher
- * to gate (its `enabled`/`hover` are render-only, controlling the hover
- * card), but the UI doesn't need to know that distinction; it just flips the
- * same two booleans through the same `setPluginField` path.
+ * All four sources render through the same generic grid/panel — the UI
+ * doesn't need to special-case which fields a source supports; it renders
+ * whatever `FEATURE_ROWS_BY_SOURCE[source.key]` lists through the same
+ * `setPluginField` path.
  */
 export function PluginsTab() {
   const { data: settings } = useSettings();

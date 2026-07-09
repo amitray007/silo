@@ -28,9 +28,9 @@ const settingsSchema = {
    * source-kinds `@silo/core`'s enrichment path knows about
    * (`source-data.ts`'s discriminated union). `link` has no enricher and no
    * rich card, so it's excluded. Each source has a master `enabled` plus the
-   * render-surface flags it supports: `hacker_news` renders both an inline row
-   * line AND a hover preview (`inline`/`hover`); `github`/`youtube`/`twitter`
-   * are hover-only.
+   * render-surface flags it supports: `hacker_news` and `twitter` render both
+   * an inline row line AND a hover preview (`inline`/`hover`); `github`/
+   * `youtube` are hover-only.
    *
    * `enabled` gates the worker fetch for every source with a live enricher
    * (hacker_news/github/youtube/twitter). `twitter` now has one too
@@ -40,7 +40,10 @@ const settingsSchema = {
    * failure like any enricher. (A tweet's rich data can ALSO still arrive
    * pre-extracted via the `silo ingest x` CLI's `/api/ingest` seam — the live
    * enricher is a second, independent path to the same `twitter` SourceData
-   * shape, not a replacement for it.)
+   * shape, not a replacement for it.) `twitter` also renders an inline row
+   * line (author + tweet text) alongside its hover card, mirroring
+   * hacker_news, so it carries the same `inline`/`hover` pair (polish slice,
+   * command-center).
    *
    * `.strict()` on every level so an unknown plugin key OR an unknown
    * feature-flag key in a PATCH body is rejected rather than silently accepted.
@@ -52,7 +55,7 @@ const settingsSchema = {
         .strict(),
       github: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
       youtube: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
-      twitter: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
+      twitter: z.object({ enabled: z.boolean(), inline: z.boolean(), hover: z.boolean() }).strict(),
     })
     .strict(),
 } as const;
@@ -74,7 +77,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },
     youtube: { enabled: true, hover: true },
-    twitter: { enabled: true, hover: true },
+    twitter: { enabled: true, inline: true, hover: true },
   },
 };
 
@@ -155,11 +158,18 @@ export function normalizePluginsValue(raw: unknown): unknown {
       defaults.youtube,
     ),
     // A pre-twitter stored blob has no `twitter` key — `coerceLegacyPluginSource`
-    // returns the default for a missing source, so it fills in `{enabled,hover}`
-    // and `.strict()` validation passes on the upgraded object.
+    // returns the default for a missing source, so it fills in
+    // `{enabled,inline,hover}` and `.strict()` validation passes on the
+    // upgraded object. A pre-INLINE stored twitter blob (`{enabled,hover}`,
+    // written before this field existed) has the WRONG arity for the
+    // fields list below (2 keys vs. 3 expected), so `coerceLegacyPluginSource`
+    // treats it as unrecognized and falls back to the twitter default
+    // (all-on) rather than partially upgrading it — correct for a feature
+    // addition: there's no legacy value to preserve for a flag that didn't
+    // exist yet.
     twitter: coerceLegacyPluginSource(
       value.twitter,
-      ['enabled', 'hover'] as const,
+      ['enabled', 'inline', 'hover'] as const,
       defaults.twitter,
     ),
   };

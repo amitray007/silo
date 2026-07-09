@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSettings } from '../api/hooks';
-import type { LinkJson } from '../api/types';
+import type { LinkJson, SettingsMap } from '../api/types';
 import { isHoverCapable } from '../lib/pointer';
 import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
@@ -68,6 +68,15 @@ import { useLibrarySelection } from './SelectionContext';
  * no row-level rich line in v3 — their richness is hover-preview-only (see
  * `HoverPreview.tsx`'s `RepoVariant`/`VideoVariant`).
  *
+ * Twitter inline line (command-center polish slice): twitter joins
+ * hacker_news as a source with a row-level inline surface — `{authorName}:
+ * {tweet text}`, single-line-ellipsized, same left inset/styling as the HN
+ * line above it (mirrors its structure exactly, gated by the analogous
+ * `plugins.twitter.enabled`/`.inline` pair). The row's TITLE stays the
+ * page's own title unchanged; this line is the "author + text" content the
+ * user picked, added BELOW it — same relationship HN's points/comments line
+ * has to its own title.
+ *
 
  * Multi-select: hovering (or having the `⋯` menu open, or any row already
  * selected) swaps the chip for a checkbox — `hovered` is tracked locally
@@ -78,6 +87,23 @@ import { useLibrarySelection } from './SelectionContext';
  * `bg: (hov || isSel) ? 'var(--hov)' : 'transparent'`), applied as an inline
  * override on top of the CSS default.
  */
+
+/**
+ * Whether a source's inline row surface should render: its plugin must be
+ * `enabled` AND its `inline` feature on. Both default to `true` while
+ * settings are loading (`source` undefined), matching the app's optimism so
+ * there's no flash of a missing line — same shape as `HoverPreview.tsx`'s
+ * `hoverEnabledFor`, just for the `inline` flag instead of `hover`. Shared by
+ * both the Hacker News and Twitter inline gates below (the two sources with
+ * an `inline` field on their plugin settings) so the fallback logic exists
+ * in exactly one place, keeping `LinkRow`'s own cognitive complexity down.
+ */
+function isInlineSurfaceOn(
+  source: SettingsMap['plugins']['hacker_news'] | SettingsMap['plugins']['twitter'] | undefined,
+): boolean {
+  return (source?.enabled ?? true) && (source?.inline ?? true);
+}
+
 export function LinkRow({ link }: { link: LinkJson }) {
   const domain = deriveDomain(link.url);
   const title = link.title ?? deriveTitleFromUrl(link.url);
@@ -92,10 +118,13 @@ export function LinkRow({ link }: { link: LinkJson }) {
   // Plan 026: the Hacker News inline points/comments line renders only when the
   // HN plugin is enabled AND its `inline` feature is on. Default to SHOWING
   // while settings load (`?? true`), matching the app's optimism so there's no
-  // flash of a missing line. (HN is the only source with an inline surface.)
+  // flash of a missing line. Twitter joined this same inline-row surface in
+  // the command-center polish slice — SAME gate shape, so it shares the one
+  // `isInlineSurfaceOn` helper (below the component) rather than repeating
+  // the `?? true` fallback logic inline here for each source.
   const { data: settings } = useSettings();
-  const hn = settings?.plugins?.hacker_news;
-  const showHnInline = (hn?.enabled ?? true) && (hn?.inline ?? true);
+  const showHnInline = isInlineSurfaceOn(settings?.plugins?.hacker_news);
+  const showTwitterInline = isInlineSurfaceOn(settings?.plugins?.twitter);
 
   // The hover-preview trigger (plan 011, V3-8 — v3's `it.enter`/`it.leave`,
   // `Silo-v3.html:808-823`). Suppressed (no preview scheduled at all, not
@@ -321,6 +350,27 @@ export function LinkRow({ link }: { link: LinkJson }) {
             }}
           >
             {link.sourceData.points} points · {link.sourceData.comments} comments
+          </span>
+        )}
+        {link.sourceData.kind === 'twitter' && showTwitterInline && (
+          // Mirrors the HN inline block above exactly (same left inset, same
+          // --text-sm/--fnt/single-line-ellipsis treatment) — the user-picked
+          // "author + text" row: `{authorName}: {tweet text}`, truncated to
+          // one line. The row's own TITLE stays the page title unchanged;
+          // this line ADDS the tweet's actual content underneath it, same
+          // relationship HN's points/comments line has to its title.
+          <span
+            style={{
+              display: 'block',
+              padding: 'var(--s-0-5) var(--s5) 0 calc(var(--row-inset) - var(--s2-5))',
+              fontSize: 'var(--text-sm)',
+              color: 'var(--fnt)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {link.sourceData.authorName}: {link.sourceData.text}
           </span>
         )}
         {link.notes && (

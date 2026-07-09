@@ -7,7 +7,7 @@ function basePlugins(): PluginsMap {
     hacker_news: { enabled: true, inline: true, hover: false },
     github: { enabled: true, hover: false },
     youtube: { enabled: false, hover: true },
-    twitter: { enabled: true, hover: false },
+    twitter: { enabled: true, inline: false, hover: false },
   };
 }
 
@@ -18,7 +18,7 @@ describe('setPluginField', () => {
       hacker_news: { enabled: false, inline: true, hover: false },
       github: { enabled: true, hover: false },
       youtube: { enabled: false, hover: true },
-      twitter: { enabled: true, hover: false },
+      twitter: { enabled: true, inline: false, hover: false },
     });
   });
 
@@ -29,7 +29,7 @@ describe('setPluginField', () => {
       hacker_news: { enabled: true, inline: false, hover: false },
       github: { enabled: true, hover: false },
       youtube: { enabled: false, hover: true },
-      twitter: { enabled: true, hover: false },
+      twitter: { enabled: true, inline: false, hover: false },
     });
     // Untouched sources are passed through by reference, not deep-cloned.
     expect(next.github).toBe(before.github);
@@ -62,14 +62,19 @@ describe('setPluginField', () => {
     expect(next.youtube).toEqual({ enabled: false, hover: false });
   });
 
-  it('flips twitter.enabled and preserves twitter.hover', () => {
+  it('flips twitter.enabled and preserves twitter.inline/hover', () => {
     const next = setPluginField(basePlugins(), 'twitter', 'enabled', false);
-    expect(next.twitter).toEqual({ enabled: false, hover: false });
+    expect(next.twitter).toEqual({ enabled: false, inline: false, hover: false });
   });
 
-  it('flips twitter.hover and preserves twitter.enabled', () => {
+  it('flips twitter.inline and preserves twitter.enabled/hover', () => {
+    const next = setPluginField(basePlugins(), 'twitter', 'inline', true);
+    expect(next.twitter).toEqual({ enabled: true, inline: true, hover: false });
+  });
+
+  it('flips twitter.hover and preserves twitter.enabled/inline', () => {
     const next = setPluginField(basePlugins(), 'twitter', 'hover', true);
-    expect(next.twitter).toEqual({ enabled: true, hover: true });
+    expect(next.twitter).toEqual({ enabled: true, inline: false, hover: true });
   });
 
   it('re-enabling a disabled source restores its prior inline/hover choices rather than resetting them', () => {

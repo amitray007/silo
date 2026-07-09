@@ -100,71 +100,167 @@ function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNew
 }
 
 /**
- * The Twitter/X variant — no v3 mock to match (X was a static "Soon" card in
- * the captured prototype); shaped to sit alongside `HnVariant`/`RepoVariant`
- * exactly: same `VariantBody` padding/title treatment, `--text-sm` meta rows.
- * Shows the author line (`authorName` in `--ink`, `@authorHandle` in `--fnt`),
- * the tweet text (2-3 line clamp, same pattern as `RepoVariant`'s
- * description), then an engagement line with tasteful glyphs matching
- * `HnVariant`'s `▲` convention.
+ * The engagement row's icon set (command-center polish slice — user
+ * feedback: the previous ♥/↻/💬 mix was visually mismatched, an emoji glyph
+ * next to two text characters). ONE consistent style: thin-stroke inline
+ * SVG, 14px, `currentColor`, 1.5 stroke width, round caps/joins — the same
+ * convention `RowMenu.tsx`'s `MenuIcon`/`NavIcons.tsx` use elsewhere in the
+ * app, just sized down slightly (14 vs 16) to sit comfortably inline with
+ * `--text-sm` count text.
+ */
+function EngagementIcon({ children }: { children: ReactNode }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {children}
+    </svg>
+  );
+}
+
+/** A heart outline — likes. */
+function HeartIcon() {
+  return (
+    <EngagementIcon>
+      <path d="M8 13.4S2.6 10.1 2.6 6.3a2.9 2.9 0 0 1 5.4-1.5A2.9 2.9 0 0 1 13.4 6.3c0 3.8-5.4 7.1-5.4 7.1Z" />
+    </EngagementIcon>
+  );
+}
+
+/** Two opposing arrows forming a loop — repost/retweet. */
+function RepostIcon() {
+  return (
+    <EngagementIcon>
+      <path d="M4.4 6V4.8a1.4 1.4 0 0 1 1.4-1.4h5.4" />
+      <path d="M9.6 1.8 11.6 3.4l-2 1.6" />
+      <path d="M11.6 10v1.2a1.4 1.4 0 0 1-1.4 1.4H4.8" />
+      <path d="M6.4 14.2 4.4 12.6l2-1.6" />
+    </EngagementIcon>
+  );
+}
+
+/** A speech bubble outline — replies. */
+function ReplyIcon() {
+  return (
+    <EngagementIcon>
+      <path d="M2.8 4.4a1.4 1.4 0 0 1 1.4-1.4h7.6a1.4 1.4 0 0 1 1.4 1.4v5.2a1.4 1.4 0 0 1-1.4 1.4H7l-2.8 2.4v-2.4H4.2a1.4 1.4 0 0 1-1.4-1.4Z" />
+    </EngagementIcon>
+  );
+}
+
+/** One `{icon} {count}` engagement stat — shared layout so likes/reposts/replies line up identically. */
+function EngagementStat({ icon, count }: { icon: ReactNode; count: number }) {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 4,
+        fontSize: 'var(--text-sm)',
+        color: 'var(--fnt)',
+      }}
+    >
+      {icon}
+      {count}
+    </span>
+  );
+}
+
+/**
+ * The Twitter/X variant — redesigned (command-center polish slice, direct
+ * user feedback on the shipped card): the ORIGINAL version led with
+ * `VariantBody`'s page-`<title>` header ("SpaceX (@SpaceX) on X"), which
+ * repeated the SAME name a THIRD time alongside the author line below it —
+ * pure redundancy, since the author + tweet text already ARE the card's
+ * content. This version drops that header entirely for twitter (never shows
+ * the x.com page `<title>`) and instead leads with the tweet's OWN media
+ * image when present (`sourceData.thumbnailUrl` set by the live FxEmbed
+ * enricher — see `packages/worker/src/enrich-source/twitter.ts`), matching
+ * `VideoVariant`'s cover-image treatment. Below that: the author line
+ * (`authorName` in `--ink` bold, `@authorHandle` in `--fnt`), the tweet text
+ * (3-line clamp), then the engagement row with a matched icon set (see
+ * `EngagementIcon` above).
+ *
+ * Media is rendered via `PreviewCoverImage(linkId)` — silo's own
+ * `/api/preview-image` proxy — NEVER a raw `twimg.com` `<img src>` (privacy:
+ * no third-party call per row). This variant only mounts when the source's
+ * `hover` flag is on (`hoverEnabledFor` in `SourceVariant` below), so the
+ * media image is inherently gated on hover being enabled — there is no
+ * separate media-specific toggle. A tweet with no media (`thumbnailUrl`
+ * unset — text-only, or the proxy 404s) simply omits the image, same
+ * graceful-omission pattern `RepoVariant` uses (unlike `VideoVariant`, no
+ * placeholder — a tweet card reads fine without a banner).
  *
  * `sourceData.text` is rendered as plain JSX text (`{sourceData.text}`), NOT
  * `dangerouslySetInnerHTML` — React escapes it automatically, and
  * `source-data.ts`'s doc comment flags tweet text as UNTRUSTED (captured by
- * the `silo ingest x` CLI from the page itself, not sanitized upstream), so
- * this is the only safe way to render it.
+ * either the live enricher or the `silo ingest x` CLI from the page itself,
+ * not sanitized upstream), so this is the only safe way to render it.
  *
- * Deliberately renders NO images (`authorAvatarUrl`/`mediaUrls`) — both are
- * raw `twimg.com` URLs, and rendering them as `<img src>` from the browser
- * would be a third-party network call per row, violating the "no third-party
- * calls per row" privacy rule (`CLAUDE.md`). Unlike `RepoVariant`/
- * `VideoVariant`, there's no silo-proxied equivalent for tweet media, so v1
- * simply omits it — text + counts only.
+ * `authorAvatarUrl`/`mediaUrls` are still deliberately NOT rendered as raw
+ * `<img>` elements — only the ONE proxied thumbnail goes through
+ * `PreviewCoverImage`, mirroring `RepoVariant`/`VideoVariant`'s single-image
+ * treatment rather than a multi-image gallery.
  */
-function TwitterVariant({ title, sourceData }: { title: string; sourceData: TwitterSourceData }) {
+function TwitterVariant({ linkId, sourceData }: { linkId: string; sourceData: TwitterSourceData }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  // Reset on linkId change — the shared HoverPreview instance is reused
+  // across links (same rationale as RepoVariant/VideoVariant above).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `linkId` is the intended reset trigger; `setImageFailed` is a stable useState setter.
+  useEffect(() => {
+    setImageFailed(false);
+  }, [linkId]);
+
+  const showImage = Boolean(sourceData.thumbnailUrl) && !imageFailed;
+
   return (
-    <VariantBody title={title}>
-      <div style={{ marginTop: 'var(--s1-5)' }}>
-        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--ink)' }}>
-          {sourceData.authorName}
-        </span>{' '}
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
-          @{sourceData.authorHandle}
-        </span>
+    <>
+      {showImage && <PreviewCoverImage linkId={linkId} onError={() => setImageFailed(true)} />}
+      <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
+        <div>
+          <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--ink)' }}>
+            {sourceData.authorName}
+          </span>{' '}
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
+            @{sourceData.authorHandle}
+          </span>
+        </div>
+        <div
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: 'var(--mut)',
+            marginTop: 3,
+            lineHeight: 'var(--lh-snug)',
+            display: '-webkit-box',
+            WebkitLineClamp: 3,
+            WebkitBoxOrient: 'vertical',
+            overflow: 'hidden',
+          }}
+        >
+          {sourceData.text}
+        </div>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--s3)',
+            marginTop: 'var(--s3)',
+          }}
+        >
+          <EngagementStat icon={<HeartIcon />} count={sourceData.likes} />
+          <EngagementStat icon={<RepostIcon />} count={sourceData.reposts} />
+          <EngagementStat icon={<ReplyIcon />} count={sourceData.replies} />
+        </div>
       </div>
-      <div
-        style={{
-          fontSize: 'var(--text-sm)',
-          color: 'var(--mut)',
-          marginTop: 3,
-          lineHeight: 'var(--lh-snug)',
-          display: '-webkit-box',
-          WebkitLineClamp: 3,
-          WebkitBoxOrient: 'vertical',
-          overflow: 'hidden',
-        }}
-      >
-        {sourceData.text}
-      </div>
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 'var(--s2-5)',
-          marginTop: 'var(--s3)',
-        }}
-      >
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
-          ♥ {sourceData.likes}
-        </span>
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
-          ↻ {sourceData.reposts}
-        </span>
-        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
-          💬 {sourceData.replies}
-        </span>
-      </div>
-    </VariantBody>
+    </>
   );
 }
 
@@ -444,7 +540,7 @@ function SourceVariant({
     return <VideoVariant title={title} linkId={link.id} sourceData={data} />;
   }
   if (data.kind === 'twitter' && hoverEnabledFor(plugins, 'twitter')) {
-    return <TwitterVariant title={title} sourceData={data} />;
+    return <TwitterVariant linkId={link.id} sourceData={data} />;
   }
   return <GenericVariant title={title} tagLine={tagLine} hasTags={hasTags} />;
 }

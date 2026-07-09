@@ -54,6 +54,11 @@ export type SourceData =
       possiblySensitive?: boolean;
       mediaUrls?: string[];
       externalLinks?: string[];
+      /** The tweet's own media thumbnail (video poster / photo), set by the
+       * live FxEmbed enricher when present — served through
+       * `/api/preview-image` (never rendered as a raw `twimg.com` `<img
+       * src>`). See `packages/core/src/links/source-data.ts`'s doc comment. */
+      thumbnailUrl?: string;
     }
   | {
       kind: 'github';
@@ -163,10 +168,10 @@ export type TagsResponse = { tags: TagCount[] };
  *
  * `plugins` (plan 026): each source is now a per-feature object rather than
  * a bare boolean — a master `enabled` (gates the worker fetch entirely) plus
- * the render-surface flags that source supports. `hacker_news` renders both
- * an inline row line and a hover preview (`inline`/`hover`); `github`/
- * `youtube` are hover-only today (no `inline`). Mirror core's shape EXACTLY
- * — do not add fields a source doesn't have.
+ * the render-surface flags that source supports. `hacker_news` and `twitter`
+ * render both an inline row line and a hover preview (`inline`/`hover`);
+ * `github`/`youtube` are hover-only (no `inline`). Mirror core's shape
+ * EXACTLY — do not add fields a source doesn't have.
  */
 export type SettingsMap = {
   theme: 'light' | 'dark' | 'system';
@@ -175,10 +180,11 @@ export type SettingsMap = {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
     github: { enabled: boolean; hover: boolean };
     youtube: { enabled: boolean; hover: boolean };
-    // twitter is render-only (no worker enricher — data comes from the
-    // `silo ingest x` CLI); enabled/hover gate its hover card. See
+    // twitter has a live worker enricher (api.fxtwitter.com) AND can arrive
+    // pre-extracted via the `silo ingest x` CLI; `enabled` gates the worker
+    // fetch, `inline`/`hover` gate its two render surfaces. See
     // `packages/core/src/settings/schema.ts`'s doc comment.
-    twitter: { enabled: boolean; hover: boolean };
+    twitter: { enabled: boolean; inline: boolean; hover: boolean };
   };
 };
 

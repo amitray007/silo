@@ -4,7 +4,7 @@ import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../api/hooks';
 import type { SettingsMap } from '../api/types';
-import { hackerNewsSourceData, makeLink } from '../test/fixtures';
+import { hackerNewsSourceData, makeLink, twitterSourceData } from '../test/fixtures';
 import { HoverPreviewProvider } from './HoverPreviewContext';
 import { LinkRow } from './LinkRow';
 import { RowMenuProvider } from './RowMenuContext';
@@ -267,7 +267,7 @@ describe('LinkRow', () => {
         hacker_news: { enabled: true, inline: false, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
       expect(screen.queryByText('342 points · 128 comments')).toBeNull();
       expect(screen.getByText('A post')).toBeDefined();
@@ -278,7 +278,7 @@ describe('LinkRow', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
       expect(screen.getByText('342 points · 128 comments')).toBeDefined();
     });
@@ -288,7 +288,7 @@ describe('LinkRow', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
       expect(screen.queryByText('342 points · 128 comments')).toBeNull();
     });
@@ -296,6 +296,63 @@ describe('LinkRow', () => {
     it('no settings seeded (loading): the line renders (optimistic ?? true default)', () => {
       renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />);
       expect(screen.getByText('342 points · 128 comments')).toBeDefined();
+    });
+  });
+
+  it('renders the "author: tweet text" inline line for a Twitter/X link (command-center polish slice)', () => {
+    renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />);
+    expect(
+      screen.getByText('Amit Ray: Just shipped a new feature — thrilled with how it turned out.'),
+    ).toBeDefined();
+  });
+
+  describe('Twitter inline plugin gate (command-center polish slice)', () => {
+    it('inline:false hides the author/text line (but the row/title still renders)', () => {
+      renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />, {
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: false, hover: true },
+      });
+      expect(
+        screen.queryByText(
+          'Amit Ray: Just shipped a new feature — thrilled with how it turned out.',
+        ),
+      ).toBeNull();
+      expect(screen.getByText('A post')).toBeDefined();
+    });
+
+    it('inline:true shows the author/text line', () => {
+      renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />, {
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
+      });
+      expect(
+        screen.getByText('Amit Ray: Just shipped a new feature — thrilled with how it turned out.'),
+      ).toBeDefined();
+    });
+
+    it('enabled:false (master off) hides the author/text line even when inline:true', () => {
+      renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />, {
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+        twitter: { enabled: false, inline: true, hover: true },
+      });
+      expect(
+        screen.queryByText(
+          'Amit Ray: Just shipped a new feature — thrilled with how it turned out.',
+        ),
+      ).toBeNull();
+    });
+
+    it('no settings seeded (loading): the line renders (optimistic ?? true default)', () => {
+      renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />);
+      expect(
+        screen.getByText('Amit Ray: Just shipped a new feature — thrilled with how it turned out.'),
+      ).toBeDefined();
     });
   });
 });

@@ -111,6 +111,22 @@ const twitterSourceData = z
      * bookmark -> 1 silo link, external URLs are NOT split into separate
      * silo entries). */
     externalLinks: z.array(z.string().min(1).max(2_000)).max(64).optional(),
+    /**
+     * The tweet's own media thumbnail (a video's poster frame or a photo's
+     * url — `pbs.twimg.com`), populated by the LIVE FxEmbed enricher
+     * (`packages/worker/src/enrich-source/twitter.ts`) when the tweet has
+     * media. Same "server stores it, browser never fetches it directly"
+     * pattern as `youtube`'s `thumbnailUrl`: `GET /api/preview-image`
+     * (`packages/api/src/routes/preview-image.ts`) falls back to this field
+     * when the link's own `imageUrl` is unset, so the web card renders it via
+     * `PreviewCoverImage(linkId)` through the proxy — never a raw
+     * `twimg.com` `<img src>` (privacy: no third-party call per row). A
+     * text-only tweet (no media) omits this field entirely; the card then
+     * shows no image. Not populated by the `silo ingest x` CLI's pre-
+     * extracted payload today (its `mediaUrls` above is the equivalent for
+     * that path) — only the live enricher sets it.
+     */
+    thumbnailUrl: z.string().min(1).max(2_000).optional(),
   })
   .strict();
 

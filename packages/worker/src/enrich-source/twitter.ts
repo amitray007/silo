@@ -30,9 +30,20 @@
  *                            `.length(2)` would otherwise reject)
  *   possibly_sensitive    -> possiblySensitive (optional)
  *   media.all[].url       -> mediaUrls (optional, thumbnail/photo urls only —
- *                            v1 does not render images, see source-data.ts's
- *                            RENDERER SAFETY note, so this is populated only
- *                            when trivially available)
+ *                            kept as raw metadata, see source-data.ts's
+ *                            RENDERER SAFETY note — never rendered as a raw
+ *                            `<img src>` in the web app)
+ *   media (best single)   -> thumbnailUrl (optional — command-center polish
+ *                            slice: the ONE best media thumbnail for this
+ *                            tweet, picked by `extractThumbnailUrl` below. A
+ *                            video's `media.all[0].thumbnail_url` (its poster
+ *                            frame, a twimg.com still) is preferred when
+ *                            present; otherwise the first photo's url
+ *                            (`media.photos[0].url`, falling back to
+ *                            `media.all[0].url`). Consumed by `enrich.ts`,
+ *                            which overrides the page's own (useless,
+ *                            generic X-logo) og:image `imageUrl` with this
+ *                            when present — see that module's doc comment.)
  *
  * `text`/`authorHandle`/`authorName` are REQUIRED by the schema (min length
  * 1) — a response missing any of them degrades to `undefined` rather than
@@ -52,11 +63,16 @@ interface FxEmbedAuthor {
 }
 
 /** The subset of FxEmbed's nested `media` object this enricher actually reads. */
-interface FxEmbedMediaPhoto {
+interface FxEmbedMediaItem {
   url?: unknown;
+  /** Present on video/gif media items — a twimg.com poster-frame still. */
+  thumbnail_url?: unknown;
 }
 interface FxEmbedMedia {
   all?: unknown;
+  /** FxEmbed also breaks media out by type; `photos` is used as the
+   * photo-specific fallback when `all[0]` isn't itself a photo. */
+  photos?: unknown;
 }
 
 /** The subset of FxEmbed's `tweet` JSON this enricher actually reads. */
@@ -93,9 +109,10 @@ function toCount(value: unknown): number | undefined {
 
 /**
  * Best-effort thumbnail/photo urls off FxEmbed's nested `media.all[].url` —
- * v1 does not render images (privacy — no third-party media fetch per row),
- * so this is populated only when trivially available and never over-engineered
- * (no video-variant selection, no size negotiation).
+ * kept as raw metadata only (never rendered as a raw `<img src>` in the web
+ * app — see source-data.ts's RENDERER SAFETY note), so this is populated
+ * only when trivially available and never over-engineered (no video-variant
+ * selection, no size negotiation).
  */
 function extractMediaUrls(media: unknown): string[] | undefined {
   if (media === null || typeof media !== 'object') return undefined;
@@ -103,12 +120,62 @@ function extractMediaUrls(media: unknown): string[] | undefined {
   if (!Array.isArray(all)) return undefined;
   const urls = all
     .map((item) =>
-      item !== null && typeof item === 'object' ? (item as FxEmbedMediaPhoto).url : undefined,
+      item !== null && typeof item === 'object' ? (item as FxEmbedMediaItem).url : undefined,
     )
     .filter(
       (url): url is string => typeof url === 'string' && url.length > 0 && url.length <= 2_000,
     );
   return urls.length > 0 ? urls.slice(0, 64) : undefined;
+}
+
+/** A bounded, non-empty string url, or `undefined` for anything else — the one validity check every candidate thumbnail/photo url in `extractThumbnailUrl` needs. */
+function isUsableUrl(value: unknown): value is string {
+  return typeof value === 'string' && value.length > 0 && value.length <= 2_000;
+}
+
+/**
+ * Picks the SINGLE best media thumbnail for the tweet, in priority order
+ * (command-center polish slice — see this module's doc comment for the
+ * verified FxEmbed shape):
+ *
+ *   1. `media.all[0].thumbnail_url` — a video/gif's poster-frame still. Videos
+ *      are preferred first because FxEmbed's own og:image for a video tweet
+ *      IS this same still, so it's the most representative single frame.
+ *   2. `media.photos[0].url` — the first photo, when FxEmbed breaks media out
+ *      by type.
+ *   3. `media.all[0].url` — the first media item's own url, as a last-resort
+ *      fallback when neither of the above is present (e.g. a photo-only
+ *      response that only populated `all`, not `photos`).
+ *
+ * Returns `undefined` for a text-only tweet (no `media` at all) or any
+ * malformed/unusable shape — this is a "nice to have," never a reason to
+ * fail the candidate.
+ */
+function extractThumbnailUrl(media: unknown): string | undefined {
+  if (media === null || typeof media !== 'object') return undefined;
+  const m = media as FxEmbedMedia;
+
+  const all = Array.isArray(m.all) ? m.all : undefined;
+  const firstAll =
+    all && all[0] !== null && typeof all[0] === 'object' ? (all[0] as FxEmbedMediaItem) : undefined;
+  if (firstAll && isUsableUrl(firstAll.thumbnail_url)) {
+    return firstAll.thumbnail_url;
+  }
+
+  const photos = Array.isArray(m.photos) ? m.photos : undefined;
+  const firstPhoto =
+    photos && photos[0] !== null && typeof photos[0] === 'object'
+      ? (photos[0] as FxEmbedMediaItem)
+      : undefined;
+  if (firstPhoto && isUsableUrl(firstPhoto.url)) {
+    return firstPhoto.url;
+  }
+
+  if (firstAll && isUsableUrl(firstAll.url)) {
+    return firstAll.url;
+  }
+
+  return undefined;
 }
 
 type TwitterSourceData = Extract<SourceData, { kind: 'twitter' }>;
@@ -140,6 +207,10 @@ function optionalFields(tweet: FxEmbedTweet, author: FxEmbedAuthor | undefined) 
   const mediaUrls = extractMediaUrls(tweet.media);
   if (mediaUrls) {
     fields.mediaUrls = mediaUrls;
+  }
+  const thumbnailUrl = extractThumbnailUrl(tweet.media);
+  if (thumbnailUrl) {
+    fields.thumbnailUrl = thumbnailUrl;
   }
   return fields;
 }

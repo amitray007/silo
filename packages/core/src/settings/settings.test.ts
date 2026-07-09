@@ -38,7 +38,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
     });
 
@@ -51,7 +51,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       });
     });
@@ -73,13 +73,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
         hacker_news: { enabled: false, inline: false, hover: false },
         github: { enabled: true, hover: true },
         youtube: { enabled: false, hover: false },
-        twitter: { enabled: false, hover: false },
+        twitter: { enabled: false, inline: false, hover: false },
       });
       expect(await ops.getSetting('plugins')).toEqual({
         hacker_news: { enabled: false, inline: false, hover: false },
         github: { enabled: true, hover: true },
         youtube: { enabled: false, hover: false },
-        twitter: { enabled: false, hover: false },
+        twitter: { enabled: false, inline: false, hover: false },
       });
     });
 
@@ -94,7 +94,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: false, hover: false },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true }, // filled with default — a legacy blob predates twitter entirely
+        twitter: { enabled: true, inline: true, hover: true }, // filled with default — a legacy blob predates twitter entirely
       });
     });
 
@@ -109,7 +109,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true }, // filled with default
+        twitter: { enabled: true, inline: true, hover: true }, // filled with default
       });
     });
 
@@ -147,7 +147,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
           evil: { enabled: true },
         }),
       ).rejects.toThrow();
@@ -158,13 +158,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true, evil: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
       expect(await ops.getSetting('plugins')).toEqual({
         hacker_news: { enabled: true, inline: true, hover: true }, // fell back to default
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
       });
     });
 
@@ -181,7 +181,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true }, // filled with default
-        twitter: { enabled: true, hover: true }, // filled with default
+        twitter: { enabled: true, inline: true, hover: true }, // filled with default
       });
     });
 
@@ -203,7 +203,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       });
     });
@@ -234,7 +234,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
         },
       });
     });
@@ -269,7 +269,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
           hacker_news: { enabled: false, inline: false, hover: false },
           github: { enabled: false, hover: false },
           youtube: { enabled: false, hover: false },
-          twitter: { enabled: false, hover: false },
+          twitter: { enabled: false, inline: false, hover: false },
         },
       });
       expect(result).toEqual({
@@ -279,7 +279,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
           hacker_news: { enabled: false, inline: false, hover: false },
           github: { enabled: false, hover: false },
           youtube: { enabled: false, hover: false },
-          twitter: { enabled: false, hover: false },
+          twitter: { enabled: false, inline: false, hover: false },
         },
       });
       // And it's actually persisted, not just returned.

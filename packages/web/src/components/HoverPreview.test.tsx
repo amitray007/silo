@@ -258,7 +258,7 @@ describe('HoverPreview', () => {
       expect(document.querySelector('img')).toBeNull();
     });
 
-    it('renders the Twitter variant: author name/handle, tweet text, and engagement counts', () => {
+    it('renders the Twitter variant: author name/handle, tweet text, and engagement counts (icon + number)', () => {
       renderPreview(
         makeLink({
           title: 'Amit Ray on X',
@@ -271,17 +271,82 @@ describe('HoverPreview', () => {
       expect(
         screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
       ).toBeDefined();
-      expect(screen.getByText('♥ 512')).toBeDefined();
-      expect(screen.getByText('↻ 48')).toBeDefined();
-      expect(screen.getByText('💬 23')).toBeDefined();
+      // Counts render as icon+number, not a text glyph prefix — assert the
+      // bare numbers (each engagement stat is its own <span>).
+      expect(screen.getByText('512')).toBeDefined();
+      expect(screen.getByText('48')).toBeDefined();
+      expect(screen.getByText('23')).toBeDefined();
       expect(screen.getByRole('link', { name: 'Open ↗' })).toBeDefined();
     });
 
-    it('Twitter variant never renders an <img> (no third-party twimg.com calls)', () => {
+    it('does NOT render the redundant page-title header ("Amit Ray on X") — only the author line + tweet text', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray (@amitray007) on X',
+          sourceData: twitterSourceData,
+          url: 'https://x.com/amitray007/status/1',
+        }),
+      );
+      // The author name appears exactly once (the author line), not also as
+      // a page-title header repeating the same name.
+      expect(screen.getAllByText('Amit Ray')).toHaveLength(1);
+      expect(screen.queryByText('Amit Ray (@amitray007) on X')).toBeNull();
+      expect(screen.queryByText(/on X$/)).toBeNull();
+    });
+
+    it('the engagement row uses one consistent SVG icon set (heart/repost/reply), not mismatched emoji', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray on X',
+          sourceData: twitterSourceData,
+          url: 'https://x.com/amitray007/status/1',
+        }),
+      );
+      // Three matched inline SVGs (14x14, same stroke/viewBox), no emoji glyph.
+      const svgs = Array.from(document.querySelectorAll('svg')).filter(
+        (svg) => svg.getAttribute('width') === '14' && svg.getAttribute('height') === '14',
+      );
+      expect(svgs).toHaveLength(3);
+      for (const svg of svgs) {
+        expect(svg.getAttribute('viewBox')).toBe('0 0 16 16');
+        expect(svg.getAttribute('stroke-width')).toBe('1.5');
+      }
+      expect(screen.queryByText(/💬/)).toBeNull();
+      expect(screen.queryByText(/♥/)).toBeNull();
+      expect(screen.queryByText(/↻/)).toBeNull();
+    });
+
+    it('Twitter variant never renders a raw <img> (no third-party twimg.com calls) even with an avatar url present', () => {
       renderPreview(
         makeLink({
           title: 'Amit Ray on X',
           sourceData: { ...twitterSourceData, authorAvatarUrl: 'https://pbs.twimg.com/a.jpg' },
+        }),
+      );
+      expect(document.querySelector('img')).toBeNull();
+    });
+
+    it('renders the tweet media thumbnail via the preview-image proxy (never a raw twimg.com src) when thumbnailUrl is present', () => {
+      renderPreview(
+        makeLink({
+          id: 'link-with-media',
+          title: 'Amit Ray on X',
+          sourceData: {
+            ...twitterSourceData,
+            thumbnailUrl: 'https://pbs.twimg.com/ext_tw_video_thumb/1/thumb.jpg',
+          },
+        }),
+      );
+      const img = document.querySelector('img');
+      expect(img).not.toBeNull();
+      expect(img?.getAttribute('src')).toBe('/api/preview-image?linkId=link-with-media');
+    });
+
+    it('omits the image entirely for a text-only tweet (no thumbnailUrl)', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray on X',
+          sourceData: twitterSourceData, // fixture has no thumbnailUrl
         }),
       );
       expect(document.querySelector('img')).toBeNull();
@@ -293,7 +358,7 @@ describe('HoverPreview', () => {
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
     };
 
     it('github: hover:false falls back to the generic variant (repo stats absent, generic card shown)', () => {
@@ -408,7 +473,7 @@ describe('HoverPreview', () => {
           sourceData: twitterSourceData,
           url: 'https://x.com/amitray007/status/1',
         }),
-        { ...allOn, twitter: { enabled: true, hover: false } },
+        { ...allOn, twitter: { enabled: true, inline: false, hover: false } },
       );
       expect(screen.queryByText('@amitray007')).toBeNull();
       expect(screen.queryByText('♥ 512')).toBeNull();
@@ -422,7 +487,7 @@ describe('HoverPreview', () => {
           sourceData: twitterSourceData,
           url: 'https://x.com/amitray007/status/1',
         }),
-        { ...allOn, twitter: { enabled: false, hover: true } },
+        { ...allOn, twitter: { enabled: false, inline: true, hover: true } },
       );
       expect(screen.queryByText('@amitray007')).toBeNull();
       expect(screen.getByText('Amit Ray on X')).toBeDefined();
@@ -438,7 +503,7 @@ describe('HoverPreview', () => {
         allOn,
       );
       expect(screen.getByText('@amitray007')).toBeDefined();
-      expect(screen.getByText('♥ 512')).toBeDefined();
+      expect(screen.getByText('512')).toBeDefined();
     });
 
     it('loading default (no settings seeded): the rich variant renders (optimistic ?? true)', () => {
