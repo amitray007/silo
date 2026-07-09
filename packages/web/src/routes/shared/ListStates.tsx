@@ -40,7 +40,7 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
       <p
         style={{
           margin: '22px 0 0',
-          fontSize: '0.92rem',
+          fontSize: 'var(--text-md)',
           fontWeight: 500,
           color: 'var(--ink)',
           letterSpacing: 'var(--tracking-tight)',
@@ -52,7 +52,7 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
       <p
         style={{
           margin: '6px 0 0',
-          fontSize: '0.84rem',
+          fontSize: 'var(--text-base)',
           color: 'var(--mut)',
           maxWidth: '24rem',
           textWrap: 'pretty',
@@ -71,7 +71,7 @@ export function ErrorState({ error }: { error: ApiError }) {
       <p
         style={{
           margin: 0,
-          fontSize: '0.92rem',
+          fontSize: 'var(--text-md)',
           fontWeight: 500,
           color: 'var(--warn)',
           letterSpacing: 'var(--tracking-tight)',
@@ -83,7 +83,7 @@ export function ErrorState({ error }: { error: ApiError }) {
       <p
         style={{
           margin: '6px 0 0',
-          fontSize: '0.84rem',
+          fontSize: 'var(--text-base)',
           color: 'var(--mut)',
           maxWidth: '24rem',
           textWrap: 'pretty',

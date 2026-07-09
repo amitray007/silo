@@ -88,7 +88,12 @@ export function Dock({
 function DockSelectedLabel({ count }: { count: number }) {
   return (
     <span
-      style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap' }}
+      style={{
+        fontSize: 'var(--text-sm)',
+        fontWeight: 500,
+        color: 'var(--ink)',
+        whiteSpace: 'nowrap',
+      }}
     >
       {count} selected
     </span>
@@ -137,7 +142,7 @@ function dockActionStyle(disabled: boolean) {
     border: 0,
     background: 'none',
     fontFamily: 'inherit',
-    fontSize: '0.78rem',
+    fontSize: 'var(--text-sm)',
     fontWeight: 500,
     color: 'var(--mut)',
     cursor: disabled ? 'default' : ('pointer' as const),

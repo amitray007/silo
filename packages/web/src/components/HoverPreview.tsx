@@ -24,7 +24,14 @@ type YoutubeSourceData = Extract<SourceData, { kind: 'youtube' }>;
 function VariantBody({ title, children }: { title: string; children?: ReactNode }) {
   return (
     <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
-      <div style={{ fontSize: '0.84rem', fontWeight: 500, color: 'var(--ink)', lineHeight: 1.4 }}>
+      <div
+        style={{
+          fontSize: 'var(--text-base)',
+          fontWeight: 500,
+          color: 'var(--ink)',
+          lineHeight: 1.4,
+        }}
+      >
         {title}
       </div>
       {children}
@@ -79,10 +86,10 @@ function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNew
           marginTop: 'var(--s1-5)',
         }}
       >
-        <span style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--markt)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--markt)' }}>
           ▲ {sourceData.points} points
         </span>
-        <span style={{ fontSize: '0.76rem', color: 'var(--fnt)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
           {sourceData.comments} comments
         </span>
       </div>
@@ -140,7 +147,7 @@ function RepoVariant({
       <div style={{ padding: 'var(--s3) var(--s3-5) var(--s-0-5)' }}>
         <div
           style={{
-            fontSize: '0.84rem',
+            fontSize: 'var(--text-base)',
             fontWeight: 500,
             color: 'var(--ink)',
             overflowWrap: 'break-word',
@@ -152,7 +159,7 @@ function RepoVariant({
         {sourceData.description && (
           <div
             style={{
-              fontSize: '0.76rem',
+              fontSize: 'var(--text-sm)',
               color: 'var(--mut)',
               marginTop: 3,
               lineHeight: 'var(--lh-snug)',
@@ -173,7 +180,9 @@ function RepoVariant({
         <div style={{ display: 'flex', gap: 18, marginTop: 'var(--s3)' }}>
           {stats.map((s) => (
             <div key={s.key}>
-              <div style={{ fontSize: '0.8rem', fontWeight: 500, color: 'var(--ink)' }}>{s.n}</div>
+              <div style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--ink)' }}>
+                {s.n}
+              </div>
               <div style={{ fontSize: '0.64rem', color: 'var(--fnt)', marginTop: 1 }}>
                 {s.label}
               </div>
@@ -194,7 +203,9 @@ function RepoVariant({
               <span style={{ width: `${langPct}%`, background: 'var(--mark)' }} />
               <span style={{ flex: 1, background: 'var(--line)' }} />
             </div>
-            <div style={{ fontSize: '0.68rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
+            <div
+              style={{ fontSize: 'var(--text-xs)', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}
+            >
               {sourceData.language}
             </div>
           </>
@@ -282,7 +293,7 @@ function VideoVariant({
         <PreviewCoverImage linkId={linkId} onError={() => setImageFailed(true)} />
       )}
       <VariantBody title={title}>
-        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1)' }}>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)', marginTop: 'var(--s1)' }}>
           {sourceData.channel}
         </div>
       </VariantBody>
@@ -307,7 +318,7 @@ function GenericVariant({
   return (
     <VariantBody title={title}>
       {hasTags && (
-        <div style={{ fontSize: '0.76rem', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
+        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
           {tagLine}
         </div>
       )}
@@ -402,7 +413,7 @@ export function HoverPreview({
           padding: 'var(--s2-5) var(--s3-5) var(--s2-5)',
           marginTop: 'var(--s2)',
           borderTop: '1px solid var(--line)',
-          fontSize: '0.72rem',
+          fontSize: 'var(--text-xs)',
           color: 'var(--fnt)',
         }}
       >

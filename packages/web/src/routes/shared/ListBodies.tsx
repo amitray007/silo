@@ -53,7 +53,7 @@ function LinkListBody({
               color: 'var(--ink)',
               borderRadius: 6,
               padding: '6px 14px',
-              fontSize: '0.84rem',
+              fontSize: 'var(--text-base)',
               fontFamily: 'inherit',
               cursor: isFetchingNextPage ? 'default' : 'pointer',
               opacity: isFetchingNextPage ? 0.6 : 1,

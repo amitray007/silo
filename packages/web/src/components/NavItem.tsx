@@ -90,7 +90,7 @@ export function NavItem({
     textAlign: 'left' as const,
     padding,
     borderRadius: 8,
-    fontSize: '0.84rem',
+    fontSize: 'var(--text-base)',
     fontWeight,
     cursor: 'pointer',
     textDecoration: 'none',
@@ -143,7 +143,7 @@ export function NavItem({
           style={{
             marginLeft: 'auto',
             lineHeight: 1,
-            fontSize: '0.72rem',
+            fontSize: 'var(--text-xs)',
             fontWeight: 400,
             color: 'var(--fnt)',
           }}

@@ -33,7 +33,7 @@ function menuItemStyle(active = false): React.CSSProperties {
     textAlign: 'left',
     padding: 'var(--s2) var(--s2-5)',
     borderRadius: 8,
-    fontSize: '0.82rem',
+    fontSize: 'var(--text-sm)',
     fontWeight: 500,
     color: 'var(--mut)',
     cursor: 'pointer',
@@ -368,7 +368,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
           </span>
           <span>Tags</span>
           {link.tags.length > 0 && (
-            <span style={{ fontSize: '0.72rem', color: 'var(--fnt)', fontWeight: 400 }}>
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--fnt)', fontWeight: 400 }}>
               {link.tags.length}
             </span>
           )}

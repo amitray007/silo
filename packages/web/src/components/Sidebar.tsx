@@ -240,7 +240,9 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px 15px' }}>
         <GrainDot size={16} />
-        <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>silo</span>
+        <span style={{ fontWeight: 500, fontSize: 'var(--text-md)', letterSpacing: '-0.01em' }}>
+          silo
+        </span>
       </div>
 
       <SidebarSearchItem onOpenSearch={onOpenSearch} />

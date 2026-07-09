@@ -203,7 +203,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
                 style={{
                   flex: 'none',
                   maxWidth: '14rem',
-                  fontSize: 'var(--text-base)',
+                  fontSize: 'var(--text-sm)',
                   color: 'var(--fnt)',
                   fontWeight: 400,
                   whiteSpace: 'nowrap',
@@ -265,7 +265,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
               border: 0,
               borderRadius: 6,
               background: 'none',
-              fontSize: '0.9rem',
+              fontSize: 'var(--text-md)',
               lineHeight: 1,
               color: menuOpen ? 'var(--ink)' : 'var(--ghost)',
               cursor: 'pointer',
@@ -291,7 +291,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
               // here to avoid double-counting it (title = row-pad + chip + gap;
               // this = the same, expressed relative to the already-padded box).
               padding: 'var(--s-0-5) var(--s5) 0 calc(var(--row-inset) - var(--s2-5))',
-              fontSize: '0.78rem',
+              fontSize: 'var(--text-sm)',
               color: 'var(--fnt)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
@@ -315,7 +315,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
               // here to avoid double-counting it (title = row-pad + chip + gap;
               // this = the same, expressed relative to the already-padded box).
               padding: 'var(--s-0-5) var(--s5) 0 calc(var(--row-inset) - var(--s2-5))',
-              fontSize: '0.8rem',
+              fontSize: 'var(--text-sm)',
               color: 'var(--mut)',
               fontStyle: 'italic',
               maxWidth: '48ch',

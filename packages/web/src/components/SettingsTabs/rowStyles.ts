@@ -30,7 +30,7 @@ export const settingsRowDivided: CSSProperties = {
 
 /** A row's label line (the setting's name) — Title Case, matching the reference's row-name treatment. */
 export const rowLabel: CSSProperties = {
-  fontSize: '0.9rem',
+  fontSize: 'var(--text-md)',
   fontWeight: 500,
   color: 'var(--ink)',
   lineHeight: 1.35,
@@ -38,7 +38,7 @@ export const rowLabel: CSSProperties = {
 
 /** A row's muted description line under the label. */
 export const rowDesc: CSSProperties = {
-  fontSize: '0.78rem',
+  fontSize: 'var(--text-sm)',
   color: 'var(--fnt)',
   marginTop: 3,
   lineHeight: 'var(--lh-snug)',
@@ -48,14 +48,14 @@ export const rowDesc: CSSProperties = {
 /** The calm footer note some tabs end with. */
 export const tabNote: CSSProperties = {
   margin: '16px 0 0',
-  fontSize: '0.76rem',
+  fontSize: 'var(--text-sm)',
   color: 'var(--fnt)',
   lineHeight: 1.5,
 };
 
 /** A quiet, non-interactive status chip (Plugins' "soon") — the Oat calm-badge look, using the new `--badge-*` tokens (bg/border/ink) as one cohesive set rather than reusing `--line`/`--ghost` ad hoc. */
 export const badgeChip: CSSProperties = {
-  fontSize: '0.72rem',
+  fontSize: 'var(--text-xs)',
   fontWeight: 500,
   color: 'var(--badge-ink)',
   border: '1px solid var(--badge-border)',

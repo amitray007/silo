@@ -132,7 +132,7 @@ describe('NavItem', () => {
       const button = screen.getByRole('button', { name: /search/i });
       expect(button.style.padding).toBe('7px var(--s2-5)');
       expect(button.style.fontWeight).toBe('500');
-      expect(button.style.fontSize).toBe('0.84rem');
+      expect(button.style.fontSize).toBe('var(--text-base)');
       expect(button.style.color).toBe('var(--mut)');
       expect(button.className).toContain('silo-nav-item');
       expect(button.querySelector('svg')).not.toBeNull();

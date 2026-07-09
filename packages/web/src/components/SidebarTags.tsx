@@ -119,7 +119,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             label, not a row. */}
         <p
           style={{
-            fontSize: '0.8rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 500,
             color: 'var(--fnt)',
             margin: 0,
@@ -192,7 +192,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             background: 'var(--bg)',
             color: 'var(--ink)',
             font: 'inherit',
-            fontSize: '0.78rem',
+            fontSize: 'var(--text-sm)',
             outline: 'none',
             width: 'calc(100% - 8px)',
             boxSizing: 'border-box',
@@ -226,7 +226,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
               background: 'var(--bg)',
               color: 'var(--ink)',
               font: 'inherit',
-              fontSize: '0.8rem',
+              fontSize: 'var(--text-sm)',
               outline: 'none',
               width: 'calc(100% - 8px)',
               boxSizing: 'border-box',
@@ -237,7 +237,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             <p
               style={{
                 margin: '0 4px 3px',
-                fontSize: '0.7rem',
+                fontSize: 'var(--text-xs)',
                 color: 'var(--warn)',
               }}
             >
@@ -259,7 +259,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             boxSizing: 'border-box',
             padding: '5px 10px',
             borderRadius: 8,
-            fontSize: '0.84rem',
+            fontSize: 'var(--text-base)',
             fontWeight: 400,
             color: 'var(--fnt)',
             cursor: 'pointer',

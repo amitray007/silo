@@ -21,7 +21,7 @@ export function tagSearchFieldStyle(margin: string): React.CSSProperties {
     background: 'var(--bg2)',
     color: 'var(--ink)',
     font: 'inherit',
-    fontSize: '0.78rem',
+    fontSize: 'var(--text-sm)',
     outline: 'none',
   };
 }
@@ -78,7 +78,7 @@ export function TagOptionsList({
             textAlign: 'left',
             padding: rowPadding,
             borderRadius: 7,
-            fontSize: '0.8rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 400,
             cursor: 'pointer',
             color: opt.active ? 'var(--ink)' : 'var(--mut)',
@@ -99,7 +99,7 @@ export function TagOptionsList({
         </button>
       ))}
       {hidden > 0 && (
-        <div style={{ padding: notePadding, fontSize: '0.7rem', color: 'var(--fnt)' }}>
+        <div style={{ padding: notePadding, fontSize: 'var(--text-xs)', color: 'var(--fnt)' }}>
           {hidden} more — type to narrow
         </div>
       )}

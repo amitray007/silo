@@ -10,7 +10,7 @@ export function ComingSoon({ title, subtitle }: { title: string; subtitle?: stri
       <p
         style={{
           margin: 0,
-          fontSize: '0.92rem',
+          fontSize: 'var(--text-md)',
           fontWeight: 500,
           color: 'var(--ink)',
           letterSpacing: 'var(--tracking-tight)',
@@ -23,7 +23,7 @@ export function ComingSoon({ title, subtitle }: { title: string; subtitle?: stri
         <p
           style={{
             margin: '6px 0 0',
-            fontSize: '0.84rem',
+            fontSize: 'var(--text-base)',
             color: 'var(--mut)',
             maxWidth: '24rem',
             textWrap: 'pretty',

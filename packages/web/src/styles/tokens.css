@@ -154,8 +154,14 @@
   --bg2: #17110b;
   --line: #292219;
   --hov: #201a13;
-  --ink: #f1ddc5;
-  --mut: #ad9e89;
+  /* Primary text: brightened from the old warm cream #f1ddc5, which read
+     dull/beige next to a crisp reference (user feedback: "our white text
+     looks dull"). #f7efe4 is a near-white with only a whisper of Oat warmth
+     left — brighter luminance, so contrast on --bg/--bg2 only improves. */
+  --ink: #f7efe4;
+  /* Secondary text (domains, counts, meta) lifted a step too so the whole
+     ramp reads crisp rather than muddy, while staying clearly below --ink. */
+  --mut: #bcae98;
   --fnt: #94856f;
   --ghost: #85795f;
   --mark: #dda54a;

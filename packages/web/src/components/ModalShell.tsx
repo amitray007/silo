@@ -223,7 +223,7 @@ export function ModalHeader({
       <h2
         style={{
           margin: 0,
-          fontSize: '1.05rem',
+          fontSize: 'var(--text-lg)',
           fontWeight: 500,
           letterSpacing: 'var(--tracking-tight)',
           lineHeight: 'var(--lh-tight)',

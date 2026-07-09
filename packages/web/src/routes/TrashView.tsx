@@ -78,7 +78,7 @@ function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; a
 
   return (
     <Dock padding="9px 18px">
-      <span style={{ fontSize: '0.74rem', color: 'var(--fnt)', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--fnt)', whiteSpace: 'nowrap' }}>
         Deleted links keep their text · auto-empties after {purgeWindowDays} days
       </span>
       <DockDivider />
@@ -178,7 +178,14 @@ function TrashBody({
 
   if (isError) {
     return (
-      <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--warn)' }}>
+      <p
+        style={{
+          padding: '40px 11px',
+          margin: 0,
+          fontSize: 'var(--text-sm)',
+          color: 'var(--warn)',
+        }}
+      >
         Couldn't load the trash.
       </p>
     );

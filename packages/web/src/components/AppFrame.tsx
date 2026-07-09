@@ -289,14 +289,14 @@ export function AppFrame() {
                 border: 'none',
                 borderRadius: 8,
                 color: 'var(--ink)',
-                fontSize: '1.1rem',
+                fontSize: 'var(--text-xl)',
                 cursor: 'pointer',
               }}
             >
               <span aria-hidden="true">☰</span>
             </button>
             <GrainDot />
-            <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
+            <span style={{ fontWeight: 500, fontSize: 'var(--text-md)', letterSpacing: '-0.01em' }}>
               silo
             </span>
           </div>

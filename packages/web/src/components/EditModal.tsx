@@ -17,7 +17,7 @@ import { TagOptionsList, tagSearchFieldStyle } from './TagOptionsList';
 
 const labelStyle: React.CSSProperties = {
   margin: '0 0 var(--s1)',
-  fontSize: '0.72rem',
+  fontSize: 'var(--text-xs)',
   fontWeight: 500,
   color: 'var(--fnt)',
   letterSpacing: '0.02em',
@@ -31,7 +31,7 @@ const fieldStyle: React.CSSProperties = {
   background: 'var(--bg2)',
   color: 'var(--ink)',
   font: 'inherit',
-  fontSize: '0.85rem',
+  fontSize: 'var(--text-base)',
   // K3 (oat-conformance audit): 8px → var(--s2) exact; 11px → var(--s2-5)
   // (rounded to 10px, the nearest step).
   padding: 'var(--s2) var(--s2-5)',
@@ -173,7 +173,7 @@ function EditTagsFlyout({
             textAlign: 'left',
             padding: 'var(--s1-5) var(--s2)',
             borderRadius: 6,
-            fontSize: '0.78rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 500,
             color: 'var(--mut)',
             cursor: 'pointer',
@@ -278,7 +278,9 @@ export function EditModal({ link }: { link: LinkJson }) {
         title="Edit"
         onClose={handleClose}
         leading={
-          <span style={{ fontSize: '0.78rem', color: 'var(--fnt)' }}>{deriveDomain(link.url)}</span>
+          <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
+            {deriveDomain(link.url)}
+          </span>
         }
       />
 
@@ -298,7 +300,12 @@ export function EditModal({ link }: { link: LinkJson }) {
         rows={2}
         placeholder="What this is, in your words"
         className="silo-field"
-        style={{ ...fieldStyle, color: 'var(--mut)', fontSize: '0.82rem', resize: 'vertical' }}
+        style={{
+          ...fieldStyle,
+          color: 'var(--mut)',
+          fontSize: 'var(--text-sm)',
+          resize: 'vertical',
+        }}
       />
 
       <p style={labelStyle}>Tags</p>
@@ -322,7 +329,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             borderRadius: 8,
             background: 'var(--bg2)',
             fontFamily: 'inherit',
-            fontSize: '0.82rem',
+            fontSize: 'var(--text-sm)',
             // 7px left un-tokenized (no clean --s* step between --s1-5/6px
             // and --s2/8px); 11px → var(--s2-5) (K3, oat-conformance audit).
             padding: '7px var(--s2-5)',
@@ -341,7 +348,7 @@ export function EditModal({ link }: { link: LinkJson }) {
                 background: 'var(--bg)',
                 borderRadius: 999,
                 padding: 'var(--s-0-5) var(--s2)',
-                fontSize: '0.74rem',
+                fontSize: 'var(--text-xs)',
                 color: 'var(--ink)',
               }}
             >
@@ -363,7 +370,9 @@ export function EditModal({ link }: { link: LinkJson }) {
             </span>
           ))}
           {tags.length === 0 && <span style={{ color: 'var(--fnt)' }}>Choose tags</span>}
-          <span style={{ marginLeft: 'auto', color: 'var(--ghost)', fontSize: '0.72rem' }}>▾</span>
+          <span style={{ marginLeft: 'auto', color: 'var(--ghost)', fontSize: 'var(--text-xs)' }}>
+            ▾
+          </span>
         </button>
         {tagsOpen && (
           <EditTagsFlyout
@@ -392,7 +401,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         style={{
           ...fieldStyle,
           color: 'var(--mut)',
-          fontSize: '0.82rem',
+          fontSize: 'var(--text-sm)',
           fontStyle: 'italic',
           resize: 'vertical',
           marginBottom: 0,
@@ -414,7 +423,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             gap: 'var(--s1-5)',
             border: 0,
             background: 'none',
-            fontSize: '0.76rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 500,
             color: 'var(--fnt)',
             padding: 0,
@@ -448,7 +457,7 @@ export function EditModal({ link }: { link: LinkJson }) {
           style={{
             border: 0,
             background: 'none',
-            fontSize: '0.76rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 500,
             color: 'var(--mut)',
             padding: 0,
@@ -466,7 +475,7 @@ export function EditModal({ link }: { link: LinkJson }) {
             border: '1px solid var(--line)',
             background: 'var(--bg2)',
             borderRadius: 8,
-            fontSize: '0.76rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 500,
             color: 'var(--ink)',
             padding: 'var(--s1-5) var(--s4)',

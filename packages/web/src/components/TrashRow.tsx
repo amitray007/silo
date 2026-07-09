@@ -210,12 +210,12 @@ export function TrashRow({
           display: 'inline-flex',
           alignItems: 'center',
           gap: 'var(--s1-5)',
-          fontSize: '0.74rem',
+          fontSize: 'var(--text-xs)',
           fontWeight: 500,
           color: 'var(--warn)',
         }}
       >
-        <span style={{ fontSize: '0.84rem', lineHeight: 1 }}>◷</span>
+        <span style={{ fontSize: 'var(--text-base)', lineHeight: 1 }}>◷</span>
         {left}d
       </span>
       <TrashRowActions id={link.id} />
