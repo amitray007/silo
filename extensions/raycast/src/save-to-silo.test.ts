@@ -58,25 +58,35 @@ describe('save-to-silo (instant capture)', () => {
     expect(showHUD).toHaveBeenCalledWith('✓ Saved to silo');
   });
 
-  it('closes Raycast after a successful save', async () => {
+  it('closes Raycast BEFORE the save completes (close-first, save-in-background)', async () => {
     runAppleScript.mockImplementation(async (script: string) => {
       if (script.includes('System Events')) return 'Google Chrome';
       if (script.includes('Google Chrome')) return 'https://example.com␟Example';
       throw new Error('unexpected script');
     });
-    captureLink.mockResolvedValue({
-      link: { id: '1', url: 'https://example.com', captureStatus: 'full' },
-      deduped: false,
+    // Order-tracking: record when close vs capture were invoked.
+    const calls: string[] = [];
+    closeMainWindow.mockImplementation(async () => {
+      calls.push('close');
+    });
+    captureLink.mockImplementation(async () => {
+      calls.push('capture');
+      return {
+        link: { id: '1', url: 'https://example.com', captureStatus: 'full' },
+        deduped: false,
+      };
     });
 
     const { default: Command } = await import('./save-to-silo.js');
     await Command();
 
+    // close must be called, and BEFORE the capture request fires.
+    expect(calls[0]).toBe('close');
+    expect(calls).toContain('capture');
     expect(showHUD).toHaveBeenCalledWith(expect.stringContaining('Saved to silo'));
-    expect(closeMainWindow).toHaveBeenCalled();
   });
 
-  it('does not close Raycast when the save fails', async () => {
+  it('still closes Raycast even when the save fails, then shows the error HUD', async () => {
     runAppleScript.mockImplementation(async (script: string) => {
       if (script.includes('System Events')) return 'Finder';
       throw new Error('should not query a non-frontmost browser');
@@ -88,8 +98,9 @@ describe('save-to-silo (instant capture)', () => {
     const { default: Command } = await import('./save-to-silo.js');
     await Command();
 
+    // close-first means a failed save no longer keeps the window open.
+    expect(closeMainWindow).toHaveBeenCalled();
     expect(showHUD).toHaveBeenCalledWith('✗ Could not reach silo');
-    expect(closeMainWindow).not.toHaveBeenCalled();
   });
 
   it('shows a dedup HUD when the API folds into an existing link', async () => {
@@ -109,18 +120,21 @@ describe('save-to-silo (instant capture)', () => {
     expect(showHUD).toHaveBeenCalledWith('✓ Already in silo (updated)');
   });
 
-  it('shows an error HUD when no URL can be resolved (no browser, no clipboard URL)', async () => {
+  it('closes silently with NO HUD when no valid URL resolves (nothing to save)', async () => {
     runAppleScript.mockImplementation(async (script: string) => {
       if (script.includes('System Events')) return 'Finder';
       throw new Error('should not query a non-frontmost browser');
     });
-    readText.mockResolvedValue('not a url');
+    readText.mockResolvedValue('not a url'); // invalid → resolveUrl returns undefined
 
     const { default: Command } = await import('./save-to-silo.js');
     await Command();
 
+    // No save attempted, Raycast closes, and NO error HUD fires (an
+    // absent/invalid URL is a silent no-op per design).
     expect(captureLink).not.toHaveBeenCalled();
-    expect(showHUD).toHaveBeenCalledWith(expect.stringContaining('✗'));
+    expect(closeMainWindow).toHaveBeenCalled();
+    expect(showHUD).not.toHaveBeenCalled();
   });
 
   it('shows an error HUD with the actionable message when the API is unreachable', async () => {
