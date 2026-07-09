@@ -8,6 +8,7 @@ import type {
   Counts,
   LinkResponse,
   SearchResponse,
+  TagsResponse,
   TagWithCount,
   TrashResponse,
 } from './types.js';
@@ -165,7 +166,7 @@ export async function deleteTrashed(id: string): Promise<void> {
 /** `GET /api/tags` — unwraps `.tags` for the tag picker + Browse's scope dropdown. */
 export async function listTags(): Promise<TagWithCount[]> {
   const response = await apiFetch('/api/tags', { method: 'GET' });
-  const body = (await response.json()) as { tags: TagWithCount[] };
+  const body = (await response.json()) as TagsResponse;
   return body.tags;
 }
 
