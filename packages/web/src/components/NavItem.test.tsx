@@ -105,6 +105,24 @@ describe('NavItem', () => {
     expect(link.style.padding).toBe('7px var(--s2-5)');
   });
 
+  it('the "tag" variant uses a slightly tighter icon-to-label gap than main nav rows', () => {
+    render(
+      <>
+        <NavItem label="Library" href="/" icon={<span aria-hidden="true">#</span>} />
+        <NavItem
+          label="ai"
+          href="/tags/ai"
+          icon={<span aria-hidden="true">#</span>}
+          variant="tag"
+        />
+      </>,
+    );
+    const library = screen.getByRole('link', { name: /library/i });
+    const tag = screen.getByRole('link', { name: /ai/i });
+    expect(library.style.gap).toBe('var(--s2-5)');
+    expect(tag.style.gap).toBe('var(--s1-5)');
+  });
+
   describe('button mode (no href — plan 024, the Search row)', () => {
     it('renders a <button type="button"> instead of an <a> when href is omitted', () => {
       render(<NavItem label="Search" />);

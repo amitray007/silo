@@ -22,7 +22,7 @@ export type NavItemVariant = 'default' | 'settings' | 'tag';
 
 const VARIANT_STYLE: Record<
   NavItemVariant,
-  { fontWeight: number; inactiveColor: string; padding: string }
+  { fontWeight: number; inactiveColor: string; padding: string; gap: string }
 > = {
   // K3 (oat-conformance audit): 10px → var(--s2-5) exact on every variant. All
   // three variants now share the same 7px vertical padding — the tag row's old
@@ -30,13 +30,28 @@ const VARIANT_STYLE: Record<
   // the tag list to read as solid/roomy as the nav rows, so they're unified.
   // 7px has no clean --s* match (between --s1-5/6px and --s2/8px) — left
   // un-tokenized rather than nudging row height off the reference.
-  default: { fontWeight: 500, inactiveColor: 'var(--ink)', padding: '7px var(--s2-5)' },
-  settings: { fontWeight: 400, inactiveColor: 'var(--mut)', padding: '7px var(--s2-5)' },
+  default: {
+    fontWeight: 500,
+    inactiveColor: 'var(--ink)',
+    padding: '7px var(--s2-5)',
+    gap: 'var(--s2-5)',
+  },
+  settings: {
+    fontWeight: 400,
+    inactiveColor: 'var(--mut)',
+    padding: '7px var(--s2-5)',
+    gap: 'var(--s2-5)',
+  },
   // Tag rows bumped to match the nav rows (was 5px/400): roomier 7px height +
   // weight 500 so the tag list reads as solid, bigger, and consistent with
   // Library/Trash above — not a cramped secondary strip (user feedback: "make
   // the tags a bit bigger / better").
-  tag: { fontWeight: 500, inactiveColor: 'var(--ink)', padding: '7px var(--s2-5)' },
+  tag: {
+    fontWeight: 500,
+    inactiveColor: 'var(--ink)',
+    padding: '7px var(--s2-5)',
+    gap: 'var(--s1-5)',
+  },
 };
 
 interface NavItemSharedProps {
@@ -88,12 +103,12 @@ export function NavItem({
   variant = 'default',
   ...props
 }: NavItemProps) {
-  const { fontWeight, inactiveColor, padding } = VARIANT_STYLE[variant];
+  const { fontWeight, inactiveColor, padding, gap } = VARIANT_STYLE[variant];
 
   const sharedStyle = {
     display: 'flex',
     alignItems: 'center',
-    gap: 'var(--s2-5)',
+    gap,
     width: '100%',
     boxSizing: 'border-box' as const,
     textAlign: 'left' as const,
