@@ -96,7 +96,7 @@ describeIfPg('exportLinks (integration)', () => {
         'id,url,canonicalUrl,title,description,siteName,sourceKind,captureStatus,addedBy,notes,createdAt,updatedAt,tags',
       );
       expect(result.count).toBe(0);
-      expect(result.contentType).toBe('text/csv');
+      expect(result.contentType).toBe('text/csv; charset=utf-8');
       expect(result.extension).toBe('csv');
     });
 
@@ -105,7 +105,7 @@ describeIfPg('exportLinks (integration)', () => {
       const parsed = parseYaml(result.body);
       expect(parsed.count).toBe(0);
       expect(parsed.links).toEqual([]);
-      expect(result.contentType).toBe('application/yaml');
+      expect(result.contentType).toBe('application/yaml; charset=utf-8');
       expect(result.extension).toBe('yaml');
     });
   });
@@ -217,6 +217,110 @@ describeIfPg('exportLinks (integration)', () => {
 
       const noTagsRow = dataRows.find((cells) => cells[0] === noTagsLink.id);
       expect(noTagsRow?.[12]).toBe('');
+    });
+  });
+
+  describe('CSV formula-injection guard', () => {
+    it('a title/notes starting with a formula-trigger char is apostrophe-prefixed and still parses as one field', async () => {
+      const link = await linkOps.createLink({
+        url: 'https://example.com/formula-injection-title',
+        title: '=HYPERLINK("http://evil","click")',
+        notes: '+1 (also @mentions and -dashes trigger the guard)',
+        sourceKind: 'link',
+      });
+
+      const csvResult = await ops.exportLinks({ format: 'csv' });
+      const rows = splitCsvRows(csvResult.body.slice(1));
+      const dataRows = rows.slice(1).map(parseCsvLine);
+      const row = dataRows.find((cells) => cells[0] === link.id);
+      expect(row).toBeDefined();
+
+      // Guard fired: the cell's raw (unparsed-back) value starts with `'`.
+      // parseCsvLine already stripped the RFC-4180 quoting/escaping, so the
+      // guard's leading apostrophe is preserved verbatim in cells[3]/cells[9]
+      // as a literal character — proving the guard, not just the quoting.
+      expect(row?.[3]).toBe('\'=HYPERLINK("http://evil","click")');
+      expect(row?.[9]).toBe("'+1 (also @mentions and -dashes trigger the guard)");
+
+      // Still exactly one field each — the guard didn't break RFC-4180
+      // field-count parsing (13 columns per the fixed CSV_COLUMNS order).
+      expect(row).toHaveLength(13);
+    });
+  });
+
+  describe('trashed link excluded', () => {
+    it('a trashed link never appears in JSON, YAML, or CSV bodies', async () => {
+      const liveOne = await linkOps.createLink({
+        url: 'https://example.com/trash-exclude-live-1',
+        sourceKind: 'link',
+      });
+      const liveTwo = await linkOps.createLink({
+        url: 'https://example.com/trash-exclude-live-2',
+        sourceKind: 'link',
+      });
+      const trashed = await linkOps.createLink({
+        url: 'https://example.com/trash-exclude-trashed',
+        sourceKind: 'link',
+      });
+      await linkOps.softDelete(trashed.id);
+
+      const jsonResult = await ops.exportLinks({ format: 'json' });
+      const jsonParsed = JSON.parse(jsonResult.body);
+      const jsonUrls = jsonParsed.links.map((l: { url: string }) => l.url);
+      expect(jsonUrls).toContain(liveOne.url);
+      expect(jsonUrls).toContain(liveTwo.url);
+      expect(jsonUrls).not.toContain(trashed.url);
+
+      const yamlResult = await ops.exportLinks({ format: 'yaml' });
+      expect(yamlResult.body).not.toContain(trashed.url);
+      expect(yamlResult.body).toContain(liveOne.url);
+
+      const csvResult = await ops.exportLinks({ format: 'csv' });
+      expect(csvResult.body).not.toContain(trashed.url);
+      expect(csvResult.body).toContain(liveOne.url);
+    });
+  });
+
+  describe('sourceData null', () => {
+    it('a plain link with no sourceData exports with sourceData: null present (not omitted)', async () => {
+      // `core.createLink` always writes a `{ kind: 'link' }` floor into
+      // `sourceData` (see `links.ts`'s `resolveSource` doc comment) — there is
+      // no way to reach a genuinely NULL `source_data` column through it. The
+      // column itself IS nullable (no DB default — see
+      // `packages/db/src/schema/links.ts`), e.g. for pre-plan-012 rows created
+      // before that floor existed. Insert directly via the harness's
+      // `rawDb()` (a raw drizzle handle wired to THIS suite's disposable
+      // database — see `pg-harness.ts`'s doc comment) rather than the
+      // `@silo/db` singleton `db`. `links` (the table schema) is imported
+      // dynamically here too, NOT as a static top-of-file import: even a
+      // static import of ONLY the schema object still evaluates `@silo/db`'s
+      // single `index.ts` module graph (which also constructs the `db`/`pool`
+      // singleton in `client.ts` as a side effect) before `beforeAll` rewrites
+      // `DATABASE_URL` for the disposable database — poisoning that singleton
+      // for every OTHER module in this test run that later does
+      // `import { db } from '@silo/db'` (including `exportLinks` itself),
+      // which silently redirects reads/writes at the real dev database
+      // instead of the disposable one. This is exactly the footgun
+      // `pg-harness.ts`'s own doc comment warns every caller off of.
+      const { links } = await import('@silo/db');
+      const [inserted] = await harness
+        .rawDb()
+        .insert(links)
+        .values({
+          url: 'https://example.com/no-source-data',
+          canonicalUrl: 'https://example.com/no-source-data',
+          sourceKind: 'link',
+          sourceData: null,
+        })
+        .returning({ id: links.id });
+      if (!inserted) throw new Error('insert did not return a row');
+
+      const jsonResult = await ops.exportLinks({ format: 'json' });
+      const jsonParsed = JSON.parse(jsonResult.body);
+      const jsonLink = jsonParsed.links.find((l: { id: string }) => l.id === inserted.id);
+      expect(jsonLink).toBeDefined();
+      expect(jsonLink).toHaveProperty('sourceData');
+      expect(jsonLink.sourceData).toBeNull();
     });
   });
 

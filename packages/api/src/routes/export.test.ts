@@ -1,6 +1,6 @@
 import type * as CoreOps from '@silo/core';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { expect400 } from '../test-support/assertions.js';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
@@ -45,7 +45,7 @@ describeIfPg('GET /api/export (integration)', () => {
     const { app } = harness.mod();
     const res = await app.request('/api/export?format=yaml');
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('application/yaml');
+    expect(res.headers.get('content-type')).toBe('application/yaml; charset=utf-8');
     expect(res.headers.get('content-disposition')).toMatch(/silo-export-\d{4}-\d{2}-\d{2}\.yaml"$/);
     const body = await res.text();
     expect(body).toContain('version:');
@@ -55,7 +55,7 @@ describeIfPg('GET /api/export (integration)', () => {
     const { app } = harness.mod();
     const res = await app.request('/api/export?format=csv');
     expect(res.status).toBe(200);
-    expect(res.headers.get('content-type')).toBe('text/csv');
+    expect(res.headers.get('content-type')).toBe('text/csv; charset=utf-8');
     expect(res.headers.get('content-disposition')).toMatch(/silo-export-\d{4}-\d{2}-\d{2}\.csv"$/);
     // Check the raw wire bytes for the UTF-8 BOM (EF BB BF), not `res.text()`:
     // the Fetch spec's UTF-8 decode consumes a leading BOM as a marker rather
@@ -91,5 +91,44 @@ describeIfPg('GET /api/export (integration)', () => {
     expect(seeded).toBeDefined();
     expect(seeded.title).toBe('Export route seed link');
     expect(seeded.tags).toEqual(['export-seed-tag']);
+  });
+
+  /**
+   * Export-specific auth regression (general-auth.ts's OPTIONAL
+   * `SILO_API_TOKEN` gate, plan 021) — `/api/export` is an ordinary route
+   * under the `/api` sub-app's `generalTokenAuth` middleware, so it must obey
+   * the same open/closed posture every other `/api/*` route does. Mirrors
+   * `general-auth.test.ts`'s exact set/restore pattern: set in `beforeEach`
+   * (as unset, matching that suite's default) and unconditionally deleted in
+   * `afterEach` — CRITICAL, since `generalTokenAuth` reads the env var fresh
+   * on every request (see its doc comment), a leaked value would make every
+   * OTHER route test in this package start demanding a bearer token too.
+   */
+  describe('SILO_API_TOKEN gate', () => {
+    const TOKEN = 'export-route-auth-test-token-do-not-use-in-prod';
+
+    beforeEach(() => {
+      delete process.env.SILO_API_TOKEN;
+    });
+
+    afterEach(() => {
+      delete process.env.SILO_API_TOKEN;
+    });
+
+    it('SILO_API_TOKEN set: GET /api/export without an Authorization header is 401', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app } = harness.mod();
+      const res = await app.request('/api/export');
+      expect(res.status).toBe(401);
+    });
+
+    it('SILO_API_TOKEN set: GET /api/export with the correct bearer token is 200', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app } = harness.mod();
+      const res = await app.request('/api/export', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.status).toBe(200);
+    });
   });
 });

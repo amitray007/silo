@@ -205,3 +205,32 @@ Gate `--filter=@silo/web`, commit: `feat(web): export control in Settings`.
 - Whether route tests need a DB or mock core → match the existing route test the
   package already has.
 - YAML `stringify` options (default flow is fine; keep it readable).
+
+---
+
+## Import slice — carry-forward notes
+
+Recorded here (review fix pass, 2026-07-10) for whoever builds the future import
+slice, so it doesn't have to rediscover these from scratch:
+
+- **`sourceData` is an OPAQUE pass-through at `version: 1`.** There is no
+  per-`sourceKind` schema/version marker on it — export just round-trips
+  whatever JSON currently sits in the `source_data` column. That discriminated
+  union (per-kind shape validation) is deferred to core's U3, not this slice.
+  A future importer must either (a) treat `sourceData` as fully opaque and
+  write it back verbatim with no field-level validation, or (b) bump the
+  export format to `version: 2` once core's discriminated union lands, at
+  which point the importer can validate per-source fields against that schema.
+  Importing a `version: 1` file's `sourceData` as if it were already
+  schema-validated would be a mistake — it never was.
+- **Dedup strategy is undecided and must be chosen by the import slice.**
+  `id` alone is NOT a safe dedup key when merging exports from two different
+  silo instances — two independently-created links can coincidentally share
+  no relationship yet still collide on `id` only if IDs were ever copied
+  across instances (or, conversely, the "same" link re-added by an agent in
+  two different silos gets two different `id`s, so `id`-based upsert would
+  wrongly treat them as unrelated). The importer needs to explicitly decide
+  between upsert-by-`id` (safe only for re-importing a file back into the
+  SAME silo it came from, e.g. restore-from-backup) vs. content-hash /
+  URL-based dedup (needed for merging exports FROM DIFFERENT silos). Don't
+  default to `id`-upsert without considering the cross-silo-merge case.
