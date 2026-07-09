@@ -204,7 +204,7 @@ function BrowseLiveItem({
     <List.Item
       title={title}
       subtitle={domainOf(link.url)}
-      icon={sourceIcon(link)}
+      icon={sourceIcon(link, baseUrl)}
       accessories={link.captureStatus === 'enriching' ? [{ text: '◌ capturing' }] : []}
       detail={<LinkDetail link={link} baseUrl={baseUrl} />}
       actions={
@@ -232,7 +232,7 @@ function BrowseTrashItem({
     <List.Item
       title={title}
       subtitle={domainOf(link.url)}
-      icon={sourceIcon(link)}
+      icon={sourceIcon(link, baseUrl)}
       accessories={[{ text: `purges in ${daysLeft}d` }]}
       detail={<LinkDetail link={link} baseUrl={baseUrl} />}
       actions={<LinkActions link={link} variant="trash" onChange={onChange} />}

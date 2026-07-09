@@ -56,7 +56,7 @@ function SearchResultItem({ link, onChange }: { link: CapturedLink; onChange: ()
     <List.Item
       title={title}
       subtitle={domainOf(link.url)}
-      icon={sourceIcon(link)}
+      icon={sourceIcon(link, baseUrl)}
       // "silence means complete" — the ◌ capturing pulse is the ONLY status
       // chrome a row ever carries, and only while enriching (design tokens).
       accessories={link.captureStatus === 'enriching' ? [{ text: '◌ capturing' }] : []}
