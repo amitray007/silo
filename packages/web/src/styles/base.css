@@ -127,18 +127,21 @@ select {
   box-sizing: border-box;
   display: flex;
   justify-content: center;
-  padding: var(--s6);
+  /* Tighter outer margin (was --s6/24px) so the app reads as one compact
+     window like shiori, not a panel stranded in a wide dark field. */
+  padding: var(--s5);
 }
 
 /* The centered band: a transparent sidebar (sits directly on --bg, no fill —
    the "sidebar matches background" the user picked) beside the floating
    content panel (`.silo-content`, below). No band walls — the old left/right
    borders are retired; the floating panel now owns the only visible edge via
-   its radius + hairline. Kept at 60rem (size unchanged per the user's scope). */
+   its radius + hairline. Tightened to 56rem (from 60rem) so the whole app
+   reads more compact, matching shiori's window proportions (user feedback). */
 .silo-band {
   display: flex;
   width: 100%;
-  max-width: 60rem;
+  max-width: 56rem;
   min-height: 0;
   gap: var(--s4);
 }
@@ -245,11 +248,14 @@ select {
   flex-direction: column;
 }
 
-/* The reading-column cap — only the LIST narrows to ~720px, not the header
-   (which spans the full content width via `.silo-content-body`'s padding). */
+/* The reading-column cap. Widened 45rem → 48rem so the list fills the content
+   panel edge-to-edge (with the 56rem band + 232px sidebar the panel is
+   ~45rem wide, so this cap effectively lets `width:100%` govern) — killing
+   the stranded-left list + empty-right-panel gap the user flagged against
+   shiori, whose list fills its whole panel. */
 .silo-content-col {
   width: 100%;
-  max-width: 45rem;
+  max-width: 48rem;
   flex: 1;
   min-height: 0;
   display: flex;

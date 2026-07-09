@@ -285,7 +285,7 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
  * `usePasteCapture.test.tsx` instead, which is unaffected by this
  * component-scoped header change.
  */
-describe('LibraryView header box (non-interactive omnibar)', () => {
+describe('LibraryView header (no paste box)', () => {
   beforeEach(() => {
     FakeIntersectionObserver.instances = [];
     vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
@@ -297,7 +297,7 @@ describe('LibraryView header box (non-interactive omnibar)', () => {
     vi.restoreAllMocks();
   });
 
-  it('renders the "Paste a link to keep" hint with no input/button inside it', async () => {
+  it('renders no "Paste a link" hint box or input in the header (removed to match shiori)', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
@@ -310,15 +310,13 @@ describe('LibraryView header box (non-interactive omnibar)', () => {
     renderLibraryView();
     await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
 
-    const hint = screen.getByText('Paste a link to keep');
-    expect(hint).toBeDefined();
+    // The header box is gone entirely — no hint text, no input, no button.
+    expect(screen.queryByText('Paste a link to keep')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
     expect(screen.queryByRole('button', { name: /paste a link/i })).toBeNull();
 
-    // No POST is ever fired by this box on its own — it carries no click/key handlers.
-    fireEvent.click(hint);
-    fireEvent.keyDown(hint, { key: 'Enter' });
-    expect(vi.mocked(fetch).mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
+    // The title still renders (header didn't lose its heading).
+    expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();
   });
 });
 

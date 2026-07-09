@@ -1,4 +1,3 @@
-import { Omnibar } from '../components/Omnibar';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
@@ -11,7 +10,7 @@ function LibraryEmptyState() {
       title="Nothing kept yet."
       body={
         <>
-          Paste a link in the bar above — it's saved the moment it lands.
+          Paste a link anywhere on this page — it's saved the moment it lands.
           <br />
           <span style={{ fontSize: '0.9em', color: 'var(--fnt)' }}>
             Claude can add links here too, once you connect it in Settings → Access.
@@ -30,16 +29,17 @@ function LibraryEmptyState() {
  * prefetch sentinel). Shares its orchestration/header/body/state chrome with
  * `TagView` via `./shared/*` — see those modules' doc comments.
  *
- * The header's `<Omnibar/>` is a static, non-interactive hint box (later
- * user-feedback pass) — it no longer drives capture itself; pasting a URL
- * anywhere on the page already captures it via the document-level
- * `usePasteCapture` listener (mounted once in `AppFrame`).
+ * The header carries only the title + count now — the "Paste a link to keep"
+ * hint box was removed (direct user feedback: match shiori's compact header,
+ * which has no top input). Capture still works everywhere: pasting a URL
+ * anywhere on the page captures it via the document-level `usePasteCapture`
+ * listener (mounted once in `AppFrame`).
  */
 export function LibraryView() {
   const view = useListView();
 
   return (
-    <ContentFrame title="Library" count={view.liveCount} headerSlot={<Omnibar />}>
+    <ContentFrame title="Library" count={view.liveCount} headerSlot={undefined}>
       {ListBody(view, <LibraryEmptyState />)}
     </ContentFrame>
   );
