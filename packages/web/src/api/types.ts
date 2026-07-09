@@ -151,19 +151,31 @@ export type EditLinkRequest = { title?: string; description?: string; note?: str
 export type TagsResponse = { tags: TagCount[] };
 
 /**
- * Web's OWN copy of `@silo/core`'s settings allowlist (plan 016) — mirrors
- * `packages/core/src/settings/schema.ts`'s `SettingsMap`/`plugins` shape
- * field-for-field, same "not imported from core" rule the rest of this file
- * follows (see the file's top doc comment — `@silo/core`'s barrel pulls in
- * `pg` at module scope, which a browser bundle can never load). Both `GET
- * /api/settings` and `PATCH /api/settings` share this exact shape — the
- * PATCH response is the full, freshly-merged map, not just the changed
- * fields (see `settings.ts`'s route doc comment).
+ * Web's OWN copy of `@silo/core`'s settings allowlist (plan 016, `plugins`
+ * shape updated plan 026) — mirrors `packages/core/src/settings/schema.ts`'s
+ * `SettingsMap`/`settingsSchema.plugins` shape field-for-field, same "not
+ * imported from core" rule the rest of this file follows (see the file's top
+ * doc comment — `@silo/core`'s barrel pulls in `pg` at module scope, which a
+ * browser bundle can never load). Both `GET /api/settings` and `PATCH
+ * /api/settings` share this exact shape — the PATCH response is the full,
+ * freshly-merged map, not just the changed fields (see `settings.ts`'s route
+ * doc comment).
+ *
+ * `plugins` (plan 026): each source is now a per-feature object rather than
+ * a bare boolean — a master `enabled` (gates the worker fetch entirely) plus
+ * the render-surface flags that source supports. `hacker_news` renders both
+ * an inline row line and a hover preview (`inline`/`hover`); `github`/
+ * `youtube` are hover-only today (no `inline`). Mirror core's shape EXACTLY
+ * — do not add fields a source doesn't have.
  */
 export type SettingsMap = {
   theme: 'light' | 'dark' | 'system';
   trashPurgeDays: 7 | 30 | 90;
-  plugins: { hacker_news: boolean; github: boolean; youtube: boolean };
+  plugins: {
+    hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
+    github: { enabled: boolean; hover: boolean };
+    youtube: { enabled: boolean; hover: boolean };
+  };
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */

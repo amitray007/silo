@@ -12,11 +12,15 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** The default `/api/settings` GET response — every field at its server-side default (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`). */
+/** The default `/api/settings` GET response — every field at its server-side default (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`; `plugins` nested per-feature shape as of plan 026). */
 const DEFAULT_SETTINGS = {
   theme: 'system',
   trashPurgeDays: 30,
-  plugins: { hacker_news: true, github: true, youtube: true },
+  plugins: {
+    hacker_news: { enabled: true, inline: true, hover: true },
+    github: { enabled: true, hover: true },
+    youtube: { enabled: true, hover: true },
+  },
 };
 
 /**
@@ -245,36 +249,26 @@ describe('SettingsModal', () => {
     });
   });
 
-  describe('Plugins tab (plan 016 — hacker_news/github/youtube now functional)', () => {
-    it('renders all four rows; three are functional toggles, Twitter/X stays a "Soon" chip', async () => {
+  describe('Plugins tab (plan 026 — logo grid + expand panel)', () => {
+    it('renders a 4-up grid (HN/GitHub/YouTube functional, Twitter/X stays a "Soon" card)', () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
-      expect(screen.getByText('Hacker News')).toBeDefined();
-      expect(screen.getByText('Twitter / X')).toBeDefined();
-      expect(screen.getByText('GitHub')).toBeDefined();
-      expect(screen.getByText('YouTube')).toBeDefined();
-
-      // Toggles hydrate from GET /api/settings (all on by default).
-      const hnToggle = await screen.findByTitle(/Hacker News is on/i);
-      expect(hnToggle.getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getByTitle(/GitHub is on/i)).toBeDefined();
-      expect(screen.getByTitle(/YouTube is on/i)).toBeDefined();
-
-      // Twitter/X has no toggle — just the calm "Soon" chip.
-      expect(screen.queryByTitle(/Twitter/i)).toBeNull();
+      // HN's panel is expanded by default, so its name appears twice (card +
+      // panel header); each brand SVG's <title> also matches its own name by
+      // text content — getAllByText (existence, not uniqueness) sidesteps both.
+      expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Twitter / X').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('GitHub').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('YouTube').length).toBeGreaterThan(0);
       expect(screen.getByText('Soon')).toBeDefined();
     });
 
-    it('clicking a plugin dot toggles it off and PATCHes the full plugins record', async () => {
+    it('clicking the master toggle in the expand panel flips it off and PATCHes the full nested plugins record', async () => {
       renderModal();
+      fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
-      // Wait for the toggle to become ENABLED (not just present) — while
-      // `useSettings()` is still loading, the row renders with `enabled ??
-      // true` (so the title already reads "is on") but `disabled` is true;
-      // asserting on `not.toHaveProperty('disabled', true)` (rather than
-      // just finding the title) is what proves hydration actually finished
-      // before this test clicks it.
+      // HN's card is selected by default — its expand panel is already open.
       const hnToggle = await screen.findByTitle(/Hacker News is on/i);
       await waitFor(() => expect(hnToggle).not.toHaveProperty('disabled', true));
 
