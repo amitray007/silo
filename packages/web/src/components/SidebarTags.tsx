@@ -26,7 +26,7 @@ interface SidebarTagsProps {
  * Redesign (direct user feedback): the tag list used to truncate to the
  * first `TAG_SHOWN` tags behind a "+N more" toggle. It now renders EVERY
  * tag (filtered set included) inside its own fixed-`max-height`,
- * hidden-scrollbar scroll region (`.silo-tag-scroll`, base.css) — a long tag
+ * soft-scrollbar scroll region (`.silo-tag-scroll`, base.css) — a long tag
  * list scrolls independently instead of pushing Settings off-screen, and
  * nothing is hidden behind a click. Filtering (case-insensitive substring
  * match on `tagQ`) still narrows the list before it renders.
@@ -206,7 +206,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
       )}
 
       {/* The scrollable tag-list region (fix, direct user feedback): a fixed
-          `max-height` + hidden scrollbar (`.silo-tag-scroll`, base.css) so a
+          `max-height` + soft custom scrollbar (`.silo-tag-scroll`, base.css) so a
           long tag list scrolls in place instead of pushing Settings
           off-screen — every tag (or every filtered match) renders here, no
           truncation. */}

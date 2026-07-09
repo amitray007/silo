@@ -148,8 +148,10 @@ select {
      band is narrower than this cap, so `width:100%` wins and it fills the
      whole window edge-to-edge with no gutters (user feedback: "when it's a
      small page it automatically fills the whole page"). One rule gives both:
-     fill-below-cap, center-above-cap. */
-  max-width: 72rem;
+     fill-below-cap, center-above-cap. Tightened 72rem → 64rem (user feedback:
+     "the main content is a bit big") — narrower content column, more calm
+     side gutters on a wide window. */
+  max-width: 64rem;
   min-height: 0;
 }
 
@@ -198,11 +200,31 @@ select {
 .silo-tag-scroll {
   max-height: 264px;
   overflow-y: auto;
-  scrollbar-width: none;
+  /* Soft custom scrollbar (user feedback: show a scrollbar for many tags, but
+     a softer one — not the default OS bar). Firefox: thin + a translucent
+     warm-light thumb on a transparent track. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
 }
 
+/* WebKit/Blink: a slim 6px thumb — a translucent light pill on a transparent
+   track, so it reads as a gentle hint of scroll position rather than a hard
+   chrome bar. Brightens slightly on hover for grab affordance. */
 .silo-tag-scroll::-webkit-scrollbar {
-  display: none;
+  width: 6px;
+}
+
+.silo-tag-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.silo-tag-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.silo-tag-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 /* The content region: a flex column of TWO stacked children — the header bar

@@ -289,7 +289,7 @@ describe('Sidebar', () => {
       expect(screen.queryByText('Show less')).toBeNull();
     });
 
-    it('puts the tag rows inside the hidden-scrollbar, fixed-max-height scroll container', async () => {
+    it('puts the tag rows inside the soft-scrollbar, fixed-max-height scroll container', async () => {
       vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
         if (url === '/api/counts') {
