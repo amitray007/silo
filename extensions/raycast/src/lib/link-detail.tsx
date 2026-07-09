@@ -61,17 +61,25 @@ export function detailModel(link: CapturedLink, baseUrl: string): LinkDetailMode
   const title = link.title?.trim() || hostOf(link.url) || link.url;
   const data = link.sourceData;
 
+  // Only emit an image URL when the link ACTUALLY has an image to serve —
+  // otherwise `/api/preview-image` 404s and Raycast paints a broken-image box
+  // (the exact outcome this model's contract promises to avoid). A YouTube
+  // link has a thumbnail iff the enricher stored `thumbnailUrl`; every other
+  // source (Twitter media, generic og:image) is signalled by a captured
+  // `link.imageUrl`. The rendered URL is still the proxy, keyed by id — never
+  // the raw host.
   let imageUrl: string | null = null;
   let imageCaption: string | null = null;
-  if (data.kind === 'youtube') {
+  const hasThumbnail = data.kind === 'youtube' && data.thumbnailUrl.trim() !== '';
+  if (hasThumbnail) {
     imageUrl = previewImageUrl(baseUrl, link.id);
-    imageCaption = `▶ ${data.channel} · YouTube`;
-  } else if (data.kind === 'twitter') {
-    imageUrl = previewImageUrl(baseUrl, link.id);
-    imageCaption = `@${data.authorHandle} · X`;
+    imageCaption = `▶ ${(data as { channel: string }).channel} · YouTube`;
   } else if (link.imageUrl) {
     imageUrl = previewImageUrl(baseUrl, link.id);
-    imageCaption = link.siteName ?? hostOf(link.url) ?? null;
+    imageCaption =
+      data.kind === 'twitter'
+        ? `@${data.authorHandle} · X`
+        : (link.siteName ?? hostOf(link.url) ?? null);
   }
 
   return {

@@ -10,10 +10,18 @@ describe('actionsFor', () => {
     expect(trash?.shortcut).not.toBe('enter');
   });
 
-  it('trash variant offers restore on enter and guarded delete', () => {
+  it('trash variant binds enter to restore only (exactly one enter action)', () => {
     const a = actionsFor('trash');
-    expect(a.find((x) => x.id === 'restore')?.shortcut).toBe('enter');
+    const enterActions = a.filter((x) => x.shortcut === 'enter');
+    expect(enterActions.map((x) => x.id)).toEqual(['restore']); // exactly one, and it's restore
     expect(a.find((x) => x.id === 'delete')?.destructive).toBe(true);
+  });
+
+  it('each variant has at most one enter-bound action (no two actions fight for enter)', () => {
+    for (const variant of ['live', 'trash'] as const) {
+      const enterCount = actionsFor(variant).filter((x) => x.shortcut === 'enter').length;
+      expect(enterCount).toBeLessThanOrEqual(1);
+    }
   });
 
   it('no destructive action is ever bound to enter, in either variant', () => {

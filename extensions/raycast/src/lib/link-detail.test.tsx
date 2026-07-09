@@ -27,6 +27,93 @@ describe('detailModel', () => {
     expect(m.stats.find((s) => s.label === 'Channel')?.value).toBe('C');
   });
 
+  it('omits the image for a youtube link with no stored thumbnail (no broken-image box)', () => {
+    const m = detailModel(
+      {
+        id: 'v2',
+        url: 'https://youtube.com/watch?v=y',
+        title: 'V2',
+        description: null,
+        siteName: null,
+        sourceKind: 'youtube',
+        sourceData: { kind: 'youtube', channel: 'C', thumbnailUrl: '' },
+        captureStatus: 'full',
+        notes: null,
+        tags: [],
+        imageUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as CapturedLink,
+      base,
+    );
+    expect(m.imageUrl).toBeNull();
+  });
+
+  it('omits the image for a media-less tweet (no captured imageUrl)', () => {
+    const m = detailModel(
+      {
+        id: 't1',
+        url: 'https://x.com/a/status/1',
+        title: 'tweet',
+        description: null,
+        siteName: null,
+        sourceKind: 'twitter',
+        sourceData: {
+          kind: 'twitter',
+          text: 'hi',
+          authorHandle: 'a',
+          authorName: 'A',
+          likes: 0,
+          reposts: 0,
+          replies: 0,
+          quotes: 0,
+          bookmarks: 0,
+        },
+        captureStatus: 'full',
+        notes: null,
+        tags: [],
+        imageUrl: null,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as CapturedLink,
+      base,
+    );
+    expect(m.imageUrl).toBeNull();
+  });
+
+  it('includes the image for a tweet WITH captured media', () => {
+    const m = detailModel(
+      {
+        id: 't2',
+        url: 'https://x.com/a/status/2',
+        title: 'tweet2',
+        description: null,
+        siteName: null,
+        sourceKind: 'twitter',
+        sourceData: {
+          kind: 'twitter',
+          text: 'pic',
+          authorHandle: 'a',
+          authorName: 'A',
+          likes: 0,
+          reposts: 0,
+          replies: 0,
+          quotes: 0,
+          bookmarks: 0,
+        },
+        captureStatus: 'full',
+        notes: null,
+        tags: [],
+        imageUrl: 'https://pbs.twimg.com/x.jpg',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as CapturedLink,
+      base,
+    );
+    // still the PROXY url, keyed by id — never the raw twimg host
+    expect(m.imageUrl).toBe('http://localhost:8787/api/preview-image?linkId=t2');
+  });
+
   it('omits the image for a plain link with no imageUrl', () => {
     const m = detailModel(
       {

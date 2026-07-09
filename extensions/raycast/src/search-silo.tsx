@@ -17,7 +17,7 @@ import { useSiloSearch } from './lib/use-silo-search.js';
  */
 export default function Command() {
   const [query, setQuery] = useState('');
-  const { results, isLoading } = useSiloSearch(query);
+  const { results, isLoading, reload } = useSiloSearch(query);
   const sections = groupByDay(results);
 
   return (
@@ -39,7 +39,7 @@ export default function Command() {
         sections.map((section) => (
           <List.Section key={section.title} title={section.title}>
             {section.links.map((link) => (
-              <SearchResultItem key={link.id} link={link} />
+              <SearchResultItem key={link.id} link={link} onChange={reload} />
             ))}
           </List.Section>
         ))
@@ -48,7 +48,7 @@ export default function Command() {
   );
 }
 
-function SearchResultItem({ link }: { link: CapturedLink }) {
+function SearchResultItem({ link, onChange }: { link: CapturedLink; onChange: () => void }) {
   const title = link.title?.trim() || domainOf(link.url);
   const baseUrl = getBaseUrl();
 
@@ -61,7 +61,7 @@ function SearchResultItem({ link }: { link: CapturedLink }) {
       // chrome a row ever carries, and only while enriching (design tokens).
       accessories={link.captureStatus === 'enriching' ? [{ text: '◌ capturing' }] : []}
       detail={<LinkDetail link={link} baseUrl={baseUrl} />}
-      actions={<LinkActions link={link} variant="live" onChange={() => {}} />}
+      actions={<LinkActions link={link} variant="live" onChange={onChange} />}
     />
   );
 }

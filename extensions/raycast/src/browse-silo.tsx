@@ -1,5 +1,5 @@
 import { List } from '@raycast/api';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { browseLinks, CaptureError, getCounts, listTags, listTrash } from './lib/capture-client.js';
 import { LinkActions } from './lib/link-actions.js';
 import { LinkDetail } from './lib/link-detail.js';
@@ -34,7 +34,8 @@ type BrowseState = {
   links: CapturedLink[];
   trashLinks: TrashLink[];
   isLoading: boolean;
-  purgeWindowDays: number;
+  /** null until `GET /api/counts` resolves — so the trash countdown never paints a wrong (default) retention window before the real one loads. */
+  purgeWindowDays: number | null;
 };
 
 /** Fetches the current scope's rows — Library/tag from `browseLinks`, Trash from `listTrash`, per the design spec's scope→endpoint mapping. */
@@ -64,23 +65,37 @@ export default function Command() {
     links: [],
     trashLinks: [],
     isLoading: true,
-    purgeWindowDays: 30,
+    purgeWindowDays: null,
   });
 
+  // Monotonic reload generation: a scope switch (Library→Trash→tag) fires
+  // overlapping fetches, and without this guard whichever request RESOLVES
+  // last wins — so a slow Library response can clobber the current Trash view
+  // (empty-view on a full trash, or vice-versa). Each reload captures its own
+  // generation; a response only commits if it's still the latest.
+  const reloadGen = useRef(0);
+
   const reload = useCallback(async (currentScope: Scope) => {
+    const gen = ++reloadGen.current;
     setState((s) => ({ ...s, isLoading: true }));
     try {
       const [{ links, trashLinks }, counts] = await Promise.all([
         fetchScope(currentScope),
         currentScope === 'trash' ? getCounts() : Promise.resolve(undefined),
       ]);
+      if (gen !== reloadGen.current) return; // a newer reload superseded this one
       setState((s) => ({
         links,
         trashLinks,
         isLoading: false,
-        purgeWindowDays: counts?.purgeWindowDays ?? s.purgeWindowDays,
+        // Only carry a window when this reload actually loaded counts (trash
+        // scope); leave null otherwise so the countdown never shows a stale
+        // or default value.
+        purgeWindowDays:
+          counts?.purgeWindowDays ?? (currentScope === 'trash' ? s.purgeWindowDays : null),
       }));
     } catch (error) {
+      if (gen !== reloadGen.current) return;
       const message = error instanceof CaptureError ? error.message : 'Could not load from silo';
       setState((s) => ({ ...s, isLoading: false }));
       console.error(message);
@@ -135,16 +150,23 @@ export default function Command() {
           />
         )
       ) : isTrash ? (
-        <List.Section title={`In trash · purges in ${state.purgeWindowDays} days`}>
-          {state.trashLinks.map((link) => (
-            <BrowseTrashItem
-              key={link.id}
-              link={link}
-              baseUrl={baseUrl}
-              purgeWindowDays={state.purgeWindowDays}
-              onChange={() => void reload(scope)}
-            />
-          ))}
+        <List.Section
+          title={
+            state.purgeWindowDays === null
+              ? 'In trash'
+              : `In trash · purges in ${state.purgeWindowDays} days`
+          }
+        >
+          {state.purgeWindowDays !== null &&
+            state.trashLinks.map((link) => (
+              <BrowseTrashItem
+                key={link.id}
+                link={link}
+                baseUrl={baseUrl}
+                purgeWindowDays={state.purgeWindowDays as number}
+                onChange={() => void reload(scope)}
+              />
+            ))}
         </List.Section>
       ) : (
         sections.map((section) => (

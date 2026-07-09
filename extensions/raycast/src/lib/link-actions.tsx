@@ -43,10 +43,12 @@ const LIVE_ACTIONS: ActionSpec[] = [
   { id: 'trash', shortcut: 'ctrl+x', destructive: true },
 ];
 
+// Order matches the rendered panel: Restore is primary (⏎), then Open/Copy,
+// then the guarded destructive actions. Only ONE action carries 'enter'.
 const TRASH_ACTIONS: ActionSpec[] = [
-  { id: 'open', shortcut: 'enter', destructive: false },
-  { id: 'copy', shortcut: 'cmd+c', destructive: false },
   { id: 'restore', shortcut: 'enter', destructive: false },
+  { id: 'open', shortcut: 'default', destructive: false },
+  { id: 'copy', shortcut: 'cmd+c', destructive: false },
   { id: 'delete', shortcut: 'ctrl+x', destructive: true },
   { id: 'empty-trash', shortcut: 'cmd+shift+delete', destructive: true },
 ];
@@ -111,13 +113,16 @@ export function LinkActions({
   if (variant === 'trash') {
     return (
       <ActionPanel>
-        <Action.OpenInBrowser url={link.url} title="Open in Browser" />
-        <Action.CopyToClipboard content={link.url} title="Copy URL" icon={Icon.CopyClipboard} />
+        {/* Restore is the primary action in trash, so it renders FIRST and
+            Raycast binds ⏎ to it — matching the design spec ("⏎ = Restore").
+            Open/Copy follow as secondary. */}
         <Action
           title="Restore"
           icon={Icon.ArrowCounterClockwise}
           onAction={() => void runGuarded(() => restoreLink(link.id), 'Restored', onChange)}
         />
+        <Action.OpenInBrowser url={link.url} title="Open in Browser" />
+        <Action.CopyToClipboard content={link.url} title="Copy URL" icon={Icon.CopyClipboard} />
         <Action
           title="Delete Permanently"
           icon={Icon.Trash}
