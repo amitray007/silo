@@ -62,6 +62,7 @@ describe('Sidebar', () => {
               { name: 'ai', count: 12000 },
               { name: 'design', count: 17 },
               { name: 'mcp', count: 7 },
+              { name: 'empty', count: 0 },
             ],
           }),
         );
@@ -80,11 +81,12 @@ describe('Sidebar', () => {
     // node — query by name and read tag rows by role for order. Tag counts are
     // compact too (12000 → 12k).
     await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
-    const tagNames = ['ai', 'design', 'mcp'].map(
+    const tagNames = ['ai', 'design', 'mcp', 'empty'].map(
       (name) => screen.getByRole('link', { name: new RegExp(name, 'i') }).textContent,
     );
-    expect(tagNames).toEqual(['#ai12k', '#design17', '#mcp7']);
+    expect(tagNames).toEqual(['#ai12k', '#design17', '#mcp7', '#empty']);
     expect(screen.getByText('12k')).toBeDefined();
+    expect(screen.queryByText('0')).toBeNull();
 
     expect(screen.getByRole('link', { name: /settings/i })).toBeDefined();
   });

@@ -279,7 +279,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
             // glyph, bright (--ink) label.
             icon={<span style={{ color: 'var(--ghost)', fontSize: 'var(--text-md)' }}>#</span>}
             label={tag.name}
-            meta={formatCount(tag.count)}
+            meta={tag.count > 0 ? formatCount(tag.count) : undefined}
             variant="tag"
             onNavigate={onNavigate}
           />
