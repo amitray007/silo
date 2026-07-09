@@ -248,9 +248,14 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
 
       <SidebarSearchItem onOpenSearch={onOpenSearch} />
 
-      {/* Library shows NO count (user feedback: the live count beside the top
-          nav item was noise — the list itself is the count). */}
-      <NavItemLink to="/" end label="Library" icon={<LibraryIcon />} onNavigate={onNavigate} />
+      <NavItemLink
+        to="/"
+        end
+        label="Library"
+        meta={counts ? formatCount(counts.live) : undefined}
+        icon={<LibraryIcon />}
+        onNavigate={onNavigate}
+      />
       <NavItemLink
         to="/trash"
         label="Trash"

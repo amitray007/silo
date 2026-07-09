@@ -29,7 +29,7 @@ function LibraryEmptyState() {
  * prefetch sentinel). Shares its orchestration/header/body/state chrome with
  * `TagView` via `./shared/*` — see those modules' doc comments.
  *
- * The header carries only the title + count now — the "Paste a link to keep"
+ * The header carries only the title now — the "Paste a link to keep"
  * hint box was removed (direct user feedback: match shiori's compact header,
  * which has no top input). Capture still works everywhere: pasting a URL
  * anywhere on the page captures it via the document-level `usePasteCapture`
@@ -39,7 +39,7 @@ export function LibraryView() {
   const view = useListView();
 
   return (
-    <ContentFrame title="Library" count={view.liveCount} headerSlot={undefined}>
+    <ContentFrame title="Library" headerSlot={undefined}>
       {ListBody(view, <LibraryEmptyState />)}
     </ContentFrame>
   );

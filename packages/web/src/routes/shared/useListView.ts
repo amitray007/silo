@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import type { ApiError } from '../../api/client';
-import { useCounts, useInfiniteLinks } from '../../api/hooks';
+import { useInfiniteLinks } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 
 /**
@@ -26,8 +26,6 @@ import type { LinkJson } from '../../api/types';
  * own independent `useCaptureLink` mutation.
  */
 export interface ListViewState {
-  /** Live library count (from `/api/counts`) — the header count fallback. */
-  liveCount: number | undefined;
   /** The browse feed (day-grouped, paginated), scoped to `tag` when given. */
   links: LinkJson[];
   isLoading: boolean;
@@ -39,7 +37,6 @@ export interface ListViewState {
 }
 
 export function useListView(tag?: string): ListViewState {
-  const { data: counts } = useCounts();
   const { data, isLoading, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useInfiniteLinks(tag);
 
@@ -50,7 +47,6 @@ export function useListView(tag?: string): ListViewState {
   }, [fetchNextPage]);
 
   return {
-    liveCount: counts?.live,
     links,
     isLoading,
     isError,

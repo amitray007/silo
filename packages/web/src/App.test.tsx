@@ -45,10 +45,10 @@ describe('App routing', () => {
 
   it('renders the Library view (and its active nav item) at /', async () => {
     renderApp(['/']);
-    // "128" appears twice now (v3): the sidebar's Library count AND the new
-    // content-header count next to the "Library" title.
-    await waitFor(() => expect(screen.getAllByText('128').length).toBeGreaterThan(0));
+    // Counts render in the sidebar; the content header remains just "Library".
+    await waitFor(() => expect(screen.getByText('128')).toBeDefined());
     await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
+    expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();
     const libraryLink = screen.getByRole('link', { name: /library/i });
     expect(libraryLink.getAttribute('aria-current')).toBe('page');
   });

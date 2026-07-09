@@ -18,14 +18,8 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/**
- * `LibraryView` now also renders the v3 header bar via `useCounts()` (a real
- * `useQuery`) — every render needs a `QueryClientProvider` ancestor, even the
- * tests below that mock `useInfiniteLinks` directly via `vi.spyOn` and don't
- * care about the header's count. `useCounts` itself hits the mocked global
- * `fetch`; those tests don't assert on the header, so its (unmocked-URL)
- * response settling asynchronously after the assertions run is harmless.
- */
+/** `LibraryView` renders through TanStack Query hooks, so each test provides a
+ * `QueryClientProvider` even when `useInfiniteLinks` is mocked directly. */
 function renderLibraryView() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -229,14 +223,8 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
       nextCursor: 'c1',
     };
     const page2: LinksResponse = { links: [link({ id: 'p2', title: 'Page two' })] };
-    // `LibraryView` also fires `useCounts()` for the header's count (v3) —
-    // route the mock by URL rather than by call order, since both requests
-    // are in flight together.
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
-      if (url === '/api/counts') {
-        return Promise.resolve(jsonResponse({ live: 1, trash: 0, purgeWindowDays: 30 }));
-      }
       if (url === '/api/links') return Promise.resolve(jsonResponse(page1));
       if (url === '/api/links?cursor=c1') return Promise.resolve(jsonResponse(page2));
       throw new Error(`unexpected fetch: ${url}`);

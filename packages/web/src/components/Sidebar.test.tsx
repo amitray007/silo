@@ -48,12 +48,11 @@ describe('Sidebar', () => {
     vi.unstubAllGlobals();
   });
 
-  it('shows NO Library count, a compact-formatted Trash count, and compact tag counts (count-desc order)', async () => {
+  it('shows compact-formatted Library, Trash, and tag counts (count-desc order)', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
-        // live 128 must NOT appear (Library count removed, user feedback);
-        // trash 1500 must render as the compact "1.5k".
+        // Library and Trash counts render in the sidebar.
         return Promise.resolve(jsonResponse({ live: 128, trash: 1500, purgeWindowDays: 30 }));
       }
       if (url === '/api/tags') {
@@ -73,9 +72,9 @@ describe('Sidebar', () => {
     renderSidebar();
 
     expect(screen.getByText('silo')).toBeDefined();
-    // Trash count is compact-formatted, and the raw Library count never renders.
+    // Trash count is compact-formatted; Library's raw count is shown beside Library.
+    await waitFor(() => expect(screen.getByText('128')).toBeDefined());
     await waitFor(() => expect(screen.getByText('1.5k')).toBeDefined());
-    expect(screen.queryByText('128')).toBeNull();
 
     // The `#` is its own span (spacing fix), so the tag name is a separate text
     // node — query by name and read tag rows by role for order. Tag counts are
