@@ -208,6 +208,71 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     });
   });
 
+  it('two quick toggles on the same source do NOT clobber each other (optimistic onMutate — plan 026 review fix)', async () => {
+    // Regression for the read-modify-write race: without the optimistic cache
+    // write in useUpdateSettings, both clicks would read the SAME stale
+    // useSettings() snapshot and the second PATCH would drop the first's
+    // change. Start from a mixed stored state so a clobber is visible, then
+    // click inline then hover in quick succession WITHOUT awaiting between —
+    // the second PATCH must carry BOTH flips.
+    const { fetchMock } = renderTab({
+      ...defaultSettings(),
+      plugins: {
+        hacker_news: { enabled: true, inline: false, hover: false },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      },
+    });
+
+    const inlineToggle = await screen.findByTitle(/Inline on the row is off/i);
+    fireEvent.click(inlineToggle);
+    const hoverToggle = await screen.findByTitle(/On hover \(preview card\) is off/i);
+    fireEvent.click(hoverToggle);
+
+    await waitFor(() => {
+      const patchBodies = fetchMock.mock.calls
+        .filter((call) => (call[1] as RequestInit | undefined)?.method === 'PATCH')
+        .map((call) => JSON.parse((call[1] as RequestInit).body as string));
+      // The LAST PATCH must reflect BOTH toggles on (inline was flipped first,
+      // hover second) — proving the second click read the first's optimistic
+      // update rather than the original stale snapshot.
+      const last = patchBodies.at(-1);
+      expect(last?.plugins.hacker_news).toEqual({ enabled: true, inline: true, hover: true });
+    });
+  });
+
+  it('feature toggles are DISABLED while settings are still loading (no clobber via LOADING_PLUGINS — plan 026 review fix)', async () => {
+    // Regression for the loading-window clobber: during the initial GET the
+    // tab renders against the all-on LOADING_PLUGINS placeholder; a click on a
+    // feature toggle then would rebuild the PATCH from placeholder values and
+    // overwrite the user's real stored settings. The GET here never resolves,
+    // so useSettings() stays loading and the inline toggle must be disabled.
+    const neverResolves = new Promise<Response>(() => {});
+    const fetchMock = vi.fn().mockReturnValue(neverResolves);
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PluginsTab />
+      </QueryClientProvider>,
+    );
+
+    // HN's panel is open by default; its inline feature toggle exists but must
+    // be disabled while loading (matching the master toggle's load-gate). A
+    // disabled toggle's title is the generic "turn the source on first" form,
+    // so match on the "Inline on the row" label prefix (present in every title
+    // variant) rather than the "is on/off" copy.
+    const inlineToggle = await screen.findByTitle(/^Inline on the row/i);
+    expect(inlineToggle).toHaveProperty('disabled', true);
+
+    // A click while disabled must fire NO PATCH.
+    fireEvent.click(inlineToggle);
+    const patched = fetchMock.mock.calls.some(
+      (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+    );
+    expect(patched).toBe(false);
+  });
+
   it('when a source is master-disabled, its feature toggles render disabled/greyed', async () => {
     renderTab({
       ...defaultSettings(),
@@ -218,13 +283,13 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       },
     });
 
-    // The loose title regex matches BOTH the loading-optimistic "is on" title
-    // and the settled "turn the source on first" title — wait for the
-    // settled (disabled) one specifically so this doesn't assert against the
+    // A disabled feature toggle's title is the neutral "— unavailable" form
+    // (shared by the master-off and loading cases) — wait for the settled
+    // (disabled) render specifically so this doesn't assert against the
     // transient loading render.
-    const inlineToggle = await screen.findByTitle(/Inline on the row — turn the source on first/i);
+    const inlineToggle = await screen.findByTitle(/Inline on the row — unavailable/i);
     expect(inlineToggle).toHaveProperty('disabled', true);
-    const hoverToggle = screen.getByTitle(/On hover \(preview card\) — turn the source on first/i);
+    const hoverToggle = screen.getByTitle(/On hover \(preview card\) — unavailable/i);
     expect(hoverToggle).toHaveProperty('disabled', true);
   });
 

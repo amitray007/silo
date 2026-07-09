@@ -145,7 +145,10 @@ function PluginToggle({
       disabled={disabled}
       title={
         disabled
-          ? `${label} — turn the source on first`
+          ? // Neutral disabled copy — a feature toggle is disabled either while
+            // settings load OR while its source's master is off; the button
+            // can't tell which, so avoid asserting a specific reason.
+            `${label} — unavailable`
           : on
             ? `${label} is on — click to turn off`
             : `${label} is off — click to turn on`
@@ -225,6 +228,7 @@ function FeatureToggleRow({
   desc,
   on,
   masterEnabled,
+  loading,
   onToggle,
 }: {
   field: string;
@@ -232,15 +236,24 @@ function FeatureToggleRow({
   desc: string;
   on: boolean;
   masterEnabled: boolean;
+  // Disabled while settings are still loading (plan 026 review fix): during
+  // the initial GET the whole tab renders against the all-on LOADING_PLUGINS
+  // placeholder, so a click here would rebuild the PATCH from placeholder
+  // values and clobber the user's real stored settings. The master toggle
+  // already gates on `loading`; the feature rows must too (the pre-026 UI
+  // disabled every toggle until settings loaded — dropped for feature rows in
+  // the redesign, re-added here).
+  loading: boolean;
   onToggle: () => void;
 }) {
+  const disabled = !masterEnabled || loading;
   return (
     <div key={field} style={featureRow}>
-      <div style={{ flex: 1, opacity: masterEnabled ? 1 : 0.5 }}>
+      <div style={{ flex: 1, opacity: disabled ? 0.5 : 1 }}>
         <div style={rowLabel}>{name}</div>
         <div style={rowDesc}>{desc}</div>
       </div>
-      <PluginToggle on={on} disabled={!masterEnabled} onToggle={onToggle} label={name} />
+      <PluginToggle on={on} disabled={disabled} onToggle={onToggle} label={name} />
     </div>
   );
 }
@@ -351,6 +364,7 @@ export function PluginsTab() {
                     desc={row.desc}
                     on={state[row.field as keyof typeof state] as boolean}
                     masterEnabled={state.enabled}
+                    loading={loading}
                     onToggle={() =>
                       // `row` was drawn from `FEATURE_ROWS_BY_SOURCE[source.key]`, so `row.field`
                       // is guaranteed to be a field `source.key`'s schema actually has — the

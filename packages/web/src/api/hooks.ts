@@ -713,20 +713,49 @@ export function useSettings() {
 /**
  * The Settings modal's write (`PATCH /api/settings`, plan 016) — every field
  * of `UpdateSettingsRequest` is optional, so a caller patches just the one
- * control the user touched (e.g. `{ theme: 'dark' }`). No optimistic
- * update: unlike capture/trash, a settings change has no list to feel
- * "instant" against, and the mutation is a single local round-trip — a
- * plain invalidate-on-settle (mirrors `useEditLink`'s reasoning) keeps this
- * hook simple. On success the server returns the FULL merged map, which is
- * written directly into the cache (`onSuccess`) so the modal reflects the
- * change without waiting on a second round-trip; `onSettled` still
- * invalidates as a safety net (e.g. a concurrent PATCH from another tab).
+ * control the user touched (e.g. `{ theme: 'dark' }`).
+ *
+ * OPTIMISTIC (plan 026 review fix — ce-adversarial/ce-correctness): the
+ * plugins toggles do a full-object READ-MODIFY-WRITE (`setPluginField` rebuilds
+ * the whole `plugins` map from the current `useSettings()` snapshot, since the
+ * store replaces the whole value with no sub-key merge). Without an
+ * `onMutate` optimistic cache write, two quick toggles both read the SAME
+ * stale snapshot — the second PATCH is built without the first's change and
+ * clobbers it (last-write-wins), silently losing a toggle the user clicked.
+ * `onMutate` merges the patch into the cached map IMMEDIATELY (before the
+ * round-trip), so a rapid follow-up `writeField` reads the updated value and
+ * its PATCH carries BOTH changes. Standard optimistic pattern: cancel
+ * in-flight refetches, snapshot for rollback, roll back `onError`. `onSuccess`
+ * still writes the server's authoritative full map; `onSettled` invalidates as
+ * a cross-tab safety net.
+ *
+ * The merge is shallow-at-the-top (`{ ...prev, ...patch }`) — correct because
+ * every caller sends a COMPLETE top-level value for each key it touches
+ * (`setPluginField` returns the full three-source `plugins` object; theme /
+ * trashPurgeDays are scalars), so a partial nested object never reaches here.
  */
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (patch: UpdateSettingsRequest) => apiPatch<SettingsMap>('/api/settings', patch),
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.settings() });
+      const previous = queryClient.getQueryData<SettingsMap>(queryKeys.settings());
+      // Only optimistically merge when we already have a loaded snapshot — a
+      // partial merge onto `undefined` would produce an incomplete map. If
+      // settings haven't loaded yet the callers (PluginsTab) gate their
+      // controls on `loading`, so no write originates from that window.
+      if (previous) {
+        queryClient.setQueryData<SettingsMap>(queryKeys.settings(), { ...previous, ...patch });
+      }
+      return { previous };
+    },
+    onError: (_err, _patch, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.settings(), context.previous);
+      }
+    },
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.settings(), settings);
     },
