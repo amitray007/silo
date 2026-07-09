@@ -159,7 +159,15 @@ function renderToast(payload: ToastPayload): void {
 
   function pauseDismiss(bar: HTMLElement): void {
     if (editing) return;
-    if (dismissTimer) clearTimeout(dismissTimer);
+    // Idempotent: a second pointerenter without an intervening pointerleave
+    // (the browser can drop a pointerleave when the pointer exits into browser
+    // chrome or a cross-origin overlay) must NOT re-subtract elapsed time
+    // against a stale countdownStart — that double-counts and can collapse the
+    // timer to 0, snapping the toast away early. If already paused (timer
+    // cleared), do nothing.
+    if (!dismissTimer) return;
+    clearTimeout(dismissTimer);
+    dismissTimer = undefined;
     const elapsed = Date.now() - countdownStart;
     countdownRemaining = Math.max(0, countdownRemaining - elapsed);
     bar.style.animationPlayState = 'paused';
@@ -245,9 +253,15 @@ function renderToast(payload: ToastPayload): void {
       return btn;
     }
 
+    // Editing is only meaningful once a link exists. An error toast carries no
+    // saved link (linkId === ''), so opening an edit card on it is a guaranteed
+    // dead-end (applyEdit('') can never resolve). Suppress the edit affordance
+    // entirely in that case — only Dismiss is offered.
+    const editable = payload.kind !== 'error' && payload.linkId !== '';
     const editBtn = iconButton('Edit details', '✎');
     const closeBtn = iconButton('Dismiss', '✕');
-    actions.append(editBtn, closeBtn);
+    if (editable) actions.append(editBtn, closeBtn);
+    else actions.append(closeBtn);
 
     row.append(markWrap, textCol, actions);
     wrapper.appendChild(row);
@@ -278,14 +292,21 @@ function renderToast(payload: ToastPayload): void {
     card.appendChild(wrapper);
 
     const openEdit = (): void => renderEditCard();
-    wrapper.addEventListener('click', (event) => {
-      if (event.target === closeBtn) return;
-      openEdit();
-    });
-    editBtn.addEventListener('click', (event) => {
-      event.stopPropagation();
-      openEdit();
-    });
+    if (editable) {
+      wrapper.style.cursor = 'pointer';
+      wrapper.addEventListener('click', (event) => {
+        if (event.target === closeBtn) return;
+        openEdit();
+      });
+      editBtn.addEventListener('click', (event) => {
+        event.stopPropagation();
+        openEdit();
+      });
+    } else {
+      // No edit path on an error toast — it's not clickable, so drop the
+      // pointer affordance the shared wrapper style applies.
+      wrapper.style.cursor = 'default';
+    }
     closeBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       removeHost();

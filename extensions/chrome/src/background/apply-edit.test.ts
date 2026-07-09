@@ -37,13 +37,31 @@ describe('applyEdit', () => {
     expect(client.editNote).not.toHaveBeenCalled();
   });
 
-  it('returns ok:false with the message on first failure', async () => {
+  it('returns ok:false, partial:false when the FIRST call fails (nothing applied)', async () => {
     const client = await import('../lib/capture-client.js');
     (client.addTag as unknown as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
       new (client.CaptureError as new (k: string, m: string) => Error)('server', 'boom'),
     );
     const { applyEdit } = await import('./apply-edit.js');
     const res = await applyEdit('1', { addedTags: ['x'], removedTags: [] });
-    expect(res).toEqual({ ok: false, message: 'boom' });
+    expect(res).toEqual({ ok: false, message: 'boom', partial: false });
+  });
+
+  it('reports partial:true and an honest message when an EARLIER call already committed', async () => {
+    const client = await import('../lib/capture-client.js');
+    // tag 'a' succeeds and persists server-side; tag 'b' then fails.
+    (client.addTag as unknown as ReturnType<typeof vi.fn>)
+      .mockResolvedValueOnce({})
+      .mockRejectedValueOnce(
+        new (client.CaptureError as new (k: string, m: string) => Error)('server', 'boom'),
+      );
+    const { applyEdit } = await import('./apply-edit.js');
+    const res = await applyEdit('1', { addedTags: ['a', 'b'], removedTags: [] });
+    expect(res.ok).toBe(false);
+    if (res.ok) throw new Error('unreachable');
+    expect(res.partial).toBe(true);
+    expect(res.message).toContain('Some changes were saved');
+    // 'a' was applied before the failure — not rolled back.
+    expect(client.addTag).toHaveBeenCalledWith('1', 'a');
   });
 });
