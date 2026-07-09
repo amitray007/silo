@@ -136,6 +136,28 @@ describe('detailModel', () => {
     expect(m.imageUrl).toBeNull();
   });
 
+  it('omits the image for a plain link even WITH a captured imageUrl (og:image) — plain links never image', () => {
+    const m = detailModel(
+      {
+        id: 'l3',
+        url: 'https://open.spotify.com/track/abc',
+        title: 'Some Song',
+        description: null,
+        siteName: null,
+        sourceKind: 'link',
+        sourceData: { kind: 'link' },
+        captureStatus: 'full',
+        notes: null,
+        tags: [],
+        imageUrl: 'https://cdn.example/og.jpg',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as CapturedLink,
+      base,
+    );
+    expect(m.imageUrl).toBeNull();
+  });
+
   it('includes github stats', () => {
     const m = detailModel(
       {
@@ -161,6 +183,33 @@ describe('detailModel', () => {
       base,
     );
     expect(m.stats.find((s) => s.label === 'Stars')?.value).toBe('10');
+    expect(m.imageUrl).toBeNull();
+  });
+
+  it('omits the image for a github link even WITH a captured imageUrl (GitHub never images)', () => {
+    const m = detailModel(
+      {
+        id: 'g2',
+        url: 'https://github.com/x/z',
+        title: 'z',
+        description: null,
+        siteName: null,
+        sourceKind: 'link',
+        sourceData: {
+          kind: 'github',
+          stars: 5,
+          forks: 1,
+          issues: 0,
+        },
+        captureStatus: 'full',
+        notes: null,
+        tags: [],
+        imageUrl: 'https://cdn.example/og.jpg',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      } as CapturedLink,
+      base,
+    );
     expect(m.imageUrl).toBeNull();
   });
 
