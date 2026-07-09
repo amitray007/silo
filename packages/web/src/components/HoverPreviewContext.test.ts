@@ -46,28 +46,39 @@ describe('computePosition', () => {
   });
 
   it(
-    'QA fix: flips the card to the LEFT of the row instead of covering it, when the row sits ' +
-      "close enough to the viewport's right edge that the right-side clamp would otherwise " +
-      "land before the row's own right edge (reproduced live: this covered the row's own " +
-      '"⋯" Options button at an ordinary 1280px desktop width, making it unclickable while ' +
-      'the preview was showing)',
+    'flips the card to the LEFT of the anchor instead of overshooting it, when the anchor sits ' +
+      "close enough to the viewport's right edge that the right-side clamp would otherwise land " +
+      'before the anchor point (no-pointer fallback anchors at rect.right)',
     () => {
-      // A row whose right edge sits at 1087px, matching the QA repro exactly
-      // (a Library row near the content column's right edge at 1280px wide).
+      // An anchor (rect.right) at 1087px near the viewport's right edge at
+      // 1280px wide — the right candidate clamps to 976 (before the anchor),
+      // so the card flips to the anchor's left instead.
       const r = rect({ top: 300, left: 700, right: 1087 });
       const { left } = computePosition(r);
 
-      // The card (288px wide) must not overlap [r.left, r.right] at all —
-      // either fully to the right of it, or fully to the left of it.
-      const cardRight = left + 288;
-      const overlapsRow = left < r.right && cardRight > r.left;
-      expect(overlapsRow).toBe(false);
-
-      // Concretely: this case has no room to the right, so it must have
-      // flipped to the row's left.
-      expect(left).toBeLessThan(r.left);
+      // No room to the right of the anchor → flips left of it.
+      expect(left).toBeLessThan(r.right);
+      expect(left).toBe(785); // anchor - GAP - CARD_WIDTH = 1087 - 14 - 288
     },
   );
+
+  it('anchors the card near the POINTER (not the row edge) when a pointerX is given', () => {
+    // Full-width row, but the pointer is mid-row at x=520: the card should
+    // appear just right of the cursor (520 + 14), NOT at the row's far-right
+    // edge (1087) — the whole point of the pointer-anchored fix.
+    const r = rect({ top: 300, left: 100, right: 1087 });
+    const { left } = computePosition(r, 520);
+    expect(left).toBe(534); // pointerX + GAP
+  });
+
+  it('flips a pointer-anchored card left when the pointer is near the right edge', () => {
+    // Pointer at x=1200 on a 1280px viewport: right candidate clamps to 976
+    // (before the pointer), so it flips to the pointer's left.
+    const r = rect({ top: 300, left: 100, right: 1260 });
+    const { left } = computePosition(r, 1200);
+    expect(left).toBeLessThan(1200);
+    expect(left).toBe(898); // 1200 - 14 - 288
+  });
 
   it('still prefers the right side when the row is comfortably clear of the viewport edge', () => {
     const r = rect({ top: 300, left: 100, right: 300 });

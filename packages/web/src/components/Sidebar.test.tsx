@@ -107,7 +107,7 @@ describe('Sidebar', () => {
     const libraryLink = screen.getByRole('link', { name: /library/i });
     const trashLink = screen.getByRole('link', { name: /trash/i });
     const settingsLink = screen.getByRole('link', { name: /settings/i });
-    const tagLink = screen.getByRole('link', { name: /#ai/i });
+    const tagLink = screen.getByRole('link', { name: /#\s*ai/i });
 
     expect(libraryLink.querySelector('svg')).not.toBeNull();
     expect(trashLink.querySelector('svg')).not.toBeNull();
@@ -342,7 +342,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
@@ -352,7 +352,7 @@ describe('Sidebar', () => {
       expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toEqual({ name: 'newtag' });
 
       expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
-      expect(screen.getByText('+ New tag')).toBeDefined();
+      expect(screen.getByRole('button', { name: /new tag/i })).toBeDefined();
     });
 
     it('Escape closes the input without creating a tag', async () => {
@@ -361,7 +361,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'abandoned' } });
       fireEvent.keyDown(input, { key: 'Escape' });
@@ -376,7 +376,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -403,7 +403,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
@@ -473,7 +473,7 @@ describe('Sidebar', () => {
     renderSidebar();
 
     await waitFor(() => expect(screen.getByText('Tags')).toBeDefined());
-    expect(screen.getByText('+ New tag')).toBeDefined();
+    expect(screen.getByRole('button', { name: /new tag/i })).toBeDefined();
     expect(screen.queryAllByText(/^#/)).toHaveLength(0);
     expect(screen.queryByText(/more$/)).toBeNull();
   });

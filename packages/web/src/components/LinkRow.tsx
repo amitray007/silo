@@ -100,7 +100,20 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const handleEnter = (e: React.SyntheticEvent<HTMLAnchorElement>) => {
     setHovered(true);
     if (menuOpen || !isHoverCapable()) return;
-    scheduleShow(link, e.currentTarget.getBoundingClientRect());
+    // Pass the pointer's X so the preview card anchors near the cursor rather
+    // than the row's far-right edge (user feedback). A mouse-enter's native
+    // event carries `clientX`; a keyboard `focus` does not — in that case
+    // `pointerX` stays undefined and computePosition falls back to the row edge.
+    const native = e.nativeEvent;
+    const rect = e.currentTarget.getBoundingClientRect();
+    // Only include pointerX when it's a real mouse event (keyboard focus has
+    // none) — `exactOptionalPropertyTypes` forbids passing an explicit
+    // `undefined` for an optional prop.
+    if (native instanceof MouseEvent) {
+      scheduleShow(link, rect, { pointerX: native.clientX });
+    } else {
+      scheduleShow(link, rect);
+    }
   };
   const handleLeave = () => {
     setHovered(false);

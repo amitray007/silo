@@ -271,12 +271,13 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           <NavItemLink
             key={tag.name}
             to={`/tags/${tag.name}`}
-            label={
-              <>
-                <span style={{ color: 'var(--ghost)', marginRight: 4 }}>#</span>
-                {tag.name}
-              </>
-            }
+            // The `#` sits in NavItem's 18px icon slot (not inline in the
+            // label) so it aligns to the SAME left ledger column as the
+            // Library/Trash nav icons above and the `+ New tag` glyph below —
+            // one clean column, matching shiori's Tags spacing. Dim (--ghost)
+            // glyph, bright (--ink) label.
+            icon={<span style={{ color: 'var(--ghost)', fontSize: 'var(--text-base)' }}>#</span>}
+            label={tag.name}
             meta={tag.count}
             variant="tag"
             onNavigate={onNavigate}

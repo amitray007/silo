@@ -109,7 +109,10 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         style={{
           display: 'flex',
           alignItems: 'center',
-          padding: 'var(--s-0-5) var(--s2-5) var(--s1-5)',
+          // Tighter header→first-row gap (bottom --s1-5 → --s1) to match
+          // shiori's compact Tags rhythm — the header sits closer to the tag
+          // rows it labels, reading as one group rather than a floating title.
+          padding: 'var(--s-0-5) var(--s2-5) var(--s1)',
         }}
       >
         {/* Bumped 0.7rem → 0.8rem (direct user feedback: "too small vs the
@@ -251,13 +254,16 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           onClick={openNewTag}
           className="silo-sidebar-text-btn"
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--s2-5)',
             border: 0,
             background: 'none',
             fontFamily: 'inherit',
             textAlign: 'left',
             width: '100%',
             boxSizing: 'border-box',
-            padding: '5px 10px',
+            padding: '5px var(--s2-5)',
             borderRadius: 8,
             fontSize: 'var(--text-base)',
             fontWeight: 400,
@@ -265,7 +271,21 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             cursor: 'pointer',
           }}
         >
-          + New tag
+          {/* `+` in the same 18px icon slot as the tag `#` and the nav icons,
+              so the whole Tags column shares one left ledger. Dim glyph
+              (--ghost), bright label — matching shiori. */}
+          <span
+            style={{
+              flex: 'none',
+              display: 'grid',
+              placeItems: 'center',
+              width: 18,
+              color: 'var(--ghost)',
+            }}
+          >
+            +
+          </span>
+          <span>New tag</span>
         </button>
       )}
     </div>
