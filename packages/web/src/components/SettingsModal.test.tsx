@@ -277,7 +277,9 @@ describe('SettingsModal', () => {
       await waitFor(() => {
         expect(screen.getByTitle(/Hacker News is off/i)).toBeDefined();
       });
-      expect(screen.getByTitle(/Hacker News is off/i).getAttribute('aria-pressed')).toBe('false');
+      // The toggle is now a slider switch (role="switch"/aria-checked), not the
+      // old aria-pressed button.
+      expect(screen.getByTitle(/Hacker News is off/i).getAttribute('aria-checked')).toBe('false');
     });
   });
 
