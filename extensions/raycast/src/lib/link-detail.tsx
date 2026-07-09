@@ -119,6 +119,9 @@ export function LinkDetail({ link, baseUrl }: { link: CapturedLink; baseUrl: str
             title="Source"
             text={link.siteName ?? hostOf(link.url)}
           />
+          {/* The link itself — clickable, so ⏎-on-the-row and this both open
+              it, and the full URL is visible in the detail table (design ask). */}
+          <List.Item.Detail.Metadata.Link title="Link" text={link.url} target={link.url} />
           <List.Item.Detail.Metadata.Label title="Status" text={statusLabel(link.captureStatus)} />
           <List.Item.Detail.Metadata.Label
             title="Saved"
