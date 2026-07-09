@@ -3,9 +3,10 @@
  * Generates all favicon/PWA/apple-touch raster icons from the two committed
  * SVG sources, into `packages/web/public/`. Reproducible (no system deps
  * beyond `sharp`/`png-to-ico`, both pure npm packages with prebuilt
- * binaries) and idempotent — re-running with unchanged sources produces
- * byte-identical output (sharp's PNG encoder is deterministic for a given
- * input + options).
+ * binaries) and effectively idempotent — re-running with unchanged sources
+ * reproduces the same icons. (PNG bytes are deterministic for a fixed
+ * sharp/libvips build; a different platform or libvips version may encode
+ * byte-different PNGs, so don't gate CI on a `git diff` after this runs.)
  *
  * TWO sources, deliberately not one — see docs/superpowers/specs/2026-07-10-stack-brand-mark-design.md:
  *   - `favicon.svg`  — transparent ground, light-ink Stack mark. Used for the
@@ -39,6 +40,23 @@ for (const src of [faviconSvg, appIconSvg]) {
 const faviconSvgBuffer = readFileSync(faviconSvg);
 const appIconSvgBuffer = readFileSync(appIconSvg);
 
+/**
+ * Fail loudly if a source SVG isn't valid, renderable XML BEFORE writing any
+ * raster. The old favicon.svg once carried a literal `--` inside an XML
+ * comment (`--mark`), which strict parsers (sharp/librsvg) reject outright —
+ * that silently broke this whole pipeline. `sharp().metadata()` runs the
+ * librsvg parse without emitting a file, so a malformed source dies here with
+ * a clear message instead of writing partial/corrupt icons downstream.
+ */
+async function assertRenderable(svgBuffer, label) {
+  try {
+    await sharp(svgBuffer).metadata();
+  } catch (err) {
+    console.error(`[gen-icons] source SVG is not renderable (${label}): ${err.message}`);
+    process.exit(1);
+  }
+}
+
 /** Renders an SVG buffer to a square PNG at `size`x`size` and writes it to `public/<name>`. */
 async function renderPng(svgBuffer, size, name) {
   const outPath = join(publicDir, name);
@@ -49,6 +67,9 @@ async function renderPng(svgBuffer, size, name) {
 }
 
 async function main() {
+  await assertRenderable(faviconSvgBuffer, 'favicon.svg');
+  await assertRenderable(appIconSvgBuffer, 'app-icon.svg');
+
   // Transparent favicon.svg -> small browser-tab favicons.
   const favicon16 = await renderPng(faviconSvgBuffer, 16, 'favicon-16x16.png');
   const favicon32 = await renderPng(faviconSvgBuffer, 32, 'favicon-32x32.png');
