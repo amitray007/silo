@@ -109,7 +109,8 @@ describe('SettingsModal', () => {
     expect(screen.getByRole('tab', { name: 'Preferences' })).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Import / export' })).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Access' })).toBeDefined();
-    expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
+    expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
   });
 
   it('switches tabs on click, rendering each panel exclusively and updating aria-selected', () => {

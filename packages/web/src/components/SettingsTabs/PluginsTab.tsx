@@ -3,7 +3,7 @@ import { useSettings, useUpdateSettings } from '../../api/hooks';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
-import { rowDesc, rowLabel, tabNote } from './rowStyles';
+import { rowDesc, rowLabel } from './rowStyles';
 
 /**
  * The all-on shape used while `useSettings()` is still loading (plan 026 —
@@ -407,11 +407,6 @@ export function PluginsTab() {
           );
         })()}
       </div>
-
-      <p style={tabNote}>
-        Plugins add inline detail and hover previews — they never change what gets saved. Turning
-        one off stops new hover/inline detail from that source; existing saved links are unaffected.
-      </p>
     </>
   );
 }

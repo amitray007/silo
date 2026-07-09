@@ -170,7 +170,8 @@ describe('AppFrame', () => {
       renderAppFrame();
 
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
+      expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+      expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
       expect(screen.getByText(/oat, in two lights/i)).toBeDefined();

@@ -392,8 +392,8 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     });
   });
 
-  it('renders the footer note explaining plugins never change what gets saved', () => {
+  it('does not render the old footer note explaining plugins never change what gets saved', () => {
     renderTab();
-    expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
+    expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
   });
 });
