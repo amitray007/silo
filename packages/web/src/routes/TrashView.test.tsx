@@ -75,6 +75,8 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('An old post')).toBeDefined());
+    const heading = screen.getByRole('heading', { name: 'Trash' });
+    expect(heading.parentElement?.textContent).toBe('Trash');
     expect(screen.getByText('Today')).toBeDefined();
     const countdown = screen.getByText(/^(29|30)d$/);
     expect(countdown).toBeDefined();

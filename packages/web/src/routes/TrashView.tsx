@@ -222,9 +222,9 @@ function TrashBody({
  * The header's search input (`TrashSearchInput`, Trash search slice) was
  * REMOVED by a later user-feedback pass, mirroring the tag page's own
  * search-box removal (`TagView.tsx`'s doc comment): the command palette
- * (⌘K / `/`) handles trash search now, so `ContentHeader` here renders no
- * `children` — title+count only, same "no children" convention as
- * `SettingsView`/`TagView`.
+ * (⌘K / `/`) handles trash search now, so `ContentHeader` here renders only
+ * the route title. The trash count still lives in the sidebar nav item,
+ * matching Library's own "count in sidebar, not heading bar" treatment.
  */
 export function TrashView() {
   const { data: counts } = useCounts();
@@ -242,7 +242,7 @@ export function TrashView() {
 
   return (
     <>
-      <ContentHeader title="Trash" count={links.length} />
+      <ContentHeader title="Trash" />
       <div className="silo-content-body">
         <div className="silo-content-col silo-route-fade">
           <TrashBody
