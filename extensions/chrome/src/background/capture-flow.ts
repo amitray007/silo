@@ -1,17 +1,16 @@
 import { CaptureError, captureLink, listTags } from '../lib/capture-client.js';
-import { trackCapturedId } from '../lib/recent.js';
 import { isCapturableUrl, tabDisplayTitle } from '../lib/tab-payload.js';
 import { showToast } from '../lib/toast.js';
 import type { CaptureRequest } from '../lib/types.js';
 
 /**
  * The one quiet-capture path every entry point (toolbar click, keyboard
- * command, context menu) funnels through: POST, track the id for the
- * recent-5 list, show the toast. Never blocks on or renders enrichment (the
- * brief's binding philosophy) — the toast fires the instant the capture
- * request settles, regardless of the link's enrichment state. The saved
- * `link.id` is threaded into the toast payload so the edit card (clicking
- * the toast) can target it via `chrome.runtime.sendMessage`.
+ * command, context menu) funnels through: POST, show the toast. Never
+ * blocks on or renders enrichment (the brief's binding philosophy) — the
+ * toast fires the instant the capture request settles, regardless of the
+ * link's enrichment state. The saved `link.id` is threaded into the toast
+ * payload so the edit card (clicking the toast) can target it via
+ * `chrome.runtime.sendMessage`.
  */
 export async function runQuietCapture(
   request: CaptureRequest,
@@ -20,7 +19,6 @@ export async function runQuietCapture(
 ): Promise<void> {
   try {
     const { link, deduped } = await captureLink(request);
-    await trackCapturedId(link.id);
     if (tabId !== undefined) {
       const tags = await listTags().catch(() => []);
       await showToast(tabId, {

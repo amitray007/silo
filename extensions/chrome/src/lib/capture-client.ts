@@ -9,12 +9,12 @@ import type {
 
 /**
  * A typed, actionable error thrown by every function in this module —
- * `kind` lets callers (the toast, the popup) branch on the failure without
- * string-matching a message. `'unreachable'` covers both a network failure
- * (silo not running / wrong `baseUrl`) and a CORS rejection (the browser
- * throws the SAME generic `TypeError: Failed to fetch` for both — there is
- * no way to distinguish them from `fetch`'s result, see MDN's CORS error
- * docs), so the message stays actionable for either cause.
+ * `kind` lets callers (the toast, the options page) branch on the failure
+ * without string-matching a message. `'unreachable'` covers both a network
+ * failure (silo not running / wrong `baseUrl`) and a CORS rejection (the
+ * browser throws the SAME generic `TypeError: Failed to fetch` for both —
+ * there is no way to distinguish them from `fetch`'s result, see MDN's CORS
+ * error docs), so the message stays actionable for either cause.
  */
 export class CaptureError extends Error {
   constructor(
@@ -26,7 +26,7 @@ export class CaptureError extends Error {
   }
 }
 
-/** Every request gets a hard timeout (ce-reliability finding): without one, a hung (not down, just stuck) silo leaves the popup/service-worker capture — and the options page's "test connection" — waiting forever instead of surfacing an actionable error. */
+/** Every request gets a hard timeout (ce-reliability finding): without one, a hung (not down, just stuck) silo leaves the service-worker capture — and the options page's "test connection" — waiting forever instead of surfacing an actionable error. */
 const REQUEST_TIMEOUT_MS = 10_000;
 
 async function apiFetch(path: string, init: RequestInit): Promise<Response> {
@@ -75,7 +75,7 @@ async function safeErrorBody(response: Response): Promise<ApiErrorEnvelope | und
   }
 }
 
-/** `POST /api/links` — the one capture call every entry point (command, popup, context menu) funnels through. */
+/** `POST /api/links` — the one capture call every entry point (toolbar icon, keyboard command, context menu) funnels through. */
 export async function captureLink(input: CaptureRequest): Promise<CaptureResponse> {
   const response = await apiFetch('/api/links', {
     method: 'POST',
@@ -110,7 +110,7 @@ export async function removeTag(id: string, tag: string): Promise<CapturedLink> 
   return ((await response.json()) as { link: CapturedLink }).link;
 }
 
-/** `GET /api/tags` — tag-autocomplete source for the popup. */
+/** `GET /api/tags` — tag suggestions for the toast's edit-card dropdown. */
 export async function listTags(): Promise<TagWithCount[]> {
   const response = await apiFetch('/api/tags', { method: 'GET' });
   const body = (await response.json()) as { tags: TagWithCount[] };

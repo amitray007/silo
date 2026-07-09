@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as captureClient from '../lib/capture-client.js';
-import { getRecentIds } from '../lib/recent.js';
 import * as toast from '../lib/toast.js';
 import { captureActiveTab, runQuietCapture } from './capture-flow.js';
 
@@ -18,7 +17,7 @@ describe('runQuietCapture', () => {
     vi.restoreAllMocks();
   });
 
-  it('captures, tracks the id, and shows a "saved" toast — never rendering enrichment state', async () => {
+  it('captures and shows a "saved" toast — never rendering enrichment state', async () => {
     vi.spyOn(captureClient, 'captureLink').mockResolvedValue({
       link: {
         id: 'new-id',
@@ -34,7 +33,6 @@ describe('runQuietCapture', () => {
 
     await runQuietCapture({ url: 'https://example.com' }, 'Example', 7);
 
-    expect(await getRecentIds()).toEqual(['new-id']);
     expect(showToastSpy).toHaveBeenCalledWith(7, {
       kind: 'saved',
       title: 'Example',
