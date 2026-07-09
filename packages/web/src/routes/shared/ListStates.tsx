@@ -32,7 +32,7 @@ export function LoadingState() {
   );
 }
 
-/** The design's richer empty state (`Silo-v2.html:96-103`) — the grain-dot + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
+/** The design's richer empty state (`Silo-v2.html:96-103`) — the Stack mark + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
 export function EmptyState({ title, body }: { title: string; body: ReactNode }) {
   return (
     <CenteredPanel>
