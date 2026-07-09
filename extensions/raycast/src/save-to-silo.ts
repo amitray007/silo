@@ -20,18 +20,20 @@ import { resolveUrl } from './lib/resolve-url.js';
  * in silo's backend and this command does NOT wait for or gate on it.
  */
 export default async function Command(): Promise<void> {
+  // Close FIRST, before any work. URL resolution runs a chain of AppleScript
+  // calls (frontmost-app detection across several browsers, then a tab read)
+  // that can take hundreds of ms — doing it before the close is what made
+  // Raycast appear to "wait". Closing up front also hands focus back to the
+  // browser BEFORE `isFrontmost` runs, so tab detection is actually more
+  // reliable. A no-view command keeps running after its window closes, so the
+  // resolve + save + HUD below all complete in the background.
+  await closeMainWindow({ popToRootType: PopToRootType.Immediate });
+
   const resolved = await resolveUrl();
 
-  // Nothing valid to save → close silently, no error HUD (per design: an
-  // invalid/absent URL is a no-op, not an error worth interrupting for).
-  if (!resolved) {
-    await closeMainWindow({ popToRootType: PopToRootType.Immediate });
-    return;
-  }
-
-  // Close first so Raycast never lingers on the request; the HUD below still
-  // fires afterward (a HUD is a desktop overlay, independent of the window).
-  await closeMainWindow({ popToRootType: PopToRootType.Immediate });
+  // Nothing valid to save → already closed, stay silent (an invalid/absent
+  // URL is a no-op, not an error worth a HUD).
+  if (!resolved) return;
 
   try {
     const { deduped } = await captureLink({ url: resolved.url });

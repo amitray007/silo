@@ -58,16 +58,17 @@ describe('save-to-silo (instant capture)', () => {
     expect(showHUD).toHaveBeenCalledWith('✓ Saved to silo');
   });
 
-  it('closes Raycast BEFORE the save completes (close-first, save-in-background)', async () => {
-    runAppleScript.mockImplementation(async (script: string) => {
-      if (script.includes('System Events')) return 'Google Chrome';
-      if (script.includes('Google Chrome')) return 'https://example.com␟Example';
-      throw new Error('unexpected script');
-    });
-    // Order-tracking: record when close vs capture were invoked.
+  it('closes Raycast FIRST — before URL resolution and the save (close-first, everything in background)', async () => {
+    // Order-tracking: record close vs the AppleScript resolution vs capture.
     const calls: string[] = [];
     closeMainWindow.mockImplementation(async () => {
       calls.push('close');
+    });
+    runAppleScript.mockImplementation(async (script: string) => {
+      calls.push('resolve');
+      if (script.includes('System Events')) return 'Google Chrome';
+      if (script.includes('Google Chrome')) return 'https://example.com␟Example';
+      throw new Error('unexpected script');
     });
     captureLink.mockImplementation(async () => {
       calls.push('capture');
@@ -80,9 +81,11 @@ describe('save-to-silo (instant capture)', () => {
     const { default: Command } = await import('./save-to-silo.js');
     await Command();
 
-    // close must be called, and BEFORE the capture request fires.
+    // close must come first — before ANY AppleScript resolution work runs, so
+    // the window never lingers on the slow frontmost-browser detection.
     expect(calls[0]).toBe('close');
-    expect(calls).toContain('capture');
+    expect(calls.indexOf('close')).toBeLessThan(calls.indexOf('resolve'));
+    expect(calls.indexOf('resolve')).toBeLessThan(calls.indexOf('capture'));
     expect(showHUD).toHaveBeenCalledWith(expect.stringContaining('Saved to silo'));
   });
 
