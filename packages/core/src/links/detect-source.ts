@@ -25,6 +25,7 @@ export type DetectedSource =
   | { kind: 'hacker_news'; itemId: number }
   | { kind: 'github'; owner: string; repo: string }
   | { kind: 'youtube'; videoId: string }
+  | { kind: 'twitter'; tweetId: string }
   | { kind: 'link' };
 
 /** GitHub path segments that are platform features, not a `{owner}/{repo}` — a URL shaped like one of these must never be misread as a repo. */
@@ -63,6 +64,9 @@ const GITHUB_SEGMENT = /^[a-zA-Z0-9._-]+$/;
 
 /** An 11-character YouTube video id: base64url-alphabet (letters, digits, `-`, `_`), exactly 11 chars — YouTube's actual id format. */
 const YOUTUBE_ID_RE = /^[a-zA-Z0-9_-]{11}$/;
+
+/** An X/Twitter status (tweet) id: Twitter's snowflake ids are a run of digits — no fixed length (they grow over time), so just "one or more digits". */
+const TWITTER_STATUS_ID_RE = /^\d+$/;
 
 /**
  * Only http(s) URLs are classifiable — same scheme gate `canonicalize` applies
@@ -135,6 +139,32 @@ function detectYouTube(url: URL, host: string): DetectedSource | undefined {
 }
 
 /**
+ * X/Twitter — only the canonical `/{handle}/status/{digits}` status-permalink
+ * shape (`mobile.`/`www.` tolerated, stripped by `normalizedHost`). A profile
+ * (`x.com/handle`), the home timeline, `/i/...` (bookmarks, notifications,
+ * etc.), or a search url is NOT a status permalink and must fall through to
+ * `{ kind: 'link' }` rather than guess — same conservatism as the other
+ * matchers. A trailing segment after the id (e.g. `/photo/1`, `/video/1`) is
+ * tolerated since it still names the same tweet.
+ */
+function detectTwitter(url: URL, host: string): DetectedSource | undefined {
+  // `normalizedHost` only strips a leading `www.`; `mobile.twitter.com` is a
+  // distinct, real subdomain X used to redirect to (mirrors `m.youtube.com`
+  // being checked explicitly alongside `youtube.com` above) — checked here
+  // rather than in the shared helper so every OTHER matcher's `www.`-only
+  // tolerance is unaffected.
+  const isTwitterHost = host === 'x.com' || host === 'twitter.com' || host === 'mobile.twitter.com';
+  if (!isTwitterHost) return undefined;
+  const segments = url.pathname.split('/').filter(Boolean);
+  // {handle}/status/{id}[/...]  — at least 3 segments, exactly this shape.
+  if (segments.length < 3) return undefined;
+  const [handle, statusSegment, tweetId] = segments;
+  if (!handle || statusSegment !== 'status' || !tweetId) return undefined;
+  if (!TWITTER_STATUS_ID_RE.test(tweetId)) return undefined;
+  return { kind: 'twitter', tweetId };
+}
+
+/**
  * Classify a raw URL into a `DetectedSource`. Never throws — an unparseable
  * URL (mirrors `canonicalize`'s own tolerance) degrades to `{ kind: 'link' }`,
  * same as any URL that doesn't match a recognized source shape.
@@ -149,7 +179,8 @@ export function detectSource(rawUrl: string): DetectedSource {
   return (
     detectHackerNews(url, host) ??
     detectGitHub(url, host) ??
-    detectYouTube(url, host) ?? {
+    detectYouTube(url, host) ??
+    detectTwitter(url, host) ?? {
       kind: 'link',
     }
   );

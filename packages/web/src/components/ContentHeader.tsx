@@ -55,7 +55,7 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
           // edge, so --s2-5 lands the title exactly above the favicons. The
           // border-bottom still spans full width — only the text moves.
           marginLeft: 'var(--s2-5)',
-          fontSize: '1rem',
+          fontSize: 'var(--text-lg)',
           fontWeight: 500,
           color: 'var(--ink)',
           // The route title stays on one line (Library / Trash / #tag are
@@ -69,7 +69,7 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
         {title}
       </h1>
       {count !== undefined && (
-        <span style={{ fontSize: '0.76rem', color: 'var(--fnt)' }}>{count}</span>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>{count}</span>
       )}
       <span style={{ flex: 1 }} />
       {captureError && (
@@ -77,7 +77,7 @@ export function ContentHeader({ title, count, captureError, children }: ContentH
           role="alert"
           style={{
             flex: 'none',
-            fontSize: '0.76rem',
+            fontSize: 'var(--text-sm)',
             color: 'var(--warn)',
             whiteSpace: 'nowrap',
             overflow: 'hidden',

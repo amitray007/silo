@@ -39,7 +39,32 @@ export const queryKeys = {
   tags: () => ['tags'] as const,
   links: (filter?: { tag?: string; status?: string }) => ['links', filter ?? {}] as const,
   link: (id: string) => ['link', id] as const,
-  search: (q: string) => ['search', q] as const,
+  /**
+   * `tag` (optional, command-center search plan 024) is folded into the key
+   * so a `q`-only search and the SAME `q` scoped to a tag never collide in
+   * the cache — `useSearchLinks('react')` and `useSearchLinks('react',
+   * 'frontend')` are distinct cache entries.
+   */
+  search: (q: string, tag?: string) => ['search', q, tag ?? null] as const,
+  /**
+   * The command palette's tag-only list view (`useLinksByTag`, plan 024) —
+   * deliberately its OWN key family, NOT `links({ tag })`. `links({ tag })`
+   * is written by `useInfiniteLinks(tag)` as `InfiniteData<LinksResponse>`
+   * (`{ pages: [...], pageParams: [...] }`); `useLinksByTag` is a plain
+   * `useQuery` that would write a bare `LinksResponse` (`{ links, nextCursor
+   * }`) onto that SAME key. TanStack keys one query cache entry per key
+   * regardless of which hook/observer type wrote it — whichever of the two
+   * resolves last silently overwrites the other's shape. Concretely: open
+   * `/tags/react` (mounts `useInfiniteLinks('react')`), then ⌘K a `#react`
+   * query (mounts `useLinksByTag('react')` on the SAME key pre-fix) — the
+   * plain response clobbers the infinite-query shape, and
+   * `useListView.ts`'s `data?.pages.flatMap(...)` throws on the now-missing
+   * `pages` field, crashing `TagView`. A distinct key family removes the
+   * collision entirely (at the cost of a possible duplicate fetch when both
+   * views are open for the same tag — a correct, cheap tradeoff over a
+   * shared-cache "optimization" that can crash a screen).
+   */
+  tagOnlyList: (tag: string) => ['links-tag-only', tag] as const,
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
@@ -125,40 +150,57 @@ export function useInfiniteLinks(tag?: string) {
 }
 
 /**
- * The omnibar's live search (`GET /api/links/search?q=`) — plan 011, V3-2.
- * `enabled: q.trim().length > 0` means an empty/blank query never fires a
- * request (mirrors the API's own `q` min-length-1 guard — a client-side
- * no-op is cheaper than a request that would just 400). Callers are
- * responsible for debouncing keystrokes (`Omnibar.tsx`) and for not calling
- * this when the query looks like a URL (the `keep` capture path, not
- * search) — this hook itself has no opinion on that, it just fetches for
- * whatever `q` it's given.
+ * The command palette's / (formerly the omnibar's) live search (`GET
+ * /api/links/search?q=&tag=`) — plan 011, V3-2; `tag` added plan 024
+ * (command center). `enabled: q.trim().length > 0` means an empty/blank
+ * query never fires a request (mirrors the API's own `q` min-length-1
+ * guard — a client-side no-op is cheaper than a request that would just
+ * 400) — `tag` alone with no `q` is NOT enough to fire this hook; that case
+ * is the palette's tag-only list query instead (`useLinksByTag`), since
+ * `GET /api/links/search` always requires `q`. Callers are responsible for
+ * debouncing keystrokes and for not calling this when the query looks like
+ * a URL (the `keep` capture path, not search) — this hook itself has no
+ * opinion on that, it just fetches for whatever `q`/`tag` it's given.
  */
-export function useSearchLinks(q: string) {
+export function useSearchLinks(q: string, tag?: string) {
   const trimmed = q.trim();
   return useQuery({
-    queryKey: queryKeys.search(trimmed),
-    queryFn: () => apiGet<SearchResponse>(`/api/links/search?q=${encodeURIComponent(trimmed)}`),
+    queryKey: queryKeys.search(trimmed, tag),
+    queryFn: () => {
+      const params = new URLSearchParams({ q: trimmed });
+      if (tag) params.set('tag', tag);
+      return apiGet<SearchResponse>(`/api/links/search?${params.toString()}`);
+    },
     enabled: trimmed.length > 0,
   });
 }
 
 /**
- * The Trash screen's server-side search (`GET /api/trash/search?q=`, Trash
- * search slice) — mirrors `useSearchLinks` exactly (same `enabled:
- * trimmed.length > 0` no-op-on-empty guard, same trim-before-key discipline
- * so whitespace-only queries don't fire), hitting the trash-scoped route
- * instead. Callers are responsible for debouncing keystrokes, same as
- * `useSearchLinks`'s callers (`Omnibar.tsx`) — see `TrashView.tsx`'s own
- * debounced input.
+ * The command palette's tag-only view (plan 024): the first page of
+ * `GET /api/links?tag=`, for when the parsed query is JUST a settled `#tag`
+ * with no free text (`GET /api/links/search` always requires `q`, so a
+ * tag-only filter has to go through the plain list route instead). A
+ * one-shot `useQuery` (not `useInfiniteLinks`'s paginated machinery) — the
+ * palette shows a first page of results, not a "load more" affordance, so
+ * the simpler non-infinite hook is enough.
+ *
+ * Keyed on `queryKeys.tagOnlyList(tag)` — its OWN key family, deliberately
+ * NOT `queryKeys.links({ tag })` (bugfix, see that key's doc comment):
+ * `useInfiniteLinks(tag)` writes `InfiniteData<LinksResponse>` onto
+ * `links({ tag })`, and this hook writes a bare `LinksResponse` — sharing
+ * that key let whichever hook resolved last silently corrupt the other's
+ * cached shape (`TagView` would crash reading `.pages` off a
+ * non-infinite-shaped cache entry). A distinct key means opening the
+ * palette for a tag that's also open as a `/tags/:name` browse fetches the
+ * data twice rather than sharing one cache entry — a correct, cheap
+ * tradeoff over a "shared cache" optimization that could crash a screen.
+ * Disabled when `tag` is empty/undefined.
  */
-export function useSearchTrash(q: string) {
-  const trimmed = q.trim();
+export function useLinksByTag(tag: string | undefined) {
   return useQuery({
-    queryKey: queryKeys.trashSearch(trimmed),
-    queryFn: () =>
-      apiGet<TrashSearchResponse>(`/api/trash/search?q=${encodeURIComponent(trimmed)}`),
-    enabled: trimmed.length > 0,
+    queryKey: queryKeys.tagOnlyList(tag ?? ''),
+    queryFn: () => apiGet<LinksResponse>(`/api/links?tag=${encodeURIComponent(tag ?? '')}`),
+    enabled: Boolean(tag),
   });
 }
 
@@ -431,6 +473,26 @@ export function useTrashList() {
 }
 
 /**
+ * The command palette's trash-scoped server search (`GET /api/trash/search?q=`,
+ * Trash search slice) — mirrors `useSearchLinks` exactly (same `enabled:
+ * trimmed.length > 0` no-op-on-empty guard, same trim-before-key discipline
+ * so whitespace-only queries don't fire), hitting the trash-scoped route
+ * instead. The palette (`CommandPalette.tsx`) is the sole caller since the
+ * Trash view's own inline search box was removed — when the palette opens on
+ * the Trash page it scopes to this endpoint (`usePaletteScope`). Callers
+ * debounce keystrokes, same as `useSearchLinks`'s callers.
+ */
+export function useSearchTrash(q: string) {
+  const trimmed = q.trim();
+  return useQuery({
+    queryKey: queryKeys.trashSearch(trimmed),
+    queryFn: () =>
+      apiGet<TrashSearchResponse>(`/api/trash/search?q=${encodeURIComponent(trimmed)}`),
+    enabled: trimmed.length > 0,
+  });
+}
+
+/**
  * Removes `id` from every cached `trash` query's `links` array — the shared
  * optimistic-removal tail for `useRestoreLink`/`useDeleteNow`/the bulk trash
  * mutations below. Mirrors `removeOptimisticLink`'s by-id (not
@@ -651,20 +713,49 @@ export function useSettings() {
 /**
  * The Settings modal's write (`PATCH /api/settings`, plan 016) — every field
  * of `UpdateSettingsRequest` is optional, so a caller patches just the one
- * control the user touched (e.g. `{ theme: 'dark' }`). No optimistic
- * update: unlike capture/trash, a settings change has no list to feel
- * "instant" against, and the mutation is a single local round-trip — a
- * plain invalidate-on-settle (mirrors `useEditLink`'s reasoning) keeps this
- * hook simple. On success the server returns the FULL merged map, which is
- * written directly into the cache (`onSuccess`) so the modal reflects the
- * change without waiting on a second round-trip; `onSettled` still
- * invalidates as a safety net (e.g. a concurrent PATCH from another tab).
+ * control the user touched (e.g. `{ theme: 'dark' }`).
+ *
+ * OPTIMISTIC (plan 026 review fix — ce-adversarial/ce-correctness): the
+ * plugins toggles do a full-object READ-MODIFY-WRITE (`setPluginField` rebuilds
+ * the whole `plugins` map from the current `useSettings()` snapshot, since the
+ * store replaces the whole value with no sub-key merge). Without an
+ * `onMutate` optimistic cache write, two quick toggles both read the SAME
+ * stale snapshot — the second PATCH is built without the first's change and
+ * clobbers it (last-write-wins), silently losing a toggle the user clicked.
+ * `onMutate` merges the patch into the cached map IMMEDIATELY (before the
+ * round-trip), so a rapid follow-up `writeField` reads the updated value and
+ * its PATCH carries BOTH changes. Standard optimistic pattern: cancel
+ * in-flight refetches, snapshot for rollback, roll back `onError`. `onSuccess`
+ * still writes the server's authoritative full map; `onSettled` invalidates as
+ * a cross-tab safety net.
+ *
+ * The merge is shallow-at-the-top (`{ ...prev, ...patch }`) — correct because
+ * every caller sends a COMPLETE top-level value for each key it touches
+ * (`setPluginField` returns the full three-source `plugins` object; theme /
+ * trashPurgeDays are scalars), so a partial nested object never reaches here.
  */
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: (patch: UpdateSettingsRequest) => apiPatch<SettingsMap>('/api/settings', patch),
+    onMutate: async (patch) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.settings() });
+      const previous = queryClient.getQueryData<SettingsMap>(queryKeys.settings());
+      // Only optimistically merge when we already have a loaded snapshot — a
+      // partial merge onto `undefined` would produce an incomplete map. If
+      // settings haven't loaded yet the callers (PluginsTab) gate their
+      // controls on `loading`, so no write originates from that window.
+      if (previous) {
+        queryClient.setQueryData<SettingsMap>(queryKeys.settings(), { ...previous, ...patch });
+      }
+      return { previous };
+    },
+    onError: (_err, _patch, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(queryKeys.settings(), context.previous);
+      }
+    },
     onSuccess: (settings) => {
       queryClient.setQueryData(queryKeys.settings(), settings);
     },

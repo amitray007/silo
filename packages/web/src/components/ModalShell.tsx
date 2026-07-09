@@ -133,6 +133,12 @@ export function ModalShell({
         // (identical value: rgba(24,17,7,.32)) rather than a hardcoded
         // literal, so dark mode's deeper scrim applies automatically.
         background: 'var(--scrim)',
+        // Frosted-glass backdrop (user feedback: "make the background blurry
+        // when a modal opens") — the app behind the modal is blurred, not just
+        // dimmed, so the modal reads as clearly floating above a defocused
+        // page. `WebkitBackdropFilter` for Safari.
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'grid',
         placeItems: 'center',
         zIndex: 40,
@@ -223,7 +229,7 @@ export function ModalHeader({
       <h2
         style={{
           margin: 0,
-          fontSize: '1.05rem',
+          fontSize: 'var(--text-lg)',
           fontWeight: 500,
           letterSpacing: 'var(--tracking-tight)',
           lineHeight: 'var(--lh-tight)',

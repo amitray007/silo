@@ -2,9 +2,7 @@ import type { ReactNode } from 'react';
 import { useBulkTrash } from '../../api/hooks';
 import { ContentHeader } from '../../components/ContentHeader';
 import { DockIconAction, DockTrashIcon, SelectionDock } from '../../components/Dock';
-import { Omnibar } from '../../components/Omnibar';
 import { useLibrarySelection } from '../../components/SelectionContext';
-import type { useOmnibarState } from '../../lib/useOmnibarState';
 
 /**
  * The Library selection dock (v3's `selActive`, `Silo-v3.html:279-287`) — "N
@@ -60,7 +58,7 @@ export function ContentFrame({
   fadeKey,
 }: {
   title: ReactNode;
-  count: number | undefined;
+  count?: number;
   captureError?: string;
   headerSlot: ReactNode;
   children: ReactNode;
@@ -94,47 +92,5 @@ export function ContentFrame({
       </div>
       {selectedIds.length > 0 && <LibrarySelectionDock selectedIds={selectedIds} />}
     </>
-  );
-}
-
-/**
- * The omnibar bound to `useOmnibarState`, shared by `LibraryView` (no tag
- * filter — `tagName` omitted) and `TagView` (`tagName` set, `onClearTag`
- * navigates back to `/`). `onKeep` (plan 011, V3-3) is `useListView`'s real
- * capture handler — this component no longer owns any capture logic itself,
- * it only wires the callback through so neither view has to repeat it.
- */
-export function ListOmnibar({
-  omnibar,
-  searchEnabled,
-  shownCount,
-  libCount,
-  onKeep,
-  tagName,
-  onClearTag,
-}: {
-  omnibar: ReturnType<typeof useOmnibarState>;
-  searchEnabled: boolean;
-  shownCount: number;
-  libCount: number;
-  onKeep: () => void;
-  tagName?: string;
-  onClearTag?: () => void;
-}) {
-  return (
-    <Omnibar
-      ref={omnibar.inputRef}
-      value={omnibar.q}
-      onChange={omnibar.setQ}
-      onKeep={onKeep}
-      focused={omnibar.focused}
-      onFocus={omnibar.onFocus}
-      onBlur={omnibar.onBlur}
-      looksLikeUrl={omnibar.isUrl}
-      {...(tagName !== undefined ? { tagName } : {})}
-      onClearTag={onClearTag ?? (() => {})}
-      shownCount={searchEnabled ? shownCount : libCount}
-      libCount={libCount}
-    />
   );
 }

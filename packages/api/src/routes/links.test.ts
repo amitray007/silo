@@ -360,6 +360,71 @@ describeIfPg('A2 read routes (integration)', () => {
       expect(typeof result.rank).toBe('number');
     });
 
+    it('a tag param scopes results to links carrying that exact tag (AND with q)', async () => {
+      const { core, app } = harness.mod();
+      const matching = await core.createLink({
+        url: 'https://example.com/search-tagparam-match',
+        sourceKind: 'link',
+        title: 'tagparammarkerxyz scoped',
+        tags: ['tagparamscope'],
+      });
+      const wrongTag = await core.createLink({
+        url: 'https://example.com/search-tagparam-wrong',
+        sourceKind: 'link',
+        title: 'tagparammarkerxyz wrong tag',
+        tags: ['othertagparamscope'],
+      });
+      const noTag = await core.createLink({
+        url: 'https://example.com/search-tagparam-none',
+        sourceKind: 'link',
+        title: 'tagparammarkerxyz no tag',
+      });
+
+      const body = await expectOk<{ results: Array<{ id: string }> }>(
+        app,
+        '/api/links/search?q=tagparammarkerxyz&tag=tagparamscope',
+      );
+      const ids = body.results.map((r) => r.id);
+      expect(ids).toContain(matching.id);
+      expect(ids).not.toContain(wrongTag.id);
+      expect(ids).not.toContain(noTag.id);
+    });
+
+    it('a tag param that matches nothing returns { results: [] }, not an error', async () => {
+      const { core, app } = harness.mod();
+      await core.createLink({
+        url: 'https://example.com/search-tagparam-empty',
+        sourceKind: 'link',
+        title: 'tagparamemptymarker',
+      });
+
+      const body = await expectOk<{ results: unknown[] }>(
+        app,
+        '/api/links/search?q=tagparamemptymarker&tag=nonexistenttagparamxyz',
+      );
+      expect(body.results).toEqual([]);
+    });
+
+    it('omitting tag is unchanged from q-only search (regression)', async () => {
+      const { core, app } = harness.mod();
+      const link = await core.createLink({
+        url: 'https://example.com/search-tagparam-omitted',
+        sourceKind: 'link',
+        title: 'tagparamomittedmarker',
+      });
+      await expectSearchFinds(app, 'tagparamomittedmarker', link.id);
+    });
+
+    it('an empty tag param (?tag=) is a 400, not a silent unscoped search (review fix)', async () => {
+      const { app } = harness.mod();
+      // Without the `.min(1)` on `tag`, `?tag=` would parse as the empty
+      // string, which is FALSY — `core.search`'s `tag ? ... : undefined`
+      // scope-condition check would then silently treat it as "no tag
+      // filter" rather than failing loudly, exactly the footgun `q`'s own
+      // `.min(1)` already guards against for the text query.
+      await expect400(app, '/api/links/search?q=tagparamemptyvaluemarker&tag=', 'validation_error');
+    });
+
     it('the "search" path segment is not swallowed as an :id — route ordering test', async () => {
       // If /links/:id were registered before /links/search, this request would
       // try z.uuid().parse("search") and 400 instead of hitting the search route.

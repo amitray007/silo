@@ -24,14 +24,14 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function renderSidebar(initialEntries: string[] = ['/']) {
+function renderSidebar(initialEntries: string[] = ['/'], onOpenSearch?: () => void) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={initialEntries}>
           <SettingsProvider>
-            <Sidebar />
+            {onOpenSearch ? <Sidebar onOpenSearch={onOpenSearch} /> : <Sidebar />}
           </SettingsProvider>
         </MemoryRouter>
       </QueryClientProvider>
@@ -48,19 +48,21 @@ describe('Sidebar', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders Library/Trash counts and a NavItem per tag, count-desc order preserved', async () => {
+  it('shows compact-formatted Library, Trash, and tag counts (count-desc order)', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
-        return Promise.resolve(jsonResponse({ live: 128, trash: 2, purgeWindowDays: 30 }));
+        // Library and Trash counts render in the sidebar.
+        return Promise.resolve(jsonResponse({ live: 128, trash: 1500, purgeWindowDays: 30 }));
       }
       if (url === '/api/tags') {
         return Promise.resolve(
           jsonResponse({
             tags: [
-              { name: 'ai', count: 23 },
+              { name: 'ai', count: 12000 },
               { name: 'design', count: 17 },
               { name: 'mcp', count: 7 },
+              { name: 'empty', count: 0 },
             ],
           }),
         );
@@ -71,19 +73,20 @@ describe('Sidebar', () => {
     renderSidebar();
 
     expect(screen.getByText('silo')).toBeDefined();
+    // Trash count is compact-formatted; Library's raw count is shown beside Library.
     await waitFor(() => expect(screen.getByText('128')).toBeDefined());
-    expect(screen.getByText('2')).toBeDefined();
+    await waitFor(() => expect(screen.getByText('1.5k')).toBeDefined());
 
     // The `#` is its own span (spacing fix), so the tag name is a separate text
-    // node — query by name and read tag rows by role for order.
+    // node — query by name and read tag rows by role for order. Tag counts are
+    // compact too (12000 → 12k).
     await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
-    const tagNames = ['ai', 'design', 'mcp'].map(
+    const tagNames = ['ai', 'design', 'mcp', 'empty'].map(
       (name) => screen.getByRole('link', { name: new RegExp(name, 'i') }).textContent,
     );
-    expect(tagNames).toEqual(['#ai23', '#design17', '#mcp7']);
-    expect(screen.getByText('23')).toBeDefined();
-    expect(screen.getByText('17')).toBeDefined();
-    expect(screen.getByText('7')).toBeDefined();
+    expect(tagNames).toEqual(['#ai12k', '#design17', '#mcp7', '#empty']);
+    expect(screen.getByText('12k')).toBeDefined();
+    expect(screen.queryByText('0')).toBeNull();
 
     expect(screen.getByRole('link', { name: /settings/i })).toBeDefined();
   });
@@ -107,7 +110,7 @@ describe('Sidebar', () => {
     const libraryLink = screen.getByRole('link', { name: /library/i });
     const trashLink = screen.getByRole('link', { name: /trash/i });
     const settingsLink = screen.getByRole('link', { name: /settings/i });
-    const tagLink = screen.getByRole('link', { name: /#ai/i });
+    const tagLink = screen.getByRole('link', { name: /#\s*ai/i });
 
     expect(libraryLink.querySelector('svg')).not.toBeNull();
     expect(trashLink.querySelector('svg')).not.toBeNull();
@@ -126,6 +129,31 @@ describe('Sidebar', () => {
     });
     const libraryLink = screen.getByRole('link', { name: /library/i });
     expect(libraryLink.getAttribute('aria-current')).toBeNull();
+  });
+
+  it('an active tag row gets the same filled --surface-active box as an active Library/Trash row', async () => {
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/tags') {
+        return Promise.resolve(jsonResponse({ tags: tagCounts(['ai', 'design']) }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+
+    renderSidebar(['/tags/ai']);
+
+    await waitFor(() => {
+      const aiLink = screen.getByRole('link', { name: /ai/i });
+      expect(aiLink.getAttribute('aria-current')).toBe('page');
+      expect(aiLink.style.background).toBe('var(--surface-active)');
+      expect(aiLink.style.boxShadow).toBe('var(--elev-1), inset 0 0 0 1px var(--line)');
+    });
+    const designLink = screen.getByRole('link', { name: /design/i });
+    expect(designLink.getAttribute('aria-current')).toBeNull();
+    expect(designLink.style.background).toBe('');
   });
 
   it('does not crash and renders no tag rows (but keeps the Tags tools) when the tags request errors', async () => {
@@ -167,6 +195,48 @@ describe('Sidebar', () => {
     });
   });
 
+  describe('Search nav row (rewritten to render through shared NavItem — parity with Library/Trash)', () => {
+    it('renders as a button (not a link — no /search route) that fires onOpenSearch', async () => {
+      const onOpenSearch = vi.fn();
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+      renderSidebar(['/'], onOpenSearch);
+
+      const searchButton = screen.getByRole('button', { name: /search/i });
+      expect(searchButton.tagName).toBe('BUTTON');
+      fireEvent.click(searchButton);
+      expect(onOpenSearch).toHaveBeenCalledTimes(1);
+    });
+
+    it('renders the same icon size, font size/weight, and padding as the Library row', async () => {
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 0, purgeWindowDays: 30 }));
+      renderSidebar();
+
+      const searchButton = screen.getByRole('button', { name: /search/i });
+      const libraryLink = await screen.findByRole('link', { name: /library/i });
+
+      expect(searchButton.style.padding).toBe(libraryLink.style.padding);
+      expect(searchButton.style.fontSize).toBe(libraryLink.style.fontSize);
+      expect(searchButton.style.fontWeight).toBe(libraryLink.style.fontWeight);
+      expect(searchButton.className).toBe(libraryLink.className);
+
+      const searchIcon = searchButton.querySelector('svg');
+      const libraryIcon = libraryLink.querySelector('svg');
+      expect(searchIcon?.getAttribute('width')).toBe('18');
+      expect(searchIcon?.getAttribute('width')).toBe(libraryIcon?.getAttribute('width'));
+    });
+
+    it('renders the "⌘K" shortcut chip in the same right-aligned meta column as counts', async () => {
+      // trash 2 anchors the load (Library no longer renders a count) and
+      // formats compactly as "2".
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 2, purgeWindowDays: 30 }));
+      renderSidebar();
+
+      await waitFor(() => expect(screen.getByText('2')).toBeDefined());
+      expect(screen.getByText('⌘')).toBeDefined();
+      expect(screen.getByText('K')).toBeDefined();
+    });
+  });
+
   describe('⌕ find-a-tag', () => {
     beforeEach(() => {
       vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
@@ -202,8 +272,8 @@ describe('Sidebar', () => {
     });
   });
 
-  describe('+N more truncation', () => {
-    it('shows only the first 10 tags with a "+N more" toggle when there are more than 10', async () => {
+  describe('scrollable tag list (redesign — no more "+N more" truncation)', () => {
+    it('renders every tag, however many, inside the scroll region — nothing hidden behind a click', async () => {
       const names = Array.from({ length: 13 }, (_, i) => `tag${i}`);
       vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
@@ -219,19 +289,12 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('tag0')).toBeDefined());
 
-      expect(tagRowCount()).toBe(10);
-      const more = screen.getByText('+3 more');
-      expect(more).toBeDefined();
-
-      fireEvent.click(more);
       expect(tagRowCount()).toBe(13);
-      expect(screen.getByText('Show less')).toBeDefined();
-
-      fireEvent.click(screen.getByText('Show less'));
-      expect(tagRowCount()).toBe(10);
+      expect(screen.queryByText(/more$/)).toBeNull();
+      expect(screen.queryByText('Show less')).toBeNull();
     });
 
-    it('shows no "+N more" toggle when there are 10 or fewer tags', async () => {
+    it('puts the tag rows inside the soft-scrollbar, fixed-max-height scroll container', async () => {
       vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
         if (url === '/api/counts') {
@@ -243,9 +306,12 @@ describe('Sidebar', () => {
         throw new Error(`unexpected fetch: ${url}`);
       });
 
-      renderSidebar();
+      const { container } = renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
-      expect(screen.queryByText(/more$/)).toBeNull();
+
+      const scrollRegion = container.querySelector('.silo-tag-scroll');
+      expect(scrollRegion).not.toBeNull();
+      expect(scrollRegion?.contains(screen.getByRole('link', { name: /ai/i }))).toBe(true);
     });
   });
 
@@ -281,7 +347,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
@@ -291,7 +357,7 @@ describe('Sidebar', () => {
       expect(JSON.parse(String((postCall?.[1] as RequestInit).body))).toEqual({ name: 'newtag' });
 
       expect(screen.queryByPlaceholderText('Tag name')).toBeNull();
-      expect(screen.getByText('+ New tag')).toBeDefined();
+      expect(screen.getByRole('button', { name: /new tag/i })).toBeDefined();
     });
 
     it('Escape closes the input without creating a tag', async () => {
@@ -300,7 +366,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'abandoned' } });
       fireEvent.keyDown(input, { key: 'Escape' });
@@ -315,7 +381,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.keyDown(input, { key: 'Enter' });
 
@@ -342,7 +408,7 @@ describe('Sidebar', () => {
       renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      fireEvent.click(screen.getByText('+ New tag'));
+      fireEvent.click(screen.getByRole('button', { name: /new tag/i }));
       const input = screen.getByPlaceholderText('Tag name');
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
@@ -412,7 +478,10 @@ describe('Sidebar', () => {
     renderSidebar();
 
     await waitFor(() => expect(screen.getByText('Tags')).toBeDefined());
-    expect(screen.getByText('+ New tag')).toBeDefined();
+    expect(screen.getByText('Tags').parentElement?.style.padding).toBe(
+      'var(--s-0-5) var(--s2-5) var(--s1) calc(var(--s2-5) + 3px)',
+    );
+    expect(screen.getByRole('button', { name: /new tag/i })).toBeDefined();
     expect(screen.queryAllByText(/^#/)).toHaveLength(0);
     expect(screen.queryByText(/more$/)).toBeNull();
   });

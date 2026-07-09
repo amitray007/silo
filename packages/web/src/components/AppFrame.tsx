@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
+import { useCommandPalette } from '../lib/useCommandPalette';
 import { usePasteCapture } from '../lib/usePasteCapture';
 import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
+import { CommandPalette } from './CommandPalette';
 import { EditModal } from './EditModal';
 import { GrainDot } from './GrainDot';
 import { HoverPreviewProvider } from './HoverPreviewContext';
@@ -41,7 +43,7 @@ const DRAWER_ID = 'silo-drawer';
  * "click outside clears selection" behavior — the docks are dismissed via
  * their own `clear` button or Escape only).
  */
-function RowMenuLayer() {
+function RowMenuLayer({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
   const { openMenuId, closeMenu, editingLink, closeEdit } = useRowMenu();
   const librarySelection = useLibrarySelection();
   const trashSelection = useTrashSelection();
@@ -68,6 +70,41 @@ function RowMenuLayer() {
       closeEdit();
     }
   }, [settingsOpen, editingLink, closeEdit]);
+
+  // Mutual exclusion with the command palette (plan 024 review fix): the
+  // palette is ALSO a `ModalShell`-based scrim'd, focus-trapped overlay
+  // (`CommandPalette.tsx`), with its own capture-phase Escape listener. Two
+  // `ModalShell` overlays open together means TWO capture-phase Escape
+  // listeners both firing on one keypress plus nested/fighting scrims —
+  // the exact problem the Edit-vs-Settings effect above already guards
+  // against. The palette's ⌘K/`/` triggers are GLOBAL keydown listeners
+  // that fire regardless of what's already on screen, so every combination
+  // is reachable (palette-then-Settings, Settings-then-palette,
+  // palette-then-Edit, Edit-then-palette), unlike Edit-vs-Settings where the
+  // UI structurally prevents one direction.
+  //
+  // Rule: the palette YIELDS to any other `ModalShell`-based overlay
+  // (Edit/Settings) — it never opens over one, and if one opens while the
+  // palette is up, the palette closes. Between two `ModalShell` overlays,
+  // "whoever's newest wins" is fine (per the Edit-vs-Settings precedent);
+  // here it's simpler and just as correct to make the palette always the
+  // one that backs off, since it never holds user input worth preserving.
+  //
+  // The row `⋯` menu is DIFFERENT in kind: `RowMenu.tsx` is a lightweight
+  // popover, not a `ModalShell` (no scrim, no focus-trap, no Escape
+  // listener of its own) — there's no dueling-listener risk, so the palette
+  // is free to WIN over it (closing the menu) rather than refusing to open.
+  useEffect(() => {
+    if ((settingsOpen || editingLink) && palette.open) {
+      palette.closePalette();
+    }
+  }, [settingsOpen, editingLink, palette.open, palette.closePalette]);
+
+  useEffect(() => {
+    if (palette.open && openMenuId !== null) {
+      closeMenu();
+    }
+  }, [palette.open, openMenuId, closeMenu]);
 
   useEffect(() => {
     if (openMenuId === null) return;
@@ -152,6 +189,12 @@ export function AppFrame() {
   // app root, same as the other document-level singletons below, so a paste
   // anywhere on the page (not just inside the omnibar) can be caught.
   usePasteCapture();
+
+  // The command palette (plan 024) — ONE instance mounted here, alongside
+  // the other document-level singletons, so its ⌘K/`/` global listeners
+  // exist for the app's whole lifetime rather than per-route. `Sidebar`'s
+  // Search nav item and every other trigger call `commandPalette.openPalette`.
+  const commandPalette = useCommandPalette();
 
   const closeDrawer = () => {
     // Only steal focus back to the (offscreen-on-desktop) ☰ button when the
@@ -246,14 +289,14 @@ export function AppFrame() {
                 border: 'none',
                 borderRadius: 8,
                 color: 'var(--ink)',
-                fontSize: '1.1rem',
+                fontSize: 'var(--text-xl)',
                 cursor: 'pointer',
               }}
             >
               <span aria-hidden="true">☰</span>
             </button>
             <GrainDot />
-            <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>
+            <span style={{ fontWeight: 500, fontSize: 'var(--text-md)', letterSpacing: '-0.01em' }}>
               silo
             </span>
           </div>
@@ -268,7 +311,13 @@ export function AppFrame() {
             onClick={closeDrawer}
           />
 
-          <Sidebar id={DRAWER_ID} ref={sidebarRef} open={drawerOpen} onNavigate={closeDrawer} />
+          <Sidebar
+            id={DRAWER_ID}
+            ref={sidebarRef}
+            open={drawerOpen}
+            onNavigate={closeDrawer}
+            onOpenSearch={commandPalette.openPalette}
+          />
 
           {/* Content region: a flex column of two stacked children, both
               supplied by the routed view via <Outlet/> — the header bar
@@ -291,13 +340,14 @@ export function AppFrame() {
               <SelectionProvider>
                 <HoverPreviewProvider>
                   <Outlet />
-                  <RowMenuLayer />
+                  <RowMenuLayer palette={commandPalette} />
                 </HoverPreviewProvider>
               </SelectionProvider>
             </RowMenuProvider>
           </main>
         </div>
         <SettingsLayer />
+        <CommandPalette palette={commandPalette} />
       </div>
     </SettingsProvider>
   );

@@ -13,16 +13,30 @@ import { TrashIcon } from './NavIcons';
  */
 
 /**
- * The shared fixed-bottom pill shell (plan 011, V3-5) — matches
- * `Silo-v3.html`'s three dock blocks (`selActive`/`trDockIdle`/`trSelActive`)
- * pixel-for-pixel: centered, `bottom:32px`, `border-radius:999px`, the same
- * shadow, `siloIn` entrance. `padding` defaults to the two selection docks'
- * `9px 12px 9px 18px` (asymmetric — extra room on the left where the
- * "N selected" label sits flush); the idle trash dock passes `'9px 18px'`
- * (symmetric — v3's markup uses a plain padding shorthand there, no label).
- * Pulled into one component because all three docks share this exact shell;
- * without it they'd duplicate ~15 style properties three times over (jscpd
- * guards production src at 1.5%).
+ * The shared bottom pill shell (plan 011, V3-5) — matches `Silo-v3.html`'s
+ * three dock blocks (`selActive`/`trDockIdle`/`trSelActive`) pixel-for-pixel:
+ * centered, `bottom:32px`, `border-radius:999px`, the same shadow, `siloIn`
+ * entrance. `padding` defaults to the two selection docks' `9px 12px 9px
+ * 18px` (asymmetric — extra room on the left where the "N selected" label
+ * sits flush); the idle trash dock passes `'9px 18px'` (symmetric — v3's
+ * markup uses a plain padding shorthand there, no label). Pulled into one
+ * component because all three docks share this exact shell; without it
+ * they'd duplicate ~15 style properties three times over (jscpd guards
+ * production src at 1.5%).
+ *
+ * `position: absolute` (not `fixed`) — every caller mounts this as a direct
+ * child of `.silo-content` (the floating content panel, `AppFrame.tsx`'s
+ * `<main>`), either straight from `TrashView.tsx` or via `ContentFrame`
+ * (`routes/shared/ListHeader.tsx`). `.silo-content` is `position: relative`
+ * (`base.css`) specifically to anchor this, so the dock centers over the
+ * CONTENT PANEL's own width — not the viewport's. A `fixed` dock centered via
+ * `left:0;right:0` centers to the whole viewport instead, which straddles
+ * the sidebar/content boundary on desktop (the sidebar's ~232px + the
+ * frame's centered-band math skew the panel off-center from the viewport at
+ * every width except a coincidence) — this bug is what moved the dock off
+ * `fixed`. On mobile (`≤720px`) the sidebar drops out of flow and
+ * `.silo-content` already fills the full width, so the dock still spans/
+ * centers full-width there with no separate mobile case needed.
  */
 export function Dock({
   children,
@@ -38,12 +52,12 @@ export function Dock({
   return (
     <div
       style={{
-        position: 'fixed',
+        position: 'absolute',
         left: 0,
         right: 0,
         margin: '0 auto',
         width: 'max-content',
-        maxWidth: 'calc(100vw - 40px)',
+        maxWidth: 'calc(100% - 40px)',
         bottom: 'var(--s8)',
         zIndex: 35,
         display: 'flex',
@@ -52,9 +66,9 @@ export function Dock({
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 999,
-        // K6: dock is a fixed-position overlay (highest prominence, like a
-        // modal), so it takes the strongest elevation step rather than the
-        // mid-tier --elev-2 popovers use.
+        // K6: dock is an absolutely-positioned overlay (highest prominence,
+        // like a modal), so it takes the strongest elevation step rather
+        // than the mid-tier --elev-2 popovers use.
         boxShadow: 'var(--elev-3)',
         padding,
         // Bottom-anchored: it slides/scales up off the bottom edge it's
@@ -74,7 +88,12 @@ export function Dock({
 function DockSelectedLabel({ count }: { count: number }) {
   return (
     <span
-      style={{ fontSize: '0.78rem', fontWeight: 500, color: 'var(--ink)', whiteSpace: 'nowrap' }}
+      style={{
+        fontSize: 'var(--text-sm)',
+        fontWeight: 500,
+        color: 'var(--ink)',
+        whiteSpace: 'nowrap',
+      }}
     >
       {count} selected
     </span>
@@ -117,15 +136,15 @@ export function SelectionDock({
   );
 }
 
-/** The text/color/cursor styling every dock action button shares (text-only `DockAction` and icon-leading `DockIconAction` alike) — only `display`/`gap` differ (the icon variant needs a flex row to lay out its leading icon + label), so those two stay per-caller rather than folding into this shared base. */
+/** The text/color/cursor styling every dock action button shares (text-only `DockAction` and icon-leading `DockIconAction` alike) — only `display`/`gap` differ (the icon variant needs a flex row to lay out its leading icon + label), so those two stay per-caller rather than folding into this shared base. `color: var(--ink)` (brightened from `--mut`, direct user feedback: these ARE the dock's primary clickable affordances — "Clear"/"select all"/"empty all"/"restore"/"delete now" — not secondary meta, so they read at the same brightness as any other primary action label; `opacity` still carries the disabled-dimming signal. */
 function dockActionStyle(disabled: boolean) {
   return {
     border: 0,
     background: 'none',
     fontFamily: 'inherit',
-    fontSize: '0.78rem',
+    fontSize: 'var(--text-sm)',
     fontWeight: 500,
-    color: 'var(--mut)',
+    color: 'var(--ink)',
     cursor: disabled ? 'default' : ('pointer' as const),
     opacity: disabled ? 0.5 : 1,
     padding: 0,

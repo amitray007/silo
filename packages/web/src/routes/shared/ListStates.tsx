@@ -40,7 +40,7 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
       <p
         style={{
           margin: '22px 0 0',
-          fontSize: '0.92rem',
+          fontSize: 'var(--text-md)',
           fontWeight: 500,
           color: 'var(--ink)',
           letterSpacing: 'var(--tracking-tight)',
@@ -52,7 +52,7 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
       <p
         style={{
           margin: '6px 0 0',
-          fontSize: '0.84rem',
+          fontSize: 'var(--text-base)',
           color: 'var(--mut)',
           maxWidth: '24rem',
           textWrap: 'pretty',
@@ -64,15 +64,6 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
   );
 }
 
-/** v3's `noResults` state (`Silo-v3.html:171-173`) — a plain left-aligned line, not the full centered empty-state treatment (that's reserved for "nothing here at all"). */
-export function NoSearchResults({ q }: { q: string }) {
-  return (
-    <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--fnt)' }}>
-      Nothing found for "{q}"
-    </p>
-  );
-}
-
 /** A calm inline error message (not a white screen — the `ErrorBoundary` still backstops render errors). */
 export function ErrorState({ error }: { error: ApiError }) {
   return (
@@ -80,7 +71,7 @@ export function ErrorState({ error }: { error: ApiError }) {
       <p
         style={{
           margin: 0,
-          fontSize: '0.92rem',
+          fontSize: 'var(--text-md)',
           fontWeight: 500,
           color: 'var(--warn)',
           letterSpacing: 'var(--tracking-tight)',
@@ -92,7 +83,7 @@ export function ErrorState({ error }: { error: ApiError }) {
       <p
         style={{
           margin: '6px 0 0',
-          fontSize: '0.84rem',
+          fontSize: 'var(--text-base)',
           color: 'var(--mut)',
           maxWidth: '24rem',
           textWrap: 'pretty',

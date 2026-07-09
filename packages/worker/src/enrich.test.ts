@@ -27,6 +27,10 @@ describeIfPg('enrichLink (integration)', () => {
   let enrichMod: typeof import('./enrich.js');
   let pool: Pool;
 
+  // CI runs many packages' disposable-DB suites in parallel; create+migrate
+  // routinely exceeds vitest's default 10s hookTimeout under that load
+  // (same flake has been red on main). Give the setup room, and guard
+  // teardown so a timed-out beforeAll doesn't crash on undefined `pool`.
   beforeAll(async () => {
     const database = createDisposableDatabase('silo_worker_enrich_test');
     dropDatabase = database.drop;
@@ -37,14 +41,18 @@ describeIfPg('enrichLink (integration)', () => {
     core = await import('@silo/core');
     enrichMod = await import('./enrich.js');
     pool = new Pool({ connectionString: database.url });
-  });
+  }, 60_000);
 
   afterAll(async () => {
-    const { pool: corePool } = await import('@silo/db');
-    await corePool.end();
-    await pool.end();
-    dropDatabase();
-  });
+    try {
+      const { pool: corePool } = await import('@silo/db');
+      await corePool.end();
+    } catch {
+      // @silo/db may never have loaded if beforeAll timed out mid-setup.
+    }
+    await pool?.end();
+    dropDatabase?.();
+  }, 60_000);
 
   function stubDeps(fetchResult: SafeFetchResult, extractResult?: ExtractResult): EnrichLinkDeps {
     return {
@@ -57,7 +65,13 @@ describeIfPg('enrichLink (integration)', () => {
       enrichSource: () => Promise.resolve(undefined),
       // Plugin-toggle enforcement is covered in its own describe block below
       // — these generic tests don't care about the toggle state.
-      getPluginsSetting: () => Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+      getPluginsSetting: () =>
+        Promise.resolve({
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, inline: true, hover: true },
+        }),
     };
   }
 
@@ -184,7 +198,12 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.reject(new Error('unexpected extract crash')),
         enrichSource: () => Promise.resolve(undefined),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
       }),
     ).rejects.toThrow('unexpected extract crash');
     // Untouched — the failed attempt recorded nothing; a retry starts fresh.
@@ -207,7 +226,12 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: () =>
           Promise.resolve({ kind: 'hacker_news', points: 500, comments: 200, author: 'pg' }),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
@@ -231,7 +255,12 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: () =>
           Promise.resolve({ kind: 'hacker_news', points: 10, comments: 3, author: 'x' }),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       expect(link?.captureStatus).toBe('bare');
@@ -264,6 +293,123 @@ describeIfPg('enrichLink (integration)', () => {
     });
   });
 
+  describe('twitter thumbnail override (command-center polish slice)', () => {
+    const okTwitterFetch: SafeFetchResult = {
+      ok: true,
+      html: '<html></html>',
+      contentType: 'text/html',
+      finalUrl: 'https://x.com/someone/status/123',
+      status: 200,
+    };
+
+    it('overrides the extracted (placeholder) imageUrl with sourceData.thumbnailUrl when present', async () => {
+      const id = await newLink('https://x.com/someone/status/123');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okTwitterFetch),
+        extract: () =>
+          Promise.resolve({
+            status: 'full',
+            title: 'Someone on X',
+            // The generic x.com og:image extraction — a useless placeholder.
+            imageUrl: 'https://abs.twimg.com/errors/logo46x38.png',
+          }),
+        enrichSource: () =>
+          Promise.resolve({
+            kind: 'twitter',
+            text: 'a tweet with a video',
+            authorHandle: 'someone',
+            authorName: 'Someone',
+            likes: 1,
+            reposts: 0,
+            replies: 0,
+            quotes: 0,
+            bookmarks: 0,
+            thumbnailUrl: 'https://pbs.twimg.com/ext_tw_video_thumb/123/thumb.jpg',
+          }),
+        getPluginsSetting: () =>
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
+      });
+      const link = await core.getById(id);
+      expect(link?.imageUrl).toBe('https://pbs.twimg.com/ext_tw_video_thumb/123/thumb.jpg');
+      expect(link?.sourceData).toMatchObject({
+        kind: 'twitter',
+        thumbnailUrl: 'https://pbs.twimg.com/ext_tw_video_thumb/123/thumb.jpg',
+      });
+    });
+
+    it('leaves the extracted imageUrl untouched when the tweet has no media (text-only)', async () => {
+      const id = await newLink('https://x.com/someone/status/456');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okTwitterFetch),
+        extract: () =>
+          Promise.resolve({
+            status: 'full',
+            title: 'Someone on X',
+            imageUrl: 'https://abs.twimg.com/errors/logo46x38.png',
+          }),
+        enrichSource: () =>
+          Promise.resolve({
+            kind: 'twitter',
+            text: 'a text-only tweet, no media',
+            authorHandle: 'someone',
+            authorName: 'Someone',
+            likes: 1,
+            reposts: 0,
+            replies: 0,
+            quotes: 0,
+            bookmarks: 0,
+            // No thumbnailUrl — a text-only tweet.
+          }),
+        getPluginsSetting: () =>
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
+      });
+      const link = await core.getById(id);
+      // The placeholder og:image is what gets stored — no override to apply.
+      expect(link?.imageUrl).toBe('https://abs.twimg.com/errors/logo46x38.png');
+    });
+
+    it('does not apply the override for a non-twitter sourceData kind', async () => {
+      const id = await newLink('https://news.ycombinator.com/item?id=999');
+      await enrichMod.enrichLink(id, {
+        safeFetch: () =>
+          Promise.resolve({
+            ok: true,
+            html: '<html></html>',
+            contentType: 'text/html',
+            finalUrl: 'https://news.ycombinator.com/item?id=999',
+            status: 200,
+          }),
+        extract: () =>
+          Promise.resolve({
+            status: 'full',
+            title: 'HN thread',
+            imageUrl: 'https://example.com/og.png',
+          }),
+        enrichSource: () =>
+          Promise.resolve({ kind: 'hacker_news', points: 5, comments: 1, author: 'x' }),
+        getPluginsSetting: () =>
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
+      });
+      const link = await core.getById(id);
+      expect(link?.imageUrl).toBe('https://example.com/og.png');
+    });
+  });
+
   describe('plugin toggle enforcement (plan 017)', () => {
     /** A stubbed `enrichSource` that records the `enabledPlugins` it was called with. */
     function spyingEnrichSource(calls: Array<Parameters<EnrichLinkDeps['enrichSource']>>) {
@@ -274,7 +420,7 @@ describeIfPg('enrichLink (integration)', () => {
       ) => {
         calls.push([sourceKind, url, enabledPlugins]);
         return Promise.resolve(
-          enabledPlugins?.hacker_news === false
+          enabledPlugins?.hacker_news.enabled === false
             ? undefined
             : { kind: 'hacker_news' as const, points: 1, comments: 1, author: 'x' },
         );
@@ -300,13 +446,23 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: spyingEnrichSource(calls),
         getPluginsSetting: () => {
           getPluginsSettingCallCount += 1;
-          return Promise.resolve({ hacker_news: false, github: true, youtube: true });
+          return Promise.resolve({
+            hacker_news: { enabled: false, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          });
         },
       });
 
       expect(getPluginsSettingCallCount).toBe(1);
       expect(calls).toHaveLength(1);
-      expect(calls[0]?.[2]).toEqual({ hacker_news: false, github: true, youtube: true });
+      expect(calls[0]?.[2]).toEqual({
+        hacker_news: { enabled: false, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
+      });
     });
 
     it('disabled plugin -> enrichSource degrades -> no sourceData recorded (generic capture only)', async () => {
@@ -316,7 +472,12 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
         enrichSource: spyingEnrichSource([]),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: false, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: false, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       // No sourceData folded in — createLink's safe `link` floor stands, and
@@ -333,7 +494,12 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
         enrichSource: spyingEnrichSource([]),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, inline: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
@@ -357,7 +523,12 @@ describeIfPg('enrichLink (integration)', () => {
       ).resolves.toBeUndefined();
 
       // Degraded to the all-enabled default, not left undefined/false.
-      expect(calls[0]?.[2]).toEqual({ hacker_news: true, github: true, youtube: true });
+      expect(calls[0]?.[2]).toEqual({
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, inline: true, hover: true },
+      });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
         kind: 'hacker_news',

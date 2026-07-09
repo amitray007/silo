@@ -1,5 +1,5 @@
 import { ListBody } from './shared/ListBodies';
-import { ContentFrame, ListOmnibar } from './shared/ListHeader';
+import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
 import { useListView } from './shared/useListView';
 
@@ -10,7 +10,7 @@ function LibraryEmptyState() {
       title="Nothing kept yet."
       body={
         <>
-          Paste a link in the bar above — it's saved the moment it lands.
+          Paste a link anywhere on this page — it's saved the moment it lands.
           <br />
           <span style={{ fontSize: '0.9em', color: 'var(--fnt)' }}>
             Claude can add links here too, once you connect it in Settings → Access.
@@ -22,35 +22,24 @@ function LibraryEmptyState() {
 }
 
 /**
- * `/` — the Library list (plan 010, extended by plan 011 V3-2 with the
- * omnibar's live search). Day-grouped, read-only rows via `useListView()`
- * (no tag scope); when the omnibar carries a non-empty, non-URL query, the
- * body switches to the search results (`ListBody`). Pagination (the "load
- * more" button + prefetch sentinel) is Library-only — search results aren't
- * paginated in this slice (matches v3, which searches the already-loaded
- * list). Shares its orchestration/header/body/state chrome with `TagView`
- * via `./shared/*` — see those modules' doc comments.
+ * `/` — the Library list (plan 010; the omnibar's live search that plan 011
+ * V3-2 added here has since moved OUT to the command palette, plan 024 —
+ * this view is just the day-grouped browse feed now). Read-only rows via
+ * `useListView()` (no tag scope), with pagination (the "load more" button +
+ * prefetch sentinel). Shares its orchestration/header/body/state chrome with
+ * `TagView` via `./shared/*` — see those modules' doc comments.
+ *
+ * The header carries only the title now — the "Paste a link to keep"
+ * hint box was removed (direct user feedback: match shiori's compact header,
+ * which has no top input). Capture still works everywhere: pasting a URL
+ * anywhere on the page captures it via the document-level `usePasteCapture`
+ * listener (mounted once in `AppFrame`).
  */
 export function LibraryView() {
   const view = useListView();
 
-  const header = (
-    <ListOmnibar
-      omnibar={view.omnibar}
-      searchEnabled={view.searchEnabled}
-      shownCount={view.searchEnabled ? view.results.length : view.links.length}
-      libCount={view.liveCount ?? 0}
-      onKeep={view.onKeep}
-    />
-  );
-
   return (
-    <ContentFrame
-      title="Library"
-      count={view.liveCount}
-      {...(view.captureError !== undefined ? { captureError: view.captureError } : {})}
-      headerSlot={header}
-    >
+    <ContentFrame title="Library" headerSlot={undefined}>
       {ListBody(view, <LibraryEmptyState />)}
     </ContentFrame>
   );

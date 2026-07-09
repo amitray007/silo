@@ -1,6 +1,14 @@
 import { useState } from 'react';
 
 /**
+ * True once the favicon `<img>` has actually decoded (not just started
+ * loading). Only then do we drop the letter-fallback chrome (the `--bg2`
+ * backing + hairline border), so a favicon that eventually fails still lands
+ * back on a bordered letter tile rather than a naked glyph.
+ */
+type FaviconState = 'pending' | 'loaded' | 'failed';
+
+/**
  * Deterministic letter-chip derivation: strips a leading `www.`, takes the
  * hostname's first dot-segment, keeps only alphanumerics, and uppercases the
  * first character. Mirrors the prototype's `Component.chip()` derivation
@@ -25,12 +33,21 @@ export function chipLetter(domain: string | null | undefined): string {
  * (`packages/api/src/routes/favicon.ts`), never from a third-party host
  * directly; the browser only ever talks to silo's own origin. An `<img>`
  * (not a CSS `background-image`, which can't signal failure) is used so
- * `onError` can hide it, gracefully revealing the letter underneath — no
- * broken-image icon, no third-party call, no flash of the fallback once a
- * favicon is cached.
+ * `onError`/`onLoad` can track it, gracefully revealing the letter underneath
+ * on failure — no broken-image icon, no third-party call, no flash of the
+ * fallback once a favicon is cached.
+ *
+ * Vibrancy (direct user feedback — "make the icons pop like shiori"): the
+ * `--bg2` backing + hairline border are the LETTER-FALLBACK chrome ONLY. Once
+ * a real favicon decodes (`state === 'loaded'`) they're dropped, so the
+ * favicon's own colour fills the chip edge-to-edge and reads as a vivid app
+ * mark rather than a colour swatch trapped in a grey box. A favicon that
+ * never loads (or fails) keeps the bordered letter tile — the resting look
+ * for sites without an icon is unchanged.
  */
 export function Chip({ domain, size = 18 }: { domain: string | null | undefined; size?: number }) {
-  const [faviconFailed, setFaviconFailed] = useState(false);
+  const [state, setState] = useState<FaviconState>('pending');
+  const showLetterChrome = state !== 'loaded';
 
   return (
     <span
@@ -39,8 +56,10 @@ export function Chip({ domain, size = 18 }: { domain: string | null | undefined;
         width: size,
         height: size,
         borderRadius: 4,
-        background: 'var(--bg2)',
-        border: '1px solid var(--line)',
+        // Backing + border only while the letter is the visible content —
+        // gone the moment a favicon decodes so its colour isn't muted.
+        background: showLetterChrome ? 'var(--bg2)' : 'transparent',
+        border: showLetterChrome ? '1px solid var(--line)' : 'none',
         color: 'var(--mut)',
         fontSize: '0.5rem',
         fontWeight: 500,
@@ -51,15 +70,16 @@ export function Chip({ domain, size = 18 }: { domain: string | null | undefined;
         overflow: 'hidden',
       }}
     >
-      <span aria-hidden="true">{chipLetter(domain)}</span>
-      {domain && !faviconFailed && (
+      {showLetterChrome && <span aria-hidden="true">{chipLetter(domain)}</span>}
+      {domain && state !== 'failed' && (
         // Decorative: alt="" + aria-hidden — the letter behind it already
         // conveys the domain to assistive tech (satisfies useAltText).
         <img
           src={`/api/favicon?domain=${encodeURIComponent(domain)}`}
           alt=""
           aria-hidden="true"
-          onError={() => setFaviconFailed(true)}
+          onLoad={() => setState('loaded')}
+          onError={() => setState('failed')}
           style={{
             position: 'absolute',
             inset: 0,

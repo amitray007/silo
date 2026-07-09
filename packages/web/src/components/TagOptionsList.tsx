@@ -21,7 +21,7 @@ export function tagSearchFieldStyle(margin: string): React.CSSProperties {
     background: 'var(--bg2)',
     color: 'var(--ink)',
     font: 'inherit',
-    fontSize: '0.78rem',
+    fontSize: 'var(--text-sm)',
     outline: 'none',
   };
 }
@@ -78,10 +78,17 @@ export function TagOptionsList({
             textAlign: 'left',
             padding: rowPadding,
             borderRadius: 7,
-            fontSize: '0.8rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 400,
             cursor: 'pointer',
-            color: opt.active ? 'var(--ink)' : 'var(--mut)',
+            // Brightened inactive from `--mut` to `--ink` (direct user
+            // feedback): this is a primary clickable tag-picker label — the
+            // active/inactive distinction is already carried by the trailing
+            // dot marker below (`opt.active ? 'var(--mark)' : 'transparent'`)
+            // plus the row's own hover fill, so dimming the LABEL text on top
+            // of that was redundant and read as muddy, same reasoning as
+            // `NavItem`'s `default`/`tag` variants.
+            color: 'var(--ink)',
             transform: 'scale(1)',
           }}
         >
@@ -99,7 +106,7 @@ export function TagOptionsList({
         </button>
       ))}
       {hidden > 0 && (
-        <div style={{ padding: notePadding, fontSize: '0.7rem', color: 'var(--fnt)' }}>
+        <div style={{ padding: notePadding, fontSize: 'var(--text-xs)', color: 'var(--fnt)' }}>
           {hidden} more — type to narrow
         </div>
       )}

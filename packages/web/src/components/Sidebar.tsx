@@ -2,8 +2,9 @@ import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
 import type { TagCount } from '../api/types';
+import { formatCount } from '../lib/formatCount';
 import { GrainDot } from './GrainDot';
-import { LibraryIcon, SettingsIcon, TrashIcon } from './NavIcons';
+import { LibraryIcon, SearchIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { useSettings } from './SettingsContext';
 import { SidebarTags } from './SidebarTags';
@@ -93,6 +94,87 @@ function NavItemLink({
   );
 }
 
+/**
+ * The `⌘K` shortcut hint chip that sits in the Search row's `meta` slot —
+ * shows the palette's PRIMARY trigger (⌘K/Ctrl+K still work identically;
+ * `/` remains a secondary global trigger too, see `useCommandPalette.ts`,
+ * but the displayed hint is the one every other command-palette-style app
+ * (Linear, Raycast, Vercel) surfaces, and it's unambiguous cross-platform in
+ * a way a bare `/` glyph isn't). Visually a small bordered pill (unlike
+ * Library/Trash's borderless count text) but sized/centered to land on the
+ * SAME right-hand column as those counts: `lineHeight: 1` + `display:
+ * inline-flex` centering (direct user feedback fix, preserved from the `/`
+ * chip: "the chip is not vertically aligned with the Library/Trash count
+ * numbers") means the chip's border+padding center on the glyph's own
+ * collapsed line-box rather than an inherited 1.55 line-height, landing it
+ * on the identical row-center baseline as `NavItem`'s borderless meta spans.
+ *
+ * The `margin: -3px 0` (a negative vertical margin equal to the chip's own
+ * border+padding, `1px` border + `2px` padding per edge) is a row-parity
+ * fix: without it, the chip's border+padding grow its layout box taller
+ * than a bare count span, and since `NavItem`'s row is a flex container
+ * with `align-items: center`, the ROW itself stretches to fit the tallest
+ * child — making the Search row ~4px taller than Library/Trash despite
+ * identical padding/font on the row itself. The negative margin lets the
+ * border/padding still PAINT (margin never clips rendered content) while
+ * removing the chip's layout footprint beyond its glyph's own line-box, so
+ * it no longer inflates the row's flex-computed height — this is purely a
+ * font-metrics fix (line-height/baseline), so it applies identically
+ * whether the chip's content is one glyph (`/`) or two (`⌘K`).
+ */
+function SearchShortcutChip() {
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        lineHeight: 1,
+        fontSize: '0.66rem',
+        color: 'var(--fnt)',
+        border: '1px solid var(--line)',
+        borderRadius: 5,
+        padding: 'var(--s-0-5) var(--s1-5)',
+        margin: '-3px 0',
+        background: 'var(--bg)',
+      }}
+    >
+      <span aria-hidden="true">⌘</span>
+      <span>K</span>
+    </span>
+  );
+}
+
+/**
+ * The Search nav row (plan 024, command center): rendered through the SAME
+ * shared `NavItem` component Library/Trash use, in its button mode (no
+ * `href` — Search has no dedicated `/route` at all, it opens the floating
+ * palette in place, exactly like the Settings item's `skipNavigate` case,
+ * but simpler still since there's no `/search` URL to keep linkable
+ * either). This used to be a hand-rolled `<button>` that duplicated
+ * `NavItem`'s inline styles — that duplication drifted (e.g. its meta font
+ * was 0.66rem vs. `NavItem`'s 0.72rem), which is why the row rendered at a
+ * visibly different size/weight than Library/Trash despite looking
+ * "close." Going through `NavItem` directly makes that drift structurally
+ * impossible: icon size (18px, matching Library/Trash), label font/weight,
+ * padding, and row height are all the ONE shared implementation. The `⌘K`
+ * shortcut hint renders via `meta` (the same right-aligned slot
+ * Library/Trash use for their counts) — `NavItem`'s `meta` accepts any
+ * `ReactNode`, so the chip fits without a dedicated prop, and it lands in
+ * the same right-hand column as the counts below it.
+ */
+function SidebarSearchItem({ onOpenSearch }: { onOpenSearch: () => void }) {
+  return (
+    <NavItem
+      label="Search"
+      icon={<SearchIcon size={18} stroke="currentColor" />}
+      meta={<SearchShortcutChip />}
+      onClick={onOpenSearch}
+    />
+  );
+}
+
 interface SidebarProps {
   /** DOM id the mobile ☰ button's `aria-controls` points at. */
   id?: string;
@@ -100,6 +182,8 @@ interface SidebarProps {
   open?: boolean;
   /** Fires after a nav item navigates — closes the mobile drawer. */
   onNavigate?: () => void;
+  /** Opens the command palette (plan 024) — the Search nav item's click handler. */
+  onOpenSearch?: () => void;
 }
 
 /**
@@ -134,7 +218,7 @@ interface SidebarProps {
  * failed tags fetch renders nothing rather than crashing the sidebar.
  */
 export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar(
-  { id, open = false, onNavigate = noop },
+  { id, open = false, onNavigate = noop, onOpenSearch = noop },
   ref,
 ) {
   const { data: counts } = useCounts();
@@ -157,21 +241,25 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
     >
       <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px 15px' }}>
         <GrainDot size={16} />
-        <span style={{ fontWeight: 500, fontSize: '0.95rem', letterSpacing: '-0.01em' }}>silo</span>
+        <span style={{ fontWeight: 500, fontSize: 'var(--text-md)', letterSpacing: '-0.01em' }}>
+          silo
+        </span>
       </div>
+
+      <SidebarSearchItem onOpenSearch={onOpenSearch} />
 
       <NavItemLink
         to="/"
         end
         label="Library"
-        meta={counts?.live}
+        meta={counts ? formatCount(counts.live) : undefined}
         icon={<LibraryIcon />}
         onNavigate={onNavigate}
       />
       <NavItemLink
         to="/trash"
         label="Trash"
-        meta={counts ? String(counts.trash) : undefined}
+        meta={counts ? formatCount(counts.trash) : undefined}
         icon={<TrashIcon />}
         onNavigate={onNavigate}
       />
@@ -184,13 +272,14 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           <NavItemLink
             key={tag.name}
             to={`/tags/${tag.name}`}
-            label={
-              <>
-                <span style={{ color: 'var(--ghost)', marginRight: 4 }}>#</span>
-                {tag.name}
-              </>
-            }
-            meta={tag.count}
+            // The `#` sits in NavItem's 18px icon slot (not inline in the
+            // label) so it aligns to the SAME left ledger column as the
+            // Library/Trash nav icons above and the `+ New tag` glyph below —
+            // one clean column, matching shiori's Tags spacing. Dim (--ghost)
+            // glyph, bright (--ink) label.
+            icon={<span style={{ color: 'var(--ghost)', fontSize: 'var(--text-md)' }}>#</span>}
+            label={tag.name}
+            meta={tag.count > 0 ? formatCount(tag.count) : undefined}
             variant="tag"
             onNavigate={onNavigate}
           />

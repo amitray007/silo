@@ -37,13 +37,15 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     if (this.state.hasError) {
       return (
         <CenteredPanel>
-          <p style={{ margin: 0, fontSize: '0.92rem', fontWeight: 500, color: 'var(--ink)' }}>
+          <p
+            style={{ margin: 0, fontSize: 'var(--text-md)', fontWeight: 500, color: 'var(--ink)' }}
+          >
             Something went wrong
           </p>
           <p
             style={{
               margin: '6px 0 20px',
-              fontSize: '0.84rem',
+              fontSize: 'var(--text-base)',
               color: 'var(--mut)',
               maxWidth: '24rem',
             }}
@@ -59,7 +61,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
               color: 'var(--ink)',
               borderRadius: '6px',
               padding: '6px 14px',
-              fontSize: '0.84rem',
+              fontSize: 'var(--text-base)',
               fontFamily: 'inherit',
               cursor: 'pointer',
             }}

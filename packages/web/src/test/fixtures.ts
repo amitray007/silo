@@ -63,3 +63,15 @@ export const youtubeSourceData: Extract<SourceData, { kind: 'youtube' }> = {
   channel: 'Fireship',
   thumbnailUrl: 'https://img.youtube.com/vi/abc123/hqdefault.jpg',
 };
+
+export const twitterSourceData: Extract<SourceData, { kind: 'twitter' }> = {
+  kind: 'twitter',
+  text: 'Just shipped a new feature — thrilled with how it turned out.',
+  authorHandle: 'amitray007',
+  authorName: 'Amit Ray',
+  likes: 512,
+  reposts: 48,
+  replies: 23,
+  quotes: 6,
+  bookmarks: 91,
+};

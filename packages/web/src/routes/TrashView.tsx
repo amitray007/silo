@@ -1,13 +1,11 @@
-import { useState } from 'react';
 import {
   useBulkDeleteNow,
   useBulkRestore,
   useCounts,
   useEmptyTrash,
-  useSearchTrash,
   useTrashList,
 } from '../api/hooks';
-import type { TrashLinkJson, TrashSearchResultJson } from '../api/types';
+import type { TrashLinkJson } from '../api/types';
 import { ContentHeader } from '../components';
 import { CenteredPanel } from '../components/CenteredPanel';
 import {
@@ -19,67 +17,10 @@ import {
   DockTrashIcon,
   SelectionDock,
 } from '../components/Dock';
-import { SearchIcon, TrashIcon } from '../components/NavIcons';
+import { TrashIcon } from '../components/NavIcons';
 import { useTrashSelection } from '../components/SelectionContext';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
-import { useDebouncedValue } from '../lib/useDebouncedValue';
-import { NoSearchResults } from './shared/ListStates';
-
-/** Matches the omnibar's search debounce (`useOmnibarState.ts`'s `SEARCH_DEBOUNCE_MS`) — kept as its own constant here since this input has no shared state hook of its own. */
-const TRASH_SEARCH_DEBOUNCE_MS = 200;
-
-/**
- * The Trash screen's search-only input (Trash search slice) — deliberately
- * NOT the full `Omnibar` (that component is coupled to keep/URL/tag
- * semantics this screen doesn't have), but matching its LOOK exactly: the
- * same `--bg2` rounded field, the same magnifier SVG (copied verbatim from
- * `Omnibar.tsx`), the same enlarged padding/width clamp. A controlled input;
- * the raw value is always what's displayed, same discipline as the omnibar's
- * `q`/`debouncedQ` split (debouncing only ever gates the network request,
- * never the visible keystroke).
- */
-function TrashSearchInput({ value, onChange }: { value: string; onChange: (v: string) => void }) {
-  return (
-    <div
-      style={{
-        width: 'clamp(320px, 52%, 620px)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--s2-5)',
-        border: '1px solid var(--line)',
-        borderRadius: 11,
-        background: 'var(--bg2)',
-        padding: 'var(--s3) var(--s4)',
-      }}
-    >
-      <SearchIcon />
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') {
-            onChange('');
-            (e.target as HTMLInputElement).blur();
-          }
-        }}
-        placeholder="Search trash"
-        aria-label="Search trash"
-        style={{
-          flex: 1,
-          minWidth: 0,
-          border: 0,
-          background: 'none',
-          outline: 'none',
-          font: 'inherit',
-          fontSize: '0.92rem',
-          color: 'var(--ink)',
-          padding: 0,
-        }}
-      />
-    </div>
-  );
-}
 
 /**
  * The trash selection dock (v3's `trSelActive`, `Silo-v3.html:296-305`) — "N
@@ -137,7 +78,7 @@ function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; a
 
   return (
     <Dock padding="9px 18px">
-      <span style={{ fontSize: '0.74rem', color: 'var(--fnt)', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--fnt)', whiteSpace: 'nowrap' }}>
         Deleted links keep their text · auto-empties after {purgeWindowDays} days
       </span>
       <DockDivider />
@@ -198,28 +139,21 @@ function TrashEmptyState({ purgeWindowDays }: { purgeWindowDays: number }) {
 }
 
 /**
- * The Trash body's loading/error/empty/results branches (Trash search slice)
- * — pulled out of `TrashView` itself so that component's own complexity stays
- * under the lint gate once search added a second (loading, empty, results)
- * triple alongside the browse feed's. `isError` only ever reflects the browse
- * feed's `useTrashList` query — a failed SEARCH request instead lands on
- * `shownLinks.length === 0` and reads as "nothing found" rather than a load
- * error, since `useSearchTrash` has no dedicated error copy of its own here
- * (mirrors the Library's search, which also has no separate search-error
- * state — see `useListView`'s doc comment).
+ * The Trash body's loading/error/empty/results branches — pulled out of
+ * `TrashView` itself so that component's own complexity stays under the lint
+ * gate. Search removed (later user-feedback pass, mirroring the Library's own
+ * omnibar-search removal): the header's search input is gone — trash search
+ * now lives entirely in the command palette (⌘K / `/`) — so this only ever
+ * renders the plain day-grouped browse feed.
  */
 function TrashBody({
   loading,
   isError,
-  searchEnabled,
-  query,
   shownLinks,
   purgeWindowDays,
 }: {
   loading: boolean;
   isError: boolean;
-  searchEnabled: boolean;
-  query: string;
   shownLinks: TrashLinkJson[];
   purgeWindowDays: number;
 }) {
@@ -242,20 +176,23 @@ function TrashBody({
     );
   }
 
-  if (!searchEnabled && isError) {
+  if (isError) {
     return (
-      <p style={{ padding: '40px 11px', margin: 0, fontSize: '0.82rem', color: 'var(--warn)' }}>
+      <p
+        style={{
+          padding: '40px 11px',
+          margin: 0,
+          fontSize: 'var(--text-sm)',
+          color: 'var(--warn)',
+        }}
+      >
         Couldn't load the trash.
       </p>
     );
   }
 
   if (shownLinks.length === 0) {
-    return searchEnabled ? (
-      <NoSearchResults q={query} />
-    ) : (
-      <TrashEmptyState purgeWindowDays={purgeWindowDays} />
-    );
+    return <TrashEmptyState purgeWindowDays={purgeWindowDays} />;
   }
 
   return (
@@ -273,37 +210,28 @@ function TrashBody({
 }
 
 /**
- * `/trash` (plan 011, V3-5; server-side search added by the Trash search
- * slice) — day-grouped trash rows with a purge countdown, per-row
- * restore/delete-now, and the bottom docks (idle "select all · empty all" /
- * selection "restore · delete now · clear"). The per-row restore/delete-now
- * mutations (`useRestoreLink`/`useDeleteNow`) live in `TrashRowActions`
- * (`TrashRow.tsx`), not here — this component only owns the feed/search
- * orchestration, the day-grouping, and the two bulk docks (rendering itself
- * delegated to `TrashBody`, kept in this file for its complexity budget).
+ * `/trash` (plan 011, V3-5) — day-grouped trash rows with a purge countdown,
+ * per-row restore/delete-now, and the bottom docks (idle "select all · empty
+ * all" / selection "restore · delete now · clear"). The per-row
+ * restore/delete-now mutations (`useRestoreLink`/`useDeleteNow`) live in
+ * `TrashRowActions` (`TrashRow.tsx`), not here — this component only owns the
+ * feed orchestration, the day-grouping, and the two bulk docks (rendering
+ * itself delegated to `TrashBody`, kept in this file for its complexity
+ * budget).
+ *
+ * The header's search input (`TrashSearchInput`, Trash search slice) was
+ * REMOVED by a later user-feedback pass, mirroring the tag page's own
+ * search-box removal (`TagView.tsx`'s doc comment): the command palette
+ * (⌘K / `/`) handles trash search now, so `ContentHeader` here renders only
+ * the route title. The trash count still lives in the sidebar nav item,
+ * matching Library's own "count in sidebar, not heading bar" treatment.
  */
 export function TrashView() {
   const { data: counts } = useCounts();
   const { data, isLoading, isError } = useTrashList();
   const selection = useTrashSelection();
 
-  // Server-side search (Trash search slice) — mirrors the Library's
-  // omnibar/`useListView` split exactly: `query` is the raw, every-keystroke
-  // value always shown in the input; `debouncedQuery` is what's actually
-  // handed to `useSearchTrash`, so typing doesn't fire a request per
-  // keystroke. `searchEnabled` gates which feed renders — a non-empty
-  // debounced query switches the body to search results (day-grouped by
-  // `deletedAt`, same as the plain feed); clearing it falls back to the
-  // normal `listTrash` browse feed.
-  const [query, setQuery] = useState('');
-  const debouncedQuery = useDebouncedValue(query, TRASH_SEARCH_DEBOUNCE_MS);
-  const searchEnabled = debouncedQuery.trim().length > 0;
-  const { data: searchData, isLoading: isSearching } = useSearchTrash(
-    searchEnabled ? debouncedQuery : '',
-  );
-
   const links = data?.links ?? [];
-  const searchResults: TrashSearchResultJson[] = searchData?.results ?? [];
   const purgeWindowDays = counts?.purgeWindowDays ?? 30;
   const selectedIds = selection.selected;
   const hasSelection = selectedIds.length > 0;
@@ -312,29 +240,22 @@ export function TrashView() {
   // row `⋯` menu first if one is open, otherwise clears this scope's
   // selection) — see that component's doc comment. No listener needed here.
 
-  const shownLinks = searchEnabled ? searchResults : links;
-  const loading = searchEnabled ? isSearching : isLoading;
-
   return (
     <>
-      <ContentHeader title="Trash" count={links.length}>
-        <TrashSearchInput value={query} onChange={setQuery} />
-      </ContentHeader>
+      <ContentHeader title="Trash" />
       <div className="silo-content-body">
         <div className="silo-content-col silo-route-fade">
           <TrashBody
-            loading={loading}
+            loading={isLoading}
             isError={isError}
-            searchEnabled={searchEnabled}
-            query={debouncedQuery}
-            shownLinks={shownLinks}
+            shownLinks={links}
             purgeWindowDays={purgeWindowDays}
           />
         </div>
       </div>
 
       {hasSelection && <TrashSelectionDock selectedIds={selectedIds} />}
-      {!hasSelection && !searchEnabled && links.length > 0 && (
+      {!hasSelection && links.length > 0 && (
         <TrashIdleDock purgeWindowDays={purgeWindowDays} allIds={links.map((l) => l.id)} />
       )}
     </>

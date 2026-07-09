@@ -216,7 +216,13 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
       const trashCursor = (await ops.listTrash({ limit: 1 })).nextCursor;
       expect(trashCursor).toBeDefined();
 
-      const searchWithTrashCursor = ops.search('anything', { cursor: trashCursor as string });
+      const searchWithTrashCursor = ops.search(
+        'anything',
+        {},
+        {
+          cursor: trashCursor as string,
+        },
+      );
       await expect(searchWithTrashCursor).rejects.toThrow(ops.InvalidCursorError);
     });
 

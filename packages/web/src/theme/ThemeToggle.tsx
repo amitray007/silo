@@ -75,7 +75,7 @@ export function ThemeToggle() {
               borderRadius: 6,
               padding: '5px 10px',
               fontFamily: 'inherit',
-              fontSize: '0.78rem',
+              fontSize: 'var(--text-sm)',
               fontWeight: active ? 500 : 400,
               cursor: 'pointer',
               color: active ? 'var(--ink)' : 'var(--ghost)',

@@ -54,6 +54,11 @@ export type SourceData =
       possiblySensitive?: boolean;
       mediaUrls?: string[];
       externalLinks?: string[];
+      /** The tweet's own media thumbnail (video poster / photo), set by the
+       * live FxEmbed enricher when present — served through
+       * `/api/preview-image` (never rendered as a raw `twimg.com` `<img
+       * src>`). See `packages/core/src/links/source-data.ts`'s doc comment. */
+      thumbnailUrl?: string;
     }
   | {
       kind: 'github';
@@ -95,14 +100,6 @@ export type TrashLinkJson = LinkJson & { deletedAt: string };
 /** `LinkJson` plus a search `rank` — `GET /api/links/search`'s per-result shape. */
 export type SearchResultJson = LinkJson & { rank: number };
 
-/**
- * `TrashLinkJson` plus a search `rank` — `GET /api/trash/search`'s per-result
- * shape (Trash search slice). Distinct from `SearchResultJson`: it carries
- * `deletedAt` so the Trash search UI can day-group results (`bucketTrashByDay`)
- * and show the same purge countdown the plain trash feed shows.
- */
-export type TrashSearchResultJson = TrashLinkJson & { rank: number };
-
 /** A single tag with its live-link count — an entry in `GET /api/tags`'s list. */
 export type TagCount = { name: string; count: number };
 
@@ -118,7 +115,10 @@ export type SearchResponse = { results: SearchResultJson[]; nextCursor?: string 
 /** `GET /api/trash` response envelope. */
 export type TrashResponse = { links: TrashLinkJson[]; nextCursor?: string };
 
-/** `GET /api/trash/search` response envelope (Trash search slice). */
+/** A trashed link plus a search `rank` — `GET /api/trash/search`'s per-result shape. */
+export type TrashSearchResultJson = TrashLinkJson & { rank: number };
+
+/** `GET /api/trash/search` response envelope (Trash search slice — consumed by the command palette's Trash scope). */
 export type TrashSearchResponse = { results: TrashSearchResultJson[]; nextCursor?: string };
 
 /** `GET /api/links/:id` response envelope. */
@@ -156,19 +156,36 @@ export type EditLinkRequest = { title?: string; description?: string; note?: str
 export type TagsResponse = { tags: TagCount[] };
 
 /**
- * Web's OWN copy of `@silo/core`'s settings allowlist (plan 016) — mirrors
- * `packages/core/src/settings/schema.ts`'s `SettingsMap`/`plugins` shape
- * field-for-field, same "not imported from core" rule the rest of this file
- * follows (see the file's top doc comment — `@silo/core`'s barrel pulls in
- * `pg` at module scope, which a browser bundle can never load). Both `GET
- * /api/settings` and `PATCH /api/settings` share this exact shape — the
- * PATCH response is the full, freshly-merged map, not just the changed
- * fields (see `settings.ts`'s route doc comment).
+ * Web's OWN copy of `@silo/core`'s settings allowlist (plan 016, `plugins`
+ * shape updated plan 026) — mirrors `packages/core/src/settings/schema.ts`'s
+ * `SettingsMap`/`settingsSchema.plugins` shape field-for-field, same "not
+ * imported from core" rule the rest of this file follows (see the file's top
+ * doc comment — `@silo/core`'s barrel pulls in `pg` at module scope, which a
+ * browser bundle can never load). Both `GET /api/settings` and `PATCH
+ * /api/settings` share this exact shape — the PATCH response is the full,
+ * freshly-merged map, not just the changed fields (see `settings.ts`'s route
+ * doc comment).
+ *
+ * `plugins` (plan 026): each source is now a per-feature object rather than
+ * a bare boolean — a master `enabled` (gates the worker fetch entirely) plus
+ * the render-surface flags that source supports. `hacker_news` and `twitter`
+ * render both an inline row line and a hover preview (`inline`/`hover`);
+ * `github`/`youtube` are hover-only (no `inline`). Mirror core's shape
+ * EXACTLY — do not add fields a source doesn't have.
  */
 export type SettingsMap = {
   theme: 'light' | 'dark' | 'system';
   trashPurgeDays: 7 | 30 | 90;
-  plugins: { hacker_news: boolean; github: boolean; youtube: boolean };
+  plugins: {
+    hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
+    github: { enabled: boolean; hover: boolean };
+    youtube: { enabled: boolean; hover: boolean };
+    // twitter has a live worker enricher (api.fxtwitter.com) AND can arrive
+    // pre-extracted via the `silo ingest x` CLI; `enabled` gates the worker
+    // fetch, `inline`/`hover` gate its two render surfaces. See
+    // `packages/core/src/settings/schema.ts`'s doc comment.
+    twitter: { enabled: boolean; inline: boolean; hover: boolean };
+  };
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */

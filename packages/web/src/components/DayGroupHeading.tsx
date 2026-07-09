@@ -13,7 +13,10 @@ export function DayGroupHeading({ label }: { label: string }) {
   return (
     <p
       style={{
-        fontSize: 'var(--text-xs)',
+        // Bumped --text-xs → --text-sm (11.5px → 12.8px): the day label read
+        // too small next to the reference (user feedback). Still clearly
+        // subordinate to the 14px row titles it groups.
+        fontSize: 'var(--text-sm)',
         fontWeight: 500,
         color: 'var(--fnt)',
         // Top gap reduced from --s5 (20px) to --s3 (12px) per user feedback

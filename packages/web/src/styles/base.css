@@ -127,20 +127,32 @@ select {
   box-sizing: border-box;
   display: flex;
   justify-content: center;
-  padding: var(--s6);
+  /* No vertical margin (the band fills the full window height), but the band
+     is width-capped + centered below, so the --bg frame shows through as
+     empty gutters on the LEFT and RIGHT — shiori's centered-cluster look
+     (user feedback: "shiori has left and right empty"). */
+  padding: 0;
 }
 
-/* The centered band: a transparent sidebar (sits directly on --bg, no fill —
-   the "sidebar matches background" the user picked) beside the floating
-   content panel (`.silo-content`, below). No band walls — the old left/right
-   borders are retired; the floating panel now owns the only visible edge via
-   its radius + hairline. Kept at 60rem (size unchanged per the user's scope). */
+/* The centered band: sidebar + content as one cluster, capped and centered in
+   the window so the --bg frame shows as calm empty gutters on both sides
+   (shiori's layout — NOT full-bleed edge-to-edge). The sidebar is
+   transparent-on-`--bg` (the "sidebar matches background" the user picked);
+   the content panel is the only filled surface. Full window height (no
+   top/bottom gap), gutters only left/right. */
 .silo-band {
   display: flex;
   width: 100%;
-  max-width: 60rem;
+  /* Capped + centered: on a WIDE window the --bg frame shows as empty gutters
+     on both sides (shiori's centered cluster). On a SMALL/narrow window the
+     band is narrower than this cap, so `width:100%` wins and it fills the
+     whole window edge-to-edge with no gutters (user feedback: "when it's a
+     small page it automatically fills the whole page"). One rule gives both:
+     fill-below-cap, center-above-cap. Tightened 72rem → 64rem (user feedback:
+     "the main content is a bit big") — narrower content column, more calm
+     side gutters on a wide window. */
+  max-width: 64rem;
   min-height: 0;
-  gap: var(--s4);
 }
 
 /* Mobile top bar (☰ + brand): hidden on desktop, shown ≤ the mobile
@@ -175,24 +187,77 @@ select {
   display: none;
 }
 
+/* The Tags section's own scroll region (sidebar redesign, direct user
+   feedback: "the tag list must be scrollable within a fixed vertical
+   max-height so many tags don't push Settings off-screen, with the
+   scrollbar hidden"). `max-height` caps it to a comfortable number of rows
+   before it scrolls independently of the rest of the sidebar (which no
+   longer needs its own `+N more` truncation once this exists); the
+   scrollbar is hidden cross-browser (Firefox's `scrollbar-width`, WebKit/
+   Blink's `::-webkit-scrollbar`) while the region stays fully scrollable via
+   wheel/trackpad/keyboard/touch — hiding the bar is cosmetic only, it never
+   disables scrolling itself. */
+.silo-tag-scroll {
+  max-height: 264px;
+  overflow-y: auto;
+  /* Soft custom scrollbar (user feedback: show a scrollbar for many tags, but
+     a softer one — not the default OS bar). Firefox: thin + a translucent
+     warm-light thumb on a transparent track. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+}
+
+/* WebKit/Blink: a slim 6px thumb — a translucent light pill on a transparent
+   track, so it reads as a gentle hint of scroll position rather than a hard
+   chrome bar. Brightens slightly on hover for grab affordance. */
+.silo-tag-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.silo-tag-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.silo-tag-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+}
+
+.silo-tag-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
 /* The content region: a flex column of TWO stacked children — the header bar
    (v3: `ContentHeader`, full width, NOT scrolled) and the scrolling body
    below it. No padding lives on this outer wrapper, so the header's
    border-bottom reaches the content region's full width, matching v3. */
 .silo-content {
+  /* `position: relative` anchors `Dock.tsx`'s `position: absolute` bottom
+     dock (the Trash "empty all"/selection dock + the Library selection dock,
+     both render as direct children here via `Outlet`/`ContentFrame`) — so it
+     centers over THIS panel's own width, not the viewport's (the sidebar +
+     frame padding otherwise skew a viewport-centered dock off-axis; see
+     Dock.tsx's doc comment). */
+  position: relative;
   flex: 1;
   min-width: 0;
   min-height: 0;
-  max-height: calc(100vh - var(--s6) * 2);
+  /* Full window height now that the frame has no outer padding (edge-to-edge,
+     user feedback). Was `calc(100vh - --s6*2)` to leave room for the floating
+     panel's margin — that margin is gone. */
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
-  /* The one floating panel (user-picked corner layout): --bg2 surface fill,
-     a gentle radius, a hairline light-edge + soft elevation off the deep bg. */
+  /* Full-bleed content surface (the floating-panel radius + elevation were
+     retired when the app went edge-to-edge): a --bg2 fill separated from the
+     transparent sidebar by a single hairline on its left edge. The divider is
+     a translucent light hairline (rgba white .06) rather than the solid brown
+     --line, so it reads as a soft Apple/iOS-style seam — barely there, a
+     whisper of light on the dark ground — not a hard drawn rule (user
+     feedback: shiori's divider is far lighter-weight). No radius (the window's
+     own corners are the only rounding now), no drop shadow. */
   background: var(--bg2);
-  border-radius: 16px;
-  box-shadow:
-    var(--elev-2),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
 
@@ -218,11 +283,15 @@ select {
   flex-direction: column;
 }
 
-/* The reading-column cap — only the LIST narrows to ~720px, not the header
-   (which spans the full content width via `.silo-content-body`'s padding). */
+/* The list column now fills the WHOLE content panel (no reading-column cap) —
+   the 48rem cap pinned the list far-left on a wide window, leaving a large
+   empty right void the user flagged. Shiori's list spans its entire panel:
+   the title sits left and the domain + ⋯ actions ride the far-right edge (the
+   row is a flex layout with a `flex:1` spacer between title and meta, so they
+   spread to fill). Matching that — rows go full-width, aligned with the
+   full-width header above them. */
 .silo-content-col {
   width: 100%;
-  max-width: 45rem;
   flex: 1;
   min-height: 0;
   display: flex;
@@ -238,8 +307,12 @@ select {
        fills the full width. The sidebar is lifted out of flow (position:fixed
        below), so it no longer reserves a 210px column. */
     flex-direction: column;
+  }
+
+  .silo-content {
+    /* No sidebar beside it in the stacked mobile layout (it's an off-canvas
+       drawer), so the desktop left-edge divider would read as a stray rule. */
     border-left: none;
-    border-right: none;
   }
 
   .silo-topbar {
@@ -399,8 +472,8 @@ select {
   transform: scale(0.96);
 }
 
-/* Row action buttons (Copy config / Download / Choose file / Rotate / purge
-   cycle) — one shared class for the resting/hover/active/disabled ramp, so
+/* Row action buttons (Copy config / Download / Choose file / Rotate) — one
+   shared class for the resting/hover/active/disabled ramp, so
    every row button in Settings feels like the same control family (Geist's
    secondary-button recipe: flat fill, a border, one step darker on hover,
    another on press).
@@ -448,6 +521,110 @@ select {
   color: var(--ghost);
   cursor: default;
   transform: none;
+}
+
+.silo-settings-select-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-width: 126px;
+}
+
+.silo-settings-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  width: 100%;
+  min-height: 36px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg2);
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 7px 12px 7px 14px;
+  cursor: pointer;
+  transform: scale(1);
+  transition:
+    background 0.14s ease,
+    border-color 0.14s ease,
+    transform 0.12s cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.silo-settings-select-chevron {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fnt);
+  line-height: 1;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-settings-select-trigger:hover {
+    background: var(--surface-hover);
+    border-color: var(--ghost);
+  }
+}
+
+.silo-settings-select-trigger:active {
+  background: var(--surface-active);
+  transform: scale(0.97);
+}
+
+.silo-settings-select-trigger:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.silo-settings-select-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 6px);
+  z-index: 45;
+  min-width: 100%;
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  box-shadow: var(--elev-2);
+}
+
+.silo-settings-select-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  width: 100%;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 0.8rem;
+  font-weight: 500;
+  line-height: 1;
+  padding: 8px 10px;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-settings-select-option:hover {
+    background: var(--surface-hover);
+  }
+}
+
+.silo-settings-select-option[aria-selected="true"] {
+  background: var(--surface-active);
+}
+
+.silo-settings-select-check {
+  color: var(--fnt);
+  font-size: var(--text-xs);
+  line-height: 1;
 }
 
 /* The hero card's primary + secondary buttons need their own contrast (ink
@@ -545,6 +722,24 @@ select {
     background: var(--surface-hover);
     border-color: var(--ghost);
     color: var(--ink);
+  }
+}
+
+/* Command palette result rows (CommandPalette.tsx, plan 024): the resting
+   background is transparent (CSS-owned, not inline — see the component's
+   own doc comment for why); a hovered row picks up `--hov`, same token the
+   keyboard-active row uses inline, so hover and keyboard-highlight read as
+   the same "this is the one that'll fire on Enter/click" affordance rather
+   than two different visual languages. `:not([aria-selected="true"])` avoids
+   a redundant identical background paint on the already-active row (no
+   visible difference, just a cheaper no-op repaint skipped). */
+.silo-palette-row {
+  background: transparent;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-palette-row:hover:not([aria-selected="true"]) {
+    background: var(--hov);
   }
 }
 
@@ -678,6 +873,18 @@ select {
    background for the active case, leaving every other state CSS-owned. */
 .silo-nav-item {
   background: transparent;
+  /* `NavItem` (ui/fix-search-nav) now renders EITHER an `<a>` or a
+     `<button type="button">` from one shared component (button mode: the
+     Search row, which has no `/route` to link to). Anchors have no
+     UA-stylesheet `line-height` override, so they inherit `body`'s 1.55;
+     `<button>` DOES carry a UA default of `line-height: normal`, which wins
+     over the inherited value and made a button-mode row render ~1px
+     shorter than an anchor-mode row with byte-identical padding/font —
+     the last sliver of the Search-vs-Library row-height drift. Forcing
+     `inherit` here makes both element types size their row exactly the
+     same for the same padding, closing that gap structurally rather than
+     leaving it to whichever element type a given row happens to render as. */
+  line-height: inherit;
 }
 
 @media (hover: hover) and (pointer: fine) {

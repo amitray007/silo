@@ -1,39 +1,10 @@
 import type { ReactNode } from 'react';
-import type { LinkJson, SearchResultJson } from '../../api/types';
+import type { LinkJson } from '../../api/types';
 import { DayGroup } from '../../components/DayGroup';
 import { bucketByDay } from '../../lib/buckets';
 import { useIntersectionPrefetch } from '../../lib/useIntersectionPrefetch';
-import { ErrorState, LoadingState, NoSearchResults } from './ListStates';
+import { ErrorState, LoadingState } from './ListStates';
 import type { ListViewState } from './useListView';
-
-/**
- * The omnibar's search-mode body: loading skeleton, "nothing found", or the
- * day-grouped results (`SearchResultJson` carries the same `createdAt` shape
- * `bucketByDay` groups on). Shared by `LibraryView`/`TagView` (plan 011,
- * V3-2) — search itself is NOT tag-scoped in this slice (the API's `q` param
- * has no `tag` filter yet), so both views render the same global search
- * results while a query is active; `TagView`'s tag scoping only affects the
- * non-search body below.
- */
-function SearchResultsBody({
-  q,
-  isSearching,
-  results,
-}: {
-  q: string;
-  isSearching: boolean;
-  results: SearchResultJson[];
-}) {
-  if (isSearching && results.length === 0) return <LoadingState />;
-  if (results.length === 0) return <NoSearchResults q={q} />;
-  return (
-    <>
-      {bucketByDay(results).map((group) => (
-        <DayGroup key={group.label} label={group.label} links={group.items} />
-      ))}
-    </>
-  );
-}
 
 /**
  * The normal (non-search) list body: day-grouped rows, the prefetch
@@ -82,7 +53,7 @@ function LinkListBody({
               color: 'var(--ink)',
               borderRadius: 6,
               padding: '6px 14px',
-              fontSize: '0.84rem',
+              fontSize: 'var(--text-base)',
               fontFamily: 'inherit',
               cursor: isFetchingNextPage ? 'default' : 'pointer',
               opacity: isFetchingNextPage ? 0.6 : 1,
@@ -98,22 +69,14 @@ function LinkListBody({
 
 /**
  * The full body-branch selection shared by `LibraryView`/`TagView` (plan 011,
- * V3-2): loading → error → search-results → the day-grouped browse feed. Takes
+ * V3-2; simplified plan 024 — search moved entirely to the command palette,
+ * so this is now just loading → error → the day-grouped browse feed). Takes
  * the orchestration state from `useListView` plus the view-specific
  * `emptyState`, so neither route duplicates the branch logic.
  */
 export function ListBody(state: ListViewState, emptyState: ReactNode): ReactNode {
   if (state.isLoading) return <LoadingState />;
   if (state.isError && state.error) return <ErrorState error={state.error} />;
-  if (state.searchEnabled) {
-    return (
-      <SearchResultsBody
-        q={state.omnibar.debouncedQ}
-        isSearching={state.isSearching}
-        results={state.results}
-      />
-    );
-  }
   return (
     <LinkListBody
       links={state.links}

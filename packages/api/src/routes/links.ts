@@ -1,4 +1,4 @@
-import type { ListFilter } from '@silo/core';
+import type { ListFilter, SearchFilter } from '@silo/core';
 import { getById, list, search } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
@@ -17,9 +17,19 @@ const listQuerySchema = pageQuerySchema.extend({
   status: z.enum(['enriching', 'full', 'partial', 'bare']).optional(),
 });
 
-/** `GET /api/links/search` query schema: `q` is required (min length 1) so an empty/missing query is a 400, not a full unfiltered scan. */
+/**
+ * `GET /api/links/search` query schema: `q` is required (min length 1) so an
+ * empty/missing query is a 400, not a full unfiltered scan. `tag` (optional,
+ * command-center search plan 024) additively scopes results to that exact
+ * tag — see `core.search`'s doc comment for the AND semantics. `tag`, when
+ * present, ALSO requires min length 1 (review fix): without this, `?tag=`
+ * (present but empty) would silently degrade to an unscoped search — the
+ * SAME footgun `q`'s own min-length-1 already guards against — rather than
+ * failing loudly as a 400 the way an empty `q` does.
+ */
 const searchQuerySchema = pageQuerySchema.extend({
   q: z.string().min(1),
+  tag: z.string().min(1).optional(),
 });
 
 /** `GET /api/links/:id` param schema — a non-uuid `id` is a 400, not a pointless DB round-trip that would always miss. */
@@ -40,7 +50,14 @@ const idParamSchema = z.object({
 export function registerLinksRoutes(app: Hono): void {
   app.get('/links/search', async (c) => {
     const query = searchQuerySchema.parse(c.req.query());
-    const result = await search(query.q, toPageParams(query));
+    // Built conditionally (not `{ tag: query.tag }`), matching `list()`'s own
+    // `ListFilter` construction just below: `exactOptionalPropertyTypes`
+    // rejects an explicit `tag: undefined` against `SearchFilter`'s
+    // `tag?: string` — the field must be OMITTED, not present-with-undefined,
+    // when the query param wasn't supplied.
+    const searchFilter: SearchFilter = {};
+    if (query.tag !== undefined) searchFilter.tag = query.tag;
+    const result = await search(query.q, searchFilter, toPageParams(query));
     const results = result.results.map((link) => toSearchResultJson(link, link.rank));
     return c.json(
       result.nextCursor === undefined ? { results } : { results, nextCursor: result.nextCursor },

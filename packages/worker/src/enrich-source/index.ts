@@ -19,13 +19,17 @@
  * The registry (plan 017 — "extract the framework"): `PLUGINS` maps each
  * pluggable `DetectedSource['kind']` to its enricher function. That same
  * `kind` string doubles as the `plugins`-setting key (`schema.ts`'s
- * `hacker_news`/`github`/`youtube`) — one plugin-identifying name, not two
- * fields to keep in sync. `enrichSource` looks the descriptor up by
- * `detected.kind` and runs it — adding a 4th plugin is: write the enricher,
- * add its `SourceData` union variant + `detectSource` case + settings key,
- * then add ONE descriptor here. No switch to edit. Kept deliberately small —
- * this is a registry over 3 uniform functions, not a dynamic-load/lifecycle
- * plugin system (YAGNI; see docs/rules/architecture.md).
+ * `hacker_news`/`github`/`youtube`/`twitter`) — one plugin-identifying name,
+ * not two fields to keep in sync. `enrichSource` looks the descriptor up by
+ * `detected.kind` and runs it — adding a plugin is: write the enricher, add
+ * its `SourceData` union variant + `detectSource` case + settings key, then
+ * add ONE descriptor here. No switch to edit. Kept deliberately small — this
+ * is a registry over uniform functions, not a dynamic-load/lifecycle plugin
+ * system (YAGNI; see docs/rules/architecture.md). `twitter` (live-enrichment
+ * slice) is the 4th plugin, backed by the third-party FxEmbed API rather than
+ * an official one — see `twitter.ts`'s doc comment for why that changes
+ * nothing about this dispatcher's contract (still degrades to `undefined` on
+ * any failure).
  */
 
 import type { SettingsMap, SourceData } from '@silo/core';
@@ -34,6 +38,7 @@ import type { SafeFetchResult } from '../fetch/safe-fetch.js';
 import { safeFetch } from '../fetch/safe-fetch.js';
 import { enrichGitHub } from './github.js';
 import { enrichHackerNews } from './hacker-news.js';
+import { enrichTwitter } from './twitter.js';
 import { enrichYouTube } from './youtube.js';
 
 /** Injectable seam for testing — defaults to the real `safeFetch`. */
@@ -46,9 +51,9 @@ const defaultDeps: EnrichSourceDeps = { fetchFn: safeFetch };
 /**
  * A pluggable source kind — every `DetectedSource['kind']` except the
  * `'link'` floor, which has no enricher to toggle. Also the `plugins`-setting
- * key that gates this plugin (`schema.ts`'s `hacker_news`/`github`/`youtube`
- * — the SAME string on both sides; there's exactly one plugin-identifying
- * name per plugin, not two to keep in sync).
+ * key that gates this plugin (`schema.ts`'s `hacker_news`/`github`/`youtube`/
+ * `twitter` — the SAME string on both sides; there's exactly one plugin-
+ * identifying name per plugin, not two to keep in sync).
  */
 type PluginKind = Exclude<ReturnType<typeof detectSource>['kind'], 'link'>;
 
@@ -62,7 +67,7 @@ interface PluginDescriptor {
 }
 
 /**
- * The whole framework: one descriptor per plugin. Adding a 4th plugin is
+ * The whole framework: one descriptor per plugin. Adding a plugin is
  * registering one more entry here (after adding its enricher + `SourceData`
  * variant + `detectSource` case + settings key) — no dispatch code to edit.
  */
@@ -94,6 +99,15 @@ const PLUGINS: readonly PluginDescriptor[] = [
       return enrichYouTube(detected.videoId, fetchFn);
     },
   },
+  {
+    kind: 'twitter',
+    enrich: (detected, fetchFn) => {
+      if (detected.kind !== 'twitter') throw new Error('registry/detected kind mismatch');
+      // FxEmbed (api.fxtwitter.com) — see twitter.ts's own doc comment for
+      // the full field mapping + degrade contract.
+      return enrichTwitter(detected.tweetId, fetchFn);
+    },
+  },
 ];
 
 const PLUGINS_BY_KIND: ReadonlyMap<PluginKind, PluginDescriptor> = new Map(
@@ -101,18 +115,21 @@ const PLUGINS_BY_KIND: ReadonlyMap<PluginKind, PluginDescriptor> = new Map(
 );
 
 // Drift guard (mirrors queue.ts's runtime queue-name-drift check, module-load
-// assertion + all): the registry's plugin kinds, one-for-one, against the
-// settings-schema's OWN plugin keys (`SETTINGS_DEFAULTS.plugins`) — so a
-// future plugin registered here without its settings key (or vice versa)
-// fails LOUDLY at import time rather than silently half-working.
+// assertion + all): every enricher in the registry MUST have a matching
+// settings key, so a plugin registered here without its toggle fails LOUDLY at
+// import time rather than silently un-toggleable. The reverse is NOT required
+// in general — the settings schema is allowed to carry a RENDER-ONLY plugin
+// key with no enricher — but as of the live-enrichment slice (twitter backed
+// by FxEmbed) every settings key currently DOES have a matching enricher, so
+// this happens to assert set equality today. Kept as a ⊆ check (not `===`)
+// so a future render-only-again plugin doesn't need this guard touched.
 const REGISTRY_KINDS = new Set(PLUGINS.map((plugin) => plugin.kind));
 const SETTINGS_PLUGIN_KEYS = new Set(Object.keys(SETTINGS_DEFAULTS.plugins));
-if (
-  REGISTRY_KINDS.size !== SETTINGS_PLUGIN_KEYS.size ||
-  ![...REGISTRY_KINDS].every((kind) => SETTINGS_PLUGIN_KEYS.has(kind))
-) {
+const unregistered = [...REGISTRY_KINDS].filter((kind) => !SETTINGS_PLUGIN_KEYS.has(kind));
+if (unregistered.length > 0) {
   throw new Error(
-    `plugin registry/settings-schema drift: registry=[${[...REGISTRY_KINDS].join(', ')}] ` +
+    `plugin registry/settings-schema drift: enricher(s) [${unregistered.join(', ')}] ` +
+      `have no settings key. registry=[${[...REGISTRY_KINDS].join(', ')}] ` +
       `settings=[${[...SETTINGS_PLUGIN_KEYS].join(', ')}]`,
   );
 }
@@ -151,15 +168,20 @@ export async function enrichSource(
 
     const plugin = PLUGINS_BY_KIND.get(detected.kind as PluginKind);
     if (!plugin) {
-      // An unrecognized/not-yet-pluggable kind (e.g. 'twitter', which has no
-      // registered enricher today) — nothing to dispatch to.
+      // An unrecognized/not-yet-pluggable kind — no registered enricher to
+      // dispatch to (defensive; every current `PluginKind` has one).
       return undefined;
     }
 
     // Missing map (enabledPlugins undefined) or missing key both mean
     // "unknown toggle state" — default to enabled, matching
-    // `SETTINGS_DEFAULTS.plugins` (all true).
-    const isEnabled = enabledPlugins?.[plugin.kind] ?? true;
+    // `SETTINGS_DEFAULTS.plugins` (all true). The gate is the master
+    // `.enabled` field only (plan 026 U2) — the per-feature `inline`/`hover`
+    // flags are render-time decisions (U4/U5), not worker-fetch gates: we
+    // still fetch source data whenever `enabled` is true even if both
+    // render flags are off, since a cheap already-fetched read later is
+    // preferable to re-fetching if a feature flag flips back on.
+    const isEnabled = enabledPlugins?.[plugin.kind]?.enabled ?? true;
     if (!isEnabled) {
       return undefined;
     }

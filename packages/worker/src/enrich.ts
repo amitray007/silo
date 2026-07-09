@@ -141,6 +141,32 @@ async function recordThenMaybeSettle(
 }
 
 /**
+ * Overrides the page's own extracted `imageUrl` with the tweet's real media
+ * thumbnail when both are available (command-center polish slice). x.com's
+ * own `og:image` is a useless, generic X-logo placeholder shared by every
+ * tweet — not worth storing as the link's cover image — whereas the live
+ * Twitter enricher's `sourceData.thumbnailUrl` (when present) is the tweet's
+ * OWN media (a video's poster frame or a photo), the thing actually worth
+ * showing in the card. `GET /api/preview-image` prefers `link.imageUrl` over
+ * `sourceData.thumbnailUrl` (see that route's doc comment) precisely so a
+ * genuinely useful `imageUrl` (GitHub's OG card, an article's hero image)
+ * always wins for every OTHER source — twitter is the one case where the
+ * extracted `imageUrl` is worse than the source-data alternative, so this
+ * override exists here rather than by changing the proxy's general
+ * preference order. A text-only tweet (no `thumbnailUrl`) or a non-twitter
+ * `sourceData` leaves `extracted` untouched.
+ */
+function withTwitterThumbnailOverride(
+  extracted: ExtractResult,
+  sourceData: SourceData | undefined,
+): ExtractResult {
+  if (sourceData?.kind !== 'twitter' || !sourceData.thumbnailUrl) {
+    return extracted;
+  }
+  return { ...extracted, imageUrl: sourceData.thumbnailUrl };
+}
+
+/**
  * Run the enrichment pipeline for `linkId`: fetch -> extract -> record.
  *
  * If the link no longer exists (deleted between enqueue and processing —
@@ -168,6 +194,15 @@ async function recordThenMaybeSettle(
  * for every expected failure, so `Promise.all` never rejects on an expected
  * degraded outcome; a genuinely unexpected throw (an infra bug) from either
  * still propagates for pg-boss to retry, exactly as before.
+ *
+ * On the extract-success branch, `withTwitterThumbnailOverride` (above)
+ * replaces the page's own extracted `imageUrl` with the tweet's media
+ * thumbnail (`sourceData.thumbnailUrl`) when `sourceData` is a twitter
+ * result that has one — x.com's `og:image` is a generic placeholder, not
+ * worth storing, so the source-specific enricher's own thumbnail wins for
+ * this one source (see that function's doc comment for why this is scoped
+ * to twitter rather than a general `imageUrl`-vs-`sourceData` preference
+ * change).
  *
  * Plugin toggle enforcement (plan 017): the `plugins` setting is read via
  * `deps.getPluginsSetting()` ONCE per call (not once per source, and not
@@ -223,11 +258,14 @@ export async function enrichLink(
     return;
   }
 
-  const extracted = await deps.extract({
-    url: fetchResult.finalUrl,
-    html: fetchResult.html,
-    contentType: fetchResult.contentType,
-  });
+  const extracted = withTwitterThumbnailOverride(
+    await deps.extract({
+      url: fetchResult.finalUrl,
+      html: fetchResult.html,
+      contentType: fetchResult.contentType,
+    }),
+    sourceData,
+  );
 
   await recordThenMaybeSettle(linkId, { ...extracted, ...(sourceData ? { sourceData } : {}) });
 }

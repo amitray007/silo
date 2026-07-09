@@ -2,9 +2,6 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
 
-/** v3's sidebar tag-list truncation threshold (`Silo-v3.html`'s `tagShown`). */
-const TAG_SHOWN = 10;
-
 /**
  * A `NavItemLink`-shaped callback the caller (`Sidebar`) supplies so this
  * component stays router-agnostic — it renders the tag row via `NavItem` but
@@ -19,25 +16,24 @@ interface SidebarTagsProps {
 
 /**
  * The Tags section's interactive chrome (`docs/design/app/Silo-v3.html`,
- * lines 40-61 — `toggleTagFind`/`tagFindOpen`, `moreTags`/`toggleTagList`,
- * `newTagClosed`/`newTagOpen`): a `⌕` find-a-tag toggle that reveals a
- * client-side filter input, `+N more` truncation to the first `TAG_SHOWN`
- * tags, and an inline `+ new tag` create flow. Extracted out of `Sidebar` so
- * that component doesn't have to carry five extra pieces of local state on
- * top of routing/counts — this owns everything about "the tags list as an
+ * lines 40-61 — `toggleTagFind`/`tagFindOpen`, `newTagClosed`/`newTagOpen`):
+ * a `⌕` find-a-tag toggle that reveals a client-side filter input, a
+ * scrollable tag list, and an inline `+ new tag` create flow. Extracted out
+ * of `Sidebar` so that component doesn't have to carry the extra local state
+ * on top of routing/counts — this owns everything about "the tags list as an
  * interactive tool", `Sidebar` just supplies the tag data + a link renderer.
  *
- * Filtering and truncation compose in the v3-specified order: the raw tag
- * list is filtered by `tagQ` first (case-insensitive substring match), and
- * ONLY when no filter is active does the `+N more` truncation apply — a
- * filtered result set always shows every match, however many, matching v3's
- * behavior (filtering already narrows the list, so there's nothing left to
- * truncate).
+ * Redesign (direct user feedback): the tag list used to truncate to the
+ * first `TAG_SHOWN` tags behind a "+N more" toggle. It now renders EVERY
+ * tag (filtered set included) inside its own fixed-`max-height`,
+ * soft-scrollbar scroll region (`.silo-tag-scroll`, base.css) — a long tag
+ * list scrolls independently instead of pushing Settings off-screen, and
+ * nothing is hidden behind a click. Filtering (case-insensitive substring
+ * match on `tagQ`) still narrows the list before it renders.
  */
 export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
-  const [showAll, setShowAll] = useState(false);
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
 
@@ -65,14 +61,9 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
   }
 
   const trimmedQuery = query.trim().toLowerCase();
-  const filtered = trimmedQuery
+  const visibleTags = trimmedQuery
     ? tags.filter((tag) => tag.name.toLowerCase().includes(trimmedQuery))
     : tags;
-
-  const isFiltering = trimmedQuery.length > 0;
-  const hasMore = !isFiltering && tags.length > TAG_SHOWN;
-  const visibleTags = hasMore && !showAll ? filtered.slice(0, TAG_SHOWN) : filtered;
-  const moreCount = tags.length - TAG_SHOWN;
 
   function openNewTag() {
     setNewTagOpen(true);
@@ -118,14 +109,25 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         style={{
           display: 'flex',
           alignItems: 'center',
-          padding: 'var(--s-0-5) var(--s2-5) var(--s1-5)',
+          // Tighter header→first-row gap (bottom --s1-5 → --s1) to match
+          // shiori's compact Tags rhythm — the header sits closer to the tag
+          // rows it labels, reading as one group rather than a floating title.
+          // The left edge is nudged 3px past the row padding so "Tags"
+          // aligns with the visible start of the Trash icon stroke, not the
+          // invisible edge of the 18px icon slot.
+          padding: 'var(--s-0-5) var(--s2-5) var(--s1) calc(var(--s2-5) + 3px)',
         }}
       >
+        {/* Bumped 0.7rem → 0.8rem (direct user feedback: "too small vs the
+            search icon next to it") — the 16px icon dwarfed the old size;
+            0.8rem balances against it while staying a step below the
+            0.84rem row-text scale, so "Tags" still reads as a section
+            label, not a row. */}
         <p
           style={{
-            fontSize: '0.7rem',
+            fontSize: 'var(--text-sm)',
             fontWeight: 500,
-            color: 'var(--fnt)',
+            color: 'var(--mut)',
             margin: 0,
             letterSpacing: '0.02em',
           }}
@@ -133,6 +135,15 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           Tags
         </p>
         <span style={{ flex: 1 }} />
+        {/* The search icon shares the SAME right inset as the tag counts below
+            it: the header container and the NavItem tag rows both use --s2-5
+            right padding, and here the icon button carries NO negative margin
+            (removed) + zero right padding, so the 16px glyph's right edge lands
+            exactly on the count column's right edge — one consistent right rail
+            for "Tags 🔍" and every "# tag  N" below it (user feedback: align the
+            count with the Tags heading). The extra hit area is added to the
+            LEFT/vertical only, never the right, so it can't push the glyph off
+            that rail. */}
         <button
           type="button"
           onClick={toggleTagFind}
@@ -147,8 +158,8 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             border: 0,
             background: 'none',
             borderRadius: 6,
-            padding: 'var(--s1)',
-            color: findOpen ? 'var(--ink)' : 'var(--fnt)',
+            padding: 'var(--s1) 0 var(--s1) var(--s1)',
+            color: findOpen ? 'var(--ink)' : 'var(--mut)',
             cursor: 'pointer',
           }}
         >
@@ -188,7 +199,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             background: 'var(--bg)',
             color: 'var(--ink)',
             font: 'inherit',
-            fontSize: '0.78rem',
+            fontSize: 'var(--text-sm)',
             outline: 'none',
             width: 'calc(100% - 8px)',
             boxSizing: 'border-box',
@@ -197,31 +208,12 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
         />
       )}
 
-      {visibleTags.map((tag) => renderTagLink(tag))}
-
-      {hasMore && (
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="silo-sidebar-text-btn"
-          style={{
-            border: 0,
-            background: 'none',
-            fontFamily: 'inherit',
-            textAlign: 'left',
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '4px 10px',
-            borderRadius: 8,
-            fontSize: '0.76rem',
-            fontWeight: 400,
-            color: 'var(--fnt)',
-            cursor: 'pointer',
-          }}
-        >
-          {showAll ? 'Show less' : `+${moreCount} more`}
-        </button>
-      )}
+      {/* The scrollable tag-list region (fix, direct user feedback): a fixed
+          `max-height` + soft custom scrollbar (`.silo-tag-scroll`, base.css) so a
+          long tag list scrolls in place instead of pushing Settings
+          off-screen — every tag (or every filtered match) renders here, no
+          truncation. */}
+      <div className="silo-tag-scroll">{visibleTags.map((tag) => renderTagLink(tag))}</div>
 
       {newTagOpen ? (
         <>
@@ -241,7 +233,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
               background: 'var(--bg)',
               color: 'var(--ink)',
               font: 'inherit',
-              fontSize: '0.8rem',
+              fontSize: 'var(--text-sm)',
               outline: 'none',
               width: 'calc(100% - 8px)',
               boxSizing: 'border-box',
@@ -252,7 +244,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             <p
               style={{
                 margin: '0 4px 3px',
-                fontSize: '0.7rem',
+                fontSize: 'var(--text-xs)',
                 color: 'var(--warn)',
               }}
             >
@@ -266,21 +258,38 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           onClick={openNewTag}
           className="silo-sidebar-text-btn"
           style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 'var(--s2-5)',
             border: 0,
             background: 'none',
             fontFamily: 'inherit',
             textAlign: 'left',
             width: '100%',
             boxSizing: 'border-box',
-            padding: '5px 10px',
+            padding: '5px var(--s2-5)',
             borderRadius: 8,
-            fontSize: '0.84rem',
+            fontSize: 'var(--text-base)',
             fontWeight: 400,
-            color: 'var(--fnt)',
+            color: 'var(--ink)',
             cursor: 'pointer',
           }}
         >
-          + New tag
+          {/* `+` in the same 18px icon slot as the tag `#` and the nav icons,
+              so the whole Tags column shares one left ledger. Dim glyph
+              (--ghost), bright label — matching shiori. */}
+          <span
+            style={{
+              flex: 'none',
+              display: 'grid',
+              placeItems: 'center',
+              width: 18,
+              color: 'var(--ghost)',
+            }}
+          >
+            +
+          </span>
+          <span>New tag</span>
         </button>
       )}
     </div>

@@ -12,11 +12,16 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** The default `/api/settings` GET response — every field at its server-side default (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`). */
+/** The default `/api/settings` GET response — every field at its server-side default (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`; `plugins` nested per-feature shape as of plan 026). */
 const DEFAULT_SETTINGS = {
   theme: 'system',
   trashPurgeDays: 30,
-  plugins: { hacker_news: true, github: true, youtube: true },
+  plugins: {
+    hacker_news: { enabled: true, inline: true, hover: true },
+    github: { enabled: true, hover: true },
+    youtube: { enabled: true, hover: true },
+    twitter: { enabled: true, inline: true, hover: true },
+  },
 };
 
 /**
@@ -104,7 +109,8 @@ describe('SettingsModal', () => {
     expect(screen.getByRole('tab', { name: 'Preferences' })).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Import / export' })).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Access' })).toBeDefined();
-    expect(screen.getByText(/plugins add inline detail/i)).toBeDefined();
+    expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+    expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
   });
 
   it('switches tabs on click, rendering each panel exclusively and updating aria-selected', () => {
@@ -232,49 +238,52 @@ describe('SettingsModal', () => {
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
     });
 
-    it('shows the persisted purge window from /api/settings, and cycling it PATCHes the next value (plan 016)', async () => {
+    it('shows the persisted purge window as a custom dropdown, and selecting an option PATCHes it', async () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
-      const purgeButton = await screen.findByRole('button', { name: /30 days/i });
-      expect(purgeButton).not.toHaveProperty('disabled', true);
+      const purgeButton = await screen.findByRole('button', {
+        name: /trash auto-empty window/i,
+      });
+      expect(purgeButton.textContent).toContain('30 days');
+      expect(purgeButton.getAttribute('aria-expanded')).toBe('false');
 
       fireEvent.click(purgeButton);
-      // Cycles 30 -> 90 (v3's cyclePurge order: 7 -> 30 -> 90 -> 7).
-      expect(await screen.findByRole('button', { name: /90 days/i })).toBeDefined();
+      expect(screen.getByRole('listbox')).toBeDefined();
+      expect(screen.getByRole('option', { name: '7 days' })).toBeDefined();
+      expect(screen.getByRole('option', { name: /30 days/ }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+      fireEvent.click(screen.getByRole('option', { name: '90 days' }));
+
+      const updatedButton = await screen.findByRole('button', {
+        name: /trash auto-empty window/i,
+      });
+      expect(updatedButton.textContent).toContain('90 days');
+      expect(screen.queryByRole('listbox')).toBeNull();
     });
   });
 
-  describe('Plugins tab (plan 016 — hacker_news/github/youtube now functional)', () => {
-    it('renders all four rows; three are functional toggles, Twitter/X stays a "Soon" chip', async () => {
+  describe('Plugins tab (plan 026 — logo grid + expand panel)', () => {
+    it('renders a 4-up grid with all four sources as real toggles (no "Soon" card)', () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
-      expect(screen.getByText('Hacker News')).toBeDefined();
-      expect(screen.getByText('Twitter / X')).toBeDefined();
-      expect(screen.getByText('GitHub')).toBeDefined();
-      expect(screen.getByText('YouTube')).toBeDefined();
-
-      // Toggles hydrate from GET /api/settings (all on by default).
-      const hnToggle = await screen.findByTitle(/Hacker News is on/i);
-      expect(hnToggle.getAttribute('aria-pressed')).toBe('true');
-      expect(screen.getByTitle(/GitHub is on/i)).toBeDefined();
-      expect(screen.getByTitle(/YouTube is on/i)).toBeDefined();
-
-      // Twitter/X has no toggle — just the calm "Soon" chip.
-      expect(screen.queryByTitle(/Twitter/i)).toBeNull();
-      expect(screen.getByText('Soon')).toBeDefined();
+      // HN's panel is expanded by default, so its name appears twice (card +
+      // panel header); each brand SVG's <title> also matches its own name by
+      // text content — getAllByText (existence, not uniqueness) sidesteps both.
+      expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Twitter / X').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('GitHub').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('YouTube').length).toBeGreaterThan(0);
+      expect(screen.queryByText('Soon')).toBeNull();
     });
 
-    it('clicking a plugin dot toggles it off and PATCHes the full plugins record', async () => {
+    it('clicking the master toggle in the expand panel flips it off and PATCHes the full nested plugins record', async () => {
       renderModal();
+      fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
-      // Wait for the toggle to become ENABLED (not just present) — while
-      // `useSettings()` is still loading, the row renders with `enabled ??
-      // true` (so the title already reads "is on") but `disabled` is true;
-      // asserting on `not.toHaveProperty('disabled', true)` (rather than
-      // just finding the title) is what proves hydration actually finished
-      // before this test clicks it.
+      // HN's card is selected by default — its expand panel is already open.
       const hnToggle = await screen.findByTitle(/Hacker News is on/i);
       await waitFor(() => expect(hnToggle).not.toHaveProperty('disabled', true));
 
@@ -283,7 +292,9 @@ describe('SettingsModal', () => {
       await waitFor(() => {
         expect(screen.getByTitle(/Hacker News is off/i)).toBeDefined();
       });
-      expect(screen.getByTitle(/Hacker News is off/i).getAttribute('aria-pressed')).toBe('false');
+      // The toggle is now a slider switch (role="switch"/aria-checked), not the
+      // old aria-pressed button.
+      expect(screen.getByTitle(/Hacker News is off/i).getAttribute('aria-checked')).toBe('false');
     });
   });
 

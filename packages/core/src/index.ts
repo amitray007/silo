@@ -50,6 +50,7 @@ export type {
   ListPage,
   PageParams,
   RestoreResult,
+  SearchFilter,
   SearchPage,
   SearchResult,
 } from './links/links.js';

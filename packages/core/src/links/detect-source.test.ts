@@ -166,6 +166,80 @@ describe('detectSource', () => {
     });
   });
 
+  describe('twitter', () => {
+    it('detects a canonical x.com status url', () => {
+      expect(detectSource('https://x.com/elonmusk/status/1234567890123456789')).toEqual({
+        kind: 'twitter',
+        tweetId: '1234567890123456789',
+      });
+    });
+
+    it('detects a canonical twitter.com status url', () => {
+      expect(detectSource('https://twitter.com/elonmusk/status/1234567890123456789')).toEqual({
+        kind: 'twitter',
+        tweetId: '1234567890123456789',
+      });
+    });
+
+    it('detects with www. and http', () => {
+      expect(detectSource('http://www.x.com/jack/status/42')).toEqual({
+        kind: 'twitter',
+        tweetId: '42',
+      });
+    });
+
+    it('detects on mobile.twitter.com', () => {
+      expect(detectSource('https://mobile.twitter.com/jack/status/42')).toEqual({
+        kind: 'twitter',
+        tweetId: '42',
+      });
+    });
+
+    it('detects a status url with a trailing /photo/1 segment', () => {
+      expect(detectSource('https://x.com/elonmusk/status/1234567890123456789/photo/1')).toEqual({
+        kind: 'twitter',
+        tweetId: '1234567890123456789',
+      });
+    });
+
+    it('detects a status url with a trailing /video/1 segment', () => {
+      expect(detectSource('https://x.com/elonmusk/status/1234567890123456789/video/1')).toEqual({
+        kind: 'twitter',
+        tweetId: '1234567890123456789',
+      });
+    });
+
+    it('does not match a bare profile url', () => {
+      expect(detectSource('https://x.com/elonmusk')).toEqual({ kind: 'link' });
+    });
+
+    it('does not match the home timeline', () => {
+      expect(detectSource('https://x.com/home')).toEqual({ kind: 'link' });
+    });
+
+    it('does not match an /i/ path (bookmarks, notifications, etc.)', () => {
+      expect(detectSource('https://x.com/i/bookmarks')).toEqual({ kind: 'link' });
+    });
+
+    it('does not match a search url', () => {
+      expect(detectSource('https://x.com/search?q=cats')).toEqual({ kind: 'link' });
+    });
+
+    it('does not match a non-numeric status id', () => {
+      expect(detectSource('https://x.com/elonmusk/status/notanid')).toEqual({ kind: 'link' });
+    });
+
+    it('does not match a status path missing the id', () => {
+      expect(detectSource('https://x.com/elonmusk/status')).toEqual({ kind: 'link' });
+    });
+
+    it('does not match a non-x/twitter host', () => {
+      expect(detectSource('https://nitter.net/elonmusk/status/1234567890')).toEqual({
+        kind: 'link',
+      });
+    });
+  });
+
   describe('non-matches / edge cases', () => {
     it('returns link for a plain arbitrary url', () => {
       expect(detectSource('https://example.com/some/article')).toEqual({ kind: 'link' });

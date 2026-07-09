@@ -34,61 +34,29 @@ const HIDE_DELAY_MS = 140;
 /**
  * Clamped 288px-card placement from a hovered row's bounding rect (v3's
  * `enter` handler, `Silo-v3.html:813-816`): right of the row with a 14px gap,
- * clamped so the ~288+16px card never runs off the right edge; vertically
- * anchored a hair above the row's top, clamped into `[14, viewport height −
- * 340]` so it never runs off top or bottom. `304`/`340` are v3's own
- * constants (288px card + margin / an assumed max card height), kept as-is
- * rather than re-derived from the actual (unmeasured-until-painted) card
- * size.
+ * clamped so the card never runs off the viewport. This keeps the preview
+ * visually attached to the row (like the Shiori reference) instead of docking
+ * at the far right edge of a wide app window.
  *
- * `left` ALSO has a `14`px lower floor (review fix, ce-correctness) — v3's
- * own source only clamps the upper bound (`Math.min(r.right + 14,
- * window.innerWidth - 304)`), which goes negative on any viewport narrower
- * than ~304px (a resized desktop window, a narrow split-view), pushing the
- * card off the LEFT edge instead of the intended right edge. `top` already
- * clamped both bounds; `left` didn't, purely by omission — this makes them
- * symmetric.
- *
- * QA finding (full end-to-end drive): at a completely ordinary 1280px-wide
- * desktop viewport, a row's right edge (where the row's own "⋯" Options
- * trigger lives) regularly sits close enough to `window.innerWidth` that the
- * upper clamp above pulls `left` back to BEFORE `rect.right` — i.e. the card
- * renders on top of the row it's anchored to instead of beside it, covering
- * that row's own Options button so it can't be clicked while the preview is
- * showing (reproduced with a real Playwright click timing out because the
- * hover-preview's `<img>` sat at the button's coordinates). Fix: when the
- * clamped right-side placement would land before the row's right edge (no
- * real room to its right), flip the card to the row's LEFT instead of
- * squeezing it on top — mirrors the same `14`px gap.
- *
- * Independent review caught a residual case in that first fix: naively
- * flipping left isn't enough on a narrow viewport with a WIDE row (e.g. a
- * ~320px window with a row spanning most of it) — there may be no 14px-gap
- * slot on EITHER side wide enough for the 288px card without overlapping the
- * row again, just from the other direction. Below, both candidate positions
- * are clamped into `[14, viewport]` first, then whichever candidate leaves
- * more real (non-overlapping) clearance from the row wins — so on a
- * comfortable viewport this is exactly the right-or-left flip above, and on
- * a viewport too narrow to avoid overlap entirely, it degrades to "the least
- * bad of two overlaps" rather than silently assuming the left flip always
- * fully escapes the row.
+ * If there is not enough room to the right, the card flips to the row's left
+ * with the same gap. On very narrow viewports, both candidates are clamped
+ * into the visible range and the side with less row overlap wins.
  */
 export function computePosition(rect: DOMRect): HoverPreviewPosition {
   const CARD_WIDTH = 288;
-  const GAP = 14;
+  const EDGE_MARGIN = 16;
+  const ROW_GAP = 14;
+  const maxLeft = Math.max(EDGE_MARGIN, window.innerWidth - CARD_WIDTH - EDGE_MARGIN);
 
-  const rightCandidate = Math.round(
-    Math.max(14, Math.min(rect.right + GAP, window.innerWidth - CARD_WIDTH - 16)),
+  const clampLeft = (left: number) => Math.max(EDGE_MARGIN, Math.min(left, maxLeft));
+  const rightCandidate = clampLeft(rect.right + ROW_GAP);
+  const leftCandidate = clampLeft(rect.left - CARD_WIDTH - ROW_GAP);
+
+  const rightOverlap = Math.max(0, rect.right - rightCandidate);
+  const leftOverlap = Math.max(0, leftCandidate + CARD_WIDTH - rect.left);
+  const left = Math.round(
+    rightOverlap <= 0 || rightOverlap <= leftOverlap ? rightCandidate : leftCandidate,
   );
-  const leftCandidate = Math.round(Math.max(14, rect.left - GAP - CARD_WIDTH));
-
-  // Clearance = how much of the card sits clear of the row on that side;
-  // negative means the card overlaps the row by that many pixels.
-  const rightClearance = rightCandidate - rect.right;
-  const leftClearance = rect.left - (leftCandidate + CARD_WIDTH);
-
-  const left =
-    rightClearance >= 0 || rightClearance >= leftClearance ? rightCandidate : leftCandidate;
   const top = Math.round(Math.max(14, Math.min(rect.top - 4, window.innerHeight - 340)));
   return { top, left };
 }

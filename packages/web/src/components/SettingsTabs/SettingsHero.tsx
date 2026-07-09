@@ -12,7 +12,7 @@ const heroCard: CSSProperties = {
 
 const heroTitle: CSSProperties = {
   margin: '10px 0 4px',
-  fontSize: '1rem',
+  fontSize: 'var(--text-lg)',
   fontWeight: 500,
   color: 'var(--ink)',
   letterSpacing: 'var(--tracking-tight)',
@@ -21,7 +21,7 @@ const heroTitle: CSSProperties = {
 
 const heroDesc: CSSProperties = {
   margin: '0 0 16px',
-  fontSize: '0.82rem',
+  fontSize: 'var(--text-sm)',
   color: 'var(--fnt)',
   lineHeight: 1.55,
   maxWidth: '34rem',

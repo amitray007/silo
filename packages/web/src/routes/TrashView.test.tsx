@@ -75,6 +75,8 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('An old post')).toBeDefined());
+    const heading = screen.getByRole('heading', { name: 'Trash' });
+    expect(heading.parentElement?.textContent).toBe('Trash');
     expect(screen.getByText('Today')).toBeDefined();
     const countdown = screen.getByText(/^(29|30)d$/);
     expect(countdown).toBeDefined();
@@ -343,107 +345,38 @@ describe('TrashView', () => {
     // behavior.
   });
 
-  describe('search (Trash search slice)', () => {
-    it('typing in the search field queries /api/trash/search and renders the results, not the browse feed', async () => {
-      const browseLink = trashLink({
-        id: 'browse-only',
-        title: 'Browse feed item',
-        url: 'https://example.com/browse-only',
-      });
-      const searchResult = {
-        ...trashLink({
-          id: 'search-hit',
-          title: 'Unique trash search hit',
-          url: 'https://example.com/search-hit',
-        }),
-        rank: 0.9,
-      };
-      const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url === '/api/trash') return Promise.resolve(jsonResponse({ links: [browseLink] }));
-        if (url === '/api/counts') {
-          return Promise.resolve(jsonResponse({ live: 0, trash: 1, purgeWindowDays: 30 }));
-        }
-        if (url.startsWith('/api/trash/search')) {
-          return Promise.resolve(jsonResponse({ results: [searchResult] }));
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as unknown as typeof fetch;
-
-      renderTrashView(fetchImpl);
-
-      await waitFor(() => expect(screen.getByText('Browse feed item')).toBeDefined());
-
-      const input = screen.getByPlaceholderText('Search trash');
-      fireEvent.change(input, { target: { value: 'unique' } });
-
-      await waitFor(() =>
-        expect(fetchImpl).toHaveBeenCalledWith(
-          expect.stringContaining('/api/trash/search?q=unique'),
-        ),
-      );
-      await waitFor(() => expect(screen.getByText('Unique trash search hit')).toBeDefined());
-      // The browse-only row is gone once search results are showing.
-      expect(screen.queryByText('Browse feed item')).toBeNull();
+  /**
+   * The header's search input (`TrashSearchInput`, formerly the Trash search
+   * slice) was REMOVED by a later user-feedback pass — trash search now
+   * lives entirely in the command palette (⌘K / `/`), mirroring the tag
+   * page's own search-box removal. This replaces the old "search (Trash
+   * search slice)" suite that drove typing through that now-gone input.
+   */
+  it('renders no search input in the header — the command palette handles trash search now', async () => {
+    const browseLink = trashLink({
+      id: 'browse-only',
+      title: 'Browse feed item',
+      url: 'https://example.com/browse-only',
     });
+    const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/trash') return Promise.resolve(jsonResponse({ links: [browseLink] }));
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 0, trash: 1, purgeWindowDays: 30 }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    }) as unknown as typeof fetch;
 
-    it('shows a "nothing found" message when the search returns no results', async () => {
-      const browseLink = trashLink({ id: '1', title: 'One', url: 'https://example.com/1' });
-      const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url === '/api/trash') return Promise.resolve(jsonResponse({ links: [browseLink] }));
-        if (url === '/api/counts') {
-          return Promise.resolve(jsonResponse({ live: 0, trash: 1, purgeWindowDays: 30 }));
-        }
-        if (url.startsWith('/api/trash/search')) {
-          return Promise.resolve(jsonResponse({ results: [] }));
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as unknown as typeof fetch;
+    renderTrashView(fetchImpl);
 
-      renderTrashView(fetchImpl);
-
-      await waitFor(() => expect(screen.getByText('One')).toBeDefined());
-
-      const input = screen.getByPlaceholderText('Search trash');
-      fireEvent.change(input, { target: { value: 'nosuchtrashmatch' } });
-
-      await waitFor(() =>
-        expect(screen.getByText('Nothing found for "nosuchtrashmatch"')).toBeDefined(),
-      );
-      // Neither the idle dock nor the whole-trash empty state should show —
-      // this is "no search results", not "trash is empty".
-      expect(screen.queryByText('Trash is empty')).toBeNull();
-      expect(screen.queryByText('Select all')).toBeNull();
-    });
-
-    it('clearing the search field falls back to the normal browse feed', async () => {
-      const browseLink = trashLink({
-        id: 'browse-only',
-        title: 'Browse feed item',
-        url: 'https://example.com/browse-only',
-      });
-      const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url === '/api/trash') return Promise.resolve(jsonResponse({ links: [browseLink] }));
-        if (url === '/api/counts') {
-          return Promise.resolve(jsonResponse({ live: 0, trash: 1, purgeWindowDays: 30 }));
-        }
-        if (url.startsWith('/api/trash/search')) {
-          return Promise.resolve(jsonResponse({ results: [] }));
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }) as unknown as typeof fetch;
-
-      renderTrashView(fetchImpl);
-      await waitFor(() => expect(screen.getByText('Browse feed item')).toBeDefined());
-
-      const input = screen.getByPlaceholderText('Search trash');
-      fireEvent.change(input, { target: { value: 'anything' } });
-      await waitFor(() => expect(screen.queryByText('Browse feed item')).toBeNull());
-
-      fireEvent.change(input, { target: { value: '' } });
-      await waitFor(() => expect(screen.getByText('Browse feed item')).toBeDefined());
-    });
+    await waitFor(() => expect(screen.getByText('Browse feed item')).toBeDefined());
+    expect(screen.queryByPlaceholderText('Search trash')).toBeNull();
+    expect(screen.queryByRole('textbox')).toBeNull();
+    // Never requests the search endpoint — nothing in this view can trigger it anymore.
+    expect(
+      vi
+        .mocked(fetchImpl)
+        .mock.calls.some(([input]) => String(input).startsWith('/api/trash/search')),
+    ).toBe(false);
   });
 });
