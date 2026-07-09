@@ -138,9 +138,8 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const handleEnter = (e: React.SyntheticEvent<HTMLAnchorElement>) => {
     setHovered(true);
     if (menuOpen || !isHoverCapable()) return;
-    // The card docks at the viewport's right edge (see computePosition), so
-    // only the row's rect (for vertical top-alignment) is needed — the pointer
-    // position no longer matters.
+    // The card anchors from the row rect (see computePosition), keeping the
+    // preview near the row rather than near the pointer.
     scheduleShow(link, e.currentTarget.getBoundingClientRect());
   };
   const handleLeave = () => {

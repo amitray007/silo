@@ -34,15 +34,14 @@ describe('computePosition', () => {
     });
   });
 
-  it('docks the card at the viewport RIGHT edge, independent of the row/pointer position', () => {
-    // innerWidth 1280, CARD_WIDTH 288, EDGE_MARGIN 16 → 1280 - 288 - 16 = 976.
-    // The row's own left/right no longer affect `left` — the card always docks
-    // right (shiori-style detail pane), so two very different rows give the
-    // same left.
-    const a = computePosition(rect({ top: 100, left: 200, right: 400 }));
-    const b = computePosition(rect({ top: 100, left: 50, right: 1200 }));
-    expect(a.left).toBe(976);
-    expect(b.left).toBe(976);
+  it('places the card just to the right of the hovered row when there is room', () => {
+    const { left } = computePosition(rect({ top: 100, left: 200, right: 400 }));
+    expect(left).toBe(414);
+  });
+
+  it('flips to the row left when the right-side placement would overlap the row', () => {
+    const { left } = computePosition(rect({ top: 100, left: 900, right: 1200 }));
+    expect(left).toBe(598);
   });
 
   it('clamps left to a 16px floor on a viewport narrower than the card (never runs off the left edge)', () => {

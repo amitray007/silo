@@ -613,11 +613,10 @@ export function HoverPreview({
         boxShadow: 'var(--elev-2)',
         overflow: 'hidden',
         boxSizing: 'border-box',
-        // The card is placed to the RIGHT of the hovered row
-        // (`computePosition` in HoverPreviewContext.tsx: `rect.right + 14`),
-        // so it grows from its own left edge — the edge nearest the row it's
-        // previewing — not its center (review-animations-STANDARDS.md's
-        // origin-aware rule).
+        // The usual placement is to the RIGHT of the hovered row, so it grows
+        // from the edge nearest the row it previews. `computePosition` can
+        // flip left near the viewport edge, but this origin still keeps the
+        // wide-screen/default case anchored to the trigger.
         transformOrigin: 'left center',
       }}
     >
