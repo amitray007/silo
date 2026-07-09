@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSettings } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import { isHoverCapable } from '../lib/pointer';
 import { relativeTimeFromNow } from '../lib/relativeTime';
@@ -87,6 +88,14 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const isSelected = selection.isSelected(link.id);
   const showCheck = hovered || menuOpen || selection.selected.length > 0;
   const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
+
+  // Plan 026: the Hacker News inline points/comments line renders only when the
+  // HN plugin is enabled AND its `inline` feature is on. Default to SHOWING
+  // while settings load (`?? true`), matching the app's optimism so there's no
+  // flash of a missing line. (HN is the only source with an inline surface.)
+  const { data: settings } = useSettings();
+  const hn = settings?.plugins?.hacker_news;
+  const showHnInline = (hn?.enabled ?? true) && (hn?.inline ?? true);
 
   // The hover-preview trigger (plan 011, V3-8 — v3's `it.enter`/`it.leave`,
   // `Silo-v3.html:808-823`). Suppressed (no preview scheduled at all, not
@@ -293,7 +302,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
             ⋯
           </button>
         </span>
-        {link.sourceData.kind === 'hacker_news' && (
+        {link.sourceData.kind === 'hacker_news' && showHnInline && (
           <span
             style={{
               display: 'block',

@@ -2,6 +2,8 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { queryKeys } from '../api/hooks';
+import type { SettingsMap } from '../api/types';
 import { hackerNewsSourceData, makeLink } from '../test/fixtures';
 import { HoverPreviewProvider } from './HoverPreviewContext';
 import { LinkRow } from './LinkRow';
@@ -12,9 +14,27 @@ function link(overrides: Parameters<typeof makeLink>[0] = {}) {
   return makeLink({ url: 'https://www.example.com/a-post', title: 'A post', ...overrides });
 }
 
-/** `LinkRow` reads `useRowMenu()` for its `⋯` button (plan 011, V3-4), `useLibrarySelection()` for its hover checkbox (V3-5), and `useHoverPreview()` for the hover-preview trigger (V3-8) — every render needs a `RowMenuProvider`, a `SelectionProvider`, and a `HoverPreviewProvider` ancestor; the `⋯` menu's tag hooks need a `QueryClientProvider` too. */
-function renderRow(ui: ReactNode) {
+/**
+ * `LinkRow` reads `useRowMenu()` for its `⋯` button (plan 011, V3-4),
+ * `useLibrarySelection()` for its hover checkbox (V3-5), `useHoverPreview()`
+ * for the hover-preview trigger (V3-8), and `useSettings()` for the HN
+ * inline-line plugin gate (plan 026) — every render needs a `RowMenuProvider`,
+ * a `SelectionProvider`, and a `HoverPreviewProvider` ancestor; the `⋯` menu's
+ * tag hooks and `useSettings()` need a `QueryClientProvider` too.
+ *
+ * `plugins` seeds `queryKeys.settings()` in the cache so a test can exercise
+ * the gate; when omitted, `useSettings()` stays in its loading state, which
+ * exercises the `?? true` optimistic default (rich variant shows).
+ */
+function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins']) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  if (plugins) {
+    queryClient.setQueryData(queryKeys.settings(), {
+      theme: 'system',
+      trashPurgeDays: 30,
+      plugins,
+    } satisfies SettingsMap);
+  }
   return render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
@@ -239,6 +259,41 @@ describe('LinkRow', () => {
   it('renders no rich line for a plain link', () => {
     renderRow(<LinkRow link={link({ sourceData: { kind: 'link' } })} />);
     expect(screen.queryByText(/points ·/)).toBeNull();
+  });
+
+  describe('HN inline plugin gate (plan 026)', () => {
+    it('inline:false hides the points/comments line (but the row/title still renders)', () => {
+      renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />, {
+        hacker_news: { enabled: true, inline: false, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      });
+      expect(screen.queryByText('342 points · 128 comments')).toBeNull();
+      expect(screen.getByText('A post')).toBeDefined();
+    });
+
+    it('inline:true shows the points/comments line', () => {
+      renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />, {
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      });
+      expect(screen.getByText('342 points · 128 comments')).toBeDefined();
+    });
+
+    it('enabled:false (master off) hides the points/comments line', () => {
+      renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />, {
+        hacker_news: { enabled: false, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      });
+      expect(screen.queryByText('342 points · 128 comments')).toBeNull();
+    });
+
+    it('no settings seeded (loading): the line renders (optimistic ?? true default)', () => {
+      renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />);
+      expect(screen.getByText('342 points · 128 comments')).toBeDefined();
+    });
   });
 });
 

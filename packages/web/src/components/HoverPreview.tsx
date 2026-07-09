@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { LinkJson, SourceData } from '../api/types';
+import { useSettings } from '../api/hooks';
+import type { LinkJson, SettingsMap, SourceData } from '../api/types';
 import { previewImageUrl } from '../lib/previewImage';
 import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
@@ -327,6 +328,55 @@ function GenericVariant({
 }
 
 /**
+ * Whether a source's rich hover variant should render: its plugin must be
+ * `enabled` AND its `hover` feature on. Both default to `true` while settings
+ * are loading (`plugins` undefined), matching the app's optimism so there's no
+ * flash of a missing preview. A `source` with no plugin entry (twitter/link)
+ * never reaches here — see `SourceVariant`.
+ */
+function hoverEnabledFor(
+  plugins: SettingsMap['plugins'] | undefined,
+  source: 'hacker_news' | 'github' | 'youtube',
+): boolean {
+  const p = plugins?.[source];
+  return (p?.enabled ?? true) && (p?.hover ?? true);
+}
+
+/**
+ * Picks the hover variant for a link, applying the plan-026 per-source plugin
+ * gate (`hoverEnabledFor`): a source's rich variant (HN/GitHub/YouTube) renders
+ * only when that source's plugin is enabled AND its `hover` feature is on —
+ * otherwise it falls through to `GenericVariant` (tags only). Twitter/link have
+ * no plugin toggle and always use `GenericVariant`. Extracted from
+ * `HoverPreview` so the popover component's own body stays flat.
+ */
+function SourceVariant({
+  link,
+  title,
+  tagLine,
+  hasTags,
+  plugins,
+}: {
+  link: LinkJson;
+  title: string;
+  tagLine: string;
+  hasTags: boolean;
+  plugins: SettingsMap['plugins'] | undefined;
+}) {
+  const data = link.sourceData;
+  if (data.kind === 'hacker_news' && hoverEnabledFor(plugins, 'hacker_news')) {
+    return <HnVariant title={title} sourceData={data} />;
+  }
+  if (data.kind === 'github' && hoverEnabledFor(plugins, 'github')) {
+    return <RepoVariant title={title} linkId={link.id} sourceData={data} />;
+  }
+  if (data.kind === 'youtube' && hoverEnabledFor(plugins, 'youtube')) {
+    return <VideoVariant title={title} linkId={link.id} sourceData={data} />;
+  }
+  return <GenericVariant title={title} tagLine={tagLine} hasTags={hasTags} />;
+}
+
+/**
  * The `pvOpen` fixed popover (plan 011, V3-8 — `Silo-v3.html:207-277`; the
  * rich variants un-parked plan 012 phase 2). Dispatches on
  * `link.sourceData.kind`: `hacker_news` → `HnVariant`, `github` →
@@ -369,6 +419,14 @@ export function HoverPreview({
   const tagLine = link.tags.map((t) => `#${t}`).join('  ');
   const meta = relativeTimeFromNow(link.createdAt);
 
+  // Plan 026: a source's rich hover variant only renders when that source's
+  // plugin is enabled AND its `hover` feature is on — otherwise fall through
+  // to the plain GenericVariant (tags only). The card still appears; only the
+  // source-specific detail is gated. Default to SHOWING while settings load
+  // (`?? true`), matching the app's optimism, so there's no flash of a missing
+  // preview. Twitter/link have no plugin toggle and always use GenericVariant.
+  const { data: settings } = useSettings();
+
   return createPortal(
     // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — the only actual control inside (the `open ↗` anchor) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
     <div
@@ -396,15 +454,13 @@ export function HoverPreview({
         transformOrigin: 'left center',
       }}
     >
-      {link.sourceData.kind === 'hacker_news' ? (
-        <HnVariant title={title} sourceData={link.sourceData} />
-      ) : link.sourceData.kind === 'github' ? (
-        <RepoVariant title={title} linkId={link.id} sourceData={link.sourceData} />
-      ) : link.sourceData.kind === 'youtube' ? (
-        <VideoVariant title={title} linkId={link.id} sourceData={link.sourceData} />
-      ) : (
-        <GenericVariant title={title} tagLine={tagLine} hasTags={hasTags} />
-      )}
+      <SourceVariant
+        link={link}
+        title={title}
+        tagLine={tagLine}
+        hasTags={hasTags}
+        plugins={settings?.plugins}
+      />
       <div
         style={{
           display: 'flex',
