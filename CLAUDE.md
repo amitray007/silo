@@ -69,7 +69,7 @@ After **every major code change / implementation unit**, before moving to the ne
 
 ## Design fidelity
 
-Build against `docs/design/tokens.md` and the captured prototype. Binding design rules: Geist Sans (400/500 only), the warm "Oat" ramp in both themes, amber only as the brand dot + status marks (never a button fill), the four marks (¶ note · ◆ added-by-claude · ◌ incomplete), "silence means complete" (healthy rows carry no status chrome). Privacy: no third-party calls per row (no Google favicon fetch) — silo is self-owned.
+Build against `docs/design/tokens.md` and the captured prototype. Binding design rules: Geist Sans (400/500 only), the warm "Oat" ramp in both themes, amber only as the Stack mark's top bar + status marks (never a button fill), the four marks (¶ note · ◆ added-by-claude · ◌ incomplete), "silence means complete" (healthy rows carry no status chrome). Privacy: no third-party calls per row (no Google favicon fetch) — silo is self-owned.
 
 ## User context
 
