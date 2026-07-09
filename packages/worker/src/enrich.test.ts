@@ -27,6 +27,10 @@ describeIfPg('enrichLink (integration)', () => {
   let enrichMod: typeof import('./enrich.js');
   let pool: Pool;
 
+  // CI runs many packages' disposable-DB suites in parallel; create+migrate
+  // routinely exceeds vitest's default 10s hookTimeout under that load
+  // (same flake has been red on main). Give the setup room, and guard
+  // teardown so a timed-out beforeAll doesn't crash on undefined `pool`.
   beforeAll(async () => {
     const database = createDisposableDatabase('silo_worker_enrich_test');
     dropDatabase = database.drop;
@@ -37,14 +41,18 @@ describeIfPg('enrichLink (integration)', () => {
     core = await import('@silo/core');
     enrichMod = await import('./enrich.js');
     pool = new Pool({ connectionString: database.url });
-  });
+  }, 60_000);
 
   afterAll(async () => {
-    const { pool: corePool } = await import('@silo/db');
-    await corePool.end();
-    await pool.end();
-    dropDatabase();
-  });
+    try {
+      const { pool: corePool } = await import('@silo/db');
+      await corePool.end();
+    } catch {
+      // @silo/db may never have loaded if beforeAll timed out mid-setup.
+    }
+    await pool?.end();
+    dropDatabase?.();
+  }, 60_000);
 
   function stubDeps(fetchResult: SafeFetchResult, extractResult?: ExtractResult): EnrichLinkDeps {
     return {
