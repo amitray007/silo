@@ -1,4 +1,4 @@
-import { showHUD } from '@raycast/api';
+import { closeMainWindow, PopToRootType, showHUD } from '@raycast/api';
 import { CaptureError, captureLink } from './lib/capture-client.js';
 import { resolveUrl } from './lib/resolve-url.js';
 
@@ -19,6 +19,7 @@ export default async function Command(): Promise<void> {
   try {
     const { deduped } = await captureLink({ url: resolved.url });
     await showHUD(deduped ? '✓ Already in silo (updated)' : '✓ Saved to silo');
+    await closeMainWindow({ popToRootType: PopToRootType.Immediate });
   } catch (error) {
     const message = error instanceof CaptureError ? error.message : 'Could not save to silo';
     await showHUD(`✗ ${message}`);
