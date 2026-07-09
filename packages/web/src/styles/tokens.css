@@ -190,7 +190,12 @@
   --elev-1: 0 1px 3px rgba(0, 0, 0, 0.4);
   --elev-2: 0 12px 32px -16px rgba(0, 0, 0, 0.55);
   --elev-3: 0 24px 60px -22px rgba(0, 0, 0, 0.6);
-  --scrim: rgba(0, 0, 0, 0.55);
+  /* Deeper backdrop wash (was .55): the command palette + settings/edit
+     modals both read this token for their scrim, and the user wants the
+     surrounding app dimmed harder so the focused overlay clearly stands out.
+     .72 dims the background firmly while still hinting at the app underneath
+     (not a full black-out). */
+  --scrim: rgba(0, 0, 0, 0.72);
 
   color-scheme: dark;
 }

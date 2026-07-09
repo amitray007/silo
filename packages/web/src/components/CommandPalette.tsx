@@ -527,6 +527,12 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
         background: 'var(--scrim)',
         display: 'flex',
         justifyContent: 'center',
+        // `flex-start` (NOT the default `stretch`): the scrim is a flex row, so
+        // its cross-axis is vertical — without this the panel stretches to the
+        // full scrim height and the result list shows a big empty region below
+        // it (user feedback). `flex-start` lets the panel take its natural
+        // content height (capped at maxHeight:70vh) so it hugs the results.
+        alignItems: 'flex-start',
         // Top-anchored, not centered (the redesign's whole point): ~17vh
         // down from the viewport top, the standard command-palette resting
         // position (Linear/Raycast/VS Code Quick Open) rather than a
