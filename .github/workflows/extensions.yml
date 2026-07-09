@@ -1,0 +1,105 @@
+name: Extensions
+
+# Focused, fast signal for the Chrome + Raycast extensions. The main `ci.yml`
+# gate already type-checks, tests, and builds these packages as part of the
+# turbo graph — this workflow adds the extension-specific value that gate can't:
+# `ray lint` (Raycast store rejection checks), Chrome manifest sanity, and a
+# downloadable Chrome Web Store zip on every green run. It runs only when
+# extension code (or its shared deps / lockfile) changes, so it stays quick.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/extensions.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "extensions/**"
+      - "pnpm-lock.yaml"
+      - "pnpm-workspace.yaml"
+      - ".github/workflows/extensions.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: extensions-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  chrome:
+    name: chrome · typecheck · test · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      # Scope every task to the chrome package so this job stays fast and its
+      # failures point squarely at the extension.
+      - run: pnpm --filter @silo/extension-chrome run check-types
+      - run: pnpm --filter @silo/extension-chrome run test
+      - run: pnpm --filter @silo/extension-chrome run build
+
+      # Manifest sanity: the browser loads dist/manifest.json, so validate the
+      # built copy. We check shape (valid JSON, MV3, name + version present) —
+      # NOT parity with package.json, whose version is intentionally 0.0.0
+      # boilerplate; the manifest is the source of truth for the shipped version.
+      - name: chrome manifest is valid MV3
+        run: |
+          node -e '
+            const fs = require("node:fs");
+            const path = "extensions/chrome/dist/manifest.json";
+            const m = JSON.parse(fs.readFileSync(path, "utf8"));
+            const problems = [];
+            if (m.manifest_version !== 3) problems.push(`manifest_version is ${m.manifest_version}, expected 3`);
+            if (typeof m.name !== "string" || !m.name.trim()) problems.push("missing name");
+            if (typeof m.version !== "string" || !/^\d+(\.\d+){0,3}$/.test(m.version)) problems.push(`version "${m.version}" is not a valid extension version`);
+            if (problems.length) {
+              console.error("::error file=" + path + "::invalid manifest — " + problems.join("; "));
+              process.exit(1);
+            }
+            console.log(`manifest ok — ${m.name} v${m.version} (MV3)`);
+          '
+
+      # The packed zip is the exact thing you drag into the Chrome Web Store.
+      # Keep it downloadable from every green run so review always has the
+      # reviewed build in hand.
+      - name: upload chrome zip
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: silo-capture-chrome
+          path: extensions/chrome/dist-zip/silo-capture.zip
+          if-no-files-found: error
+
+  raycast:
+    name: raycast · typecheck · test · lint · build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version: 24
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm --filter silo-raycast run check-types
+      - run: pnpm --filter silo-raycast run test
+
+      # `ray lint` validates package.json metadata + icons the way the Raycast
+      # store does — this is what catches a submission rejection before you
+      # submit. `ray build` compiles the commands (headless-safe).
+      - run: pnpm --filter silo-raycast exec ray lint
+      - run: pnpm --filter silo-raycast run build
+      # No artifact upload: Raycast extensions publish from source via
+      # `ray publish`, not by uploading a build folder — there is no
+      # distributable to attach, so we don't fake one.
