@@ -62,6 +62,7 @@ describeIfPg('enrichLink (integration)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         }),
     };
   }
@@ -193,6 +194,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, hover: true },
           }),
       }),
     ).rejects.toThrow('unexpected extract crash');
@@ -220,6 +222,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -248,6 +251,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -321,6 +325,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: false, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, hover: true },
           });
         },
       });
@@ -331,6 +336,7 @@ describeIfPg('enrichLink (integration)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       });
     });
 
@@ -345,6 +351,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: false, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -366,6 +373,7 @@ describeIfPg('enrichLink (integration)', () => {
             hacker_news: { enabled: true, inline: true, hover: true },
             github: { enabled: true, hover: true },
             youtube: { enabled: true, hover: true },
+            twitter: { enabled: true, hover: true },
           }),
       });
       const link = await core.getById(id);
@@ -394,6 +402,7 @@ describeIfPg('enrichLink (integration)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({

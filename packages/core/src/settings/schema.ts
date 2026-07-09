@@ -25,18 +25,23 @@ const settingsSchema = {
   trashPurgeDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
   /**
    * Enricher-kind -> per-feature toggles (plan 026). Keys mirror the
-   * source-kinds `@silo/core`'s enrichment path already knows about
-   * (`source-data.ts`'s discriminated union) that are actually pluggable —
-   * `link` has no enricher to toggle, so it's deliberately excluded from
-   * this record, and `twitter` has no external-API enricher (its rich data
-   * comes from the page itself), so it is likewise excluded here for now.
-   * Each source has a master `enabled` (gates the worker fetch entirely)
-   * plus the render-surface flags it actually supports: `hacker_news`
-   * renders both an inline row line AND a hover preview, so it gets both
-   * `inline`/`hover`; `github`/`youtube` are hover-only today. `.strict()`
-   * on every level so an unknown plugin key OR an unknown feature-flag key
-   * in a PATCH body is rejected rather than silently accepted into the
-   * stored record.
+   * source-kinds `@silo/core`'s enrichment path knows about
+   * (`source-data.ts`'s discriminated union). `link` has no enricher and no
+   * rich card, so it's excluded. Each source has a master `enabled` plus the
+   * render-surface flags it supports: `hacker_news` renders both an inline row
+   * line AND a hover preview (`inline`/`hover`); `github`/`youtube`/`twitter`
+   * are hover-only.
+   *
+   * `enabled` gates the worker fetch for sources that HAVE a live enricher
+   * (hacker_news/github/youtube). `twitter` has NO external-API enricher — its
+   * rich data is imported by the `silo ingest x` CLI, not fetched by the
+   * worker — so for twitter both flags are RENDER-only: `enabled`/`hover`
+   * control whether the already-stored tweet card shows. It's still toggleable
+   * (reaches parity with the other sources' hover cards), it just has nothing
+   * for the worker to skip.
+   *
+   * `.strict()` on every level so an unknown plugin key OR an unknown
+   * feature-flag key in a PATCH body is rejected rather than silently accepted.
    */
   plugins: z
     .object({
@@ -45,6 +50,7 @@ const settingsSchema = {
         .strict(),
       github: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
       youtube: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
+      twitter: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
     })
     .strict(),
 } as const;
@@ -66,6 +72,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },
     youtube: { enabled: true, hover: true },
+    twitter: { enabled: true, hover: true },
   },
 };
 
@@ -144,6 +151,14 @@ export function normalizePluginsValue(raw: unknown): unknown {
       value.youtube,
       ['enabled', 'hover'] as const,
       defaults.youtube,
+    ),
+    // A pre-twitter stored blob has no `twitter` key — `coerceLegacyPluginSource`
+    // returns the default for a missing source, so it fills in `{enabled,hover}`
+    // and `.strict()` validation passes on the upgraded object.
+    twitter: coerceLegacyPluginSource(
+      value.twitter,
+      ['enabled', 'hover'] as const,
+      defaults.twitter,
     ),
   };
 }

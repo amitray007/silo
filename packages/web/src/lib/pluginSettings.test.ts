@@ -7,6 +7,7 @@ function basePlugins(): PluginsMap {
     hacker_news: { enabled: true, inline: true, hover: false },
     github: { enabled: true, hover: false },
     youtube: { enabled: false, hover: true },
+    twitter: { enabled: true, hover: false },
   };
 }
 
@@ -17,20 +18,23 @@ describe('setPluginField', () => {
       hacker_news: { enabled: false, inline: true, hover: false },
       github: { enabled: true, hover: false },
       youtube: { enabled: false, hover: true },
+      twitter: { enabled: true, hover: false },
     });
   });
 
-  it('flips hacker_news.inline and leaves github/youtube completely untouched', () => {
+  it('flips hacker_news.inline and leaves github/youtube/twitter completely untouched', () => {
     const before = basePlugins();
     const next = setPluginField(before, 'hacker_news', 'inline', false);
     expect(next).toEqual({
       hacker_news: { enabled: true, inline: false, hover: false },
       github: { enabled: true, hover: false },
       youtube: { enabled: false, hover: true },
+      twitter: { enabled: true, hover: false },
     });
     // Untouched sources are passed through by reference, not deep-cloned.
     expect(next.github).toBe(before.github);
     expect(next.youtube).toBe(before.youtube);
+    expect(next.twitter).toBe(before.twitter);
   });
 
   it('flips hacker_news.hover independently of enabled/inline', () => {
@@ -58,6 +62,16 @@ describe('setPluginField', () => {
     expect(next.youtube).toEqual({ enabled: false, hover: false });
   });
 
+  it('flips twitter.enabled and preserves twitter.hover', () => {
+    const next = setPluginField(basePlugins(), 'twitter', 'enabled', false);
+    expect(next.twitter).toEqual({ enabled: false, hover: false });
+  });
+
+  it('flips twitter.hover and preserves twitter.enabled', () => {
+    const next = setPluginField(basePlugins(), 'twitter', 'hover', true);
+    expect(next.twitter).toEqual({ enabled: true, hover: true });
+  });
+
   it('re-enabling a disabled source restores its prior inline/hover choices rather than resetting them', () => {
     const disabled = setPluginField(basePlugins(), 'hacker_news', 'enabled', false);
     // inline/hover survived the disable...
@@ -67,9 +81,9 @@ describe('setPluginField', () => {
     expect(reenabled.hacker_news).toEqual({ enabled: true, inline: true, hover: false });
   });
 
-  it('returns the full three-source object, not a partial patch', () => {
+  it('returns the full four-source object, not a partial patch', () => {
     const next = setPluginField(basePlugins(), 'youtube', 'hover', false);
-    expect(Object.keys(next).sort()).toEqual(['github', 'hacker_news', 'youtube']);
+    expect(Object.keys(next).sort()).toEqual(['github', 'hacker_news', 'twitter', 'youtube']);
   });
 
   it('does not mutate the input plugins map', () => {

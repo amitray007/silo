@@ -123,6 +123,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: false, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         },
       );
       expect(result).toBeUndefined();
@@ -137,6 +138,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         },
       );
       expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
@@ -151,6 +153,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: true, inline: false, hover: false },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         },
       );
       expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
@@ -170,6 +173,7 @@ describe('enrichSource', () => {
           hacker_news: { enabled: false, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         },
       );
       expect(result).toEqual({ kind: 'github', stars: 1, forks: 2, issues: 3 });
@@ -185,19 +189,28 @@ describe('enrichSource', () => {
     });
   });
 
-  describe('registry-kinds-vs-settings-keys drift guard (plan 017)', () => {
-    it('the registry kinds match the settings-schema plugin keys exactly (module-load assertion, mirrors queue.ts — this module having imported successfully at the top of this file IS the guard passing)', () => {
+  describe('registry-kinds-vs-settings-keys drift guard (plan 017, relaxed to registry ⊆ settings in plan 026)', () => {
+    it('every registry-dispatched enricher kind has a matching settings key (module-load assertion, mirrors queue.ts — this module having imported successfully at the top of this file IS the guard passing)', () => {
       // The guard runs once, at import time, in enrich-source/index.ts itself
-      // (`if (registry kinds !== settings keys) throw`) — the same pattern
-      // `packages/queue/src/queue.ts` uses for its queue-name-drift check.
-      // There is nothing left to assert here beyond "this test file's own
-      // `import { enrichSource } from './index.js'` at the top didn't throw"
-      // — which every other test in this file already proves by running at
-      // all. This test exists so the guard's EXISTENCE is discoverable from
-      // the test file, not just from reading the source.
-      expect(Object.keys(SETTINGS_DEFAULTS.plugins).sort()).toEqual(
-        ['github', 'hacker_news', 'youtube'].sort(),
-      );
+      // (`if (some registry kind has no settings key) throw`) — the same
+      // pattern `packages/queue/src/queue.ts` uses for its queue-name-drift
+      // check. There is nothing left to assert here beyond "this test file's
+      // own `import { enrichSource } from './index.js'` at the top didn't
+      // throw" — which every other test in this file already proves by
+      // running at all. This test exists so the guard's EXISTENCE is
+      // discoverable from the test file, not just from reading the source.
+      //
+      // Plan 026 relaxed the guard from set-equality to registry ⊆ settings:
+      // `twitter` is a settings key with NO registry enricher (its rich data
+      // comes from the `silo ingest x` CLI, not a worker-fetched API), so the
+      // registry's 3 kinds are a proper SUBSET of settings' 4 keys — the
+      // reverse containment, not equality.
+      const registryKinds = ['hacker_news', 'github', 'youtube'];
+      const settingsKeys = Object.keys(SETTINGS_DEFAULTS.plugins);
+      expect(settingsKeys.sort()).toEqual(['github', 'hacker_news', 'twitter', 'youtube']);
+      for (const kind of registryKinds) {
+        expect(settingsKeys).toContain(kind);
+      }
     });
   });
 });

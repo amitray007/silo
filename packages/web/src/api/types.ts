@@ -175,6 +175,10 @@ export type SettingsMap = {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
     github: { enabled: boolean; hover: boolean };
     youtube: { enabled: boolean; hover: boolean };
+    // twitter is render-only (no worker enricher — data comes from the
+    // `silo ingest x` CLI); enabled/hover gate its hover card. See
+    // `packages/core/src/settings/schema.ts`'s doc comment.
+    twitter: { enabled: boolean; hover: boolean };
   };
 };
 

@@ -267,6 +267,7 @@ describe('LinkRow', () => {
         hacker_news: { enabled: true, inline: false, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       });
       expect(screen.queryByText('342 points · 128 comments')).toBeNull();
       expect(screen.getByText('A post')).toBeDefined();
@@ -277,6 +278,7 @@ describe('LinkRow', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       });
       expect(screen.getByText('342 points · 128 comments')).toBeDefined();
     });
@@ -286,6 +288,7 @@ describe('LinkRow', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       });
       expect(screen.queryByText('342 points · 128 comments')).toBeNull();
     });

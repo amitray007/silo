@@ -52,14 +52,3 @@ export const tabNote: CSSProperties = {
   color: 'var(--fnt)',
   lineHeight: 1.5,
 };
-
-/** A quiet, non-interactive status chip (Plugins' "soon") — the Oat calm-badge look, using the new `--badge-*` tokens (bg/border/ink) as one cohesive set rather than reusing `--line`/`--ghost` ad hoc. */
-export const badgeChip: CSSProperties = {
-  fontSize: 'var(--text-xs)',
-  fontWeight: 500,
-  color: 'var(--badge-ink)',
-  border: '1px solid var(--badge-border)',
-  borderRadius: 999,
-  padding: '3px 10px',
-  background: 'var(--badge-bg)',
-};

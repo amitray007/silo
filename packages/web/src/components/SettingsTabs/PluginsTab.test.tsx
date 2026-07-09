@@ -10,7 +10,7 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** The default `/api/settings` GET response, new plan-026 nested `plugins` shape (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`) — every field on, matching the server's all-on default. */
+/** The default `/api/settings` GET response, new plan-026 nested `plugins` shape (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`) — every field on, matching the server's all-on default. Includes `twitter` (un-parked from its static "Soon" card into a real toggle). */
 function defaultSettings() {
   return {
     theme: 'system' as const,
@@ -19,6 +19,7 @@ function defaultSettings() {
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
+      twitter: { enabled: true, hover: true },
     },
   };
 }
@@ -78,7 +79,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders a 4-up grid with correct titles and status dots (three "on", X "Soon")', async () => {
+  it('renders a 4-up grid with correct titles and status dots — all four are real toggles, no "Soon"', async () => {
     renderTab();
 
     // HN's panel is expanded by default, so its name appears twice (card +
@@ -88,13 +89,15 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     expect(screen.getAllByText('GitHub').length).toBeGreaterThan(0);
     expect(screen.getAllByText('YouTube').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Twitter / X').length).toBeGreaterThan(0);
-    expect(screen.getByText('Soon')).toBeDefined();
+    expect(screen.queryByText('Soon')).toBeNull();
 
     // Each source card is a button with aria-expanded reflecting selection.
     const hnCard = getSourceCard(/Hacker News/i);
     expect(hnCard.getAttribute('aria-expanded')).toBe('true'); // selected by default
     const githubCard = getSourceCard(/^GitHub$/i);
     expect(githubCard.getAttribute('aria-expanded')).toBe('false');
+    const twitterCard = getSourceCard(/Twitter \/ X/i);
+    expect(twitterCard.getAttribute('aria-expanded')).toBe('false');
 
     await waitFor(() => expect(screen.getByTitle(/Hacker News is on/i)).toBeDefined());
   });
@@ -127,16 +130,63 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     expect(screen.queryByText('Inline on the row')).toBeNull();
   });
 
-  it('clicking the X card shows a "coming soon" panel with no toggles', () => {
+  it('clicking the Twitter/X card expands its panel showing hover-only (no inline toggle)', async () => {
     renderTab();
 
     fireEvent.click(getSourceCard(/Twitter \/ X/i));
 
-    expect(screen.getAllByText('Soon').length).toBeGreaterThan(0);
-    expect(screen.queryByTitle(/Twitter.*is on/i)).toBeNull();
+    await waitFor(() => expect(screen.getByTitle(/Twitter \/ X is on/i)).toBeDefined());
+    expect(screen.getByText('On hover (preview card)')).toBeDefined();
     expect(screen.queryByText('Inline on the row')).toBeNull();
-    expect(screen.queryByText('On hover (preview card)')).toBeNull();
-    expect(screen.getByText(/coming soon/i)).toBeDefined();
+    expect(screen.queryByText('Soon')).toBeNull();
+  });
+
+  it('toggling Twitter/X hover calls updateSettings with the full nested object, only twitter.hover flipped', async () => {
+    const { fetchMock } = renderTab();
+
+    fireEvent.click(getSourceCard(/Twitter \/ X/i));
+    const hoverToggle = await screen.findByTitle(/On hover \(preview card\) is on/i);
+    fireEvent.click(hoverToggle);
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
+      expect(body).toEqual({
+        plugins: {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: false },
+        },
+      });
+    });
+  });
+
+  it('toggling Twitter/X master off calls updateSettings with enabled:false and hover preserved', async () => {
+    const { fetchMock } = renderTab();
+
+    fireEvent.click(getSourceCard(/Twitter \/ X/i));
+    const masterToggle = await screen.findByTitle(/Twitter \/ X is on/i);
+    fireEvent.click(masterToggle);
+
+    await waitFor(() => {
+      const patchCall = fetchMock.mock.calls.find(
+        (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+      );
+      expect(patchCall).toBeDefined();
+      const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
+      expect(body).toEqual({
+        plugins: {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+          twitter: { enabled: false, hover: true },
+        },
+      });
+    });
   });
 
   it('toggling HN master off calls updateSettings with enabled:false and inline/hover preserved (setPluginField output)', async () => {
@@ -158,6 +208,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: false, inline: true, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         },
       });
     });
@@ -180,6 +231,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: true, inline: false, hover: true },
           github: { enabled: true, hover: true },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         },
       });
     });
@@ -203,6 +255,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: false },
           youtube: { enabled: true, hover: true },
+          twitter: { enabled: true, hover: true },
         },
       });
     });
@@ -221,6 +274,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
         hacker_news: { enabled: true, inline: false, hover: false },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       },
     });
 
@@ -280,6 +334,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       },
     });
 
@@ -300,6 +355,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       },
     });
 

@@ -101,18 +101,20 @@ const PLUGINS_BY_KIND: ReadonlyMap<PluginKind, PluginDescriptor> = new Map(
 );
 
 // Drift guard (mirrors queue.ts's runtime queue-name-drift check, module-load
-// assertion + all): the registry's plugin kinds, one-for-one, against the
-// settings-schema's OWN plugin keys (`SETTINGS_DEFAULTS.plugins`) — so a
-// future plugin registered here without its settings key (or vice versa)
-// fails LOUDLY at import time rather than silently half-working.
+// assertion + all): every enricher in the registry MUST have a matching
+// settings key, so a plugin registered here without its toggle fails LOUDLY at
+// import time rather than silently un-toggleable. The reverse is NOT required —
+// the settings schema may carry RENDER-ONLY plugin keys with no enricher
+// (`twitter`: its rich data is imported by the `silo ingest x` CLI, not fetched
+// by the worker, so it's toggleable for its hover card but has nothing here to
+// gate). So this asserts registry ⊆ settings, not set equality.
 const REGISTRY_KINDS = new Set(PLUGINS.map((plugin) => plugin.kind));
 const SETTINGS_PLUGIN_KEYS = new Set(Object.keys(SETTINGS_DEFAULTS.plugins));
-if (
-  REGISTRY_KINDS.size !== SETTINGS_PLUGIN_KEYS.size ||
-  ![...REGISTRY_KINDS].every((kind) => SETTINGS_PLUGIN_KEYS.has(kind))
-) {
+const unregistered = [...REGISTRY_KINDS].filter((kind) => !SETTINGS_PLUGIN_KEYS.has(kind));
+if (unregistered.length > 0) {
   throw new Error(
-    `plugin registry/settings-schema drift: registry=[${[...REGISTRY_KINDS].join(', ')}] ` +
+    `plugin registry/settings-schema drift: enricher(s) [${unregistered.join(', ')}] ` +
+      `have no settings key. registry=[${[...REGISTRY_KINDS].join(', ')}] ` +
       `settings=[${[...SETTINGS_PLUGIN_KEYS].join(', ')}]`,
   );
 }

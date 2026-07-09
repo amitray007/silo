@@ -20,6 +20,7 @@ const DEFAULT_SETTINGS = {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },
     youtube: { enabled: true, hover: true },
+    twitter: { enabled: true, hover: true },
   },
 };
 
@@ -250,7 +251,7 @@ describe('SettingsModal', () => {
   });
 
   describe('Plugins tab (plan 026 — logo grid + expand panel)', () => {
-    it('renders a 4-up grid (HN/GitHub/YouTube functional, Twitter/X stays a "Soon" card)', () => {
+    it('renders a 4-up grid with all four sources as real toggles (no "Soon" card)', () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
@@ -261,7 +262,7 @@ describe('SettingsModal', () => {
       expect(screen.getAllByText('Twitter / X').length).toBeGreaterThan(0);
       expect(screen.getAllByText('GitHub').length).toBeGreaterThan(0);
       expect(screen.getAllByText('YouTube').length).toBeGreaterThan(0);
-      expect(screen.getByText('Soon')).toBeDefined();
+      expect(screen.queryByText('Soon')).toBeNull();
     });
 
     it('clicking the master toggle in the expand panel flips it off and PATCHes the full nested plugins record', async () => {

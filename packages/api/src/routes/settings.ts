@@ -37,6 +37,7 @@ const settingsPatchBodySchema = z
           .strict(),
         github: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
         youtube: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
+        twitter: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
       })
       .strict()
       .optional(),

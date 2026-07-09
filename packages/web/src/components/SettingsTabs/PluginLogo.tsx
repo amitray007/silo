@@ -65,11 +65,12 @@ function XLogo(props: SVGProps<SVGSVGElement>) {
 }
 
 /**
- * Every grid source key PLUS the non-toggleable `x` card — a superset of
- * `PluginSource` (`hacker_news`/`github`/`youtube`) since the grid always
- * shows a 4th "X — Soon" card that has no entry in `SettingsMap['plugins']`.
+ * Every grid source key — now a plain alias of `PluginSource`
+ * (`hacker_news`/`github`/`youtube`/`twitter`, plan 026's twitter un-parking).
+ * Kept as its own named type (rather than importing `PluginSource` directly at
+ * every call site) so this file's logo-mapping code reads self-contained.
  */
-export type LogoSource = PluginSource | 'x';
+export type LogoSource = PluginSource;
 
 /**
  * Whether a source's brand mark carries its own color (YC orange, YouTube
@@ -78,13 +79,13 @@ export type LogoSource = PluginSource | 'x';
  * plan's locked tiling rule ("real logo with circular white background or
  * color flowing based on the logo").
  */
-const DARK_MONOCHROME_SOURCES: ReadonlySet<LogoSource> = new Set(['github', 'x']);
+const DARK_MONOCHROME_SOURCES: ReadonlySet<LogoSource> = new Set(['github', 'twitter']);
 
 const LOGO_BY_SOURCE: Record<LogoSource, (props: SVGProps<SVGSVGElement>) => React.JSX.Element> = {
   hacker_news: YCombinatorLogo,
   github: GitHubLogo,
   youtube: YouTubeLogo,
-  x: XLogo,
+  twitter: XLogo,
 };
 
 const tileBase: CSSProperties = {

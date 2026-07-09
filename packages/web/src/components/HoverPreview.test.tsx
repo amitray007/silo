@@ -7,6 +7,7 @@ import {
   githubSourceData,
   hackerNewsSourceData,
   makeLink,
+  twitterSourceData,
   youtubeSourceData,
 } from '../test/fixtures';
 import { HoverPreview } from './HoverPreview';
@@ -256,6 +257,35 @@ describe('HoverPreview', () => {
       expect(screen.queryByText(/points$/)).toBeNull();
       expect(document.querySelector('img')).toBeNull();
     });
+
+    it('renders the Twitter variant: author name/handle, tweet text, and engagement counts', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray on X',
+          sourceData: twitterSourceData,
+          url: 'https://x.com/amitray007/status/1',
+        }),
+      );
+      expect(screen.getByText('Amit Ray')).toBeDefined();
+      expect(screen.getByText('@amitray007')).toBeDefined();
+      expect(
+        screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
+      ).toBeDefined();
+      expect(screen.getByText('♥ 512')).toBeDefined();
+      expect(screen.getByText('↻ 48')).toBeDefined();
+      expect(screen.getByText('💬 23')).toBeDefined();
+      expect(screen.getByRole('link', { name: 'Open ↗' })).toBeDefined();
+    });
+
+    it('Twitter variant never renders an <img> (no third-party twimg.com calls)', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray on X',
+          sourceData: { ...twitterSourceData, authorAvatarUrl: 'https://pbs.twimg.com/a.jpg' },
+        }),
+      );
+      expect(document.querySelector('img')).toBeNull();
+    });
   });
 
   describe('plugin hover gate (plan 026)', () => {
@@ -263,6 +293,7 @@ describe('HoverPreview', () => {
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
+      twitter: { enabled: true, hover: true },
     };
 
     it('github: hover:false falls back to the generic variant (repo stats absent, generic card shown)', () => {
@@ -368,6 +399,46 @@ describe('HoverPreview', () => {
       );
       expect(screen.getByText('▲ 342 points')).toBeDefined();
       expect(screen.getByText('128 comments')).toBeDefined();
+    });
+
+    it('twitter: hover:false falls back to the generic variant (TwitterVariant absent)', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray on X',
+          sourceData: twitterSourceData,
+          url: 'https://x.com/amitray007/status/1',
+        }),
+        { ...allOn, twitter: { enabled: true, hover: false } },
+      );
+      expect(screen.queryByText('@amitray007')).toBeNull();
+      expect(screen.queryByText('♥ 512')).toBeNull();
+      expect(screen.getByText('Amit Ray on X')).toBeDefined();
+    });
+
+    it('twitter: enabled:false (master off) also falls back to the generic variant', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray on X',
+          sourceData: twitterSourceData,
+          url: 'https://x.com/amitray007/status/1',
+        }),
+        { ...allOn, twitter: { enabled: false, hover: true } },
+      );
+      expect(screen.queryByText('@amitray007')).toBeNull();
+      expect(screen.getByText('Amit Ray on X')).toBeDefined();
+    });
+
+    it('twitter: enabled:true && hover:true renders the TwitterVariant', () => {
+      renderPreview(
+        makeLink({
+          title: 'Amit Ray on X',
+          sourceData: twitterSourceData,
+          url: 'https://x.com/amitray007/status/1',
+        }),
+        allOn,
+      );
+      expect(screen.getByText('@amitray007')).toBeDefined();
+      expect(screen.getByText('♥ 512')).toBeDefined();
     });
 
     it('loading default (no settings seeded): the rich variant renders (optimistic ?? true)', () => {

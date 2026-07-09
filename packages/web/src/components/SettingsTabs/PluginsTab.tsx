@@ -3,7 +3,7 @@ import { useSettings, useUpdateSettings } from '../../api/hooks';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
-import { badgeChip, rowDesc, rowLabel, tabNote } from './rowStyles';
+import { rowDesc, rowLabel, tabNote } from './rowStyles';
 
 /**
  * The all-on shape used while `useSettings()` is still loading (plan 026 —
@@ -16,23 +16,27 @@ const LOADING_PLUGINS: PluginsMap = {
   hacker_news: { enabled: true, inline: true, hover: true },
   github: { enabled: true, hover: true },
   youtube: { enabled: true, hover: true },
+  twitter: { enabled: true, hover: true },
 };
 
 /**
- * Grid metadata for the three toggleable sources — mirrors
- * `@silo/core`'s `settingsSchema.plugins` allowlist EXACTLY (`link`/`twitter`
- * excluded: `link` has no enricher to toggle, `twitter`'s rich data comes
- * from the page itself, not an external-API enricher — see
- * `packages/core/src/settings/schema.ts`'s doc comment). `key` indexes
- * directly into `SettingsMap['plugins']`.
+ * Grid metadata for the four toggleable sources — mirrors
+ * `@silo/core`'s `settingsSchema.plugins` allowlist EXACTLY (`link` excluded:
+ * it has no enricher/card to toggle — see `packages/core/src/settings/
+ * schema.ts`'s doc comment). `twitter` joined the real allowlist in plan 026
+ * (previously a static "Soon" card): it has no worker enricher (its rich data
+ * comes from the `silo ingest x` CLI, not a fetched API), so its `enabled`/
+ * `hover` are RENDER-only — gating the hover card, not a worker fetch. `key`
+ * indexes directly into `SettingsMap['plugins']`.
  */
 const PLUGIN_SOURCES = [
   { key: 'hacker_news', name: 'Hacker News' },
   { key: 'github', name: 'GitHub' },
   { key: 'youtube', name: 'YouTube' },
+  { key: 'twitter', name: 'Twitter / X' },
 ] as const satisfies ReadonlyArray<{ key: PluginSource; name: string }>;
 
-/** The feature toggles a given source supports — HN renders both an inline row line and a hover preview; GitHub/YouTube are hover-only today (see `packages/core/src/settings/schema.ts`'s doc comment). Keyed so the panel only ever shows toggles the source's schema actually has. */
+/** The feature toggles a given source supports — HN renders both an inline row line and a hover preview; GitHub/YouTube/Twitter are hover-only today (see `packages/core/src/settings/schema.ts`'s doc comment). Keyed so the panel only ever shows toggles the source's schema actually has. */
 const FEATURE_ROWS_BY_SOURCE: Record<
   PluginSource,
   ReadonlyArray<{ field: 'inline' | 'hover'; name: string; desc: string }>
@@ -61,6 +65,13 @@ const FEATURE_ROWS_BY_SOURCE: Record<
       field: 'hover',
       name: 'On hover (preview card)',
       desc: 'Thumbnail and channel in the hover preview',
+    },
+  ],
+  twitter: [
+    {
+      field: 'hover',
+      name: 'On hover (preview card)',
+      desc: 'Author, text, and engagement in the hover preview',
     },
   ],
 };
@@ -226,14 +237,14 @@ function SourceCard({
   name,
   selected,
   panelId,
-  status,
+  on,
   onSelect,
 }: {
   logoSource: LogoSource;
   name: string;
   selected: boolean;
   panelId: string;
-  status: { kind: 'toggle'; on: boolean } | { kind: 'soon' };
+  on: boolean;
   onSelect: () => void;
 }) {
   return (
@@ -250,7 +261,7 @@ function SourceCard({
     >
       <PluginLogo source={logoSource} size={44} />
       <span style={cardTitle}>{name}</span>
-      {status.kind === 'soon' ? <span style={badgeChip}>Soon</span> : <StatusDot on={status.on} />}
+      <StatusDot on={on} />
     </button>
   );
 }
@@ -292,8 +303,9 @@ function FeatureToggleRow({
 }
 
 /**
- * Settings → Plugins (plan 026 redesign) — a 4-up logo grid (HN/GitHub/
- * YouTube/X) that expands inline below into a control panel for whichever
+ * Settings → Plugins (plan 026 redesign; Twitter un-parked from its static
+ * "Soon" card into a real toggle) — a 4-up logo grid (HN/GitHub/YouTube/
+ * Twitter-X) that expands inline below into a control panel for whichever
  * source is selected. Replaces the flat toggle-row list (plan 016) now that
  * each source has a **master `enabled`** plus the per-feature `inline`/
  * `hover` flags it supports (`SettingsMap['plugins']`, plan 026 schema —
@@ -303,13 +315,14 @@ function FeatureToggleRow({
  * and are greyed + disabled while `.enabled` is off (the plan's rule — a
  * disabled source's feature choices are PRESERVED, not reset, so re-enabling
  * restores them; see `setPluginField`'s doc comment). Every write goes
- * through `setPluginField`, which reconstructs the FULL three-source object
+ * through `setPluginField`, which reconstructs the FULL four-source object
  * (`core.setSetting('plugins', ...)` replaces the whole stored value, no
  * sub-key merge).
  *
- * Twitter/X stays a static "Soon" card — no `twitter` key exists in `core`'s
- * plugins allowlist (its rich preview comes from the page's own markup, not
- * an external-API enricher the worker can skip).
+ * All four sources render identically here — twitter has no worker enricher
+ * to gate (its `enabled`/`hover` are render-only, controlling the hover
+ * card), but the UI doesn't need to know that distinction; it just flips the
+ * same two booleans through the same `setPluginField` path.
  */
 export function PluginsTab() {
   const { data: settings } = useSettings();
@@ -338,82 +351,56 @@ export function PluginsTab() {
             name={source.name}
             selected={selected === source.key}
             panelId={panelId}
-            status={{ kind: 'toggle', on: plugins[source.key].enabled }}
+            on={plugins[source.key].enabled}
             onSelect={() => setSelected(source.key)}
           />
         ))}
-        <SourceCard
-          logoSource="x"
-          name="Twitter / X"
-          selected={selected === 'x'}
-          panelId={panelId}
-          status={{ kind: 'soon' }}
-          onSelect={() => setSelected('x')}
-        />
       </div>
 
       <div id={panelId} style={panelShell}>
-        {selected === 'x' ? (
-          <>
-            <div style={panelHeaderRow}>
-              <PluginLogo source="x" size={32} />
-              <div style={{ flex: 1 }}>
-                <div style={rowLabel}>Twitter / X</div>
-                <div style={rowDesc}>Author and post text — inline and on hover</div>
-              </div>
-              <span style={badgeChip}>Soon</span>
-            </div>
-            <hr style={panelDivider} />
-            <p style={rowDesc}>
-              X posts already render their author and text from the page itself — a toggle-able
-              plugin isn't needed here. Coming soon: hover-preview parity with the other sources.
-            </p>
-          </>
-        ) : (
-          (() => {
-            const source = PLUGIN_SOURCES.find((s) => s.key === selected);
-            if (!source) return null;
-            const state = plugins[source.key];
-            return (
-              <>
-                <div style={panelHeaderRow}>
-                  <PluginLogo source={source.key} size={32} />
-                  <div style={{ flex: 1 }}>
-                    <div style={rowLabel}>{source.name}</div>
-                  </div>
-                  <PluginToggle
-                    on={state.enabled}
-                    disabled={loading}
-                    onToggle={() => writeField(source.key, 'enabled', !state.enabled)}
-                    label={source.name}
-                  />
+        {(() => {
+          const source = PLUGIN_SOURCES.find((s) => s.key === selected);
+          if (!source) return null;
+          const state = plugins[source.key];
+          return (
+            <>
+              <div style={panelHeaderRow}>
+                <PluginLogo source={source.key} size={32} />
+                <div style={{ flex: 1 }}>
+                  <div style={rowLabel}>{source.name}</div>
                 </div>
-                <hr style={panelDivider} />
-                {FEATURE_ROWS_BY_SOURCE[source.key].map((row) => (
-                  <FeatureToggleRow
-                    key={row.field}
-                    field={row.field}
-                    name={row.name}
-                    desc={row.desc}
-                    on={state[row.field as keyof typeof state] as boolean}
-                    masterEnabled={state.enabled}
-                    loading={loading}
-                    onToggle={() =>
-                      // `row` was drawn from `FEATURE_ROWS_BY_SOURCE[source.key]`, so `row.field`
-                      // is guaranteed to be a field `source.key`'s schema actually has — the
-                      // union-vs-generic correlation TS can't see through `.find()`'s narrowing.
-                      writeField(
-                        source.key,
-                        row.field as keyof PluginsMap[typeof source.key],
-                        !state[row.field as keyof typeof state],
-                      )
-                    }
-                  />
-                ))}
-              </>
-            );
-          })()
-        )}
+                <PluginToggle
+                  on={state.enabled}
+                  disabled={loading}
+                  onToggle={() => writeField(source.key, 'enabled', !state.enabled)}
+                  label={source.name}
+                />
+              </div>
+              <hr style={panelDivider} />
+              {FEATURE_ROWS_BY_SOURCE[source.key].map((row) => (
+                <FeatureToggleRow
+                  key={row.field}
+                  field={row.field}
+                  name={row.name}
+                  desc={row.desc}
+                  on={state[row.field as keyof typeof state] as boolean}
+                  masterEnabled={state.enabled}
+                  loading={loading}
+                  onToggle={() =>
+                    // `row` was drawn from `FEATURE_ROWS_BY_SOURCE[source.key]`, so `row.field`
+                    // is guaranteed to be a field `source.key`'s schema actually has — the
+                    // union-vs-generic correlation TS can't see through `.find()`'s narrowing.
+                    writeField(
+                      source.key,
+                      row.field as keyof PluginsMap[typeof source.key],
+                      !state[row.field as keyof typeof state],
+                    )
+                  }
+                />
+              ))}
+            </>
+          );
+        })()}
       </div>
 
       <p style={tabNote}>

@@ -26,6 +26,7 @@ type SettingsBody = {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
     github: { enabled: boolean; hover: boolean };
     youtube: { enabled: boolean; hover: boolean };
+    twitter: { enabled: boolean; hover: boolean };
   };
 };
 
@@ -55,6 +56,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       },
     });
   });
@@ -68,11 +70,11 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     // Top-level: exactly the three allowlisted keys, nothing else (e.g. no
     // stray internal/db-row field like `updatedAt` could leak through).
     expect(Object.keys(body).sort()).toEqual(['plugins', 'theme', 'trashPurgeDays']);
-    // Nested `plugins`: exactly the three allowlisted plugin keys — a
+    // Nested `plugins`: exactly the four allowlisted plugin keys — a
     // shallow top-level-only check (the pre-fix version of this test) would
     // miss a leaked/extra key nested inside `plugins`.
     const plugins = body.plugins as Record<string, unknown>;
-    expect(Object.keys(plugins).sort()).toEqual(['github', 'hacker_news', 'youtube']);
+    expect(Object.keys(plugins).sort()).toEqual(['github', 'hacker_news', 'twitter', 'youtube']);
   });
 
   it('PATCH theme persists and is reflected by a subsequent GET', async () => {
@@ -102,6 +104,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
         hacker_news: { enabled: false, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
       },
     });
     expect(patchRes.status).toBe(200);
@@ -111,6 +114,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       hacker_news: { enabled: false, inline: true, hover: true },
       github: { enabled: true, hover: true },
       youtube: { enabled: true, hover: true },
+      twitter: { enabled: true, hover: true },
     });
   });
 
@@ -167,6 +171,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
         youtube: { enabled: true, hover: true },
+        twitter: { enabled: true, hover: true },
         evilPlugin: true,
       },
     });

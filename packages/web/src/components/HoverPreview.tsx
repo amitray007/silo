@@ -12,6 +12,7 @@ export type HoverPreviewPosition = { top: number; left: number };
 type HackerNewsSourceData = Extract<SourceData, { kind: 'hacker_news' }>;
 type GithubSourceData = Extract<SourceData, { kind: 'github' }>;
 type YoutubeSourceData = Extract<SourceData, { kind: 'youtube' }>;
+type TwitterSourceData = Extract<SourceData, { kind: 'twitter' }>;
 
 /**
  * The body padding + title line every variant (`HnVariant`/`RepoVariant`/
@@ -92,6 +93,75 @@ function HnVariant({ title, sourceData }: { title: string; sourceData: HackerNew
         </span>
         <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
           {sourceData.comments} comments
+        </span>
+      </div>
+    </VariantBody>
+  );
+}
+
+/**
+ * The Twitter/X variant — no v3 mock to match (X was a static "Soon" card in
+ * the captured prototype); shaped to sit alongside `HnVariant`/`RepoVariant`
+ * exactly: same `VariantBody` padding/title treatment, `--text-sm` meta rows.
+ * Shows the author line (`authorName` in `--ink`, `@authorHandle` in `--fnt`),
+ * the tweet text (2-3 line clamp, same pattern as `RepoVariant`'s
+ * description), then an engagement line with tasteful glyphs matching
+ * `HnVariant`'s `▲` convention.
+ *
+ * `sourceData.text` is rendered as plain JSX text (`{sourceData.text}`), NOT
+ * `dangerouslySetInnerHTML` — React escapes it automatically, and
+ * `source-data.ts`'s doc comment flags tweet text as UNTRUSTED (captured by
+ * the `silo ingest x` CLI from the page itself, not sanitized upstream), so
+ * this is the only safe way to render it.
+ *
+ * Deliberately renders NO images (`authorAvatarUrl`/`mediaUrls`) — both are
+ * raw `twimg.com` URLs, and rendering them as `<img src>` from the browser
+ * would be a third-party network call per row, violating the "no third-party
+ * calls per row" privacy rule (`CLAUDE.md`). Unlike `RepoVariant`/
+ * `VideoVariant`, there's no silo-proxied equivalent for tweet media, so v1
+ * simply omits it — text + counts only.
+ */
+function TwitterVariant({ title, sourceData }: { title: string; sourceData: TwitterSourceData }) {
+  return (
+    <VariantBody title={title}>
+      <div style={{ marginTop: 'var(--s1-5)' }}>
+        <span style={{ fontSize: 'var(--text-sm)', fontWeight: 500, color: 'var(--ink)' }}>
+          {sourceData.authorName}
+        </span>{' '}
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
+          @{sourceData.authorHandle}
+        </span>
+      </div>
+      <div
+        style={{
+          fontSize: 'var(--text-sm)',
+          color: 'var(--mut)',
+          marginTop: 3,
+          lineHeight: 'var(--lh-snug)',
+          display: '-webkit-box',
+          WebkitLineClamp: 3,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }}
+      >
+        {sourceData.text}
+      </div>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 'var(--s2-5)',
+          marginTop: 'var(--s3)',
+        }}
+      >
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
+          ♥ {sourceData.likes}
+        </span>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
+          ↻ {sourceData.reposts}
+        </span>
+        <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
+          💬 {sourceData.replies}
         </span>
       </div>
     </VariantBody>
@@ -331,12 +401,12 @@ function GenericVariant({
  * Whether a source's rich hover variant should render: its plugin must be
  * `enabled` AND its `hover` feature on. Both default to `true` while settings
  * are loading (`plugins` undefined), matching the app's optimism so there's no
- * flash of a missing preview. A `source` with no plugin entry (twitter/link)
- * never reaches here — see `SourceVariant`.
+ * flash of a missing preview. A `source` with no plugin entry (`link`) never
+ * reaches here — see `SourceVariant`.
  */
 function hoverEnabledFor(
   plugins: SettingsMap['plugins'] | undefined,
-  source: 'hacker_news' | 'github' | 'youtube',
+  source: 'hacker_news' | 'github' | 'youtube' | 'twitter',
 ): boolean {
   const p = plugins?.[source];
   return (p?.enabled ?? true) && (p?.hover ?? true);
@@ -344,10 +414,10 @@ function hoverEnabledFor(
 
 /**
  * Picks the hover variant for a link, applying the plan-026 per-source plugin
- * gate (`hoverEnabledFor`): a source's rich variant (HN/GitHub/YouTube) renders
- * only when that source's plugin is enabled AND its `hover` feature is on —
- * otherwise it falls through to `GenericVariant` (tags only). Twitter/link have
- * no plugin toggle and always use `GenericVariant`. Extracted from
+ * gate (`hoverEnabledFor`): a source's rich variant (HN/GitHub/YouTube/
+ * Twitter) renders only when that source's plugin is enabled AND its `hover`
+ * feature is on — otherwise it falls through to `GenericVariant` (tags only).
+ * `link` has no plugin toggle and always uses `GenericVariant`. Extracted from
  * `HoverPreview` so the popover component's own body stays flat.
  */
 function SourceVariant({
@@ -373,19 +443,20 @@ function SourceVariant({
   if (data.kind === 'youtube' && hoverEnabledFor(plugins, 'youtube')) {
     return <VideoVariant title={title} linkId={link.id} sourceData={data} />;
   }
+  if (data.kind === 'twitter' && hoverEnabledFor(plugins, 'twitter')) {
+    return <TwitterVariant title={title} sourceData={data} />;
+  }
   return <GenericVariant title={title} tagLine={tagLine} hasTags={hasTags} />;
 }
 
 /**
  * The `pvOpen` fixed popover (plan 011, V3-8 — `Silo-v3.html:207-277`; the
- * rich variants un-parked plan 012 phase 2). Dispatches on
- * `link.sourceData.kind`: `hacker_news` → `HnVariant`, `github` →
- * `RepoVariant`, `youtube` → `VideoVariant`, everything else (`'link'`, the
- * universal floor covering both a plain link AND a detected-but-not-yet-
- * enriched rich source — see `@silo/core`'s `resolveSource` doc comment) →
- * `GenericVariant`. Twitter has no variant (plan 012 scope: no free API,
- * deferred) — a `twitter` `sourceData.kind` falls through to generic rather
- * than crashing, since the union's floor case makes that safe.
+ * rich variants un-parked plan 012 phase 2, Twitter un-parked plan 026).
+ * Dispatches on `link.sourceData.kind`: `hacker_news` → `HnVariant`, `github`
+ * → `RepoVariant`, `youtube` → `VideoVariant`, `twitter` → `TwitterVariant`,
+ * everything else (`'link'`, the universal floor covering both a plain link
+ * AND a detected-but-not-yet-enriched rich source — see `@silo/core`'s
+ * `resolveSource` doc comment) → `GenericVariant`.
  *
  * `pvMeta` in v3 is a pre-baked mock `time`/`left` string; `LinkJson` has no
  * such field, so this derives an honest equivalent from `createdAt`
