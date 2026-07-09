@@ -37,7 +37,7 @@ No popup. No "recently saved" list. No enrichment status surfaced anywhere in th
 ### Flow 2 — Edit (the exception path)
 
 - Clicking the toast (or its ✎) **morphs that same element, in place**, into a floating edit card anchored at the same top-right spot — the eye never relocates.
-- The link is **already saved**; the edit card only *adds detail* (a re-POST of the URL with note + tags, see Data below). The card shows:
+- The link is **already saved**; the edit card only *refines detail* (note via PATCH, tags via add/remove endpoints — see Data below). The card shows:
   - a "Saved · editing details" flag anchored by the silo stack mark,
   - the page title + URL (read-only context),
   - a **note** textarea,
@@ -60,12 +60,17 @@ There is no recent-5 list and no `captureStatus` read anywhere in the new extens
 
 ## Data flow
 
-The contract is already in place (`packages/api/src/routes/links-write.ts`, verified). The edit path is a **single call to the same endpoint as the save**, not a PATCH + per-tag fan-out:
+The contract is verified in `packages/core/src/links/links.ts` + `packages/api/src/routes/links-write.ts`. **The re-POST-the-URL shortcut does NOT work for an editor**, because re-capture is *purely additive*: `mergeNotes` **appends** a re-saved note (`links.ts:93-99`) and `attachTags` **only adds** tags (`links.ts:130`, `251-253`) — neither can remove a tag or rewrite a note. The edit card must therefore use the granular, replace-capable endpoints:
 
-1. **Save (Flow 1):** `POST /api/links` with `{ url }`. Returns `{ link, deduped }`.
-2. **Edit (Flow 2):** `POST /api/links` **again**, with `{ url, note, tags }`. `POST /api/links` already accepts `tags: string[]` and `note` inline (`links-write.ts:66-67`), and the API **dedupes on URL** — a second POST for the same URL updates the existing link and returns `{ deduped: true }`. So "add a note + tags to the thing I just saved" is one idempotent call to one endpoint, no `link.id` bookkeeping and no per-tag requests.
+1. **Save (Flow 1):** `POST /api/links` with `{ url }`. Returns `{ link, deduped }`. **The `link.id` from this response is held in the service worker** (in-memory, for this capture only) so the edit path can target it.
+2. **Edit (Flow 2)** — on **Save details**, the card diffs its state against what was saved and issues:
+   - **note** (if changed): `PATCH /api/links/:id` with `{ note }` — `PATCH` **replaces** the note (`editLink`, a direct set — not `mergeNotes`), so it can clear or rewrite. Only sent if the note field changed.
+   - **each added tag:** `POST /api/links/:id/tags` with `{ tag }`.
+   - **each removed tag:** `DELETE /api/links/:id/tags/:tag`.
 
-**Why not `PATCH /api/links/:id` + `POST/DELETE …/tags`?** Those endpoints exist, but `PATCH` only handles `note` (not tags — `links-write.ts:83-86`), and tags are add-one / remove-one endpoints (`POST /links/:id/tags`, `DELETE /links/:id/tags/:tag`). Editing via them would mean 1 PATCH + N tag calls and require threading the `link.id` from the save into the injected edit card. Re-POSTing the URL with the full desired `{ note, tags }` is strictly simpler and matches how capture already works. (Caveat for the plan: confirm re-POST **replaces** the tag set rather than appending; if it appends, fall back to PATCH-for-note + tag-diffing. This is the one behavior to verify before building Flow 2.)
+   Every one of these returns the full `{ link }` envelope; the card uses the last response as the authoritative post-edit state. Calls run sequentially; the first error aborts and surfaces in the card (the save from Flow 1 is never at risk).
+
+**Consequence for the UI (already reflected in the mockup):** the tag dropdown's "chosen" pills can be *removed* (✕) and the note *rewritten* — both are honored because the edit path uses replace-capable endpoints, not re-POST. Threading the `link.id` from Flow 1's response into the injected edit card is the one piece of new plumbing this requires (via `chrome.runtime.sendMessage`, since the injected world can't hold service-worker state).
 
 Tag suggestions come from `GET /api/tags` (already used), now feeding the dropdown instead of inline autocomplete.
 
@@ -74,9 +79,9 @@ Tag suggestions come from `GET /api/tags` (already used), now feeding the dropdo
 The extension stays a plain HTTP client (per `docs/rules/architecture.md` — no `@silo/core`/`@silo/api` imports). Proposed units, each independently testable:
 
 - **`background/service-worker.ts`** — registers `chrome.action.onClicked` + the `capture-page` command + context menu, all funneling into `captureActiveTab`. (Popup registration removed.)
-- **`background/capture-flow.ts`** — `runQuietCapture` (unchanged in spirit: POST → toast). The edit re-POSTs the URL, so no `link.id` needs to be stashed.
-- **`lib/toast.ts`** — the injected surface, extended: the injected function renders **both** the toast and, on click, the edit card (they share one injected shadow-DOM host so the morph is a DOM swap, not a re-injection). Auto-dismiss with hover-pause. The edit card sends `{ url, note, tags }` back to the service worker via `chrome.runtime.sendMessage` (the injected world can't call the client directly), and the service worker performs the re-POST.
-- **`lib/capture-client.ts`** — `captureLink` already carries `{ url, note?, tags? }`, so the edit reuses it; `getLink` removed.
+- **`background/capture-flow.ts`** — `runQuietCapture` (unchanged in spirit: POST → toast). Passes the saved `link.id` through to the injected surface so the edit card can target it.
+- **`lib/toast.ts`** — the injected surface, extended: the injected function renders **both** the toast and, on click, the edit card (they share one injected shadow-DOM host so the morph is a DOM swap, not a re-injection). Auto-dismiss with hover-pause. On **Save details** the card computes its diff (note change + added/removed tags) and sends it back to the service worker via `chrome.runtime.sendMessage` (the injected world can't call the client directly); the service worker issues the PATCH + tag calls.
+- **`lib/capture-client.ts`** — add `editNote(id, note)` → `PATCH /api/links/:id`, `addTag(id, tag)` → `POST /api/links/:id/tags`, `removeTag(id, tag)` → `DELETE /api/links/:id/tags/:tag`; `getLink` removed.
 - **`lib/tag-list.ts`** — repurposed from inline pills to the dropdown model (filter + toggle + create).
 - **Removed:** `popup/*`, `lib/recent.ts`, the popup's `getLink` usage.
 
