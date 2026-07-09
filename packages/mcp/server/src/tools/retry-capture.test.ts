@@ -14,7 +14,7 @@ describeMcpTool(
   'silo_mcp_retry_capture_test',
   'retry_capture (integration, via MCP client<->server)',
   (getContext) => {
-    it('tools/list lists retry_capture alongside the other 9 tools (10 total)', async () => {
+    it('tools/list lists retry_capture alongside the other 10 tools (11 total)', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name);
@@ -28,9 +28,10 @@ describeMcpTool(
           'edit_link',
           'add_tag',
           'remove_tag',
+          'export_links',
         ]),
       );
-      expect(names).toHaveLength(10);
+      expect(names).toHaveLength(11);
     });
 
     // A degraded capture ('partial' or 'bare') is retryable: retry_capture

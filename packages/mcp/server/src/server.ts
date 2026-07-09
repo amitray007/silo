@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAddTag } from './tools/add-tag.js';
 import { registerCaptureLink } from './tools/capture-link.js';
 import { registerEditLink } from './tools/edit-link.js';
+import { registerExportLinks } from './tools/export-links.js';
 import { registerGetLink } from './tools/get-link.js';
 import { registerListLinks } from './tools/list-links.js';
 import { registerRemoveTag } from './tools/remove-tag.js';
@@ -53,6 +54,9 @@ export function createSiloMcpServer(): McpServer {
   // W5 registers retry_capture — closes the agent-native parity gap for
   // retrying a degraded capture.
   registerRetryCapture(server);
+  // Export slice U3 registers export_links — a full-library snapshot
+  // (json/yaml/csv) for backup or bulk agent ingestion.
+  registerExportLinks(server);
 
   return server;
 }
