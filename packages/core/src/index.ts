@@ -37,6 +37,14 @@ export {
 // Executor types (shared db/tx handle) — the worker's real enqueuer is typed
 // against these.
 export type { Db, Executor, Tx } from './links/executor.js';
+// Export (export-JSON-YAML-CSV slice, U1): exportLinks reads the full live
+// library (trash excluded) and serializes it to JSON (default, lossless),
+// YAML (same object, lossless), or CSV (flat partial view — drops
+// sourceData/extractedText). One shared row->object mapper backs all three
+// serializers so they can never drift on which fields exist. See
+// export.ts's doc comments for the format-by-format contract.
+export type { ExportFormat, ExportResult } from './links/export.js';
+export { EXPORT_VERSION, exportLinks, InvalidExportFormatError } from './links/export.js';
 // Core link operations (U4): the typed data-access primitives the UI and
 // MCP adapters both call — create (dedup/merge), read, list, search, edit,
 // tag, trash/restore. See docs/rules/architecture.md — this is the one

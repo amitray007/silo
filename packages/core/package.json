@@ -17,6 +17,7 @@
     "@silo/db": "workspace:*",
     "drizzle-orm": "catalog:",
     "normalize-url": "catalog:",
+    "yaml": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

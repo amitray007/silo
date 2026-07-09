@@ -129,6 +129,9 @@ catalogs:
     vitest:
       specifier: 4.1.9
       version: 4.1.9
+    yaml:
+      specifier: 2.9.0
+      version: 2.9.0
     zod:
       specifier: 4.4.3
       version: 4.4.3
@@ -338,6 +341,9 @@ importers:
       normalize-url:
         specifier: 'catalog:'
         version: 9.0.1
+      yaml:
+        specifier: 'catalog:'
+        version: 2.9.0
       zod:
         specifier: 'catalog:'
         version: 4.4.3
