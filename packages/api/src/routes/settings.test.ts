@@ -22,7 +22,11 @@ const describeIfPg = postgresReachable() ? describe : describe.skip;
 type SettingsBody = {
   theme: 'light' | 'dark' | 'system';
   trashPurgeDays: 7 | 30 | 90;
-  plugins: { hacker_news: boolean; github: boolean; youtube: boolean };
+  plugins: {
+    hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
+    github: { enabled: boolean; hover: boolean };
+    youtube: { enabled: boolean; hover: boolean };
+  };
 };
 
 /** PATCHes `body` as JSON to `/api/settings` on `app` — the shared shape every PATCH test in this file needs. */
@@ -47,7 +51,11 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     expect(body).toEqual({
       theme: 'system',
       trashPurgeDays: 30,
-      plugins: { hacker_news: true, github: true, youtube: true },
+      plugins: {
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      },
     });
   });
 
@@ -90,12 +98,20 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
   it('PATCH a single plugin toggle persists the full plugins record', async () => {
     const { app } = harness.mod();
     const patchRes = await patchSettings(app, {
-      plugins: { hacker_news: false, github: true, youtube: true },
+      plugins: {
+        hacker_news: { enabled: false, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      },
     });
     expect(patchRes.status).toBe(200);
 
     const getBody = await expectOk<SettingsBody>(app, '/api/settings');
-    expect(getBody.plugins).toEqual({ hacker_news: false, github: true, youtube: true });
+    expect(getBody.plugins).toEqual({
+      hacker_news: { enabled: false, inline: true, hover: true },
+      github: { enabled: true, hover: true },
+      youtube: { enabled: true, hover: true },
+    });
   });
 
   it('PATCH is a genuine partial update — other keys are untouched', async () => {
@@ -141,17 +157,31 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     expect(body.error).toBe('validation_error');
   });
 
-  it('PATCH rejects an unknown plugin key with 400 validation_error', async () => {
+  it('PATCH rejects an unknown top-level plugin key with 400 validation_error', async () => {
+    // The plan-026 migration normalizer reshapes the three KNOWN source keys
+    // but passes any unrecognized top-level key through unchanged, so the
+    // schema's `.strict()` still rejects a stray plugin name.
     const { app } = harness.mod();
     const res = await patchSettings(app, {
-      plugins: { hacker_news: true, github: true, youtube: true, evilPlugin: true },
+      plugins: {
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+        evilPlugin: true,
+      },
     });
     expect(res.status).toBe(400);
     const body = (await res.json()) as ErrorEnvelope;
     expect(body.error).toBe('validation_error');
   });
 
-  it('PATCH rejects a plugins record missing a required key with 400 validation_error', async () => {
+  it('PATCH rejects a legacy-boolean / incomplete plugins record at the edge with 400', async () => {
+    // Writes must be well-formed in the CURRENT (per-source object) shape: the
+    // edge schema strictly validates the new shape, so a legacy boolean value
+    // (or a record missing a source key) 400s here. The plan-026 migration
+    // that self-heals legacy blobs is READ-only (for pre-026 stored data);
+    // it does not loosen the write contract. Our own web client always sends
+    // the full new shape, so this only ever rejects genuinely malformed writes.
     const { app } = harness.mod();
     const res = await patchSettings(app, {
       plugins: { hacker_news: true, github: true },

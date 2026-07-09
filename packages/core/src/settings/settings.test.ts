@@ -35,9 +35,9 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(await ops.getSetting('theme')).toBe('system');
       expect(await ops.getSetting('trashPurgeDays')).toBe(30);
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: true,
-        github: true,
-        youtube: true,
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
       });
     });
 
@@ -46,7 +46,11 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(all).toEqual({
         theme: 'system',
         trashPurgeDays: 30,
-        plugins: { hacker_news: true, github: true, youtube: true },
+        plugins: {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        },
       });
     });
   });
@@ -63,11 +67,29 @@ describeIfPg('settings store (integration, plan 016)', () => {
     });
 
     it('persists a partial plugins record merge — the FULL object is stored, not merged at write time', async () => {
-      await ops.setSetting('plugins', { hacker_news: false, github: true, youtube: false });
+      await ops.setSetting('plugins', {
+        hacker_news: { enabled: false, inline: false, hover: false },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: false, hover: false },
+      });
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: false,
-        github: true,
-        youtube: false,
+        hacker_news: { enabled: false, inline: false, hover: false },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: false, hover: false },
+      });
+    });
+
+    it('a legacy boolean-shaped plugins blob (pre-026) reads back migrated to the new per-feature shape', async () => {
+      // Simulate a row written before plan 026, bypassing setSetting's
+      // CURRENT-schema validation — this is exactly the shape a real
+      // pre-026 install has sitting in its `settings` table today.
+      await rawDb.execute(
+        sql`insert into settings (key, value) values ('plugins', '{"hacker_news": true, "github": false, "youtube": true}'::jsonb)`,
+      );
+      expect(await ops.getSetting('plugins')).toEqual({
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: false, hover: false },
+        youtube: { enabled: true, hover: true },
       });
     });
 
@@ -99,16 +121,44 @@ describeIfPg('settings store (integration, plan 016)', () => {
       await expect(ops.setSetting('trashPurgeDays', 5)).rejects.toThrow();
     });
 
-    it('rejects a plugins record with an unknown plugin key (.strict())', async () => {
+    it('rejects a plugins record with an unknown top-level plugin key (.strict())', async () => {
       await expect(
-        ops.setSetting('plugins', { hacker_news: true, github: true, youtube: true, evil: true }),
+        ops.setSetting('plugins', {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+          evil: { enabled: true },
+        }),
       ).rejects.toThrow();
     });
 
-    it('rejects a plugins record missing a known key', async () => {
-      await expect(
-        ops.setSetting('plugins', { hacker_news: true, github: true }),
-      ).rejects.toThrow();
+    it('a plugins record with a stray field on a per-source object is NOT rejected — that source falls back to its default (migration normalizer is lenient per-source by design)', async () => {
+      await ops.setSetting('plugins', {
+        hacker_news: { enabled: true, inline: true, hover: true, evil: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      });
+      expect(await ops.getSetting('plugins')).toEqual({
+        hacker_news: { enabled: true, inline: true, hover: true }, // fell back to default
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      });
+    });
+
+    it('a plugins record missing a known top-level source key is NOT rejected — the migration fills the missing source with its default (legacy-tolerant read path)', async () => {
+      // Pre-026 note: this used to throw (missing key = invalid under the
+      // old flat-boolean .strict() schema). Under the plan-026 migration, a
+      // missing source is indistinguishable from "not upgraded yet" and
+      // gets that source's default instead — see `coerceLegacyPluginSource`.
+      await ops.setSetting('plugins', {
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+      });
+      expect(await ops.getSetting('plugins')).toEqual({
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true }, // filled with default
+      });
     });
 
     it('never writes to the database when validation fails', async () => {
@@ -125,7 +175,11 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(all).toEqual({
         theme: 'dark',
         trashPurgeDays: 30,
-        plugins: { hacker_news: true, github: true, youtube: true },
+        plugins: {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        },
       });
     });
 
@@ -151,7 +205,11 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(result).toEqual({
         theme: 'dark',
         trashPurgeDays: 7,
-        plugins: { hacker_news: true, github: true, youtube: true },
+        plugins: {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        },
       });
     });
 
@@ -181,12 +239,20 @@ describeIfPg('settings store (integration, plan 016)', () => {
       const result = await ops.updateSettings({
         theme: 'dark',
         trashPurgeDays: 90,
-        plugins: { hacker_news: false, github: false, youtube: false },
+        plugins: {
+          hacker_news: { enabled: false, inline: false, hover: false },
+          github: { enabled: false, hover: false },
+          youtube: { enabled: false, hover: false },
+        },
       });
       expect(result).toEqual({
         theme: 'dark',
         trashPurgeDays: 90,
-        plugins: { hacker_news: false, github: false, youtube: false },
+        plugins: {
+          hacker_news: { enabled: false, inline: false, hover: false },
+          github: { enabled: false, hover: false },
+          youtube: { enabled: false, hover: false },
+        },
       });
       // And it's actually persisted, not just returned.
       expect(await ops.getSetting('theme')).toBe('dark');

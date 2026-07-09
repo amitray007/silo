@@ -158,8 +158,13 @@ export async function enrichSource(
 
     // Missing map (enabledPlugins undefined) or missing key both mean
     // "unknown toggle state" — default to enabled, matching
-    // `SETTINGS_DEFAULTS.plugins` (all true).
-    const isEnabled = enabledPlugins?.[plugin.kind] ?? true;
+    // `SETTINGS_DEFAULTS.plugins` (all true). The gate is the master
+    // `.enabled` field only (plan 026 U2) — the per-feature `inline`/`hover`
+    // flags are render-time decisions (U4/U5), not worker-fetch gates: we
+    // still fetch source data whenever `enabled` is true even if both
+    // render flags are off, since a cheap already-fetched read later is
+    // preferable to re-fetching if a feature flag flips back on.
+    const isEnabled = enabledPlugins?.[plugin.kind]?.enabled ?? true;
     if (!isEnabled) {
       return undefined;
     }

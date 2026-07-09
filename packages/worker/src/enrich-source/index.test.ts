@@ -113,13 +113,17 @@ describe('enrichSource', () => {
     });
   });
 
-  describe('plugin toggle enforcement (plan 017)', () => {
+  describe('plugin toggle enforcement (plan 017, gate shape updated plan 026 U2)', () => {
     it('a disabled plugin skips its enricher (resolves undefined, degrades like no source enrichment)', async () => {
       const result = await enrichSource(
         'hacker_news',
         'https://news.ycombinator.com/item?id=1',
         { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
-        { hacker_news: false, github: true, youtube: true },
+        {
+          hacker_news: { enabled: false, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        },
       );
       expect(result).toBeUndefined();
     });
@@ -129,7 +133,25 @@ describe('enrichSource', () => {
         'hacker_news',
         'https://news.ycombinator.com/item?id=1',
         { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
-        { hacker_news: true, github: true, youtube: true },
+        {
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        },
+      );
+      expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
+    });
+
+    it('gates on master `enabled` only — still enriches when inline/hover are both off (plan 026 U2: fetch runs regardless of render-time flags)', async () => {
+      const result = await enrichSource(
+        'hacker_news',
+        'https://news.ycombinator.com/item?id=1',
+        { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
+        {
+          hacker_news: { enabled: true, inline: false, hover: false },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        },
       );
       expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
     });
@@ -144,7 +166,11 @@ describe('enrichSource', () => {
               okResult({ stargazers_count: 1, forks_count: 2, open_issues_count: 3 }),
             ),
         },
-        { hacker_news: false, github: true, youtube: true },
+        {
+          hacker_news: { enabled: false, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        },
       );
       expect(result).toEqual({ kind: 'github', stars: 1, forks: 2, issues: 3 });
     });

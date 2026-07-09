@@ -57,7 +57,12 @@ describeIfPg('enrichLink (integration)', () => {
       enrichSource: () => Promise.resolve(undefined),
       // Plugin-toggle enforcement is covered in its own describe block below
       // — these generic tests don't care about the toggle state.
-      getPluginsSetting: () => Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+      getPluginsSetting: () =>
+        Promise.resolve({
+          hacker_news: { enabled: true, inline: true, hover: true },
+          github: { enabled: true, hover: true },
+          youtube: { enabled: true, hover: true },
+        }),
     };
   }
 
@@ -184,7 +189,11 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.reject(new Error('unexpected extract crash')),
         enrichSource: () => Promise.resolve(undefined),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+          }),
       }),
     ).rejects.toThrow('unexpected extract crash');
     // Untouched — the failed attempt recorded nothing; a retry starts fresh.
@@ -207,7 +216,11 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: () =>
           Promise.resolve({ kind: 'hacker_news', points: 500, comments: 200, author: 'pg' }),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
@@ -231,7 +244,11 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: () =>
           Promise.resolve({ kind: 'hacker_news', points: 10, comments: 3, author: 'x' }),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       expect(link?.captureStatus).toBe('bare');
@@ -274,7 +291,7 @@ describeIfPg('enrichLink (integration)', () => {
       ) => {
         calls.push([sourceKind, url, enabledPlugins]);
         return Promise.resolve(
-          enabledPlugins?.hacker_news === false
+          enabledPlugins?.hacker_news.enabled === false
             ? undefined
             : { kind: 'hacker_news' as const, points: 1, comments: 1, author: 'x' },
         );
@@ -300,13 +317,21 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: spyingEnrichSource(calls),
         getPluginsSetting: () => {
           getPluginsSettingCallCount += 1;
-          return Promise.resolve({ hacker_news: false, github: true, youtube: true });
+          return Promise.resolve({
+            hacker_news: { enabled: false, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+          });
         },
       });
 
       expect(getPluginsSettingCallCount).toBe(1);
       expect(calls).toHaveLength(1);
-      expect(calls[0]?.[2]).toEqual({ hacker_news: false, github: true, youtube: true });
+      expect(calls[0]?.[2]).toEqual({
+        hacker_news: { enabled: false, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      });
     });
 
     it('disabled plugin -> enrichSource degrades -> no sourceData recorded (generic capture only)', async () => {
@@ -316,7 +341,11 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
         enrichSource: spyingEnrichSource([]),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: false, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: false, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       // No sourceData folded in — createLink's safe `link` floor stands, and
@@ -333,7 +362,11 @@ describeIfPg('enrichLink (integration)', () => {
         extract: () => Promise.resolve({ status: 'partial', title: 'HN thread' }),
         enrichSource: spyingEnrichSource([]),
         getPluginsSetting: () =>
-          Promise.resolve({ hacker_news: true, github: true, youtube: true }),
+          Promise.resolve({
+            hacker_news: { enabled: true, inline: true, hover: true },
+            github: { enabled: true, hover: true },
+            youtube: { enabled: true, hover: true },
+          }),
       });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
@@ -357,7 +390,11 @@ describeIfPg('enrichLink (integration)', () => {
       ).resolves.toBeUndefined();
 
       // Degraded to the all-enabled default, not left undefined/false.
-      expect(calls[0]?.[2]).toEqual({ hacker_news: true, github: true, youtube: true });
+      expect(calls[0]?.[2]).toEqual({
+        hacker_news: { enabled: true, inline: true, hover: true },
+        github: { enabled: true, hover: true },
+        youtube: { enabled: true, hover: true },
+      });
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
         kind: 'hacker_news',

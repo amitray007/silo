@@ -25,11 +25,18 @@ const settingsPatchBodySchema = z
   .object({
     theme: z.enum(['light', 'dark', 'system']).optional(),
     trashPurgeDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional(),
+    // Plan 026: per-source objects (master `enabled` + the render features that
+    // source supports). Mirrors `core`'s `settingsSchema.plugins` exactly. The
+    // edge validates the CURRENT (new) shape strictly — well-formed writes only;
+    // legacy-boolean *reads* of pre-026 stored blobs are handled by core's
+    // migration normalizer, not here.
     plugins: z
       .object({
-        hacker_news: z.boolean(),
-        github: z.boolean(),
-        youtube: z.boolean(),
+        hacker_news: z
+          .object({ enabled: z.boolean(), inline: z.boolean(), hover: z.boolean() })
+          .strict(),
+        github: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
+        youtube: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
       })
       .strict()
       .optional(),
