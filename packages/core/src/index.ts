@@ -45,6 +45,15 @@ export type { Db, Executor, Tx } from './links/executor.js';
 // export.ts's doc comments for the format-by-format contract.
 export type { ExportFormat, ExportResult } from './links/export.js';
 export { EXPORT_VERSION, exportLinks, InvalidExportFormatError } from './links/export.js';
+// Import (import slice, U1): importLinks is the write half of the export/
+// import round-trip — restores a silo `version: 1` JSON export back into the
+// store, reusing `createLink`'s existing canonical-URL dedup-merge (no new
+// write path). Envelope-invalid payloads throw `InvalidImportError`;
+// per-link failures are collected into `ImportResult.skipped` rather than
+// failing the whole import. See import.ts's doc comments for the full
+// validation/dedup contract.
+export type { ImportResult, ImportSkip } from './links/import.js';
+export { InvalidImportError, importLinks } from './links/import.js';
 // Core link operations (U4): the typed data-access primitives the UI and
 // MCP adapters both call — create (dedup/merge), read, list, search, edit,
 // tag, trash/restore. See docs/rules/architecture.md — this is the one
