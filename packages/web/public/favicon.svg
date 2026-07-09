@@ -1,15 +1,19 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-labelledby="silo-favicon-title">
   <!--
-    The amber "grain dot" mark, self-hosted (no third-party favicon fetch —
-    see docs/rules/architecture.md privacy rule). Mirrors the gradient used
-    by .silo-grain-dot in src/styles/base.css (light-mode --mark colors).
+    silo "Stack" brand mark — self-hosted favicon (no third-party favicon
+    fetch; see docs/rules/architecture.md privacy rule). Three stored items,
+    the top one lit with the amber grain gradient; the lower two are ink.
+    Grain gradient mirrors the in-app Stack mark component (GrainDot.tsx),
+    which uses the same fixed stops rather than the theme-flipped mark token.
   -->
   <title id="silo-favicon-title">silo</title>
   <defs>
-    <radialGradient id="grain" cx="32%" cy="30%" r="75%">
+    <linearGradient id="grain" x1="0" y1="0" x2="0.55" y2="1">
       <stop offset="0%" stop-color="#e8b054" />
-      <stop offset="70%" stop-color="#c98f2d" />
-    </radialGradient>
+      <stop offset="100%" stop-color="#c98f2d" />
+    </linearGradient>
   </defs>
-  <circle cx="16" cy="16" r="15" fill="url(#grain)" />
+  <rect x="7" y="19.5" width="18" height="5" rx="2.5" fill="#211b11" opacity="0.34" />
+  <rect x="7" y="12.5" width="18" height="5" rx="2.5" fill="#211b11" opacity="0.62" />
+  <rect x="7" y="5.5"  width="18" height="5" rx="2.5" fill="url(#grain)" />
 </svg>
