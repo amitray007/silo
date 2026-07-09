@@ -8,7 +8,8 @@
     "dev": "vite",
     "build": "vite build",
     "check-types": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "gen-icons": "node scripts/gen-icons.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "catalog:",
@@ -25,6 +26,8 @@
     "@vitejs/plugin-react": "catalog:",
     "agentation": "catalog:",
     "jsdom": "catalog:",
+    "png-to-ico": "^3.0.2",
+    "sharp": "^0.35.3",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
