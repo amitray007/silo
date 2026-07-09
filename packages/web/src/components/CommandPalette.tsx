@@ -525,6 +525,10 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
         position: 'fixed',
         inset: 0,
         background: 'var(--scrim)',
+        // Frosted-glass backdrop, matching the modal shell — the app blurs
+        // behind the palette so it clearly floats above a defocused page.
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'flex',
         justifyContent: 'center',
         // `flex-start` (NOT the default `stretch`): the scrim is a flex row, so
