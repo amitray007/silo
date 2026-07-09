@@ -238,16 +238,29 @@ describe('SettingsModal', () => {
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
     });
 
-    it('shows the persisted purge window from /api/settings, and cycling it PATCHes the next value (plan 016)', async () => {
+    it('shows the persisted purge window as a custom dropdown, and selecting an option PATCHes it', async () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
-      const purgeButton = await screen.findByRole('button', { name: /30 days/i });
-      expect(purgeButton).not.toHaveProperty('disabled', true);
+      const purgeButton = await screen.findByRole('button', {
+        name: /trash auto-empty window/i,
+      });
+      expect(purgeButton.textContent).toContain('30 days');
+      expect(purgeButton.getAttribute('aria-expanded')).toBe('false');
 
       fireEvent.click(purgeButton);
-      // Cycles 30 -> 90 (v3's cyclePurge order: 7 -> 30 -> 90 -> 7).
-      expect(await screen.findByRole('button', { name: /90 days/i })).toBeDefined();
+      expect(screen.getByRole('listbox')).toBeDefined();
+      expect(screen.getByRole('option', { name: '7 days' })).toBeDefined();
+      expect(screen.getByRole('option', { name: /30 days/ }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+      fireEvent.click(screen.getByRole('option', { name: '90 days' }));
+
+      const updatedButton = await screen.findByRole('button', {
+        name: /trash auto-empty window/i,
+      });
+      expect(updatedButton.textContent).toContain('90 days');
+      expect(screen.queryByRole('listbox')).toBeNull();
     });
   });
 
