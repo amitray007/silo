@@ -239,9 +239,9 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       data-open={open}
       className="silo-sidebar"
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 9, padding: '6px 9px 15px' }}>
-        <GrainDot size={16} />
-        <span style={{ fontWeight: 500, fontSize: 'var(--text-md)', letterSpacing: '-0.01em' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 9px 16px' }}>
+        <GrainDot size={26} plate />
+        <span style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}>
           silo
         </span>
       </div>
