@@ -1,0 +1,110 @@
+/**
+ * The options page's own stylesheet — split out of the now-deleted
+ * `popup/popup.css` (the popup was removed in the capture-redesign; the
+ * options page still needs the shared Oat base tokens + the handful of
+ * classes it actually renders — see `src/options/options.ts`).
+ */
+:root {
+  --bg: #fbf7ef;
+  --bg-2: #f4ede1;
+  --line: #ebe2d2;
+  --ink: #211b11;
+  --muted: #6e6350;
+  --faint: #8c8170;
+  --mark: #c98f2d;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #171310;
+    --bg-2: #201a15;
+    --line: #2c251d;
+    --ink: #ede5d8;
+    --muted: #a89a87;
+    --faint: #8c7f6c;
+    --mark: #d9a441;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Geist Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-size: 13px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--line);
+}
+
+.dot {
+  flex-shrink: 0;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--mark);
+}
+
+.wordmark {
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.section {
+  padding: 12px 14px;
+}
+
+input {
+  width: 100%;
+  background: var(--bg-2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  font-family: inherit;
+  font-size: 12px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+}
+
+input:focus {
+  outline: none;
+  border-color: var(--faint);
+}
+
+button.save {
+  width: 100%;
+  background: var(--ink);
+  color: var(--bg);
+  border: none;
+  border-radius: 8px;
+  padding: 9px;
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button.save:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.status {
+  margin-top: 8px;
+  font-size: 11px;
+  color: var(--muted);
+  min-height: 14px;
+}
+
+.status.error {
+  color: #b3543a;
+}
