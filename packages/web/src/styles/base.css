@@ -219,12 +219,14 @@ select {
   flex-direction: column;
   /* Full-bleed content surface (the floating-panel radius + elevation were
      retired when the app went edge-to-edge): a --bg2 fill separated from the
-     transparent sidebar by a single hairline on its left edge, matching
-     shiori's flush sidebar↔content divider. No radius (the window's own
-     corners are the only rounding now), no drop shadow (nothing to float
-     above). */
+     transparent sidebar by a single hairline on its left edge. The divider is
+     a translucent light hairline (rgba white .06) rather than the solid brown
+     --line, so it reads as a soft Apple/iOS-style seam — barely there, a
+     whisper of light on the dark ground — not a hard drawn rule (user
+     feedback: shiori's divider is far lighter-weight). No radius (the window's
+     own corners are the only rounding now), no drop shadow. */
   background: var(--bg2);
-  border-left: 1px solid var(--line);
+  border-left: 1px solid rgba(255, 255, 255, 0.06);
   overflow: hidden;
 }
 
@@ -250,14 +252,15 @@ select {
   flex-direction: column;
 }
 
-/* The reading-column cap. Widened 45rem → 48rem so the list fills the content
-   panel edge-to-edge (with the 56rem band + 232px sidebar the panel is
-   ~45rem wide, so this cap effectively lets `width:100%` govern) — killing
-   the stranded-left list + empty-right-panel gap the user flagged against
-   shiori, whose list fills its whole panel. */
+/* The list column now fills the WHOLE content panel (no reading-column cap) —
+   the 48rem cap pinned the list far-left on a wide window, leaving a large
+   empty right void the user flagged. Shiori's list spans its entire panel:
+   the title sits left and the domain + ⋯ actions ride the far-right edge (the
+   row is a flex layout with a `flex:1` spacer between title and meta, so they
+   spread to fill). Matching that — rows go full-width, aligned with the
+   full-width header above them. */
 .silo-content-col {
   width: 100%;
-  max-width: 48rem;
   flex: 1;
   min-height: 0;
   display: flex;
