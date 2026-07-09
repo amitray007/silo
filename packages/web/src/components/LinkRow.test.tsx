@@ -299,10 +299,10 @@ describe('LinkRow', () => {
     });
   });
 
-  it('renders the "author: tweet text" inline line for a Twitter/X link (command-center polish slice)', () => {
+  it('renders the tweet text inline line (no author prefix) for a Twitter/X link (command-center polish slice)', () => {
     renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />);
     expect(
-      screen.getByText('Amit Ray: Just shipped a new feature — thrilled with how it turned out.'),
+      screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
     ).toBeDefined();
   });
 
@@ -315,9 +315,7 @@ describe('LinkRow', () => {
         twitter: { enabled: true, inline: false, hover: true },
       });
       expect(
-        screen.queryByText(
-          'Amit Ray: Just shipped a new feature — thrilled with how it turned out.',
-        ),
+        screen.queryByText('Just shipped a new feature — thrilled with how it turned out.'),
       ).toBeNull();
       expect(screen.getByText('A post')).toBeDefined();
     });
@@ -330,7 +328,7 @@ describe('LinkRow', () => {
         twitter: { enabled: true, inline: true, hover: true },
       });
       expect(
-        screen.getByText('Amit Ray: Just shipped a new feature — thrilled with how it turned out.'),
+        screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
       ).toBeDefined();
     });
 
@@ -342,16 +340,14 @@ describe('LinkRow', () => {
         twitter: { enabled: false, inline: true, hover: true },
       });
       expect(
-        screen.queryByText(
-          'Amit Ray: Just shipped a new feature — thrilled with how it turned out.',
-        ),
+        screen.queryByText('Just shipped a new feature — thrilled with how it turned out.'),
       ).toBeNull();
     });
 
     it('no settings seeded (loading): the line renders (optimistic ?? true default)', () => {
       renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />);
       expect(
-        screen.getByText('Amit Ray: Just shipped a new feature — thrilled with how it turned out.'),
+        screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
       ).toBeDefined();
     });
   });

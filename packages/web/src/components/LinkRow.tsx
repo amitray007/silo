@@ -354,11 +354,12 @@ export function LinkRow({ link }: { link: LinkJson }) {
         )}
         {link.sourceData.kind === 'twitter' && showTwitterInline && (
           // Mirrors the HN inline block above exactly (same left inset, same
-          // --text-sm/--fnt/single-line-ellipsis treatment) — the user-picked
-          // "author + text" row: `{authorName}: {tweet text}`, truncated to
-          // one line. The row's own TITLE stays the page title unchanged;
-          // this line ADDS the tweet's actual content underneath it, same
-          // relationship HN's points/comments line has to its title.
+          // --text-sm/--fnt/single-line-ellipsis treatment): the tweet TEXT,
+          // truncated to one line, added under the row title. The `{authorName}:`
+          // prefix was dropped (user feedback) — the row's own title already
+          // reads "{authorName} (@handle) on X", so leading the line with the
+          // author again was pure repetition; the tweet text alone is the
+          // content this line exists to surface.
           <span
             style={{
               display: 'block',
@@ -370,7 +371,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
               whiteSpace: 'nowrap',
             }}
           >
-            {link.sourceData.authorName}: {link.sourceData.text}
+            {link.sourceData.text}
           </span>
         )}
         {link.notes && (
