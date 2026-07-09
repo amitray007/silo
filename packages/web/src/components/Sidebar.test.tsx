@@ -48,17 +48,19 @@ describe('Sidebar', () => {
     vi.unstubAllGlobals();
   });
 
-  it('renders Library/Trash counts and a NavItem per tag, count-desc order preserved', async () => {
+  it('shows NO Library count, a compact-formatted Trash count, and compact tag counts (count-desc order)', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
-        return Promise.resolve(jsonResponse({ live: 128, trash: 2, purgeWindowDays: 30 }));
+        // live 128 must NOT appear (Library count removed, user feedback);
+        // trash 1500 must render as the compact "1.5k".
+        return Promise.resolve(jsonResponse({ live: 128, trash: 1500, purgeWindowDays: 30 }));
       }
       if (url === '/api/tags') {
         return Promise.resolve(
           jsonResponse({
             tags: [
-              { name: 'ai', count: 23 },
+              { name: 'ai', count: 12000 },
               { name: 'design', count: 17 },
               { name: 'mcp', count: 7 },
             ],
@@ -71,19 +73,19 @@ describe('Sidebar', () => {
     renderSidebar();
 
     expect(screen.getByText('silo')).toBeDefined();
-    await waitFor(() => expect(screen.getByText('128')).toBeDefined());
-    expect(screen.getByText('2')).toBeDefined();
+    // Trash count is compact-formatted, and the raw Library count never renders.
+    await waitFor(() => expect(screen.getByText('1.5k')).toBeDefined());
+    expect(screen.queryByText('128')).toBeNull();
 
     // The `#` is its own span (spacing fix), so the tag name is a separate text
-    // node — query by name and read tag rows by role for order.
+    // node — query by name and read tag rows by role for order. Tag counts are
+    // compact too (12000 → 12k).
     await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
     const tagNames = ['ai', 'design', 'mcp'].map(
       (name) => screen.getByRole('link', { name: new RegExp(name, 'i') }).textContent,
     );
-    expect(tagNames).toEqual(['#ai23', '#design17', '#mcp7']);
-    expect(screen.getByText('23')).toBeDefined();
-    expect(screen.getByText('17')).toBeDefined();
-    expect(screen.getByText('7')).toBeDefined();
+    expect(tagNames).toEqual(['#ai12k', '#design17', '#mcp7']);
+    expect(screen.getByText('12k')).toBeDefined();
 
     expect(screen.getByRole('link', { name: /settings/i })).toBeDefined();
   });
@@ -223,10 +225,12 @@ describe('Sidebar', () => {
     });
 
     it('renders the "⌘K" shortcut chip in the same right-aligned meta column as counts', async () => {
-      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 0, purgeWindowDays: 30 }));
+      // trash 2 anchors the load (Library no longer renders a count) and
+      // formats compactly as "2".
+      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 2, purgeWindowDays: 30 }));
       renderSidebar();
 
-      await waitFor(() => expect(screen.getByText('3')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('2')).toBeDefined());
       expect(screen.getByText('⌘')).toBeDefined();
       expect(screen.getByText('K')).toBeDefined();
     });

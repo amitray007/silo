@@ -2,6 +2,7 @@ import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
 import type { TagCount } from '../api/types';
+import { formatCount } from '../lib/formatCount';
 import { GrainDot } from './GrainDot';
 import { LibraryIcon, SearchIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
@@ -247,18 +248,13 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
 
       <SidebarSearchItem onOpenSearch={onOpenSearch} />
 
-      <NavItemLink
-        to="/"
-        end
-        label="Library"
-        meta={counts?.live}
-        icon={<LibraryIcon />}
-        onNavigate={onNavigate}
-      />
+      {/* Library shows NO count (user feedback: the live count beside the top
+          nav item was noise — the list itself is the count). */}
+      <NavItemLink to="/" end label="Library" icon={<LibraryIcon />} onNavigate={onNavigate} />
       <NavItemLink
         to="/trash"
         label="Trash"
-        meta={counts ? String(counts.trash) : undefined}
+        meta={counts ? formatCount(counts.trash) : undefined}
         icon={<TrashIcon />}
         onNavigate={onNavigate}
       />
@@ -278,7 +274,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
             // glyph, bright (--ink) label.
             icon={<span style={{ color: 'var(--ghost)', fontSize: 'var(--text-md)' }}>#</span>}
             label={tag.name}
-            meta={tag.count}
+            meta={formatCount(tag.count)}
             variant="tag"
             onNavigate={onNavigate}
           />

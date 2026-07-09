@@ -73,29 +73,18 @@ const HIDE_DELAY_MS = 140;
  * bad of two overlaps" rather than silently assuming the left flip always
  * fully escapes the row.
  */
-export function computePosition(rect: DOMRect, pointerX?: number): HoverPreviewPosition {
+export function computePosition(rect: DOMRect): HoverPreviewPosition {
   const CARD_WIDTH = 288;
-  const GAP = 14;
+  const EDGE_MARGIN = 16;
 
-  // Anchor to the POINTER, not the row's right edge (user feedback: the card
-  // was floating at the far-right of a full-width row, disconnected from the
-  // cursor). Place the card just to the right of the pointer; if that would
-  // run off the viewport, flip it to the pointer's left. When there's no
-  // pointer (keyboard focus), fall back to the row's right edge as before.
-  const anchorX = pointerX ?? rect.right;
-
-  const rightCandidate = Math.round(
-    Math.max(14, Math.min(anchorX + GAP, window.innerWidth - CARD_WIDTH - 16)),
-  );
-  const leftCandidate = Math.round(Math.max(14, anchorX - GAP - CARD_WIDTH));
-
-  // Clearance = how much of the card sits clear of the anchor on that side;
-  // negative means the card overlaps back past the pointer by that many px.
-  const rightClearance = rightCandidate - anchorX;
-  const leftClearance = anchorX - (leftCandidate + CARD_WIDTH);
-
-  const left =
-    rightClearance >= 0 || rightClearance >= leftClearance ? rightCandidate : leftCandidate;
+  // Pinned to the RIGHT edge of the viewport, top-aligned to the hovered row
+  // (user feedback + the shiori reference): the card docks on the right like a
+  // detail pane rather than following the cursor — a fleeting cursor-anchored
+  // card (the previous behavior) read as jumpy and could cover the row's own
+  // ⋯ actions. A fixed right dock is calm and predictable, and since the
+  // content column doesn't run all the way to the window edge on a wide
+  // window, this lands the card in the empty right gutter beside the list.
+  const left = Math.round(Math.max(EDGE_MARGIN, window.innerWidth - CARD_WIDTH - EDGE_MARGIN));
   const top = Math.round(Math.max(14, Math.min(rect.top - 4, window.innerHeight - 340)));
   return { top, left };
 }
@@ -110,11 +99,7 @@ interface HoverPreviewContextValue {
    * (its demo has no touch/menu-open guard), but a hover-only hint that
    * mis-times against another open overlay was a real reviewed risk.
    */
-  scheduleShow: (
-    link: LinkJson,
-    rect: DOMRect,
-    options?: { suppress?: boolean; pointerX?: number },
-  ) => void;
+  scheduleShow: (link: LinkJson, rect: DOMRect, options?: { suppress?: boolean }) => void;
   /** Row hover-leave (v3's `leave`): cancels a pending show, and schedules a hide for `linkId` after the hide delay (only if THIS link's preview is what's currently showing/pending — matches v3's `s2.preview.id === l.id` guard). */
   scheduleHide: (linkId: string) => void;
   /**
@@ -181,7 +166,7 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
   }, [preview]);
 
   const scheduleShow = useCallback(
-    (link: LinkJson, rect: DOMRect, options?: { suppress?: boolean; pointerX?: number }) => {
+    (link: LinkJson, rect: DOMRect, options?: { suppress?: boolean }) => {
       if (showTimer.current) clearTimeout(showTimer.current);
       if (hideTimer.current) clearTimeout(hideTimer.current);
       if (options?.suppress) return;
@@ -192,9 +177,8 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
       // "switching between links takes too long": the wait only ever applies
       // to the first open, not to every subsequent row switch.
       const delay = isShowingRef.current ? SHOW_DELAY_WARM_MS : SHOW_DELAY_COLD_MS;
-      const pointerX = options?.pointerX;
       showTimer.current = setTimeout(() => {
-        setPreview({ link, position: computePosition(rect, pointerX) });
+        setPreview({ link, position: computePosition(rect) });
       }, delay);
     },
     [],
