@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { NavItem } from './NavItem';
 
 describe('NavItem', () => {
-  it('renders an inactive item: mut text, background left to CSS (not inline)', () => {
+  it('renders an inactive item: ink text, background left to CSS (not inline)', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
-    expect(link.style.color).toBe('var(--mut)');
+    expect(link.style.color).toBe('var(--ink)');
     // The inactive case must NOT set an inline `background` (review fix,
     // CodeRabbit): inline styles always beat CSS regardless of specificity,
     // so an inline `background: transparent` here would silently defeat
@@ -84,18 +84,18 @@ describe('NavItem', () => {
     expect(link.style.fontWeight).toBe('400');
   });
 
-  it('the "settings" variant uses --fnt (not --mut) for its inactive color', () => {
+  it('the "settings" variant uses --mut (not --ink) for its inactive color', () => {
     render(<NavItem label="Settings" href="/settings" variant="settings" />);
     const link = screen.getByRole('link', { name: /settings/i });
-    expect(link.style.color).toBe('var(--fnt)');
+    expect(link.style.color).toBe('var(--mut)');
     expect(link.style.fontWeight).toBe('400');
   });
 
-  it('the default variant is weight 500 with --mut inactive color and 7px var(--s2-5) padding (K3 token migration)', () => {
+  it('the default variant is weight 500 with --ink inactive color and 7px var(--s2-5) padding (K3 token migration)', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
     expect(link.style.fontWeight).toBe('500');
-    expect(link.style.color).toBe('var(--mut)');
+    expect(link.style.color).toBe('var(--ink)');
     expect(link.style.padding).toBe('7px var(--s2-5)');
   });
 
@@ -133,7 +133,7 @@ describe('NavItem', () => {
       expect(button.style.padding).toBe('7px var(--s2-5)');
       expect(button.style.fontWeight).toBe('500');
       expect(button.style.fontSize).toBe('var(--text-base)');
-      expect(button.style.color).toBe('var(--mut)');
+      expect(button.style.color).toBe('var(--ink)');
       expect(button.className).toContain('silo-nav-item');
       expect(button.querySelector('svg')).not.toBeNull();
       expect(screen.getByText('/')).toBeDefined();

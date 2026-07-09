@@ -427,7 +427,10 @@ export function HoverPreview({
           rel="noopener"
           className="silo-edit-footer-btn"
           style={{
-            color: 'var(--fnt)',
+            // Brightened from `--fnt` (direct user feedback): "Open ↗" is
+            // this card's own primary affordance — the actual link-out
+            // action, not meta text like the domain/time beside it.
+            color: 'var(--mut)',
             textDecoration: 'none',
             fontWeight: 500,
           }}

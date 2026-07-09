@@ -20,22 +20,29 @@ const COPY_RESET_MS = 700;
  * called `menuItemStyle()` with no argument for every row except "tags",
  * so only "tags" ever got the promised `--hov` hover treatment).
  */
-function menuItemStyle(active = false): React.CSSProperties {
+function menuItemStyle(active = false, danger = false): React.CSSProperties {
   return {
     display: 'flex',
     alignItems: 'center',
-    gap: 'var(--s2)',
+    gap: 'var(--s3)',
     width: '100%',
     boxSizing: 'border-box',
     border: 0,
     background: active ? 'var(--hov)' : 'none',
     fontFamily: 'inherit',
     textAlign: 'left',
-    padding: 'var(--s2) var(--s2-5)',
+    // Roomier rows (was --s2/--s2-5) so each is an easy, deliberate target
+    // like shiori's menu, not a cramped text line.
+    padding: 'var(--s2-5) var(--s3)',
     borderRadius: 8,
-    fontSize: 'var(--text-sm)',
+    // Labels are --ink/500 (was the muddy --mut at --text-sm): shiori's menu
+    // labels are crisp bright text, clearly readable — the whole point of the
+    // redesign (user feedback: "muddy ugly"). 14px reads solid at this size.
+    // A `danger` row (Move to trash) is --warn so the destructive action reads
+    // red like shiori's, and its icon inherits the same via currentColor.
+    fontSize: 'var(--text-base)',
     fontWeight: 500,
-    color: 'var(--mut)',
+    color: danger ? 'var(--warn)' : 'var(--ink)',
     cursor: 'pointer',
     transform: 'scale(1)',
     transition: 'background 0.14s ease, transform 0.12s var(--ease-out)',
@@ -54,10 +61,12 @@ function menuItemStyle(active = false): React.CSSProperties {
 function MenuItem({
   href,
   onClick,
+  danger = false,
   children,
 }: {
   href?: string;
   onClick?: () => void;
+  danger?: boolean;
   children: React.ReactNode;
 }) {
   const [hovered, setHovered] = useState(false);
@@ -75,7 +84,7 @@ function MenuItem({
   // a touch cancelled mid-gesture (`touchcancel`/`pointercancel`, neither of
   // which fires a matching `mouseup`) could leave stuck `true`. `:active` is
   // native, stateless, and can't get stuck.
-  const style = menuItemStyle(hovered);
+  const style = menuItemStyle(hovered, danger);
 
   if (href) {
     return (
@@ -100,14 +109,14 @@ function MenuItem({
   );
 }
 
-/** The leading icon slot — fixed 16px so every row's label starts at the same x, whatever 14px SVG icon sits in it. */
+/** The leading icon slot — fixed 18px so every row's label starts at the same x, whatever 16px SVG icon sits in it. Icons are --mut (was the faint --ghost) so they read clearly like shiori's, not as barely-there hairlines. */
 const iconSlotStyle: React.CSSProperties = {
   flex: 'none',
-  width: 16,
-  height: 16,
+  width: 18,
+  height: 18,
   display: 'grid',
   placeItems: 'center',
-  color: 'var(--ghost)',
+  color: 'var(--mut)',
 };
 
 function Divider() {
@@ -118,12 +127,12 @@ function Divider() {
 function MenuIcon({ children }: { children: React.ReactNode }) {
   return (
     <svg
-      width="14"
-      height="14"
+      width="16"
+      height="16"
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
@@ -412,9 +421,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
             the brand grain-dot only, never a control/feedback state, and the
             marks that used to justify `--markt` here (note/claude/enriching)
             were removed in this same polish pass. */}
-        <span style={{ color: copied ? 'var(--ink)' : 'var(--mut)' }}>
-          {copied ? 'Copied' : 'Copy link'}
-        </span>
+        <span>{copied ? 'Copied' : 'Copy link'}</span>
       </MenuItem>
 
       <Divider />
@@ -438,9 +445,12 @@ export function RowMenu({ link }: { link: LinkJson }) {
           <span>{link.captureStatus === 'enriching' ? 'Re-enrich' : 'Enrich'}</span>
         </MenuItem>
       )}
-      <MenuItem onClick={handleTrash}>
-        <span style={iconSlotStyle}>
-          <TrashIcon size={14} stroke="var(--ghost)" />
+      <MenuItem onClick={handleTrash} danger>
+        {/* Icon inherits the row's --warn via currentColor (iconSlot's --mut is
+            overridden here) so the whole destructive row reads red, matching
+            shiori's red "Move to trash". */}
+        <span style={{ ...iconSlotStyle, color: 'currentColor' }}>
+          <TrashIcon size={16} stroke="currentColor" />
         </span>
         <span>Move to trash</span>
       </MenuItem>

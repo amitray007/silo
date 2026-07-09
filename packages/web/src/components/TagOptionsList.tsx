@@ -81,7 +81,14 @@ export function TagOptionsList({
             fontSize: 'var(--text-sm)',
             fontWeight: 400,
             cursor: 'pointer',
-            color: opt.active ? 'var(--ink)' : 'var(--mut)',
+            // Brightened inactive from `--mut` to `--ink` (direct user
+            // feedback): this is a primary clickable tag-picker label — the
+            // active/inactive distinction is already carried by the trailing
+            // dot marker below (`opt.active ? 'var(--mark)' : 'transparent'`)
+            // plus the row's own hover fill, so dimming the LABEL text on top
+            // of that was redundant and read as muddy, same reasoning as
+            // `NavItem`'s `default`/`tag` variants.
+            color: 'var(--ink)',
             transform: 'scale(1)',
           }}
         >

@@ -2,10 +2,17 @@ import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'reac
 
 /**
  * The three row "looks" v3 draws (`docs/design/app/Silo-v3.html`):
- * - `default` — Library/Trash: weight 500, `--mut` inactive color, `7px 10px` padding.
- * - `settings` — the Settings row: weight 400, `--fnt` inactive color (never
- *   `--mut`, even though it's never "active"), `7px 10px` padding.
- * - `tag` — a Tags-section row: weight 400, `--mut` inactive color, `5px 10px` padding.
+ * - `default` — Library/Trash: weight 500, `--ink` inactive color, `7px 10px` padding.
+ * - `settings` — the Settings row: weight 400, `--mut` inactive color (never
+ *   `--ink`, even though it's never "active"), `7px 10px` padding.
+ * - `tag` — a Tags-section row: weight 400, `--ink` inactive color, `5px 10px` padding.
+ * Inactive labels for `default`/`tag` match the active `--ink` color — the
+ * active/inactive distinction is carried entirely by the `--surface-active`/
+ * `--hov` highlight box (see the `active` styling below), not by dimming the
+ * label text, so a resting nav row never reads as muddy (direct user
+ * feedback: primary nav labels rendered in `--mut` looked too dim to read as
+ * the crisp, clickable labels they are). `settings` deliberately stays one
+ * step dimmer at `--mut` — it's a secondary/utility row, never "active".
  * A single named variant (vs. four independent styling props) keeps callers
  * picking a row LOOK rather than reconstructing one prop-by-prop.
  */
@@ -25,9 +32,9 @@ const VARIANT_STYLE: Record<
   // unlike NavItem's own doc-comment guidance for OTHER 5/6 gaps — rounding
   // it would nudge tag rows 1px taller, a real visible change to leave out
   // of a token-migration-only pass).
-  default: { fontWeight: 500, inactiveColor: 'var(--mut)', padding: '7px var(--s2-5)' },
-  settings: { fontWeight: 400, inactiveColor: 'var(--fnt)', padding: '7px var(--s2-5)' },
-  tag: { fontWeight: 400, inactiveColor: 'var(--mut)', padding: '5px var(--s2-5)' },
+  default: { fontWeight: 500, inactiveColor: 'var(--ink)', padding: '7px var(--s2-5)' },
+  settings: { fontWeight: 400, inactiveColor: 'var(--mut)', padding: '7px var(--s2-5)' },
+  tag: { fontWeight: 400, inactiveColor: 'var(--ink)', padding: '5px var(--s2-5)' },
 };
 
 interface NavItemSharedProps {

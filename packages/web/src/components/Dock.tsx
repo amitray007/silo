@@ -136,7 +136,7 @@ export function SelectionDock({
   );
 }
 
-/** The text/color/cursor styling every dock action button shares (text-only `DockAction` and icon-leading `DockIconAction` alike) — only `display`/`gap` differ (the icon variant needs a flex row to lay out its leading icon + label), so those two stay per-caller rather than folding into this shared base. */
+/** The text/color/cursor styling every dock action button shares (text-only `DockAction` and icon-leading `DockIconAction` alike) — only `display`/`gap` differ (the icon variant needs a flex row to lay out its leading icon + label), so those two stay per-caller rather than folding into this shared base. `color: var(--ink)` (brightened from `--mut`, direct user feedback: these ARE the dock's primary clickable affordances — "Clear"/"select all"/"empty all"/"restore"/"delete now" — not secondary meta, so they read at the same brightness as any other primary action label; `opacity` still carries the disabled-dimming signal. */
 function dockActionStyle(disabled: boolean) {
   return {
     border: 0,
@@ -144,7 +144,7 @@ function dockActionStyle(disabled: boolean) {
     fontFamily: 'inherit',
     fontSize: 'var(--text-sm)',
     fontWeight: 500,
-    color: 'var(--mut)',
+    color: 'var(--ink)',
     cursor: disabled ? 'default' : ('pointer' as const),
     opacity: disabled ? 0.5 : 1,
     padding: 0,

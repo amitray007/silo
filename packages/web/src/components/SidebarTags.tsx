@@ -121,7 +121,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           style={{
             fontSize: 'var(--text-sm)',
             fontWeight: 500,
-            color: 'var(--fnt)',
+            color: 'var(--mut)',
             margin: 0,
             letterSpacing: '0.02em',
           }}
@@ -152,7 +152,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             borderRadius: 6,
             padding: 'var(--s1)',
             marginRight: 'calc(var(--s1) * -1)',
-            color: findOpen ? 'var(--ink)' : 'var(--fnt)',
+            color: findOpen ? 'var(--ink)' : 'var(--mut)',
             cursor: 'pointer',
           }}
         >
@@ -261,7 +261,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             borderRadius: 8,
             fontSize: 'var(--text-base)',
             fontWeight: 400,
-            color: 'var(--fnt)',
+            color: 'var(--ink)',
             cursor: 'pointer',
           }}
         >

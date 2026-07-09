@@ -175,7 +175,10 @@ function EditTagsFlyout({
             borderRadius: 6,
             fontSize: 'var(--text-sm)',
             fontWeight: 500,
-            color: 'var(--mut)',
+            // Brightened from `--mut` (direct user feedback): this is the
+            // fly-out's own primary action button ("create this tag"), same
+            // tier as any other clickable row label here.
+            color: 'var(--ink)',
             cursor: 'pointer',
           }}
         >
@@ -425,7 +428,10 @@ export function EditModal({ link }: { link: LinkJson }) {
             background: 'none',
             fontSize: 'var(--text-sm)',
             fontWeight: 500,
-            color: 'var(--fnt)',
+            // Brightened from `--fnt` (direct user feedback): "Trash" is a
+            // real footer action button, same tier as "Cancel"/"Save" beside
+            // it, not secondary meta text.
+            color: 'var(--mut)',
             padding: 0,
             cursor: 'pointer',
             fontFamily: 'inherit',
@@ -459,6 +465,9 @@ export function EditModal({ link }: { link: LinkJson }) {
             background: 'none',
             fontSize: 'var(--text-sm)',
             fontWeight: 500,
+            // `--mut` (already, unchanged) — same secondary-action tier as
+            // the brightened "Trash" button beside it; "Save" stays the sole
+            // `--ink`-on-a-box PRIMARY CTA of the three.
             color: 'var(--mut)',
             padding: 0,
             cursor: 'pointer',
