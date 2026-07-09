@@ -127,20 +127,29 @@ select {
   box-sizing: border-box;
   display: flex;
   justify-content: center;
-  /* Edge-to-edge (user feedback: "remove the top/left/right/bottom spacing").
-     The app now fills the whole window like shiori — no outer margin, no
-     floating panel stranded in a dark field. */
+  /* No vertical margin (the band fills the full window height), but the band
+     is width-capped + centered below, so the --bg frame shows through as
+     empty gutters on the LEFT and RIGHT — shiori's centered-cluster look
+     (user feedback: "shiori has left and right empty"). */
   padding: 0;
 }
 
-/* The full-bleed band: a transparent sidebar (sits directly on --bg — the
-   "sidebar matches background" the user picked) beside the content region.
-   No max-width cap anymore — the band fills the entire window width so the
-   sidebar hugs the left edge and the content hugs the right, matching
-   shiori's edge-to-edge window (user feedback). */
+/* The centered band: sidebar + content as one cluster, capped and centered in
+   the window so the --bg frame shows as calm empty gutters on both sides
+   (shiori's layout — NOT full-bleed edge-to-edge). The sidebar is
+   transparent-on-`--bg` (the "sidebar matches background" the user picked);
+   the content panel is the only filled surface. Full window height (no
+   top/bottom gap), gutters only left/right. */
 .silo-band {
   display: flex;
   width: 100%;
+  /* Capped + centered: on a WIDE window the --bg frame shows as empty gutters
+     on both sides (shiori's centered cluster). On a SMALL/narrow window the
+     band is narrower than this cap, so `width:100%` wins and it fills the
+     whole window edge-to-edge with no gutters (user feedback: "when it's a
+     small page it automatically fills the whole page"). One rule gives both:
+     fill-below-cap, center-above-cap. */
+  max-width: 72rem;
   min-height: 0;
 }
 
