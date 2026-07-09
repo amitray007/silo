@@ -1,17 +1,19 @@
-import { Action, ActionPanel, Icon, List } from '@raycast/api';
+import { List } from '@raycast/api';
 import { useState } from 'react';
-import { buildDetailMarkdown, statusLabel } from './lib/detail-markdown.js';
+import { LinkActions } from './lib/link-actions.js';
+import { LinkDetail } from './lib/link-detail.js';
+import { getBaseUrl } from './lib/preferences.js';
 import { groupByDay } from './lib/search-grouping.js';
 import { domainOf, sourceIcon } from './lib/source-icon.js';
 import type { CapturedLink } from './lib/types.js';
 import { useSiloSearch } from './lib/use-silo-search.js';
 
 /**
- * The find surface (brief: "a left results list ... and a right detail
- * pane"), modeled on `docs/plans/refs/raycast-search-detail-reference.png`:
- * a filterable list with day-section headers on the left, a rich detail
- * card + Information table on the right. Enter opens the link in the
- * browser; ⌘K exposes copy-url / open-in-silo.
+ * The find surface (design spec CMD 3: "Search Silo") — a filterable list
+ * with day-section headers on the left, the shared rich detail pane on the
+ * right (favicon-before-title, proxy image, source stats — `lib/link-
+ * detail.tsx`), and the full `⌘K` action panel (`lib/link-actions.tsx`),
+ * so Search and Browse render identically per the design spec.
  */
 export default function Command() {
   const [query, setQuery] = useState('');
@@ -48,49 +50,18 @@ export default function Command() {
 
 function SearchResultItem({ link }: { link: CapturedLink }) {
   const title = link.title?.trim() || domainOf(link.url);
+  const baseUrl = getBaseUrl();
 
   return (
     <List.Item
       title={title}
       subtitle={domainOf(link.url)}
       icon={sourceIcon(link)}
-      detail={
-        <List.Item.Detail
-          markdown={buildDetailMarkdown(link)}
-          metadata={
-            <List.Item.Detail.Metadata>
-              <List.Item.Detail.Metadata.Label
-                title="Source"
-                text={link.siteName ?? domainOf(link.url)}
-              />
-              <List.Item.Detail.Metadata.Label title="Type" text={link.sourceKind} />
-              <List.Item.Detail.Metadata.Link title="URL" text={link.url} target={link.url} />
-              <List.Item.Detail.Metadata.Label title="Title" text={title} />
-              <List.Item.Detail.Metadata.Label
-                title="Status"
-                text={statusLabel(link.captureStatus)}
-              />
-              <List.Item.Detail.Metadata.Label
-                title="Saved at"
-                text={new Date(link.createdAt).toLocaleString()}
-              />
-              {link.tags.length > 0 && (
-                <List.Item.Detail.Metadata.TagList title="Tags">
-                  {link.tags.map((tag) => (
-                    <List.Item.Detail.Metadata.TagList.Item key={tag} text={tag} />
-                  ))}
-                </List.Item.Detail.Metadata.TagList>
-              )}
-            </List.Item.Detail.Metadata>
-          }
-        />
-      }
-      actions={
-        <ActionPanel>
-          <Action.OpenInBrowser url={link.url} title="Open in Browser" />
-          <Action.CopyToClipboard content={link.url} title="Copy URL" icon={Icon.CopyClipboard} />
-        </ActionPanel>
-      }
+      // "silence means complete" — the ◌ capturing pulse is the ONLY status
+      // chrome a row ever carries, and only while enriching (design tokens).
+      accessories={link.captureStatus === 'enriching' ? [{ text: '◌ capturing' }] : []}
+      detail={<LinkDetail link={link} baseUrl={baseUrl} />}
+      actions={<LinkActions link={link} variant="live" onChange={() => {}} />}
     />
   );
 }

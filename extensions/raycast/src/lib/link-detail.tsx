@@ -4,7 +4,7 @@ import { faviconUrl, domainOf as hostOf, previewImageUrl } from './image-urls.js
 import type { CapturedLink } from './types.js';
 
 /** One labeled stat row in the detail pane's source-specific stat block. */
-export type DetailStat = { label: string; value: string };
+type DetailStat = { label: string; value: string };
 
 /** The pure model `LinkDetail` renders — extracted so it's unit-testable without a Raycast render (see plan Task 6: `@raycast/api` is types-only under vitest). */
 export type LinkDetailModel = {
