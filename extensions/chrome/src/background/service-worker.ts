@@ -1,3 +1,5 @@
+import type { EditDiff } from '../lib/types.js';
+import { applyEdit } from './apply-edit.js';
 import { captureActiveTab } from './capture-flow.js';
 import { handleContextMenuClick, registerContextMenus } from './context-menu.js';
 
@@ -43,3 +45,17 @@ chrome.action.onClicked.addListener(() => {
     // Already reported via the toast inside runQuietCapture.
   });
 });
+
+type ApplyEditMessage = { type: 'silo-apply-edit'; id: string; diff: EditDiff };
+
+// The injected edit card (lib/toast.ts) runs in the page's isolated world and
+// can't call the API client directly (it owns the token) — it posts its diff
+// here instead. `return true` keeps the message channel open so the async
+// `sendResponse` below is honored (per the MV3 onMessage contract).
+chrome.runtime.onMessage.addListener(
+  (message: ApplyEditMessage, _sender, sendResponse): boolean => {
+    if (message?.type !== 'silo-apply-edit') return false;
+    applyEdit(message.id, message.diff).then(sendResponse);
+    return true; // keep the message channel open for the async sendResponse
+  },
+);
