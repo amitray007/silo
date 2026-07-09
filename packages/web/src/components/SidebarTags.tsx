@@ -112,7 +112,10 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           // Tighter header→first-row gap (bottom --s1-5 → --s1) to match
           // shiori's compact Tags rhythm — the header sits closer to the tag
           // rows it labels, reading as one group rather than a floating title.
-          padding: 'var(--s-0-5) var(--s2-5) var(--s1)',
+          // The left edge is nudged 3px past the row padding so "Tags"
+          // aligns with the visible start of the Trash icon stroke, not the
+          // invisible edge of the 18px icon slot.
+          padding: 'var(--s-0-5) var(--s2-5) var(--s1) calc(var(--s2-5) + 3px)',
         }}
       >
         {/* Bumped 0.7rem → 0.8rem (direct user feedback: "too small vs the

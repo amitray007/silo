@@ -478,6 +478,9 @@ describe('Sidebar', () => {
     renderSidebar();
 
     await waitFor(() => expect(screen.getByText('Tags')).toBeDefined());
+    expect(screen.getByText('Tags').parentElement?.style.padding).toBe(
+      'var(--s-0-5) var(--s2-5) var(--s1) calc(var(--s2-5) + 3px)',
+    );
     expect(screen.getByRole('button', { name: /new tag/i })).toBeDefined();
     expect(screen.queryAllByText(/^#/)).toHaveLength(0);
     expect(screen.queryByText(/more$/)).toBeNull();
