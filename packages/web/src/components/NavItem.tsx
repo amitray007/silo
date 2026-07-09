@@ -5,7 +5,9 @@ import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'reac
  * - `default` — Library/Trash: weight 500, `--ink` inactive color, `7px 10px` padding.
  * - `settings` — the Settings row: weight 400, `--mut` inactive color (never
  *   `--ink`, even though it's never "active"), `7px 10px` padding.
- * - `tag` — a Tags-section row: weight 400, `--ink` inactive color, `5px 10px` padding.
+ * - `tag` — a Tags-section row: weight 500, `--ink` inactive color, `7px 10px`
+ *   padding (bumped from the old 5px/400 so tag rows read as solid and roomy
+ *   as the nav rows above, per user feedback).
  * Inactive labels for `default`/`tag` match the active `--ink` color — the
  * active/inactive distinction is carried entirely by the `--surface-active`/
  * `--hov` highlight box (see the `active` styling below), not by dimming the
@@ -22,19 +24,19 @@ const VARIANT_STYLE: Record<
   NavItemVariant,
   { fontWeight: number; inactiveColor: string; padding: string }
 > = {
-  // K3 (oat-conformance audit): 10px → var(--s2-5) exact on every variant.
-  // The vertical value intentionally stays DIFFERENT between variants (7px
-  // vs. 5px) — that's the deliberate row-height distinction the class doc
-  // comment above describes (default/settings rows taller than tag rows),
-  // not drift to fix. 7px has no clean --s* match (between --s1-5/6px and
-  // --s2/8px) — left un-tokenized rather than changing the row height;
-  // same for 5px, which stays literal (NOT rounded to --s1-5/6px here,
-  // unlike NavItem's own doc-comment guidance for OTHER 5/6 gaps — rounding
-  // it would nudge tag rows 1px taller, a real visible change to leave out
-  // of a token-migration-only pass).
+  // K3 (oat-conformance audit): 10px → var(--s2-5) exact on every variant. All
+  // three variants now share the same 7px vertical padding — the tag row's old
+  // 5px was tightened as a "secondary strip" look, but user feedback asked for
+  // the tag list to read as solid/roomy as the nav rows, so they're unified.
+  // 7px has no clean --s* match (between --s1-5/6px and --s2/8px) — left
+  // un-tokenized rather than nudging row height off the reference.
   default: { fontWeight: 500, inactiveColor: 'var(--ink)', padding: '7px var(--s2-5)' },
   settings: { fontWeight: 400, inactiveColor: 'var(--mut)', padding: '7px var(--s2-5)' },
-  tag: { fontWeight: 400, inactiveColor: 'var(--ink)', padding: '5px var(--s2-5)' },
+  // Tag rows bumped to match the nav rows (was 5px/400): roomier 7px height +
+  // weight 500 so the tag list reads as solid, bigger, and consistent with
+  // Library/Trash above — not a cramped secondary strip (user feedback: "make
+  // the tags a bit bigger / better").
+  tag: { fontWeight: 500, inactiveColor: 'var(--ink)', padding: '7px var(--s2-5)' },
 };
 
 interface NavItemSharedProps {

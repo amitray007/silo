@@ -78,10 +78,10 @@ describe('NavItem', () => {
     expect(container.querySelector('svg')).toBeNull();
   });
 
-  it('the "tag" variant is weight 400 (v3: Library/Trash default to weight 500)', () => {
+  it('the "tag" variant is weight 500 (bumped to match the Library/Trash nav rows)', () => {
     render(<NavItem label="#ai" href="/tags/ai" variant="tag" />);
     const link = screen.getByRole('link', { name: /ai/i });
-    expect(link.style.fontWeight).toBe('400');
+    expect(link.style.fontWeight).toBe('500');
   });
 
   it('the "settings" variant uses --mut (not --ink) for its inactive color', () => {
@@ -99,10 +99,10 @@ describe('NavItem', () => {
     expect(link.style.padding).toBe('7px var(--s2-5)');
   });
 
-  it('the "tag" variant uses 5px var(--s2-5) padding (v3; K3 token migration)', () => {
+  it('the "tag" variant uses 7px var(--s2-5) padding (bumped to match nav rows)', () => {
     render(<NavItem label="#ai" href="/tags/ai" variant="tag" />);
     const link = screen.getByRole('link', { name: /ai/i });
-    expect(link.style.padding).toBe('5px var(--s2-5)');
+    expect(link.style.padding).toBe('7px var(--s2-5)');
   });
 
   describe('button mode (no href — plan 024, the Search row)', () => {

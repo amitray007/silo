@@ -132,13 +132,15 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           Tags
         </p>
         <span style={{ flex: 1 }} />
-        {/* Negative right margin cancels the button's own hit-target padding
-            (`--s1`) so the 16px glyph's visual right edge lands flush with
-            the row's right padding edge — the same flush-right baseline
-            NavItem's meta counts sit on (direct user feedback: "search icon
-            is not aligned well with the tag counts on the right"). The hit
-            target itself stays full-sized (padding untouched), only the
-            box's outer edge is pulled in. */}
+        {/* The search icon shares the SAME right inset as the tag counts below
+            it: the header container and the NavItem tag rows both use --s2-5
+            right padding, and here the icon button carries NO negative margin
+            (removed) + zero right padding, so the 16px glyph's right edge lands
+            exactly on the count column's right edge — one consistent right rail
+            for "Tags 🔍" and every "# tag  N" below it (user feedback: align the
+            count with the Tags heading). The extra hit area is added to the
+            LEFT/vertical only, never the right, so it can't push the glyph off
+            that rail. */}
         <button
           type="button"
           onClick={toggleTagFind}
@@ -153,8 +155,7 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
             border: 0,
             background: 'none',
             borderRadius: 6,
-            padding: 'var(--s1)',
-            marginRight: 'calc(var(--s1) * -1)',
+            padding: 'var(--s1) 0 var(--s1) var(--s1)',
             color: findOpen ? 'var(--ink)' : 'var(--mut)',
             cursor: 'pointer',
           }}
