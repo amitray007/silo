@@ -4,6 +4,7 @@ import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
 import { registerCountsRoutes } from './routes/counts.js';
+import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
@@ -84,6 +85,7 @@ export function createApp(): Hono {
   registerFaviconRoutes(api);
   registerPreviewImageRoutes(api);
   registerSettingsRoutes(api);
+  registerExportRoutes(api);
   app.route('/api', api);
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
