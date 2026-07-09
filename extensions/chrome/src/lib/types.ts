@@ -43,6 +43,12 @@ export type TagWithCount = {
   count: number;
 };
 
+/** The edit card's editable state (mirrors what the UI holds). */
+export type EditState = { note: string; tags: string[] };
+
+/** The minimal set of changes to apply — note (replace) + tag add/remove. */
+export type EditDiff = { note?: string; addedTags: string[]; removedTags: string[] };
+
 /** The API's error envelope (`packages/api/src/app.ts`'s `ErrorEnvelope`). */
 export type ApiErrorEnvelope = {
   error: string;
