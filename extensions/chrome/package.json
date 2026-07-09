@@ -7,7 +7,8 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "test": "vitest run",
-    "build": "vite build && node scripts/zip.mjs"
+    "build": "vite build && node scripts/zip.mjs",
+    "gen-icons": "node scripts/gen-icons.mjs"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
@@ -15,6 +16,7 @@
     "@types/jsdom": "catalog:",
     "@types/node": "catalog:",
     "jsdom": "catalog:",
+    "sharp": "^0.35.3",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
