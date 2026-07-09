@@ -298,15 +298,15 @@ describe('SettingsModal', () => {
     });
   });
 
-  describe('Import/Export tab (stubbed)', () => {
-    it('renders Import/Export rows with disabled buttons', () => {
+  describe('Import/Export tab (plan 027 — Export live, Import still stubbed)', () => {
+    it('renders Import disabled and Export (Download) live', () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Import / export' }));
 
       const chooseFile = screen.getByRole('button', { name: /choose file/i });
       const download = screen.getByRole('button', { name: /download/i });
       expect(chooseFile).toHaveProperty('disabled', true);
-      expect(download).toHaveProperty('disabled', true);
+      expect(download).not.toHaveProperty('disabled', true);
     });
   });
 

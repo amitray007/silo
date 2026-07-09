@@ -16,6 +16,19 @@ export function setApiBaseUrl(url: string): void {
 }
 
 /**
+ * Resolves `path` against `baseUrl` and returns the absolute-or-relative URL
+ * string, WITHOUT fetching it. For call sites that need the URL itself rather
+ * than its JSON body — e.g. a file download navigated to via an `<a href>`
+ * (`ImportExportTab`'s Export button hits `/api/export`, which the browser
+ * must download, not `apiGet`-and-parse-as-JSON). `baseUrl` is module-local
+ * (set via `setApiBaseUrl`), so this is the one clean way to read it from
+ * outside the module rather than duplicating the variable at each call site.
+ */
+export function apiUrl(path: string): string {
+  return `${baseUrl}${path}`;
+}
+
+/**
  * Thrown by every helper below on any non-2xx response, a non-JSON body, or a
  * network failure — callers never see a raw `fetch` rejection or an untyped
  * error. `status` is the HTTP status (`0` for a network failure — there was
