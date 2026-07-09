@@ -32,13 +32,15 @@ const settingsSchema = {
    * line AND a hover preview (`inline`/`hover`); `github`/`youtube`/`twitter`
    * are hover-only.
    *
-   * `enabled` gates the worker fetch for sources that HAVE a live enricher
-   * (hacker_news/github/youtube). `twitter` has NO external-API enricher — its
-   * rich data is imported by the `silo ingest x` CLI, not fetched by the
-   * worker — so for twitter both flags are RENDER-only: `enabled`/`hover`
-   * control whether the already-stored tweet card shows. It's still toggleable
-   * (reaches parity with the other sources' hover cards), it just has nothing
-   * for the worker to skip.
+   * `enabled` gates the worker fetch for every source with a live enricher
+   * (hacker_news/github/youtube/twitter). `twitter` now has one too
+   * (live-enrichment slice): the worker fetches `api.fxtwitter.com`, an
+   * undocumented, third-party, X-derived source — same "toggle it off to skip
+   * the fetch" semantics as the others, and it degrades to a plain link on
+   * failure like any enricher. (A tweet's rich data can ALSO still arrive
+   * pre-extracted via the `silo ingest x` CLI's `/api/ingest` seam — the live
+   * enricher is a second, independent path to the same `twitter` SourceData
+   * shape, not a replacement for it.)
    *
    * `.strict()` on every level so an unknown plugin key OR an unknown
    * feature-flag key in a PATCH body is rejected rather than silently accepted.
