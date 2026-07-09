@@ -50,6 +50,8 @@ export type CapturedLink = {
   url: string;
   title: string | null;
   description: string | null;
+  /** The captured og:image (or equivalent) for a plain `link` source — the detail pane's image gate for non-YouTube/Twitter sources (Task 6). */
+  imageUrl?: string | null;
   siteName: string | null;
   sourceKind: string;
   sourceData: SourceData;
