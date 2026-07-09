@@ -32,6 +32,9 @@ export function installChromeMock(): typeof chrome {
     commands: {
       onCommand: { addListener: vi.fn() },
     },
+    action: {
+      onClicked: { addListener: vi.fn() },
+    },
     runtime: {
       onInstalled: { addListener: vi.fn() },
     },

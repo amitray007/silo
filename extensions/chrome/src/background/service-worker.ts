@@ -4,12 +4,9 @@ import { handleContextMenuClick, registerContextMenus } from './context-menu.js'
 /**
  * The MV3 service worker — entry point for all THREE quiet-capture triggers
  * (toolbar action, `commands` keyboard shortcut, context menu). The toolbar
- * action has no `default_popup`-less click handler here because
- * `manifest.json` sets `default_popup: "popup.html"` — clicking the icon
- * opens the popup (the brief's secondary enrich-at-capture surface)
- * INSTEAD of firing `action.onClicked` (Chrome never fires `onClicked` when
- * a popup is configured). The keyboard command and context menu are the
- * quiet, no-popup capture paths.
+ * action has NO `default_popup`, so clicking the icon fires
+ * `action.onClicked` (instant save). All THREE triggers (icon, keyboard
+ * command, context menu) funnel through `runQuietCapture`.
  */
 
 chrome.runtime.onInstalled.addListener(() => {
@@ -33,6 +30,16 @@ chrome.commands.onCommand.addListener((command) => {
 
 chrome.contextMenus.onClicked.addListener((info, tab) => {
   handleContextMenuClick(info, tab).catch(() => {
+    // Already reported via the toast inside runQuietCapture.
+  });
+});
+
+// The toolbar icon now has NO default_popup (manifest.json), so clicking it
+// fires action.onClicked here — the instant-save path. Same shared
+// runQuietCapture funnel as the keyboard command; failures are reported by
+// the toast inside it, so the .catch is a documented no-op.
+chrome.action.onClicked.addListener(() => {
+  captureActiveTab().catch(() => {
     // Already reported via the toast inside runQuietCapture.
   });
 });
