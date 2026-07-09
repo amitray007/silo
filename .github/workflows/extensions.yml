@@ -95,10 +95,16 @@ jobs:
       - run: pnpm --filter silo-raycast run check-types
       - run: pnpm --filter silo-raycast run test
 
-      # `ray lint` validates package.json metadata + icons the way the Raycast
-      # store does — this is what catches a submission rejection before you
-      # submit. `ray build` compiles the commands (headless-safe).
-      - run: pnpm --filter silo-raycast exec ray lint
+      # `ray lint` validates the manifest + icons the way Raycast does. We run
+      # it `--relaxed`: the strict mode also demands a `package-lock.json`
+      # (a Raycast STORE-submission requirement), which cannot exist here — this
+      # is a pnpm workspace whose `package.json` uses `workspace:*` deps that
+      # `npm install` rejects outright (EUNSUPPORTEDPROTOCOL), and the single
+      # source of truth is the root `pnpm-lock.yaml`. This extension runs via
+      # `ray develop`, not store publish, so the lockfile check doesn't apply;
+      # `--relaxed` keeps the icon/entry-point validation without it. `ray build`
+      # then compiles the commands (headless-safe).
+      - run: pnpm --filter silo-raycast exec ray lint --relaxed
       - run: pnpm --filter silo-raycast run build
       # No artifact upload: Raycast extensions publish from source via
       # `ray publish`, not by uploading a build folder — there is no
