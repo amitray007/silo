@@ -76,6 +76,40 @@ function scopePlaceholder(scope: PaletteScope): string {
   return 'Search links…';
 }
 
+/**
+ * A footer keyboard hint: a small key-cap glyph (`↑↓`, `↵`, `esc`) + its label
+ * on ONE shared vertical center. The glyph lives in an inline-flex box with
+ * `lineHeight: 1` + `place-items:center`, so Unicode arrows — whose own font
+ * metrics otherwise float above/below the Latin label — line up cleanly with
+ * the word beside them (user feedback: the navigate/open/close glyphs looked
+ * misaligned with their text). The pair is itself `align-items:center`.
+ */
+function PaletteHint({ glyph, label }: { glyph: string; label: string }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--s1-5)' }}>
+      <span
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          lineHeight: 1,
+          minWidth: 18,
+          height: 16,
+          padding: '0 var(--s1)',
+          borderRadius: 4,
+          border: '1px solid var(--line)',
+          background: 'var(--bg2)',
+          color: 'var(--mut)',
+          fontSize: 'var(--text-xs)',
+        }}
+      >
+        {glyph}
+      </span>
+      <span style={{ lineHeight: 1 }}>{label}</span>
+    </span>
+  );
+}
+
 /** A single link result row (favicon + title + domain), scaled down from `LinkRow`'s look for the palette's tighter list. `Command.Item`'s own `onSelect` handles both click and Enter-while-active — no separate keydown handler needed. Renders trash-scope rows identically to library/tag ones (see `PaletteLinkResult`'s doc comment) — the palette's job is "find the thing", not editorialize by scope. */
 function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
   const domain = deriveDomain(link.url);
@@ -672,16 +706,21 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
                 flex: 'none',
                 display: 'flex',
                 alignItems: 'center',
-                gap: 'var(--s3)',
+                gap: 'var(--s4)',
                 padding: 'var(--s2) var(--s5)',
                 borderTop: '1px solid var(--line)',
                 fontSize: 'var(--text-xs)',
                 color: 'var(--fnt)',
               }}
             >
-              <span>↑↓ navigate</span>
-              <span>↵ {showTagSuggestions ? 'apply' : 'open'}</span>
-              <span>esc close</span>
+              {/* Each hint is a flex pair so the glyph and its label share ONE
+                  vertical center (user feedback: the ↑↓/↵ glyphs floated off
+                  the text baseline). The glyph sits in a fixed-height key-cap
+                  with line-height:1, so its own font metrics can't drag it
+                  above/below the label beside it. */}
+              <PaletteHint glyph="↑↓" label="navigate" />
+              <PaletteHint glyph="↵" label={showTagSuggestions ? 'apply' : 'open'} />
+              <PaletteHint glyph="esc" label="close" />
             </div>
           )}
         </Command>
