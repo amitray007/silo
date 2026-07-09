@@ -1,9 +1,9 @@
 import { getSettings } from './settings.js';
 import type {
   ApiErrorEnvelope,
+  CapturedLink,
   CaptureRequest,
   CaptureResponse,
-  GetLinkResponse,
   TagWithCount,
 } from './types.js';
 
@@ -84,10 +84,30 @@ export async function captureLink(input: CaptureRequest): Promise<CaptureRespons
   return (await response.json()) as CaptureResponse;
 }
 
-/** `GET /api/links/:id` — used by the popup's recent-5 list to fetch each tracked id's current (post-enrichment) state. */
-export async function getLink(id: string): Promise<GetLinkResponse> {
-  const response = await apiFetch(`/api/links/${id}`, { method: 'GET' });
-  return (await response.json()) as GetLinkResponse;
+/** `PATCH /api/links/:id` — replace the note (edit card). */
+export async function editNote(id: string, note: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ note }),
+  });
+  return ((await response.json()) as { link: CapturedLink }).link;
+}
+
+/** `POST /api/links/:id/tags` — add one tag (edit card). */
+export async function addTag(id: string, tag: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}/tags`, {
+    method: 'POST',
+    body: JSON.stringify({ tag }),
+  });
+  return ((await response.json()) as { link: CapturedLink }).link;
+}
+
+/** `DELETE /api/links/:id/tags/:tag` — remove one tag (edit card). */
+export async function removeTag(id: string, tag: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}/tags/${encodeURIComponent(tag)}`, {
+    method: 'DELETE',
+  });
+  return ((await response.json()) as { link: CapturedLink }).link;
 }
 
 /** `GET /api/tags` — tag-autocomplete source for the popup. */

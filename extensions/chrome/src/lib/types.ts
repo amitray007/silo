@@ -16,13 +16,12 @@ export type CaptureRequest = {
   sourceKind?: 'link' | 'hacker_news' | 'twitter';
 };
 
-/** The subset of `LinkJson` this extension reads (recent-list + popup). */
+/** The subset of `LinkJson` this extension reads (save + edit-card). */
 export type CapturedLink = {
   id: string;
   url: string;
   title: string | null;
   notes: string | null;
-  captureStatus: 'enriching' | 'full' | 'partial' | 'bare';
   tags: string[];
 };
 
@@ -30,11 +29,6 @@ export type CapturedLink = {
 export type CaptureResponse = {
   link: CapturedLink;
   deduped: boolean;
-};
-
-/** `GET /api/links/:id` success envelope. */
-export type GetLinkResponse = {
-  link: CapturedLink;
 };
 
 /** `GET /api/tags` success envelope entry — `{ name, count }`. */
