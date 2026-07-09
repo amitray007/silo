@@ -127,23 +127,21 @@ select {
   box-sizing: border-box;
   display: flex;
   justify-content: center;
-  /* Tighter outer margin (was --s6/24px) so the app reads as one compact
-     window like shiori, not a panel stranded in a wide dark field. */
-  padding: var(--s5);
+  /* Edge-to-edge (user feedback: "remove the top/left/right/bottom spacing").
+     The app now fills the whole window like shiori — no outer margin, no
+     floating panel stranded in a dark field. */
+  padding: 0;
 }
 
-/* The centered band: a transparent sidebar (sits directly on --bg, no fill —
-   the "sidebar matches background" the user picked) beside the floating
-   content panel (`.silo-content`, below). No band walls — the old left/right
-   borders are retired; the floating panel now owns the only visible edge via
-   its radius + hairline. Tightened to 56rem (from 60rem) so the whole app
-   reads more compact, matching shiori's window proportions (user feedback). */
+/* The full-bleed band: a transparent sidebar (sits directly on --bg — the
+   "sidebar matches background" the user picked) beside the content region.
+   No max-width cap anymore — the band fills the entire window width so the
+   sidebar hugs the left edge and the content hugs the right, matching
+   shiori's edge-to-edge window (user feedback). */
 .silo-band {
   display: flex;
   width: 100%;
-  max-width: 56rem;
   min-height: 0;
-  gap: var(--s4);
 }
 
 /* Mobile top bar (☰ + brand): hidden on desktop, shown ≤ the mobile
@@ -213,16 +211,20 @@ select {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  max-height: calc(100vh - var(--s6) * 2);
+  /* Full window height now that the frame has no outer padding (edge-to-edge,
+     user feedback). Was `calc(100vh - --s6*2)` to leave room for the floating
+     panel's margin — that margin is gone. */
+  max-height: 100vh;
   display: flex;
   flex-direction: column;
-  /* The one floating panel (user-picked corner layout): --bg2 surface fill,
-     a gentle radius, a hairline light-edge + soft elevation off the deep bg. */
+  /* Full-bleed content surface (the floating-panel radius + elevation were
+     retired when the app went edge-to-edge): a --bg2 fill separated from the
+     transparent sidebar by a single hairline on its left edge, matching
+     shiori's flush sidebar↔content divider. No radius (the window's own
+     corners are the only rounding now), no drop shadow (nothing to float
+     above). */
   background: var(--bg2);
-  border-radius: 16px;
-  box-shadow:
-    var(--elev-2),
-    inset 0 0 0 0.5px rgba(255, 255, 255, 0.05);
+  border-left: 1px solid var(--line);
   overflow: hidden;
 }
 
@@ -271,8 +273,12 @@ select {
        fills the full width. The sidebar is lifted out of flow (position:fixed
        below), so it no longer reserves a 210px column. */
     flex-direction: column;
+  }
+
+  .silo-content {
+    /* No sidebar beside it in the stacked mobile layout (it's an off-canvas
+       drawer), so the desktop left-edge divider would read as a stray rule. */
     border-left: none;
-    border-right: none;
   }
 
   .silo-topbar {
