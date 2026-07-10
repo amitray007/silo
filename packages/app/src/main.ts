@@ -44,7 +44,18 @@ async function main(): Promise<void> {
   const mcpHttpPort = process.env.SILO_MCP_HTTP_PORT;
   if (mcpHttpPort !== undefined && mcpHttpPort.length > 0) {
     const port = Number(mcpHttpPort);
-    if (!Number.isFinite(port)) {
+    // Tightened guard (fix CORR-1): `Number.isFinite` alone lets through
+    // out-of-range (70000), negative (-1), fractional (3.14), and
+    // whitespace/blank-coerced-to-0 values. Any of those would previously
+    // reach `server.listen(port)`, which throws a SYNCHRONOUS `RangeError`
+    // for out-of-range ports — uncaught, that propagates to `main().catch`
+    // and calls `process.exit(1)`, killing the already-running worker + stdio
+    // MCP over a networked-listener misconfig. Require a true integer in the
+    // valid TCP port range; `0` (OS-ephemeral) is deliberately excluded here
+    // — it's a near-certain typo/blank-env case for an operator-set env var
+    // (the ephemeral-port use case is exercised by calling
+    // `startMcpHttpServer` directly, e.g. in tests, bypassing this guard).
+    if (!Number.isInteger(port) || port < 1 || port > 65535) {
       console.error(
         `[silo] SILO_MCP_HTTP_PORT is set to an invalid port (${mcpHttpPort}) — refusing to ` +
           'start the HTTP MCP listener. stdio MCP still works.',
@@ -57,10 +68,35 @@ async function main(): Promise<void> {
             'unauthenticated networked MCP endpoint. stdio MCP still works.',
         );
       } else {
-        httpServer = startMcpHttpServer({ port, token });
-        const address = httpServer.address();
-        const boundPort = typeof address === 'object' && address !== null ? address.port : port;
-        console.error(`[silo] mcp http listener bound — http://127.0.0.1:${boundPort}/mcp`);
+        // Defensive wrap (fix CORR-1b): `startMcpHttpServer`/`server.listen`
+        // can still throw or emit a late async 'error' (e.g. EADDRINUSE,
+        // EACCES on a privileged port) even with a range-valid port. Never
+        // let that reach `main().catch` — log loudly and continue with
+        // stdio-only, same posture as the guards above.
+        try {
+          httpServer = startMcpHttpServer({ port, token });
+          httpServer.once('error', (error: unknown) => {
+            console.error('[silo] mcp http listener error:', error);
+          });
+          // Read the bound address inside 'listening' (fix CORR-2): `listen()`
+          // is async, so reading `.address()` synchronously right after the
+          // call (the old code) always raced ahead of the bind and returned
+          // null — the log then printed the REQUESTED port, which is
+          // actively wrong for an ephemeral bind (`:0`). Deferring the log
+          // into the 'listening' callback guarantees `.address()` is
+          // populated with the actually-bound port.
+          httpServer.once('listening', () => {
+            const address = httpServer?.address();
+            const boundPort = typeof address === 'object' && address !== null ? address.port : port;
+            console.error(`[silo] mcp http listener bound — http://127.0.0.1:${boundPort}/mcp`);
+          });
+        } catch (error: unknown) {
+          console.error(
+            '[silo] failed to start the HTTP MCP listener — stdio MCP still works:',
+            error,
+          );
+          httpServer = undefined;
+        }
       }
     }
   }

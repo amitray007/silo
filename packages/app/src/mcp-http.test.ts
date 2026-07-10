@@ -1,4 +1,5 @@
 import type { Server } from 'node:http';
+import * as http from 'node:http';
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 /**
@@ -29,7 +30,7 @@ afterEach(async () => {
   });
 });
 
-async function startTestServer(): Promise<{ baseUrl: string }> {
+async function startTestServer(): Promise<{ baseUrl: string; port: number }> {
   const { startMcpHttpServer } = await import('./mcp-http.js');
   server = startMcpHttpServer({ port: 0, token: TOKEN, host: '127.0.0.1' });
   await new Promise<void>((resolve) => server?.once('listening', resolve));
@@ -37,8 +38,46 @@ async function startTestServer(): Promise<{ baseUrl: string }> {
   if (address === null || typeof address === 'string') {
     throw new Error('expected an ephemeral TCP address');
   }
-  return { baseUrl: `http://127.0.0.1:${address.port}` };
+  return { baseUrl: `http://127.0.0.1:${address.port}`, port: address.port };
 }
+
+/** Issues a raw `node:http` POST request with a caller-controlled `Host`
+ * header. `fetch` (and most HTTP clients) refuse to let a caller override the
+ * `Host` header — it's derived from the URL — which makes it useless for
+ * exercising the SDK's DNS-rebinding `Host`-header check from a test. Node's
+ * `http.request` has no such restriction: passing `Host` in `headers`
+ * overrides the header Node would otherwise derive from `options.host`. */
+function postWithHostHeader(
+  port: number,
+  hostHeader: string,
+  body: string,
+): Promise<{ status: number }> {
+  return new Promise((resolve, reject) => {
+    const req = http.request(
+      {
+        method: 'POST',
+        host: '127.0.0.1',
+        port,
+        path: MCP_PATH_FOR_TEST,
+        headers: {
+          host: hostHeader,
+          'content-type': 'application/json',
+          accept: 'application/json, text/event-stream',
+          authorization: `Bearer ${TOKEN}`,
+          'content-length': Buffer.byteLength(body),
+        },
+      },
+      (res) => {
+        res.resume(); // drain, we only need the status
+        res.on('end', () => resolve({ status: res.statusCode ?? 0 }));
+      },
+    );
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+
+const MCP_PATH_FOR_TEST = '/mcp';
 
 const INITIALIZE_BODY = {
   jsonrpc: '2.0' as const,
@@ -133,5 +172,61 @@ describe('startMcpHttpServer', () => {
       body: 'not json',
     });
     expect(res.status).toBe(400);
+  });
+
+  it('POST /mcp with the correct bearer but a foreign Host header is rejected (DNS-rebinding protection)', async () => {
+    const { port } = await startTestServer();
+    const { status } = await postWithHostHeader(
+      port,
+      'evil.example.com',
+      JSON.stringify(INITIALIZE_BODY),
+    );
+    // The SDK's DNS-rebinding guard rejects a Host header outside
+    // `allowedHosts` with a 4xx (its own error, not a plain 401/404) —
+    // assert it is neither the success path nor left hanging/2xx.
+    expect(status).not.toBe(200);
+    expect(status).toBeGreaterThanOrEqual(400);
+    expect(status).toBeLessThan(500);
+  });
+
+  it('POST /mcp with the correct bearer and the correct 127.0.0.1:<port> Host header still works', async () => {
+    const { port } = await startTestServer();
+    const { status } = await postWithHostHeader(
+      port,
+      `127.0.0.1:${port}`,
+      JSON.stringify(INITIALIZE_BODY),
+    );
+    expect(status).toBe(200);
+  });
+
+  it('POST /mcp with a body larger than MAX_MCP_BODY_BYTES (4MB) is 413', async () => {
+    const { baseUrl } = await startTestServer();
+    // Doesn't need to be valid JSON-RPC — the size check fires before the
+    // body is ever parsed.
+    const oversized = 'x'.repeat(4 * 1024 * 1024 + 1024);
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: oversized,
+    });
+    expect(res.status).toBe(413);
+  });
+});
+
+describe('startMcpHttpServer — invalid port handling', () => {
+  it('throws for a port outside the valid TCP range (documents that main.ts must guard before calling this)', async () => {
+    const { startMcpHttpServer } = await import('./mcp-http.js');
+    // `server.listen()` throws a synchronous RangeError for an out-of-range
+    // port. `startMcpHttpServer` does not itself validate the port — the
+    // range check lives in `main.ts` (see its `Number.isInteger(port) &&
+    // port >= 1 && port <= 65535` guard) precisely so an invalid
+    // `SILO_MCP_HTTP_PORT` never reaches this call. This test documents and
+    // locks in that contract: calling this function directly with a bad
+    // port still throws, so `main.ts`'s guard — not this function — is what
+    // must prevent it in production.
+    expect(() => startMcpHttpServer({ port: 70000, token: TOKEN, host: '127.0.0.1' })).toThrow();
   });
 });
