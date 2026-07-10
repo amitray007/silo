@@ -32,6 +32,16 @@ export function LoginGate() {
     inputRef.current?.focus();
   }, []);
 
+  // Restore focus to the password field after a failed attempt. The input is
+  // `disabled` while the submit is `pending` (which blurs it), so once the
+  // attempt resolves to a failure the field is re-enabled but unfocused —
+  // without this the user has to click back in before retyping. Keyed on
+  // `failed` so it runs after the re-enable render commits (not inline in the
+  // submit handler, where the element is still disabled — see `handleSubmit`).
+  useEffect(() => {
+    if (failed) inputRef.current?.focus();
+  }, [failed]);
+
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || value === '') return;
@@ -42,8 +52,11 @@ export function LoginGate() {
     setPending(false);
     if (!ok) {
       setFailed(true);
-      // Leave the field populated for a quick retry (e.g. a fumbled
-      // paste/typo) rather than forcing a full re-entry.
+      // Focus is restored by the `failed`-keyed effect below, NOT inline here:
+      // the input is `disabled` while `pending`, and this same synchronous
+      // block just called `setPending(false)`, so the DOM hasn't re-enabled the
+      // element yet — a `.focus()` now would no-op on a still-disabled input.
+      // Deferring to an effect lets the re-enable render commit first.
     }
   }
 
@@ -84,17 +97,6 @@ export function LoginGate() {
             silo
           </span>
         </div>
-
-        <p
-          style={{
-            margin: '0 0 var(--s5)',
-            fontSize: 'var(--text-base)',
-            color: 'var(--mut)',
-            textWrap: 'pretty',
-          }}
-        >
-          Enter your password to continue.
-        </p>
 
         <form onSubmit={handleSubmit} noValidate>
           <label
