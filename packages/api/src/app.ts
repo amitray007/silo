@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
+import { registerAccessTokenRoutes } from './routes/access-tokens.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
@@ -110,6 +111,7 @@ export function createApp(): Hono {
   registerSettingsRoutes(api);
   registerExportRoutes(api);
   registerImportRoutes(api);
+  registerAccessTokenRoutes(api);
   app.route('/api', api);
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
