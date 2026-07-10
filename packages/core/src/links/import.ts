@@ -59,14 +59,20 @@ type ImportLink = z.infer<typeof linkSchema>;
 /**
  * The envelope schema import gates on: `version` must be the literal `1`
  * (silo's own export version — see `export.ts`'s `EXPORT_VERSION`), and
- * `links` must be an array of `linkSchema`-shaped objects. Deliberately NOT
- * `.strict()` — extra top-level keys the export envelope also writes
- * (`exportedAt`, `count`) are allowed and ignored, so import accepts exactly
- * what export produces without the two staying byte-for-byte synced.
+ * `links` must be an ARRAY — but deliberately of `z.unknown()` elements, NOT
+ * `linkSchema`-shaped objects. This is the "envelope tier" of the two-tier
+ * validation (see the design spec's "Post-QA decisions": a structurally-
+ * invalid single link must not fail the whole file). Per-element validation
+ * against `linkSchema` happens INSIDE `importLinks`'s loop instead, so one
+ * bad link becomes a per-link skip, not a whole-envelope rejection. Also
+ * deliberately NOT `.strict()` — extra top-level keys the export envelope
+ * also writes (`exportedAt`, `count`) are allowed and ignored, so import
+ * accepts exactly what export produces without the two staying byte-for-byte
+ * synced.
  */
 const envelopeSchema = z.object({
   version: z.literal(1),
-  links: z.array(linkSchema),
+  links: z.array(z.unknown()),
 });
 
 /**
@@ -122,19 +128,84 @@ function toCreateLinkInput(link: ImportLink): CreateLinkInput {
 }
 
 /**
+ * Best-effort URL extraction for a skip record, from a raw (unvalidated)
+ * envelope element — used only to make a `skipped[]` entry more useful to a
+ * human scanning the import result. Returns `undefined` for anything that
+ * isn't a plain object with a string `url` (e.g. the element is missing
+ * `url` entirely, which is exactly the case this exists to still surface
+ * SOMETHING useful for).
+ */
+function bestEffortUrl(element: unknown): string | undefined {
+  if (typeof element !== 'object' || element === null) return undefined;
+  const url = (element as { url?: unknown }).url;
+  return typeof url === 'string' ? url : undefined;
+}
+
+/** Outcome of validating + writing one raw envelope element — see `importOneLink`. */
+type ImportOneLinkResult =
+  | { outcome: 'created' }
+  | { outcome: 'merged' }
+  | { outcome: 'skip'; skip: ImportSkip };
+
+/**
+ * Validate + write one raw envelope element. Returns the outcome so the
+ * caller (`importLinks`) can update its running tallies — pulled out of the
+ * main loop to keep `importLinks` under the cognitive-complexity ceiling
+ * (see `docs/rules/typescript.md`). Never throws: both the per-link
+ * `linkSchema.safeParse` failure and any error `createLink` throws (e.g. bad
+ * `sourceData`) are caught here and turned into a `skip` outcome — that's
+ * the whole point of the per-link tier (see `importLinks`'s doc comment).
+ */
+async function importOneLink(element: unknown, index: number): Promise<ImportOneLinkResult> {
+  const parsedLink = linkSchema.safeParse(element);
+  if (!parsedLink.success) {
+    const url = bestEffortUrl(element);
+    return {
+      outcome: 'skip',
+      skip:
+        url === undefined
+          ? { index, reason: parsedLink.error.message }
+          : { index, url, reason: parsedLink.error.message },
+    };
+  }
+  const link = parsedLink.data;
+  try {
+    const input = toCreateLinkInput(link);
+    const existed = (await findByCanonicalUrl(link.url)) !== null;
+    await createLink(input);
+    return { outcome: existed ? 'merged' : 'created' };
+  } catch (error) {
+    return {
+      outcome: 'skip',
+      skip: {
+        index,
+        url: link.url,
+        reason: error instanceof Error ? error.message : String(error),
+      },
+    };
+  }
+}
+
+/**
  * Restore a silo JSON export (the `version: 1` envelope `exportLinks`
  * produces) back into the store — the write half of the export/import
  * round-trip (design spec: `docs/superpowers/specs/2026-07-10-import-
  * design.md`).
  *
- * Validation posture (strict Zod, two tiers — the design spec's locked
- * decision):
- * - ENVELOPE failure (bad shape: missing `links`, `version !== 1`, not an
- *   object) rejects the WHOLE file — throws `InvalidImportError`. A
- *   structurally broken file is never partially applied.
- * - PER-LINK failure (e.g. a link missing `url`, or a `sourceData` payload
- *   `createLink` rejects) is caught and collected into `skipped` — a backup
- *   with one malformed row still restores every good row.
+ * Validation posture (strict Zod, two tiers — the design spec's "Post-QA
+ * decisions", locked after real-infra QA found the original one-tier
+ * `z.array(linkSchema)` envelope schema made ONE structurally-invalid link
+ * reject the WHOLE file):
+ * - ENVELOPE failure (bad shape: missing `links`, `version !== 1`, `links`
+ *   not an array, payload not an object) rejects the WHOLE file — throws
+ *   `InvalidImportError`. A genuinely broken envelope is never partially
+ *   applied.
+ * - PER-LINK failure — EITHER a link that fails `linkSchema.safeParse`
+ *   (structurally invalid: missing `url`, wrong-typed field, ...) OR a
+ *   structurally-valid link `createLink` itself rejects (e.g. bad
+ *   `sourceData`) — is caught and collected into `skipped` instead of
+ *   failing the import. A backup with one malformed row still restores
+ *   every good row.
  *
  * Dedup: reuses `createLink`'s existing canonical-URL dedup-merge wholesale
  * (no new write path). `findByCanonicalUrl` pre-checks each link's URL
@@ -164,23 +235,13 @@ export async function importLinks(payload: unknown): Promise<ImportResult> {
   const skipped: ImportSkip[] = [];
 
   for (let index = 0; index < links.length; index++) {
-    const link = links[index];
-    if (!link) continue;
-    try {
-      const input = toCreateLinkInput(link);
-      const existed = (await findByCanonicalUrl(link.url)) !== null;
-      await createLink(input);
-      if (existed) {
-        merged++;
-      } else {
-        created++;
-      }
-    } catch (error) {
-      skipped.push({
-        index,
-        url: link.url,
-        reason: error instanceof Error ? error.message : String(error),
-      });
+    const result = await importOneLink(links[index], index);
+    if (result.outcome === 'created') {
+      created++;
+    } else if (result.outcome === 'merged') {
+      merged++;
+    } else {
+      skipped.push(result.skip);
     }
   }
 

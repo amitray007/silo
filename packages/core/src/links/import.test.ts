@@ -120,6 +120,15 @@ describeIfPg('importLinks (integration)', () => {
       await expect(ops.importLinks({ version: 1 })).rejects.toThrow(ops.InvalidImportError);
     });
 
+    it('links not an array throws InvalidImportError', async () => {
+      await expect(ops.importLinks({ version: 1, links: 'not-an-array' })).rejects.toThrow(
+        ops.InvalidImportError,
+      );
+      await expect(ops.importLinks({ version: 1, links: { url: 'x' } })).rejects.toThrow(
+        ops.InvalidImportError,
+      );
+    });
+
     it('a non-object payload throws InvalidImportError', async () => {
       await expect(ops.importLinks('not an object')).rejects.toThrow(ops.InvalidImportError);
       await expect(ops.importLinks(null)).rejects.toThrow(ops.InvalidImportError);
@@ -127,14 +136,37 @@ describeIfPg('importLinks (integration)', () => {
   });
 
   describe('per-link failures', () => {
-    it('a link missing url is skipped by the envelope schema (not a link at all); others import', async () => {
-      // A link object missing the REQUIRED `url` field fails the per-link
-      // Zod schema inside the envelope parse — since envelope parsing is
-      // ALL-OR-NOTHING (envelope-level failure), a structurally-invalid link
-      // (wrong TYPE, not just a bad VALUE) makes envelope parsing itself
-      // fail. This test instead exercises a link that parses fine at the
-      // envelope level but fails inside `createLink` (bad sourceData) — the
-      // documented per-link skip path.
+    it('a link missing url is skipped per-link (structural failure); the good link still imports', async () => {
+      // The envelope tier only validates that `links` is an ARRAY (elements
+      // are `z.unknown()`) — a link missing the REQUIRED `url` field is
+      // caught by the PER-LINK `linkSchema.safeParse` inside `importLinks`'s
+      // loop instead, and goes to `skipped` rather than failing the whole
+      // envelope. See the design spec's "Post-QA decisions".
+      const payload = envelope([
+        {
+          // Missing `url` entirely — structurally invalid per `linkSchema`.
+          sourceKind: 'link',
+        },
+        {
+          url: 'https://example.com/import-good-1',
+          sourceKind: 'link',
+        },
+      ]);
+
+      const result = await ops.importLinks(payload);
+      expect(result.total).toBe(2);
+      expect(result.created).toBe(1);
+      expect(result.merged).toBe(0);
+      expect(result.skipped).toHaveLength(1);
+      expect(result.skipped[0]).toMatchObject({ index: 0 });
+      expect(result.skipped[0]?.url).toBeUndefined();
+      expect(result.skipped[0]?.reason).toBeTruthy();
+
+      const good = await linkOps.findByCanonicalUrl('https://example.com/import-good-1');
+      expect(good).not.toBeNull();
+    });
+
+    it('a link with bad sourceData is skipped per-link (value failure inside createLink); others import', async () => {
       const payload = envelope([
         {
           url: 'https://example.com/import-good-1',
@@ -144,8 +176,8 @@ describeIfPg('importLinks (integration)', () => {
           url: 'https://example.com/import-bad-source-data',
           sourceKind: 'hacker_news',
           // Missing required hacker_news fields (points/comments/author) —
-          // valid per the loose envelope schema (sourceData is
-          // z.record(unknown)), but createLink's sourceDataSchema rejects it.
+          // valid per `linkSchema` (sourceData is z.record(unknown)), but
+          // createLink's sourceDataSchema rejects it.
           sourceData: { kind: 'hacker_news' },
         },
         {
@@ -173,9 +205,50 @@ describeIfPg('importLinks (integration)', () => {
       expect(bad).toBeNull();
     });
 
-    it('a non-string url field fails the envelope schema and rejects the whole file (envelope-level type failure)', async () => {
-      const payload = envelope([{ url: 123, sourceKind: 'link' }]);
-      await expect(ops.importLinks(payload)).rejects.toThrow(ops.InvalidImportError);
+    it('a non-string url field is skipped per-link, not a whole-envelope failure', async () => {
+      const payload = envelope([
+        { url: 123, sourceKind: 'link' },
+        { url: 'https://example.com/import-good-non-string-url-sibling', sourceKind: 'link' },
+      ]);
+      const result = await ops.importLinks(payload);
+      expect(result.total).toBe(2);
+      expect(result.created).toBe(1);
+      expect(result.skipped).toHaveLength(1);
+      expect(result.skipped[0]).toMatchObject({ index: 0 });
+    });
+
+    it('a mix of a structurally-bad link, a value-bad link, and two good links: both bad ones skipped, both good ones created', async () => {
+      const payload = envelope([
+        {
+          // Structurally bad: missing `url`.
+          sourceKind: 'link',
+        },
+        {
+          url: 'https://example.com/import-mix-good-1',
+          sourceKind: 'link',
+        },
+        {
+          url: 'https://example.com/import-mix-bad-source-data',
+          sourceKind: 'hacker_news',
+          sourceData: { kind: 'hacker_news' },
+        },
+        {
+          url: 'https://example.com/import-mix-good-2',
+          sourceKind: 'link',
+        },
+      ]);
+
+      const result = await ops.importLinks(payload);
+      expect(result.total).toBe(4);
+      expect(result.created).toBe(2);
+      expect(result.merged).toBe(0);
+      expect(result.skipped).toHaveLength(2);
+      expect(result.skipped.map((s) => s.index).sort()).toEqual([0, 2]);
+
+      const good1 = await linkOps.findByCanonicalUrl('https://example.com/import-mix-good-1');
+      expect(good1).not.toBeNull();
+      const good2 = await linkOps.findByCanonicalUrl('https://example.com/import-mix-good-2');
+      expect(good2).not.toBeNull();
     });
   });
 
