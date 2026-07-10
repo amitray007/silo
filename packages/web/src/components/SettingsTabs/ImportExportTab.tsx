@@ -1,8 +1,30 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { apiUrl } from '../../api/client';
-import { rowDesc, rowLabel, settingsRow, settingsRowDivided, tabNote } from './rowStyles';
+import { ApiError, apiPost, apiUrl } from '../../api/client';
+import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
 
 type ExportFormat = 'json' | 'yaml' | 'csv';
+
+/**
+ * Web's own mirror of `@silo/core`'s `ImportResult` (`packages/core/src/links/import.ts`)
+ * — NOT imported from `@silo/core` (the bundling rule, `docs/rules/web-react.md`:
+ * core's barrel value-imports `@silo/db` -> `pg` at module top level). `version`
+ * is always `1` server-side but kept as `number` here since the wire contract
+ * (JSON) doesn't carry the literal-type narrowing.
+ */
+type ImportResult = {
+  version: number;
+  total: number;
+  created: number;
+  merged: number;
+  skipped: { index: number; url?: string; reason: string }[];
+};
+
+/** The Import row's outcome — `null` before any file has been picked. Mirrors the three cases the route/client contract distinguishes: a parse-side rejection (bad JSON, never reached the server), a typed API failure (401/400/other), or a successful `ImportResult`. */
+type ImportState =
+  | { kind: 'parse-error'; message: string }
+  | { kind: 'api-error'; message: string }
+  | { kind: 'result'; result: ImportResult }
+  | null;
 
 const EXPORT_FORMAT_OPTIONS = [
   { value: 'json', label: 'JSON' },
@@ -132,26 +154,131 @@ function downloadExport(format: ExportFormat): void {
 }
 
 /**
- * Settings → Import + Export (v3's `tabImport`): the Export row is now LIVE
- * (plan 027, Unit 4) — a format picker (JSON/YAML/CSV, JSON default) plus a
- * Download button that hits `GET /api/export?format=<selected>`
+ * Renders an `ImportState` as a calm, `rowDesc`-styled line under the Import
+ * row — success summary, or one of the three error messages (parse/401/other).
+ * `skipped` reasons (when present) are tucked into a `<details>` rather than
+ * inlined, so a large skip list doesn't blow out the row's rhythm.
+ */
+function ImportStatusLine({ state }: { state: ImportState }) {
+  if (state === null) return null;
+
+  if (state.kind === 'parse-error' || state.kind === 'api-error') {
+    return (
+      <p style={{ ...rowDesc, marginTop: 6 }} role="alert">
+        {state.message}
+      </p>
+    );
+  }
+
+  const { result } = state;
+  return (
+    <div style={{ ...rowDesc, marginTop: 6 }}>
+      Imported {result.total} — {result.created} new, {result.merged} merged
+      {result.skipped.length > 0 && (
+        <>
+          {' · '}
+          <details style={{ display: 'inline' }}>
+            <summary
+              style={{ display: 'inline', cursor: 'pointer' }}
+              title={result.skipped
+                .map((s) => `#${s.index}${s.url ? ` ${s.url}` : ''}: ${s.reason}`)
+                .join('\n')}
+            >
+              {result.skipped.length} skipped
+            </summary>
+            <ul style={{ margin: '4px 0 0', paddingLeft: 18 }}>
+              {result.skipped.map((s) => (
+                <li key={s.index}>
+                  #{s.index}
+                  {s.url ? ` ${s.url}` : ''} — {s.reason}
+                </li>
+              ))}
+            </ul>
+          </details>
+        </>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Settings → Import + Export (v3's `tabImport`): both halves are now LIVE.
+ * Export (plan 027, Unit 4) is a format picker (JSON/YAML/CSV, JSON default)
+ * plus a Download button hitting `GET /api/export?format=<selected>`
  * (`packages/core/src/links/export.ts` → `packages/api/src/routes/export.ts`).
- * Import stays disabled — a separate later slice (v3 has a full choose-file →
- * preview → "Import N links" flow backed by an import API route that doesn't
- * exist yet); render that row faithfully disabled with a calm "not yet" note
- * rather than simulating a picker that has nowhere real to go.
+ * Import (plan 028, Unit 3) picks a local silo-export JSON file, parses it
+ * client-side, and POSTs it to `POST /api/import` (`packages/api/src/routes/import.ts`)
+ * via the shared `apiPost` client. That route is token-gated the same way
+ * ingest is — until the web-auth slice gives the client a bearer token, a real
+ * POST here 401s; that's surfaced as an honest inline message rather than
+ * hidden behind a disabled control, since the flow itself (pick → parse →
+ * POST → summarize) is fully built and curl-testable today.
  */
 export function ImportExportTab() {
   const [format, setFormat] = useState<ExportFormat>('json');
+  const [importState, setImportState] = useState<ImportState>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  async function handleFileSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    // Reset the input's value immediately so re-selecting the SAME file still
+    // fires a fresh `change` event next time (a browser suppresses `change`
+    // when the `<input>`'s value/FileList would be unchanged).
+    event.target.value = '';
+    if (!file) return;
+
+    let parsed: unknown;
+    try {
+      const text = await file.text();
+      parsed = JSON.parse(text);
+    } catch {
+      setImportState({ kind: 'parse-error', message: "That file isn't valid JSON." });
+      return;
+    }
+
+    try {
+      const result = await apiPost<ImportResult>('/api/import', parsed);
+      setImportState({ kind: 'result', result });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        setImportState({
+          kind: 'api-error',
+          message:
+            "Import needs a server token (it accepts source data, so it's gated like ingest). The auth setup will wire this up.",
+        });
+        return;
+      }
+      if (error instanceof ApiError && error.status === 400) {
+        setImportState({
+          kind: 'api-error',
+          message: error.message || "That file isn't a valid silo export.",
+        });
+        return;
+      }
+      setImportState({ kind: 'api-error', message: 'Import failed — try again.' });
+    }
+  }
 
   return (
     <>
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Import</div>
-          <div style={rowDesc}>A Pocket, Instapaper, or browser-bookmarks export file</div>
+          <div style={rowDesc}>A silo export (JSON)</div>
+          <ImportStatusLine state={importState} />
         </div>
-        <button type="button" disabled title="Not yet available" className="silo-settings-btn">
+        <input
+          ref={fileInputRef}
+          type="file"
+          accept="application/json,.json"
+          style={{ display: 'none' }}
+          onChange={handleFileSelected}
+        />
+        <button
+          type="button"
+          className="silo-settings-btn"
+          onClick={() => fileInputRef.current?.click()}
+        >
           Choose file…
         </button>
       </div>
@@ -173,7 +300,6 @@ export function ImportExportTab() {
           </button>
         </span>
       </div>
-      <p style={tabNote}>Import isn't wired up yet — coming in a later slice.</p>
     </>
   );
 }
