@@ -164,6 +164,55 @@ describe('RowMenu', () => {
     );
   });
 
+  it('keeps the tags fly-out open when the pointer moves from the trigger wrapper onto the fly-out (hover race fix)', () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderMenu({ tags: ['mcp'] });
+
+    const trigger = screen.getByText('Tags').closest('button') as HTMLButtonElement;
+    const wrapper = trigger.parentElement as HTMLElement;
+    fireEvent.click(trigger);
+    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+
+    // Pointer leaves the trigger wrapper (schedules a delayed close)...
+    fireEvent.mouseLeave(wrapper);
+    // ...then lands on the fly-out itself before the close delay elapses —
+    // this must cancel the pending close, not let it fire.
+    const flyout = screen.getByPlaceholderText('Find tag').closest('.silo-popover') as HTMLElement;
+    fireEvent.mouseEnter(flyout);
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+    vi.useRealTimers();
+  });
+
+  it('closes the tags fly-out after the delay when the pointer leaves the trigger and never reaches the fly-out', () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderMenu({ tags: ['mcp'] });
+
+    const trigger = screen.getByText('Tags').closest('button') as HTMLButtonElement;
+    const wrapper = trigger.parentElement as HTMLElement;
+    fireEvent.click(trigger);
+    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+
+    fireEvent.mouseLeave(wrapper);
+
+    // Not yet elapsed: still open.
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+
+    // Past the delay with neither the wrapper nor the fly-out re-entered:
+    // now it closes.
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
+    vi.useRealTimers();
+  });
+
   it('toggling an unassigned tag on calls the add-tag mutation (POST)', async () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({
