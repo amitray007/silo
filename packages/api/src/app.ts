@@ -3,6 +3,7 @@ import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
@@ -66,6 +67,16 @@ export function createApp(): Hono {
   );
 
   app.get('/health', (c) => c.json({ ok: true }));
+
+  // `/api/auth/check` MUST be registered on the root app, BEFORE the `/api`
+  // sub-app mount below — it is the ungated status probe the web app calls
+  // to learn whether `SILO_API_TOKEN` is even configured, so it must stay
+  // reachable with no bearer token even once `generalTokenAuth` (mounted on
+  // the `api` sub-app) starts requiring one for everything else under
+  // `/api/*`. Registering the exact path here means the root app's router
+  // matches it directly and never delegates to the sub-app for this one path
+  // (see `routes/auth.ts`'s doc comment; proven by `routes/auth.test.ts`).
+  registerAuthRoutes(app);
 
   const api = new Hono();
   // CORS first (the browser-facing gate — an allowlist-rejected origin gets
