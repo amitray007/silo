@@ -110,7 +110,7 @@ describe('SettingsModal', () => {
     expect(pluginsTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Preferences' })).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Import / Export' })).toBeDefined();
-    expect(screen.getByRole('tab', { name: 'Access' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'MCP' })).toBeDefined();
     expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
   });
@@ -136,7 +136,7 @@ describe('SettingsModal', () => {
     expect(screen.getByText('Export')).toBeDefined();
     expect(screen.queryByText('Theme')).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'MCP' }));
     expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
     expect(screen.queryByText('Import')).toBeNull();
   });
@@ -216,7 +216,7 @@ describe('SettingsModal', () => {
   it('remembers the last-viewed tab across close/reopen (does NOT reset to Plugins — deliberate, per SettingsContext doc comment)', () => {
     renderModal();
     // Switch away from the default Plugins tab, then close.
-    fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'MCP' }));
     expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'esc' }));
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -315,14 +315,14 @@ describe('SettingsModal', () => {
   describe('Access tab', () => {
     it('renders the hero card with the honest MCP-access copy', () => {
       renderModal();
-      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'MCP' }));
 
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
     });
 
     it('renders a LIVE MCP-access switch reflecting the mcpAccess setting', async () => {
       renderModal();
-      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'MCP' }));
 
       const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
       await waitFor(() => expect(mcpToggle).toHaveProperty('disabled', false));
@@ -331,7 +331,7 @@ describe('SettingsModal', () => {
 
     it('clicking the MCP-access switch PATCHes mcpAccess flipped', async () => {
       renderModal();
-      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'MCP' }));
 
       const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
       await waitFor(() => expect(mcpToggle).toHaveProperty('disabled', false));
@@ -345,7 +345,7 @@ describe('SettingsModal', () => {
       Object.assign(navigator, { clipboard: { writeText } });
 
       renderModal();
-      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'MCP' }));
       fireEvent.click(screen.getByRole('button', { name: /copy config/i }));
 
       expect(writeText).toHaveBeenCalledTimes(1);
@@ -365,7 +365,7 @@ describe('SettingsModal', () => {
       Object.assign(navigator, { clipboard: { writeText } });
 
       renderModal();
-      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'MCP' }));
       fireEvent.click(screen.getByRole('button', { name: /copy config/i }));
 
       expect(await screen.findByText("Couldn't copy")).toBeDefined();

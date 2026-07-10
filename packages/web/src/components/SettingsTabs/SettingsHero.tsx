@@ -11,7 +11,7 @@ const heroCard: CSSProperties = {
 };
 
 const heroTitle: CSSProperties = {
-  margin: '10px 0 4px',
+  margin: 0,
   fontSize: 'var(--text-lg)',
   fontWeight: 500,
   color: 'var(--ink)',
@@ -19,8 +19,23 @@ const heroTitle: CSSProperties = {
   textWrap: 'balance',
 };
 
+/**
+ * The header row: the icon badge + title on the left, the primary action
+ * pinned to the far right (`marginLeft: auto`). `secondaryAction` — when
+ * present — rides alongside the primary on the right. Replaces the old
+ * vertical stack (icon → title → desc → actions) per direct user feedback:
+ * the "Copy config" affordance reads better inline with the title than
+ * stranded below the description.
+ */
+const heroHeaderRow: CSSProperties = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 12,
+  marginBottom: 12,
+};
+
 const heroDesc: CSSProperties = {
-  margin: '0 0 16px',
+  margin: 0,
   fontSize: 'var(--text-sm)',
   color: 'var(--fnt)',
   lineHeight: 1.55,
@@ -69,20 +84,24 @@ export function SettingsHero({
 }) {
   return (
     <div style={heroCard}>
-      <span style={heroIconWrap} aria-hidden="true">
-        <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-          <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3" />
-          <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
-        </svg>
-      </span>
-      <p style={heroTitle}>{title}</p>
+      <div style={heroHeaderRow}>
+        <span style={heroIconWrap} aria-hidden="true">
+          <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3" />
+            <path d="M8 5v6M5 8h6" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" />
+          </svg>
+        </span>
+        <p style={heroTitle}>{title}</p>
+        {(primaryAction || secondaryAction) && (
+          // Pinned to the far right of the header row; `marginLeft: auto`
+          // pushes it past the icon+title on the left.
+          <div style={{ display: 'flex', gap: 10, marginLeft: 'auto', flexShrink: 0 }}>
+            {primaryAction}
+            {secondaryAction}
+          </div>
+        )}
+      </div>
       <p style={heroDesc}>{description}</p>
-      {(primaryAction || secondaryAction) && (
-        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-          {primaryAction}
-          {secondaryAction}
-        </div>
-      )}
     </div>
   );
 }
