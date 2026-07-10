@@ -418,9 +418,9 @@ export function RowMenu({ link }: { link: LinkJson }) {
         </span>
         {/* `--ink`, not amber, for the "copied" confirmation — review fix
             (ce-frontend-design): amber (`--mark`/`--markt`) is reserved for
-            the brand grain-dot only, never a control/feedback state, and the
-            marks that used to justify `--markt` here (note/claude/enriching)
-            were removed in this same polish pass. */}
+            the Stack mark's top bar only, never a control/feedback state,
+            and the marks that used to justify `--markt` here (note/claude/
+            enriching) were removed in this same polish pass. */}
         <span>{copied ? 'Copied' : 'Copy link'}</span>
       </MenuItem>
 

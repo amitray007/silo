@@ -1,4 +1,4 @@
-# @silo/extension-raycast
+# silo-raycast
 
 A Raycast extension: instant capture + rich search over your silo library,
 without leaving Raycast.
@@ -44,15 +44,15 @@ extension to work.
 ## Develop / build
 
 ```sh
-pnpm --filter @silo/extension-raycast develop   # ray develop — hot-reload in Raycast
-pnpm --filter @silo/extension-raycast build     # ray build
+pnpm --filter silo-raycast develop   # ray develop — hot-reload in Raycast
+pnpm --filter silo-raycast build     # ray build
 ```
 
 ## Test
 
 ```sh
-pnpm --filter @silo/extension-raycast test
-pnpm --filter @silo/extension-raycast check-types
+pnpm --filter silo-raycast test
+pnpm --filter silo-raycast check-types
 ```
 
 Tests mock `@raycast/api`/`@raycast/utils` (the real `@raycast/api` package

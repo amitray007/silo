@@ -67,9 +67,36 @@ After **every major code change / implementation unit**, before moving to the ne
 
   `Co-Authored-By: Claude <noreply@anthropic.com>`
 
+## The done-gate & pre-existing RED (binding)
+
+The Claude Code Stop hook (`.claude/hooks/gate.sh`) runs the quality gate over the
+**whole tree** — every workspace package, plus any sibling **git worktrees** under
+`.claude/worktrees/`. So the gate can go **RED on work that has nothing to do with the
+unit you just finished**: another agent's in-progress worktree, or **uncommitted
+work-in-progress already in the tree** (e.g. a red test-first TDD draft whose
+implementation doesn't exist yet). Treat a RED gate as a **diagnosis step, not an
+automatic fix step**:
+
+1. **Attribute the failure before acting.** Check `git status` / `git diff` and whether
+   the failing file was touched by *this* unit. A failure in files you didn't touch —
+   or in a `.claude/worktrees/*` path — is **not yours to make green**.
+2. **Never fabricate to satisfy the gate.** Do not invent function bodies, API surface,
+   or stubs to make someone's red TDD draft compile. A guessed implementation is worse
+   than the RED.
+3. **Never discard others' work to satisfy the gate.** Do not revert, delete, or
+   `git checkout --` uncommitted WIP that isn't yours. Stashing a specific file is only
+   acceptable **when the user explicitly asks** (it's reversible; still, ask first).
+4. **Surface it, then stop.** Report exactly what's red, why it's unrelated to the
+   current unit, and hand the decision back. The current unit can still be *correct and
+   complete* even while the whole-tree gate is red on unrelated WIP — say so plainly.
+5. **Stale worktrees poison the gate.** Untracked files don't propagate into worktrees,
+   so a `.claude/worktrees/*` checkout can report phantom "cannot find module" / missing-
+   export errors. Flag abandoned worktrees for `git worktree remove`; don't chase their
+   errors in the main tree.
+
 ## Design fidelity
 
-Build against `docs/design/tokens.md` and the captured prototype. Binding design rules: Geist Sans (400/500 only), the warm "Oat" ramp in both themes, amber only as the brand dot + status marks (never a button fill), the four marks (¶ note · ◆ added-by-claude · ◌ incomplete), "silence means complete" (healthy rows carry no status chrome). Privacy: no third-party calls per row (no Google favicon fetch) — silo is self-owned.
+Build against `docs/design/tokens.md` and the captured prototype. Binding design rules: Geist Sans (400/500 only), the warm "Oat" ramp in both themes, amber only as the Stack mark's top bar + status marks (never a button fill), the four marks (¶ note · ◆ added-by-claude · ◌ incomplete), "silence means complete" (healthy rows carry no status chrome). Privacy: no third-party calls per row (no Google favicon fetch) — silo is self-owned.
 
 ## User context
 

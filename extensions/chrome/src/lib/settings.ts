@@ -1,10 +1,10 @@
 /**
  * Extension config, persisted in `chrome.storage.local` — the options page
- * (`options/options.ts`) writes it, everything else (background, popup)
- * reads it. Two independent settings per `extensions/INTERFACES.md`'s
- * capture-contract note: `baseUrl` (which silo this extension talks to) and
- * `token` (optional bearer, sent only once set — the prod seam over
- * `general-auth.ts`).
+ * (`options/options.ts`) writes it, everything else (the background service
+ * worker) reads it. Two independent settings per `extensions/
+ * INTERFACES.md`'s capture-contract note: `baseUrl` (which silo this
+ * extension talks to) and `token` (optional bearer, sent only once set —
+ * the prod seam over `general-auth.ts`).
  */
 
 export const DEFAULT_BASE_URL = 'http://localhost:8787';

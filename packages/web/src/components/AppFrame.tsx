@@ -295,8 +295,10 @@ export function AppFrame() {
             >
               <span aria-hidden="true">☰</span>
             </button>
-            <GrainDot />
-            <span style={{ fontWeight: 500, fontSize: 'var(--text-md)', letterSpacing: '-0.01em' }}>
+            <GrainDot size={24} plate />
+            <span
+              style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}
+            >
               silo
             </span>
           </div>

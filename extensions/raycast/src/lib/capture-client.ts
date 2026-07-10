@@ -1,5 +1,17 @@
 import { getBaseUrl, getToken } from './preferences.js';
-import type { ApiErrorEnvelope, CaptureRequest, CaptureResponse, SearchResponse } from './types.js';
+import type {
+  ApiErrorEnvelope,
+  BrowseResponse,
+  CapturedLink,
+  CaptureRequest,
+  CaptureResponse,
+  Counts,
+  LinkResponse,
+  SearchResponse,
+  TagsResponse,
+  TagWithCount,
+  TrashResponse,
+} from './types.js';
 
 /**
  * A typed, actionable error thrown by every function in this module —
@@ -82,4 +94,84 @@ export async function searchLinks(query: string): Promise<SearchResponse> {
     method: 'GET',
   });
   return (await response.json()) as SearchResponse;
+}
+
+/** `GET /api/links[?tag=]` — Browse's whole-library / by-tag data source. */
+export async function browseLinks(filter: { tag?: string } = {}): Promise<BrowseResponse> {
+  const qs = filter.tag ? `?tag=${encodeURIComponent(filter.tag)}` : '';
+  const response = await apiFetch(`/api/links${qs}`, { method: 'GET' });
+  return (await response.json()) as BrowseResponse;
+}
+
+/** `GET /api/trash` — Browse's Trash scope. */
+export async function listTrash(): Promise<TrashResponse> {
+  const response = await apiFetch('/api/trash', { method: 'GET' });
+  return (await response.json()) as TrashResponse;
+}
+
+/** `PATCH /api/links/:id { note }` — replaces the note (not a merge). */
+export async function editNote(id: string, note: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ note }),
+  });
+  return ((await response.json()) as LinkResponse).link;
+}
+
+/** `POST /api/links/:id/tags { tag }`. */
+export async function addTag(id: string, tag: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}/tags`, {
+    method: 'POST',
+    body: JSON.stringify({ tag }),
+  });
+  return ((await response.json()) as LinkResponse).link;
+}
+
+/** `DELETE /api/links/:id/tags/:tag` — the tag is a path segment, so it must be encoded. */
+export async function removeTag(id: string, tag: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}/tags/${encodeURIComponent(tag)}`, {
+    method: 'DELETE',
+  });
+  return ((await response.json()) as LinkResponse).link;
+}
+
+/** `POST /api/links/:id/trash` — soft-delete; guarded by `confirmAlert` at the call site. */
+export async function trashLink(id: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}/trash`, { method: 'POST' });
+  return ((await response.json()) as LinkResponse).link;
+}
+
+/** `POST /api/links/:id/restore` — moves a trashed link back to the library. */
+export async function restoreLink(id: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}/restore`, { method: 'POST' });
+  return ((await response.json()) as LinkResponse).link;
+}
+
+/** `POST /api/links/:id/retry` — re-runs enrichment for a partial/bare link. */
+export async function retryLink(id: string): Promise<CapturedLink> {
+  const response = await apiFetch(`/api/links/${id}/retry`, { method: 'POST' });
+  return ((await response.json()) as LinkResponse).link;
+}
+
+/** `DELETE /api/trash` — empties the whole trash (204, no body). Guarded by `confirmAlert` at the call site. */
+export async function emptyTrash(): Promise<void> {
+  await apiFetch('/api/trash', { method: 'DELETE' });
+}
+
+/** `DELETE /api/trash/:id` — permanently deletes one trashed link (204, no body). Guarded by `confirmAlert` at the call site. */
+export async function deleteTrashed(id: string): Promise<void> {
+  await apiFetch(`/api/trash/${id}`, { method: 'DELETE' });
+}
+
+/** `GET /api/tags` — unwraps `.tags` for the tag picker + Browse's scope dropdown. */
+export async function listTags(): Promise<TagWithCount[]> {
+  const response = await apiFetch('/api/tags', { method: 'GET' });
+  const body = (await response.json()) as TagsResponse;
+  return body.tags;
+}
+
+/** `GET /api/counts` — used by Browse's Trash purge-countdown header. */
+export async function getCounts(): Promise<Counts> {
+  const response = await apiFetch('/api/counts', { method: 'GET' });
+  return (await response.json()) as Counts;
 }

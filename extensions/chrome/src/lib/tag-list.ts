@@ -1,62 +1,38 @@
 /**
- * The popup's tag-selection state + DOM rendering — extracted from
- * `popup/popup.ts` so it's independently testable (ce-correctness review
- * caught a real bug here: `addTag` used to call the render function with no
- * args, defaulting the suggestion list to `[]` and wiping every
- * not-yet-selected suggestion pill whenever the user typed a manual tag
- * after suggestions had already loaded).
- *
- * `TagListState` holds the two pieces of state a `TagListController` needs
- * across renders: which tags are selected, and the last-loaded suggestion
- * list (so a re-render triggered by `addTag` — which knows nothing about
- * suggestions — doesn't have to guess/lose them).
+ * The edit card's tag-dropdown model — pure state + queries, DOM-free so it's
+ * testable without jsdom. The injected UI (lib/toast.ts) renders from these.
+ * Replaces the old inline-pill model; filtering + create-new + toggle live
+ * here.
  */
+export type TagOption = { name: string; count: number };
+export type TagPickerState = { all: TagOption[]; selected: Set<string>; query: string };
 
-export type TagListState = {
-  selected: Set<string>;
-  suggestions: string[];
-};
+const key = (t: string): string => t.trim().toLowerCase();
 
-export function createTagListState(): TagListState {
-  return { selected: new Set(), suggestions: [] };
+export function createTagPicker(all: TagOption[], selected: string[] = []): TagPickerState {
+  return { all, selected: new Set(selected), query: '' };
 }
 
-/** Adds a manually-typed tag to `selected`, preserving whatever `suggestions` were last rendered. */
-export function addTag(state: TagListState, tag: string): void {
-  state.selected.add(tag);
+/** Existing tags matching the current query (case-insensitive substring). */
+export function filterTags(state: TagPickerState): TagOption[] {
+  const q = state.query.trim().toLowerCase();
+  if (!q) return state.all;
+  return state.all.filter((t) => t.name.toLowerCase().includes(q));
 }
 
-/** Toggles a tag's selection (clicking a pill). */
-export function toggleTag(state: TagListState, tag: string): void {
-  if (state.selected.has(tag)) state.selected.delete(tag);
-  else state.selected.add(tag);
+export function toggleTag(state: TagPickerState, name: string): void {
+  if (state.selected.has(name)) state.selected.delete(name);
+  else state.selected.add(name);
 }
 
-/** Replaces the suggestion list (e.g. after `GET /api/tags` resolves), keeping `selected` untouched. */
-export function setSuggestions(state: TagListState, suggestions: string[]): void {
-  state.suggestions = suggestions;
+/** The query as a new-tag candidate, or null if empty / already an existing tag. */
+export function canCreate(state: TagPickerState): string | null {
+  const trimmed = state.query.trim();
+  if (!trimmed) return null;
+  const exists = state.all.some((t) => key(t.name) === key(trimmed));
+  return exists ? null : trimmed;
 }
 
-/** The full set of tags to render as pills: every selected tag plus every suggestion, deduplicated. Selected tags always render active regardless of whether they're also a suggestion. */
-export function visibleTags(state: TagListState): string[] {
-  return [...new Set([...state.selected, ...state.suggestions])];
-}
-
-/** Renders the tag pills into `container`, wiring each pill's click to `toggleTag` + `onChange` (the caller re-renders after every toggle so the active/inactive styling updates immediately). */
-export function renderTagList(
-  container: HTMLElement,
-  state: TagListState,
-  onChange: () => void,
-): void {
-  container.innerHTML = '';
-  for (const tag of visibleTags(state)) {
-    const pill = document.createElement('div');
-    pill.className = `tag-pill${state.selected.has(tag) ? ' active' : ''}`;
-    pill.textContent = tag;
-    pill.addEventListener('click', () => {
-      toggleTag(state, tag);
-      onChange();
-    });
-    container.appendChild(pill);
-  }
+export function selectedList(state: TagPickerState): string[] {
+  return [...state.selected];
 }

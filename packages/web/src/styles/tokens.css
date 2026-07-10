@@ -41,6 +41,14 @@
   --mark: #c98f2d;
   --markt: #a87514;
   --warn: #a8482d;
+  /* Brand-lockup plate (GrainDot plate variant). A DARK plate in BOTH themes,
+     mirroring the Mac app icon / .icns exactly — so the amber grain bar pops
+     and all three bars keep full contrast regardless of the app theme. The
+     dark tile reads cleanly on both the light `bg-2` and the dark sidebar.
+     (Not theme-inverted: a light plate washes out the amber.) */
+  --mark-plate: #201a15;
+  --mark-plate-ink: #f7efe4;
+  --mark-plate-edge: #201a15;
 
   /* Settings redesign (build brief, docs/design/refs/settings-reference.png):
      a subtle hero-card tint + a resting/hover/active surface ramp for
@@ -167,6 +175,12 @@
   --mark: #dda54a;
   --markt: #e0ab4f;
   --warn: #d67e5c;
+  /* Same dark plate as light theme — the lockup tile is brand-fixed (matches
+     the app icon), not theme-inverted. A subtle hairline in dark mode keeps
+     the near-black tile from merging into the near-black sidebar. */
+  --mark-plate: #221c16;
+  --mark-plate-ink: #f7efe4;
+  --mark-plate-edge: #342c22;
 
   /* Same additive roles as light mode above — deepened for the dark ground so
      the hero card reads as a gentle lift off --bg (never a bright card), and

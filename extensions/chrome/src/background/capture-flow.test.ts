@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as captureClient from '../lib/capture-client.js';
-import { getRecentIds } from '../lib/recent.js';
 import * as toast from '../lib/toast.js';
 import { captureActiveTab, runQuietCapture } from './capture-flow.js';
 
@@ -18,24 +17,29 @@ describe('runQuietCapture', () => {
     vi.restoreAllMocks();
   });
 
-  it('captures, tracks the id, and shows a "saved" toast — never rendering enrichment state', async () => {
+  it('captures and shows a "saved" toast — never rendering enrichment state', async () => {
     vi.spyOn(captureClient, 'captureLink').mockResolvedValue({
       link: {
         id: 'new-id',
         url: 'https://example.com',
         title: null,
         notes: null,
-        captureStatus: 'enriching',
         tags: [],
       },
       deduped: false,
     });
+    vi.spyOn(captureClient, 'listTags').mockResolvedValue([]);
     const showToastSpy = vi.spyOn(toast, 'showToast').mockResolvedValue(undefined);
 
     await runQuietCapture({ url: 'https://example.com' }, 'Example', 7);
 
-    expect(await getRecentIds()).toEqual(['new-id']);
-    expect(showToastSpy).toHaveBeenCalledWith(7, { kind: 'saved', title: 'Example' });
+    expect(showToastSpy).toHaveBeenCalledWith(7, {
+      kind: 'saved',
+      title: 'Example',
+      url: 'https://example.com',
+      linkId: 'new-id',
+      tags: [],
+    });
   });
 
   it('shows a "deduped" toast when the API folds into an existing link', async () => {
@@ -45,16 +49,22 @@ describe('runQuietCapture', () => {
         url: 'https://example.com',
         title: 'Example',
         notes: null,
-        captureStatus: 'full',
         tags: [],
       },
       deduped: true,
     });
+    vi.spyOn(captureClient, 'listTags').mockResolvedValue([]);
     const showToastSpy = vi.spyOn(toast, 'showToast').mockResolvedValue(undefined);
 
     await runQuietCapture({ url: 'https://example.com' }, 'Example', 7);
 
-    expect(showToastSpy).toHaveBeenCalledWith(7, { kind: 'deduped', title: 'Example' });
+    expect(showToastSpy).toHaveBeenCalledWith(7, {
+      kind: 'deduped',
+      title: 'Example',
+      url: 'https://example.com',
+      linkId: 'existing-id',
+      tags: [],
+    });
   });
 
   it('shows an error toast and re-throws when the API is unreachable', async () => {
@@ -63,7 +73,13 @@ describe('runQuietCapture', () => {
     const showToastSpy = vi.spyOn(toast, 'showToast').mockResolvedValue(undefined);
 
     await expect(runQuietCapture({ url: 'https://example.com' }, 'Example', 7)).rejects.toBe(error);
-    expect(showToastSpy).toHaveBeenCalledWith(7, { kind: 'error', title: 'Could not reach silo' });
+    expect(showToastSpy).toHaveBeenCalledWith(7, {
+      kind: 'error',
+      title: 'Could not reach silo',
+      url: 'https://example.com',
+      linkId: '',
+      tags: [],
+    });
   });
 
   it('does not attempt to show a toast when tabId is undefined (e.g. a headless capture)', async () => {
@@ -73,7 +89,6 @@ describe('runQuietCapture', () => {
         url: 'https://example.com',
         title: null,
         notes: null,
-        captureStatus: 'full',
         tags: [],
       },
       deduped: false,
@@ -99,11 +114,11 @@ describe('captureActiveTab', () => {
         url: 'https://example.com',
         title: null,
         notes: null,
-        captureStatus: 'enriching',
         tags: [],
       },
       deduped: false,
     });
+    vi.spyOn(captureClient, 'listTags').mockResolvedValue([]);
     vi.spyOn(toast, 'showToast').mockResolvedValue(undefined);
 
     await captureActiveTab();

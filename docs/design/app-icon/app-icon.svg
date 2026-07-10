@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" role="img" aria-labelledby="silo-app-icon-title">
+  <!--
+    silo Mac app icon — "Stack", dark (ink) ground. Product identity, not
+    in-app chrome, so the amber grain is used as a fill here by design.
+    Geometry scaled x32 from the 32-grid mark; ground uses the Oat dark ramp.
+  -->
+  <title id="silo-app-icon-title">silo</title>
+  <defs>
+    <linearGradient id="ground" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#241d16" />
+      <stop offset="100%" stop-color="#14100b" />
+    </linearGradient>
+    <linearGradient id="grainVivid" x1="0.34" y1="0.28" x2="1" y2="1">
+      <stop offset="0%" stop-color="#ffd98a" />
+      <stop offset="55%" stop-color="#f0a93e" />
+      <stop offset="100%" stop-color="#c9791c" />
+    </linearGradient>
+  </defs>
+  <!-- squircle plate (macOS superellipse-ish via large radius) -->
+  <rect x="0" y="0" width="1024" height="1024" rx="228" fill="url(#ground)" />
+  <!-- three bars, centered on the 1024 canvas (mark grid 34..94 x, 34/57/80 y -> x32) -->
+  <g>
+    <rect x="272" y="640" width="480" height="120" rx="60" fill="#ede5d8" opacity="0.22" />
+    <rect x="272" y="456" width="480" height="120" rx="60" fill="#ede5d8" opacity="0.46" />
+    <rect x="272" y="272" width="480" height="120" rx="60" fill="url(#grainVivid)" />
+  </g>
+</svg>

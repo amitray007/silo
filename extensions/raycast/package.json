@@ -1,12 +1,12 @@
 {
-  "name": "@silo/extension-raycast",
+  "name": "silo-raycast",
   "version": "0.0.0",
   "private": true,
   "license": "MIT",
-  "title": "silo",
+  "title": "Silo",
   "description": "Save links to silo and search your library, without leaving Raycast.",
   "icon": "icon.png",
-  "author": "amitray007",
+  "author": "amit_ray",
   "categories": [
     "Productivity",
     "Web"
@@ -28,6 +28,12 @@
       "name": "search-silo",
       "title": "Search Silo",
       "description": "Search your silo library and open a result.",
+      "mode": "view"
+    },
+    {
+      "name": "browse-silo",
+      "title": "Browse Silo",
+      "description": "Browse your whole silo library, by tag, or the trash.",
       "mode": "view"
     }
   ],

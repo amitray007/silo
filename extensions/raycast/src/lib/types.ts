@@ -50,6 +50,8 @@ export type CapturedLink = {
   url: string;
   title: string | null;
   description: string | null;
+  /** The captured og:image (or equivalent) for a plain `link` source — the detail pane's image gate for non-YouTube/Twitter sources (Task 6). */
+  imageUrl?: string | null;
   siteName: string | null;
   sourceKind: string;
   sourceData: SourceData;
@@ -77,3 +79,24 @@ export type ApiErrorEnvelope = {
   message: string;
   details?: unknown;
 };
+
+/** A trashed link — `GET /api/trash`'s rows carry `deletedAt` alongside the normal `CapturedLink` fields. */
+export type TrashLink = CapturedLink & { deletedAt: string };
+
+/** `GET /api/tags`'s per-tag entry. */
+export type TagWithCount = { name: string; count: number };
+
+/** `GET /api/counts`'s envelope — only the fields this extension reads. */
+export type Counts = { total?: number; trashed?: number; purgeWindowDays: number };
+
+/** `GET /api/links` success envelope (Browse). */
+export type BrowseResponse = { links: CapturedLink[]; nextCursor?: string };
+
+/** `GET /api/trash` success envelope. */
+export type TrashResponse = { links: TrashLink[]; nextCursor?: string };
+
+/** `GET /api/tags` success envelope. */
+export type TagsResponse = { tags: TagWithCount[] };
+
+/** The single-link envelope shared by edit/tag/trash/restore/retry endpoints. */
+export type LinkResponse = { link: CapturedLink };

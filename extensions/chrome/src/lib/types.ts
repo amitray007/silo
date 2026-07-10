@@ -16,13 +16,12 @@ export type CaptureRequest = {
   sourceKind?: 'link' | 'hacker_news' | 'twitter';
 };
 
-/** The subset of `LinkJson` this extension reads (recent-list + popup). */
+/** The subset of `LinkJson` this extension reads (save + edit-card). */
 export type CapturedLink = {
   id: string;
   url: string;
   title: string | null;
   notes: string | null;
-  captureStatus: 'enriching' | 'full' | 'partial' | 'bare';
   tags: string[];
 };
 
@@ -32,16 +31,17 @@ export type CaptureResponse = {
   deduped: boolean;
 };
 
-/** `GET /api/links/:id` success envelope. */
-export type GetLinkResponse = {
-  link: CapturedLink;
-};
-
 /** `GET /api/tags` success envelope entry — `{ name, count }`. */
 export type TagWithCount = {
   name: string;
   count: number;
 };
+
+/** The edit card's editable state (mirrors what the UI holds). */
+export type EditState = { note: string; tags: string[] };
+
+/** The minimal set of changes to apply — note (replace) + tag add/remove. */
+export type EditDiff = { note?: string; addedTags: string[]; removedTags: string[] };
 
 /** The API's error envelope (`packages/api/src/app.ts`'s `ErrorEnvelope`). */
 export type ApiErrorEnvelope = {

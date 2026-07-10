@@ -139,4 +139,171 @@ describe('capture-client', () => {
     );
     expect(result.results).toEqual([]);
   });
+
+  describe('browseLinks', () => {
+    it('GETs /api/links with no query when no tag filter is given', async () => {
+      const { browseLinks } = await import('./capture-client.js');
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ links: [] }));
+
+      const result = await browseLinks();
+
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links',
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(result.links).toEqual([]);
+    });
+
+    it('GETs /api/links?tag= when a tag filter is given', async () => {
+      const { browseLinks } = await import('./capture-client.js');
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ links: [] }));
+
+      await browseLinks({ tag: 'a b' });
+
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links?tag=a%20b',
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+  });
+
+  describe('listTrash', () => {
+    it('GETs /api/trash and returns the links array', async () => {
+      const { listTrash } = await import('./capture-client.js');
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ links: [] }));
+
+      const result = await listTrash();
+
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/trash',
+        expect.objectContaining({ method: 'GET' }),
+      );
+      expect(result.links).toEqual([]);
+    });
+  });
+
+  describe('editNote', () => {
+    it('PATCHes note and unwraps link', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        jsonResponse({ link: { id: '1', notes: 'hi', tags: [] } }, 200),
+      );
+      const { editNote } = await import('./capture-client.js');
+      const link = await editNote('1', 'hi');
+      expect(link.notes).toBe('hi');
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links/1',
+        expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ note: 'hi' }) }),
+      );
+    });
+  });
+
+  describe('addTag', () => {
+    it('POSTs the tag and unwraps link', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: { id: '1', tags: ['x'] } }, 200));
+      const { addTag } = await import('./capture-client.js');
+      const link = await addTag('1', 'x');
+      expect(link.tags).toEqual(['x']);
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links/1/tags',
+        expect.objectContaining({ method: 'POST', body: JSON.stringify({ tag: 'x' }) }),
+      );
+    });
+  });
+
+  describe('removeTag', () => {
+    it('URL-encodes the tag path segment', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: { id: '1', tags: [] } }, 200));
+      const { removeTag } = await import('./capture-client.js');
+      await removeTag('1', 'a b');
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links/1/tags/a%20b',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  describe('trashLink / restoreLink / retryLink', () => {
+    it('trashLink POSTs /api/links/:id/trash and unwraps link', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: { id: '1' } }, 200));
+      const { trashLink } = await import('./capture-client.js');
+      const link = await trashLink('1');
+      expect(link.id).toBe('1');
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links/1/trash',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('restoreLink POSTs /api/links/:id/restore', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: { id: '1' } }, 200));
+      const { restoreLink } = await import('./capture-client.js');
+      await restoreLink('1');
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links/1/restore',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    it('retryLink POSTs /api/links/:id/retry', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: { id: '1' } }, 200));
+      const { retryLink } = await import('./capture-client.js');
+      await retryLink('1');
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/links/1/retry',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+  });
+
+  describe('emptyTrash', () => {
+    it('DELETEs /api/trash and tolerates a 204 no-body', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const { emptyTrash } = await import('./capture-client.js');
+      await expect(emptyTrash()).resolves.toBeUndefined();
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/trash',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  describe('deleteTrashed', () => {
+    it('DELETEs /api/trash/:id and tolerates a 204 no-body', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
+      const { deleteTrashed } = await import('./capture-client.js');
+      await expect(deleteTrashed('1')).resolves.toBeUndefined();
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/trash/1',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+  });
+
+  describe('listTags', () => {
+    it('GETs /api/tags and unwraps the tags array', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ tags: [{ name: 'react', count: 3 }] }));
+      const { listTags } = await import('./capture-client.js');
+      const tags = await listTags();
+      expect(tags).toEqual([{ name: 'react', count: 3 }]);
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/tags',
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+  });
+
+  describe('getCounts', () => {
+    it('GETs /api/counts', async () => {
+      vi.mocked(fetch).mockResolvedValueOnce(
+        jsonResponse({ total: 10, trashed: 2, purgeWindowDays: 30 }),
+      );
+      const { getCounts } = await import('./capture-client.js');
+      const counts = await getCounts();
+      expect(counts.purgeWindowDays).toBe(30);
+      expect(fetch).toHaveBeenCalledWith(
+        'http://localhost:8787/api/counts',
+        expect.objectContaining({ method: 'GET' }),
+      );
+    });
+  });
 });

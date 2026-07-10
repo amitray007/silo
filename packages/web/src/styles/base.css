@@ -73,15 +73,6 @@ select {
     box-shadow 0.14s ease;
 }
 
-/* The brand "grain" dot — amber radial gradient. Brand mark only, never chrome. */
-.silo-grain-dot {
-  display: inline-block;
-  width: 15px;
-  height: 15px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 32% 30%, #e8b054, var(--mark) 70%);
-}
-
 /* Library row (plan 010): the whole row is a link; hover needs real CSS
    (inline styles can't do :hover), so this one interaction lives here.
    Padding roomed up slightly (build brief's "global scale" pass) to match
