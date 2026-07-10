@@ -16,6 +16,7 @@ function linkFixture(id: string, createdAt: string): LinkJson {
     sourceData: { kind: 'link' },
     captureStatus: 'full',
     addedBy: 'user',
+    source: 'unknown',
     notes: null,
     tags: [],
     createdAt,

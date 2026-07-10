@@ -63,6 +63,8 @@ export type LinkJson = {
   captureStatus: 'enriching' | 'full' | 'partial' | 'bare';
   /** Mirrors `LinkJson['addedBy']` in `packages/api/src/link-json.ts`. Inlined (not a named export) — nothing outside this field needs the alias. */
   addedBy: 'user' | 'agent';
+  /** Mirrors `LinkJson['source']` in `packages/api/src/link-json.ts` (capture-source slice) — the capture SURFACE, orthogonal to `addedBy`'s who. Inlined union, same style as the fields above. */
+  source: 'web' | 'mcp' | 'cli' | 'raycast' | 'chrome' | 'ingest' | 'unknown';
   notes: string | null;
   tags: string[];
   createdAt: string;

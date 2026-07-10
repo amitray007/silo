@@ -302,6 +302,35 @@ describeIfPg('POST /api/ingest (integration)', () => {
       expect(after).toBe(before);
     });
 
+    it('first-write-wins ACROSS the seam: capture via /api/links (source=web), then re-ingest the same url -> source stays "web", not overwritten by the ingest fallback', async () => {
+      const { app } = harness.mod();
+      const url = 'https://example.com/first-write-wins-seam';
+      // First capture through the /api/links route, stamped web. This suite
+      // sets SILO_API_TOKEN, so `generalTokenAuth` gates EVERY /api/* route —
+      // hence the bearer here too (not just on /api/ingest).
+      const first = await postJson(
+        app,
+        '/api/links',
+        { url, source: 'web' },
+        `Bearer ${TEST_TOKEN}`,
+      );
+      expect(first.status).toBe(201);
+      // Re-capture the SAME url through the token-gated ingest seam, sending NO
+      // source (so the route's `?? 'ingest'` fallback would apply on a fresh
+      // insert). Because this dedup-merges into the existing row, the merge
+      // must PRESERVE the original `web` — provenance is first-write-sticky and
+      // a re-save from a different surface never rewrites it.
+      const second = await postJson(
+        app,
+        '/api/ingest',
+        { url, sourceKind: 'link' },
+        `Bearer ${TEST_TOKEN}`,
+      );
+      expect(second.status).toBe(201);
+      const body = (await second.json()) as { link: Record<string, unknown> };
+      expect(body.link.source).toBe('web');
+    });
+
     it('bad url -> 400 invalid_url, nothing saved (same edge guard as POST /api/links)', async () => {
       const { app, pool } = harness.mod();
       const before = (await pool.query('select count(*) from links')).rows[0]?.count;

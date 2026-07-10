@@ -16,6 +16,7 @@ function resultFixture(overrides: Partial<SearchResultJson> = {}): SearchResultJ
     sourceData: { kind: 'link' },
     captureStatus: 'full',
     addedBy: 'user',
+    source: 'unknown',
     notes: null,
     tags: [],
     createdAt: '2026-07-01T00:00:00.000Z',
