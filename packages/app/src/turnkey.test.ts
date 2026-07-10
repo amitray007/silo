@@ -62,6 +62,16 @@ describeIfPg('@silo/app turnkey composition (integration)', () => {
   });
 
   afterAll(async () => {
+    // Close the `@silo/db` singleton pool (opened when this suite imports
+    // `@silo/core`/`@silo/mcp-server`/`@silo/worker`, which all run on it)
+    // BEFORE dropping the disposable database — otherwise `DROP DATABASE ...
+    // WITH (FORCE)` force-terminates the pool's idle connections and fires its
+    // `error` handler ("terminating connection due to administrator command"),
+    // an async error that under CI parallel load gets mis-attributed to a
+    // later test. Same root-cause fix + rationale as `worker.test.ts`'s
+    // afterAll and `packages/core`'s `setupPgHarness`.
+    const { pool: opsPool } = await import('@silo/db');
+    await opsPool.end();
     await inspectPool.end();
     dropDatabase();
   });

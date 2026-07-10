@@ -49,7 +49,17 @@ beforeAll(async () => {
   dropDatabase = database.drop;
 });
 
-afterAll(() => {
+afterAll(async () => {
+  // Close the real `@silo/db` singleton pool (this suite's `startMcpHttpServer`
+  // runs `@silo/core` against it) BEFORE dropping the disposable DB, so
+  // `DROP DATABASE ... WITH (FORCE)` doesn't force-terminate its idle
+  // connections and fire the pool's `error` handler as a stray async error
+  // (mis-attributed to a later test under CI parallel load). `@silo/db` is NOT
+  // covered by this file's `vi.mock('@silo/core', { spy: true })`, so this
+  // imports the real pool. Same root-cause fix as `worker.test.ts`/
+  // `turnkey.test.ts`/`setupPgHarness`.
+  const { pool: opsPool } = await import('@silo/db');
+  await opsPool.end();
   dropDatabase?.();
 });
 
