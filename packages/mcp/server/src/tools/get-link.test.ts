@@ -16,6 +16,20 @@ describeMcpTool(
         : (await core.createLink({ url, sourceKind: 'link' })).id;
     }
 
+    it('a link captured with a known source -> get_link carries that source in structuredContent', async () => {
+      const { core, client } = getContext();
+      const { id } = await core.createLink({
+        url: 'https://example.com/get-link-source',
+        sourceKind: 'link',
+        source: 'chrome',
+      });
+
+      const result = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as Record<string, unknown>;
+      expect(structured.source).toBe('chrome');
+    });
+
     it('tools/list lists get_link (the capability went live)', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
@@ -59,6 +73,8 @@ describeMcpTool(
         extractedText: 'x'.repeat(200),
         captureStatus: 'full',
         tags: ['ai', 'reading'],
+        // Omitted -> core defaults to 'unknown' (capture-source slice).
+        source: 'unknown',
       });
       expect(typeof structured.createdAt).toBe('string');
       expect(typeof structured.updatedAt).toBe('string');

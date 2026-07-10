@@ -17,6 +17,18 @@ export type CaptureStatus = 'enriching' | 'full' | 'partial' | 'bare';
 export type AddedBy = 'user' | 'agent';
 
 /**
+ * Web's OWN copy of the closed capture-source value set — mirrors
+ * `LinkJson['source']` in `packages/api/src/link-json.ts`, which in turn
+ * mirrors `@silo/core`'s `CAPTURE_SOURCES` (`packages/core/src/links/
+ * source.ts`), the single source of truth. Not imported from `@silo/core`
+ * for the same bundling reason the rest of this file isn't (see the file's
+ * top doc comment). The capture SURFACE a link came through (web UI, MCP,
+ * CLI, Raycast, Chrome extension, generic ingest), orthogonal to `AddedBy`'s
+ * who (human vs agent).
+ */
+export type CaptureSource = 'web' | 'mcp' | 'cli' | 'raycast' | 'chrome' | 'ingest' | 'unknown';
+
+/**
  * Web's OWN copy of the API's `sourceData` union — mirrors
  * `@silo/core`'s `SourceData` (`packages/core/src/links/source-data.ts`)
  * field-for-field, string-safe (no `Date`s appear in this union, so no
@@ -88,6 +100,7 @@ export type LinkJson = {
   sourceData: SourceData;
   captureStatus: CaptureStatus;
   addedBy: AddedBy;
+  source: CaptureSource;
   notes: string | null;
   tags: string[];
   createdAt: string;

@@ -1,5 +1,5 @@
 import type { LinkWithTags } from '@silo/core';
-import { sourceDataSchema } from '@silo/core';
+import { CAPTURE_SOURCES, sourceDataSchema } from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -30,6 +30,14 @@ import { z } from 'zod';
  * a human or an agent, backing the mockup's `◆` mark), not an internal-only
  * field like `searchVector` — agent-native parity means the agent should see
  * the same origin signal a human sees in the UI.
+ *
+ * `source` (capture-source slice) IS ALSO whitelisted: it's provenance too,
+ * but a different axis — the capture SURFACE a link came through (web UI,
+ * this MCP server, the CLI, Raycast, the Chrome extension, generic ingest),
+ * orthogonal to `addedBy`'s who (human vs agent). `z.enum(CAPTURE_SOURCES)`
+ * imports the single source of truth from `@silo/core` (mirrored, not
+ * re-declared) rather than re-listing the 7 values here — see the
+ * capture-source method file's "value-set drift guard".
  */
 export const baseLinkShape = {
   id: z.uuid(),
@@ -43,6 +51,7 @@ export const baseLinkShape = {
   sourceData: sourceDataSchema,
   captureStatus: z.enum(['enriching', 'full', 'partial', 'bare']),
   addedBy: z.enum(['user', 'agent']),
+  source: z.enum(CAPTURE_SOURCES),
   notes: z.string().nullable(),
   tags: z.array(z.string()),
   createdAt: z.iso.datetime(),
@@ -97,6 +106,7 @@ export function toBaseLinkContent(link: LinkWithTags): BaseLinkContent {
     sourceData: shapeSourceData(link.sourceData),
     captureStatus: link.captureStatus,
     addedBy: link.addedBy,
+    source: link.source,
     notes: link.notes,
     tags: link.tags,
     createdAt: link.createdAt.toISOString(),
