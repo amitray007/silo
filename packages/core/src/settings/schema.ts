@@ -24,6 +24,15 @@ const settingsSchema = {
   theme: z.enum(['light', 'dark', 'system']),
   trashPurgeDays: z.union([z.literal(7), z.literal(30), z.literal(90)]),
   /**
+   * Gates the NETWORKED HTTP MCP surface (`@silo/app`'s `SILO_MCP_HTTP_PORT`
+   * listener) — when `false`, the HTTP MCP endpoint rejects requests even
+   * with a valid token and the port up. Defaults to `true` so existing
+   * behavior is unchanged for anyone upgrading. Does NOT affect the stdio
+   * MCP subprocess — that's a local, non-networked path with no exposed
+   * attack surface, so it isn't gated by this setting.
+   */
+  mcpAccess: z.boolean(),
+  /**
    * Enricher-kind -> per-feature toggles (plan 026). Keys mirror the
    * source-kinds `@silo/core`'s enrichment path knows about
    * (`source-data.ts`'s discriminated union). `link` has no enricher and no
@@ -73,6 +82,7 @@ export type SettingsMap = { [K in SettingKey]: SettingValue<K> };
 export const SETTINGS_DEFAULTS: SettingsMap = {
   theme: 'system',
   trashPurgeDays: 30,
+  mcpAccess: true,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },

@@ -34,6 +34,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
     it('getSetting returns the default for every known key when unset', async () => {
       expect(await ops.getSetting('theme')).toBe('system');
       expect(await ops.getSetting('trashPurgeDays')).toBe(30);
+      expect(await ops.getSetting('mcpAccess')).toBe(true);
       expect(await ops.getSetting('plugins')).toEqual({
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
@@ -47,6 +48,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(all).toEqual({
         theme: 'system',
         trashPurgeDays: 30,
+        mcpAccess: true,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
@@ -66,6 +68,15 @@ describeIfPg('settings store (integration, plan 016)', () => {
     it('persists a valid trashPurgeDays and reads it back', async () => {
       await ops.setSetting('trashPurgeDays', 7);
       expect(await ops.getSetting('trashPurgeDays')).toBe(7);
+    });
+
+    it('persists a valid mcpAccess and reads it back', async () => {
+      await ops.setSetting('mcpAccess', false);
+      expect(await ops.getSetting('mcpAccess')).toBe(false);
+    });
+
+    it('rejects an invalid mcpAccess value (non-boolean)', async () => {
+      await expect(ops.setSetting('mcpAccess', 'yes')).rejects.toThrow();
     });
 
     it('persists a partial plugins record merge — the FULL object is stored, not merged at write time', async () => {
@@ -199,6 +210,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(all).toEqual({
         theme: 'dark',
         trashPurgeDays: 30,
+        mcpAccess: true,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
@@ -230,6 +242,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(result).toEqual({
         theme: 'dark',
         trashPurgeDays: 7,
+        mcpAccess: true,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
@@ -265,6 +278,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       const result = await ops.updateSettings({
         theme: 'dark',
         trashPurgeDays: 90,
+        mcpAccess: false,
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false },
           github: { enabled: false, hover: false },
@@ -275,6 +289,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(result).toEqual({
         theme: 'dark',
         trashPurgeDays: 90,
+        mcpAccess: false,
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false },
           github: { enabled: false, hover: false },
@@ -284,6 +299,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       });
       // And it's actually persisted, not just returned.
       expect(await ops.getSetting('theme')).toBe('dark');
+      expect(await ops.getSetting('mcpAccess')).toBe(false);
     });
   });
 });
