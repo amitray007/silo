@@ -219,7 +219,12 @@ function TagsFlyout({ link }: { link: LinkJson }) {
         position: 'absolute',
         right: 'calc(100% - 2px)',
         top: -6,
-        width: 216,
+        // Matches the main `RowMenu` popover's `width: 224` exactly (was 216)
+        // so the two panels read as one coherent sibling pair sitting side by
+        // side, not a narrower/cramped afterthought hanging off the main
+        // menu — the rest of this panel's chrome (bg/border/radius/shadow/
+        // padding) already matched; width was the one discrepancy.
+        width: 224,
         // Dark-craft raised-surface convention (tokens.md): floating panels
         // sit one step up from the page ground on `--bg2` + a hairline
         // `--line` edge — this popover renders inside `.silo-content`, which

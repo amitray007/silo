@@ -52,8 +52,13 @@ export function TagOptionsList({
   onToggle: (name: string, active: boolean) => void;
 }) {
   const [hoveredName, setHoveredName] = useState<string | null>(null);
-  const rowPadding = size === 'sm' ? '5px 9px' : '6px 9px';
-  const notePadding = size === 'sm' ? '4px 9px 2px' : '4px 9px 2px';
+  // `md` (both current call sites: `RowMenu`'s `TagsFlyout` and `EditModal`'s
+  // `EditTagsFlyout`) is tokenized to sit closer to the main `RowMenu`
+  // popover's own row rhythm (`--s2-5 --s3`, i.e. 10px 12px) — was a
+  // hardcoded `6px 9px`, visibly tighter/cramped next to the redesigned main
+  // menu it now sits beside. `sm` is kept for any future denser use.
+  const rowPadding = size === 'sm' ? '5px 9px' : 'var(--s2) var(--s2-5)';
+  const notePadding = size === 'sm' ? '4px 9px 2px' : 'var(--s2) var(--s2-5) var(--s1)';
 
   return (
     <>
@@ -69,7 +74,7 @@ export function TagOptionsList({
           style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
+            gap: 'var(--s2)',
             width: '100%',
             boxSizing: 'border-box',
             border: 0,
@@ -92,10 +97,29 @@ export function TagOptionsList({
             transform: 'scale(1)',
           }}
         >
-          <span style={{ color: 'var(--ghost)' }}>#</span>
-          <span>{opt.name}</span>
+          <span style={{ flex: 'none', color: 'var(--ghost)' }}>#</span>
+          {/* Truncates instead of overflowing the popover — a long tag name
+              (e.g. pasted/scraped text mistaken for a tag) used to blow past
+              this row's fixed-width container with no wrap/ellipsis at all
+              (bug report: a ~45-char tag overran the flyout entirely).
+              `minWidth: 0` is required alongside `flex: 1` for the
+              `text-overflow: ellipsis` to actually kick in inside a flex
+              row — without it the flex item refuses to shrink below its
+              content's intrinsic width and the overflow: hidden never bites. */}
           <span
             style={{
+              flex: 1,
+              minWidth: 0,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {opt.name}
+          </span>
+          <span
+            style={{
+              flex: 'none',
               marginLeft: 'auto',
               width: 6,
               height: 6,
