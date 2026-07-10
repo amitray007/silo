@@ -1,6 +1,6 @@
 import * as http from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { timingSafeEqual } from '@silo/core';
+import { getSetting, timingSafeEqual } from '@silo/core';
 import { createSiloMcpServer } from '@silo/mcp-server';
 
 const MCP_PATH = '/mcp';
@@ -190,6 +190,17 @@ async function routeMcpRequest(
   const requestToken = bearerToken(req);
   if (requestToken === undefined || !timingSafeEqual(requestToken, token)) {
     sendUnauthorized(res);
+    return;
+  }
+
+  // Per-request gate: the operator can disable the networked HTTP MCP surface
+  // from Settings (core `mcpAccess`, default true) WITHOUT restarting the
+  // server or unsetting SILO_MCP_HTTP_PORT. When off, a fully-authenticated
+  // request (valid token + allowed Host) is still refused. The stdio MCP path
+  // is unaffected — this gate is specific to the networked surface.
+  const mcpAccessEnabled = await getSetting('mcpAccess');
+  if (!mcpAccessEnabled) {
+    sendJson(res, 403, JSON.stringify({ error: 'mcp_access_disabled' }));
     return;
   }
 

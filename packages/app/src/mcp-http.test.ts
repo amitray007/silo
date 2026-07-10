@@ -1,33 +1,59 @@
 import type { Server } from 'node:http';
 import * as http from 'node:http';
-import { afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { runMigrations } from '@silo/db/migrate';
+import * as disposableDb from '@silo/db/test-support/disposable-database';
+import { drizzle } from 'drizzle-orm/node-postgres';
+import { Pool } from 'pg';
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 /**
- * Tests for the token-gated HTTP MCP listener (MCP-HTTP slice, U2). Drives
- * real HTTP requests (via `fetch`) against an ephemeral-port instance —
+ * Tests for the token-gated HTTP MCP listener (MCP-HTTP slice, U2; `mcpAccess`
+ * gate added in the per-request settings-gate slice). Drives real HTTP
+ * requests (via `fetch`) against an ephemeral-port instance —
  * `startMcpHttpServer` transitively imports `@silo/mcp-server` -> `@silo/core`
- * -> `@silo/db`, whose `db`/`pool` singleton reads `DATABASE_URL` at
- * module-load time (pg.Pool connects lazily, so a syntactically valid
- * placeholder is enough — same pattern as `mcp-server`'s own
- * `server.test.ts`). Kept lean: only the auth gate + a tool-less
- * `initialize` handshake are exercised, so no real Postgres connection is
- * ever opened.
+ * -> `@silo/db`, and now `routeMcpRequest` itself calls core's `getSetting`
+ * on every request, so (unlike before the gate existed) this suite needs a
+ * REAL, reachable Postgres — a syntactically valid placeholder URL is no
+ * longer enough. Uses the same disposable-database pattern as
+ * `turnkey.test.ts`: a fresh, uniquely-named, migrated database per run,
+ * dropped in `afterAll`. `@silo/core`'s `db`/`pool` singleton reads
+ * `DATABASE_URL` at module-load time, so `@silo/core` and `@silo/mcp-server`
+ * are only imported (via `startMcpHttpServer`, dynamically imported inside
+ * `startTestServer`) AFTER `DATABASE_URL` is pointed at the disposable DB.
  */
-beforeAll(() => {
-  process.env.DATABASE_URL ??= 'postgres://localhost:5432/silo_placeholder';
-});
+const describeIfPg = disposableDb.postgresReachable() ? describe : describe.skip;
 
 const TOKEN = 'mcp-http-test-token-do-not-use-in-prod';
 
 let server: Server | undefined;
+let dropDatabase: (() => void) | undefined;
+
+beforeAll(async () => {
+  const database = disposableDb.createDisposableDatabase('silo_app_mcp_http_test');
+  const migratePool = new Pool({ connectionString: database.url });
+  await runMigrations(drizzle(migratePool), migratePool, '../db/drizzle');
+
+  process.env.DATABASE_URL = database.url;
+  dropDatabase = database.drop;
+});
+
+afterAll(() => {
+  dropDatabase?.();
+});
 
 afterEach(async () => {
-  if (server === undefined) return;
-  const toClose = server;
-  server = undefined;
-  await new Promise<void>((resolve, reject) => {
-    toClose.close((error) => (error ? reject(error) : resolve()));
-  });
+  if (server !== undefined) {
+    const toClose = server;
+    server = undefined;
+    await new Promise<void>((resolve, reject) => {
+      toClose.close((error) => (error ? reject(error) : resolve()));
+    });
+  }
+
+  // Reset mcpAccess to its default (true) after any test that changes it, so
+  // suites never poison each other's default-on assumption.
+  const core = await import('@silo/core');
+  await core.setSetting('mcpAccess', true);
 });
 
 async function startTestServer(): Promise<{ baseUrl: string; port: number }> {
@@ -90,7 +116,7 @@ const INITIALIZE_BODY = {
   },
 };
 
-describe('startMcpHttpServer', () => {
+describeIfPg('startMcpHttpServer', () => {
   it('POST /mcp with no Authorization header is 401', async () => {
     const { baseUrl } = await startTestServer();
     const res = await fetch(`${baseUrl}/mcp`, {
@@ -214,9 +240,48 @@ describe('startMcpHttpServer', () => {
     });
     expect(res.status).toBe(413);
   });
+
+  it('POST /mcp with mcpAccess=false is 403 even with a valid token and Host', async () => {
+    const core = await import('@silo/core');
+    await core.setSetting('mcpAccess', false);
+
+    const { baseUrl } = await startTestServer();
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(403);
+    expect(await res.json()).toEqual({ error: 'mcp_access_disabled' });
+  });
+
+  it('POST /mcp with mcpAccess=true (the default) still works — the happy path is unaffected by the gate', async () => {
+    const core = await import('@silo/core');
+    // Explicit, not relying purely on the fresh-DB default, since this suite
+    // runs other tests that flip mcpAccess to false and reset it in
+    // `afterEach` — this assertion documents the gate's "default on" contract
+    // regardless of ordering.
+    await core.setSetting('mcpAccess', true);
+
+    const { baseUrl } = await startTestServer();
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(200);
+  });
 });
 
-describe('startMcpHttpServer — invalid port handling', () => {
+describeIfPg('startMcpHttpServer — invalid port handling', () => {
   it('throws for a port outside the valid TCP range (documents that main.ts must guard before calling this)', async () => {
     const { startMcpHttpServer } = await import('./mcp-http.js');
     // `server.listen()` throws a synchronous RangeError for an out-of-range
