@@ -4,7 +4,19 @@ import { runMigrations } from '@silo/db/migrate';
 import * as disposableDb from '@silo/db/test-support/disposable-database';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+
+// `{ spy: true }` auto-spies every export of `@silo/core` with a real
+// passthrough implementation (vitest 3+) rather than replacing the module
+// wholesale — `@silo/core` is transitively huge (it's what `@silo/mcp-server`
+// itself needs), and a full `vi.mock` would force hand-stubbing everything
+// `startMcpHttpServer` transitively touches (settings, `timingSafeEqual`,
+// etc). With `spy: true`, every export keeps its real behavior by default;
+// the one fail-closed test below overrides only `getSetting` for a single
+// call via `mockRejectedValueOnce`, and every other test in this file (and
+// the disposable-DB-backed `setSetting`/`getSetting` calls in `afterEach`)
+// keeps hitting the real implementation against the real disposable DB.
+vi.mock('@silo/core', { spy: true });
 
 /**
  * Tests for the token-gated HTTP MCP listener (MCP-HTTP slice, U2; `mcpAccess`
@@ -278,6 +290,46 @@ describeIfPg('startMcpHttpServer', () => {
       body: JSON.stringify(INITIALIZE_BODY),
     });
     expect(res.status).toBe(200);
+  });
+
+  it('fails CLOSED (500, never the MCP handler) when the mcpAccess settings read throws', async () => {
+    // Security-critical regression guard: `routeMcpRequest` awaits
+    // `getSetting('mcpAccess')` with NO try/catch — a rejection (e.g. a
+    // transient DB outage) propagates up to `startMcpHttpServer`'s top-level
+    // `.catch`, which responds 500 and never reaches `handleMcpRequest`/the
+    // MCP tool handler. This is intentional: a settings-read failure must
+    // REFUSE the request, not silently default to "access allowed". A future
+    // refactor that wraps `getSetting` in a try/catch defaulting to `true` on
+    // error would flip this to fail-OPEN — this test exists to catch exactly
+    // that regression.
+    //
+    // `vi.mock('@silo/core', { spy: true })` at the top of this file makes
+    // every `@silo/core` export a real-passthrough spy, so `getSetting` here
+    // is a `vi.fn` wrapping the real implementation — `mockRejectedValueOnce`
+    // overrides just the next call's outcome without touching any other
+    // export (`timingSafeEqual`, `setSetting`, etc. used by `afterEach` and
+    // every other test stay real, against the real disposable DB).
+    const core = await import('@silo/core');
+    await core.setSetting('mcpAccess', true); // rule out "false" as the cause of a non-200
+    vi.mocked(core.getSetting).mockRejectedValueOnce(new Error('db down (simulated)'));
+
+    const { baseUrl } = await startTestServer();
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+
+    // Fail closed: must be a server error, and specifically must NOT be a
+    // 200 with a successful JSON-RPC result — that would mean the rejected
+    // settings read was swallowed and the request reached the MCP handler.
+    expect(res.status).toBe(500);
+    expect(res.status).not.toBe(200);
+    expect(await res.json()).toEqual({ error: 'internal_error' });
   });
 });
 
