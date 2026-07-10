@@ -33,6 +33,7 @@ function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins']) {
       theme: 'system',
       trashPurgeDays: 30,
       mcpAccess: true,
+      linkPreviewImages: true,
       plugins,
     } satisfies SettingsMap);
   }

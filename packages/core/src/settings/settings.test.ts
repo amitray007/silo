@@ -49,6 +49,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         theme: 'system',
         trashPurgeDays: 30,
         mcpAccess: true,
+        linkPreviewImages: true,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
@@ -211,6 +212,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         theme: 'dark',
         trashPurgeDays: 30,
         mcpAccess: true,
+        linkPreviewImages: true,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
@@ -243,6 +245,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         theme: 'dark',
         trashPurgeDays: 7,
         mcpAccess: true,
+        linkPreviewImages: true,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true },
           github: { enabled: true, hover: true },
@@ -279,6 +282,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         theme: 'dark',
         trashPurgeDays: 90,
         mcpAccess: false,
+        linkPreviewImages: true,
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false },
           github: { enabled: false, hover: false },
@@ -290,6 +294,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         theme: 'dark',
         trashPurgeDays: 90,
         mcpAccess: false,
+        linkPreviewImages: true,
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false },
           github: { enabled: false, hover: false },

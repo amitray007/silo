@@ -201,6 +201,10 @@ export type SettingsMap = {
   theme: 'light' | 'dark' | 'system';
   trashPurgeDays: 7 | 30 | 90;
   mcpAccess: boolean;
+  // `linkPreviewImages` (Plugins-tab silo section): mirrors core's
+  // `settingsSchema.linkPreviewImages`. When false, plain-link hover-preview
+  // cards omit the captured og:image. Default true.
+  linkPreviewImages: boolean;
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
     github: { enabled: boolean; hover: boolean };

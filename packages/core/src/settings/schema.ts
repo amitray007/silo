@@ -33,6 +33,17 @@ const settingsSchema = {
    */
   mcpAccess: z.boolean(),
   /**
+   * Whether a link's captured preview image (its `og:image`, article hero,
+   * GitHub OG card, etc. — `metascraper-image` stores it as `imageUrl` at
+   * enrich time) is shown in the hover-preview card for plain links. Defaults
+   * to `true`. A silo-level behavior toggle (distinct from the per-SOURCE
+   * `plugins` toggles below) — lives in the Plugins tab's "silo" section. The
+   * image is always served via silo's own `/api/preview-image` proxy, never a
+   * third-party fetch from the browser (privacy), so this only gates DISPLAY;
+   * a link with no captured image simply shows no image regardless.
+   */
+  linkPreviewImages: z.boolean(),
+  /**
    * Enricher-kind -> per-feature toggles (plan 026). Keys mirror the
    * source-kinds `@silo/core`'s enrichment path knows about
    * (`source-data.ts`'s discriminated union). `link` has no enricher and no
@@ -83,6 +94,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
   theme: 'system',
   trashPurgeDays: 30,
   mcpAccess: true,
+  linkPreviewImages: true,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },

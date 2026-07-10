@@ -468,39 +468,69 @@ function VideoVariant({
   );
 }
 
-/** The `pvIsGeneric` variant (`Silo-v3.html:252-261`) — unchanged from before this un-parking. */
-// The note is deliberately NOT shown here — the row already renders it (the
-// quoted line under the title, `LinkRow.tsx`), and the hover card sits right
-// beside the row, so repeating the note was pure duplication (both visible in
-// one eyeful). The hover shows tags; the note lives on the row.
+/**
+ * The `pvIsGeneric` variant (`Silo-v3.html:252-261`) — title + tags, unchanged
+ * from before this un-parking, PLUS (silo section, Plugins tab) an optional
+ * og:image cover at the TOP of the card, matching `RepoVariant`/`VideoVariant`'s
+ * image-then-title layout.
+ *
+ * `showImage` is the caller's precomputed gate — `link.imageUrl` present AND
+ * `settings?.linkPreviewImages !== false` (default-ON while settings load or
+ * when the setting is unset, matching the app's optimism elsewhere; see
+ * `SourceVariant` below for where the gate is computed). When `false`, this
+ * renders exactly as before (no image, graceful omission — "silence means
+ * complete").
+ *
+ * Same `imageFailed` + reset-on-`linkId` pattern as `RepoVariant`: a broken
+ * proxied image (404, corrupt capture) hides itself rather than showing a
+ * broken-image icon, and the shared `HoverPreview` instance is reused across
+ * links without a `key`, so the failure flag must reset when the previewed
+ * link changes or a stale failure from link A would suppress link B's (valid)
+ * image.
+ */
 function GenericVariant({
   title,
+  linkId,
   tagLine,
   hasTags,
+  showImage,
 }: {
   title: string;
+  linkId: string;
   tagLine: string;
   hasTags: boolean;
+  showImage: boolean;
 }) {
+  const [imageFailed, setImageFailed] = useState(false);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `linkId` is the intended reset trigger; `setImageFailed` is a stable useState setter.
+  useEffect(() => {
+    setImageFailed(false);
+  }, [linkId]);
+
   return (
-    <VariantBody title={title}>
-      {hasTags && (
-        <div
-          style={{
-            fontSize: 'var(--text-sm)',
-            color: 'var(--fnt)',
-            marginTop: 'var(--s1-5)',
-            // A single long tag name has no whitespace to wrap on and would
-            // otherwise overflow the fixed-width preview card (it gets clipped
-            // by the card's `overflow: hidden`). `break-word` lets it wrap
-            // mid-token so the whole tag line stays inside the card.
-            overflowWrap: 'break-word',
-          }}
-        >
-          {tagLine}
-        </div>
+    <>
+      {showImage && !imageFailed && (
+        <PreviewCoverImage linkId={linkId} onError={() => setImageFailed(true)} />
       )}
-    </VariantBody>
+      <VariantBody title={title}>
+        {hasTags && (
+          <div
+            style={{
+              fontSize: 'var(--text-sm)',
+              color: 'var(--fnt)',
+              marginTop: 'var(--s1-5)',
+              // A single long tag name has no whitespace to wrap on and would
+              // otherwise overflow the fixed-width preview card (it gets clipped
+              // by the card's `overflow: hidden`). `break-word` lets it wrap
+              // mid-token so the whole tag line stays inside the card.
+              overflowWrap: 'break-word',
+            }}
+          >
+            {tagLine}
+          </div>
+        )}
+      </VariantBody>
+    </>
   );
 }
 
@@ -533,12 +563,14 @@ function SourceVariant({
   tagLine,
   hasTags,
   plugins,
+  linkPreviewImages,
 }: {
   link: LinkJson;
   title: string;
   tagLine: string;
   hasTags: boolean;
   plugins: SettingsMap['plugins'] | undefined;
+  linkPreviewImages: boolean | undefined;
 }) {
   const data = link.sourceData;
   if (data.kind === 'hacker_news' && hoverEnabledFor(plugins, 'hacker_news')) {
@@ -553,7 +585,21 @@ function SourceVariant({
   if (data.kind === 'twitter' && hoverEnabledFor(plugins, 'twitter')) {
     return <TwitterVariant linkId={link.id} sourceData={data} />;
   }
-  return <GenericVariant title={title} tagLine={tagLine} hasTags={hasTags} />;
+  // Silo section (Plugins tab): show the captured og:image only when one was
+  // actually captured (`link.imageUrl` set) AND the setting isn't explicitly
+  // off — `!== false` means "on" AND "still loading/unset" both show,
+  // matching the app's default-on optimism (mirrors `hoverEnabledFor`'s
+  // `?? true` pattern one level up).
+  const showImage = Boolean(link.imageUrl) && linkPreviewImages !== false;
+  return (
+    <GenericVariant
+      title={title}
+      linkId={link.id}
+      tagLine={tagLine}
+      hasTags={hasTags}
+      showImage={showImage}
+    />
+  );
 }
 
 /**
@@ -637,6 +683,7 @@ export function HoverPreview({
         tagLine={tagLine}
         hasTags={hasTags}
         plugins={settings?.plugins}
+        linkPreviewImages={settings?.linkPreviewImages}
       />
       <div
         style={{

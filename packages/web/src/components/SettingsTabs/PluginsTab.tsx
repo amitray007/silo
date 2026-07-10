@@ -1,5 +1,6 @@
 import { type CSSProperties, useId, useState } from 'react';
 import { useSettings, useUpdateSettings } from '../../api/hooks';
+import type { SettingsMap } from '../../api/types';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
@@ -136,6 +137,14 @@ const featureRow: CSSProperties = {
   padding: '10px 0',
 };
 
+/** The "silo" section heading — lowercase, matching the brand wordmark (never Title Case like a row label). Sits directly above its one-line description, mirroring `rowLabel`'s weight/color at a slightly smaller size since it's a section header, not a row name. */
+const siloSectionHeading: CSSProperties = {
+  fontSize: 'var(--text-sm)',
+  fontWeight: 500,
+  color: 'var(--ink)',
+  letterSpacing: '0.01em',
+};
+
 /** The grid card's status dot — a smaller, non-interactive readout of `enabled` (the card itself is the click target, selecting the source; the actual toggle lives in the expand panel). */
 function StatusDot({ on }: { on: boolean }) {
   return (
@@ -220,6 +229,55 @@ function FeatureToggleRow({
       </div>
       <ToggleSwitch on={on} disabled={disabled} onToggle={onToggle} label={name} />
     </div>
+  );
+}
+
+/**
+ * The "silo" section — silo's OWN behaviors, distinct from the source
+ * plugins above (those gate ingestion/rendering of external sources; this
+ * gates silo's own UI behavior). Sits below the source-plugin grid+panel,
+ * separated by a divider. Currently one row (`Link preview images`,
+ * `SettingsMap['linkPreviewImages']` — see `packages/core/src/settings/
+ * schema.ts`'s doc comment); written as its own component so a future
+ * silo-level toggle is just another row here, not a restructure of
+ * `PluginsTab`'s already-nontrivial cognitive complexity.
+ *
+ * Mirrors `AccessTab`'s live MCP-access toggle pattern exactly: read
+ * `settings?.linkPreviewImages ?? true` (default-on, matching the app's
+ * loading optimism elsewhere), disable while `settings` is still loading OR
+ * the mutation is in flight (`updateSettings.isPending`) so a slow PATCH
+ * can't be double-fired.
+ */
+function SiloSettingsSection({
+  settings,
+  updateSettings,
+}: {
+  settings: SettingsMap | undefined;
+  updateSettings: ReturnType<typeof useUpdateSettings>;
+}) {
+  const linkPreviewImages = settings?.linkPreviewImages ?? true;
+  const disabled = !settings || updateSettings.isPending;
+
+  return (
+    <>
+      <hr style={panelDivider} />
+      <div style={{ marginBottom: 4 }}>
+        <div style={siloSectionHeading}>silo</div>
+        <div style={rowDesc}>silo's own behaviors — not a source plugin.</div>
+      </div>
+      <div style={featureRow}>
+        <div style={{ flex: 1 }}>
+          <div style={rowLabel}>Link preview images</div>
+          <div style={rowDesc}>Show a page's preview image in the hover card.</div>
+        </div>
+        <ToggleSwitch
+          on={linkPreviewImages}
+          disabled={disabled}
+          onToggle={() => updateSettings.mutate({ linkPreviewImages: !linkPreviewImages })}
+          label="Link preview images"
+        />
+      </div>
+    </>
   );
 }
 
@@ -323,6 +381,8 @@ export function PluginsTab() {
           );
         })()}
       </div>
+
+      <SiloSettingsSection settings={settings} updateSettings={updateSettings} />
     </>
   );
 }

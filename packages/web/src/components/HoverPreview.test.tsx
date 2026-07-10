@@ -20,15 +20,18 @@ const position = { top: 20, left: 40 };
  * QueryClient ancestor now. `plugins` is optional: when omitted, no settings
  * are seeded and `useSettings()` stays in its loading state, matching the
  * app's `?? true` optimistic default (rich variant shows) — that's the
- * existing tests' original intent, so they pass `plugins` unset.
+ * existing tests' original intent, so they pass `plugins` unset. `linkPreviewImages`
+ * defaults to `true` (matching `SETTINGS_DEFAULTS`) when `plugins` is seeded;
+ * pass `false` explicitly to exercise the silo section's off gate.
  */
-function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins']) {
+function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins'], linkPreviewImages = true) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   if (plugins) {
     queryClient.setQueryData(queryKeys.settings(), {
       theme: 'system',
       trashPurgeDays: 30,
       mcpAccess: true,
+      linkPreviewImages,
       plugins,
     } satisfies SettingsMap);
   }
@@ -517,6 +520,143 @@ describe('HoverPreview', () => {
       );
       expect(screen.getByText('58100')).toBeDefined();
       expect(screen.getByText('stars')).toBeDefined();
+    });
+  });
+
+  describe('silo section: og:image in the generic (plain-link) variant', () => {
+    const allOn: SettingsMap['plugins'] = {
+      hacker_news: { enabled: true, inline: true, hover: true },
+      github: { enabled: true, hover: true },
+      youtube: { enabled: true, hover: true },
+      twitter: { enabled: true, inline: true, hover: true },
+    };
+
+    it('renders the proxied cover image when imageUrl is present and linkPreviewImages is true', () => {
+      renderPreview(
+        makeLink({
+          id: 'link-with-image',
+          title: 'A plain link',
+          sourceData: { kind: 'link' },
+          imageUrl: 'https://example.com/og.png',
+        }),
+        allOn,
+      );
+      const img = document.querySelector('img') as HTMLImageElement;
+      expect(img).not.toBeNull();
+      expect(img.getAttribute('src')).toBe('/api/preview-image?linkId=link-with-image');
+    });
+
+    it('omits the image when linkPreviewImages is false, even with imageUrl present', () => {
+      renderPreview(
+        makeLink({
+          id: 'link-with-image',
+          title: 'A plain link',
+          sourceData: { kind: 'link' },
+          imageUrl: 'https://example.com/og.png',
+        }),
+        allOn,
+        false,
+      );
+      expect(document.querySelector('img')).toBeNull();
+      expect(screen.getByText('A plain link')).toBeDefined();
+    });
+
+    it('omits the image when imageUrl is absent, even with linkPreviewImages true', () => {
+      renderPreview(
+        makeLink({
+          title: 'A plain link',
+          sourceData: { kind: 'link' },
+          imageUrl: null,
+        }),
+        allOn,
+      );
+      expect(document.querySelector('img')).toBeNull();
+    });
+
+    it('shows the image by default while settings are still loading (optimistic, not explicitly false)', () => {
+      // No settings seeded at all — renderPreview's default path.
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <HoverPreview
+            link={makeLink({
+              id: 'link-with-image',
+              title: 'A plain link',
+              sourceData: { kind: 'link' },
+              imageUrl: 'https://example.com/og.png',
+            })}
+            position={position}
+            onKeep={vi.fn()}
+            onHide={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      const img = document.querySelector('img') as HTMLImageElement;
+      expect(img).not.toBeNull();
+      expect(img.getAttribute('src')).toBe('/api/preview-image?linkId=link-with-image');
+    });
+
+    it('falls back gracefully (no image) when the proxied cover image errors', () => {
+      renderPreview(
+        makeLink({
+          id: 'link-with-image',
+          title: 'A plain link',
+          sourceData: { kind: 'link' },
+          imageUrl: 'https://example.com/og.png',
+        }),
+        allOn,
+      );
+      const img = document.querySelector('img') as HTMLImageElement;
+      fireEvent.error(img);
+      expect(document.querySelector('img')).toBeNull();
+      expect(screen.getByText('A plain link')).toBeDefined();
+    });
+
+    it('resets the image-failed state when the previewed link changes (no stale placeholder leak)', () => {
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(queryKeys.settings(), {
+        theme: 'system',
+        trashPurgeDays: 30,
+        mcpAccess: true,
+        linkPreviewImages: true,
+        plugins: allOn,
+      } satisfies SettingsMap);
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <HoverPreview
+            link={makeLink({
+              id: 'link-a',
+              title: 'Link A',
+              sourceData: { kind: 'link' },
+              imageUrl: 'https://example.com/a.png',
+            })}
+            position={position}
+            onKeep={vi.fn()}
+            onHide={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      fireEvent.error(document.querySelector('img') as HTMLImageElement);
+      expect(document.querySelector('img')).toBeNull();
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <HoverPreview
+            link={makeLink({
+              id: 'link-b',
+              title: 'Link B',
+              sourceData: { kind: 'link' },
+              imageUrl: 'https://example.com/b.png',
+            })}
+            position={position}
+            onKeep={vi.fn()}
+            onHide={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      const imgB = document.querySelector('img') as HTMLImageElement;
+      expect(imgB).not.toBeNull();
+      expect(imgB.getAttribute('src')).toBe('/api/preview-image?linkId=link-b');
     });
   });
 });

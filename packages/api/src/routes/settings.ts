@@ -29,6 +29,10 @@ const settingsPatchBodySchema = z
     // (a scalar boolean, default true) — gates the HTTP MCP listener
     // per-request server-side (`packages/app/src/mcp-http.ts`).
     mcpAccess: z.boolean().optional(),
+    // Plugins-tab silo section: mirrors core's `settingsSchema.linkPreviewImages`
+    // (scalar boolean, default true) — gates whether the plain-link hover-preview
+    // card shows the captured og:image.
+    linkPreviewImages: z.boolean().optional(),
     // Plan 026: per-source objects (master `enabled` + the render features that
     // source supports). Mirrors `core`'s `settingsSchema.plugins` exactly. The
     // edge validates the CURRENT (new) shape strictly — well-formed writes only;

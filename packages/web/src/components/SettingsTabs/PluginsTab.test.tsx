@@ -15,6 +15,7 @@ function defaultSettings() {
   return {
     theme: 'system' as const,
     trashPurgeDays: 30 as const,
+    linkPreviewImages: true,
     plugins: {
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: true, hover: true },
@@ -395,5 +396,66 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
   it('does not render the old footer note explaining plugins never change what gets saved', () => {
     renderTab();
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
+  });
+
+  describe('silo section (link preview images)', () => {
+    it('renders the "silo" heading and the "Link preview images" toggle row', async () => {
+      renderTab();
+      expect(screen.getByText('silo')).toBeDefined();
+      await waitFor(() => expect(screen.getByTitle(/Link preview images is on/i)).toBeDefined());
+      expect(screen.getByText('Link preview images')).toBeDefined();
+    });
+
+    it('reflects settings.linkPreviewImages: false as an off toggle', async () => {
+      renderTab({ ...defaultSettings(), linkPreviewImages: false });
+      await waitFor(() => expect(screen.getByTitle(/Link preview images is off/i)).toBeDefined());
+    });
+
+    it('toggling it off calls updateSettings.mutate({ linkPreviewImages: false })', async () => {
+      const { fetchMock } = renderTab();
+
+      const toggle = await screen.findByTitle(/Link preview images is on/i);
+      fireEvent.click(toggle);
+
+      await waitFor(() => {
+        const patchCall = fetchMock.mock.calls.find(
+          (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+        );
+        expect(patchCall).toBeDefined();
+        const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
+        expect(body).toEqual({ linkPreviewImages: false });
+      });
+    });
+
+    it('toggling it back on calls updateSettings.mutate({ linkPreviewImages: true })', async () => {
+      const { fetchMock } = renderTab({ ...defaultSettings(), linkPreviewImages: false });
+
+      const toggle = await screen.findByTitle(/Link preview images is off/i);
+      fireEvent.click(toggle);
+
+      await waitFor(() => {
+        const patchCall = fetchMock.mock.calls.find(
+          (call) => (call[1] as RequestInit | undefined)?.method === 'PATCH',
+        );
+        expect(patchCall).toBeDefined();
+        const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
+        expect(body).toEqual({ linkPreviewImages: true });
+      });
+    });
+
+    it('the toggle is disabled while settings are still loading', async () => {
+      const neverResolves = new Promise<Response>(() => {});
+      const fetchMock = vi.fn().mockReturnValue(neverResolves);
+      vi.stubGlobal('fetch', fetchMock);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <PluginsTab />
+        </QueryClientProvider>,
+      );
+
+      const toggle = await screen.findByTitle(/Link preview images/i);
+      expect(toggle).toHaveProperty('disabled', true);
+    });
   });
 });

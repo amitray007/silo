@@ -17,6 +17,7 @@ function defaultSettings() {
     theme: 'system' as const,
     trashPurgeDays: 30 as const,
     mcpAccess: true,
+    linkPreviewImages: true,
     plugins: {
       hacker_news: { enabled: true, inline: true, hover: true },
       github: { enabled: true, hover: true },
