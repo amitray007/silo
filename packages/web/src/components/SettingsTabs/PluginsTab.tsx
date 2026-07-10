@@ -137,14 +137,6 @@ const featureRow: CSSProperties = {
   padding: '10px 0',
 };
 
-/** The "silo" section heading — lowercase, matching the brand wordmark (never Title Case like a row label). Sits directly above its one-line description, mirroring `rowLabel`'s weight/color at a slightly smaller size since it's a section header, not a row name. */
-const siloSectionHeading: CSSProperties = {
-  fontSize: 'var(--text-sm)',
-  fontWeight: 500,
-  color: 'var(--ink)',
-  letterSpacing: '0.01em',
-};
-
 /** The grid card's status dot — a smaller, non-interactive readout of `enabled` (the card itself is the click target, selecting the source; the actual toggle lives in the expand panel). */
 function StatusDot({ on }: { on: boolean }) {
   return (
@@ -261,10 +253,6 @@ function SiloSettingsSection({
   return (
     <>
       <hr style={panelDivider} />
-      <div style={{ marginBottom: 4 }}>
-        <div style={siloSectionHeading}>silo</div>
-        <div style={rowDesc}>silo's own behaviors — not a source plugin.</div>
-      </div>
       <div style={featureRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Link preview images</div>

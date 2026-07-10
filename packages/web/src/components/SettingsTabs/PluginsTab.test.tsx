@@ -399,9 +399,8 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
   });
 
   describe('silo section (link preview images)', () => {
-    it('renders the "silo" heading and the "Link preview images" toggle row', async () => {
+    it('renders the "Link preview images" toggle row', async () => {
       renderTab();
-      expect(screen.getByText('silo')).toBeDefined();
       await waitFor(() => expect(screen.getByTitle(/Link preview images is on/i)).toBeDefined());
       expect(screen.getByText('Link preview images')).toBeDefined();
     });
