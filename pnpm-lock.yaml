@@ -274,9 +274,15 @@ importers:
 
   packages/app:
     dependencies:
+      '@hono/node-server':
+        specifier: 'catalog:'
+        version: 2.0.8(hono@4.12.27)
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
+      '@silo/api':
+        specifier: workspace:*
+        version: link:../api
       '@silo/core':
         specifier: workspace:*
         version: link:../core

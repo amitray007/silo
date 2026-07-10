@@ -261,3 +261,13 @@ export type CreatedAccessTokenJson = AccessTokenJson & { token: string };
 
 /** `GET /api/access-tokens` response envelope. */
 export type AccessTokensResponse = { tokens: AccessTokenJson[] };
+
+/**
+ * `GET /api/config` response envelope (deployable-silo slice, Unit 4) —
+ * mirrors `packages/api/src/routes/config.ts`'s `c.json(...)` shape exactly.
+ * `mcpUrl` is present ONLY when the operator has set `SILO_PUBLIC_MCP_URL`
+ * server-side; absent otherwise (never `null`). Consumed by
+ * `packages/web/src/lib/mcpUrl.ts`'s resolver as step 1 of its precedence
+ * (operator override > derived `mcp.<hostname>` > localhost dev default).
+ */
+export type AppConfig = { mcpUrl?: string };

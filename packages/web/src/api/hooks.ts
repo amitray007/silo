@@ -8,6 +8,7 @@ import {
 import { apiDelete, apiGet, apiPatch, apiPost } from './client';
 import type {
   AccessTokensResponse,
+  AppConfig,
   CaptureRequest,
   CaptureResponse,
   Counts,
@@ -71,6 +72,7 @@ export const queryKeys = {
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
   accessTokens: () => ['access-tokens'] as const,
+  appConfig: () => ['app-config'] as const,
 };
 
 /** The sidebar's live/trash counts (`GET /api/counts`) — `useCounts().data` is `Counts | undefined` until loaded. */
@@ -824,5 +826,23 @@ export function useRevokeAccessToken() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accessTokens() });
     },
+  });
+}
+
+/**
+ * The Access tab's public deploy-config read (`GET /api/config`,
+ * deployable-silo slice Unit 4) — feeds `resolveMcpUrl`
+ * (`packages/web/src/lib/mcpUrl.ts`) step 1 of its precedence: an
+ * operator-set `SILO_PUBLIC_MCP_URL` wins verbatim over the client-derived
+ * `mcp.<hostname>` guess. Ungated on the server (`registerConfigRoutes`), so
+ * this hook is safe to call even before login resolves — same posture as
+ * `AuthContext`'s own `/api/auth/check` read. `useAppConfig().data` is
+ * `AppConfig | undefined` until loaded; `mcpUrl` itself is optional even once
+ * loaded (present only when the operator configured it).
+ */
+export function useAppConfig() {
+  return useQuery({
+    queryKey: queryKeys.appConfig(),
+    queryFn: () => apiGet<AppConfig>('/api/config'),
   });
 }

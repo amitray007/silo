@@ -15,10 +15,14 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "start": "tsx --env-file-if-exists=../../.env src/main.ts",
+    "start:mcp-http": "tsx --env-file-if-exists=../../.env src/mcp-http-main.ts",
+    "start:api": "tsx --env-file-if-exists=../../.env src/api-main.ts",
     "test": "vitest run"
   },
   "dependencies": {
+    "@hono/node-server": "catalog:",
     "@modelcontextprotocol/sdk": "catalog:",
+    "@silo/api": "workspace:*",
     "@silo/core": "workspace:*",
     "@silo/mcp-server": "workspace:*",
     "@silo/worker": "workspace:*"

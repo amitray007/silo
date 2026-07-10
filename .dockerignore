@@ -1,0 +1,32 @@
+# Never ship these into the build context (keeps the image small + the build
+# reproducible from source, not from a dev machine's state).
+
+# Dependencies + build outputs — reinstalled/rebuilt inside the image.
+**/node_modules
+**/dist
+**/.turbo
+packages/web/dist
+
+# VCS + agent/editor state.
+.git
+.gitignore
+.claude
+.vscode
+.idea
+
+# Local env + secrets — the container gets its config via compose/Dokploy env,
+# never a baked-in .env (which would leak secrets into image layers).
+.env
+.env.*
+!.env.example
+
+# Local-dev-only Postgres data + compose (the prod compose is separate).
+docker-compose.yml
+
+# Tests/coverage/logs that don't belong in a runtime image.
+**/coverage
+**/*.log
+**/.DS_Store
+
+# Docs are not needed at runtime.
+docs

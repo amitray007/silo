@@ -379,6 +379,75 @@ describeIfPg('startMcpHttpServer', () => {
   });
 });
 
+describeIfPg('startMcpHttpServer — extraAllowedHosts (proxied deploys)', () => {
+  it('a Host header matching an extraAllowedHosts entry VERBATIM (no port) is accepted', async () => {
+    const { startMcpHttpServer } = await import('./mcp-http.js');
+    server = startMcpHttpServer({
+      port: 0,
+      token: TOKEN,
+      host: '127.0.0.1',
+      extraAllowedHosts: ['mcp.silo.example.com'],
+    });
+    await new Promise<void>((resolve) => server?.once('listening', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('expected an ephemeral TCP address');
+    }
+    // Deliberately NO `:port` suffix — this is the proxied-request shape:
+    // Traefik forwards with the PUBLIC Host header (no port, since the
+    // client connects on :443), which is why `extraAllowedHosts` entries are
+    // matched verbatim rather than having `:{boundPort}` appended like the
+    // loopback/bind-host entries `allowedHosts()` derives itself.
+    const { status } = await postWithHostHeader(
+      address.port,
+      'mcp.silo.example.com',
+      JSON.stringify(INITIALIZE_BODY),
+    );
+    expect(status).toBe(200);
+  });
+
+  it('a Host header NOT in extraAllowedHosts is still rejected', async () => {
+    const { startMcpHttpServer } = await import('./mcp-http.js');
+    server = startMcpHttpServer({
+      port: 0,
+      token: TOKEN,
+      host: '127.0.0.1',
+      extraAllowedHosts: ['mcp.silo.example.com'],
+    });
+    await new Promise<void>((resolve) => server?.once('listening', resolve));
+    const address = server.address();
+    if (address === null || typeof address === 'string') {
+      throw new Error('expected an ephemeral TCP address');
+    }
+    const { status } = await postWithHostHeader(
+      address.port,
+      'evil.example.com',
+      JSON.stringify(INITIALIZE_BODY),
+    );
+    expect(status).not.toBe(200);
+    expect(status).toBeGreaterThanOrEqual(400);
+    expect(status).toBeLessThan(500);
+  });
+
+  it('omitting extraAllowedHosts is backward compatible — loopback Host headers still work', async () => {
+    // Regression guard for the `opts.extraAllowedHosts?: string[]` addition:
+    // every EXISTING caller (including `startTestServer` above) omits this
+    // field entirely, so `allowedHosts()` must behave identically to before
+    // the change when it's undefined.
+    const { baseUrl } = await startTestServer();
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(200);
+  });
+});
+
 describeIfPg('startMcpHttpServer — invalid port handling', () => {
   it('throws for a port outside the valid TCP range (documents that main.ts must guard before calling this)', async () => {
     const { startMcpHttpServer } = await import('./mcp-http.js');

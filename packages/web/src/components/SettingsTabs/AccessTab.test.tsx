@@ -46,10 +46,14 @@ function mockFetchRouter(opts?: {
   settings?: ReturnType<typeof defaultSettings>;
   tokens?: AccessTokenFixture[];
   createdToken?: string;
+  /** `GET /api/config`'s `mcpUrl` — mirrors the API returning it only when
+   * `SILO_PUBLIC_MCP_URL` is set server-side. Omitted -> `{}` (the unset shape). */
+  configMcpUrl?: string;
 }) {
   let settingsStore = opts?.settings ?? defaultSettings();
   let tokensStore = opts?.tokens ?? [];
   const rawToken = opts?.createdToken ?? 'silo_rawtoken1234567890abcdef';
+  const config = opts?.configMcpUrl ? { mcpUrl: opts.configMcpUrl } : {};
 
   function handleSettings(method: string, init?: RequestInit) {
     if (method === 'PATCH') {
@@ -86,6 +90,7 @@ function mockFetchRouter(opts?: {
 
     if (url.includes('/api/settings')) return handleSettings(method, init);
     if (url.includes('/api/access-tokens')) return handleAccessTokens(url, method, init);
+    if (url.includes('/api/config')) return Promise.resolve(jsonResponse(config));
     return Promise.resolve(jsonResponse({}));
   });
 
@@ -135,6 +140,55 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     expect(copied).not.toMatch(/Bearer (?!<YOUR_SILO_API_TOKEN>)\S+/);
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeDefined());
+  });
+
+  /**
+   * `resolveMcpUrl`'s three-step precedence (deployable-silo slice, Unit 4):
+   * these three cases exercise it end-to-end through the actual button click
+   * (unit coverage for the pure function itself lives in `lib/mcpUrl.test.ts`)
+   * — jsdom's default `window.location.hostname` is `localhost`, which is
+   * what makes the FIRST "Copy config" test above assert the dev-default URL
+   * without needing to say so explicitly.
+   */
+  it('an operator-set SILO_PUBLIC_MCP_URL (via GET /api/config) is copied verbatim', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+
+    renderTab({ configMcpUrl: 'https://mcp.override.example/mcp' });
+    const button = screen.getByRole('button', { name: 'Copy config' });
+    // The button doesn't gate on `useAppConfig` loading, so a click before
+    // that query resolves would read the pre-load `undefined` and silently
+    // fall through to the localhost dev-default instead of the override —
+    // click, then RETRY inside `waitFor` until the config has landed and the
+    // resolved value shows up, rather than guessing when the query settles.
+    await waitFor(() => {
+      fireEvent.click(button);
+      expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('mcp.override.example'));
+    });
+  });
+
+  it('a non-localhost origin with no config override derives https://mcp.<hostname>/mcp', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+    const originalLocation = window.location;
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      value: { ...originalLocation, hostname: 'silo.example.com', protocol: 'https:' },
+    });
+
+    try {
+      renderTab();
+      const button = screen.getByRole('button', { name: 'Copy config' });
+      await waitFor(() => {
+        fireEvent.click(button);
+        expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('mcp.silo.example.com'));
+      });
+    } finally {
+      Object.defineProperty(window, 'location', {
+        configurable: true,
+        value: originalLocation,
+      });
+    }
   });
 
   it('flashes "Couldn\'t copy" when the clipboard write fails, and resets after', async () => {

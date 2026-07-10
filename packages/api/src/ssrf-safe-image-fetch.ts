@@ -34,7 +34,7 @@
 
 import { lookup as dnsLookup } from 'node:dns';
 import ipaddr from 'ipaddr.js';
-import { Agent, fetch as undiciFetch } from 'undici';
+import { Agent, type Response as UndiciResponse, fetch as undiciFetch } from 'undici';
 
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:']);
 const TIMEOUT_MS = 5000;
@@ -164,7 +164,15 @@ async function validateAndPinHost(
  * `MAX_BODY_BYTES` — never trusts `Content-Length`. Mirrors `safe-fetch.ts`'s
  * identical streamed-byte-cap reasoning.
  */
-async function readBodyCapped(response: Response): Promise<Uint8Array | undefined> {
+// Typed with undici's OWN `Response` (not the global/DOM `Response`) — the body
+// this reads comes from `undiciFetch`, and undici's `Response` is what it
+// actually is. Using the global type happens to compile under `@silo/api`'s own
+// tsconfig but DIVERGES once a consumer (`@silo/app`, the composition root that
+// imports `createApp`) typechecks this file's source: undici's `HeadersIterator`
+// lacks the `[Symbol.dispose]` the DOM lib's requires, so the global-typed param
+// fails to accept the undici response. Pinning to the real (undici) type makes
+// this file self-consistent regardless of which package compiles it.
+async function readBodyCapped(response: UndiciResponse): Promise<Uint8Array | undefined> {
   if (!response.body) return undefined;
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];

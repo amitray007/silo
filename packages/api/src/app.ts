@@ -1,3 +1,7 @@
+import { existsSync, readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { serveStatic } from '@hono/node-server/serve-static';
 import { InvalidCursorError } from '@silo/core';
 import { Hono } from 'hono';
 import { ZodError } from 'zod';
@@ -5,6 +9,7 @@ import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
 import { registerAccessTokenRoutes } from './routes/access-tokens.js';
 import { registerAuthRoutes } from './routes/auth.js';
+import { registerConfigRoutes } from './routes/config.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
@@ -38,6 +43,45 @@ function errorBody(error: string, message: string, details?: unknown): ErrorEnve
 }
 
 /**
+ * This module's own directory, resolved from `import.meta.url` rather than
+ * `process.cwd()` — used only to build the DEFAULT web-dist path below, so
+ * that default is stable regardless of the directory a deployment happens to
+ * launch the process from (the container sets `SILO_WEB_DIST` explicitly
+ * anyway; this default only matters for a from-repo run without that env var
+ * set, e.g. `pnpm --filter @silo/api start` after building web by hand).
+ */
+const MODULE_DIR = dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Resolves the web SPA's build output directory (deployable-silo spec, Unit
+ * 1): `SILO_WEB_DIST` when set, else `packages/web/dist` resolved relative to
+ * THIS package (`packages/api/src/../../web/dist`). Always returns an
+ * ABSOLUTE path — `serveStatic`'s `root` option is resolved against
+ * `process.cwd()` by default (see `@hono/node-server/serve-static`'s doc
+ * comment), which would break the moment a deployment's working directory
+ * isn't the repo root (e.g. a container launched from `/`), so this function
+ * does that resolution itself once, here, rather than leaving it to the
+ * static middleware.
+ */
+function resolveWebDistDir(): string {
+  const raw = process.env.SILO_WEB_DIST;
+  if (raw !== undefined && raw !== '') return resolve(raw);
+  return resolve(MODULE_DIR, '../../web/dist');
+}
+
+/**
+ * Reads the SPA shell HTML for the fallback response. Not cached: `index.html`
+ * is tiny (a shell that loads hashed asset bundles, not the app itself), and
+ * re-reading it per SPA-route request keeps this correct across a redeploy
+ * that overwrites the dist directory without restarting the API process —
+ * caching it at `createApp()` time would silently serve a stale shell after
+ * such a redeploy until the next restart.
+ */
+function readIndexHtml(indexPath: string): string {
+  return readFileSync(indexPath, 'utf-8');
+}
+
+/**
  * Builds the silo HTTP API. Routes are registered here (A1 registered none —
  * `GET /health` and `GET /` only; A2 adds the `/api` read surface — `/links`,
  * `/links/search`, `/links/:id`, `/trash`, `/tags`, `/counts`; A3/A4 add the
@@ -60,13 +104,35 @@ function errorBody(error: string, message: string, details?: unknown): ErrorEnve
 export function createApp(): Hono {
   const app = new Hono();
 
-  app.get('/', (c) =>
-    c.json({
-      name: 'silo',
-      description: 'Agent-native personal link store — HTTP API',
-      version: '0.0.0',
-    }),
-  );
+  // Web dist resolved ONCE per app build (not per-request) — matches how
+  // `corsMiddleware()`'s allowlist is captured at `createApp()` time (see its
+  // doc comment). A built deployment sets `SILO_WEB_DIST` once for the
+  // process lifetime; re-checking per request would only add a `statSync`
+  // per hit for no behavioral benefit.
+  const webDistDir = resolveWebDistDir();
+  const webIndexPath = join(webDistDir, 'index.html');
+  const hasWebBuild = existsSync(webIndexPath);
+
+  // `GET /` reconciliation (Unit 1, deployable-silo spec): in a built
+  // deployment (web dist present) `/` should serve the SPA shell so a bare
+  // domain visit loads the app, not a JSON banner. But this same factory is
+  // also what every existing api test drives directly via `createApp()` with
+  // no dist built (`app.test.ts` asserts the JSON banner) — so the banner
+  // stays the fallback whenever `index.html` isn't actually there, rather
+  // than assuming a deployment context. Implemented by only registering the
+  // JSON-banner handler when there's no web build to serve; when one exists,
+  // `/` is left unmatched here and falls through to the static+SPA catch-all
+  // registered below (after the `/api` mount), which serves `index.html` for
+  // `/` the same way it does for any other unmatched SPA route.
+  if (!hasWebBuild) {
+    app.get('/', (c) =>
+      c.json({
+        name: 'silo',
+        description: 'Agent-native personal link store — HTTP API',
+        version: '0.0.0',
+      }),
+    );
+  }
 
   app.get('/health', (c) => c.json({ ok: true }));
 
@@ -103,6 +169,13 @@ export function createApp(): Hono {
   app.use('/api/logout', corsMiddleware());
   registerLoginRoutes(app);
 
+  // `/api/config` (deployable-silo slice, Unit 4) — an ungated PUBLIC probe
+  // (the operator's MCP URL, not a secret), registered on the root app for the
+  // same reason as `/api/auth/check`: the "Copy config" button must read it
+  // pre-login. CORS-wrapped to keep the origin allowlist uniform across `/api/*`.
+  app.use('/api/config', corsMiddleware());
+  registerConfigRoutes(app);
+
   const api = new Hono();
   // CORS first (the browser-facing gate — an allowlist-rejected origin gets
   // no CORS headers, so the browser refuses to expose the response, before
@@ -126,6 +199,45 @@ export function createApp(): Hono {
   registerImportRoutes(api);
   registerAccessTokenRoutes(api);
   app.route('/api', api);
+
+  // Web SPA static serve + client-route fallback (Unit 1, deployable-silo
+  // spec) — registered LAST, after the `/api` mount above, so `/api/*` keeps
+  // matching the sub-app (and its own 404s) first; Hono's router returns the
+  // FIRST matching handler for a given path (verified empirically — a
+  // wildcard registered before a specific route wins over it), so registration
+  // ORDER here is load-bearing, not cosmetic. GRACEFUL DEGRADE: when no web
+  // build exists (dev, or any test driving `createApp()` directly with
+  // `SILO_WEB_DIST` unset/pointing nowhere), NOTHING is registered here at
+  // all — the API behaves exactly as before this unit, falling through to
+  // `app.notFound`'s JSON 404 for every unmatched GET, same as today.
+  if (hasWebBuild) {
+    // Serves any request whose path matches a real file under `webDistDir`
+    // (JS/CSS/image assets, `/favicon.ico`, etc.) — falls through to `next()`
+    // (does NOT respond) when no file matches, per `serveStatic`'s own
+    // contract (see `@hono/node-server/serve-static`'s source: `onNotFound`
+    // + `next()`), so the SPA-fallback handler below still runs for a client
+    // route like `/trash` that isn't a real file on disk.
+    app.use('*', serveStatic({ root: webDistDir }));
+
+    // SPA fallback: any GET that reached here matched neither an `/api/*`
+    // route above nor a real static file — for a client-side route (e.g.
+    // `/trash`, `/tags/foo`) that's expected; hand back `index.html` so the
+    // SPA's own router (not this server) resolves the path. Scoped to GET
+    // only and explicitly excludes `/api/*` and `/health` so an unknown
+    // `/api/...` route still falls through to `app.notFound`'s JSON 404
+    // rather than being shadowed by HTML — those two prefixes should never
+    // reach this handler in practice (both are matched by earlier routes/the
+    // `/api` sub-app first), but the guard is kept explicit rather than
+    // relying solely on registration order, since "an unknown API route
+    // returns HTML" would be a silent, easy-to-miss regression.
+    app.get('*', (c, next) => {
+      const path = c.req.path;
+      if (path.startsWith('/api/') || path === '/api' || path === '/health') {
+        return next();
+      }
+      return c.html(readIndexHtml(webIndexPath));
+    });
+  }
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 

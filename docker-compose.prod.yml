@@ -1,0 +1,121 @@
+# silo — production compose (the deployable-silo slice,
+# docs/superpowers/specs/2026-07-11-deployable-silo-design.md).
+#
+# THREE services from the ONE Dockerfile image: a pgvector Postgres, the `api`
+# container (web UI + REST + in-process worker), and the `mcp` container (the
+# HTTP MCP listener). Run it directly with:
+#
+#   docker compose -f docker-compose.prod.yml up --build
+#
+# ...or mirror these two services in Dokploy, each pointed at the same image
+# with its own command + domain (silo.<domain> -> api, mcp.silo.<domain> -> mcp).
+# See docs/deploy.md.
+#
+# Secrets/config come from the environment (a .env file next to this compose, or
+# Dokploy's env UI) — NEVER baked into the image. Copy .env.example and fill in
+# real values. The values below with `${VAR:?...}` are REQUIRED (compose errors
+# if unset) so a misconfigured deploy fails loudly instead of running insecure.
+
+services:
+  postgres:
+    # pgvector, NOT plain postgres: migration 0000 runs `CREATE EXTENSION vector`
+    # (packages/db/drizzle/0000_enable-extensions.sql). Same image CI + local dev
+    # use (pgvector/pgvector:pg18).
+    image: pgvector/pgvector:pg18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-silo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-silo}
+    volumes:
+      - silo-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-silo} -d ${POSTGRES_DB:-silo}']
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      - silo
+
+  api:
+    # Serves the web UI at /, the REST API at /api, and runs the enrichment
+    # worker in-process. Owns migrations: it runs `db:migrate` (idempotent —
+    # drizzle tracks applied migrations) BEFORE starting the server, so a fresh
+    # volume or a pulled-migration branch is applied on boot.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      # Bind off-loopback so the reverse proxy / other containers can reach it
+      # (the API is auth-gated in prod via SILO_APP_PASSWORD / SILO_API_TOKEN).
+      HOST: '0.0.0.0'
+      PORT: '8787'
+      SILO_APP_PASSWORD: ${SILO_APP_PASSWORD:-}
+      SILO_SESSION_SECRET: ${SILO_SESSION_SECRET:-}
+      SILO_API_TOKEN: ${SILO_API_TOKEN:-}
+      SILO_ALLOWED_ORIGINS: ${SILO_ALLOWED_ORIGINS:-}
+      # The public MCP endpoint the "Copy config" button hands out. Set this to
+      # your mcp subdomain; if unset, the web derives https://mcp.<host>/mcp.
+      SILO_PUBLIC_MCP_URL: ${SILO_PUBLIC_MCP_URL:-}
+      SILO_TRASH_PURGE_DAYS: ${SILO_TRASH_PURGE_DAYS:-}
+      SILO_ENRICHING_STALE_MINUTES: ${SILO_ENRICHING_STALE_MINUTES:-}
+    # Migrate (idempotent) then serve via the @silo/app composition-root
+    # entrypoint (web + API + in-process worker — api-main.ts). `sh -c` so both
+    # run in one container.
+    command: >
+      sh -c "pnpm --filter @silo/db run db:migrate &&
+             pnpm exec tsx packages/app/src/api-main.ts"
+    ports:
+      # Expose for a direct `docker compose up` run. Behind Dokploy/Traefik you
+      # route silo.<domain> -> this service and can drop the host publish.
+      - '${API_PORT:-8787}:8787'
+    networks:
+      - silo
+
+  mcp:
+    # The HTTP MCP listener ONLY (packages/app/src/mcp-http-main.ts) — NOT the
+    # turnkey `@silo/app start`, which would ALSO run the enrichment worker and
+    # double up the api container's in-process worker (duplicate cron jobs +
+    # contended enrichment). This lean entrypoint runs just the listener.
+    # ALWAYS-CLOSED: refuses to start without SILO_API_TOKEN. Does NOT run
+    # migrations (the api service owns those) — depends on api having started so
+    # the schema exists.
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      api:
+        condition: service_started
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?set DATABASE_URL}
+      # Turns the HTTP MCP listener on. The listener binds this port; Traefik
+      # routes mcp.silo.<domain> -> this service.
+      SILO_MCP_HTTP_PORT: '8788'
+      # Bind off-loopback so the proxy/other containers can reach it.
+      SILO_MCP_HTTP_HOST: '0.0.0.0'
+      # The PUBLIC host(s) the listener is proxied under — added verbatim (no
+      # port) to the SDK's DNS-rebinding allowlist, or a proxied request whose
+      # Host header is `mcp.silo.<domain>` (no :8788) gets 403. Set this to your
+      # mcp subdomain(s), comma-separated.
+      SILO_MCP_ALLOWED_HOSTS: ${SILO_MCP_ALLOWED_HOSTS:-}
+      # REQUIRED for the listener to start at all (the machine bearer agents send).
+      SILO_API_TOKEN: ${SILO_API_TOKEN:?set SILO_API_TOKEN (the mcp listener refuses to start without it)}
+    command: ['pnpm', 'exec', 'tsx', 'packages/app/src/mcp-http-main.ts']
+    ports:
+      - '${MCP_PORT:-8788}:8788'
+    networks:
+      - silo
+
+volumes:
+  silo-pgdata:
+
+networks:
+  silo:

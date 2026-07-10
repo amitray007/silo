@@ -1,37 +1,47 @@
 import { type CSSProperties, useEffect, useRef, useState } from 'react';
 import {
   useAccessTokens,
+  useAppConfig,
   useCreateAccessToken,
   useRevokeAccessToken,
   useSettings,
   useUpdateSettings,
 } from '../../api/hooks';
 import type { AccessTokenJson } from '../../api/types';
+import { resolveMcpUrl } from '../../lib/mcpUrl';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
 import { SettingsHero } from './SettingsHero';
 import { ToggleSwitch } from './ToggleSwitch';
 
 /**
- * The streamable-HTTP MCP client-config snippet — points at the HTTP MCP
- * listener (`@silo/app`, opt-in via `SILO_MCP_HTTP_PORT`, see
+ * Builds the streamable-HTTP MCP client-config snippet for `url` — points at
+ * the HTTP MCP listener (`@silo/app`, opt-in via `SILO_MCP_HTTP_PORT`, see
  * `packages/app/src/mcp-http.ts`) with the shared secret in an
  * `Authorization: Bearer` header. `<YOUR_SILO_API_TOKEN>` is a literal
  * placeholder, NOT a real value — the browser is never shown the server's
  * `SILO_API_TOKEN` (it's a server-only secret; the web-auth slice, not this
  * one, is what would ever put real user-scoped credentials in the browser).
- * The user fills in their own token after copying. 8788 mirrors the spec's
- * example port (`docs/superpowers/specs/2026-07-10-mcp-http-apikey-design.md`,
- * `.env.example`); the real bind port is whatever `SILO_MCP_HTTP_PORT` is set
- * to server-side.
+ * The user fills in their own token after copying.
+ *
+ * `url` is now RESOLVED at click time (deployable-silo slice, Unit 4) rather
+ * than hardcoded — `resolveMcpUrl` (`packages/web/src/lib/mcpUrl.ts`) picks
+ * an operator-set `SILO_PUBLIC_MCP_URL` override, else derives
+ * `https://mcp.<hostname>/mcp` for a real deploy host, else falls back to
+ * this dev-default `http://127.0.0.1:8788/mcp` (which mirrors the spec's
+ * example port, `docs/superpowers/specs/2026-07-10-mcp-http-apikey-design.md`,
+ * `.env.example` — the real bind port is whatever `SILO_MCP_HTTP_PORT` is set
+ * to server-side).
  */
-const MCP_CLIENT_CONFIG = `{
+function mcpClientConfig(url: string): string {
+  return `{
   "mcpServers": {
     "silo": {
-      "url": "http://127.0.0.1:8788/mcp",
+      "url": "${url}",
       "headers": { "Authorization": "Bearer <YOUR_SILO_API_TOKEN>" }
     }
   }
 }`;
+}
 
 /**
  * A tri-state copy-flash label: `null` = never clicked, `true` = last copy
@@ -329,6 +339,10 @@ export function AccessTab() {
   const mcpAccessDisabled = !settings || updateSettings.isPending;
 
   const configCopy = useCopyFlash();
+  // Feeds `resolveMcpUrl`'s step 1 (an operator-set `SILO_PUBLIC_MCP_URL`
+  // override) — `undefined` while loading/absent falls through to the
+  // client-derived steps below, same as `mcpAccess`'s `?? true` above.
+  const { data: appConfig } = useAppConfig();
 
   return (
     <>
@@ -339,7 +353,10 @@ export function AccessTab() {
           <button
             type="button"
             className="silo-settings-hero-btn-primary"
-            onClick={() => configCopy.copyText(MCP_CLIENT_CONFIG)}
+            onClick={() => {
+              const url = resolveMcpUrl(appConfig?.mcpUrl, window.location);
+              configCopy.copyText(mcpClientConfig(url));
+            }}
           >
             {copyLabel(configCopy.copied, 'Copy config')}
           </button>

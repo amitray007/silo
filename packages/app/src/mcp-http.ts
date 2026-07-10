@@ -125,11 +125,23 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
  * Binds to `opts.host ?? '127.0.0.1'` (loopback) by default — a networked MCP
  * surface must not be reachable off-host unless an operator explicitly opts
  * in via `host`.
+ *
+ * `opts.extraAllowedHosts` (deployable-silo design, Unit 3 support) extends
+ * `allowedHosts()` with caller-supplied entries added VERBATIM — no `:port`
+ * suffix appended. This is for the reverse-proxy case: behind Traefik the
+ * container binds an internal port (e.g. 8788) but the incoming `Host`
+ * header is the PUBLIC hostname with no port at all (`mcp.silo.example.com`,
+ * since the browser/agent connects to :443 and Traefik forwards over the
+ * internal network) — the `{host}:{boundPort}` entry this function otherwise
+ * derives would never match a proxied request's Host header. Undefined/empty
+ * is a no-op, so existing callers (and `main.ts`'s stdio-first entrypoint)
+ * are unaffected.
  */
 export function startMcpHttpServer(opts: {
   port: number;
   token: string;
   host?: string;
+  extraAllowedHosts?: string[];
 }): http.Server {
   const host = opts.host ?? '127.0.0.1';
 
@@ -152,6 +164,9 @@ export function startMcpHttpServer(opts: {
     const hosts = new Set([`127.0.0.1:${boundPort}`, `localhost:${boundPort}`]);
     if (host !== '127.0.0.1' && host !== 'localhost') {
       hosts.add(`${host}:${boundPort}`);
+    }
+    for (const extra of opts.extraAllowedHosts ?? []) {
+      hosts.add(extra);
     }
     return [...hosts];
   }

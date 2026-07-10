@@ -123,6 +123,15 @@ Two ways to run silo, for two audiences:
 
 It renders in light or dark (the toggle top-left).
 
+## Deploying
+
+To host silo (Docker, behind a domain), see **[docs/deploy.md](docs/deploy.md)**.
+It ships as one image run as two containers — `api` (web UI + REST + the worker,
+at `silo.<domain>`) and `mcp` (the HTTP MCP endpoint, at `mcp.silo.<domain>`) —
+plus a pgvector Postgres. `docker compose -f docker-compose.prod.yml up --build`
+runs the whole stack locally; the doc also covers the Dokploy/Traefik path and
+the env surface (see `.env.example`).
+
 ## Architecture
 
 A TypeScript monorepo. Every human- or agent-facing operation goes through **one
