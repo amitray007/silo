@@ -8,7 +8,7 @@ import { PreferencesTab } from './SettingsTabs/PreferencesTab';
 const TABS: { key: SettingsTab; name: string }[] = [
   { key: 'plugins', name: 'Plugins' },
   { key: 'prefs', name: 'Preferences' },
-  { key: 'import', name: 'Import / export' },
+  { key: 'import', name: 'Import / Export' },
   { key: 'access', name: 'Access' },
 ];
 

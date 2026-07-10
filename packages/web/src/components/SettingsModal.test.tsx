@@ -108,7 +108,7 @@ describe('SettingsModal', () => {
     const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
     expect(pluginsTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('tab', { name: 'Preferences' })).toBeDefined();
-    expect(screen.getByRole('tab', { name: 'Import / export' })).toBeDefined();
+    expect(screen.getByRole('tab', { name: 'Import / Export' })).toBeDefined();
     expect(screen.getByRole('tab', { name: 'Access' })).toBeDefined();
     expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
@@ -130,7 +130,7 @@ describe('SettingsModal', () => {
     expect(screen.getAllByText('Theme').length).toBeGreaterThan(0);
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Import / export' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Import / Export' }));
     expect(screen.getByText('Import')).toBeDefined();
     expect(screen.getByText('Export')).toBeDefined();
     expect(screen.queryByText('Theme')).toBeNull();
@@ -302,7 +302,7 @@ describe('SettingsModal', () => {
   describe('Import/Export tab (plan 028 — both Import and Export live)', () => {
     it('renders Import (Choose file…) and Export (Download) both live', () => {
       renderModal();
-      fireEvent.click(screen.getByRole('tab', { name: 'Import / export' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Import / Export' }));
 
       const chooseFile = screen.getByRole('button', { name: /choose file/i });
       const download = screen.getByRole('button', { name: /download/i });
