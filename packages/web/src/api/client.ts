@@ -1,3 +1,4 @@
+import { clearToken, emitAuthCleared, getToken } from './auth';
 import type { ApiErrorBody } from './types';
 
 /**
@@ -129,15 +130,31 @@ async function readJson<T>(response: Response): Promise<T> {
  * which verb triggered it.
  */
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
+  const token = getToken();
+  const requestInit: RequestInit | undefined = token
+    ? { ...init, headers: { ...init?.headers, Authorization: `Bearer ${token}` } }
+    : init;
+
   let response: Response;
   try {
-    response = init ? await fetch(`${baseUrl}${path}`, init) : await fetch(`${baseUrl}${path}`);
+    response = requestInit
+      ? await fetch(`${baseUrl}${path}`, requestInit)
+      : await fetch(`${baseUrl}${path}`);
   } catch (cause) {
     throw new ApiError(
       0,
       'network_error',
       cause instanceof Error ? cause.message : 'Network request failed',
     );
+  }
+
+  if (response.status === 401) {
+    // A stale/invalid token must be dropped regardless of how the caller
+    // handles the resulting ApiError below, so the app doesn't keep
+    // resending a dead token — clear it and signal AuthContext to bounce to
+    // the login gate before falling through to the normal error handling.
+    clearToken();
+    emitAuthCleared();
   }
 
   if (!response.ok) {

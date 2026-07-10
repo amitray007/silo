@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { clearToken, getToken, onAuthCleared, setToken } from './auth';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, setApiBaseUrl } from './client';
 import type {
   AddedBy,
@@ -159,6 +160,89 @@ describe('apiGet', () => {
     const failure = apiGet('/api/counts');
     await expect(failure).rejects.toBeInstanceOf(ApiError);
     await expect(failure).rejects.toMatchObject({ status: 200, error: 'invalid_response' });
+  });
+});
+
+describe('bearer token attachment', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+    sessionStorage.clear();
+    clearToken();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    sessionStorage.clear();
+    clearToken();
+  });
+
+  it('omits Authorization when no token is set', async () => {
+    const counts: Counts = { live: 12, trash: 3, purgeWindowDays: 30 };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(counts, 200));
+
+    await apiGet<Counts>('/api/counts');
+
+    expect(fetch).toHaveBeenCalledWith('/api/counts');
+  });
+
+  it('adds Authorization: Bearer <token> on a GET when a token is set', async () => {
+    setToken('my-token');
+    const counts: Counts = { live: 12, trash: 3, purgeWindowDays: 30 };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(counts, 200));
+
+    await apiGet<Counts>('/api/counts');
+
+    expect(fetch).toHaveBeenCalledWith('/api/counts', {
+      headers: { Authorization: 'Bearer my-token' },
+    });
+  });
+
+  it('merges Authorization onto a POST without dropping the content-type header', async () => {
+    setToken('my-token');
+    const captureResponse: CaptureResponse = { link: linkFixture, deduped: false };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(captureResponse, 201));
+
+    await apiPost<CaptureResponse>('/api/links', { url: 'https://example.com' });
+
+    expect(fetch).toHaveBeenCalledWith('/api/links', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', Authorization: 'Bearer my-token' },
+      body: JSON.stringify({ url: 'https://example.com' }),
+    });
+  });
+
+  it('a 401 response clears the token', async () => {
+    setToken('stale-token');
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'unauthorized', message: 'Invalid or missing token' }, 401),
+    );
+
+    await expect(apiGet('/api/counts')).rejects.toBeInstanceOf(ApiError);
+    expect(getToken()).toBeNull();
+  });
+
+  it('a 401 response fires the auth-cleared signal', async () => {
+    setToken('stale-token');
+    const cb = vi.fn();
+    const unsubscribe = onAuthCleared(cb);
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'unauthorized', message: 'Invalid or missing token' }, 401),
+    );
+
+    await expect(apiGet('/api/counts')).rejects.toBeInstanceOf(ApiError);
+    expect(cb).toHaveBeenCalledTimes(1);
+
+    unsubscribe();
+  });
+
+  it('a non-401 error response does not clear the token', async () => {
+    setToken('valid-token');
+    vi.mocked(fetch).mockResolvedValueOnce(
+      jsonResponse({ error: 'not_found', message: 'No link with id abc' }, 404),
+    );
+
+    await expect(apiGet('/api/links/abc')).rejects.toBeInstanceOf(ApiError);
+    expect(getToken()).toBe('valid-token');
   });
 });
 
