@@ -85,6 +85,22 @@ describe('Client', () => {
     expect(result).toEqual(body);
   });
 
+  it("stamps source: 'cli' on capture() and ingest() request bodies", async () => {
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ link: linkFixture, deduped: false }, 201));
+    fetchMock.mockResolvedValueOnce(jsonResponse({ link: linkFixture, deduped: false }, 201));
+
+    const client = new Client({ baseUrl: 'http://localhost:8787', token: undefined });
+    await client.capture({ url: 'https://example.com' });
+    await client.ingest({ url: 'https://x.com/a/status/1', sourceKind: 'twitter' });
+
+    const [, captureInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(captureInit.body as string)).toMatchObject({ source: 'cli' });
+
+    const [, ingestInit] = fetchMock.mock.calls[1] as [string, RequestInit];
+    expect(JSON.parse(ingestInit.body as string)).toMatchObject({ source: 'cli' });
+  });
+
   it('throws a network_error ClientError with an actionable hint when the API is unreachable', async () => {
     vi.mocked(fetch).mockRejectedValueOnce(new TypeError('fetch failed'));
 

@@ -8,12 +8,18 @@
  * duplication of only the fields this extension actually uses.
  */
 
-/** `POST /api/links` request body. */
+/**
+ * `POST /api/links` request body. `source` is stamped centrally by
+ * `captureLink` (`capture-client.ts`) as `'chrome'` for every entry point
+ * that funnels through it, not threaded in by callers — see the
+ * capture-source design spec.
+ */
 export type CaptureRequest = {
   url: string;
   tags?: string[];
   note?: string;
   sourceKind?: 'link' | 'hacker_news' | 'twitter';
+  source?: 'chrome';
 };
 
 /** The subset of `LinkJson` this extension reads (save + edit-card). */

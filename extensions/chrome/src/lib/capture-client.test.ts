@@ -41,6 +41,23 @@ describe('capture-client', () => {
     expect(result.deduped).toBe(false);
   });
 
+  it("stamps source: 'chrome' on the request body regardless of what the caller passed", async () => {
+    const link = {
+      id: 'abc',
+      url: 'https://example.com',
+      title: null,
+      notes: null,
+      tags: [],
+    };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link, deduped: false }, 201));
+
+    await captureLink({ url: 'https://example.com' });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0]!;
+    const body = JSON.parse(init?.body as string);
+    expect(body.source).toBe('chrome');
+  });
+
   it('sends Authorization: Bearer when a token is configured', async () => {
     await saveSettings({ baseUrl: 'http://localhost:8787', token: 'sekret' });
     vi.mocked(fetch).mockResolvedValueOnce(

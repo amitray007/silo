@@ -146,8 +146,13 @@ export type EmptyTrashResponse = { deleted: number };
  */
 export type CaptureResponse = { link: LinkJson; deduped: boolean };
 
-/** `POST /api/links` (capture) request body — mirrors `captureBodySchema` (`packages/api/src/query-schemas.ts`). */
-export type CaptureRequest = { url: string; tags?: string[]; note?: string };
+/**
+ * `POST /api/links` (capture) request body — mirrors `captureBodySchema`
+ * (`packages/api/src/query-schemas.ts`). `source` is stamped centrally by
+ * `useCaptureLink` (`hooks.ts`) as `'web'` for every capture through this
+ * hook, not threaded in by callers — see the capture-source design spec.
+ */
+export type CaptureRequest = { url: string; tags?: string[]; note?: string; source?: 'web' };
 
 /** `PATCH /api/links/:id` (edit) request body — mirrors `editBodySchema` (`packages/api/src/query-schemas.ts`). Every field optional; an empty body is a valid no-op. */
 export type EditLinkRequest = { title?: string; description?: string; note?: string };

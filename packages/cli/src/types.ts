@@ -89,19 +89,26 @@ export type LinkResponse = { link: LinkJson };
  */
 export type CaptureResponse = { link: LinkJson; deduped: boolean };
 
-/** `POST /api/links` (capture) request body — mirrors `captureBodySchema` (`packages/api/src/query-schemas.ts`). */
+/**
+ * `POST /api/links` (capture) request body — mirrors `captureBodySchema`
+ * (`packages/api/src/query-schemas.ts`). `source` is stamped centrally by
+ * `Client.capture` as `'cli'` for every capture through this client, not
+ * threaded in by callers — see the capture-source design spec.
+ */
 export type CaptureRequest = {
   url: string;
   tags?: string[];
   note?: string;
   sourceKind?: 'link' | 'hacker_news' | 'twitter';
+  source?: 'cli';
 };
 
 /**
  * `POST /api/ingest` request body — mirrors `ingestBodySchema`
  * (`packages/api/src/query-schemas.ts`). The only request shape that may
  * carry `sourceData`; requires `Authorization: Bearer <SILO_API_TOKEN>` (see
- * `packages/api/src/ingest-auth.ts`).
+ * `packages/api/src/ingest-auth.ts`). `source` is stamped centrally by
+ * `Client.ingest` as `'cli'` — see the capture-source design spec.
  */
 export type IngestRequest = {
   url: string;
@@ -109,6 +116,7 @@ export type IngestRequest = {
   note?: string;
   tags?: string[];
   sourceData?: SourceData;
+  source?: 'cli';
 };
 
 /**

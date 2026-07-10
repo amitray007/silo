@@ -317,7 +317,11 @@ export function useCaptureLink() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (input: CaptureRequest) => apiPost<CaptureResponse>('/api/links', input),
+    // `source: 'web'` is stamped HERE, centrally, for every capture through
+    // this hook — the omnibar is the only caller, but the point is callers
+    // never have to remember to pass it (capture-source design spec, U3).
+    mutationFn: (input: CaptureRequest) =>
+      apiPost<CaptureResponse>('/api/links', { ...input, source: 'web' }),
     onMutate: async (input: CaptureRequest) => {
       await queryClient.cancelQueries({ queryKey: ['links'] });
       const optimisticLink = buildOptimisticLink(input);

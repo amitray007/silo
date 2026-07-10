@@ -162,9 +162,14 @@ export class Client {
     return this.get<HealthResponse>('/health');
   }
 
-  /** `POST /api/links` — public capture. No token required. */
+  /**
+   * `POST /api/links` — public capture. No token required. `source: 'cli'`
+   * is stamped HERE, centrally, so every command that captures through this
+   * client inherits it without threading it through per-call (capture-source
+   * design spec, U3).
+   */
   capture(input: CaptureRequest): Promise<CaptureResponse> {
-    return this.post<CaptureResponse>('/api/links', input);
+    return this.post<CaptureResponse>('/api/links', { ...input, source: 'cli' });
   }
 
   /**
@@ -172,10 +177,11 @@ export class Client {
    * missing/wrong token surfaces as a `ClientError` with `status === 401`
    * and an ingest-specific `hint` (see `toClientError`) — callers (e.g.
    * `silo ingest x`) should catch that case and print the hint rather than a
-   * raw stack trace.
+   * raw stack trace. `source: 'cli'` is stamped HERE, centrally, same as
+   * `capture` above.
    */
   ingest(input: IngestRequest): Promise<CaptureResponse> {
-    return this.post<CaptureResponse>('/api/ingest', input);
+    return this.post<CaptureResponse>('/api/ingest', { ...input, source: 'cli' });
   }
 
   /** `GET /api/links?tag=&limit=&cursor=` — the day-grouped feed. */

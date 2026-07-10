@@ -444,8 +444,24 @@ describe('useCaptureLink', () => {
     expect(fetch).toHaveBeenCalledWith('/api/links', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ url: 'https://example.com', tags: ['mcp'] }),
+      body: JSON.stringify({ url: 'https://example.com', tags: ['mcp'], source: 'web' }),
     });
+  });
+
+  it("stamps source: 'web' on the request body regardless of what the caller passed", async () => {
+    const { CaptureWrapper } = makeWrapper();
+    const created = makeLink({ id: 'server-2', url: 'https://example.com/b' });
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: created, deduped: false }, 201));
+
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+
+    await act(async () => {
+      await result.current.mutateAsync({ url: 'https://example.com/b' });
+    });
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] as [string, RequestInit];
+    const body = JSON.parse(init.body as string);
+    expect(body.source).toBe('web');
   });
 
   it('optimistically prepends a placeholder row to the untagged links cache before the server responds', async () => {

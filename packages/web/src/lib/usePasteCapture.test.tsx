@@ -66,7 +66,7 @@ describe('usePasteCapture', () => {
         '/api/links',
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ url: 'https://example.com/paste-test' }),
+          body: JSON.stringify({ url: 'https://example.com/paste-test', source: 'web' }),
         }),
       ),
     );

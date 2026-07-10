@@ -92,6 +92,21 @@ describeMcpTool(
       expect(getLinkStructured.addedBy).toBe('agent');
     });
 
+    it("capture_link always stamps source: 'mcp' (the MCP capture surface) -- core row + get_link both show it", async () => {
+      const { core, client } = getContext();
+      const result = await client.callTool({
+        name: 'capture_link',
+        arguments: { url: 'https://example.com/capture-source-mcp' },
+      });
+
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as Record<string, unknown>;
+      const id = structured.id as string;
+
+      const fetched = await core.getById(id);
+      expect(fetched?.source).toBe('mcp');
+    });
+
     it('re-capturing the same URL -> deduped true, same id, notes appended', async () => {
       const { core } = getContext();
       const firstStructured = await captureLink(
