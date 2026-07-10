@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthProvider } from '../auth/AuthContext';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { SettingsProvider } from './SettingsContext';
 import { Sidebar } from './Sidebar';
@@ -24,15 +25,54 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/**
+ * The `/api/auth/check` response `AuthProvider`'s mount-time check receives.
+ * Every existing Sidebar test in this file predates the auth cookie upgrade
+ * and configures `fetch` assuming no gate is in front of the sidebar at
+ * all — `AUTH_OPEN` (`authRequired: false`, `'open'` state) preserves that
+ * for every test that doesn't care about auth. Only the "Log out" describe
+ * block below opts into `AUTH_AUTHED` to exercise the gated row.
+ */
+const AUTH_OPEN = { authRequired: false };
+const AUTH_AUTHED = { authRequired: true, authenticated: true };
+
+/**
+ * Wraps a per-test `fetch` router (`appFetch`, configured via
+ * `vi.mocked(fetch)` exactly as before this file added `AuthProvider`) so
+ * `/api/auth/check` is answered out-of-band with `authResponse` — every
+ * OTHER URL still goes to whatever the test's own `mockImplementation`/
+ * `mockResolvedValue` set up. Rendering `Sidebar` now requires `AuthProvider`
+ * (it calls `useAuth()` for the Log out row), and `AuthProvider` fires its
+ * own mount-time `GET /api/auth/check` that the app-level fetch routers in
+ * this file don't know about — this interception keeps every pre-existing
+ * test's router untouched rather than editing 15 call sites to add an
+ * `/api/auth/check` branch each.
+ */
+function stubFetchWithAuth(authResponse: unknown) {
+  const appFetch = vi.fn();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input).includes('/api/auth/check')) {
+        return Promise.resolve(jsonResponse(authResponse));
+      }
+      return appFetch(input, init);
+    }),
+  );
+  return appFetch;
+}
+
 function renderSidebar(initialEntries: string[] = ['/'], onOpenSearch?: () => void) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <MemoryRouter initialEntries={initialEntries}>
-          <SettingsProvider>
-            {onOpenSearch ? <Sidebar onOpenSearch={onOpenSearch} /> : <Sidebar />}
-          </SettingsProvider>
+          <AuthProvider>
+            <SettingsProvider>
+              {onOpenSearch ? <Sidebar onOpenSearch={onOpenSearch} /> : <Sidebar />}
+            </SettingsProvider>
+          </AuthProvider>
         </MemoryRouter>
       </QueryClientProvider>
     </ThemeProvider>,
@@ -41,7 +81,10 @@ function renderSidebar(initialEntries: string[] = ['/'], onOpenSearch?: () => vo
 
 describe('Sidebar', () => {
   beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
+    // `vi.mocked(fetch)` below refers to this appFetch router — every
+    // existing test in this file configures it exactly as it did before
+    // `AuthProvider` was added (see `stubFetchWithAuth`'s doc comment).
+    vi.stubGlobal('fetch', stubFetchWithAuth(AUTH_OPEN));
   });
 
   afterEach(() => {
@@ -484,5 +527,69 @@ describe('Sidebar', () => {
     expect(screen.getByRole('button', { name: /new tag/i })).toBeDefined();
     expect(screen.queryAllByText(/^#/)).toHaveLength(0);
     expect(screen.queryByText(/more$/)).toBeNull();
+  });
+
+  describe('Log out row (auth cookie upgrade, Unit 6)', () => {
+    /** Every test in this block answers `/api/counts`/`/api/tags` the same minimal way — only the auth response varies. */
+    function stubAppData(appFetch: ReturnType<typeof vi.fn>) {
+      appFetch.mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/counts') {
+          return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+        }
+        if (url === '/api/tags') {
+          return Promise.resolve(jsonResponse({ tags: [] }));
+        }
+        if (url === '/api/logout') {
+          return Promise.resolve(jsonResponse({ ok: true }));
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      });
+    }
+
+    it('shows no Log out row when auth is "open" (no password configured)', async () => {
+      // beforeEach already stubs AUTH_OPEN; just supply the app data.
+      stubAppData(vi.mocked(fetch));
+      renderSidebar();
+
+      await waitFor(() => expect(screen.getByText('silo')).toBeDefined());
+      expect(screen.queryByRole('button', { name: /log out/i })).toBeNull();
+    });
+
+    it('shows the Log out row once a session is authed', async () => {
+      const appFetch = stubFetchWithAuth(AUTH_AUTHED);
+      stubAppData(appFetch);
+      renderSidebar();
+
+      const logoutButton = await screen.findByRole('button', { name: /log out/i });
+      expect(logoutButton.tagName).toBe('BUTTON');
+    });
+
+    it('clicking Log out calls useAuth().logout() (POSTs /api/logout)', async () => {
+      const appFetch = stubFetchWithAuth(AUTH_AUTHED);
+      stubAppData(appFetch);
+      renderSidebar();
+
+      const logoutButton = await screen.findByRole('button', { name: /log out/i });
+      fireEvent.click(logoutButton);
+
+      await waitFor(() =>
+        expect(appFetch).toHaveBeenCalledWith('/api/logout', expect.objectContaining({})),
+      );
+    });
+
+    it('renders the Log out row through the shared NavItem (settings variant — same look as Settings)', async () => {
+      const appFetch = stubFetchWithAuth(AUTH_AUTHED);
+      stubAppData(appFetch);
+      renderSidebar();
+
+      const logoutButton = await screen.findByRole('button', { name: /log out/i });
+      const settingsLink = screen.getByRole('link', { name: /settings/i });
+
+      expect(logoutButton.className).toBe(settingsLink.className);
+      expect(logoutButton.style.padding).toBe(settingsLink.style.padding);
+      expect(logoutButton.style.fontWeight).toBe(settingsLink.style.fontWeight);
+      expect(logoutButton.querySelector('svg')).not.toBeNull();
+    });
   });
 });

@@ -131,7 +131,10 @@ describe('TrashView', () => {
     fireEvent.click(screen.getByTitle('Delete now'));
 
     await waitFor(() =>
-      expect(fetchImpl).toHaveBeenCalledWith('/api/trash/1', { method: 'DELETE' }),
+      expect(fetchImpl).toHaveBeenCalledWith('/api/trash/1', {
+        method: 'DELETE',
+        credentials: 'include',
+      }),
     );
   });
 
@@ -174,7 +177,12 @@ describe('TrashView', () => {
     await waitFor(() => expect(screen.getByText('One')).toBeDefined());
     fireEvent.click(screen.getByText('Empty all'));
 
-    await waitFor(() => expect(fetchImpl).toHaveBeenCalledWith('/api/trash', { method: 'DELETE' }));
+    await waitFor(() =>
+      expect(fetchImpl).toHaveBeenCalledWith('/api/trash', {
+        method: 'DELETE',
+        credentials: 'include',
+      }),
+    );
   });
 
   describe('multi-select', () => {
@@ -252,10 +260,16 @@ describe('TrashView', () => {
       fireEvent.click(screen.getByText('Delete now'));
 
       await waitFor(() =>
-        expect(fetchImpl).toHaveBeenCalledWith('/api/trash/a', { method: 'DELETE' }),
+        expect(fetchImpl).toHaveBeenCalledWith('/api/trash/a', {
+          method: 'DELETE',
+          credentials: 'include',
+        }),
       );
       await waitFor(() =>
-        expect(fetchImpl).toHaveBeenCalledWith('/api/trash/b', { method: 'DELETE' }),
+        expect(fetchImpl).toHaveBeenCalledWith('/api/trash/b', {
+          method: 'DELETE',
+          credentials: 'include',
+        }),
       );
     });
 

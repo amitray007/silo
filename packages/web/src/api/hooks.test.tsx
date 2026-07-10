@@ -71,7 +71,7 @@ describe('useCounts', () => {
     expect(result.current.isLoading).toBe(true);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(counts);
-    expect(fetch).toHaveBeenCalledWith('/api/counts');
+    expect(fetch).toHaveBeenCalledWith('/api/counts', { credentials: 'include' });
   });
 
   it('surfaces an error state when the request fails', async () => {
@@ -109,7 +109,7 @@ describe('useTags', () => {
     expect(result.current.isLoading).toBe(true);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(tags);
-    expect(fetch).toHaveBeenCalledWith('/api/tags');
+    expect(fetch).toHaveBeenCalledWith('/api/tags', { credentials: 'include' });
   });
 });
 
@@ -134,14 +134,14 @@ describe('useInfiniteLinks', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data?.pages).toEqual([page1]);
     expect(result.current.hasNextPage).toBe(true);
-    expect(fetch).toHaveBeenCalledWith('/api/links');
+    expect(fetch).toHaveBeenCalledWith('/api/links', { credentials: 'include' });
 
     await act(async () => {
       await result.current.fetchNextPage();
     });
 
     await waitFor(() => expect(result.current.data?.pages).toEqual([page1, page2]));
-    expect(fetch).toHaveBeenCalledWith('/api/links?cursor=cursor-abc');
+    expect(fetch).toHaveBeenCalledWith('/api/links?cursor=cursor-abc', { credentials: 'include' });
     expect(result.current.hasNextPage).toBe(false);
   });
 
@@ -174,7 +174,7 @@ describe('useInfiniteLinks', () => {
     const { result } = renderHook(() => useInfiniteLinks('mcp'), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp');
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp', { credentials: 'include' });
   });
 
   it('combines ?tag= and ?cursor= on a subsequent page', async () => {
@@ -191,7 +191,9 @@ describe('useInfiniteLinks', () => {
       await result.current.fetchNextPage();
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp&cursor=cursor-abc');
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp&cursor=cursor-abc', {
+      credentials: 'include',
+    });
   });
 
   it('a differently-tagged call uses a distinct cache key (fetches independently)', async () => {
@@ -206,8 +208,8 @@ describe('useInfiniteLinks', () => {
 
     await waitFor(() => expect(resultA.current.isSuccess).toBe(true));
     await waitFor(() => expect(resultB.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp');
-    expect(fetch).toHaveBeenCalledWith('/api/links?tag=ai');
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=mcp', { credentials: 'include' });
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=ai', { credentials: 'include' });
   });
 
   /**
@@ -289,7 +291,7 @@ describe('useLinksByTag', () => {
     const { result } = renderHook(() => useLinksByTag('frontend'), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith('/api/links?tag=frontend');
+    expect(fetch).toHaveBeenCalledWith('/api/links?tag=frontend', { credentials: 'include' });
     expect(result.current.data).toEqual(response);
   });
 
@@ -368,7 +370,9 @@ describe('useSearchLinks', () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(response);
-    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=typescript');
+    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=typescript', {
+      credentials: 'include',
+    });
   });
 
   it('is disabled (never fetches) for an empty/blank query', () => {
@@ -383,7 +387,7 @@ describe('useSearchLinks', () => {
     const { result } = renderHook(() => useSearchLinks('  hooks  '), { wrapper });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=hooks');
+    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=hooks', { credentials: 'include' });
   });
 
   it('an empty result set resolves cleanly (the "nothing found" case)', async () => {
@@ -408,7 +412,9 @@ describe('useSearchLinks', () => {
 
     rerender({ q: 'typescript' });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=typescript');
+    expect(fetch).toHaveBeenCalledWith('/api/links/search?q=typescript', {
+      credentials: 'include',
+    });
   });
 });
 
@@ -445,6 +451,7 @@ describe('useCaptureLink', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: 'https://example.com', tags: ['mcp'], source: 'web' }),
+      credentials: 'include',
     });
   });
 
@@ -644,6 +651,7 @@ describe('useEditLink', () => {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'New title' }),
+      credentials: 'include',
     });
     expect(response).toEqual({ link: updated });
   });
@@ -717,6 +725,7 @@ describe('useTrashLink', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
+      credentials: 'include',
     });
   });
 
@@ -860,6 +869,7 @@ describe('useAddTag / useRemoveTag', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ tag: 'mcp' }),
+      credentials: 'include',
     });
   });
 
@@ -872,7 +882,10 @@ describe('useAddTag / useRemoveTag', () => {
       await result.current.mutateAsync('a tag');
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/links/1/tags/a%20tag', { method: 'DELETE' });
+    expect(fetch).toHaveBeenCalledWith('/api/links/1/tags/a%20tag', {
+      method: 'DELETE',
+      credentials: 'include',
+    });
   });
 
   it('both invalidate links/counts/tags on settle', async () => {
@@ -922,6 +935,7 @@ describe('useCreateTag', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'design' }),
+      credentials: 'include',
     });
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(queryKeys.tags());
@@ -960,7 +974,7 @@ describe('useTrashList', () => {
     expect(result.current.isLoading).toBe(true);
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(trash);
-    expect(fetch).toHaveBeenCalledWith('/api/trash');
+    expect(fetch).toHaveBeenCalledWith('/api/trash', { credentials: 'include' });
   });
 
   it('surfaces an error state when the request fails', async () => {
@@ -1007,6 +1021,7 @@ describe('useRestoreLink', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
+      credentials: 'include',
     });
   });
 
@@ -1099,7 +1114,10 @@ describe('useDeleteNow', () => {
       await result.current.mutateAsync();
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/trash/1', { method: 'DELETE' });
+    expect(fetch).toHaveBeenCalledWith('/api/trash/1', {
+      method: 'DELETE',
+      credentials: 'include',
+    });
   });
 
   it('optimistically removes the row from the trash cache before the server responds', async () => {
@@ -1181,7 +1199,7 @@ describe('useEmptyTrash', () => {
       await result.current.mutateAsync();
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/trash', { method: 'DELETE' });
+    expect(fetch).toHaveBeenCalledWith('/api/trash', { method: 'DELETE', credentials: 'include' });
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(queryKeys.trash());
     expect(invalidatedKeys).toContainEqual(queryKeys.counts());
@@ -1231,6 +1249,7 @@ describe('useRetryCapture', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({}),
+      credentials: 'include',
     });
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(['links']);
@@ -1396,8 +1415,14 @@ describe('useBulkRestore / useBulkDeleteNow', () => {
       await result.current.mutateAsync(['a', 'b']);
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/trash/a', { method: 'DELETE' });
-    expect(fetch).toHaveBeenCalledWith('/api/trash/b', { method: 'DELETE' });
+    expect(fetch).toHaveBeenCalledWith('/api/trash/a', {
+      method: 'DELETE',
+      credentials: 'include',
+    });
+    expect(fetch).toHaveBeenCalledWith('/api/trash/b', {
+      method: 'DELETE',
+      credentials: 'include',
+    });
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(queryKeys.trash());
     expect(invalidatedKeys).toContainEqual(queryKeys.counts());

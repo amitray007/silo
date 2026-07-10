@@ -1,13 +1,15 @@
 /**
  * The sidebar nav's inline SVG icons (v3, `docs/design/app/Silo-v3.html`):
- * Library (bookmark), Trash (trash can), Settings (gear). 18×18,
- * `viewBox="0 0 16 16"`, `stroke="currentColor"` (so they inherit the nav
- * item's ink/mut color — no hardcoded hex), stroke-width 1.4, round caps/
- * joins — path data copied from the prototype. Bumped from v3's original
- * 15px per the user-feedback polish pass ("icons look too small" — the
- * Orpheus reference, `docs/design/refs/*.png`, uses larger/cleaner icons);
- * the `viewBox` stays `0 0 16 16` so the path data is untouched, only the
- * rendered `width`/`height` grew.
+ * Library (bookmark), Trash (trash can), Settings (gear), Log out (door +
+ * arrow). 18×18, `viewBox="0 0 16 16"`, `stroke="currentColor"` (so they
+ * inherit the nav item's ink/mut color — no hardcoded hex), stroke-width
+ * 1.4, round caps/joins — path data copied from the prototype (Log out is a
+ * new glyph drawn to match, since the prototype predates the auth cookie
+ * upgrade's Log out row). Bumped from v3's original 15px per the
+ * user-feedback polish pass ("icons look too small" — the Orpheus reference,
+ * `docs/design/refs/*.png`, uses larger/cleaner icons); the `viewBox` stays
+ * `0 0 16 16` so the path data is untouched, only the rendered
+ * `width`/`height` grew.
  */
 
 export function LibraryIcon() {
@@ -90,6 +92,35 @@ export function SettingsIcon() {
         clipRule="evenodd"
         d="M6.85 1.4h2.3l.32 1.66c.34.1.66.24.97.4l1.4-.94 1.63 1.63-.94 1.4c.16.31.3.63.4.97l1.66.32v2.3l-1.66.32a4.6 4.6 0 0 1-.4.97l.94 1.4-1.63 1.63-1.4-.94a4.6 4.6 0 0 1-.97.4l-.32 1.66h-2.3l-.32-1.66a4.6 4.6 0 0 1-.97-.4l-1.4.94-1.63-1.63.94-1.4a4.6 4.6 0 0 1-.4-.97L1.4 9.15v-2.3l1.66-.32c.1-.34.24-.66.4-.97l-.94-1.4L4.15 2.53l1.4.94c.31-.16.63-.3.97-.4L6.85 1.4Zm1.15 4.1a2.5 2.5 0 1 0 0 5 2.5 2.5 0 0 0 0-5Z"
       />
+    </svg>
+  );
+}
+
+/**
+ * A door + arrow-out glyph for the sidebar's Log out row (Unit 6, the
+ * cookie-session auth upgrade): an open door frame (a partial rect, left
+ * edge omitted so it reads as an open doorway) with an arrow exiting through
+ * it. Stroked, not filled — matches Library/Trash's stroke convention
+ * (`stroke="currentColor"`, `strokeWidth 1.4`, round caps/joins) rather than
+ * Settings' filled-silhouette gear, since a door-and-arrow reads cleanly as
+ * an outline at this size where a filled version would clot into a blob.
+ */
+export function LogOutIcon() {
+  return (
+    <svg
+      width="18"
+      height="18"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M7 2.4H3.6a.6.6 0 0 0-.6.6v10a.6.6 0 0 0 .6.6H7" />
+      <path d="M10.2 5.2 13 8l-2.8 2.8" />
+      <path d="M13 8H6" />
     </svg>
   );
 }

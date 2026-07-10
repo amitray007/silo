@@ -10,11 +10,12 @@ import { useAuth } from './AuthContext';
  * so this owns its own full-bleed `--bg` ground rather than reusing
  * `ModalShell` (which assumes a scrim over existing page content).
  *
- * A single password field for `SILO_API_TOKEN` — the "password" IS the
- * server's env token (no separate account system; see the design spec's
- * "core realization"). Design: Oat tokens, Geist 400/500, the brand grain
- * dot, a plain bordered `--bg2` submit button (amber stays a mark only,
- * never a button fill, per `docs/design/tokens.md`).
+ * A single password field for `SILO_APP_PASSWORD` — a human password,
+ * separate from the machine `SILO_API_TOKEN` extensions/MCP use
+ * (`docs/superpowers/specs/2026-07-11-web-auth-cookie-upgrade.md`). Design:
+ * Oat tokens, Geist 400/500, the brand grain dot, a plain bordered `--bg2`
+ * submit button (amber stays a mark only, never a button fill, per
+ * `docs/design/tokens.md`).
  */
 export function LoginGate() {
   const { login, checkUnreachable } = useAuth();
@@ -24,7 +25,7 @@ export function LoginGate() {
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Focus the token field on mount (effect, not an inline `autoFocus` prop —
+  // Focus the password field on mount (effect, not an inline `autoFocus` prop —
   // matches SidebarTags's convention; `autoFocus` is also flagged by the
   // lint's a11y/noAutofocus rule).
   useEffect(() => {
@@ -92,7 +93,7 @@ export function LoginGate() {
             textWrap: 'pretty',
           }}
         >
-          Enter your access token to continue.
+          Enter your password to continue.
         </p>
 
         <form onSubmit={handleSubmit} noValidate>
@@ -108,7 +109,7 @@ export function LoginGate() {
               marginBottom: 'var(--s2)',
             }}
           >
-            Access token
+            Password
           </label>
           <input
             ref={inputRef}
@@ -144,7 +145,7 @@ export function LoginGate() {
                 color: 'var(--mut)',
               }}
             >
-              That token didn't work.
+              That password didn't work.
             </p>
           )}
 

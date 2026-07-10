@@ -1,5 +1,20 @@
 export const name = '@silo/core';
 
+// Web-login primitives (web-auth cookie upgrade, U1): the human
+// `SILO_APP_PASSWORD` check + the `silo_session` signed-cookie secret/name/
+// value/max-age constants, shared by `@silo/api`'s login/logout routes and
+// its general auth gate so all of them read one source of truth. The actual
+// cookie sign/verify (`setSignedCookie`/`getSignedCookie`) stays at the
+// `@silo/api` edge — see `auth/app-session.ts`'s doc comment for why core
+// only owns the secret + the password check, not the Hono cookie mechanics.
+export {
+  readAppPassword,
+  SESSION_COOKIE_NAME,
+  SESSION_COOKIE_VALUE,
+  SESSION_MAX_AGE_SECONDS,
+  sessionSecret,
+  verifyAppPassword,
+} from './auth/app-session.js';
 // Auth token primitives (MCP-HTTP slice, U1): timing-safe secret compare +
 // env-var token read, moved here from `@silo/api`'s `token-auth.ts` so
 // `@silo/app`'s HTTP MCP listener can reuse them without importing an

@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearToken, emitAuthCleared, setToken } from '../api/auth';
+import { emitAuthCleared } from '../api/auth';
 import { AuthProvider, useAuth } from './AuthContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -32,14 +32,10 @@ function renderProvider() {
 describe('AuthContext', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
-    sessionStorage.clear();
-    clearToken();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    sessionStorage.clear();
-    clearToken();
   });
 
   it('starts in the loading state before the check resolves', () => {
@@ -128,16 +124,17 @@ describe('AuthContext', () => {
       return (
         <div>
           <span data-testid="state">{state}</span>
-          <button type="button" onClick={() => login('candidate-token')}>
+          <button type="button" onClick={() => login('candidate-password')}>
             submit
           </button>
         </div>
       );
     }
 
-    it('sets state to "authed" and returns true when the token validates', async () => {
+    it('POSTs /api/login with the password, re-checks, and sets "authed" on success', async () => {
       vi.mocked(fetch)
         .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false })) // initial check
+        .mockResolvedValueOnce(jsonResponse({ ok: true })) // POST /api/login
         .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: true })); // re-check after login
 
       render(
@@ -150,12 +147,24 @@ describe('AuthContext', () => {
       screen.getByRole('button', { name: 'submit' }).click();
 
       await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('authed'));
+
+      const loginCall = vi
+        .mocked(fetch)
+        .mock.calls.find(([input]) => String(input).includes('/api/login'));
+      expect(loginCall).toBeDefined();
+      const [, init] = loginCall ?? [];
+      expect((init as RequestInit | undefined)?.method).toBe('POST');
+      expect(JSON.parse((init as RequestInit).body as string)).toEqual({
+        password: 'candidate-password',
+      });
     });
 
-    it('stays on "needs-login" and clears the token when it does not validate', async () => {
+    it('stays on "needs-login" when /api/login rejects the password (401)', async () => {
       vi.mocked(fetch)
-        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false }))
-        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false }));
+        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false })) // initial check
+        .mockResolvedValueOnce(
+          jsonResponse({ error: 'unauthorized', message: 'Wrong password' }, 401),
+        ); // POST /api/login
 
       render(
         <AuthProvider>
@@ -164,11 +173,85 @@ describe('AuthContext', () => {
       );
       await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('needs-login'));
 
-      setToken('should-be-cleared');
       screen.getByRole('button', { name: 'submit' }).click();
 
+      // Only the initial check + the rejected login POST — no re-check fires
+      // on a failed login (no cookie was set to confirm).
       await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
       expect(screen.getByTestId('state').textContent).toBe('needs-login');
+    });
+
+    it('stays on "needs-login" when the post-login re-check reports unauthenticated', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false })) // initial check
+        .mockResolvedValueOnce(jsonResponse({ ok: true })) // POST /api/login "succeeds"
+        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false })); // re-check still unauthenticated
+
+      render(
+        <AuthProvider>
+          <LoginProbe />
+        </AuthProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('needs-login'));
+
+      screen.getByRole('button', { name: 'submit' }).click();
+
+      await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
+      expect(screen.getByTestId('state').textContent).toBe('needs-login');
+    });
+  });
+
+  describe('logout', () => {
+    function LogoutProbe() {
+      const { state, logout } = useAuth();
+      return (
+        <div>
+          <span data-testid="state">{state}</span>
+          <button type="button" onClick={() => logout()}>
+            log out
+          </button>
+        </div>
+      );
+    }
+
+    it('POSTs /api/logout and sets state to "needs-login"', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: true })) // initial check
+        .mockResolvedValueOnce(jsonResponse({ ok: true })); // POST /api/logout
+
+      render(
+        <AuthProvider>
+          <LogoutProbe />
+        </AuthProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('authed'));
+
+      screen.getByRole('button', { name: 'log out' }).click();
+
+      await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('needs-login'));
+
+      const logoutCall = vi
+        .mocked(fetch)
+        .mock.calls.find(([input]) => String(input).includes('/api/logout'));
+      expect(logoutCall).toBeDefined();
+      expect((logoutCall?.[1] as RequestInit | undefined)?.method).toBe('POST');
+    });
+
+    it('still bounces to "needs-login" even if the logout request itself fails', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: true })) // initial check
+        .mockRejectedValueOnce(new TypeError('Failed to fetch')); // POST /api/logout fails
+
+      render(
+        <AuthProvider>
+          <LogoutProbe />
+        </AuthProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('authed'));
+
+      screen.getByRole('button', { name: 'log out' }).click();
+
+      await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('needs-login'));
     });
   });
 });

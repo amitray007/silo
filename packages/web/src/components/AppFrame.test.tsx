@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { AuthProvider } from '../auth/AuthContext';
 import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
@@ -65,22 +66,24 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
         <MemoryRouter initialEntries={initialEntries}>
-          <Routes>
-            <Route element={<AppFrame />}>
-              <Route
-                path="/"
-                element={
-                  <>
-                    <PathProbe />
-                    <div>outlet content</div>
-                  </>
-                }
-              />
-              <Route path="/trash" element={<div>trash content</div>} />
-              <Route path="/probe" element={<EscapeProbe />} />
-              <Route path="/settings" element={<div>settings route content</div>} />
-            </Route>
-          </Routes>
+          <AuthProvider>
+            <Routes>
+              <Route element={<AppFrame />}>
+                <Route
+                  path="/"
+                  element={
+                    <>
+                      <PathProbe />
+                      <div>outlet content</div>
+                    </>
+                  }
+                />
+                <Route path="/trash" element={<div>trash content</div>} />
+                <Route path="/probe" element={<EscapeProbe />} />
+                <Route path="/settings" element={<div>settings route content</div>} />
+              </Route>
+            </Routes>
+          </AuthProvider>
         </MemoryRouter>
       </ThemeProvider>
     </QueryClientProvider>,
@@ -89,6 +92,10 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
 
 describe('AppFrame', () => {
   beforeEach(() => {
+    // `AuthProvider`'s mount-time `GET /api/auth/check` also lands on this
+    // mock — a Counts-shaped body has no `authRequired` key, so it classifies
+    // as falsy/'open' (no gate), which is what every pre-existing test here
+    // assumes (Sidebar renders unconditionally, no Log out row).
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 })),

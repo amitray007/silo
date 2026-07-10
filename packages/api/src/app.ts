@@ -12,6 +12,7 @@ import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
+import { registerLoginRoutes } from './routes/login.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTagsRoutes } from './routes/tags.js';
@@ -89,6 +90,18 @@ export function createApp(): Hono {
   // CORS boundary should not have a hole.
   app.use('/api/auth/check', corsMiddleware());
   registerAuthRoutes(app);
+
+  // `/api/login`/`/api/logout` (web-auth cookie upgrade, Unit 2) sit
+  // alongside `/api/auth/check` for the same reason: they must be reachable
+  // OUTSIDE `generalTokenAuth` (login is how a credential is first
+  // obtained; logout must succeed even against a stale session) but still go
+  // THROUGH `corsMiddleware()` so their response-exposure obeys the same
+  // origin allowlist as the rest of `/api/*` (mirrors `/api/auth/check`'s
+  // CORS rationale above — see `routes/login.ts`'s doc comment for the
+  // route bodies).
+  app.use('/api/login', corsMiddleware());
+  app.use('/api/logout', corsMiddleware());
+  registerLoginRoutes(app);
 
   const api = new Hono();
   // CORS first (the browser-facing gate — an allowlist-rejected origin gets

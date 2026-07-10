@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
-import { clearToken, onAuthCleared, setToken } from '../api/auth';
-import { apiGet } from '../api/client';
+import { onAuthCleared } from '../api/auth';
+import { apiGet, apiPost } from '../api/client';
 
 /**
  * Hand-typed mirror of `@silo/api`'s `GET /api/auth/check` response
@@ -15,34 +15,46 @@ interface AuthCheckResponse {
 }
 
 /**
- * The app's auth state machine (plan 030 Unit 3;
- * `docs/superpowers/specs/2026-07-10-web-auth-design.md`):
+ * The app's auth state machine (cookie-session model,
+ * `docs/superpowers/specs/2026-07-11-web-auth-cookie-upgrade.md`, superseding
+ * plan 030's bearer-token version):
  *
  * - `'loading'` — the initial `/api/auth/check` hasn't resolved yet. The app
  *   renders nothing (not the gate, not the routes) so a fast "no auth needed"
  *   deployment never flashes a login card it doesn't need.
- * - `'open'` — `SILO_API_TOKEN` is unset on the server; this deployment has
- *   no login. Renders the app, forever, for this session.
- * - `'authed'` — a token is required AND the one this tab is holding (if any)
- *   validated. Renders the app.
- * - `'needs-login'` — a token is required and none is held, the held one is
- *   invalid, a 401 anywhere just cleared it, OR the check itself couldn't be
- *   reached at all (see `checkAuth`'s catch below). Renders `LoginGate`.
+ * - `'open'` — neither `SILO_APP_PASSWORD` nor `SILO_API_TOKEN` is set on the
+ *   server; this deployment has no login. Renders the app, forever, for this
+ *   session.
+ * - `'authed'` — auth is required AND this browser holds a valid
+ *   `silo_session` cookie (or, for a non-browser caller, a valid Bearer —
+ *   irrelevant here since the web never holds one). Renders the app.
+ * - `'needs-login'` — auth is required and no valid session cookie is
+ *   present, a 401 anywhere just signaled the cookie was rejected, OR the
+ *   check itself couldn't be reached at all (see `checkAuth`'s catch below).
+ *   Renders `LoginGate`.
  */
 export type AuthState = 'loading' | 'open' | 'authed' | 'needs-login';
 
 interface AuthContextValue {
   state: AuthState;
-  /** True only for the specific case where the initial check failed to reach the server at all (distinct from "reached it and got a 401/invalid token"), so `LoginGate` can show a "couldn't reach the server" note instead of the generic "token didn't work" copy. */
+  /** True only for the specific case where the initial check failed to reach the server at all (distinct from "reached it and got a 401/invalid session"), so `LoginGate` can show a "couldn't reach the server" note instead of the generic "wrong password" copy. */
   checkUnreachable: boolean;
   /**
-   * Submits `token` as the candidate `SILO_API_TOKEN`: stores it, re-runs
-   * the check with it attached, and resolves to whether it validated. On
-   * `false` the token is dropped again (`clearToken`) so a rejected guess
-   * never lingers as the "current" token — the gate stays up either way,
-   * `login`'s return value is what tells the caller which happened.
+   * Submits `password` to `POST /api/login`. On success the server sets the
+   * `silo_session` cookie, so the check is re-run (now cookie-bearing) to
+   * confirm it landed and flip state to `'authed'`. On a wrong password
+   * (`/api/login` responds 401) resolves to `false` and the gate stays up —
+   * there is no local credential to clean up either way, since the web never
+   * held one to begin with.
    */
-  login: (token: string) => Promise<boolean>;
+  login: (password: string) => Promise<boolean>;
+  /**
+   * Submits `POST /api/logout` (clears the `silo_session` cookie
+   * server-side, always 200) and drops straight to `'needs-login'` — the
+   * sidebar's Log out button (Unit 6) is the only caller. No local state to
+   * clear beyond the auth state itself.
+   */
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -61,10 +73,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     async function checkAuth() {
       try {
-        // apiGet (not a bare fetch) so a token already sitting in
-        // sessionStorage from an earlier session is attached as the bearer —
-        // that's what lets a returning user with a still-valid token land
-        // straight on 'authed' instead of the gate.
+        // apiGet (not a bare fetch) so credentials:'include' is set and any
+        // silo_session cookie already sitting in the browser from an
+        // earlier login is sent along — that's what lets a returning user
+        // with a still-valid session land straight on 'authed' instead of
+        // the gate.
         const response = await apiGet<AuthCheckResponse>('/api/auth/check');
         if (cancelled) return;
         setCheckUnreachable(false);
@@ -94,16 +107,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(
     () =>
       onAuthCleared(() => {
-        // A 401 anywhere (apiFetch, api/client.ts) already cleared the token
-        // — bounce a mid-session user back to the gate.
+        // A 401 anywhere (apiFetch, api/client.ts) means the session cookie
+        // was rejected or expired server-side — bounce a mid-session user
+        // back to the gate.
         setCheckUnreachable(false);
         setState('needs-login');
       }),
     [],
   );
 
-  const login = useCallback(async (token: string): Promise<boolean> => {
-    setToken(token);
+  const login = useCallback(async (password: string): Promise<boolean> => {
+    try {
+      await apiPost('/api/login', { password });
+    } catch {
+      // A wrong password is a 401 ApiError from apiPost — the gate stays up,
+      // no cookie was set. Any other failure (network down, unreachable
+      // server) is treated the same way: neither confirmed nor refuted, so
+      // stay on the gate rather than guessing "authed".
+      return false;
+    }
+
+    // The server just set the silo_session cookie — re-run the check
+    // (now cookie-bearing) to confirm it actually landed before flipping to
+    // 'authed'. This mirrors the mount-time check's own honesty: we don't
+    // assume success from a 200 alone.
     try {
       const response = await apiGet<AuthCheckResponse>('/api/auth/check');
       if (response.authRequired && response.authenticated) {
@@ -111,19 +138,32 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setState('authed');
         return true;
       }
-      clearToken();
       return false;
     } catch {
-      // The re-check itself failed to reach the server — the candidate token
-      // was neither confirmed nor refuted, so treat it the same as a wrong
-      // token: drop it and stay on the gate rather than guessing "authed".
-      clearToken();
       return false;
     }
   }, []);
 
+  const logout = useCallback(async (): Promise<void> => {
+    // Always 200 server-side (docs/superpowers/specs/2026-07-11-web-auth-cookie-upgrade.md)
+    // — logout is a best-effort cookie clear either way, so a failed request
+    // (network down, server unreachable) is swallowed rather than left as an
+    // unhandled rejection: the sidebar's Log out button (Unit 6) fires this
+    // as `onClick={() => logout()}`, with nothing awaiting the result. The
+    // UI still bounces to the gate regardless, rather than leaving a stale
+    // 'authed' state the user can't get out of.
+    try {
+      await apiPost('/api/logout', undefined);
+    } catch {
+      // Best-effort — the UI transition below happens either way.
+    } finally {
+      setCheckUnreachable(false);
+      setState('needs-login');
+    }
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ state, checkUnreachable, login }}>
+    <AuthContext.Provider value={{ state, checkUnreachable, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

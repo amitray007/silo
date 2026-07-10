@@ -233,7 +233,7 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
     renderLibraryView();
 
     await waitFor(() => expect(screen.getByText('Page one')).toBeDefined());
-    expect(fetch).toHaveBeenCalledWith('/api/links');
+    expect(fetch).toHaveBeenCalledWith('/api/links', { credentials: 'include' });
     // hasNextPage is true (page1.nextCursor set): the real guard enables the observer.
     expect(FakeIntersectionObserver.instances).toHaveLength(1);
 
@@ -241,7 +241,7 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
     button.click();
 
     await waitFor(() => expect(screen.getByText('Page two')).toBeDefined());
-    expect(fetch).toHaveBeenCalledWith('/api/links?cursor=c1');
+    expect(fetch).toHaveBeenCalledWith('/api/links?cursor=c1', { credentials: 'include' });
     // page2 has no nextCursor: hasNextPage flips false, the button disappears,
     // and the (re-created) observer for the exhausted state never fires again.
     await waitFor(() => expect(screen.queryByRole('button', { name: 'Load more' })).toBeNull());

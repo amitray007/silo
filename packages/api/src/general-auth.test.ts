@@ -5,9 +5,10 @@ import type { ErrorEnvelope } from './app.js';
 import { setupPgHarness } from './test-support/pg-harness.js';
 
 /**
- * Tests for the general-API bearer-token gate (`general-auth.ts`, plan 021 +
- * the access-tokens slice's DB-token fallback, U2) — driven via
- * `createApp()` + `app.request(...)` per `docs/rules/api-hono.md`.
+ * Tests for the general-API auth gate (`general-auth.ts`, plan 021 + the
+ * access-tokens slice's DB-token fallback, U2 + the web-auth cookie
+ * upgrade's session-cookie branch, U3) — driven via `createApp()` +
+ * `app.request(...)` per `docs/rules/api-hono.md`.
  *
  * REAL DISPOSABLE DB (not a placeholder `DATABASE_URL`): this file used to
  * point `DATABASE_URL` at a syntactically-valid-but-unmigrated placeholder,
@@ -47,10 +48,14 @@ describeIfPg('general-API bearer token gate', () => {
 
   beforeEach(() => {
     delete process.env.SILO_API_TOKEN;
+    delete process.env.SILO_APP_PASSWORD;
+    delete process.env.SILO_SESSION_SECRET;
   });
 
   afterEach(() => {
     delete process.env.SILO_API_TOKEN;
+    delete process.env.SILO_APP_PASSWORD;
+    delete process.env.SILO_SESSION_SECRET;
   });
 
   describe('env token (unchanged behavior)', () => {
@@ -194,6 +199,170 @@ describeIfPg('general-API bearer token gate', () => {
 
       const res = await app.request('/api/tags');
       expect(res.status).not.toBe(401);
+    });
+  });
+
+  /**
+   * Session-cookie branch (web-auth cookie upgrade, Unit 3): gated purely on
+   * `SILO_APP_PASSWORD` (no `SILO_API_TOKEN` involved), proving the cookie
+   * credential is a genuine third auth path, not piggybacking on the bearer
+   * branches. Each test mints its cookie for real via `POST /api/login`
+   * (rather than hand-crafting a signed cookie value) so these tests also
+   * double as an end-to-end proof that Unit 2's login route and this gate
+   * agree on the same secret/name/value.
+   */
+  describe('session cookie (web-auth cookie upgrade, U3)', () => {
+    const PASSWORD = 'general-auth-cookie-test-password';
+
+    it('SILO_APP_PASSWORD set, no credential at all: /api/tags is 401', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+      const res = await app.request('/api/tags');
+      expect(res.status).toBe(401);
+    });
+
+    it('a silo_session cookie minted by POST /api/login authorizes /api/tags', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+
+      const loginRes = await app.request('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: PASSWORD }),
+      });
+      expect(loginRes.status).toBe(200);
+      const setCookie = loginRes.headers.get('set-cookie');
+      expect(setCookie).toBeTruthy();
+      const cookieHeader = setCookie?.split(';')[0];
+
+      const res = await app.request('/api/tags', {
+        headers: { Cookie: cookieHeader ?? '' },
+      });
+      expect(res.status).not.toBe(401);
+    });
+
+    it('a forged/tampered silo_session cookie is 401', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+
+      const res = await app.request('/api/tags', {
+        headers: { Cookie: 'silo_session=not-a-real-signed-value' },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('a valid cookie minted under one password does not authorize once the password (and thus the derived secret) changes', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+
+      const loginRes = await app.request('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: PASSWORD }),
+      });
+      const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
+
+      process.env.SILO_APP_PASSWORD = 'a-completely-different-password';
+      const res = await app.request('/api/tags', {
+        headers: { Cookie: cookieHeader ?? '' },
+      });
+      expect(res.status).toBe(401);
+    });
+
+    it('Bearer env-token still works when SILO_APP_PASSWORD is also set (extension path intact)', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+
+      const res = await app.request('/api/tags', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.status).not.toBe(401);
+    });
+
+    it('only SILO_API_TOKEN set (no password): behavior is unchanged — no credential is 401, and a cookie header is simply ignored', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app } = harness.mod();
+
+      const noCredRes = await app.request('/api/tags');
+      expect(noCredRes.status).toBe(401);
+
+      const cookieOnlyRes = await app.request('/api/tags', {
+        headers: { Cookie: 'silo_session=whatever' },
+      });
+      expect(cookieOnlyRes.status).toBe(401);
+
+      const bearerRes = await app.request('/api/tags', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(bearerRes.status).not.toBe(401);
+    });
+
+    it('SILO_SESSION_SECRET (set independently of the password) signs the cookie: it verifies at the gate, and rotating ONLY the secret invalidates it', async () => {
+      // ce-security testing-gap: the independent-secret precedence
+      // (`sessionSecret()` prefers SILO_SESSION_SECRET over the password) was
+      // only unit-tested on the helper; exercise it end-to-end through
+      // login -> gate, and prove rotating the signing secret alone (password
+      // unchanged) is a valid force-logout lever.
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      process.env.SILO_SESSION_SECRET = 'an-independent-signing-secret-not-the-password';
+      const { app } = harness.mod();
+
+      const loginRes = await app.request('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: PASSWORD }),
+      });
+      expect(loginRes.status).toBe(200);
+      const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
+
+      const okRes = await app.request('/api/tags', { headers: { Cookie: cookieHeader ?? '' } });
+      expect(okRes.status).not.toBe(401);
+
+      // Rotate ONLY the signing secret (password stays the same) — the
+      // previously-minted cookie must no longer verify.
+      process.env.SILO_SESSION_SECRET = 'a-rotated-independent-signing-secret';
+      const afterRotate = await app.request('/api/tags', {
+        headers: { Cookie: cookieHeader ?? '' },
+      });
+      expect(afterRotate.status).toBe(401);
+    });
+
+    it('CSRF: a cross-site form-encoded POST to a write route is rejected (400, not a mutation) even if it carried a valid session cookie', async () => {
+      // ce-security testing-gap: the CSRF defense rests on write routes
+      // requiring a JSON body (c.req.json() + Zod). SameSite=Lax already blocks
+      // cross-site subresource POSTs from carrying the cookie; the only
+      // credentialed cross-site request Lax permits is a top-level-navigation
+      // <form> POST, which can only send form-encoded/multipart/text bodies —
+      // never application/json. Lock in that such a body fails to parse into a
+      // valid write BEFORE any mutation, so a forged top-level POST can't
+      // mutate. We attach a genuinely-valid session cookie to prove the
+      // rejection is the body contract, not the auth gate.
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+
+      const loginRes = await app.request('/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ password: PASSWORD }),
+      });
+      const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
+
+      // A classic HTML form submit: form-encoded body, NOT JSON.
+      const res = await app.request('/api/links', {
+        method: 'POST',
+        headers: {
+          Cookie: cookieHeader ?? '',
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: 'url=https://evil.example.com/forged',
+      });
+      // The gate passes (valid cookie), but the body isn't JSON -> the capture
+      // route's c.req.json()/Zod validation rejects it: a 4xx, never a 2xx
+      // create. The forged navigation cannot mutate the store.
+      expect(res.status).not.toBe(401);
+      expect(res.ok).toBe(false);
+      expect(res.status).toBeGreaterThanOrEqual(400);
     });
   });
 });

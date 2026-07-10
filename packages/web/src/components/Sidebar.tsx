@@ -2,9 +2,10 @@ import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router-dom';
 import { useCounts, useTags } from '../api/hooks';
 import type { TagCount } from '../api/types';
+import { useAuth } from '../auth/AuthContext';
 import { formatCount } from '../lib/formatCount';
 import { GrainDot } from './GrainDot';
-import { LibraryIcon, SearchIcon, SettingsIcon, TrashIcon } from './NavIcons';
+import { LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { useSettings } from './SettingsContext';
 import { SidebarTags } from './SidebarTags';
@@ -225,6 +226,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
   const { data: counts } = useCounts();
   const { data: tagsData, isError: tagsErrored } = useTags();
   const { openSettings } = useSettings();
+  const { state: authState, logout } = useAuth();
 
   // The brand row (grain dot + "silo") acts as a home link — clicking it
   // navigates to the Library (`/`), like a site logo. A real `<a href="/">`
@@ -325,6 +327,25 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         onBeforeNavigate={() => openSettings()}
         skipNavigate
       />
+
+      {authState === 'authed' && (
+        // Only rendered when a session is actually active — an 'open'
+        // (no-password) deployment or localhost dev never had anything to
+        // log out of, so no button shows there at all. Button mode (no
+        // `href`, like the Search row above) since there's no `/logout`
+        // route to link to; goes through the SAME shared `NavItem` the
+        // Settings row uses (`variant="settings"`, matching its dimmer
+        // secondary-row look) rather than hand-rolling inline styles — the
+        // established no-drift rule (see `SidebarSearchItem`'s own comment).
+        <NavItem
+          label="Log out"
+          icon={<LogOutIcon />}
+          variant="settings"
+          onClick={() => {
+            logout();
+          }}
+        />
+      )}
     </nav>
   );
 });

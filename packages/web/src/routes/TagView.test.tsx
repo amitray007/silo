@@ -83,7 +83,7 @@ describe('TagView', () => {
     // A space after the `#` (bugfix, user report) — `#mcp` (no space) must
     // NOT be present as the heading text.
     expect(screen.getByRole('heading', { name: '# mcp' })).toBeDefined();
-    expect(fetchImpl).toHaveBeenCalledWith('/api/links?tag=mcp');
+    expect(fetchImpl).toHaveBeenCalledWith('/api/links?tag=mcp', { credentials: 'include' });
   });
 
   it('shows the tag-specific empty state (spaced # tag) when the tag has no live links', async () => {

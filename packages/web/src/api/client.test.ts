@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { clearToken, getToken, onAuthCleared, setToken } from './auth';
+import { onAuthCleared } from './auth';
 import { ApiError, apiDelete, apiGet, apiPatch, apiPost, setApiBaseUrl } from './client';
 import type {
   AddedBy,
@@ -73,7 +73,9 @@ describe('apiGet', () => {
       vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(tags, 200));
 
       await expect(apiGet<TagsResponse>('/api/tags')).resolves.toEqual(tags);
-      expect(fetch).toHaveBeenCalledWith('http://localhost:8787/api/tags');
+      expect(fetch).toHaveBeenCalledWith('http://localhost:8787/api/tags', {
+        credentials: 'include',
+      });
     } finally {
       setApiBaseUrl('');
     }
@@ -165,42 +167,25 @@ describe('apiGet', () => {
   });
 });
 
-describe('bearer token attachment', () => {
+describe('cookie credentials + auth-cleared signal', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', vi.fn());
-    sessionStorage.clear();
-    clearToken();
   });
 
   afterEach(() => {
     vi.unstubAllGlobals();
-    sessionStorage.clear();
-    clearToken();
   });
 
-  it('omits Authorization when no token is set', async () => {
+  it('sends credentials: include on a GET with no other init (the no-body path)', async () => {
     const counts: Counts = { live: 12, trash: 3, purgeWindowDays: 30 };
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(counts, 200));
 
     await apiGet<Counts>('/api/counts');
 
-    expect(fetch).toHaveBeenCalledWith('/api/counts');
+    expect(fetch).toHaveBeenCalledWith('/api/counts', { credentials: 'include' });
   });
 
-  it('adds Authorization: Bearer <token> on a GET when a token is set', async () => {
-    setToken('my-token');
-    const counts: Counts = { live: 12, trash: 3, purgeWindowDays: 30 };
-    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(counts, 200));
-
-    await apiGet<Counts>('/api/counts');
-
-    expect(fetch).toHaveBeenCalledWith('/api/counts', {
-      headers: { Authorization: 'Bearer my-token' },
-    });
-  });
-
-  it('merges Authorization onto a POST without dropping the content-type header', async () => {
-    setToken('my-token');
+  it('sends credentials: include on a POST alongside the content-type header', async () => {
     const captureResponse: CaptureResponse = { link: linkFixture, deduped: false };
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(captureResponse, 201));
 
@@ -208,27 +193,27 @@ describe('bearer token attachment', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', Authorization: 'Bearer my-token' },
+      headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: 'https://example.com' }),
+      credentials: 'include',
     });
   });
 
-  it('a 401 response clears the token', async () => {
-    setToken('stale-token');
-    vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ error: 'unauthorized', message: 'Invalid or missing token' }, 401),
-    );
+  it('never adds an Authorization header — the web holds no client-side token', async () => {
+    const counts: Counts = { live: 12, trash: 3, purgeWindowDays: 30 };
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(counts, 200));
 
-    await expect(apiGet('/api/counts')).rejects.toBeInstanceOf(ApiError);
-    expect(getToken()).toBeNull();
+    await apiGet<Counts>('/api/counts');
+
+    const [, init] = vi.mocked(fetch).mock.calls[0] ?? [];
+    expect((init as RequestInit | undefined)?.headers).toBeUndefined();
   });
 
   it('a 401 response fires the auth-cleared signal', async () => {
-    setToken('stale-token');
     const cb = vi.fn();
     const unsubscribe = onAuthCleared(cb);
     vi.mocked(fetch).mockResolvedValueOnce(
-      jsonResponse({ error: 'unauthorized', message: 'Invalid or missing token' }, 401),
+      jsonResponse({ error: 'unauthorized', message: 'Invalid or missing session' }, 401),
     );
 
     await expect(apiGet('/api/counts')).rejects.toBeInstanceOf(ApiError);
@@ -237,14 +222,17 @@ describe('bearer token attachment', () => {
     unsubscribe();
   });
 
-  it('a non-401 error response does not clear the token', async () => {
-    setToken('valid-token');
+  it('a non-401 error response does not fire the auth-cleared signal', async () => {
+    const cb = vi.fn();
+    const unsubscribe = onAuthCleared(cb);
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({ error: 'not_found', message: 'No link with id abc' }, 404),
     );
 
     await expect(apiGet('/api/links/abc')).rejects.toBeInstanceOf(ApiError);
-    expect(getToken()).toBe('valid-token');
+    expect(cb).not.toHaveBeenCalled();
+
+    unsubscribe();
   });
 });
 
@@ -268,6 +256,7 @@ describe('apiPost', () => {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ url: 'https://example.com' }),
+      credentials: 'include',
     });
   });
 
@@ -332,6 +321,7 @@ describe('apiPatch / apiDelete', () => {
       method: 'PATCH',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'New title' }),
+      credentials: 'include',
     });
   });
 
@@ -340,7 +330,10 @@ describe('apiPatch / apiDelete', () => {
 
     await apiDelete(`/api/links/${linkFixture.id}`);
 
-    expect(fetch).toHaveBeenCalledWith(`/api/links/${linkFixture.id}`, { method: 'DELETE' });
+    expect(fetch).toHaveBeenCalledWith(`/api/links/${linkFixture.id}`, {
+      method: 'DELETE',
+      credentials: 'include',
+    });
   });
 
   it('a 204 No Content response resolves to undefined rather than an invalid_response ApiError', async () => {

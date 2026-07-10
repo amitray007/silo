@@ -1,4 +1,4 @@
-import { clearToken, emitAuthCleared, getToken } from './auth';
+import { emitAuthCleared } from './auth';
 import type { ApiErrorBody } from './types';
 
 /**
@@ -128,18 +128,20 @@ async function readJson<T>(response: Response): Promise<T> {
  * core behind both `apiGet` and every write verb (`apiPost`/`apiPatch`/
  * `apiDelete`), so "the request failed" has exactly one meaning regardless of
  * which verb triggered it.
+ *
+ * Every request goes out with `credentials: 'include'` so the browser
+ * attaches the `silo_session` cookie (set by `POST /api/login`,
+ * `docs/superpowers/specs/2026-07-11-web-auth-cookie-upgrade.md`) on every
+ * same-origin call — in dev that's Vite's `/api` proxy, in prod the SPA and
+ * API share an origin. The web holds no token client-side anymore, so unlike
+ * the old bearer-token era there is no header to attach here at all.
  */
 async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
-  const token = getToken();
-  const requestInit: RequestInit | undefined = token
-    ? { ...init, headers: { ...init?.headers, Authorization: `Bearer ${token}` } }
-    : init;
+  const requestInit: RequestInit = { ...init, credentials: 'include' };
 
   let response: Response;
   try {
-    response = requestInit
-      ? await fetch(`${baseUrl}${path}`, requestInit)
-      : await fetch(`${baseUrl}${path}`);
+    response = await fetch(`${baseUrl}${path}`, requestInit);
   } catch (cause) {
     throw new ApiError(
       0,
@@ -149,11 +151,10 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
   }
 
   if (response.status === 401) {
-    // A stale/invalid token must be dropped regardless of how the caller
-    // handles the resulting ApiError below, so the app doesn't keep
-    // resending a dead token — clear it and signal AuthContext to bounce to
-    // the login gate before falling through to the normal error handling.
-    clearToken();
+    // The session cookie was rejected, expired, or never set — signal
+    // AuthContext to bounce to the login gate before falling through to the
+    // normal error handling. There is no local token to drop (the cookie is
+    // HTTP-only and server-owned), only the UI state to reset.
     emitAuthCleared();
   }
 

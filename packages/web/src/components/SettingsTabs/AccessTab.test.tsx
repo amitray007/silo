@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import * as auth from '../../api/auth';
 import { AccessTab } from './AccessTab';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -112,7 +111,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('"Copy config" writes the HTTP+bearer MCP config to the clipboard', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
 
@@ -140,7 +138,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('flashes "Couldn\'t copy" when the clipboard write fails, and resets after', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const writeText = vi.fn().mockRejectedValue(new Error('denied'));
     vi.stubGlobal('navigator', { clipboard: { writeText } });
@@ -209,7 +206,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('renders the "Access tokens" section heading with its description', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     renderTab();
 
     expect(await screen.findByText('Access tokens')).toBeDefined();
@@ -217,7 +213,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('renders the token list from a mocked useAccessTokens (names + prefixes shown)', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     renderTab({
       tokens: [
         {
@@ -246,7 +241,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('shows the empty state when there are no tokens', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     renderTab({ tokens: [] });
 
     expect(
@@ -255,7 +249,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('does not show the raw token anywhere in the list rows', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     renderTab({
       tokens: [
         {
@@ -273,7 +266,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('creating a token calls the mutation with the name, then shows the raw token once + copies it', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     const writeText = vi.fn().mockResolvedValue(undefined);
     vi.stubGlobal('navigator', { clipboard: { writeText } });
 
@@ -319,7 +311,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('the Create button is disabled when the name is empty', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     renderTab({ tokens: [] });
 
     await screen.findByPlaceholderText(/laptop cli, raycast/i);
@@ -328,7 +319,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('revoking a token requires a confirm step, then calls the DELETE mutation and refreshes the list', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     const { fetchMock } = renderTab({
       tokens: [
         {
@@ -360,7 +350,6 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   });
 
   it('canceling the revoke confirm step leaves the token in place', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
     renderTab({
       tokens: [
         {

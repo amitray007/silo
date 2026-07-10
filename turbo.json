@@ -21,7 +21,9 @@
         "WORKER_DATABASE_URL",
         "SILO_TRASH_PURGE_DAYS",
         "SILO_ENRICHING_STALE_MINUTES",
-        "SILO_API_TOKEN"
+        "SILO_API_TOKEN",
+        "SILO_APP_PASSWORD",
+        "SILO_SESSION_SECRET"
       ]
     },
     "test": {
@@ -33,7 +35,9 @@
         "WORKER_DATABASE_URL",
         "SILO_TRASH_PURGE_DAYS",
         "SILO_ENRICHING_STALE_MINUTES",
-        "SILO_API_TOKEN"
+        "SILO_API_TOKEN",
+        "SILO_APP_PASSWORD",
+        "SILO_SESSION_SECRET"
       ]
     }
   }
