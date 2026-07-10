@@ -318,17 +318,17 @@ describe('SettingsModal', () => {
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
     });
 
-    it('renders the MCP toggle and Rotate as disabled/non-functional', () => {
+    it('renders the MCP toggle and access-token row as disabled/non-functional (env-secret model)', () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
 
-      const mcpToggle = screen.getByTitle(/always on/i);
+      const mcpToggle = screen.getByTitle(/SILO_MCP_HTTP_PORT \+ SILO_API_TOKEN/);
       expect(mcpToggle).toHaveProperty('disabled', true);
-      const rotate = screen.getByRole('button', { name: /rotate/i });
-      expect(rotate).toHaveProperty('disabled', true);
+      const tokenRow = screen.getByRole('button', { name: /env-set/i });
+      expect(tokenRow).toHaveProperty('disabled', true);
     });
 
-    it('"Copy config" (the hero\'s primary action) writes the static MCP client config to the clipboard', async () => {
+    it('"Copy config" (the hero\'s primary action) writes the HTTP MCP client config to the clipboard', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.assign(navigator, { clipboard: { writeText } });
 
@@ -340,6 +340,8 @@ describe('SettingsModal', () => {
       const written = writeText.mock.calls[0]?.[0] as string;
       expect(written).toContain('"mcpServers"');
       expect(written).toContain('"silo"');
+      expect(written).toContain('/mcp');
+      expect(written).toContain('Authorization');
       expect(await screen.findByText('Copied')).toBeDefined();
     });
 
