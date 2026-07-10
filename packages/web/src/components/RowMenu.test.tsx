@@ -213,6 +213,56 @@ describe('RowMenu', () => {
     vi.useRealTimers();
   });
 
+  it('closes the tags fly-out after the delay when the pointer leaves the fly-out itself and never re-enters either element', () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    renderMenu({ tags: ['mcp'] });
+
+    const trigger = screen.getByText('Tags').closest('button') as HTMLButtonElement;
+    const wrapper = trigger.parentElement as HTMLElement;
+    fireEvent.click(trigger);
+    const flyout = screen.getByPlaceholderText('Find tag').closest('.silo-popover') as HTMLElement;
+
+    // Pointer travels wrapper -> fly-out (the real handoff path), then
+    // eventually leaves the fly-out itself for good — `TagsFlyout`'s own
+    // `onMouseLeave` must schedule the same delayed close as the wrapper's.
+    fireEvent.mouseLeave(wrapper);
+    fireEvent.mouseEnter(flyout);
+    fireEvent.mouseLeave(flyout);
+
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
+    vi.useRealTimers();
+  });
+
+  it('clears the pending close timer on unmount, so it never fires setState after the row menu is gone (e.g. click-away/Escape/trash closing RowMenu mid-delay)', () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { unmount } = renderMenu({ tags: ['mcp'] });
+
+    const trigger = screen.getByText('Tags').closest('button') as HTMLButtonElement;
+    const wrapper = trigger.parentElement as HTMLElement;
+    fireEvent.click(trigger);
+    // Schedule a close, then unmount RowMenu (mirrors LinkRow conditionally
+    // unmounting it via closeMenu — click-outside/Escape/trash) WHILE that
+    // close timer is still pending.
+    fireEvent.mouseLeave(wrapper);
+
+    unmount();
+
+    // If the cleanup effect didn't clear the timer, this would fire
+    // `setTagsFlyOpen` on an unmounted component and React would log a
+    // "Can't perform a React state update on an unmounted component" error.
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+    expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
+    vi.useRealTimers();
+  });
+
   it('toggling an unassigned tag on calls the add-tag mutation (POST)', async () => {
     vi.mocked(fetch).mockResolvedValue(
       jsonResponse({

@@ -13,15 +13,21 @@ const COPY_RESET_MS = 700;
  * Tags fly-out close delay (mirrors `HoverPreviewContext`'s `HIDE_DELAY_MS`
  * pattern/handoff, not its value — this bridges a much smaller physical gap:
  * `TagsFlyout` sits ~2px from its trigger, vs. a hover-preview card 14px off
- * a row). Root cause: `TagsFlyout` is `position: absolute`, so it's OUT of
- * the trigger wrapper's layout box — the wrapper's hover hit-area is only the
- * "Tags" button, not the fly-out beside it. An immediate `onMouseLeave` close
- * fires the instant the pointer leaves the button, before it can reach the
- * fly-out. This delay + the fly-out's own enter/leave handlers below (which
- * cancel/reschedule the same close) bridge that gap — same "keep"/"hide"
- * handoff as `HoverPreviewContext`'s `keep`/`hide`, just local to this menu
- * instead of a shared provider (there's only ever one tags fly-out open at a
- * time, scoped to this one `RowMenu`).
+ * a row). Root cause: `TagsFlyout`'s `position: absolute` (`right: calc(100%
+ * - 2px)`) moves it visually ~2px to the left of the "Tags" button, outside
+ * the button's own painted box — so the pointer's path from the button to the
+ * fly-out crosses a strip of pixels that belong to whatever sits underneath
+ * that gap, not to this wrapper's subtree. `mouseleave`/`relatedTarget`
+ * containment is evaluated against that DOM subtree, so crossing the gap
+ * fires the wrapper's `onMouseLeave` an instant before the pointer reaches
+ * the fly-out (a real click/tab reorder wouldn't happen if the fly-out's
+ * painted box abutted the button with zero gap). An immediate close on that
+ * `onMouseLeave` closes the fly-out before the pointer can land on it. This
+ * delay + the fly-out's own enter/leave handlers below (which cancel/
+ * reschedule the same close) bridge that gap — same "keep"/"hide" handoff as
+ * `HoverPreviewContext`'s `keep`/`hide`, just local to this menu instead of a
+ * shared provider (there's only ever one tags fly-out open at a time, scoped
+ * to this one `RowMenu`).
  */
 const TAGS_FLYOUT_CLOSE_DELAY_MS = 140;
 
@@ -334,11 +340,13 @@ export function RowMenu({ link }: { link: LinkJson }) {
   );
 
   // Entering EITHER the trigger wrapper or the fly-out itself cancels any
-  // pending close — this is the "keep" half of the handoff (mirrors
-  // `HoverPreviewContext`'s `keep`), and is exactly what lets the pointer
-  // cross the ~2px gap between the button and the absolutely-positioned
-  // panel, or land directly on the panel, without the fly-out closing.
-  const cancelTagsClose = () => {
+  // pending close AND (re)opens — this is the "keep" half of the handoff
+  // (mirrors `HoverPreviewContext`'s `keep`, hence the name over a narrower
+  // "cancel", since it also drives the open state, not just the timer), and
+  // is exactly what lets the pointer cross the ~2px gap between the button
+  // and the absolutely-positioned panel, or land directly on the panel,
+  // without the fly-out closing.
+  const keepTagsOpen = () => {
     if (tagsCloseTimerRef.current) {
       clearTimeout(tagsCloseTimerRef.current);
       tagsCloseTimerRef.current = null;
@@ -348,7 +356,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
 
   // Leaving EITHER the trigger wrapper or the fly-out schedules a delayed
   // close — the "hide" half of the handoff. If the pointer re-enters either
-  // one before the delay elapses, `cancelTagsClose` above cancels this timer,
+  // one before the delay elapses, `keepTagsOpen` above cancels this timer,
   // so the fly-out only actually closes once neither is hovered.
   const scheduleTagsClose = () => {
     if (tagsCloseTimerRef.current) clearTimeout(tagsCloseTimerRef.current);
@@ -416,7 +424,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
     >
       {/* biome-ignore lint/a11y/noStaticElementInteractions: hover-open convenience only — the "tags" button below is already keyboard-operable (click toggles the fly-out) and owns all a11y semantics; this wrapper just widens the hover target v3-style. */}
       <div
-        onMouseEnter={cancelTagsClose}
+        onMouseEnter={keepTagsOpen}
         onMouseLeave={scheduleTagsClose}
         style={{ position: 'relative' }}
       >
@@ -436,7 +444,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
           // users (no hover) this still opens it on Enter/Space with no
           // toggle-closed path needed since Escape/click-outside close the
           // whole row menu anyway.
-          onClick={cancelTagsClose}
+          onClick={keepTagsOpen}
           style={menuItemStyle(tagsFlyOpen)}
         >
           <span style={iconSlotStyle}>
@@ -469,7 +477,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
           </span>
         </button>
         {tagsFlyOpen && (
-          <TagsFlyout link={link} onMouseEnter={cancelTagsClose} onMouseLeave={scheduleTagsClose} />
+          <TagsFlyout link={link} onMouseEnter={keepTagsOpen} onMouseLeave={scheduleTagsClose} />
         )}
       </div>
 
