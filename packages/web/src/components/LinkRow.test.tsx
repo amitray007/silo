@@ -32,6 +32,7 @@ function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins']) {
     queryClient.setQueryData(queryKeys.settings(), {
       theme: 'system',
       trashPurgeDays: 30,
+      mcpAccess: true,
       plugins,
     } satisfies SettingsMap);
   }

@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { getToken } from '../../api/auth';
+import { useSettings, useUpdateSettings } from '../../api/hooks';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided, tabNote } from './rowStyles';
 import { SettingsHero } from './SettingsHero';
+import { ToggleSwitch } from './ToggleSwitch';
 
 /**
  * The streamable-HTTP MCP client-config snippet — points at the HTTP MCP
@@ -25,22 +28,16 @@ const MCP_CLIENT_CONFIG = `{
 }`;
 
 /**
- * Settings → Access (v3's `tabAccess`): a hero card explaining MCP access
- * (silo's whole point — "let an agent add, search, and read your links"),
- * with "Copy config" as the hero's primary action; below it, an MCP-access
- * status row + an access-token row explaining the env-secret model. MCP over
- * HTTP is real now (U2, `packages/app/src/mcp-http.ts`) but opt-in and
- * server-configured — there is no in-app toggle backend and no way for the
- * browser to read or rotate the server's `SILO_API_TOKEN`, so both rows stay
- * informational/disabled with honest copy rather than faking a live control.
- * "Copy config" is the one live affordance here — it writes the HTTP+bearer
- * config (above, with a placeholder token) to the clipboard.
+ * A tri-state copy-flash label: `null` = never clicked, `true` = last copy
+ * succeeded, `false` = last copy failed. Shared by both copy affordances on
+ * this tab (Copy config / Copy token) so a failed clipboard write never looks
+ * identical to a successful one (review fix, ce-correctness) — insecure
+ * context / denied permission / non-user-gesture embeddings all reject
+ * `writeText`. Each caller gets its OWN independent state/timer (two separate
+ * `useCopyFlash()` calls) since the two buttons' labels must flip
+ * independently — copying the token must not also flip "Copy config"'s label.
  */
-export function AccessTab() {
-  // `copied` is a tri-state: null = never clicked, true = last copy succeeded,
-  // false = last copy failed. A failed clipboard write must not look identical
-  // to a successful one (review fix, ce-correctness) — insecure context /
-  // denied permission / non-user-gesture embeddings all reject `writeText`.
+function useCopyFlash() {
   const [copied, setCopied] = useState<boolean | null>(null);
   // Holds the pending "reset the label" timer so it can be cleared if the tab
   // unmounts (modal closed / tab switched) before it fires — otherwise it'd
@@ -49,18 +46,49 @@ export function AccessTab() {
 
   useEffect(() => () => clearTimeout(resetTimer.current), []);
 
-  const flashLabel = (ok: boolean) => {
+  const flash = (ok: boolean) => {
     setCopied(ok);
     clearTimeout(resetTimer.current);
     resetTimer.current = setTimeout(() => setCopied(null), 1500);
   };
 
-  const handleCopyConfig = () => {
-    navigator.clipboard.writeText(MCP_CLIENT_CONFIG).then(
-      () => flashLabel(true),
-      () => flashLabel(false),
+  const copyText = (text: string) => {
+    navigator.clipboard.writeText(text).then(
+      () => flash(true),
+      () => flash(false),
     );
   };
+
+  return { copied, copyText };
+}
+
+/** Renders a copy-flash tri-state onto a button label — shared by "Copy config" and "Copy token". */
+function copyLabel(copied: boolean | null, idleLabel: string): string {
+  return copied === true ? 'Copied' : copied === false ? "Couldn't copy" : idleLabel;
+}
+
+/**
+ * Settings → Access (v3's `tabAccess`): a hero card explaining MCP access
+ * (silo's whole point — "let an agent add, search, and read your links"),
+ * with "Copy config" as the hero's primary action; below it, a LIVE
+ * MCP-access toggle (backed by core's `mcpAccess` setting, default `true` —
+ * the HTTP MCP listener enforces it per-request server-side, `403` when off,
+ * see `packages/app/src/mcp-http.ts`) and an access-token row with a
+ * "Copy token" button that copies the LOGGED-IN session token to the
+ * clipboard (never rendered on screen — the user already holds it, being
+ * logged in). "Copy config" writes the HTTP+bearer config (above, with a
+ * placeholder token — the real token is never baked into that snippet) to
+ * the clipboard.
+ */
+export function AccessTab() {
+  const { data: settings } = useSettings();
+  const updateSettings = useUpdateSettings();
+  const mcpAccess = settings?.mcpAccess ?? true;
+  const mcpAccessDisabled = !settings || updateSettings.isPending;
+
+  const configCopy = useCopyFlash();
+  const tokenCopy = useCopyFlash();
+  const token = getToken();
 
   return (
     <>
@@ -71,9 +99,9 @@ export function AccessTab() {
           <button
             type="button"
             className="silo-settings-hero-btn-primary"
-            onClick={handleCopyConfig}
+            onClick={() => configCopy.copyText(MCP_CLIENT_CONFIG)}
           >
-            {copied === true ? 'Copied' : copied === false ? "Couldn't copy" : 'Copy config'}
+            {copyLabel(configCopy.copied, 'Copy config')}
           </button>
         }
       />
@@ -81,40 +109,32 @@ export function AccessTab() {
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>MCP access</div>
           <div style={rowDesc}>
-            On when the server has SILO_MCP_HTTP_PORT + SILO_API_TOKEN set — no per-agent toggle yet
+            When off, agents can't reach silo over HTTP even with the API key. The stdio MCP client
+            is unaffected.
           </div>
         </div>
-        <button
-          type="button"
-          disabled
-          title="Set via SILO_MCP_HTTP_PORT + SILO_API_TOKEN on the server — no in-app toggle yet"
-          style={{
-            width: 13,
-            height: 13,
-            padding: 0,
-            borderRadius: '50%',
-            cursor: 'default',
-            background: 'var(--ghost)',
-            border: '1px solid var(--ghost)',
-            boxSizing: 'border-box',
-          }}
+        <ToggleSwitch
+          on={mcpAccess}
+          disabled={mcpAccessDisabled}
+          onToggle={() => updateSettings.mutate({ mcpAccess: !mcpAccess })}
+          label="MCP access"
         />
       </div>
       <div style={settingsRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Access token</div>
           <div style={rowDesc}>
-            Set server-side via SILO_API_TOKEN — silo never shows it here. Paste your own value over
-            the placeholder in the copied config.
+            Your session token. Paste it over the placeholder in the copied config.
           </div>
         </div>
         <button
           type="button"
-          disabled
-          title="Configured via SILO_API_TOKEN on the server — not readable or rotatable from the browser"
+          disabled={!token}
+          title={token ? undefined : 'No token in this session — silo runs unauthenticated here'}
           className="silo-settings-btn"
+          onClick={token ? () => tokenCopy.copyText(token) : undefined}
         >
-          Env-set
+          {copyLabel(tokenCopy.copied, 'Copy token')}
         </button>
       </div>
       <p style={tabNote}>

@@ -22,6 +22,7 @@ const describeIfPg = postgresReachable() ? describe : describe.skip;
 type SettingsBody = {
   theme: 'light' | 'dark' | 'system';
   trashPurgeDays: 7 | 30 | 90;
+  mcpAccess: boolean;
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
     github: { enabled: boolean; hover: boolean };
@@ -52,6 +53,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     expect(body).toEqual({
       theme: 'system',
       trashPurgeDays: 30,
+      mcpAccess: true,
       plugins: {
         hacker_news: { enabled: true, inline: true, hover: true },
         github: { enabled: true, hover: true },
@@ -67,9 +69,9 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       string,
       unknown
     >;
-    // Top-level: exactly the three allowlisted keys, nothing else (e.g. no
+    // Top-level: exactly the four allowlisted keys, nothing else (e.g. no
     // stray internal/db-row field like `updatedAt` could leak through).
-    expect(Object.keys(body).sort()).toEqual(['plugins', 'theme', 'trashPurgeDays']);
+    expect(Object.keys(body).sort()).toEqual(['mcpAccess', 'plugins', 'theme', 'trashPurgeDays']);
     // Nested `plugins`: exactly the four allowlisted plugin keys — a
     // shallow top-level-only check (the pre-fix version of this test) would
     // miss a leaked/extra key nested inside `plugins`.

@@ -16,6 +16,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 const DEFAULT_SETTINGS = {
   theme: 'system',
   trashPurgeDays: 30,
+  mcpAccess: true,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },
@@ -318,14 +319,24 @@ describe('SettingsModal', () => {
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
     });
 
-    it('renders the MCP toggle and access-token row as disabled/non-functional (env-secret model)', () => {
+    it('renders a LIVE MCP-access switch reflecting the mcpAccess setting', async () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
 
-      const mcpToggle = screen.getByTitle(/SILO_MCP_HTTP_PORT \+ SILO_API_TOKEN/);
-      expect(mcpToggle).toHaveProperty('disabled', true);
-      const tokenRow = screen.getByRole('button', { name: /env-set/i });
-      expect(tokenRow).toHaveProperty('disabled', true);
+      const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
+      await waitFor(() => expect(mcpToggle).toHaveProperty('disabled', false));
+      expect(mcpToggle.getAttribute('aria-checked')).toBe('true');
+    });
+
+    it('clicking the MCP-access switch PATCHes mcpAccess flipped', async () => {
+      renderModal();
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+
+      const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
+      await waitFor(() => expect(mcpToggle).toHaveProperty('disabled', false));
+      fireEvent.click(mcpToggle);
+
+      await waitFor(() => expect(mcpToggle.getAttribute('aria-checked')).toBe('false'));
     });
 
     it('"Copy config" (the hero\'s primary action) writes the HTTP MCP client config to the clipboard', async () => {
