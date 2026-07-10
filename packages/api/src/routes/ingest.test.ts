@@ -260,6 +260,48 @@ describeIfPg('POST /api/ingest (integration)', () => {
       expect(after).toBe(before);
     });
 
+    it('explicit source -> stored on the link, overriding the ingest fallback (capture-source slice)', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(
+        app,
+        '/api/ingest',
+        { url: 'https://example.com/ingest-source-raycast', source: 'raycast' },
+        `Bearer ${TEST_TOKEN}`,
+      );
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expect(body.link.source).toBe('raycast');
+    });
+
+    it('no source in body -> stored as "ingest" (the generic-ingest fallback)', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(
+        app,
+        '/api/ingest',
+        { url: 'https://example.com/ingest-source-fallback' },
+        `Bearer ${TEST_TOKEN}`,
+      );
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expect(body.link.source).toBe('ingest');
+    });
+
+    it('invalid source enum value -> 400 validation_error, nothing saved', async () => {
+      const { app, pool } = harness.mod();
+      const before = (await pool.query('select count(*) from links')).rows[0]?.count;
+      const res = await postJson(
+        app,
+        '/api/ingest',
+        { url: 'https://example.com/ingest-source-bogus', source: 'bogus' },
+        `Bearer ${TEST_TOKEN}`,
+      );
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorEnvelope;
+      expect(body.error).toBe('validation_error');
+      const after = (await pool.query('select count(*) from links')).rows[0]?.count;
+      expect(after).toBe(before);
+    });
+
     it('bad url -> 400 invalid_url, nothing saved (same edge guard as POST /api/links)', async () => {
       const { app, pool } = harness.mod();
       const before = (await pool.query('select count(*) from links')).rows[0]?.count;

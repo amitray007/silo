@@ -27,8 +27,11 @@ const idTagParamSchema = z.object({ id: z.uuid(), tag: z.string().min(1) });
 export function registerLinksWriteRoutes(app: Hono): void {
   /**
    * `POST /api/links` — capture. Body: `url` (required), `tags?`, `note?`,
-   * `sourceKind?` (defaults `'link'`). Mirrors `capture_link`'s MCP handler
-   * (see `packages/mcp/server/src/tools/capture-link.ts`):
+   * `sourceKind?` (defaults `'link'`), `source?` (capture-source slice — the
+   * capture SURFACE, e.g. `'web'`; forwarded to `core.createLink` only when
+   * present, never hardcoded here — omitted -> core defaults `'unknown'`).
+   * Mirrors `capture_link`'s MCP handler (see `packages/mcp/server/src/
+   * tools/capture-link.ts`):
    *
    * 1. Bad-URL guard via `canonicalize` — a `!ok` url (javascript:/data:/
    *    unparseable/over-length) is REJECTED here, before `core.createLink`
@@ -65,6 +68,12 @@ export function registerLinksWriteRoutes(app: Hono): void {
     };
     if (body.tags !== undefined) input.tags = body.tags;
     if (body.note !== undefined) input.notes = body.note;
+    // Capture-source slice: forward only when the caller sent one — never
+    // hardcode `'web'` here. `core.createLink` defaults omitted `source` to
+    // `'unknown'`, which is honest for a bare/legacy caller of this route;
+    // the web app itself sends `source: 'web'` explicitly (see the web
+    // capture hook), it does not rely on a route-level default.
+    if (body.source !== undefined) input.source = body.source;
 
     return performCapture(c, input, 'Invalid capture input');
   });

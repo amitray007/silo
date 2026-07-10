@@ -42,6 +42,7 @@ describeIfPg('link-json (integration)', () => {
       tags: ['alpha', 'beta'],
       notes: 'a note',
       origin: 'agent',
+      source: 'mcp',
     });
     const link = await core.getById(created.id);
     expect(link).not.toBeNull();
@@ -57,6 +58,8 @@ describeIfPg('link-json (integration)', () => {
     expect(json.sourceKind).toBe('link');
     expect(json.captureStatus).toBe('enriching');
     expect(json.addedBy).toBe('agent');
+    // Capture-source slice: source is whitelisted + round-trips through toLinkJson.
+    expect(json.source).toBe('mcp');
     expect(json.notes).toBe('a note');
     expect(json.tags.slice().sort()).toEqual(['alpha', 'beta']);
     expect(json.sourceData).toEqual({ kind: 'link' });
