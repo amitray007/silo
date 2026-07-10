@@ -221,6 +221,84 @@ describeIfPg('links operations (integration)', () => {
     });
   });
 
+  describe('capture source (capture-source slice)', () => {
+    it("createLink with no source defaults to 'unknown'", async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/source-default',
+        sourceKind: 'link',
+      });
+      expect(created.source).toBe('unknown');
+
+      const fetched = await ops.getById(created.id);
+      expect(fetched?.source).toBe('unknown');
+    });
+
+    it.each([
+      'web',
+      'mcp',
+      'cli',
+      'raycast',
+      'chrome',
+      'ingest',
+      'unknown',
+    ] as const)("createLink with source:'%s' round-trips", async (source) => {
+      const created = await ops.createLink({
+        url: `https://example.com/source-roundtrip-${source}`,
+        sourceKind: 'link',
+        source,
+      });
+      expect(created.source).toBe(source);
+
+      const fetched = await ops.getById(created.id);
+      expect(fetched?.source).toBe(source);
+    });
+
+    it('dedup-merge PRESERVES the existing row source — first-capture-source wins', async () => {
+      const url = 'https://example.com/source-merge-first-write-wins';
+      const first = await ops.createLink({ url, sourceKind: 'link', source: 'web' });
+      expect(first.source).toBe('web');
+
+      const second = await ops.createLink({ url, sourceKind: 'link', source: 'chrome' });
+      expect(second.id).toBe(first.id);
+      // The merge must NOT adopt the incoming 'chrome' source — the row's
+      // ORIGINAL capture source ('web') is preserved.
+      expect(second.source).toBe('web');
+
+      const fetched = await ops.getById(first.id);
+      expect(fetched?.source).toBe('web');
+    });
+
+    it('dedup-merge with no incoming source still preserves the existing source', async () => {
+      const url = 'https://example.com/source-merge-omitted-incoming';
+      const first = await ops.createLink({ url, sourceKind: 'link', source: 'raycast' });
+      expect(first.source).toBe('raycast');
+
+      // Re-save with no `source` at all (defaults to 'unknown' for a FRESH
+      // insert, but this is a merge — the existing row's source must win,
+      // not be overwritten by the incoming default).
+      const second = await ops.createLink({ url, sourceKind: 'link' });
+      expect(second.id).toBe(first.id);
+      expect(second.source).toBe('raycast');
+    });
+
+    it('reads (list/search) return source alongside every link', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/source-read-surface',
+        title: 'Source Read Surface Keyword',
+        sourceKind: 'link',
+        source: 'cli',
+      });
+
+      const listed = await ops.list();
+      const listedLink = listed.links.find((l) => l.id === created.id);
+      expect(listedLink?.source).toBe('cli');
+
+      const searched = await ops.search('Source Read Surface Keyword');
+      const searchedLink = searched.results.find((r) => r.id === created.id);
+      expect(searchedLink?.source).toBe('cli');
+    });
+  });
+
   describe('createLink — dedup / merge', () => {
     it('merges a tracking-param variant of the same url into one row (not a twin)', async () => {
       const first = await ops.createLink({

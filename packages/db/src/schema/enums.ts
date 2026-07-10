@@ -18,3 +18,26 @@ export const captureStatus = pgEnum('capture_status', ['enriching', 'full', 'par
  * agent-sticky merge rule this drives on dedup-merge.
  */
 export const linkOrigin = pgEnum('link_origin', ['user', 'agent']);
+
+/**
+ * Capture source (capture-source slice): the SURFACE a link was captured
+ * through — web paste, the MCP `capture_link` tool, the CLI, the Raycast
+ * extension, the Chrome extension, or a generic `/api/ingest` caller that
+ * didn't self-declare (`'ingest'`). This is orthogonal to `linkOrigin`
+ * above: `linkOrigin` is WHO caused the save (user vs. agent); `source` is
+ * WHERE it came in through — a Raycast capture is `addedBy: 'user'` AND
+ * `source: 'raycast'`. Defaults to `'unknown'` at the column level (existing
+ * rows backfill to it — honest, since we don't know how pre-existing rows
+ * were captured). See `packages/core/src/links/links.ts`'s `mergeIntoExisting`
+ * for the first-write-sticky merge rule this drives on dedup-merge (contrast
+ * `linkOrigin`, which is agent-sticky).
+ */
+export const captureSource = pgEnum('capture_source', [
+  'web',
+  'mcp',
+  'cli',
+  'raycast',
+  'chrome',
+  'ingest',
+  'unknown',
+]);
