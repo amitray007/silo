@@ -6,6 +6,7 @@ import { generalTokenAuth } from './general-auth.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
+import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
@@ -86,6 +87,7 @@ export function createApp(): Hono {
   registerPreviewImageRoutes(api);
   registerSettingsRoutes(api);
   registerExportRoutes(api);
+  registerImportRoutes(api);
   app.route('/api', api);
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
