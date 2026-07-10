@@ -38,6 +38,18 @@ describeIfPg('startWorker (integration)', () => {
   });
 
   afterAll(async () => {
+    // Close the `@silo/db` singleton pool that the dynamically-imported
+    // `@silo/core` (via `createLink`/`getById` in these tests) runs on, BEFORE
+    // dropping the database. Nothing else closes it, so its idle connections
+    // stay attached to the disposable DB; `DROP DATABASE ... WITH (FORCE)`
+    // then force-terminates them, which fires the pool's `error` handler
+    // ("Unexpected error on idle Postgres client: ... terminating connection
+    // due to administrator command"). That async error is harmless but, under
+    // CI's parallel test load, lands during a later test's window and is
+    // mis-attributed to it — the flake this teardown ordering fixes. Mirrors
+    // `packages/core`'s `setupPgHarness` afterAll, which already does this.
+    const { pool: opsPool } = await import('@silo/db');
+    await opsPool.end();
     await inspectPool.end();
     dropDatabase();
   });
@@ -90,7 +102,13 @@ describeIfPg('startWorker (integration)', () => {
     });
     expect(await pgBossSchemaExists()).toBe(false);
     void link;
-  });
+    // 60s (not vitest's 5s default): this is the FIRST test to run in the
+    // file, so its cold dynamic `import('@silo/core')`/`import('./worker.js')`
+    // chain (core -> db -> drizzle -> pg; worker -> queue -> pg-boss) plus the
+    // disposable-DB round-trips routinely exceed 5s under CI's parallel
+    // disposable-DB load — the flake this timeout removes. Same class + fix as
+    // `enrich.test.ts`'s 60_000 hook timeout (commit d8b6ba9).
+  }, 60_000);
 
   it('startWorker() registers the enqueuer live in-process: createLink now enqueues a job (contrast: a no-op-created link enqueues none)', async () => {
     // Baseline while the enqueuer is still the default no-op (no startWorker()
@@ -124,7 +142,7 @@ describeIfPg('startWorker (integration)', () => {
       await handle.stop();
       core.resetEnrichmentEnqueuer();
     }
-  });
+  }, 60_000);
 
   it('the work loop actually runs: a link resolves to a terminal status without any network success', async () => {
     const worker = await import('./worker.js');
@@ -153,7 +171,7 @@ describeIfPg('startWorker (integration)', () => {
       await handle.stop();
       core.resetEnrichmentEnqueuer();
     }
-  });
+  }, 60_000);
 
   it('handle.stop() is graceful and idempotent (a second stop() does not throw)', async () => {
     const worker = await import('./worker.js');
@@ -164,5 +182,5 @@ describeIfPg('startWorker (integration)', () => {
     } finally {
       core.resetEnrichmentEnqueuer();
     }
-  });
+  }, 60_000);
 });
