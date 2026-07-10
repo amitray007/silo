@@ -8,6 +8,19 @@ export const name = '@silo/core';
 // `token-auth.ts` so its own existing call sites (`ingest-auth.ts`,
 // `general-auth.ts`) are unaffected.
 export { readTokenEnv, timingSafeEqual } from './auth/token.js';
+// Named DB-backed access tokens (access-tokens slice, U1): mint/list/revoke/
+// verify credentials from the web UI, checked by the API/MCP auth gates
+// alongside the env SILO_API_TOKEN. See `auth/tokens.ts`'s doc comments for
+// the hashing + timing-posture rationale.
+export type { AccessTokenSummary, CreatedAccessToken } from './auth/tokens.js';
+export {
+  generateAccessToken,
+  InvalidAccessTokenNameError,
+  listAccessTokens,
+  revokeAccessToken,
+  TOKEN_PREFIX_LEN,
+  verifyAccessToken,
+} from './auth/tokens.js';
 // URL canonicalization (U3): the normalize-url wrapper + dedup key used by
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';

@@ -415,4 +415,86 @@ describeIfPg('migrate (integration)', () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  /**
+   * Access-tokens migration proof (0009_warm_sugar_man.sql, access-tokens
+   * slice): the new `access_tokens` table exists with the right columns +
+   * unique `token_hash`, and — critically — the PRE-EXISTING
+   * `capture_status`/`link_origin`/`capture_source` enums (and the `links`
+   * columns typed against them) must survive untouched.
+   *
+   * Also proves a real drizzle-kit generation gap found while building this
+   * migration (same class as 0004's/0008's): the raw `drizzle-kit generate`
+   * output for this migration emitted a spurious `DROP TYPE
+   * "public"."link_origin"` AND `DROP TYPE "public"."capture_source"` — the
+   * generated 0009 snapshot's `enums` section had silently dropped BOTH
+   * pre-existing entries (confirmed by diffing it against 0008's snapshot,
+   * which still has all three), so drizzle-kit's diff read that as "these
+   * enums were removed" and would have run DROPs against types still in
+   * active use by `links.added_by`/`links.source`. The committed 0009
+   * migration hand-drops the two incorrect `DROP TYPE` lines (snapshot JSON
+   * hand-corrected to match); this test proves the hand-fixed file applies
+   * cleanly against the full (non-truncated) migration set and that all
+   * three enums are untouched by it.
+   */
+  it('access_tokens: table + unique token_hash exist; capture_status/link_origin/capture_source survive', async () => {
+    const database = createDisposableDatabase('silo_access_tokens_migration_test');
+    try {
+      const pool = new Pool({ connectionString: database.url });
+      const db = drizzle(pool);
+      await runMigrations(db, pool, './drizzle');
+
+      const check = new Pool({ connectionString: database.url });
+      try {
+        const columns = await check.query<{
+          column_name: string;
+          data_type: string;
+          is_nullable: string;
+        }>(
+          `select column_name, data_type, is_nullable from information_schema.columns
+           where table_name = 'access_tokens' order by ordinal_position`,
+        );
+        expect(columns.rows).toEqual([
+          { column_name: 'id', data_type: 'uuid', is_nullable: 'NO' },
+          { column_name: 'name', data_type: 'text', is_nullable: 'NO' },
+          { column_name: 'token_hash', data_type: 'text', is_nullable: 'NO' },
+          { column_name: 'token_prefix', data_type: 'text', is_nullable: 'NO' },
+          {
+            column_name: 'created_at',
+            data_type: 'timestamp with time zone',
+            is_nullable: 'NO',
+          },
+          {
+            column_name: 'last_used_at',
+            data_type: 'timestamp with time zone',
+            is_nullable: 'YES',
+          },
+        ]);
+
+        const uniqueConstraint = await check.query<{ n: number }>(
+          `select count(*)::int as n from information_schema.table_constraints
+           where table_name = 'access_tokens' and constraint_type = 'UNIQUE'
+             and constraint_name = 'access_tokens_token_hash_unique'`,
+        );
+        expect(uniqueConstraint.rows[0]?.n).toBe(1);
+
+        // The three pre-existing enums this migration's raw generated output
+        // erroneously tried to drop two of — all must survive.
+        const enumTypes = await check.query<{ typname: string }>(
+          `select typname from pg_type
+           where typname in ('capture_status', 'link_origin', 'capture_source')
+           order by typname`,
+        );
+        expect(enumTypes.rows.map((r) => r.typname)).toEqual([
+          'capture_source',
+          'capture_status',
+          'link_origin',
+        ]);
+      } finally {
+        await check.end();
+      }
+    } finally {
+      database.drop();
+    }
+  });
 });
