@@ -38,6 +38,18 @@ describeIfPg('startWorker (integration)', () => {
   });
 
   afterAll(async () => {
+    // Close the `@silo/db` singleton pool that the dynamically-imported
+    // `@silo/core` (via `createLink`/`getById` in these tests) runs on, BEFORE
+    // dropping the database. Nothing else closes it, so its idle connections
+    // stay attached to the disposable DB; `DROP DATABASE ... WITH (FORCE)`
+    // then force-terminates them, which fires the pool's `error` handler
+    // ("Unexpected error on idle Postgres client: ... terminating connection
+    // due to administrator command"). That async error is harmless but, under
+    // CI's parallel test load, lands during a later test's window and is
+    // mis-attributed to it — the flake this teardown ordering fixes. Mirrors
+    // `packages/core`'s `setupPgHarness` afterAll, which already does this.
+    const { pool: opsPool } = await import('@silo/db');
+    await opsPool.end();
     await inspectPool.end();
     dropDatabase();
   });
