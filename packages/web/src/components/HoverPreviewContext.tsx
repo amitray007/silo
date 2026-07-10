@@ -177,6 +177,32 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
     setPreview(null);
   }, []);
 
+  // Global pointer-fallback dismiss (fixes "the preview gets STUCK when
+  // switching between links quickly"). Normal dismissal relies on a row's
+  // `mouseleave` firing `scheduleHide` (or the card's `mouseleave` firing
+  // `hide`). But on a FAST pointer sweep across the list, the browser
+  // coalesces/skips the intervening `mouseleave` of the last-previewed row,
+  // and the floating card (which sits ~14px off the row) can sit under the
+  // pointer's path — so the final `scheduleShow` renders a preview for which
+  // no matching `scheduleHide` ever fires. The card then floats with the
+  // pointer nowhere near it. This listener — armed ONLY while a preview is on
+  // screen, so there's zero cost otherwise — watches raw pointer moves and,
+  // whenever the pointer is over NEITHER a link row (`.silo-link-row`) NOR the
+  // preview card (`.silo-popover`), closes the preview. That's the one signal
+  // the per-element `mouseleave` handlers can drop; the row/card enter
+  // handlers still own the normal open/keep path, so this only ever fires in
+  // the genuinely-left-everything case.
+  useEffect(() => {
+    if (preview === null) return;
+    const onPointerMove = (event: PointerEvent) => {
+      const target = event.target as Element | null;
+      if (target?.closest('.silo-link-row') || target?.closest('.silo-popover')) return;
+      hide();
+    };
+    document.addEventListener('pointermove', onPointerMove);
+    return () => document.removeEventListener('pointermove', onPointerMove);
+  }, [preview, hide]);
+
   // See `HoverPreviewContextValue.dismiss`'s doc comment — the row-unmount
   // escape hatch. Clears BOTH timers (a pending show for a now-gone row must
   // never fire; a pending hide is moot once we force-close below) and closes
