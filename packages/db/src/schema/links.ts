@@ -11,7 +11,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { tsvector } from '../types.js';
-import { captureStatus, linkOrigin } from './enums.js';
+import { captureSource, captureStatus, linkOrigin } from './enums.js';
 
 /**
  * The `links` table — one row per saved item. Stable typed columns for
@@ -58,6 +58,13 @@ export const links = pgTable(
     // fills the default for pre-existing rows on an `ADD COLUMN ... NOT NULL
     // DEFAULT`. See `enums.ts`'s `linkOrigin` doc comment for the merge rule.
     addedBy: linkOrigin('added_by').notNull().default('user'),
+
+    // Capture-source provenance (capture-source slice): the SURFACE this link
+    // was captured through (web/mcp/cli/raycast/chrome/ingest), orthogonal to
+    // `addedBy` above. `NOT NULL DEFAULT 'unknown'` backfills every existing
+    // row with no separate backfill statement. See `enums.ts`'s
+    // `captureSource` doc comment for the first-write-sticky merge rule.
+    source: captureSource('source').notNull().default('unknown'),
 
     // Enrichment lifecycle (plan 025): counts recorded enrichment attempts.
     // `recordEnrichment` increments this on every attempt; `requestRetry`

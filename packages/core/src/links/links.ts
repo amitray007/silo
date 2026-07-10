@@ -16,6 +16,7 @@ import {
   type LinkWithTags,
   type PageParams,
 } from './pagination.js';
+import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
 import { sourceDataSchema } from './source-data.js';
 
@@ -82,6 +83,16 @@ export type CreateLinkInput = {
    * agent-sticky merge rule this drives on dedup-merge.
    */
   origin?: 'user' | 'agent';
+  /**
+   * The capture SURFACE this link came in through (capture-source slice):
+   * `'web'` | `'mcp'` | `'cli'` | `'raycast'` | `'chrome'` | `'ingest'` |
+   * `'unknown'`. Orthogonal to `origin` above — independent axis, not a
+   * replacement. Defaults to `'unknown'` when omitted — matches the DB
+   * column's own `NOT NULL DEFAULT 'unknown'`. See `mergeIntoExisting`'s doc
+   * comment for the first-write-sticky merge rule this drives on dedup-merge
+   * (contrast: `origin` is agent-sticky).
+   */
+  source?: CaptureSource;
 };
 
 /**
@@ -241,6 +252,13 @@ async function mergeIntoExisting(
       siteName: input.siteName ?? existing.siteName,
       extractedText: input.extractedText ?? existing.extractedText,
       addedBy: mergedOrigin(existing.addedBy, input.origin),
+      // `source` is DELIBERATELY absent from this SET clause (first-write-
+      // sticky, capture-source slice): unlike `addedBy` above (agent-sticky —
+      // upgrades toward 'agent'), a dedup-merge NEVER rewrites `source`. The
+      // existing row's source records where the link was FIRST captured; a
+      // later re-save from a different surface (e.g. a web paste of a link
+      // originally captured via Raycast) does not change that history. Not
+      // setting the column at all leaves Postgres's stored value untouched.
     })
     .where(eq(links.id, existing.id))
     .returning();
@@ -410,6 +428,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
           notes: input.notes,
           captureStatus: 'enriching',
           addedBy: input.origin ?? 'user',
+          source: input.source ?? 'unknown',
         })
         .returning();
       if (!inserted) {

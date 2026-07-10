@@ -4,6 +4,7 @@ import { ApiError, apiDelete, apiGet, apiPatch, apiPost, setApiBaseUrl } from '.
 import type {
   AddedBy,
   CaptureResponse,
+  CaptureSource,
   CaptureStatus,
   Counts,
   LinkJson,
@@ -42,6 +43,7 @@ const linkFixture: LinkJson = {
   sourceData: { kind: 'link' },
   captureStatus: 'full',
   addedBy: 'user',
+  source: 'web',
   notes: null,
   tags: ['mcp'],
   createdAt: '2026-07-01T00:00:00.000Z',
@@ -367,6 +369,23 @@ describe('type fidelity', () => {
         expect(link.captureStatus).toBe(captureStatus);
         expect(link.addedBy).toBe(addedBy);
       }
+    }
+  });
+
+  it('accepts every CaptureSource union member on a LinkJson (capture-source slice)', () => {
+    const allCaptureSources: CaptureSource[] = [
+      'web',
+      'mcp',
+      'cli',
+      'raycast',
+      'chrome',
+      'ingest',
+      'unknown',
+    ];
+
+    for (const source of allCaptureSources) {
+      const link: LinkJson = { ...linkFixture, source };
+      expect(link.source).toBe(source);
     }
   });
 

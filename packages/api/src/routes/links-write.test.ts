@@ -159,6 +159,39 @@ describeIfPg('A3 write routes (integration)', () => {
       expectWhitelistedLinkShape(body.link);
     });
 
+    it('explicit source -> stored on the link (capture-source slice)', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links', {
+        url: 'https://example.com/write-capture-source-web',
+        source: 'web',
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expect(body.link.source).toBe('web');
+    });
+
+    it('no source in body -> stored as "unknown" (never hardcoded "web" by this route)', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links', {
+        url: 'https://example.com/write-capture-source-omitted',
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expect(body.link.source).toBe('unknown');
+    });
+
+    it('invalid source enum value -> 400 validation_error, nothing saved', async () => {
+      const { app } = harness.mod();
+      const before = await totalLinkCount();
+      const res = await postJson(app, '/api/links', {
+        url: 'https://example.com/write-capture-source-bogus',
+        source: 'bogus',
+      });
+      await expect400Response(res, 'validation_error');
+      const after = await totalLinkCount();
+      expect(after).toBe(before);
+    });
+
     it('REGRESSION (plan 020): sourceData in the body is IGNORED, never injected — the public capture route has no sourceData field; that trust boundary lives only at POST /api/ingest (see ingest.test.ts)', async () => {
       const { app } = harness.mod();
       const res = await postJson(app, '/api/links', {

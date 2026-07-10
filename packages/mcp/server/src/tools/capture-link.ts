@@ -131,7 +131,16 @@ export function registerCaptureLink(server: McpServer): void {
       // this is the one write path that sets it, backing the mockup's `◆`
       // "added-by-claude" mark. Web/API captures (a later slice) pass
       // `origin: 'user'` instead.
-      const input: CreateLinkInput = { url, sourceKind: sourceKind ?? 'link', origin: 'agent' };
+      // `source: 'mcp'` (capture-source slice, U3): every capture through
+      // this tool is the MCP surface — the literal value silo's capture
+      // surfaces each self-declare (see docs/superpowers/specs/
+      // 2026-07-10-capture-source-design.md).
+      const input: CreateLinkInput = {
+        url,
+        sourceKind: sourceKind ?? 'link',
+        origin: 'agent',
+        source: 'mcp',
+      };
       if (tags !== undefined) input.tags = tags;
       if (note !== undefined) input.notes = note;
 

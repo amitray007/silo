@@ -79,11 +79,16 @@ async function safeErrorBody(response: Response): Promise<ApiErrorEnvelope | und
   }
 }
 
-/** `POST /api/links` — the one capture call both commands (instant + with-details) funnel through. */
+/**
+ * `POST /api/links` — the one capture call both commands (instant +
+ * with-details) funnel through. `source: 'raycast'` is stamped HERE,
+ * centrally, so both commands inherit it without having to pass it
+ * themselves (capture-source design spec, U3).
+ */
 export async function captureLink(input: CaptureRequest): Promise<CaptureResponse> {
   const response = await apiFetch('/api/links', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, source: 'raycast' }),
   });
   return (await response.json()) as CaptureResponse;
 }

@@ -273,4 +273,146 @@ describeIfPg('migrate (integration)', () => {
       rmSync(tempDir, { recursive: true, force: true });
     }
   });
+
+  /**
+   * Capture-source migration proof (0008_blue_lilith.sql, capture-source
+   * slice): existing rows written before the `source` column existed must
+   * backfill to `'unknown'` when the migration runs, the enum must carry all
+   * 7 values, and — critically — the PRE-EXISTING `link_origin` type/column
+   * (`added_by`) must survive untouched. Same "pre-existing row, then apply
+   * the migration, then re-check" pattern as the C1 test above, truncated
+   * before 0008.
+   *
+   * Also proves a real drizzle-kit generation gap found while building this
+   * migration (same class as C1's): the raw `drizzle-kit generate` output for
+   * this column omitted the `CREATE TYPE "public"."capture_source"`
+   * statement AND additionally emitted a spurious `DROP TYPE
+   * "public"."link_origin"` — the generated 0008 snapshot's `enums` section
+   * had silently dropped the pre-existing `link_origin` entry (confirmed by
+   * diffing it against 0007's snapshot, which still has it), so drizzle-kit's
+   * diff read that as "link_origin was removed" and would have run a DROP
+   * against a type still in active use by `links.added_by`. The committed
+   * 0008 migration hand-adds the missing `CREATE TYPE` and drops the
+   * incorrect `DROP TYPE` line (snapshot JSON hand-corrected to match); this
+   * test proves the hand-fixed file applies cleanly AND that `added_by` /
+   * `link_origin` are untouched by it.
+   */
+  it("capture-source: pre-existing rows backfill source to 'unknown'; link_origin survives; column/enum constraints are correct", async () => {
+    const realDrizzleDir = path.resolve('./drizzle');
+    const journal = JSON.parse(
+      readFileSync(path.join(realDrizzleDir, 'meta/_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+    const sourceEntryIndex = journal.entries.findIndex((entry) => entry.tag === '0008_blue_lilith');
+    expect(sourceEntryIndex).toBeGreaterThanOrEqual(0);
+    const preSourceEntries = journal.entries.slice(0, sourceEntryIndex);
+    expect(preSourceEntries.length).toBeGreaterThan(0);
+
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'silo-pre-source-migrations-'));
+    try {
+      mkdirSync(path.join(tempDir, 'meta'), { recursive: true });
+      writeFileSync(
+        path.join(tempDir, 'meta/_journal.json'),
+        JSON.stringify({ ...journal, entries: preSourceEntries }),
+      );
+      for (const entry of preSourceEntries) {
+        writeFileSync(
+          path.join(tempDir, `${entry.tag}.sql`),
+          readFileSync(path.join(realDrizzleDir, `${entry.tag}.sql`)),
+        );
+      }
+
+      const database = createDisposableDatabase('silo_source_migration_test');
+      try {
+        // 1. Migrate to the PRE-source schema (no source column at all).
+        const preMigratePool = new Pool({ connectionString: database.url });
+        const preMigrateDb = drizzle(preMigratePool);
+        await runMigrations(preMigrateDb, preMigratePool, tempDir);
+
+        // 2. Insert rows in the pre-migration state, confirming source does
+        // not exist yet — a meaningful baseline, not a vacuous pass.
+        const seedPool = new Pool({ connectionString: database.url });
+        const seedDb = drizzle(seedPool);
+        await seedDb.execute(
+          sql`insert into links (url, canonical_url, title, source_kind) values
+              ('https://example.com/pre-source-a', 'https://example.com/pre-source-a', 'pre-existing A', 'link'),
+              ('https://example.com/pre-source-b', 'https://example.com/pre-source-b', 'pre-existing B', 'link')`,
+        );
+        const columnBefore = await seedDb.execute<{ n: number }>(
+          sql`select count(*)::int as n from information_schema.columns
+              where table_name = 'links' and column_name = 'source'`,
+        );
+        expect(columnBefore.rows[0]?.n).toBe(0);
+
+        // 3. Run the REAL migrations folder (includes 0008) against the SAME
+        // database.
+        const upgradePool = new Pool({ connectionString: database.url });
+        const upgradeDb = drizzle(upgradePool);
+        await runMigrations(upgradeDb, upgradePool, './drizzle');
+
+        // 4. Every pre-existing row backfilled to 'unknown' — no explicit
+        // backfill statement was run; the NOT NULL DEFAULT on the ALTER did
+        // it for us.
+        const after = await seedDb.execute<{ url: string; source: string }>(
+          sql`select url, source from links order by url`,
+        );
+        expect(after.rows).toEqual([
+          { url: 'https://example.com/pre-source-a', source: 'unknown' },
+          { url: 'https://example.com/pre-source-b', source: 'unknown' },
+        ]);
+
+        // 5. Column + enum constraints are exactly as designed.
+        const columnAfter = await seedDb.execute<{
+          is_nullable: string;
+          column_default: string | null;
+          udt_name: string;
+        }>(
+          sql`select is_nullable, column_default, udt_name from information_schema.columns
+              where table_name = 'links' and column_name = 'source'`,
+        );
+        expect(columnAfter.rows[0]).toMatchObject({
+          is_nullable: 'NO',
+          column_default: "'unknown'::capture_source",
+          udt_name: 'capture_source',
+        });
+
+        const enumValues = await seedDb.execute<{ enumlabel: string }>(
+          sql`select e.enumlabel from pg_type t
+              join pg_enum e on e.enumtypid = t.oid
+              where t.typname = 'capture_source'
+              order by e.enumsortorder`,
+        );
+        expect(enumValues.rows.map((r) => r.enumlabel)).toEqual([
+          'web',
+          'mcp',
+          'cli',
+          'raycast',
+          'chrome',
+          'ingest',
+          'unknown',
+        ]);
+
+        // 6. link_origin (added_by) — the PRE-EXISTING enum/column this
+        // migration's generated SQL erroneously tried to DROP — must have
+        // survived untouched.
+        const linkOriginType = await seedDb.execute<{ n: number }>(
+          sql`select count(*)::int as n from pg_type where typname = 'link_origin'`,
+        );
+        expect(linkOriginType.rows[0]?.n).toBe(1);
+
+        const addedByAfter = await seedDb.execute<{ url: string; added_by: string }>(
+          sql`select url, added_by from links order by url`,
+        );
+        expect(addedByAfter.rows).toEqual([
+          { url: 'https://example.com/pre-source-a', added_by: 'user' },
+          { url: 'https://example.com/pre-source-b', added_by: 'user' },
+        ]);
+
+        await seedPool.end();
+      } finally {
+        database.drop();
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

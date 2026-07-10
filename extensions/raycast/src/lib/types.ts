@@ -8,12 +8,18 @@
  * fields this extension actually uses.
  */
 
-/** `POST /api/links` request body. */
+/**
+ * `POST /api/links` request body. `source` is stamped centrally by
+ * `captureLink` (`capture-client.ts`) as `'raycast'` for both commands that
+ * funnel through it, not threaded in by callers — see the capture-source
+ * design spec.
+ */
 export type CaptureRequest = {
   url: string;
   tags?: string[];
   note?: string;
   sourceKind?: 'link' | 'hacker_news' | 'twitter';
+  source?: 'raycast';
 };
 
 /** Source-specific display data — the subset of `SourceData`'s variants this extension renders in the detail pane. Mirrors `packages/core/src/links/source-data.ts`. Not exported on its own — only used here as `CapturedLink['sourceData']`'s type. */

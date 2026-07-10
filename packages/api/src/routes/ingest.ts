@@ -22,6 +22,12 @@ function toCreateLinkInput(body: IngestBody): CreateLinkInput {
   if (body.tags !== undefined) input.tags = body.tags;
   if (body.note !== undefined) input.notes = body.note;
   if (body.sourceData !== undefined) input.sourceData = body.sourceData;
+  // Capture-source slice: a caller that self-declares (CLI/Raycast/Chrome)
+  // gets its own value forwarded; a generic ingest caller that didn't
+  // declare one falls back to `'ingest'` (distinct from `POST /api/links`'s
+  // `'unknown'` fallback — an ingest call is KNOWN to have come through this
+  // trusted seam, even if the specific tool didn't self-identify).
+  input.source = body.source ?? 'ingest';
   return input;
 }
 

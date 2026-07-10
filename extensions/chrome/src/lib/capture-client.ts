@@ -75,11 +75,16 @@ async function safeErrorBody(response: Response): Promise<ApiErrorEnvelope | und
   }
 }
 
-/** `POST /api/links` — the one capture call every entry point (toolbar icon, keyboard command, context menu) funnels through. */
+/**
+ * `POST /api/links` — the one capture call every entry point (toolbar icon,
+ * keyboard command, context menu) funnels through. `source: 'chrome'` is
+ * stamped HERE, centrally, so every entry point inherits it without having
+ * to pass it itself (capture-source design spec, U3).
+ */
 export async function captureLink(input: CaptureRequest): Promise<CaptureResponse> {
   const response = await apiFetch('/api/links', {
     method: 'POST',
-    body: JSON.stringify(input),
+    body: JSON.stringify({ ...input, source: 'chrome' }),
   });
   return (await response.json()) as CaptureResponse;
 }

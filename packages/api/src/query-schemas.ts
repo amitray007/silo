@@ -1,5 +1,5 @@
 import type { PageParams } from '@silo/core';
-import { sourceDataSchema } from '@silo/core';
+import { CAPTURE_SOURCES, sourceDataSchema } from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -37,12 +37,21 @@ export function toPageParams(query: PageQuery): PageParams {
   return page;
 }
 
-/** `POST /api/links` (capture) body schema — plan 007, A3. `sourceKind` mirrors `capture_link`'s MCP input (defaults to `'link'`). */
+/**
+ * `POST /api/links` (capture) body schema — plan 007, A3. `sourceKind` mirrors
+ * `capture_link`'s MCP input (defaults to `'link'`). `source` (capture-source
+ * slice) is the capture SURFACE (`web`/`mcp`/`cli`/`raycast`/`chrome`/
+ * `ingest`/`unknown`) — the enum values are imported from `@silo/core`'s
+ * `CAPTURE_SOURCES` (the single source of truth) rather than re-listed here,
+ * so this schema can't silently drift from core's value set. Absent -> `core.
+ * createLink` defaults `'unknown'` (see `links-write.ts`'s route handler).
+ */
 export const captureBodySchema = z.object({
   url: z.string(),
   tags: z.array(z.string()).optional(),
   note: z.string().optional(),
   sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
+  source: z.enum(CAPTURE_SOURCES).optional(),
 });
 
 /**
@@ -61,6 +70,11 @@ export const ingestBodySchema = z.object({
   note: z.string().optional(),
   tags: z.array(z.string()).optional(),
   sourceData: sourceDataSchema.optional(),
+  // Capture-source slice: same closed enum as `captureBodySchema` above,
+  // imported from `@silo/core`'s `CAPTURE_SOURCES`. Absent -> `ingest.ts`'s
+  // route handler falls back to `'ingest'` (a generic ingest caller that
+  // didn't self-declare); CLI/Raycast/Chrome self-declare and override it.
+  source: z.enum(CAPTURE_SOURCES).optional(),
 });
 
 /** The parsed `POST /api/ingest` body shape. */

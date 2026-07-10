@@ -98,6 +98,13 @@ export {
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
+// Capture-source provenance (capture-source slice): the closed value set +
+// type for `CreateLinkInput.source` / `Link.source` — the SURFACE a link was
+// captured through, orthogonal to `addedBy`. Single source of truth,
+// mirrored (not re-declared) by `@silo/db`'s `captureSource` pgEnum and the
+// API/MCP layers where they're allowed to import `@silo/core`.
+export type { CaptureSource } from './links/source.js';
+export { CAPTURE_SOURCES } from './links/source.js';
 // Per-source `source_data` validation (U3): the Zod discriminated union
 // keyed on `source_kind`, and its inferred type.
 export type { SourceData } from './links/source-data.js';

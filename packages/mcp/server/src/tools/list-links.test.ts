@@ -85,6 +85,21 @@ describeMcpTool(
       // would surface as a tool error here, not a silent pass.
     });
 
+    it('a link captured with a known source -> list_links carries that source (capture-source slice)', async () => {
+      const { core, client } = getContext();
+      const { id } = await core.createLink({
+        url: 'https://example.com/list-links-source',
+        sourceKind: 'link',
+        source: 'raycast',
+      });
+
+      const result = await client.callTool({ name: 'list_links', arguments: { limit: 50 } });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { links: Array<Record<string, unknown>> };
+      const link = structured.links.find((l) => l.id === id);
+      expect(link?.source).toBe('raycast');
+    });
+
     it('tag filter: only links carrying the exact tag are returned', async () => {
       const { client } = getContext();
       const taggedId = await seedLink(getContext, 'https://example.com/list-tag-filter-tagged', {

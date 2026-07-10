@@ -1,4 +1,4 @@
-import type { LinkWithTags, SourceData } from '@silo/core';
+import type { CaptureSource, LinkWithTags, SourceData } from '@silo/core';
 import { sourceDataSchema } from '@silo/core';
 
 /**
@@ -26,6 +26,12 @@ import { sourceDataSchema } from '@silo/core';
  * `addedBy` IS whitelisted: it's provenance (backs the mockup's `◆`
  * added-by-claude mark), not an internal-only field.
  *
+ * `source` IS whitelisted (capture-source slice): it's the capture SURFACE
+ * (`web`/`mcp`/`cli`/`raycast`/`chrome`/`ingest`/`unknown`) — provenance,
+ * orthogonal to `addedBy` (who vs. through-what), not an internal field. Not
+ * rendered as a per-row UI badge ("silence means complete" stays binding);
+ * it's agent/query-facing, read over this JSON and the MCP read surface.
+ *
  * `sourceData` IS NOW whitelisted (source-data/rich-previews slice, plan
  * 012 — this was the prior watch-item noted here and on the MCP side): it's
  * entirely display data (HN points/comments, GitHub repo stats, a YouTube
@@ -47,6 +53,7 @@ export type LinkJson = {
   sourceData: SourceData;
   captureStatus: 'enriching' | 'full' | 'partial' | 'bare';
   addedBy: 'user' | 'agent';
+  source: CaptureSource;
   notes: string | null;
   tags: string[];
   createdAt: string;
@@ -115,6 +122,7 @@ export function toLinkJson(link: LinkWithTags): LinkJson {
     sourceData: shapeSourceData(link.sourceData),
     captureStatus: link.captureStatus,
     addedBy: link.addedBy,
+    source: link.source,
     notes: link.notes,
     tags: link.tags,
     createdAt: link.createdAt.toISOString(),
