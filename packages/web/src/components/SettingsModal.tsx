@@ -9,7 +9,7 @@ const TABS: { key: SettingsTab; name: string }[] = [
   { key: 'plugins', name: 'Plugins' },
   { key: 'prefs', name: 'Preferences' },
   { key: 'import', name: 'Import / Export' },
-  { key: 'access', name: 'MCP' },
+  { key: 'access', name: 'API / MCP' },
 ];
 
 /**
