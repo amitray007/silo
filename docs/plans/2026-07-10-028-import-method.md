@@ -175,6 +175,28 @@ Gate `--filter=@silo/web`, commit: `feat(web): wire the Import control in Settin
    401 message path). Confirm dev DB left clean.
 4. Do NOT merge to main.
 
+## Post-QA decisions (lead, after U1/U2 real-infra QA)
+
+**Per-link skip must cover STRUCTURAL failures too (fix applied in U2.5).** The
+first U1 build made the envelope schema `z.array(linkSchema)` with `url` required,
+so a link missing `url` (or a type-invalid field) fails the whole-envelope parse →
+`InvalidImportError` → the entire file is rejected and good rows are lost. That
+contradicts the spec's fail-safe-restore intent ("a backup with one malformed row
+still restores every good row"). Correct design for a *restore* tool: the envelope
+parse validates ONLY the outer shape (`version === 1` and `links` is an array);
+each element is then validated per-link INSIDE the loop with `linkSchema.safeParse`
+— a structurally-invalid link goes to `skipped[]` (with a reason), good links still
+import. Only a genuinely broken *envelope* (not an object, no `version`, `links`
+not an array) rejects the whole file.
+
+**Canonical URL is re-derived on import, not preserved (by design).** Export emits
+`canonicalUrl`, but import ignores it and lets `createLink` re-canonicalize from
+`url`. This is correct: the IMPORTING silo's canonicalization wins, so an export
+made under older canonicalization logic dedups correctly against the current store.
+A hand-corrupted row where `canonical_url ≠ canonicalize(url)` (which no real code
+path produces) will not dedup against its own re-derived canonical — acceptable,
+since that state is unreachable via the real write path.
+
 ## Auth carry-forward
 
 The web Import row's token-sending integrates with the auth slice (task #9). This
