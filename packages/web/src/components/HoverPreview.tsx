@@ -485,7 +485,18 @@ function GenericVariant({
   return (
     <VariantBody title={title}>
       {hasTags && (
-        <div style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)', marginTop: 'var(--s1-5)' }}>
+        <div
+          style={{
+            fontSize: 'var(--text-sm)',
+            color: 'var(--fnt)',
+            marginTop: 'var(--s1-5)',
+            // A single long tag name has no whitespace to wrap on and would
+            // otherwise overflow the fixed-width preview card (it gets clipped
+            // by the card's `overflow: hidden`). `break-word` lets it wrap
+            // mid-token so the whole tag line stays inside the card.
+            overflowWrap: 'break-word',
+          }}
+        >
           {tagLine}
         </div>
       )}
