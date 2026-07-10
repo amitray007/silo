@@ -31,6 +31,12 @@ describe('App routing', () => {
       'fetch',
       vi.fn().mockImplementation((input: RequestInfo | URL) => {
         const url = String(input);
+        // `AuthProvider`'s mount-time check — `authRequired: false` (no
+        // `SILO_API_TOKEN` on this "deployment") so these route tests render
+        // the app immediately, unaffected by the auth gate added in plan 030.
+        if (url.includes('/api/auth/check')) {
+          return Promise.resolve(jsonResponse({ authRequired: false }));
+        }
         if (url.includes('/api/links') || url.includes('/api/trash')) {
           return Promise.resolve(jsonResponse({ links: [] }));
         }
