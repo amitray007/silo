@@ -7,6 +7,7 @@
   },
   "scripts": {
     "build": "turbo run build",
+    "predev": "pnpm db:migrate || echo '[silo] db:migrate skipped (is Postgres up? run pnpm db:up) — starting dev anyway'",
     "dev": "turbo run dev",
     "check-types": "turbo run check-types",
     "lint": "biome check .",
