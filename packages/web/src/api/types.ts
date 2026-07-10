@@ -227,3 +227,33 @@ export type ApiErrorBody = {
   message: string;
   details?: unknown;
 };
+
+/**
+ * Web's OWN copy of a named access token's public shape — mirrors
+ * `packages/api/src/routes/access-tokens.ts`'s `GET /api/access-tokens` list
+ * entries and `@silo/core`'s `AccessTokenSummary`
+ * (`packages/core/src/auth/tokens.ts`), the source of truth. Same
+ * not-imported-from-core rule as the rest of this file (see the file's top
+ * doc comment) — never includes `tokenHash`; the raw token is NEVER present
+ * on this shape (only on `CreatedAccessTokenJson`, once, at creation).
+ * `lastUsedAt` is `null` until the token's first successful use.
+ */
+export type AccessTokenJson = {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
+/**
+ * `POST /api/access-tokens`'s response shape — `AccessTokenJson` plus the
+ * RAW token, present this ONE time. The caller (`AccessTab`) must show it to
+ * the user immediately and never re-fetch/persist it — subsequent
+ * `GET /api/access-tokens` calls return plain `AccessTokenJson` rows with no
+ * `token` field at all.
+ */
+export type CreatedAccessTokenJson = AccessTokenJson & { token: string };
+
+/** `GET /api/access-tokens` response envelope. */
+export type AccessTokensResponse = { tokens: AccessTokenJson[] };

@@ -7,9 +7,11 @@ import {
 } from '@tanstack/react-query';
 import { apiDelete, apiGet, apiPatch, apiPost } from './client';
 import type {
+  AccessTokensResponse,
   CaptureRequest,
   CaptureResponse,
   Counts,
+  CreatedAccessTokenJson,
   EditLinkRequest,
   EmptyTrashResponse,
   LinkJson,
@@ -68,6 +70,7 @@ export const queryKeys = {
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
+  accessTokens: () => ['access-tokens'] as const,
 };
 
 /** The sidebar's live/trash counts (`GET /api/counts`) — `useCounts().data` is `Counts | undefined` until loaded. */
@@ -766,6 +769,60 @@ export function useUpdateSettings() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+    },
+  });
+}
+
+/**
+ * The Access tab's token list (`GET /api/access-tokens`, U4) — unwraps the
+ * `{ tokens }` envelope the same way `useTags` unwraps `{ tags }`, so
+ * `useAccessTokens().data` is `AccessTokenJson[] | undefined` directly (never
+ * the raw token — that only ever appears once, on `useCreateAccessToken`'s
+ * mutation result).
+ */
+export function useAccessTokens() {
+  return useQuery({
+    queryKey: queryKeys.accessTokens(),
+    queryFn: async () => (await apiGet<AccessTokensResponse>('/api/access-tokens')).tokens,
+  });
+}
+
+/**
+ * The Access tab's "New token" mutation (`POST /api/access-tokens`, U4) —
+ * returns the full `CreatedAccessTokenJson` (name/prefix/dates PLUS the raw
+ * `token`, present this one time) so the caller can show it once in a
+ * copyable reveal field. No optimistic insert: the list needs the server's
+ * real `id`/`prefix`/`createdAt` to render a correct row, so `onSuccess`
+ * simply invalidates the list to pick up the new row (the raw-token reveal
+ * itself is driven by the mutation's own returned data, not by anything
+ * read back out of the list).
+ */
+export function useCreateAccessToken() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (input: { name: string }) =>
+      apiPost<CreatedAccessTokenJson>('/api/access-tokens', input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accessTokens() });
+    },
+  });
+}
+
+/**
+ * The Access tab's "Revoke" mutation (`DELETE /api/access-tokens/:id`, U4) —
+ * plain invalidate-on-success (no optimistic removal): a revoke is a
+ * deliberate, confirmed action off a short list, not a hot path worth the
+ * extra rollback-on-failure complexity `useTrashLink`/`useDeleteNow` carry
+ * for their higher-frequency, higher-volume lists.
+ */
+export function useRevokeAccessToken() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<void>(`/api/access-tokens/${id}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.accessTokens() });
     },
   });
 }

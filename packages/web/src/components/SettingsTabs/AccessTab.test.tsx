@@ -5,9 +5,9 @@ import * as auth from '../../api/auth';
 import { AccessTab } from './AccessTab';
 
 function jsonResponse(body: unknown, status = 200): Response {
-  return new Response(JSON.stringify(body), {
+  return new Response(status === 204 ? null : JSON.stringify(body), {
     status,
-    headers: { 'content-type': 'application/json' },
+    headers: status === 204 ? {} : { 'content-type': 'application/json' },
   });
 }
 
@@ -26,32 +26,74 @@ function defaultSettings() {
   };
 }
 
+type AccessTokenFixture = {
+  id: string;
+  name: string;
+  prefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+};
+
 /**
  * Stateful fetch stub (mirrors `PluginsTab.test.tsx`'s `mockFetchRouter`) —
- * `useUpdateSettings`'s `onSettled` re-invalidates `settings` after every
- * PATCH, firing a follow-up GET; a stateless mock would hand that GET the
- * original defaults back, silently reverting whatever the PATCH just
- * "persisted."
+ * routes `/api/settings` (GET/PATCH) same as before, plus `/api/access-tokens`
+ * (GET list / POST create / DELETE :id). `useCreateAccessToken`/
+ * `useRevokeAccessToken`'s `onSuccess` re-invalidates the list, firing a
+ * follow-up GET — a stateless mock would hand that GET stale data back,
+ * silently reverting whatever the mutation just "persisted."
  */
-function mockFetchRouter(initial = defaultSettings()) {
-  let store = initial;
+function mockFetchRouter(opts?: {
+  settings?: ReturnType<typeof defaultSettings>;
+  tokens?: AccessTokenFixture[];
+  createdToken?: string;
+}) {
+  let settingsStore = opts?.settings ?? defaultSettings();
+  let tokensStore = opts?.tokens ?? [];
+  const rawToken = opts?.createdToken ?? 'silo_rawtoken1234567890abcdef';
+
+  function handleSettings(method: string, init?: RequestInit) {
+    if (method === 'PATCH') {
+      const patch = JSON.parse((init?.body as string) ?? '{}');
+      settingsStore = { ...settingsStore, ...patch };
+    }
+    return Promise.resolve(jsonResponse(settingsStore));
+  }
+
+  function handleAccessTokens(url: string, method: string, init?: RequestInit) {
+    if (method === 'POST') {
+      const body = JSON.parse((init?.body as string) ?? '{}');
+      const created: AccessTokenFixture = {
+        id: `new-${tokensStore.length + 1}`,
+        name: body.name,
+        prefix: rawToken.slice(0, 12),
+        createdAt: new Date().toISOString(),
+        lastUsedAt: null,
+      };
+      tokensStore = [created, ...tokensStore];
+      return Promise.resolve(jsonResponse({ ...created, token: rawToken }, 201));
+    }
+    if (method === 'DELETE') {
+      const id = url.split('/api/access-tokens/')[1];
+      tokensStore = tokensStore.filter((t) => t.id !== id);
+      return Promise.resolve(jsonResponse(undefined, 204));
+    }
+    return Promise.resolve(jsonResponse({ tokens: tokensStore }));
+  }
+
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
-    if (url.includes('/api/settings')) {
-      if (init?.method === 'PATCH') {
-        const patch = JSON.parse((init.body as string) ?? '{}');
-        store = { ...store, ...patch };
-        return Promise.resolve(jsonResponse(store));
-      }
-      return Promise.resolve(jsonResponse(store));
-    }
+    const method = init?.method ?? 'GET';
+
+    if (url.includes('/api/settings')) return handleSettings(method, init);
+    if (url.includes('/api/access-tokens')) return handleAccessTokens(url, method, init);
     return Promise.resolve(jsonResponse({}));
   });
-  return { fetchMock, getStore: () => store };
+
+  return { fetchMock, getTokens: () => tokensStore };
 }
 
-function renderTab(initial?: ReturnType<typeof defaultSettings>) {
-  const { fetchMock, getStore } = mockFetchRouter(initial);
+function renderTab(opts?: Parameters<typeof mockFetchRouter>[0]) {
+  const { fetchMock, getTokens } = mockFetchRouter(opts);
   vi.stubGlobal('fetch', fetchMock);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const utils = render(
@@ -59,10 +101,10 @@ function renderTab(initial?: ReturnType<typeof defaultSettings>) {
       <AccessTab />
     </QueryClientProvider>,
   );
-  return { ...utils, fetchMock, getStore };
+  return { ...utils, fetchMock, getTokens };
 }
 
-describe('AccessTab (HTTP MCP + API key)', () => {
+describe('AccessTab (HTTP MCP + named access tokens)', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
@@ -115,20 +157,8 @@ describe('AccessTab (HTTP MCP + API key)', () => {
     vi.useRealTimers();
   });
 
-  it('the access token row explains the session-token model and shows no real token on screen', () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue(null);
-    renderTab();
-
-    expect(screen.getByText('Access token')).toBeDefined();
-    expect(screen.getByText(/Your session token/i)).toBeDefined();
-
-    // The old "Rotate"/"Env-set" affordances are gone.
-    expect(screen.queryByRole('button', { name: 'Rotate' })).toBeNull();
-    expect(screen.queryByRole('button', { name: 'Env-set' })).toBeNull();
-  });
-
   it('the MCP access row renders as a live switch reflecting mcpAccess from settings', async () => {
-    renderTab({ ...defaultSettings(), mcpAccess: true });
+    renderTab({ settings: { ...defaultSettings(), mcpAccess: true } });
 
     const toggle = await screen.findByRole('switch', { name: /MCP access/i });
     await waitFor(() => expect(toggle).toHaveProperty('disabled', false));
@@ -136,14 +166,14 @@ describe('AccessTab (HTTP MCP + API key)', () => {
   });
 
   it('reflects mcpAccess: false from settings as an off switch', async () => {
-    renderTab({ ...defaultSettings(), mcpAccess: false });
+    renderTab({ settings: { ...defaultSettings(), mcpAccess: false } });
 
     const toggle = await screen.findByRole('switch', { name: /MCP access/i });
     await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
   });
 
   it('clicking the MCP access toggle PATCHes mcpAccess flipped', async () => {
-    const { fetchMock } = renderTab({ ...defaultSettings(), mcpAccess: true });
+    const { fetchMock } = renderTab({ settings: { ...defaultSettings(), mcpAccess: true } });
 
     const toggle = await screen.findByRole('switch', { name: /MCP access/i });
     await waitFor(() => expect(toggle).toHaveProperty('disabled', false));
@@ -177,26 +207,181 @@ describe('AccessTab (HTTP MCP + API key)', () => {
     expect(toggle).toHaveProperty('disabled', true);
   });
 
-  it('"Copy token" copies the logged-in token to the clipboard when one is held', async () => {
-    vi.spyOn(auth, 'getToken').mockReturnValue('secret-token-value');
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-
-    renderTab();
-    const button = screen.getByRole('button', { name: 'Copy token' });
-    expect(button).toHaveProperty('disabled', false);
-    fireEvent.click(button);
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledWith('secret-token-value'));
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeDefined());
-  });
-
-  it('"Copy token" is disabled with honest copy when no token is held (localhost no-auth mode)', () => {
+  it('renders the "Access tokens" section heading with its description', async () => {
     vi.spyOn(auth, 'getToken').mockReturnValue(null);
     renderTab();
 
-    const button = screen.getByRole('button', { name: 'Copy token' });
-    expect(button).toHaveProperty('disabled', true);
-    expect(button.getAttribute('title')).toMatch(/no token in this session/i);
+    expect(await screen.findByText('Access tokens')).toBeDefined();
+    expect(screen.getByText(/Named tokens an agent can use to connect/i)).toBeDefined();
+  });
+
+  it('renders the token list from a mocked useAccessTokens (names + prefixes shown)', async () => {
+    vi.spyOn(auth, 'getToken').mockReturnValue(null);
+    renderTab({
+      tokens: [
+        {
+          id: 'tok-1',
+          name: 'laptop cli',
+          prefix: 'silo_a1b2c3',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          lastUsedAt: null,
+        },
+        {
+          id: 'tok-2',
+          name: 'raycast',
+          prefix: 'silo_d4e5f6',
+          createdAt: '2026-02-01T00:00:00.000Z',
+          lastUsedAt: '2026-03-01T00:00:00.000Z',
+        },
+      ],
+    });
+
+    expect(await screen.findByText('laptop cli')).toBeDefined();
+    expect(screen.getByText('raycast')).toBeDefined();
+    expect(screen.getByText(/silo_a1b2c3/)).toBeDefined();
+    expect(screen.getByText(/silo_d4e5f6/)).toBeDefined();
+    expect(screen.getByText(/never used/i)).toBeDefined();
+    expect(screen.getByText(/last used/i)).toBeDefined();
+  });
+
+  it('shows the empty state when there are no tokens', async () => {
+    vi.spyOn(auth, 'getToken').mockReturnValue(null);
+    renderTab({ tokens: [] });
+
+    expect(
+      await screen.findByText('No tokens yet — create one to let an agent connect.'),
+    ).toBeDefined();
+  });
+
+  it('does not show the raw token anywhere in the list rows', async () => {
+    vi.spyOn(auth, 'getToken').mockReturnValue(null);
+    renderTab({
+      tokens: [
+        {
+          id: 'tok-1',
+          name: 'laptop cli',
+          prefix: 'silo_a1b2c3',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          lastUsedAt: null,
+        },
+      ],
+    });
+
+    await screen.findByText('laptop cli');
+    expect(screen.queryByText(/silo_rawtoken1234567890abcdef/)).toBeNull();
+  });
+
+  it('creating a token calls the mutation with the name, then shows the raw token once + copies it', async () => {
+    vi.spyOn(auth, 'getToken').mockReturnValue(null);
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal('navigator', { clipboard: { writeText } });
+
+    const { fetchMock } = renderTab({
+      tokens: [],
+      createdToken: 'silo_freshraw0987654321zzzz',
+    });
+
+    const nameInput = await screen.findByPlaceholderText(/laptop cli, raycast/i);
+    fireEvent.change(nameInput, { target: { value: 'my new device' } });
+
+    const createBtn = screen.getByRole('button', { name: 'Create' });
+    expect(createBtn).toHaveProperty('disabled', false);
+    fireEvent.click(createBtn);
+
+    await waitFor(() => {
+      const postCall = fetchMock.mock.calls.find(
+        (call) =>
+          (call[1] as RequestInit | undefined)?.method === 'POST' &&
+          (call[0] as string).includes('/api/access-tokens'),
+      );
+      expect(postCall).toBeDefined();
+      const body = JSON.parse((postCall?.[1] as RequestInit).body as string);
+      expect(body).toEqual({ name: 'my new device' });
+    });
+
+    // The raw token appears once, in the reveal field — the name input is
+    // swapped out for the reveal, so it's no longer on screen.
+    expect(await screen.findByText('silo_freshraw0987654321zzzz')).toBeDefined();
+    expect(screen.getByText(/copy this now/i)).toBeDefined();
+    expect(screen.queryByPlaceholderText(/laptop cli, raycast/i)).toBeNull();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith('silo_freshraw0987654321zzzz'));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeDefined());
+
+    // Dismiss ("Done") hides the raw token and brings the create form back
+    // with the name input cleared (it was consumed by the successful create).
+    fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(screen.queryByText('silo_freshraw0987654321zzzz')).toBeNull());
+    const freshNameInput = await screen.findByPlaceholderText(/laptop cli, raycast/i);
+    expect((freshNameInput as HTMLInputElement).value).toBe('');
+  });
+
+  it('the Create button is disabled when the name is empty', async () => {
+    vi.spyOn(auth, 'getToken').mockReturnValue(null);
+    renderTab({ tokens: [] });
+
+    await screen.findByPlaceholderText(/laptop cli, raycast/i);
+    const createBtn = screen.getByRole('button', { name: 'Create' });
+    expect(createBtn).toHaveProperty('disabled', true);
+  });
+
+  it('revoking a token requires a confirm step, then calls the DELETE mutation and refreshes the list', async () => {
+    vi.spyOn(auth, 'getToken').mockReturnValue(null);
+    const { fetchMock } = renderTab({
+      tokens: [
+        {
+          id: 'tok-1',
+          name: 'laptop cli',
+          prefix: 'silo_a1b2c3',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          lastUsedAt: null,
+        },
+      ],
+    });
+
+    await screen.findByText('laptop cli');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    const confirmBtn = await screen.findByRole('button', { name: 'Confirm revoke?' });
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      const deleteCall = fetchMock.mock.calls.find(
+        (call) =>
+          (call[1] as RequestInit | undefined)?.method === 'DELETE' &&
+          (call[0] as string).includes('/api/access-tokens/tok-1'),
+      );
+      expect(deleteCall).toBeDefined();
+    });
+
+    await waitFor(() => expect(screen.queryByText('laptop cli')).toBeNull());
+  });
+
+  it('canceling the revoke confirm step leaves the token in place', async () => {
+    vi.spyOn(auth, 'getToken').mockReturnValue(null);
+    renderTab({
+      tokens: [
+        {
+          id: 'tok-1',
+          name: 'laptop cli',
+          prefix: 'silo_a1b2c3',
+          createdAt: '2026-01-01T00:00:00.000Z',
+          lastUsedAt: null,
+        },
+      ],
+    });
+
+    await screen.findByText('laptop cli');
+    fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    await screen.findByRole('button', { name: 'Confirm revoke?' });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Confirm revoke?' })).toBeNull(),
+    );
+    expect(screen.getByText('laptop cli')).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Revoke' })).toBeDefined();
   });
 });
