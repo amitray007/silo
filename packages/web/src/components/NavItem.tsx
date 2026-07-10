@@ -156,7 +156,22 @@ export function NavItem({
           {icon}
         </span>
       )}
-      <span>{label}</span>
+      {/* `minWidth: 0` + ellipsis so a long tag name (the sidebar Tags list
+          renders arbitrary user tag names here) truncates cleanly instead of
+          overflowing the row and shoving the count off the edge. `flex: 1`
+          lets it consume the row's free width and shrink below its content
+          size — a flex item won't shrink past its content without minWidth:0. */}
+      <span
+        style={{
+          flex: 1,
+          minWidth: 0,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
+        }}
+      >
+        {label}
+      </span>
       {meta !== undefined && (
         // `lineHeight: 1` matches the Search row's `/` shortcut chip (fix,
         // direct user feedback) — both sit on the identical collapsed

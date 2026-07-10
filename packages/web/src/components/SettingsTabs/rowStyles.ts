@@ -44,11 +44,3 @@ export const rowDesc: CSSProperties = {
   lineHeight: 'var(--lh-snug)',
   textWrap: 'pretty',
 };
-
-/** The calm footer note some tabs end with. */
-export const tabNote: CSSProperties = {
-  margin: '16px 0 0',
-  fontSize: 'var(--text-sm)',
-  color: 'var(--fnt)',
-  lineHeight: 1.5,
-};

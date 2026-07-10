@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { getToken } from '../../api/auth';
 import { useSettings, useUpdateSettings } from '../../api/hooks';
-import { rowDesc, rowLabel, settingsRow, settingsRowDivided, tabNote } from './rowStyles';
+import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
 import { SettingsHero } from './SettingsHero';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -137,10 +137,6 @@ export function AccessTab() {
           {copyLabel(tokenCopy.copied, 'Copy token')}
         </button>
       </div>
-      <p style={tabNote}>
-        An agent connecting over MCP looks like any other client — links it adds look like any
-        other, nothing else changes.
-      </p>
     </>
   );
 }
