@@ -221,9 +221,25 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
   { id, open = false, onNavigate = noop, onOpenSearch = noop },
   ref,
 ) {
+  const navigate = useNavigate();
   const { data: counts } = useCounts();
   const { data: tagsData, isError: tagsErrored } = useTags();
   const { openSettings } = useSettings();
+
+  // The brand row (grain dot + "silo") acts as a home link — clicking it
+  // navigates to the Library (`/`), like a site logo. A real `<a href="/">`
+  // (so ⌘/ctrl-click and middle-click open a new tab natively), with a
+  // preventDefault + `navigate('/')` for the plain click to stay a
+  // client-side transition; `onNavigate()` closes the mobile drawer, matching
+  // the nav items' behavior.
+  const onBrandClick = (event: MouseEvent<HTMLAnchorElement>) => {
+    if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey) {
+      return;
+    }
+    event.preventDefault();
+    navigate('/');
+    onNavigate();
+  };
 
   const tags = tagsErrored ? [] : (tagsData?.tags ?? []);
 
@@ -239,12 +255,24 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       data-open={open}
       className="silo-sidebar"
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '4px 9px 16px' }}>
+      <a
+        href="/"
+        onClick={onBrandClick}
+        aria-label="silo home"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '4px 9px 16px',
+          textDecoration: 'none',
+          color: 'inherit',
+        }}
+      >
         <GrainDot size={26} plate />
         <span style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}>
           silo
         </span>
-      </div>
+      </a>
 
       <SidebarSearchItem onOpenSearch={onOpenSearch} />
 
