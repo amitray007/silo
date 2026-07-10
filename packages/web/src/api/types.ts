@@ -172,10 +172,17 @@ export type TagsResponse = { tags: TagCount[] };
  * render both an inline row line and a hover preview (`inline`/`hover`);
  * `github`/`youtube` are hover-only (no `inline`). Mirror core's shape
  * EXACTLY — do not add fields a source doesn't have.
+ *
+ * `mcpAccess` (Access-tab MCP-toggle unit): a scalar boolean, default `true`
+ * — mirrors core's `settingsSchema.mcpAccess` (`packages/core/src/settings/
+ * schema.ts`). Gates the HTTP MCP listener per-request server-side
+ * (`packages/app/src/mcp-http.ts`: `403` when `false`); the web-side toggle
+ * in `AccessTab` reads/writes this exact key.
  */
 export type SettingsMap = {
   theme: 'light' | 'dark' | 'system';
   trashPurgeDays: 7 | 30 | 90;
+  mcpAccess: boolean;
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
     github: { enabled: boolean; hover: boolean };

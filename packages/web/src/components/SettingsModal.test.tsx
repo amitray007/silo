@@ -16,6 +16,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 const DEFAULT_SETTINGS = {
   theme: 'system',
   trashPurgeDays: 30,
+  mcpAccess: true,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },
@@ -298,15 +299,15 @@ describe('SettingsModal', () => {
     });
   });
 
-  describe('Import/Export tab (stubbed)', () => {
-    it('renders Import/Export rows with disabled buttons', () => {
+  describe('Import/Export tab (plan 028 — both Import and Export live)', () => {
+    it('renders Import (Choose file…) and Export (Download) both live', () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Import / export' }));
 
       const chooseFile = screen.getByRole('button', { name: /choose file/i });
       const download = screen.getByRole('button', { name: /download/i });
-      expect(chooseFile).toHaveProperty('disabled', true);
-      expect(download).toHaveProperty('disabled', true);
+      expect(chooseFile).not.toHaveProperty('disabled', true);
+      expect(download).not.toHaveProperty('disabled', true);
     });
   });
 
@@ -318,17 +319,27 @@ describe('SettingsModal', () => {
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
     });
 
-    it('renders the MCP toggle and Rotate as disabled/non-functional', () => {
+    it('renders a LIVE MCP-access switch reflecting the mcpAccess setting', async () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
 
-      const mcpToggle = screen.getByTitle(/always on/i);
-      expect(mcpToggle).toHaveProperty('disabled', true);
-      const rotate = screen.getByRole('button', { name: /rotate/i });
-      expect(rotate).toHaveProperty('disabled', true);
+      const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
+      await waitFor(() => expect(mcpToggle).toHaveProperty('disabled', false));
+      expect(mcpToggle.getAttribute('aria-checked')).toBe('true');
     });
 
-    it('"Copy config" (the hero\'s primary action) writes the static MCP client config to the clipboard', async () => {
+    it('clicking the MCP-access switch PATCHes mcpAccess flipped', async () => {
+      renderModal();
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
+
+      const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
+      await waitFor(() => expect(mcpToggle).toHaveProperty('disabled', false));
+      fireEvent.click(mcpToggle);
+
+      await waitFor(() => expect(mcpToggle.getAttribute('aria-checked')).toBe('false'));
+    });
+
+    it('"Copy config" (the hero\'s primary action) writes the HTTP MCP client config to the clipboard', async () => {
       const writeText = vi.fn().mockResolvedValue(undefined);
       Object.assign(navigator, { clipboard: { writeText } });
 
@@ -340,6 +351,8 @@ describe('SettingsModal', () => {
       const written = writeText.mock.calls[0]?.[0] as string;
       expect(written).toContain('"mcpServers"');
       expect(written).toContain('"silo"');
+      expect(written).toContain('/mcp');
+      expect(written).toContain('Authorization');
       expect(await screen.findByText('Copied')).toBeDefined();
     });
 

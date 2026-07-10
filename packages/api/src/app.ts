@@ -3,8 +3,11 @@ import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
+import { registerAuthRoutes } from './routes/auth.js';
 import { registerCountsRoutes } from './routes/counts.js';
+import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
+import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
@@ -65,6 +68,27 @@ export function createApp(): Hono {
 
   app.get('/health', (c) => c.json({ ok: true }));
 
+  // `/api/auth/check` MUST be registered on the root app, BEFORE the `/api`
+  // sub-app mount below — it is the ungated status probe the web app calls
+  // to learn whether `SILO_API_TOKEN` is even configured, so it must stay
+  // reachable with no bearer token even once `generalTokenAuth` (mounted on
+  // the `api` sub-app) starts requiring one for everything else under
+  // `/api/*`. Registering the exact path here means the root app's router
+  // matches it directly and never delegates to the sub-app for this one path
+  // (see `routes/auth.ts`'s doc comment; proven by `routes/auth.test.ts`).
+  //
+  // It stays OUTSIDE `generalTokenAuth` (the whole point — it must answer
+  // without a token) but it goes THROUGH `corsMiddleware()` so its
+  // response-exposure obeys the SAME origin allowlist as every other `/api/*`
+  // route (ce-security review SEC-AUTHCHECK-CORS: keep the CORS boundary
+  // uniform across the whole `/api` surface — a disallowed origin gets no CORS
+  // headers here either, so the browser refuses to expose the boolean response
+  // cross-origin, matching `/api/counts` et al). Defense-in-depth: the
+  // timing-safe, boolean-only response already leaks no token material, but the
+  // CORS boundary should not have a hole.
+  app.use('/api/auth/check', corsMiddleware());
+  registerAuthRoutes(app);
+
   const api = new Hono();
   // CORS first (the browser-facing gate — an allowlist-rejected origin gets
   // no CORS headers, so the browser refuses to expose the response, before
@@ -84,6 +108,8 @@ export function createApp(): Hono {
   registerFaviconRoutes(api);
   registerPreviewImageRoutes(api);
   registerSettingsRoutes(api);
+  registerExportRoutes(api);
+  registerImportRoutes(api);
   app.route('/api', api);
 
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));

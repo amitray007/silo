@@ -25,6 +25,10 @@ const settingsPatchBodySchema = z
   .object({
     theme: z.enum(['light', 'dark', 'system']).optional(),
     trashPurgeDays: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional(),
+    // Access-tab MCP-toggle unit: mirrors core's `settingsSchema.mcpAccess`
+    // (a scalar boolean, default true) — gates the HTTP MCP listener
+    // per-request server-side (`packages/app/src/mcp-http.ts`).
+    mcpAccess: z.boolean().optional(),
     // Plan 026: per-source objects (master `enabled` + the render features that
     // source supports). Mirrors `core`'s `settingsSchema.plugins` exactly. The
     // edge validates the CURRENT (new) shape strictly — well-formed writes only;

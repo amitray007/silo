@@ -126,6 +126,32 @@ describe('normalizePluginsValue (plan 026 migration)', () => {
   });
 });
 
+describe('mcpAccess schema validation (via parseSettingValue)', () => {
+  it('accepts true', () => {
+    expect(parseSettingValue('mcpAccess', true)).toBe(true);
+  });
+
+  it('accepts false', () => {
+    expect(parseSettingValue('mcpAccess', false)).toBe(false);
+  });
+
+  it('rejects a non-boolean value (string)', () => {
+    expect(() => parseSettingValue('mcpAccess', 'yes')).toThrow();
+  });
+
+  it('rejects a non-boolean value (number)', () => {
+    expect(() => parseSettingValue('mcpAccess', 1)).toThrow();
+  });
+
+  it('rejects a non-boolean value (null)', () => {
+    expect(() => parseSettingValue('mcpAccess', null)).toThrow();
+  });
+
+  it('SETTINGS_DEFAULTS.mcpAccess defaults to true (existing behavior unchanged for the HTTP MCP gate)', () => {
+    expect(SETTINGS_DEFAULTS.mcpAccess).toBe(true);
+  });
+});
+
 describe('plugins schema validation (via parseSettingValue)', () => {
   it('accepts the new nested per-feature shape', () => {
     const value = {

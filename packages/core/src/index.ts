@@ -1,5 +1,13 @@
 export const name = '@silo/core';
 
+// Auth token primitives (MCP-HTTP slice, U1): timing-safe secret compare +
+// env-var token read, moved here from `@silo/api`'s `token-auth.ts` so
+// `@silo/app`'s HTTP MCP listener can reuse them without importing an
+// adapter (`@silo/app` may not import `@silo/api` — see
+// docs/rules/architecture.md). `@silo/api` re-exports both from
+// `token-auth.ts` so its own existing call sites (`ingest-auth.ts`,
+// `general-auth.ts`) are unaffected.
+export { readTokenEnv, timingSafeEqual } from './auth/token.js';
 // URL canonicalization (U3): the normalize-url wrapper + dedup key used by
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';
@@ -37,6 +45,23 @@ export {
 // Executor types (shared db/tx handle) — the worker's real enqueuer is typed
 // against these.
 export type { Db, Executor, Tx } from './links/executor.js';
+// Export (export-JSON-YAML-CSV slice, U1): exportLinks reads the full live
+// library (trash excluded) and serializes it to JSON (default, lossless),
+// YAML (same object, lossless), or CSV (flat partial view — drops
+// sourceData/extractedText). One shared row->object mapper backs all three
+// serializers so they can never drift on which fields exist. See
+// export.ts's doc comments for the format-by-format contract.
+export type { ExportFormat, ExportResult } from './links/export.js';
+export { EXPORT_VERSION, exportLinks, InvalidExportFormatError } from './links/export.js';
+// Import (import slice, U1): importLinks is the write half of the export/
+// import round-trip — restores a silo `version: 1` JSON export back into the
+// store, reusing `createLink`'s existing canonical-URL dedup-merge (no new
+// write path). Envelope-invalid payloads throw `InvalidImportError`;
+// per-link failures are collected into `ImportResult.skipped` rather than
+// failing the whole import. See import.ts's doc comments for the full
+// validation/dedup contract.
+export type { ImportResult, ImportSkip } from './links/import.js';
+export { InvalidImportError, importLinks, MAX_IMPORT_LINKS } from './links/import.js';
 // Core link operations (U4): the typed data-access primitives the UI and
 // MCP adapters both call — create (dedup/merge), read, list, search, edit,
 // tag, trash/restore. See docs/rules/architecture.md — this is the one

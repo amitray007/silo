@@ -28,6 +28,7 @@ function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins']) {
     queryClient.setQueryData(queryKeys.settings(), {
       theme: 'system',
       trashPurgeDays: 30,
+      mcpAccess: true,
       plugins,
     } satisfies SettingsMap);
   }

@@ -4,6 +4,7 @@ import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
 import { rowDesc, rowLabel } from './rowStyles';
+import { ToggleSwitch } from './ToggleSwitch';
 
 /**
  * The all-on shape used while `useSettings()` is still loading (plan 026 —
@@ -135,91 +136,6 @@ const featureRow: CSSProperties = {
   padding: '10px 0',
 };
 
-/**
- * The shared slider switch (plan 026 — replaces the original amber-dot toggle
- * per user feedback: "make it a slider switch, smoother"). An iOS/macOS-style
- * pill track (28×16) with a sliding knob that animates left↔right on toggle;
- * ON fills the track amber (`--mark`, the brand's status colour), OFF is a
- * muted `--line`-bordered track. Used in the panel's master + feature rows.
- * `disabled` greys it out AND blocks the click (feature rows when the source's
- * master `enabled` is off, or while settings load — per the plan's rule).
- *
- * `role="switch"` + `aria-checked` (not a plain `aria-pressed` button) so
- * assistive tech announces it as an on/off switch, matching its new look. The
- * knob + track transitions are eased and honour `prefers-reduced-motion` via
- * the shared token curve; the slide is the whole point of "smoother".
- */
-function PluginToggle({
-  on,
-  disabled,
-  onToggle,
-  label,
-}: {
-  on: boolean;
-  disabled?: boolean;
-  onToggle: () => void;
-  label: string;
-}) {
-  const TRACK_W = 28;
-  const TRACK_H = 16;
-  const KNOB = 12;
-  const INSET = (TRACK_H - KNOB) / 2; // 2px gap on every edge
-
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      disabled={disabled}
-      role="switch"
-      aria-checked={on}
-      title={
-        disabled
-          ? // Neutral disabled copy — a feature toggle is disabled either while
-            // settings load OR while its source's master is off; the button
-            // can't tell which, so avoid asserting a specific reason.
-            `${label} — unavailable`
-          : on
-            ? `${label} is on — click to turn off`
-            : `${label} is off — click to turn on`
-      }
-      style={{
-        position: 'relative',
-        width: TRACK_W,
-        height: TRACK_H,
-        padding: 0,
-        borderRadius: TRACK_H,
-        cursor: disabled ? 'default' : 'pointer',
-        opacity: disabled ? 0.4 : 1,
-        background: on ? 'var(--mark)' : 'var(--bg2)',
-        border: `1px solid ${on ? 'var(--mark)' : 'var(--line)'}`,
-        boxSizing: 'border-box',
-        transition:
-          'background .18s var(--ease-out), border-color .18s var(--ease-out), opacity .15s ease',
-        flex: 'none',
-      }}
-    >
-      {/* The sliding knob — translated to the ON side; the transform is what
-          reads as the smooth slide. Off-white knob so it stays legible on both
-          the amber (on) and dark (off) track. */}
-      <span
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          top: INSET,
-          left: INSET,
-          width: KNOB,
-          height: KNOB,
-          borderRadius: '50%',
-          background: on ? '#fff' : 'var(--mut)',
-          transform: on ? `translateX(${TRACK_W - KNOB - INSET * 2}px)` : 'translateX(0)',
-          transition: 'transform .18s var(--ease-out), background .18s var(--ease-out)',
-          boxShadow: '0 1px 2px rgba(0, 0, 0, 0.3)',
-        }}
-      />
-    </button>
-  );
-}
-
 /** The grid card's status dot — a smaller, non-interactive readout of `enabled` (the card itself is the click target, selecting the source; the actual toggle lives in the expand panel). */
 function StatusDot({ on }: { on: boolean }) {
   return (
@@ -302,7 +218,7 @@ function FeatureToggleRow({
         <div style={rowLabel}>{name}</div>
         <div style={rowDesc}>{desc}</div>
       </div>
-      <PluginToggle on={on} disabled={disabled} onToggle={onToggle} label={name} />
+      <ToggleSwitch on={on} disabled={disabled} onToggle={onToggle} label={name} />
     </div>
   );
 }
@@ -374,7 +290,7 @@ export function PluginsTab() {
                 <div style={{ flex: 1 }}>
                   <div style={rowLabel}>{source.name}</div>
                 </div>
-                <PluginToggle
+                <ToggleSwitch
                   on={state.enabled}
                   disabled={loading}
                   onToggle={() => writeField(source.key, 'enabled', !state.enabled)}
