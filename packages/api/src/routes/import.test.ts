@@ -118,6 +118,41 @@ describeIfPg('POST /api/import (integration)', () => {
       const after = (await pool.query('select count(*) from links')).rows[0]?.count;
       expect(after).toBe(before);
     });
+
+    it.each([
+      ['number', '42'],
+      ['string', '"hello"'],
+      ['null', 'null'],
+    ])('correct token, valid JSON but not an object (%s) -> 400 validation_error, not 500 or 200', async (_label, jsonBody) => {
+      const { app, pool } = harness.mod();
+      const before = (await pool.query('select count(*) from links')).rows[0]?.count;
+      const res = await postRaw(app, '/api/import', jsonBody, `Bearer ${TEST_TOKEN}`);
+      expect(res.status).toBe(400);
+      const body = (await res.json()) as ErrorEnvelope;
+      expect(body.error).toBe('validation_error');
+      const after = (await pool.query('select count(*) from links')).rows[0]?.count;
+      expect(after).toBe(before);
+    });
+
+    it('correct token, content-length over the size cap -> 413, nothing imported (auth still ran first)', async () => {
+      const { app, pool } = harness.mod();
+      const before = (await pool.query('select count(*) from links')).rows[0]?.count;
+      // Lie about content-length via a raw fetch-style request so the route's
+      // manual header check rejects before ever reading the (small) actual
+      // body — proves the guard is header-driven, not full-body-read-driven.
+      const res = await app.request('/api/import', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          authorization: `Bearer ${TEST_TOKEN}`,
+          'content-length': String(26 * 1024 * 1024),
+        },
+        body: JSON.stringify({ version: 1, links: [] }),
+      });
+      expect(res.status).toBe(413);
+      const after = (await pool.query('select count(*) from links')).rows[0]?.count;
+      expect(after).toBe(before);
+    });
   });
 
   describe('trusted caller — happy path', () => {

@@ -53,7 +53,7 @@ export { EXPORT_VERSION, exportLinks, InvalidExportFormatError } from './links/e
 // failing the whole import. See import.ts's doc comments for the full
 // validation/dedup contract.
 export type { ImportResult, ImportSkip } from './links/import.js';
-export { InvalidImportError, importLinks } from './links/import.js';
+export { InvalidImportError, importLinks, MAX_IMPORT_LINKS } from './links/import.js';
 // Core link operations (U4): the typed data-access primitives the UI and
 // MCP adapters both call — create (dedup/merge), read, list, search, edit,
 // tag, trash/restore. See docs/rules/architecture.md — this is the one

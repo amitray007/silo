@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { type CreateLinkInput, createLink, findByCanonicalUrl } from './links.js';
+import { type CreateLinkInput, createLink, willDedupCapture } from './links.js';
 import type { SourceData } from './source-data.js';
 
 /** One link from the envelope that failed to import, with why. */
@@ -74,6 +74,21 @@ const envelopeSchema = z.object({
   version: z.literal(1),
   links: z.array(z.unknown()),
 });
+
+/**
+ * Ceiling on `links.length` in one import envelope. `importLinks` processes
+ * the array SEQUENTIALLY, one `createLink` transaction per link — an
+ * unbounded array from an authenticated-but-hostile (or just huge)
+ * upload turns a single request into an unbounded amount of DB work, on top
+ * of the route already buffering the whole JSON body into memory
+ * (`c.req.json()`) before `importLinks` ever sees it. That's availability
+ * self-harm even for a legitimate token holder (a fat-fingered or malicious
+ * import blocks the single-user server for everyone else). 50,000 is a
+ * generous ceiling for a personal link library — far above any real export
+ * (see `export.ts`) — while still bounding worst-case memory/DB work to
+ * something a personal-scale server can absorb.
+ */
+export const MAX_IMPORT_LINKS = 50_000;
 
 /**
  * The exported shape's nullable-string metadata fields — each must be
@@ -171,7 +186,7 @@ async function importOneLink(element: unknown, index: number): Promise<ImportOne
   const link = parsedLink.data;
   try {
     const input = toCreateLinkInput(link);
-    const existed = (await findByCanonicalUrl(link.url)) !== null;
+    const existed = await willDedupCapture(link.url);
     await createLink(input);
     return { outcome: existed ? 'merged' : 'created' };
   } catch (error) {
@@ -208,13 +223,17 @@ async function importOneLink(element: unknown, index: number): Promise<ImportOne
  *   every good row.
  *
  * Dedup: reuses `createLink`'s existing canonical-URL dedup-merge wholesale
- * (no new write path). `findByCanonicalUrl` pre-checks each link's URL
- * BEFORE calling `createLink`, purely to classify the outcome for the
- * summary (`existed` -> merged, else -> created) — `createLink` itself is
- * the sole source of truth for what actually gets written; this pre-check
- * can theoretically race a concurrent writer (same caveat `willDedupCapture`
- * documents), which would misclassify a link's created/merged count but
- * never the stored data.
+ * (no new write path). `willDedupCapture` pre-checks each link's URL BEFORE
+ * calling `createLink`, purely to classify the outcome for the summary
+ * (`existed` -> merged, else -> created) — it runs the SAME live-OR-trashed
+ * lookup `createLink`'s own dedup target (`findExistingForDedup`) uses, so a
+ * link that revives a trashed row is correctly counted as `merged`, not
+ * `created` (a live-only check like `findByCanonicalUrl` would misreport
+ * that case — see `willDedupCapture`'s doc comment in links.ts). `createLink`
+ * itself remains the sole source of truth for what actually gets written;
+ * this pre-check can theoretically race a concurrent writer (same caveat
+ * `willDedupCapture` documents), which would misclassify a link's
+ * created/merged count but never the stored data.
  *
  * Links are imported SEQUENTIALLY (not `Promise.all`): `createLink` runs its
  * own transaction per link, and import volumes are personal-scale, so
@@ -222,6 +241,14 @@ async function importOneLink(element: unknown, index: number): Promise<ImportOne
  * calls returning `existed: false` for the same not-yet-inserted URL) and
  * the code simple. A future large-import perf need could batch this —
  * parked, not needed now.
+ *
+ * Size cap: the envelope's `links` array is bounded to `MAX_IMPORT_LINKS` —
+ * see that constant's doc comment for why (unbounded sequential
+ * `createLink` transactions + a fully-buffered request body is an
+ * availability self-harm vector even for an authenticated token holder).
+ * Checked BEFORE the per-link loop starts, so an oversized file throws
+ * `InvalidImportError` (whole-file rejection, consistent with the other
+ * envelope-tier failures above) without doing any DB work.
  */
 export async function importLinks(payload: unknown): Promise<ImportResult> {
   const parsed = envelopeSchema.safeParse(payload);
@@ -229,6 +256,12 @@ export async function importLinks(payload: unknown): Promise<ImportResult> {
     throw new InvalidImportError(`invalid import envelope: ${parsed.error.message}`);
   }
   const { links } = parsed.data;
+
+  if (links.length > MAX_IMPORT_LINKS) {
+    throw new InvalidImportError(
+      `import envelope has ${links.length} links, exceeding the ${MAX_IMPORT_LINKS} limit`,
+    );
+  }
 
   let created = 0;
   let merged = 0;

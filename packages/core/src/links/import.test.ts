@@ -281,6 +281,81 @@ describeIfPg('importLinks (integration)', () => {
       expect(merged?.notes).toContain('imported note');
       expect(merged?.tags.slice().sort()).toEqual(['existing-tag', 'imported-tag']);
     });
+
+    it('importing a TRASHED link revives + merges it, counted as merged (not created) — the Fix 1 regression case', async () => {
+      // Reproduces the "restore a backup after emptying trash" scenario:
+      // createLink's actual dedup target (findExistingForDedup) matches
+      // trashed rows too, so this must be classified as `merged`, not
+      // `created`, even though the row didn't exist LIVE at import time.
+      const existing = await linkOps.createLink({
+        url: 'https://example.com/import-trashed-revive',
+        sourceKind: 'link',
+        notes: 'pre-trash note',
+      });
+      await linkOps.softDelete(existing.id);
+
+      // Confirm it's actually gone from the live-only lookup before import,
+      // so this test would catch a regression to the old
+      // findByCanonicalUrl-based pre-check.
+      const beforeImport = await linkOps.findByCanonicalUrl(
+        'https://example.com/import-trashed-revive',
+      );
+      expect(beforeImport).toBeNull();
+
+      const payload = envelope([
+        {
+          url: 'https://example.com/import-trashed-revive',
+          sourceKind: 'link',
+          notes: 'revived note',
+        },
+      ]);
+
+      const result = await ops.importLinks(payload);
+      expect(result.total).toBe(1);
+      expect(result.created).toBe(0);
+      expect(result.merged).toBe(1);
+      expect(result.skipped).toEqual([]);
+
+      const revived = await linkOps.findByCanonicalUrl('https://example.com/import-trashed-revive');
+      expect(revived).not.toBeNull();
+      expect(revived?.id).toBe(existing.id);
+      expect(revived?.notes).toContain('pre-trash note');
+      expect(revived?.notes).toContain('revived note');
+    });
+
+    it('same-file duplicate URLs (canonicalizing to the same value): first created, second merged', async () => {
+      // https://example.com/import-dup/a and .../a/ canonicalize to the same
+      // value (canonicalize.ts strips the trailing slash) — exercises the
+      // within-one-import dedup path, not just against a pre-existing row.
+      const payload = envelope([
+        { url: 'https://example.com/import-dup/a', sourceKind: 'link', notes: 'first' },
+        { url: 'https://example.com/import-dup/a/', sourceKind: 'link', notes: 'second' },
+      ]);
+
+      const result = await ops.importLinks(payload);
+      expect(result.total).toBe(2);
+      expect(result.created).toBe(1);
+      expect(result.merged).toBe(1);
+      expect(result.skipped).toEqual([]);
+
+      const found = await linkOps.findByCanonicalUrl('https://example.com/import-dup/a');
+      expect(found).not.toBeNull();
+      expect(found?.notes).toContain('first');
+      expect(found?.notes).toContain('second');
+    });
+  });
+
+  describe('size cap', () => {
+    it('an envelope with links.length > MAX_IMPORT_LINKS throws InvalidImportError before any DB work', async () => {
+      // Trivial minimal links — the cap must reject before processing any of
+      // them, so this doesn't need to be realistic or fast to import.
+      const links = Array.from({ length: ops.MAX_IMPORT_LINKS + 1 }, (_, i) => ({
+        url: `https://example.com/import-cap-${i}`,
+        sourceKind: 'link',
+      }));
+
+      await expect(ops.importLinks(envelope(links))).rejects.toThrow(ops.InvalidImportError);
+    });
   });
 
   describe('addedBy / origin preserved', () => {
