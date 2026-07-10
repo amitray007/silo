@@ -76,6 +76,17 @@ export function createApp(): Hono {
   // `/api/*`. Registering the exact path here means the root app's router
   // matches it directly and never delegates to the sub-app for this one path
   // (see `routes/auth.ts`'s doc comment; proven by `routes/auth.test.ts`).
+  //
+  // It stays OUTSIDE `generalTokenAuth` (the whole point — it must answer
+  // without a token) but it goes THROUGH `corsMiddleware()` so its
+  // response-exposure obeys the SAME origin allowlist as every other `/api/*`
+  // route (ce-security review SEC-AUTHCHECK-CORS: keep the CORS boundary
+  // uniform across the whole `/api` surface — a disallowed origin gets no CORS
+  // headers here either, so the browser refuses to expose the boolean response
+  // cross-origin, matching `/api/counts` et al). Defense-in-depth: the
+  // timing-safe, boolean-only response already leaks no token material, but the
+  // CORS boundary should not have a hole.
+  app.use('/api/auth/check', corsMiddleware());
   registerAuthRoutes(app);
 
   const api = new Hono();

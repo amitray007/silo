@@ -110,6 +110,38 @@ describe('CORS on /api/*', () => {
     // request; the route itself still runs normally.
     expect(res.headers.get('access-control-allow-origin')).toBeNull();
   });
+
+  // `/api/auth/check` is registered on the ROOT app (outside the `/api`
+  // sub-app that carries CORS), so a scoped `corsMiddleware()` is applied to
+  // its exact path to keep the CORS boundary uniform across the whole `/api`
+  // surface (ce-security review SEC-AUTHCHECK-CORS). These assert it obeys the
+  // same allowlist as every other `/api/*` route WITHOUT losing its
+  // reachable-without-a-token property.
+  it('/api/auth/check echoes Access-Control-Allow-Origin for an allowlisted origin', async () => {
+    const { createApp } = await import('./app.js');
+    const app = createApp();
+    const res = await app.request('/api/auth/check', {
+      headers: { Origin: 'http://localhost:5173' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+  });
+
+  it('/api/auth/check gets NO CORS headers for a disallowed origin (boundary is uniform)', async () => {
+    const { createApp } = await import('./app.js');
+    const app = createApp();
+    const res = await app.request('/api/auth/check', {
+      headers: { Origin: 'https://evil.example.com' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBeNull();
+  });
+
+  it('/api/auth/check stays reachable (200) with no token and no Origin — still an ungated probe', async () => {
+    delete process.env.SILO_API_TOKEN;
+    const { createApp } = await import('./app.js');
+    const app = createApp();
+    const res = await app.request('/api/auth/check');
+    expect(res.status).toBe(200);
+  });
 });
 
 describe('readAllowedOrigins', () => {
