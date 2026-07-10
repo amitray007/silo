@@ -274,6 +274,9 @@ importers:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
         version: 1.29.0(zod@4.4.3)
+      '@silo/core':
+        specifier: workspace:*
+        version: link:../core
       '@silo/mcp-server':
         specifier: workspace:*
         version: link:../mcp/server
@@ -281,9 +284,6 @@ importers:
         specifier: workspace:*
         version: link:../worker
     devDependencies:
-      '@silo/core':
-        specifier: workspace:*
-        version: link:../core
       '@silo/db':
         specifier: workspace:*
         version: link:../db

@@ -19,11 +19,11 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "catalog:",
+    "@silo/core": "workspace:*",
     "@silo/mcp-server": "workspace:*",
     "@silo/worker": "workspace:*"
   },
   "devDependencies": {
-    "@silo/core": "workspace:*",
     "@silo/db": "workspace:*",
     "@silo/tsconfig": "workspace:*",
     "@types/node": "catalog:",

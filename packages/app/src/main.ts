@@ -1,6 +1,8 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { readTokenEnv } from '@silo/core';
 import { createSiloMcpServer } from '@silo/mcp-server';
 import { startWorker } from '@silo/worker';
+import { startMcpHttpServer } from './mcp-http.js';
 
 /**
  * `@silo/app` — the turnkey `silo` process (plan 005, A2).
@@ -33,6 +35,36 @@ async function main(): Promise<void> {
   await server.connect(transport);
   console.error('[silo] mcp server connected over stdio — turnkey process ready');
 
+  // Optional networked MCP surface (MCP-HTTP slice, U2): unset by default, so
+  // the turnkey process stays stdio-only unless an operator explicitly opts
+  // in. ALWAYS-CLOSED: even with the port set, the listener refuses to start
+  // without SILO_API_TOKEN — a networked MCP endpoint must never be
+  // reachable unauthenticated (same posture as `/api/ingest`).
+  let httpServer: ReturnType<typeof startMcpHttpServer> | undefined;
+  const mcpHttpPort = process.env.SILO_MCP_HTTP_PORT;
+  if (mcpHttpPort !== undefined && mcpHttpPort.length > 0) {
+    const port = Number(mcpHttpPort);
+    if (!Number.isFinite(port)) {
+      console.error(
+        `[silo] SILO_MCP_HTTP_PORT is set to an invalid port (${mcpHttpPort}) — refusing to ` +
+          'start the HTTP MCP listener. stdio MCP still works.',
+      );
+    } else {
+      const token = readTokenEnv('SILO_API_TOKEN');
+      if (token === undefined) {
+        console.error(
+          '[silo] SILO_MCP_HTTP_PORT is set but SILO_API_TOKEN is not — refusing to start an ' +
+            'unauthenticated networked MCP endpoint. stdio MCP still works.',
+        );
+      } else {
+        httpServer = startMcpHttpServer({ port, token });
+        const address = httpServer.address();
+        const boundPort = typeof address === 'object' && address !== null ? address.port : port;
+        console.error(`[silo] mcp http listener bound — http://127.0.0.1:${boundPort}/mcp`);
+      }
+    }
+  }
+
   let stopping = false;
   const shutdown = (signal: NodeJS.Signals) => {
     if (stopping) return;
@@ -49,7 +81,16 @@ async function main(): Promise<void> {
         } catch (error: unknown) {
           console.error('[silo] error closing mcp server:', error);
         } finally {
-          process.exit(0);
+          if (httpServer === undefined) {
+            process.exit(0);
+          } else {
+            httpServer.close((closeError) => {
+              if (closeError) {
+                console.error('[silo] error closing mcp http listener:', closeError);
+              }
+              process.exit(0);
+            });
+          }
         }
       }
     })().catch((error: unknown) => {
