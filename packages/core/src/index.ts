@@ -1,5 +1,13 @@
 export const name = '@silo/core';
 
+// Auth token primitives (MCP-HTTP slice, U1): timing-safe secret compare +
+// env-var token read, moved here from `@silo/api`'s `token-auth.ts` so
+// `@silo/app`'s HTTP MCP listener can reuse them without importing an
+// adapter (`@silo/app` may not import `@silo/api` — see
+// docs/rules/architecture.md). `@silo/api` re-exports both from
+// `token-auth.ts` so its own existing call sites (`ingest-auth.ts`,
+// `general-auth.ts`) are unaffected.
+export { readTokenEnv, timingSafeEqual } from './auth/token.js';
 // URL canonicalization (U3): the normalize-url wrapper + dedup key used by
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';
