@@ -43,6 +43,7 @@
  * web-UI auth story is a separate, later slice.
  */
 
+import { verifyAccessToken } from '@silo/core';
 import type { Context, Next } from 'hono';
 import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
 
@@ -63,6 +64,17 @@ function configuredToken(): string | undefined {
  * so the ordering is: disallowed origin -> blocked by CORS (no CORS headers,
  * browser refuses the response) before this middleware ever runs; allowed
  * origin + no/bad token -> this middleware's `401`.
+ *
+ * DB TOKENS (access-tokens slice, U2): a presented bearer also authenticates
+ * if it matches any non-revoked DB-backed access token (`@silo/core`'s
+ * `verifyAccessToken`, hash-lookup by sha256), NOT just the env
+ * `SILO_API_TOKEN`. The env compare stays FIRST as a fast, synchronous path
+ * (and remains the "is this gate on at all" trigger — see the `!expected`
+ * no-op branch above, UNCHANGED); the DB lookup only runs when the env
+ * compare fails, so the common case (env token, or gate off) never pays for
+ * an extra round-trip. This keeps the env token's role as an always-valid
+ * bootstrap/escape-hatch intact while letting any minted DB token act as a
+ * full second credential.
  */
 export async function generalTokenAuth(c: Context, next: Next): Promise<Response | undefined> {
   const expected = configuredToken();
@@ -71,12 +83,16 @@ export async function generalTokenAuth(c: Context, next: Next): Promise<Response
     return undefined;
   }
   const presented = bearerToken(c);
-  if (!presented || !timingSafeEqual(presented, expected)) {
-    return c.json(
-      { error: 'unauthorized', message: 'A valid Authorization: Bearer token is required.' },
-      401,
-    );
+  if (presented && timingSafeEqual(presented, expected)) {
+    await next();
+    return undefined;
   }
-  await next();
-  return undefined;
+  if (presented && (await verifyAccessToken(presented))) {
+    await next();
+    return undefined;
+  }
+  return c.json(
+    { error: 'unauthorized', message: 'A valid Authorization: Bearer token is required.' },
+    401,
+  );
 }

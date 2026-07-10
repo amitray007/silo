@@ -87,7 +87,7 @@ function toCreateLinkInput(body: IngestBody): CreateLinkInput {
  */
 export function registerIngestRoutes(app: Hono): void {
   app.post('/ingest', async (c) => {
-    const auth = checkIngestAuth(c);
+    const auth = await checkIngestAuth(c);
     if (!auth.ok) {
       // Never distinguish "token not configured" from "wrong/missing token"
       // in the RESPONSE (both are 401 with the same generic message) — that

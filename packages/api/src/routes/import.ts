@@ -53,7 +53,7 @@ const MAX_IMPORT_BODY_BYTES = 25 * 1024 * 1024;
  */
 export function registerImportRoutes(app: Hono): void {
   app.post('/import', async (c) => {
-    const auth = checkIngestAuth(c);
+    const auth = await checkIngestAuth(c);
     if (!auth.ok) {
       // Same generic-401 discipline as routes/ingest.ts: never distinguish
       // "token not configured" from "wrong/missing token" in the RESPONSE —

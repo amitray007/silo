@@ -91,6 +91,47 @@ describeIfPg('POST /api/import (integration)', () => {
     });
   });
 
+  describe('trust gate — DB-backed access tokens (access-tokens slice, U2)', () => {
+    it('a valid DB access token authorizes import, even with SILO_API_TOKEN unset (DB token existence IS the opt-in)', async () => {
+      delete process.env.SILO_API_TOKEN;
+      const { app, core } = harness.mod();
+      const created = await core.generateAccessToken('import-test db-token');
+      const res = await postJson(
+        app,
+        '/api/import',
+        {
+          version: 1,
+          links: [{ url: 'https://example.com/import-db-token-no-env', sourceKind: 'link' }],
+        },
+        `Bearer ${created.token}`,
+      );
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as CoreOps.ImportResult;
+      expect(body.created).toBe(1);
+    });
+
+    it('a REVOKED DB access token is 401, nothing imported', async () => {
+      const { app, pool, core } = harness.mod();
+      const created = await core.generateAccessToken('import-test revoked-token');
+      const revoked = await core.revokeAccessToken(created.id);
+      expect(revoked).toBe(true);
+
+      const before = (await pool.query('select count(*) from links')).rows[0]?.count;
+      const res = await postJson(
+        app,
+        '/api/import',
+        {
+          version: 1,
+          links: [{ url: 'https://example.com/import-db-token-revoked', sourceKind: 'link' }],
+        },
+        `Bearer ${created.token}`,
+      );
+      expect(res.status).toBe(401);
+      const after = (await pool.query('select count(*) from links')).rows[0]?.count;
+      expect(after).toBe(before);
+    });
+  });
+
   describe('trusted caller — validation', () => {
     it('correct token, bad JSON body -> 400 validation_error, nothing imported', async () => {
       const { app, pool } = harness.mod();

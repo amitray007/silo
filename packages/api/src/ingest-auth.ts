@@ -38,6 +38,7 @@
  * than open until someone remembers to lock it down.
  */
 
+import { verifyAccessToken } from '@silo/core';
 import type { Context } from 'hono';
 import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
 
@@ -57,22 +58,53 @@ export type IngestAuthResult =
  * (no response-writing) so the route handler stays in control of the exact
  * error envelope — see `routes/ingest.ts`.
  *
+ * ASYNC (access-tokens slice, U2): now also accepts a non-revoked DB-backed
+ * access token (`@silo/core`'s `verifyAccessToken`, a hash-lookup — hence the
+ * `Promise`), not just the env `SILO_API_TOKEN`. Every caller (`routes/
+ * ingest.ts`, `routes/import.ts`) must `await` this.
+ *
+ * DECISION — a valid DB token authorizes ingest EVEN IF `SILO_API_TOKEN` is
+ * unset: this deliberately differs from `general-auth.ts`'s general gate,
+ * where DB tokens only matter once the env token has turned the gate on
+ * (`!expected` short-circuits before any DB lookup there). `/api/ingest` is
+ * always-closed BY DESIGN (see this module's top doc comment — unset env
+ * token still means 401, never "open on localhost"), so "the gate is on"
+ * isn't a meaningful precondition here the way it is for the general gate.
+ * A DB access token is an explicit, operator-created credential (minted via
+ * the web UI's token management, itself gated behind `generalTokenAuth`) —
+ * its mere existence IS the operator opting a caller into trusted-ingest
+ * access, independent of whether they've ALSO set the env bootstrap secret.
+ * Refusing a valid DB token here just because `SILO_API_TOKEN` happens to be
+ * unset would make DB tokens a second-class credential for this one route,
+ * with no security benefit (the token itself is still a 256-bit secret the
+ * caller had to be handed) and a real usability cost (an operator who only
+ * ever provisions DB tokens, never sets the env var, could never use
+ * ingest/import at all). So: env token matches OR a valid DB token is
+ * presented -> ok; DB tokens are checked on EVERY request here (not gated
+ * behind `!!expected` first), unlike the general gate.
+ *
  * Two failure modes, both a 401 at the call site, distinguished only for the
  * operator-facing log line (never leaked to the client — same discipline as
  * `app.ts`'s `onError`, which never exposes internal detail over HTTP):
  * - `token_not_configured`: the operator never set `SILO_API_TOKEN` on this
- *   process. The route is unconditionally closed, not "open on localhost".
+ *   process AND the presented bearer (if any) does not match a DB token
+ *   either. The route is unconditionally closed, not "open on localhost".
  * - `missing_or_invalid_token`: a token IS configured, but the request
- *   didn't present a matching `Authorization: Bearer` header.
+ *   didn't present a matching `Authorization: Bearer` header (env or DB).
  */
-export function checkIngestAuth(c: Context): IngestAuthResult {
+export async function checkIngestAuth(c: Context): Promise<IngestAuthResult> {
+  const presented = bearerToken(c);
   const expected = configuredToken();
+
+  if (presented && expected && timingSafeEqual(presented, expected)) {
+    return { ok: true };
+  }
+  if (presented && (await verifyAccessToken(presented))) {
+    return { ok: true };
+  }
+
   if (!expected) {
     return { ok: false, reason: 'token_not_configured' };
   }
-  const presented = bearerToken(c);
-  if (!presented || !timingSafeEqual(presented, expected)) {
-    return { ok: false, reason: 'missing_or_invalid_token' };
-  }
-  return { ok: true };
+  return { ok: false, reason: 'missing_or_invalid_token' };
 }

@@ -1,6 +1,6 @@
 import * as http from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { getSetting, timingSafeEqual } from '@silo/core';
+import { getSetting, timingSafeEqual, verifyAccessToken } from '@silo/core';
 import { createSiloMcpServer } from '@silo/mcp-server';
 
 const MCP_PATH = '/mcp';
@@ -187,8 +187,19 @@ async function routeMcpRequest(
 
   // Auth FIRST — before touching the body — so an unauthenticated caller
   // never causes the (more expensive) body-read/MCP-wiring path to run.
+  //
+  // DB TOKENS (access-tokens slice, U2): accepts the configured `token` (the
+  // env `SILO_API_TOKEN` this listener was started with — see
+  // `startMcpHttpServer`'s `opts.token`) OR any non-revoked DB-backed access
+  // token (`@silo/core`'s `verifyAccessToken`), mirroring `general-auth.ts`'s
+  // env-first-then-DB-fallback ordering. The env compare runs first and is
+  // synchronous/timing-safe (`envOk`); the DB lookup only runs when it fails
+  // (`dbOk`'s `!envOk &&` short-circuit), so the common case (correct env
+  // token) never pays for the extra async DB round-trip.
   const requestToken = bearerToken(req);
-  if (requestToken === undefined || !timingSafeEqual(requestToken, token)) {
+  const envOk = requestToken !== undefined && timingSafeEqual(requestToken, token);
+  const dbOk = !envOk && requestToken !== undefined && (await verifyAccessToken(requestToken));
+  if (!envOk && !dbOk) {
     sendUnauthorized(res);
     return;
   }

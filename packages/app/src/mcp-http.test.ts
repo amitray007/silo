@@ -191,6 +191,42 @@ describeIfPg('startMcpHttpServer', () => {
     expect(body.result?.serverInfo?.name).toBe('silo');
   });
 
+  it('a valid DB access token (generated via core.generateAccessToken) is accepted as the bearer, even though it is not the configured env token', async () => {
+    const core = await import('@silo/core');
+    const created = await core.generateAccessToken('mcp-http-test db-token');
+
+    const { baseUrl } = await startTestServer();
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${created.token}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('a REVOKED DB access token is 401', async () => {
+    const core = await import('@silo/core');
+    const created = await core.generateAccessToken('mcp-http-test revoked-token');
+    const revoked = await core.revokeAccessToken(created.id);
+    expect(revoked).toBe(true);
+
+    const { baseUrl } = await startTestServer();
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${created.token}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(401);
+  });
+
   it('GET /mcp (wrong method) is 404', async () => {
     const { baseUrl } = await startTestServer();
     const res = await fetch(`${baseUrl}/mcp`, {

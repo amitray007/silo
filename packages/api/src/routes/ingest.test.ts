@@ -155,6 +155,53 @@ describeIfPg('POST /api/ingest (integration)', () => {
     });
   });
 
+  describe('trust gate — DB-backed access tokens (access-tokens slice, U2)', () => {
+    it('a valid DB access token authorizes ingest, even with SILO_API_TOKEN unset (DB token existence IS the opt-in)', async () => {
+      delete process.env.SILO_API_TOKEN;
+      const { app, core } = harness.mod();
+      const created = await core.generateAccessToken('ingest-test db-token');
+      const res = await postJson(
+        app,
+        '/api/ingest',
+        { url: 'https://example.com/ingest-db-token-no-env' },
+        `Bearer ${created.token}`,
+      );
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as { link: Record<string, unknown> };
+      expect(body.link.sourceKind).toBe('link');
+    });
+
+    it('a REVOKED DB access token is 401, nothing saved', async () => {
+      const { app, pool, core } = harness.mod();
+      const created = await core.generateAccessToken('ingest-test revoked-token');
+      const revoked = await core.revokeAccessToken(created.id);
+      expect(revoked).toBe(true);
+
+      const before = (await pool.query('select count(*) from links')).rows[0]?.count;
+      const res = await postJson(
+        app,
+        '/api/ingest',
+        { url: 'https://example.com/ingest-db-token-revoked' },
+        `Bearer ${created.token}`,
+      );
+      expect(res.status).toBe(401);
+      const after = (await pool.query('select count(*) from links')).rows[0]?.count;
+      expect(after).toBe(before);
+    });
+
+    it('the env SILO_API_TOKEN still works when DB tokens also exist', async () => {
+      const { app, core } = harness.mod();
+      await core.generateAccessToken('ingest-test unrelated-token');
+      const res = await postJson(
+        app,
+        '/api/ingest',
+        { url: 'https://example.com/ingest-env-token-still-works' },
+        `Bearer ${TEST_TOKEN}`,
+      );
+      expect(res.status).toBe(201);
+    });
+  });
+
   describe('trusted caller — accepts + writes rich sourceData', () => {
     it('valid token + full FT-shaped twitter sourceData -> 201, link + sourceData persisted, readable via GET /api/links/:id', async () => {
       const { app } = harness.mod();
