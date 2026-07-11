@@ -152,6 +152,8 @@ jobs:
         with:
           # Check out the bump commit the plan job just pushed.
           ref: main
+          # Use RELEASE_TOKEN so tag creation isn't blocked by the ruleset.
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
         with:
@@ -211,13 +213,14 @@ jobs:
       - name: create GitHub Release
         uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2
         with:
+          token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: ${{ matrix.entry.tag }}
           name: ${{ matrix.entry.distributable }} v${{ matrix.entry.to }}
           body: |
             Automated release of **${{ matrix.entry.distributable }}** ${{ matrix.entry.from }} → ${{ matrix.entry.to }}.
 
             ${{ matrix.entry.distributable == 'chrome' && 'Download `silo-capture-*.zip` below and upload it to the Chrome Web Store, or load it unpacked.' || '' }}
-            ${{ matrix.entry.distributable == 'cli' && 'Install via Homebrew (`brew install amitray007/silo/silo`) or download the tarball below.' || '' }}
+            ${{ matrix.entry.distributable == 'cli' && 'Install via Homebrew (`brew install amitray007/tap/silo`) or download the tarball below.' || '' }}
             ${{ matrix.entry.distributable == 'raycast' && 'Published to the Raycast Store from source — run `pnpm --filter silo-raycast exec ray publish` to open the store PR.' || '' }}
           files: |
             silo-capture-${{ matrix.entry.to }}.zip
