@@ -2426,4 +2426,160 @@ describeIfPg('links operations (integration)', () => {
       expect(link.id).toBeTruthy();
     });
   });
+
+  describe('search — snippet, extractedText dropped (agent-navigation U2)', () => {
+    it('snippet highlights the matched term and is shorter than the full extracted text', async () => {
+      const longBody = `${'padding word '.repeat(200)}the zorblequax appeared here in the middle ${'more padding text '.repeat(200)}`;
+      await ops.createLink({
+        url: 'https://example.com/u2-search-snippet-highlight',
+        title: 'an article',
+        extractedText: longBody,
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('zorblequax');
+      expect(results).toHaveLength(1);
+      const [result] = results;
+      expect(result?.snippet).toBeTruthy();
+      expect(result?.snippet).toContain('**zorblequax**');
+      expect(result?.snippet?.length).toBeLessThan(longBody.length);
+    });
+
+    it('extractedText is ABSENT from search result rows', async () => {
+      await ops.createLink({
+        url: 'https://example.com/u2-search-no-extracted-text',
+        title: 'quixolarbeam article',
+        extractedText: 'this body should never be returned by search',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('quixolarbeam');
+      expect(results).toHaveLength(1);
+      expect(results[0]).not.toHaveProperty('extractedText');
+    });
+
+    it('falls back to description when extractedText is null', async () => {
+      await ops.createLink({
+        url: 'https://example.com/u2-search-snippet-fallback-description',
+        title: 'unrelated title',
+        description: 'a description mentioning flumwhistler explicitly',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('flumwhistler');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.snippet).toContain('**flumwhistler**');
+    });
+
+    it('falls back to title when both extractedText and description are null', async () => {
+      await ops.createLink({
+        url: 'https://example.com/u2-search-snippet-fallback-title',
+        title: 'grimbletoad appears only in the title',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('grimbletoad');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.snippet).toContain('**grimbletoad**');
+    });
+  });
+
+  describe('list — snippet, extractedText dropped (agent-navigation U2)', () => {
+    it('snippet is a truncated excerpt of extractedText, and extractedText is absent', async () => {
+      const longBody = 'x'.repeat(500);
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-list-snippet-truncated',
+        title: 'a long article',
+        extractedText: longBody,
+        sourceKind: 'link',
+      });
+
+      const { links: page } = await ops.list();
+      const row = page.find((l) => l.id === created.id);
+      expect(row).toBeDefined();
+      expect(row).not.toHaveProperty('extractedText');
+      expect(row?.snippet).toBeTruthy();
+      expect(row?.snippet?.length).toBeLessThanOrEqual(201); // 200 chars + ellipsis
+      expect(longBody.startsWith(row?.snippet?.replace('…', '') ?? '')).toBe(true);
+    });
+
+    it('falls back to description when extractedText is null', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-list-snippet-fallback-description',
+        title: 'unrelated',
+        description: 'a short description used as the snippet source',
+        sourceKind: 'link',
+      });
+
+      const { links: page } = await ops.list();
+      const row = page.find((l) => l.id === created.id);
+      expect(row?.snippet).toBe('a short description used as the snippet source');
+    });
+
+    it('snippet is null when there is no extractedText or description', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-list-snippet-null',
+        title: 'bare link with nothing else',
+        sourceKind: 'link',
+      });
+
+      const { links: page } = await ops.list();
+      const row = page.find((l) => l.id === created.id);
+      expect(row?.snippet).toBeNull();
+    });
+  });
+
+  describe('getById — text windowing (agent-navigation U2)', () => {
+    it('no-window call returns full extractedText exactly as before (back-compat)', async () => {
+      const fullText = 'the complete article body, in full, unwindowed';
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-no-window',
+        extractedText: fullText,
+        sourceKind: 'link',
+      });
+
+      const link = await ops.getById(created.id);
+      expect(link?.extractedText).toBe(fullText);
+      expect(link).not.toHaveProperty('extractedTextLength');
+    });
+
+    it('textWindow returns the correct character slice plus the full-length indicator', async () => {
+      const fullText = '0123456789abcdefghijklmnopqrstuvwxyz';
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-window-slice',
+        extractedText: fullText,
+        sourceKind: 'link',
+      });
+
+      const windowed = await ops.getById(created.id, { textWindow: { offset: 5, limit: 10 } });
+      expect(windowed?.extractedText).toBe(fullText.slice(5, 15));
+      expect(windowed?.extractedTextLength).toBe(fullText.length);
+    });
+
+    it('an out-of-range offset returns an empty slice, not an error', async () => {
+      const fullText = 'short text';
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-window-out-of-range',
+        extractedText: fullText,
+        sourceKind: 'link',
+      });
+
+      const windowed = await ops.getById(created.id, {
+        textWindow: { offset: 10_000, limit: 50 },
+      });
+      expect(windowed?.extractedText).toBe('');
+      expect(windowed?.extractedTextLength).toBe(fullText.length);
+    });
+
+    it('a window on a null extractedText returns an empty slice and a zero length', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-window-null-text',
+        sourceKind: 'link',
+      });
+
+      const windowed = await ops.getById(created.id, { textWindow: { offset: 0, limit: 10 } });
+      expect(windowed?.extractedText).toBe('');
+      expect(windowed?.extractedTextLength).toBe(0);
+    });
+  });
 });

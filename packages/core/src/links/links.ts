@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { db, links, linkTags, tags } from '@silo/db';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
 import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
@@ -482,12 +482,91 @@ async function getRawById(id: string): Promise<Link | null> {
   return row ?? null;
 }
 
-/** Fetch a single live link by id, or `null` if it doesn't exist or is trashed. */
-export async function getById(id: string): Promise<LinkWithTags | null> {
+/**
+ * A slice of `extractedText`, requested via `getById`'s `textWindow` option
+ * (agent-navigation slice U2). `offset`/`limit` are CHARACTER offsets into
+ * the full `extractedText` string (JS string indexing — UTF-16 code units,
+ * not bytes or grapheme clusters; adequate for this store's English-biased
+ * article text, and simple/cheap since no DB round-trip is needed beyond the
+ * one that already fetches the full column).
+ */
+export type TextWindowOptions = {
+  /** Character offset into `extractedText` to start the slice at (0-based). */
+  offset: number;
+  /** Maximum number of characters to return from `offset`. */
+  limit: number;
+};
+
+/** Optional read modifiers for `getById`. */
+export type GetByIdOptions = {
+  /**
+   * Request a character-sliced window of `extractedText` instead of the full
+   * text — lets an agent read a relevant slice of a long article without
+   * paying for the whole body in context. Omitted (the default): behavior is
+   * UNCHANGED from before this option existed — `extractedText` is returned
+   * in full, and `extractedTextLength` is omitted.
+   */
+  textWindow?: TextWindowOptions;
+};
+
+/**
+ * `getById`'s return shape when `opts.textWindow` is given: `extractedText`
+ * is REPLACED by the requested character slice (still on the same field
+ * name, so a caller reading a window doesn't need a different field), and
+ * `extractedTextLength` carries the FULL untruncated length so the caller
+ * (an agent) can tell there's more text beyond the window it received and
+ * decide whether to request a later offset.
+ */
+export type LinkWithTextWindow = LinkWithTags & { extractedTextLength: number };
+
+/**
+ * Character-slice `text` to `[offset, offset + limit)`. An out-of-range
+ * `offset` (negative or past the end) or a non-positive `limit` clamps to an
+ * EMPTY string rather than throwing — a caller paging past the end of a short
+ * article gets `''`, not an error, matching `effectiveLimit`'s
+ * clamp-don't-throw style elsewhere in this module for caller-supplied
+ * paging numbers.
+ */
+function sliceTextWindow(text: string, window: TextWindowOptions): string {
+  const start = Math.max(0, Math.trunc(window.offset));
+  if (!Number.isFinite(start) || start >= text.length) return '';
+  const requestedLimit = Math.trunc(window.limit);
+  if (!Number.isFinite(requestedLimit) || requestedLimit <= 0) return '';
+  return text.slice(start, start + requestedLimit);
+}
+
+/**
+ * Fetch a single live link by id, or `null` if it doesn't exist or is
+ * trashed. `opts.textWindow` (agent-navigation slice U2) is ADDITIVE and
+ * OPT-IN: omitted, this is byte-for-byte the prior behavior (full
+ * `extractedText`, no `extractedTextLength` field) — every existing caller
+ * is unaffected. When given, `extractedText` is replaced by the requested
+ * character slice and `extractedTextLength` reports the full text's length
+ * so the caller knows how much more there is.
+ */
+export async function getById(
+  id: string,
+  opts: GetByIdOptions & { textWindow: TextWindowOptions },
+): Promise<LinkWithTextWindow | null>;
+export async function getById(id: string, opts?: GetByIdOptions): Promise<LinkWithTags | null>;
+export async function getById(
+  id: string,
+  opts?: GetByIdOptions,
+): Promise<LinkWithTags | LinkWithTextWindow | null> {
   const row = await getRawById(id);
   if (!row) return null;
   const [hydrated] = await hydrateTags(db, [row]);
-  return hydrated ?? null;
+  if (!hydrated) return null;
+
+  const window = opts?.textWindow;
+  if (!window) return hydrated;
+
+  const fullText = hydrated.extractedText ?? '';
+  return {
+    ...hydrated,
+    extractedText: sliceTextWindow(fullText, window),
+    extractedTextLength: fullText.length,
+  };
 }
 
 export type ListFilter = {
@@ -515,10 +594,60 @@ export type ListFilter = {
   until?: string;
 };
 
+/**
+ * Max characters of plain-text excerpt `list()`'s `snippet` carries (agent-
+ * navigation slice U2). `list` has no query to focus a `ts_headline` around
+ * (unlike `search`'s query-highlighted snippet below), so its snippet is a
+ * plain truncation — just enough to let an agent recognize a link without
+ * paying for the full article body.
+ */
+const LIST_SNIPPET_MAX_CHARS = 200;
+
+/**
+ * A `list()` result row (agent-navigation slice U2): `LinkWithTags` MINUS the
+ * full `extractedText` body, PLUS a short plain-truncation `snippet`. Dropping
+ * `extractedText` here is the whole point of this change — a page of 20 list
+ * results no longer drags every article's full body into the caller's
+ * context; a caller that needs the full text calls `getById` for the one
+ * link it actually wants to read.
+ */
+export type ListResultRow = Omit<LinkWithTags, 'extractedText'> & { snippet: string | null };
+
 export type ListPage = {
-  links: LinkWithTags[];
+  links: ListResultRow[];
   nextCursor?: string;
 };
+
+/**
+ * Single-line, whitespace-collapsed, ellipsized plain-text excerpt for
+ * `list()`'s `snippet` (no query to focus around, unlike `search`'s
+ * `ts_headline` snippet). Prefers `extractedText`, falling back to
+ * `description` when the article body hasn't been extracted yet (matching
+ * `search`'s snippet fallback order below) — `null` only when BOTH are
+ * empty/absent. Truncates to `LIST_SNIPPET_MAX_CHARS` characters, breaking on
+ * a whitespace boundary where one exists nearby so the excerpt doesn't end
+ * mid-word, and appends an ellipsis whenever the source text was cut.
+ */
+function truncatedSnippet(text: string | null | undefined): string | null {
+  const collapsed = text?.replace(/\s+/g, ' ').trim();
+  if (!collapsed) return null;
+  if (collapsed.length <= LIST_SNIPPET_MAX_CHARS) return collapsed;
+
+  const hardCut = collapsed.slice(0, LIST_SNIPPET_MAX_CHARS);
+  const lastSpace = hardCut.lastIndexOf(' ');
+  // Prefer breaking on the last whitespace boundary within the cut, but only
+  // if that doesn't throw away a large chunk of the budget (a boundary very
+  // early in the slice means the text has few/no spaces near the cutoff —
+  // just hard-cut instead of over-truncating).
+  const cut = lastSpace > LIST_SNIPPET_MAX_CHARS * 0.6 ? hardCut.slice(0, lastSpace) : hardCut;
+  return `${cut}…`;
+}
+
+/** Build a `list()` result row: strip `extractedText`, add its truncated `snippet`. */
+function toListResultRow(link: LinkWithTags): ListResultRow {
+  const { extractedText, ...rest } = link;
+  return { ...rest, snippet: truncatedSnippet(extractedText ?? link.description) };
+}
 
 /** Selects `created_at` as full-precision text (Postgres renders all 6
  * fractional-second digits) — the value carried in the keyset cursor. See
@@ -651,15 +780,69 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
     db,
     page_.map((row) => row.link),
   );
-  return nextCursor === undefined ? { links: hydrated } : { links: hydrated, nextCursor };
+  const resultRows = hydrated.map(toListResultRow);
+  return nextCursor === undefined ? { links: resultRows } : { links: resultRows, nextCursor };
 }
 
 export type SearchResult = Link & { rank: number };
 
+/**
+ * A `search()` result row (agent-navigation slice U2): `LinkWithTags` MINUS
+ * the full `extractedText` body, PLUS `rank` (unchanged) and a query-focused
+ * `snippet` (a `ts_headline` excerpt around the best match — see `search`'s
+ * doc comment for the headline options). Dropping `extractedText` here is
+ * the whole point of this change: a 20-hit search no longer dumps ~50k+
+ * tokens of full article bodies into the caller's context. A caller that
+ * wants the full text of a specific hit calls `getById`.
+ */
+export type SearchResultRow = Omit<LinkWithTags, 'extractedText'> & {
+  rank: number;
+  snippet: string | null;
+};
+
 export type SearchPage = {
-  results: (LinkWithTags & { rank: number })[];
+  results: SearchResultRow[];
   nextCursor?: string;
 };
+
+/**
+ * `ts_headline` options for `search()`'s query-focused `snippet` (agent-
+ * navigation slice U2). Chosen for a short, readable, single-to-two-sentence
+ * excerpt around the best match rather than `ts_headline`'s (much larger)
+ * defaults:
+ *   - `MaxWords=35, MinWords=15` — roughly one sentence's worth of words,
+ *     bounded so a short match doesn't produce a one-word fragment and a
+ *     dense match doesn't run on.
+ *   - `MaxFragments=2` — allow up to two separate match locations to be
+ *     stitched together (comma-joined by Postgres) when the query terms
+ *     appear in different parts of the text, instead of only ever showing
+ *     the single best region.
+ *   - `StartSel=**, StopSel=**` — wrap each matched term in `**...**`
+ *     (markdown-bold-style markers), simple and unambiguous for an agent to
+ *     parse/strip, and safe to render as-is (no HTML tags to escape).
+ * A LITERAL (not parameterized) options string: `ts_headline`'s 4th argument
+ * must be a plan-time constant string of `key=value` pairs — Postgres does
+ * not accept it as a bind parameter — so this is inlined into the `sql`
+ * template as a fixed literal, never built from caller input.
+ */
+const TS_HEADLINE_OPTIONS = sql`'MaxWords=35, MinWords=15, MaxFragments=2, StartSel=**, StopSel=**'`;
+
+/**
+ * Build the `snippet` select expression for a `tsQuery`-matched search: a
+ * `ts_headline` excerpt over `extractedText` (falling back to `description`
+ * then `title` when the body is null/empty — see the inline `coalesce`),
+ * using the fixed `TS_HEADLINE_OPTIONS`. Exported (not module-private) so
+ * `trash.ts`'s `searchTrash` can build the SAME snippet expression for the
+ * trashed-search path rather than a hand-duplicated copy — mirrors
+ * `tagSearchVector`'s doc comment above for why sharing this matters
+ * (jscpd drift risk between two otherwise near-identical search functions).
+ */
+export function buildSnippetHeadline(tsQuery: SQL): SQL<string | null> {
+  const headlineSource = sql`coalesce(nullif(${links.extractedText}, ''), nullif(${links.description}, ''), ${links.title})`;
+  return sql<
+    string | null
+  >`ts_headline('english', ${headlineSource}, ${tsQuery}, ${TS_HEADLINE_OPTIONS})`;
+}
 
 /**
  * Correlated scalar subquery: the tsvector of `links.id`'s tag NAMES, built by
@@ -776,6 +959,12 @@ export async function search(
   const tagRank = sql`ts_rank(${tagSearchVector}, ${tsQuery})`;
   const combinedRank = sql<number>`${titleRank} + ${tagRank}`;
 
+  // `snippet` (agent-navigation slice U2): a query-focused `ts_headline`
+  // excerpt around the best match — see `buildSnippetHeadline`'s doc comment
+  // for the fallback order (extractedText -> description -> title) and the
+  // fixed headline options.
+  const snippetHeadline = buildSnippetHeadline(tsQuery);
+
   // The additive tag-membership scope (see doc comment above): an `EXISTS`
   // over the same `linkTags`/`tags` join `list()`'s tag-filter branch uses,
   // correlated on THIS row's id. Kept as a bare `undefined` (not folded into
@@ -821,6 +1010,7 @@ export async function search(
     .select({
       link: links,
       rank: combinedRank,
+      snippet: snippetHeadline,
     })
     .from(links)
     .where(
@@ -842,7 +1032,14 @@ export async function search(
     db,
     page_.map((row) => row.link),
   );
-  const results = hydrated.map((link, i) => ({ ...link, rank: page_[i]?.rank ?? 0 }));
+  const results: SearchResultRow[] = hydrated.map((link, i) => {
+    const { extractedText, ...rest } = link;
+    return {
+      ...rest,
+      rank: page_[i]?.rank ?? 0,
+      snippet: page_[i]?.snippet ?? null,
+    };
+  });
   return nextCursor === undefined ? { results } : { results, nextCursor };
 }
 

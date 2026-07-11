@@ -1,7 +1,7 @@
 import { db, links } from '@silo/db';
 import { and, desc, sql } from 'drizzle-orm';
-import type { SearchPage } from './links.js';
-import { tagSearchVector } from './links.js';
+import type { SearchPage, SearchResultRow } from './links.js';
+import { buildSnippetHeadline, tagSearchVector } from './links.js';
 import {
   decodeSearchCursor,
   decodeTrashCursor,
@@ -132,10 +132,15 @@ export async function searchTrash(query: string, page: PageParams = {}): Promise
   const trashedCondition = sql`${links.deletedAt} is not null`;
   const matchCondition = sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`;
 
+  // `snippet` (agent-navigation slice U2): same query-focused `ts_headline`
+  // excerpt live `search` returns — see `buildSnippetHeadline`'s doc comment.
+  const snippetHeadline = buildSnippetHeadline(tsQuery);
+
   const rows = await db
     .select({
       link: links,
       rank: combinedRank,
+      snippet: snippetHeadline,
     })
     .from(links)
     .where(and(trashedCondition, matchCondition))
@@ -151,7 +156,14 @@ export async function searchTrash(query: string, page: PageParams = {}): Promise
     db,
     page_.map((row) => row.link),
   );
-  const results = hydrated.map((link, i) => ({ ...link, rank: page_[i]?.rank ?? 0 }));
+  const results: SearchResultRow[] = hydrated.map((link, i) => {
+    const { extractedText, ...rest } = link;
+    return {
+      ...rest,
+      rank: page_[i]?.rank ?? 0,
+      snippet: page_[i]?.snippet ?? null,
+    };
+  });
   return nextCursor === undefined ? { results } : { results, nextCursor };
 }
 
