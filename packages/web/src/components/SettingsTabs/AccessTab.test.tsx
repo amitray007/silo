@@ -115,98 +115,41 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     vi.restoreAllMocks();
   });
 
-  it('"Copy config" writes the HTTP+bearer MCP config to the clipboard', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-
-    renderTab();
-    fireEvent.click(screen.getByRole('button', { name: 'Copy config' }));
-
-    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
-    const copied = writeText.mock.calls[0]?.[0] as string;
-
-    // The HTTP+bearer shape.
-    expect(copied).toContain('/mcp');
-    expect(copied).toContain('Authorization');
-    expect(copied).toContain('Bearer');
-    expect(copied).toContain('<YOUR_SILO_API_TOKEN>');
-
-    // Never the old stdio subprocess config.
-    expect(copied).not.toContain('"command"');
-    expect(copied).not.toContain('"args"');
-    expect(copied).not.toContain('pnpm');
-
-    // Never a real token value.
-    expect(copied).not.toMatch(/Bearer (?!<YOUR_SILO_API_TOKEN>)\S+/);
-
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Copied' })).toBeDefined());
-  });
-
   /**
-   * `resolveMcpUrl`'s three-step precedence (deployable-silo slice, Unit 4):
-   * these three cases exercise it end-to-end through the actual button click
-   * (unit coverage for the pure function itself lives in `lib/mcpUrl.test.ts`)
-   * — jsdom's default `window.location.hostname` is `localhost`, which is
-   * what makes the FIRST "Copy config" test above assert the dev-default URL
-   * without needing to say so explicitly.
+   * The hero's primary action is now "Set up" (formerly "Copy config") — it
+   * opens `McpSetupDialog` (a second, stacked `ModalShell`) rather than
+   * writing straight to the clipboard. `McpSetupDialog`'s own test file
+   * covers the dialog's content and per-field clipboard behavior in detail;
+   * this just proves the wiring from the hero button.
    */
-  it('an operator-set SILO_PUBLIC_MCP_URL (via GET /api/config) is copied verbatim', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-
-    renderTab({ configMcpUrl: 'https://mcp.override.example/mcp' });
-    const button = screen.getByRole('button', { name: 'Copy config' });
-    // The button doesn't gate on `useAppConfig` loading, so a click before
-    // that query resolves would read the pre-load `undefined` and silently
-    // fall through to the localhost dev-default instead of the override —
-    // click, then RETRY inside `waitFor` until the config has landed and the
-    // resolved value shows up, rather than guessing when the query settles.
-    await waitFor(() => {
-      fireEvent.click(button);
-      expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('mcp.override.example'));
-    });
-  });
-
-  it('a non-localhost origin with no config override derives https://mcp.<hostname>/mcp', async () => {
-    const writeText = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-    const originalLocation = window.location;
-    Object.defineProperty(window, 'location', {
-      configurable: true,
-      value: { ...originalLocation, hostname: 'silo.example.com', protocol: 'https:' },
-    });
-
-    try {
-      renderTab();
-      const button = screen.getByRole('button', { name: 'Copy config' });
-      await waitFor(() => {
-        fireEvent.click(button);
-        expect(writeText).toHaveBeenLastCalledWith(expect.stringContaining('mcp.silo.example.com'));
-      });
-    } finally {
-      Object.defineProperty(window, 'location', {
-        configurable: true,
-        value: originalLocation,
-      });
-    }
-  });
-
-  it('flashes "Couldn\'t copy" when the clipboard write fails, and resets after', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true });
-    const writeText = vi.fn().mockRejectedValue(new Error('denied'));
-    vi.stubGlobal('navigator', { clipboard: { writeText } });
-
+  it('"Set up" opens the MCP setup dialog, showing its connection fields', async () => {
     renderTab();
-    fireEvent.click(screen.getByRole('button', { name: 'Copy config' }));
+
+    expect(screen.queryByRole('dialog', { name: 'Connect over MCP' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Set up' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'Connect over MCP' });
+    expect(dialog).toBeDefined();
+    // Spot-check a couple of the dialog's rows render — full field-by-field
+    // coverage lives in `McpSetupDialog.test.tsx`.
+    expect(screen.getByText('URL')).toBeDefined();
+    expect(screen.getByText('Claude Code CLI')).toBeDefined();
+  });
+
+  it('closing the setup dialog (Escape) returns to the Settings tab, not past it', async () => {
+    renderTab();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Set up' }));
+    await screen.findByRole('dialog', { name: 'Connect over MCP' });
+
+    fireEvent.keyDown(document, { key: 'Escape' });
 
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: "Couldn't copy" })).toBeDefined(),
+      expect(screen.queryByRole('dialog', { name: 'Connect over MCP' })).toBeNull(),
     );
-
-    vi.advanceTimersByTime(1500);
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Copy config' })).toBeDefined());
-
-    vi.useRealTimers();
+    // The Access tab underneath (this test's own render) is still there —
+    // Escape closed only the dialog, not anything above/around it.
+    expect(screen.getByRole('button', { name: 'Set up' })).toBeDefined();
   });
 
   it('the MCP access row renders as a live switch reflecting mcpAccess from settings', async () => {

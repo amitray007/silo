@@ -1,87 +1,17 @@
-import { type CSSProperties, useEffect, useRef, useState } from 'react';
+import { type CSSProperties, useState } from 'react';
 import {
   useAccessTokens,
-  useAppConfig,
   useCreateAccessToken,
   useRevokeAccessToken,
   useSettings,
   useUpdateSettings,
 } from '../../api/hooks';
 import type { AccessTokenJson } from '../../api/types';
-import { resolveMcpUrl } from '../../lib/mcpUrl';
+import { copyLabel, useCopyFlash } from './copyFlash';
+import { McpSetupDialog } from './McpSetupDialog';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
 import { SettingsHero } from './SettingsHero';
 import { ToggleSwitch } from './ToggleSwitch';
-
-/**
- * Builds the streamable-HTTP MCP client-config snippet for `url` — points at
- * the HTTP MCP listener (`@silo/app`, opt-in via `SILO_MCP_HTTP_PORT`, see
- * `packages/app/src/mcp-http.ts`) with the shared secret in an
- * `Authorization: Bearer` header. `<YOUR_SILO_API_TOKEN>` is a literal
- * placeholder, NOT a real value — the browser is never shown the server's
- * `SILO_API_TOKEN` (it's a server-only secret; the web-auth slice, not this
- * one, is what would ever put real user-scoped credentials in the browser).
- * The user fills in their own token after copying.
- *
- * `url` is now RESOLVED at click time (deployable-silo slice, Unit 4) rather
- * than hardcoded — `resolveMcpUrl` (`packages/web/src/lib/mcpUrl.ts`) picks
- * an operator-set `SILO_PUBLIC_MCP_URL` override, else derives
- * `https://mcp.<hostname>/mcp` for a real deploy host, else falls back to
- * this dev-default `http://127.0.0.1:8788/mcp` (which mirrors the spec's
- * example port, `docs/superpowers/specs/2026-07-10-mcp-http-apikey-design.md`,
- * `.env.example` — the real bind port is whatever `SILO_MCP_HTTP_PORT` is set
- * to server-side).
- */
-function mcpClientConfig(url: string): string {
-  return `{
-  "mcpServers": {
-    "silo": {
-      "url": "${url}",
-      "headers": { "Authorization": "Bearer <YOUR_SILO_API_TOKEN>" }
-    }
-  }
-}`;
-}
-
-/**
- * A tri-state copy-flash label: `null` = never clicked, `true` = last copy
- * succeeded, `false` = last copy failed. Shared by both copy affordances on
- * this tab (Copy config / Copy token) so a failed clipboard write never looks
- * identical to a successful one (review fix, ce-correctness) — insecure
- * context / denied permission / non-user-gesture embeddings all reject
- * `writeText`. Each caller gets its OWN independent state/timer (two separate
- * `useCopyFlash()` calls) since the two buttons' labels must flip
- * independently — copying the token must not also flip "Copy config"'s label.
- */
-function useCopyFlash() {
-  const [copied, setCopied] = useState<boolean | null>(null);
-  // Holds the pending "reset the label" timer so it can be cleared if the tab
-  // unmounts (modal closed / tab switched) before it fires — otherwise it'd
-  // call setState on an unmounted component (review fix, ce-correctness).
-  const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
-
-  const flash = (ok: boolean) => {
-    setCopied(ok);
-    clearTimeout(resetTimer.current);
-    resetTimer.current = setTimeout(() => setCopied(null), 1500);
-  };
-
-  const copyText = (text: string) => {
-    navigator.clipboard.writeText(text).then(
-      () => flash(true),
-      () => flash(false),
-    );
-  };
-
-  return { copied, copyText };
-}
-
-/** Renders a copy-flash tri-state onto a button label — shared by "Copy config" and "Copy token". */
-function copyLabel(copied: boolean | null, idleLabel: string): string {
-  return copied === true ? 'Copied' : copied === false ? "Couldn't copy" : idleLabel;
-}
 
 /** Formats an ISO date string as a short, human date (e.g. "Jul 11, 2026") — used for both `createdAt` and `lastUsedAt`. */
 function formatDate(iso: string): string {
@@ -323,14 +253,20 @@ function AccessTokensSection() {
 /**
  * Settings → Access (v3's `tabAccess`): a hero card explaining MCP access
  * (silo's whole point — "let an agent add, search, and read your links"),
- * with "Copy config" as the hero's primary action; below it, a LIVE
- * MCP-access toggle (backed by core's `mcpAccess` setting, default `true` —
- * the HTTP MCP listener enforces it per-request server-side, `403` when off,
- * see `packages/app/src/mcp-http.ts`); below that, the named access-token
+ * with "Set up" as the hero's primary action; below it, a LIVE MCP-access
+ * toggle (backed by core's `mcpAccess` setting, default `true` — the HTTP
+ * MCP listener enforces it per-request server-side, `403` when off, see
+ * `packages/app/src/mcp-http.ts`); below that, the named access-token
  * management section (U4) — create/list/revoke real DB-backed tokens rather
- * than the old single inert env-token row. "Copy config" writes the
- * HTTP+bearer config (above, with a placeholder token — a created token is
- * copyable from its own reveal instead) to the clipboard.
+ * than the old single inert env-token row.
+ *
+ * "Set up" (formerly "Copy config", which copied a single JSON blob) opens
+ * `McpSetupDialog` — a SECOND `ModalShell` stacked on top of this Settings
+ * modal — showing the URL, transport, auth header, `claude mcp add` CLI
+ * command, and the JSON blob as individually copyable rows, since a single
+ * JSON blob doesn't serve every way people wire up an MCP client (Claude
+ * Desktop JSON, the CLI, Cursor, a raw HTTP client). See that dialog's doc
+ * comment for the stacking details.
  */
 export function AccessTab() {
   const { data: settings } = useSettings();
@@ -338,11 +274,7 @@ export function AccessTab() {
   const mcpAccess = settings?.mcpAccess ?? true;
   const mcpAccessDisabled = !settings || updateSettings.isPending;
 
-  const configCopy = useCopyFlash();
-  // Feeds `resolveMcpUrl`'s step 1 (an operator-set `SILO_PUBLIC_MCP_URL`
-  // override) — `undefined` while loading/absent falls through to the
-  // client-derived steps below, same as `mcpAccess`'s `?? true` above.
-  const { data: appConfig } = useAppConfig();
+  const [setupOpen, setSetupOpen] = useState(false);
 
   return (
     <>
@@ -353,15 +285,13 @@ export function AccessTab() {
           <button
             type="button"
             className="silo-settings-hero-btn-primary"
-            onClick={() => {
-              const url = resolveMcpUrl(appConfig?.mcpUrl, window.location);
-              configCopy.copyText(mcpClientConfig(url));
-            }}
+            onClick={() => setSetupOpen(true)}
           >
-            {copyLabel(configCopy.copied, 'Copy config')}
+            Set up
           </button>
         }
       />
+      {setupOpen && <McpSetupDialog onClose={() => setSetupOpen(false)} />}
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>MCP access</div>

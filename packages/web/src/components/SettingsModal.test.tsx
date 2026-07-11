@@ -340,36 +340,38 @@ describe('SettingsModal', () => {
       await waitFor(() => expect(mcpToggle.getAttribute('aria-checked')).toBe('false'));
     });
 
-    it('"Copy config" (the hero\'s primary action) writes the HTTP MCP client config to the clipboard', async () => {
-      const writeText = vi.fn().mockResolvedValue(undefined);
-      Object.assign(navigator, { clipboard: { writeText } });
-
+    /**
+     * "Set up" (formerly "Copy config") opens `McpSetupDialog` — a SECOND
+     * `ModalShell` stacked on top of this Settings modal — rather than
+     * writing straight to the clipboard. Field-by-field clipboard coverage
+     * (URL / transport / auth header / CLI / JSON config, each its own
+     * `useCopyFlash()`) lives in `SettingsTabs/McpSetupDialog.test.tsx`; this
+     * just proves the Settings-modal-level wiring: the button opens the
+     * dialog, and it stacks above (rather than replacing) Settings.
+     */
+    it('"Set up" (the hero\'s primary action) opens the stacked MCP setup dialog', async () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'API / MCP' }));
-      fireEvent.click(screen.getByRole('button', { name: /copy config/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Set up' }));
 
-      expect(writeText).toHaveBeenCalledTimes(1);
-      const written = writeText.mock.calls[0]?.[0] as string;
-      expect(written).toContain('"mcpServers"');
-      expect(written).toContain('"silo"');
-      expect(written).toContain('/mcp');
-      expect(written).toContain('Authorization');
-      expect(await screen.findByText('Copied')).toBeDefined();
+      expect(await screen.findByRole('dialog', { name: 'Connect over MCP' })).toBeDefined();
+      // Settings itself is still mounted underneath — the dialog stacks on
+      // top rather than replacing it.
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
 
-    it('a failed clipboard write shows an honest error label instead of "Copied" (no unhandled rejection)', async () => {
-      // navigator.clipboard.writeText rejects in real conditions (insecure
-      // context, denied permission) — the label must reflect that, not
-      // silently look like success (review fix, ce-correctness).
-      const writeText = vi.fn().mockRejectedValue(new Error('denied'));
-      Object.assign(navigator, { clipboard: { writeText } });
-
+    it('Escape closes only the MCP setup dialog, not the Settings modal underneath', async () => {
       renderModal();
       fireEvent.click(screen.getByRole('tab', { name: 'API / MCP' }));
-      fireEvent.click(screen.getByRole('button', { name: /copy config/i }));
+      fireEvent.click(screen.getByRole('button', { name: 'Set up' }));
+      await screen.findByRole('dialog', { name: 'Connect over MCP' });
 
-      expect(await screen.findByText("Couldn't copy")).toBeDefined();
-      expect(screen.queryByText('Copied')).toBeNull();
+      fireEvent.keyDown(document, { key: 'Escape' });
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Connect over MCP' })).toBeNull(),
+      );
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
   });
 });
