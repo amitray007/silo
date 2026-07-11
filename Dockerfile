@@ -33,7 +33,13 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 # before any source is copied). Keep in sync with pnpm-workspace.yaml's globs.
 COPY packages/ ./packages/
 COPY extensions/ ./extensions/
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
+# `--ignore-scripts`: the root `prepare` script is `lefthook install` (git
+# hooks — a DEV-machine concern), which needs `git` + a `.git` dir, neither of
+# which exists in this image (git isn't installed; `.git` is .dockerignore'd).
+# Skipping lifecycle scripts drops that (and `sharp`'s native-binary postinstall
+# — sharp is a devDep used ONLY by a manual icon-gen script, never by the vite
+# build or the runtime), so the container install has no git dependency.
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile --ignore-scripts
 
 # ---- build: compile the web SPA ---------------------------------------------
 # Only the web frontend has a real build (vite -> packages/web/dist). The
