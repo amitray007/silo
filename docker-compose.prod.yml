@@ -30,10 +30,18 @@ services:
     volumes:
       - silo-pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-silo} -d ${POSTGRES_DB:-silo}']
+      # Use the container's OWN $POSTGRES_USER/$POSTGRES_DB (already set as env
+      # vars inside the container by the postgres image) rather than compose-time
+      # ${...} interpolation — so the check always names the exact user/db
+      # Postgres actually initialized with, immune to an env-not-applied or
+      # interpolation-default mismatch. `sh -c` so the vars expand at runtime.
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
       timeout: 5s
       retries: 20
+      # Give a slow first-boot (volume init + pgvector) time before the app
+      # services' `depends_on: service_healthy` gate starts counting failures.
+      start_period: 30s
     networks:
       - silo
 
