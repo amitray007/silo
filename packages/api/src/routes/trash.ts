@@ -5,13 +5,17 @@ import {
   listTrash,
   requestRetry,
   restore,
+  restoreMany,
+  retryCaptureMany,
   searchTrash,
   softDelete,
+  trashMany,
 } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { toLinkJson, toTrashLinkJson, toTrashSearchResultJson } from '../link-json.js';
-import { pageQuerySchema, toPageParams } from '../query-schemas.js';
+import { runBulkGuarded } from '../bulk-result.js';
+import { toLinkJson, toTrashLinkJson, toTrashSnippetSearchResultJson } from '../link-json.js';
+import { batchIdsBodySchema, pageQuerySchema, toPageParams } from '../query-schemas.js';
 import { respondWithLink } from './mutate-link.js';
 
 /** Shared `id` param schema for the single-link lifecycle routes below — a non-uuid `id` is a 400, not a pointless DB round-trip. */
@@ -53,24 +57,60 @@ export function registerTrashRoutes(app: Hono): void {
 
   /**
    * `GET /api/trash/search` — server-side full-text search scoped to TRASHED
-   * links (Trash search slice), mirroring `GET /api/links/search` exactly:
-   * same `searchQuerySchema` shape (`q` required, min length 1 -> 400 on
-   * empty/missing), same envelope (`{ results, nextCursor? }`), same
-   * whitelisted-plus-`rank` result shape via `toSearchResultJson`. Backed by
+   * links (Trash search slice), mirroring `GET /api/links/search`: same
+   * `searchQuerySchema` shape (`q` required, min length 1 -> 400 on
+   * empty/missing), same envelope (`{ results, nextCursor? }`). Backed by
    * `core.searchTrash` instead of `core.search` — the only difference is
-   * which live/trash predicate the query runs under. Registered before any
-   * `/trash/:id`-shaped route would matter for route-ordering (there is none
-   * on GET today — see `app.ts`'s route list — but this keeps the same
-   * "literal segment before :id" discipline `links.ts` documents for
-   * `/links/search` vs `/links/:id`, in case a `GET /trash/:id` is ever added).
+   * which live/trash predicate the query runs under; `core.searchTrash`
+   * ALSO returns `SearchResultRow[]` (U2's snippet-not-extractedText shape —
+   * see `link-json.ts`'s `TrashSnippetSearchResultJson` doc comment), so its
+   * result rows carry `snippet` + `deletedAt` + `rank`, matching live
+   * search's own `extractedText` drop. Registered before any `/trash/:id`-
+   * shaped route would matter for route-ordering (there is none on GET today
+   * — see `app.ts`'s route list — but this keeps the same "literal segment
+   * before :id" discipline `links.ts` documents for `/links/search` vs
+   * `/links/:id`, in case a `GET /trash/:id` is ever added).
    */
   app.get('/trash/search', async (c) => {
     const query = trashSearchQuerySchema.parse(c.req.query());
     const result = await searchTrash(query.q, toPageParams(query));
-    const results = result.results.map((link) => toTrashSearchResultJson(link, link.rank));
+    const results = result.results.map(toTrashSnippetSearchResultJson);
     return c.json(
       result.nextCursor === undefined ? { results } : { results, nextCursor: result.nextCursor },
     );
+  });
+
+  /**
+   * `POST /api/links/batch/trash`, `POST /api/links/batch/restore`,
+   * `POST /api/links/batch/retry` (agent-navigation slice U5) — registered
+   * BEFORE `POST /links/:id/trash|restore|retry` below for the SAME route-
+   * ordering reason `links.ts` documents for `/links/search` vs `/links/:id`:
+   * Hono matches the FIRST registered handler for a path, and `:id` has no
+   * inherent priority over a literal `batch` segment — if `/links/:id/trash`
+   * were registered first, a request to `/links/batch/trash` would match
+   * `:id = "batch"` (then fail `idParamSchema`'s `z.uuid()` as a confusing
+   * `400 validation_error`, masking the batch route entirely). Proven by this
+   * file's own route-ordering regression coverage below.
+   */
+  app.post('/links/batch/trash', async (c) => {
+    const body = batchIdsBodySchema.parse(await c.req.json());
+    const outcome = await runBulkGuarded(c, () => trashMany(body.ids));
+    if (!outcome.ok) return outcome.response;
+    return c.json({ results: outcome.value }, 200);
+  });
+
+  app.post('/links/batch/restore', async (c) => {
+    const body = batchIdsBodySchema.parse(await c.req.json());
+    const outcome = await runBulkGuarded(c, () => restoreMany(body.ids));
+    if (!outcome.ok) return outcome.response;
+    return c.json({ results: outcome.value }, 200);
+  });
+
+  app.post('/links/batch/retry', async (c) => {
+    const body = batchIdsBodySchema.parse(await c.req.json());
+    const outcome = await runBulkGuarded(c, () => retryCaptureMany(body.ids));
+    if (!outcome.ok) return outcome.response;
+    return c.json({ results: outcome.value }, 200);
   });
 
   /**

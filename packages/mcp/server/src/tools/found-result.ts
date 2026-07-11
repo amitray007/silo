@@ -138,7 +138,7 @@ export function toBulkTextSummary(verb: string, results: BulkItemResultContent[]
  * seven batch-capable tools report the identical message and the cap only
  * needs to change in one place if `MAX_BULK_IDS` ever does.
  */
-export function tooManyIdsResult(): CallToolResult {
+function tooManyIdsResult(): CallToolResult {
   return {
     isError: true,
     content: [

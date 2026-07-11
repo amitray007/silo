@@ -32,6 +32,15 @@ async function post(app: Hono, path: string): Promise<Response> {
   return app.request(path, { method: 'POST' });
 }
 
+/** POSTs a JSON `body` to `path` on `app` — used by the batch (U5) routes below, which DO take a body. */
+async function postJson(app: Hono, path: string, body: unknown): Promise<Response> {
+  return app.request(path, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+}
+
 /** DELETEs `path` on `app` — shared by the hard-delete-one and empty-trash tests. */
 async function del(app: Hono, path: string): Promise<Response> {
   return app.request(path, { method: 'DELETE' });
@@ -566,6 +575,137 @@ describeIfPg('GET /api/trash (integration)', () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { deleted: number };
       expect(typeof body.deleted).toBe('number');
+    });
+  });
+
+  describe('GET /api/trash/search — snippet shape (U5)', () => {
+    it('trash search results carry snippet + deletedAt, not extractedText', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/u5-trash-search-snippet',
+        sourceKind: 'link',
+        title: 'u5trashsearchsnippetmarker',
+      });
+      await core.softDelete(created.id);
+
+      const body = await expectOk<{ results: Array<Record<string, unknown>> }>(
+        app,
+        '/api/trash/search?q=u5trashsearchsnippetmarker',
+      );
+      expect(body.results.length).toBe(1);
+      const result = body.results[0];
+      expect(result).toBeDefined();
+      if (!result) return;
+      expect(Object.hasOwn(result, 'snippet')).toBe(true);
+      expect(Object.hasOwn(result, 'extractedText')).toBe(false);
+      expect(Object.hasOwn(result, 'deletedAt')).toBe(true);
+    });
+  });
+
+  describe('POST /api/links/batch/trash — bulk trash (U5)', () => {
+    it('mixed good/bad id batch: good ids trashed, bad id reported per-item', async () => {
+      const { core, app } = harness.mod();
+      const a = await core.createLink({
+        url: 'https://example.com/u5-batch-trash-a',
+        sourceKind: 'link',
+      });
+      const b = await core.createLink({
+        url: 'https://example.com/u5-batch-trash-b',
+        sourceKind: 'link',
+      });
+
+      const res = await postJson(app, '/api/links/batch/trash', { ids: [a.id, b.id, UNKNOWN_ID] });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        results: Array<{ id: string; ok: boolean; reason?: string }>;
+      };
+      expect(body.results.find((r) => r.id === a.id)?.ok).toBe(true);
+      expect(body.results.find((r) => r.id === b.id)?.ok).toBe(true);
+      expect(body.results.find((r) => r.id === UNKNOWN_ID)?.ok).toBe(false);
+
+      const aLive = await app.request(`/api/links/${a.id}`);
+      expect(aLive.status).toBe(404);
+    });
+
+    it('empty ids array -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links/batch/trash', { ids: [] });
+      await expect400Response(res, 'validation_error');
+    });
+
+    it('over MAX_BULK_IDS (501) -> clean 400, not a raw core error', async () => {
+      const { app } = harness.mod();
+      const ids = Array.from({ length: 501 }, () => UNKNOWN_ID);
+      const res = await postJson(app, '/api/links/batch/trash', { ids });
+      const body = await expect400Response(res, 'validation_error');
+      expect(body.message).toContain('500');
+    });
+  });
+
+  describe('POST /api/links/batch/restore — bulk restore (U5)', () => {
+    it('restores every trashed id in the batch', async () => {
+      const { core, app } = harness.mod();
+      const a = await core.createLink({
+        url: 'https://example.com/u5-batch-restore-a',
+        sourceKind: 'link',
+      });
+      await core.softDelete(a.id);
+
+      const res = await postJson(app, '/api/links/batch/restore', { ids: [a.id] });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: Array<{ id: string; ok: boolean }> };
+      expect(body.results[0]?.ok).toBe(true);
+
+      const aLive = await app.request(`/api/links/${a.id}`);
+      expect(aLive.status).toBe(200);
+    });
+
+    it('unknown id in batch -> ok:false for that item, does not sink the batch', async () => {
+      const { core, app } = harness.mod();
+      const a = await core.createLink({
+        url: 'https://example.com/u5-batch-restore-mixed',
+        sourceKind: 'link',
+      });
+      await core.softDelete(a.id);
+
+      const res = await postJson(app, '/api/links/batch/restore', { ids: [a.id, UNKNOWN_ID] });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: Array<{ id: string; ok: boolean }> };
+      expect(body.results.find((r) => r.id === a.id)?.ok).toBe(true);
+      expect(body.results.find((r) => r.id === UNKNOWN_ID)?.ok).toBe(false);
+    });
+  });
+
+  describe('POST /api/links/batch/retry — bulk retry-capture (U5)', () => {
+    it('retries every retryable id in the batch', async () => {
+      const { core, app } = harness.mod();
+      const a = await core.createLink({
+        url: 'https://example.com/u5-batch-retry-a',
+        sourceKind: 'link',
+      });
+      await core.recordEnrichment(a.id, { status: 'bare' });
+
+      const res = await postJson(app, '/api/links/batch/retry', { ids: [a.id] });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: Array<{ id: string; ok: boolean }> };
+      expect(body.results[0]?.ok).toBe(true);
+
+      const detail = await expectOk<{ link: { captureStatus: string } }>(app, `/api/links/${a.id}`);
+      expect(detail.link.captureStatus).toBe('enriching');
+    });
+
+    it('an already-full link in the batch -> ok:false for that item', async () => {
+      const { core, app } = harness.mod();
+      const full = await core.createLink({
+        url: 'https://example.com/u5-batch-retry-full',
+        sourceKind: 'link',
+      });
+      await core.recordEnrichment(full.id, { status: 'full' });
+
+      const res = await postJson(app, '/api/links/batch/retry', { ids: [full.id] });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: Array<{ id: string; ok: boolean }> };
+      expect(body.results[0]?.ok).toBe(false);
     });
   });
 });
