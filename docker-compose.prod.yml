@@ -91,9 +91,14 @@ services:
     command: >
       sh -c "pnpm --filter @silo/db run db:migrate &&
              pnpm --filter @silo/app run start:api"
+    # `expose` (container-internal only) makes 8787 unambiguous to Traefik/
+    # Dokploy's port auto-discovery when you attach the silo.<domain> domain to
+    # THIS service — attach it with container port 8787. `ports` (host publish)
+    # is only for a direct `docker compose up` on one host; behind a reverse
+    # proxy it's not needed (Traefik reaches the container by service name).
+    expose:
+      - '8787'
     ports:
-      # Expose for a direct `docker compose up` run. Behind Dokploy/Traefik you
-      # route silo.<domain> -> this service and can drop the host publish.
       - '${API_PORT:-8787}:8787'
     networks:
       - silo
@@ -132,6 +137,11 @@ services:
     # A package script (tsx resolves in packages/app's context), not
     # `pnpm exec tsx …` from root — see the api command / Dockerfile comment.
     command: ['pnpm', '--filter', '@silo/app', 'run', 'start:mcp-http']
+    # Attach the mcp.silo.<domain> domain to THIS service with container port
+    # 8788 in Dokploy. `expose` makes that port unambiguous; `ports` (host
+    # publish) is only for a direct `docker compose up`.
+    expose:
+      - '8788'
     ports:
       - '${MCP_PORT:-8788}:8788'
     networks:
