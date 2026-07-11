@@ -98,12 +98,29 @@ export const links = pgTable(
     // the raw `url`: `canonical_url` is NOT NULL (never null, always falls
     // back to the raw url on canonicalization failure — see the column's own
     // comment) and dedup-normalized, so indexing it alone avoids
-    // double-indexing near-identical raw+canonical strings. The `english` tsvector
-    // config treats a whole URL as one opaque host/path token, so typing part
-    // of a domain or path (e.g. `github`) would never match — we pre-split it
-    // by replacing every run of non-alphanumeric characters with a space via
-    // `regexp_replace(..., '[^a-zA-Z0-9]+', ' ', 'g')` BEFORE handing it to
-    // to_tsvector, so each domain/path segment becomes its own lexeme.
+    // double-indexing near-identical raw+canonical strings.
+    //
+    // Before tokenizing, the URL is passed through `split_part(..., '#', 1)`
+    // to drop everything from the first `#` onward. This strips ordinary URL
+    // fragments AND — critically — the internal `#unsafe-<uuid>` dedup
+    // marker `core`'s `createLink` appends to `canonicalUrl` for `ok:false`
+    // URLs (see `@silo/core`'s `links.ts`, `storedCanonicalUrl`). Without
+    // this, that marker's `unsafe` stem and UUID hex chunks would become
+    // real, searchable lexemes — `search('unsafe')` would match every
+    // unsafe-flagged link, which is an internal implementation detail
+    // leaking into user-facing search, not a real signal.
+    //
+    // The `english` tsvector config treats a whole URL as one opaque
+    // host/path token, so typing part of a domain or path (e.g. `github`)
+    // would never match — we pre-split it by replacing every run of
+    // non-alphanumeric characters with a space via
+    // `regexp_replace(..., '[^[:alnum:]]+', ' ', 'g')` BEFORE handing it to
+    // to_tsvector, so each domain/path segment becomes its own lexeme. This
+    // uses Postgres's POSIX unicode-aware `[:alnum:]` character class (NOT
+    // the ASCII-only `a-zA-Z0-9`), so non-ASCII/IDN domains and paths (e.g.
+    // `bücher`, CJK path segments) are split and tokenized correctly instead
+    // of being shattered mid-word or left unsearchable. ASCII behavior is
+    // unchanged: plain ASCII words still split exactly the same way.
     // Consequence accepted: digit-joined segments are NOT sub-split by this
     // regex, so a path segment like `amitray007` stays one token — searching
     // `amitray` alone will NOT match a stored `amitray007` (only the exact
@@ -132,7 +149,7 @@ export const links = pgTable(
     // document.
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('english', left(coalesce(${links.title}, ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce(${links.description}, ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce(${links.extractedText}, ''), 600000)), 'C') || setweight(to_tsvector('english', regexp_replace(left(coalesce(${links.canonicalUrl}, ''), 4000), '[^a-zA-Z0-9]+', ' ', 'g')), 'C') || setweight(to_tsvector('english', left(coalesce(${links.notes}, ''), 100000)), 'D')`,
+        sql`setweight(to_tsvector('english', left(coalesce(${links.title}, ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce(${links.description}, ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce(${links.extractedText}, ''), 600000)), 'C') || setweight(to_tsvector('english', regexp_replace(left(split_part(coalesce(${links.canonicalUrl}, ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g')), 'C') || setweight(to_tsvector('english', left(coalesce(${links.notes}, ''), 100000)), 'D')`,
     ),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

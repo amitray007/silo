@@ -78,6 +78,13 @@
       "when": 1783812291765,
       "tag": "0010_dark_microbe",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1783812792672,
+      "tag": "0011_worthless_firestar",
+      "breakpoints": true
     }
   ]
 }

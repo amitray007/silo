@@ -760,6 +760,37 @@ describeIfPg('links operations (integration)', () => {
       expect(ids).toContain(urlMatch.id);
       expect(ids).not.toContain(unrelated.id);
     });
+
+    // `canonicalize()` (normalize-url/WHATWG URL) punycode/percent-encodes
+    // non-ASCII hosts and paths for any `ok: true` url, so a normal saved
+    // link never carries literal unicode bytes in `canonical_url` — the
+    // unicode-split fix is only observable end-to-end via the `ok: false`
+    // fallback path, which preserves the raw input verbatim (see
+    // `createLink`'s `storedCanonicalUrl` and the "ok:false urls are never
+    // deduped" tests above). A non-http(s) scheme forces `ok: false` while
+    // keeping the unicode text intact, which also exercises the `#unsafe-`
+    // stripping fix in the same test: the marker must not leak into search,
+    // and the raw unicode word before it must still be found.
+    it('finds an ok:false link by a unicode word in its raw url, and the #unsafe- marker never leaks (IDN split + fragment-strip fixes)', async () => {
+      const idnMatch = await ops.createLink({
+        url: 'ftp://bücher.example.de/kaffee',
+        title: 'an unrelated title',
+        sourceKind: 'link',
+      });
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/idn-search-unrelated',
+        title: 'a completely different link',
+        sourceKind: 'link',
+      });
+
+      const bucherResults = await ops.search('bücher');
+      const bucherIds = bucherResults.results.map((r) => r.id);
+      expect(bucherIds).toContain(idnMatch.id);
+      expect(bucherIds).not.toContain(unrelated.id);
+
+      const unsafeResults = await ops.search('unsafe');
+      expect(unsafeResults.results.map((r) => r.id)).not.toContain(idnMatch.id);
+    });
   });
 
   describe('search — tag scope (command-center plan 024)', () => {

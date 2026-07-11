@@ -259,6 +259,45 @@ describeIfPg('links schema (integration)', () => {
     expect(rows.rows).toHaveLength(0);
   });
 
+  it('populates search_vector from an IDN/unicode domain and path, matching both words (unicode-aware split)', async () => {
+    await db.insert(links).values({
+      url: 'https://bücher.example.de/kaffee',
+      canonicalUrl: 'https://bücher.example.de/kaffee',
+      sourceKind: 'link',
+    });
+
+    const matchesFor = async (term: string): Promise<boolean> => {
+      const rows = await db.execute<{ url: string }>(
+        sql`select url from links where search_vector @@ websearch_to_tsquery('english', ${term})`,
+      );
+      return rows.rows.length === 1;
+    };
+
+    expect(await matchesFor('bücher')).toBe(true);
+    expect(await matchesFor('kaffee')).toBe(true);
+  });
+
+  it('does NOT make the internal #unsafe-<uuid> dedup marker searchable, but still matches the pre-# path', async () => {
+    await db.insert(links).values({
+      url: 'https://example.com/distinctiveunsafepath#unsafe-9b1f7e2a-1c3d-4e5f-8a6b-7c8d9e0f1a2b',
+      canonicalUrl:
+        'https://example.com/distinctiveunsafepath#unsafe-9b1f7e2a-1c3d-4e5f-8a6b-7c8d9e0f1a2b',
+      sourceKind: 'link',
+    });
+
+    const matchesFor = async (term: string): Promise<boolean> => {
+      const rows = await db.execute<{ url: string }>(
+        sql`select url from links where search_vector @@ websearch_to_tsquery('english', ${term})`,
+      );
+      return rows.rows.length === 1;
+    };
+
+    // The fragment marker itself must never become a lexeme.
+    expect(await matchesFor('unsafe')).toBe(false);
+    // But the real path content before the `#` must still be indexed.
+    expect(await matchesFor('distinctiveunsafepath')).toBe(true);
+  });
+
   it('produces a non-null search_vector when description and extracted_text are null (coalesce)', async () => {
     await db.insert(links).values({
       url: 'https://example.com/title-only',

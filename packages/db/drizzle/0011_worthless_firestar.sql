@@ -1,0 +1,69 @@
+-- Fix two real defects in the search-url weight-C URL term (0010's
+-- generated column expression), both verified against real Postgres in
+-- independent review before this migration was written:
+--
+-- 1. IDN / unicode domains were unsafe. The URL split used the ASCII-only
+--    character class `[^a-zA-Z0-9]+`, which shatters non-ASCII domain/path
+--    words instead of treating them as one token — e.g. `bücher` split into
+--    `b` + `cher`, making the intended word unsearchable. Switched to
+--    Postgres's POSIX unicode-aware class `[^[:alnum:]]+`, which splits on
+--    non-alphanumeric runs using locale-aware alphanumeric semantics. This
+--    makes IDN/non-ASCII domains and CJK path segments searchable, while
+--    leaving every ASCII behavior byte-for-byte identical (verified: `silo`
+--    still matches, `amitray` still does NOT match a stored `amitray007` —
+--    see `links.ts`'s column comment for that accepted tradeoff).
+--
+-- 2. The internal `#unsafe-<uuid>` dedup marker leaked into the search
+--    vector. For `ok:false` URLs, `@silo/core`'s `createLink` stores
+--    `canonicalUrl` as `` `${canonical}#unsafe-${randomUUID()}` `` (see
+--    `links.ts`, `storedCanonicalUrl`) purely so the URL still satisfies the
+--    partial-unique dedup index — it is not user-facing content. Before this
+--    fix, that suffix was tokenized like any other URL text, so its `unsafe`
+--    stem and UUID hex chunks became real, searchable lexemes:
+--    `search('unsafe')` would match every unsafe-flagged link. Fixed by
+--    wrapping the URL input in `split_part(..., '#', 1)`, which takes
+--    everything before the first `#` — this drops the `#unsafe-...` marker
+--    AND any ordinary URL fragment before the value ever reaches the
+--    tokenizer, so neither becomes a lexeme.
+--
+-- Composition order (verified against real Postgres): split_part(...) first
+-- (drop the fragment/marker), then left(..., 4000) (existing byte clamp,
+-- unchanged), then regexp_replace(..., '[^[:alnum:]]+', ' ', 'g') (word
+-- split) — i.e. `regexp_replace(left(split_part(coalesce(canonical_url, ''),
+-- '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g')`.
+--
+-- Postgres does not support ALTERing a generated column's expression in
+-- place — the only path is DROP then re-ADD with the new expression, same
+-- pattern as 0006_gorgeous_makkari and 0010_dark_microbe (which last touched
+-- this same column):
+--
+--   1. DROP COLUMN "search_vector". A plain drop (no explicit CASCADE
+--      keyword, no separate DROP INDEX statement) is sufficient: Postgres
+--      silently drops the dependent partial GIN index
+--      (links_search_vector_live_idx) along with the column it indexes.
+--      There is nothing left referencing search_vector afterward.
+--   2. ADD COLUMN "search_vector" back with the new expression. Because the
+--      column is STORED, Postgres recomputes and backfills it for EVERY
+--      existing row as part of this ALTER — no separate UPDATE/backfill
+--      step is needed, and no row is left with a stale/missing vector.
+--   3. Re-CREATE the partial GIN index (`... WHERE deleted_at IS NULL`)
+--      that step 1 dropped, so search stays index-backed instead of falling
+--      back to a sequential scan.
+--
+-- NOTE: drizzle-kit's raw generated output for this migration was wrong on
+-- two counts, hand-corrected before this file was applied — the SAME class
+-- of bug 0006's and 0010's own comments document: (1) it omitted the
+-- re-CREATE INDEX statement entirely — it doesn't model that dropping a
+-- column silently drops indexes depending on it; (2) it emitted TWO
+-- spurious DROP TYPE statements (`link_origin` and `capture_source`) — the
+-- generator's enum tracking momentarily lost both enums from its diff even
+-- though `links.added_by` and `links.source` still use them. All spurious
+-- lines were removed by hand; `meta/0011_snapshot.json` was hand-corrected
+-- to restore the full `enums` map (matching 0010's) so the NEXT
+-- `db:generate` diffs against the true state instead of re-proposing the
+-- same bogus drops.
+ALTER TABLE "links" DROP COLUMN "search_vector";--> statement-breakpoint
+
+ALTER TABLE "links" ADD COLUMN "search_vector" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector('english', left(coalesce("links"."title", ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce("links"."description", ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce("links"."extracted_text", ''), 600000)), 'C') || setweight(to_tsvector('english', regexp_replace(left(split_part(coalesce("links"."canonical_url", ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g')), 'C') || setweight(to_tsvector('english', left(coalesce("links"."notes", ''), 100000)), 'D')) STORED;--> statement-breakpoint
+
+CREATE INDEX "links_search_vector_live_idx" ON "links" USING gin ("search_vector") WHERE "links"."deleted_at" is null;
