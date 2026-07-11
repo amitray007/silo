@@ -41,8 +41,9 @@ the twitter sourceData (NOT split into separate silo entries). Faithful to
 {
   url:  bookmark.url,                    // the tweet permalink
   sourceKind: 'twitter',
-  note: bookmark.text,                   // the tweet text as the note (or a
-                                         //   dedicated field — see the variant)
+  // NO note: the tweet text lives in the twitter sourceData variant's `text`
+  //   field (the "dedicated field" this mapping originally deferred to). The
+  //   note (¶) is the user's own free-form note — left empty on ingest.
   // tags: [] (silo tags; NOT FT's tags unless we decide to carry them)
 }
 ```

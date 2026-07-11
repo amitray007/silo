@@ -60,10 +60,14 @@ export function mapBookmarkToIngest(bookmark: FieldTheoryBookmark): IngestReques
   const externalLinks = clampArray(bookmark.links, 64, 2000);
   if (externalLinks.length > 0) sourceData.externalLinks = externalLinks;
 
+  // NO note: the tweet text is carried in sourceData.text (above); the note
+  // field is the user's own single free-form note (¶) and is left empty on
+  // ingest for the user to fill in silo. (Earlier the mapper copied `text`
+  // into `note` — a leftover from before the twitter variant carried `text`;
+  // that duplicated content and polluted the user-note field.)
   return {
     url: bookmark.url,
     sourceKind: 'twitter',
-    note: text,
     sourceData,
   };
 }

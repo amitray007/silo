@@ -25,7 +25,11 @@ describe('mapBookmarkToIngest', () => {
     expect(result).not.toBeNull();
     expect(result?.url).toBe(syntheticBookmark.url);
     expect(result?.sourceKind).toBe('twitter');
-    expect(result?.note).toBe(syntheticBookmark.text);
+    // The note must NOT be auto-filled from the tweet text — it is the user's
+    // own free-form note (¶), left empty on ingest. The tweet text is carried
+    // in sourceData.text (asserted below). Regression guard for the bug where
+    // the mapper copied `text` into `note`, duplicating content.
+    expect(result?.note).toBeUndefined();
 
     const sourceData = result?.sourceData;
     expect(sourceData?.kind).toBe('twitter');
