@@ -4,7 +4,7 @@ packages:
   - "extensions/*"
 
 catalog:
-  lefthook: 2.1.9
+  lefthook: 2.1.10
   typescript: 6.0.3
   vitest: 4.1.9
   react: 19.2.7
