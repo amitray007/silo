@@ -62,4 +62,10 @@ ENV SILO_WEB_DIST=/app/packages/web/dist
 # import the worker (dependency-cruiser boundary), so the composition root is
 # what wires web+API+worker into one process. The mcp service overrides this
 # command in compose.
-CMD ["pnpm", "exec", "tsx", "packages/app/src/api-main.ts"]
+#
+# `pnpm --filter @silo/app run start:api` (NOT `pnpm exec tsx …` from the repo
+# root): with pnpm's isolated node_modules, `tsx`'s bin is linked into
+# `packages/app/node_modules/.bin`, not the ROOT `.bin` — so `pnpm exec tsx`
+# from `/app` fails with "Command tsx not found". Running the package's own
+# `start:api` script executes in that package's context where tsx resolves.
+CMD ["pnpm", "--filter", "@silo/app", "run", "start:api"]

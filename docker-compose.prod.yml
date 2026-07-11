@@ -66,10 +66,12 @@ services:
       SILO_ENRICHING_STALE_MINUTES: ${SILO_ENRICHING_STALE_MINUTES:-}
     # Migrate (idempotent) then serve via the @silo/app composition-root
     # entrypoint (web + API + in-process worker — api-main.ts). `sh -c` so both
-    # run in one container.
+    # run in one container. Use `pnpm --filter … run start:api` (a package
+    # script), NOT `pnpm exec tsx …` from root — tsx's bin is linked inside
+    # packages/app, not the repo-root .bin (see the Dockerfile CMD comment).
     command: >
       sh -c "pnpm --filter @silo/db run db:migrate &&
-             pnpm exec tsx packages/app/src/api-main.ts"
+             pnpm --filter @silo/app run start:api"
     ports:
       # Expose for a direct `docker compose up` run. Behind Dokploy/Traefik you
       # route silo.<domain> -> this service and can drop the host publish.
@@ -108,7 +110,9 @@ services:
       SILO_MCP_ALLOWED_HOSTS: ${SILO_MCP_ALLOWED_HOSTS:-}
       # REQUIRED for the listener to start at all (the machine bearer agents send).
       SILO_API_TOKEN: ${SILO_API_TOKEN:?set SILO_API_TOKEN (the mcp listener refuses to start without it)}
-    command: ['pnpm', 'exec', 'tsx', 'packages/app/src/mcp-http-main.ts']
+    # A package script (tsx resolves in packages/app's context), not
+    # `pnpm exec tsx …` from root — see the api command / Dockerfile comment.
+    command: ['pnpm', '--filter', '@silo/app', 'run', 'start:mcp-http']
     ports:
       - '${MCP_PORT:-8788}:8788'
     networks:
