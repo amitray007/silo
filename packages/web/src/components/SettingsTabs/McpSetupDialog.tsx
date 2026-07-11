@@ -65,6 +65,37 @@ const copyRowCode: CSSProperties = {
 
 const fieldBlock: CSSProperties = { marginBottom: 16 };
 
+/** A section heading above a group of fields — signals "these belong together". */
+const groupHeading: CSSProperties = {
+  fontSize: 'var(--text-sm)',
+  fontWeight: 500,
+  color: 'var(--ink)',
+  marginBottom: 4,
+};
+
+/** The one-line note under a group heading explaining how its fields are used together. */
+const groupNote: CSSProperties = {
+  ...rowDesc,
+  marginBottom: 12,
+};
+
+/**
+ * The "Connection" group container — visually binds URL + Transport + Auth
+ * header into ONE unit (a subtle inset panel), because they're not three
+ * independent options: you use all three TOGETHER to wire up a manual / Cursor
+ * / raw-HTTP-client connection. The CLI command and JSON config below sit
+ * OUTSIDE this panel as separate, each-self-sufficient alternatives (either one
+ * alone is a complete config). Last field's `marginBottom` is zeroed so the
+ * panel doesn't carry trailing space.
+ */
+const connectionGroup: CSSProperties = {
+  padding: '14px 14px 0',
+  borderRadius: 10,
+  border: '1px solid var(--line)',
+  background: 'var(--bg)',
+  marginBottom: 20,
+};
+
 /**
  * One labeled, individually-copyable field — the row shape lifted verbatim
  * from `AccessTab.tsx`'s old token-reveal field (border/bg2/radius-8 row, an
@@ -121,16 +152,28 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
         tokens).
       </div>
 
-      <CopyField label="URL" value={url} />
-
-      <div style={fieldBlock}>
-        <div style={fieldLabel}>Transport</div>
-        <div style={copyRow}>
-          <code style={copyRowCode}>Streamable HTTP</code>
+      {/* The connection, grouped: URL + Transport + Auth are used TOGETHER for a
+          manual / Cursor / raw-HTTP setup — the inset panel makes that "one
+          unit, not three options" reading explicit. */}
+      <div style={groupHeading}>Connection</div>
+      <div style={groupNote}>Use these three together to add silo manually.</div>
+      <div style={connectionGroup}>
+        <CopyField label="URL" value={url} />
+        <div style={fieldBlock}>
+          <div style={fieldLabel}>Transport</div>
+          <div style={copyRow}>
+            <code style={copyRowCode}>Streamable HTTP</code>
+          </div>
+        </div>
+        <div style={{ marginBottom: 14 }}>
+          <CopyField label="Auth header" value="Authorization: Bearer <YOUR_SILO_API_TOKEN>" />
         </div>
       </div>
 
-      <CopyField label="Auth header" value="Authorization: Bearer <YOUR_SILO_API_TOKEN>" />
+      {/* Each of these is a COMPLETE config on its own — an alternative to
+          assembling the group above, not part of it. */}
+      <div style={groupHeading}>Or paste a ready-made config</div>
+      <div style={groupNote}>Each of these is complete on its own.</div>
       <CopyField label="Claude Code CLI" value={claudeCodeCliCommand(url)} />
       <div style={{ marginBottom: 0 }}>
         <CopyField label="JSON config" value={mcpClientConfig(url)} />
