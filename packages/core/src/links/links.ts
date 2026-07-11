@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { db, links, linkTags, tags } from '@silo/db';
-import { and, desc, eq, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, sql } from 'drizzle-orm';
 import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
@@ -493,6 +493,26 @@ export async function getById(id: string): Promise<LinkWithTags | null> {
 export type ListFilter = {
   tag?: string;
   status?: Link['captureStatus'];
+  /**
+   * Restrict to links whose `source_kind` equals this value (a `source_data`
+   * kind like `'link' | 'hacker_news' | 'github' | 'youtube' | 'twitter'`,
+   * though stored/compared as a plain string — silo never validates this
+   * against the closed set here, mirroring `sourceKind`'s own storage type).
+   * Backed by the existing `links_source_kind_idx` (agent-navigation slice,
+   * U1). Omitted = no source restriction (byte-for-byte prior behavior).
+   */
+  source?: string;
+  /**
+   * Require ALL of these tag names (case-insensitive, AND-match — a link must
+   * carry every one, not just one). Additive with `tag` above: when BOTH are
+   * given, `tag` is folded in as one more required tag (see `list`'s doc
+   * comment for the exact union rule). Omitted/empty = no tag restriction.
+   */
+  tags?: string[];
+  /** Only links created at or after this ISO datetime (`created_at >= since`). */
+  since?: string;
+  /** Only links created strictly before this ISO datetime (`created_at < until`). */
+  until?: string;
 };
 
 export type ListPage = {
@@ -533,44 +553,93 @@ function afterListCursor(createdAt: string, id: string): ReturnType<typeof sql> 
 }
 
 /**
- * List live links, optionally filtered by tag name and/or capture status,
- * newest first, tag-hydrated and keyset-paginated on `(createdAt, id)`.
- * `limit` is clamped to `[1, 100]` (default 20). A malformed/mismatched
- * cursor throws `InvalidCursorError`.
+ * `created_at >= since` (inclusive lower bound), parsed as `timestamptz` in
+ * SQL rather than a JS `Date` comparison — same style as `afterListCursor`'s
+ * cast, and keeps the bound parameterized (no string interpolation of the
+ * caller-supplied ISO value).
+ */
+function sinceCondition(since: string): ReturnType<typeof sql> {
+  return sql`${links.createdAt} >= ${since}::timestamptz`;
+}
+
+/** `created_at < until` (exclusive upper bound) — see `sinceCondition`. */
+function untilCondition(until: string): ReturnType<typeof sql> {
+  return sql`${links.createdAt} < ${until}::timestamptz`;
+}
+
+/**
+ * Merge `ListFilter`/`SearchFilter`'s `tag` (singular, back-compat) and
+ * `tags` (array, AND-match) into one de-duplicated list of REQUIRED
+ * normalized tag keys. Per the spec: "if both given, treat singular as one
+ * more required tag" — so `{ tag: 'a', tags: ['a', 'b'] }` requires exactly
+ * `{a, b}`, not three conditions or a double-count of `a`.
+ */
+function requiredTagKeys(filter: { tag?: string; tags?: string[] }): string[] {
+  const keys = new Set<string>();
+  if (filter.tag) keys.add(normalizeTagKey(filter.tag));
+  for (const tag of filter.tags ?? []) {
+    if (tag) keys.add(normalizeTagKey(tag));
+  }
+  return [...keys];
+}
+
+/**
+ * ANDed correlated-`EXISTS` conditions — one per required tag key — so a
+ * matched `links` row must carry EVERY tag in `tagKeys`, not just one
+ * (multi-tag AND, agent-navigation slice U1). Each `EXISTS` is independently
+ * correlated on `links.id` (rather than a single join + `HAVING count(...)
+ * = N`), which composes directly with `list`/`search`'s existing
+ * `whereLive(...conditions)` flat-conditions-array style with no `GROUP BY`
+ * restructuring of a query that already selects whole-row columns.
+ */
+function requiredTagConditions(tagKeys: ReadonlyArray<string>): ReturnType<typeof sql>[] {
+  return tagKeys.map(
+    (key) => sql`exists (
+      select 1 from ${linkTags}
+      inner join ${tags} on ${tags.id} = ${linkTags.tagId}
+      where ${linkTags.linkId} = ${links.id}
+        and ${tags.normalizedKey} = ${key}
+    )`,
+  );
+}
+
+/**
+ * List live links, optionally filtered by tag(s), capture status, source, and
+ * a `created_at` date range, newest first, tag-hydrated and keyset-paginated
+ * on `(createdAt, id)`. `limit` is clamped to `[1, 100]` (default 20). A
+ * malformed/mismatched cursor throws `InvalidCursorError`.
+ *
+ * All filters beyond `tag`/`status` (`source`, `tags`, `since`, `until` —
+ * agent-navigation slice U1) are additive and OPTIONAL: omitting them leaves
+ * every existing caller's query byte-for-byte unchanged. `tags`/`tag`
+ * AND-match — see `requiredTagKeys`/`requiredTagConditions`.
  */
 export async function list(filter: ListFilter = {}, page: PageParams = {}): Promise<ListPage> {
   const limit = effectiveLimit(page.limit);
   const cursor = page.cursor !== undefined ? decodeListCursor(page.cursor) : undefined;
   const cursorCondition = cursor ? afterListCursor(cursor.createdAt, cursor.id) : undefined;
 
+  const tagKeys = requiredTagKeys(filter);
+
   // Each row carries `createdAtText` — the full-microsecond-precision text
   // rendering of `created_at` — alongside the typed `Link`, so the keyset
   // cursor is built from the exact stored value, not the lossy JS `Date`
   // node-postgres parses the column into. It is stripped before tag
   // hydration (hydration only needs the `Link`).
-  const rows = await (async () => {
-    if (filter.tag) {
-      const conditions = [eq(tags.normalizedKey, normalizeTagKey(filter.tag))];
-      if (filter.status) conditions.push(eq(links.captureStatus, filter.status));
-      if (cursorCondition) conditions.push(cursorCondition);
-      return db
-        .select({ link: links, createdAtText })
-        .from(links)
-        .innerJoin(linkTags, eq(linkTags.linkId, links.id))
-        .innerJoin(tags, eq(tags.id, linkTags.tagId))
-        .where(whereLive(...conditions))
-        .orderBy(desc(links.createdAt), desc(links.id))
-        .limit(limit + 1);
-    }
-    const conditions = filter.status ? [eq(links.captureStatus, filter.status)] : [];
-    if (cursorCondition) conditions.push(cursorCondition);
-    return db
-      .select({ link: links, createdAtText })
-      .from(links)
-      .where(whereLive(...conditions))
-      .orderBy(desc(links.createdAt), desc(links.id))
-      .limit(limit + 1);
-  })();
+  const conditions: ReturnType<typeof sql>[] = [];
+  if (filter.status) conditions.push(eq(links.captureStatus, filter.status));
+  if (filter.source) conditions.push(eq(links.sourceKind, filter.source));
+  if (filter.since) conditions.push(sinceCondition(filter.since));
+  if (filter.until) conditions.push(untilCondition(filter.until));
+  conditions.push(...requiredTagConditions(tagKeys));
+  if (cursorCondition) conditions.push(cursorCondition);
+
+  const rows = await db
+    .select({ link: links, createdAtText })
+    .from(links)
+    .where(whereLive(...conditions))
+    .orderBy(desc(links.createdAt), desc(links.id))
+    .limit(limit + 1);
 
   const hasMore = rows.length > limit;
   const page_ = hasMore ? rows.slice(0, limit) : rows;
@@ -672,6 +741,24 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  */
 export type SearchFilter = {
   tag?: string;
+  /** Restrict to links whose `source_kind` equals this value. See `ListFilter.source`. */
+  source?: string;
+  /** Require ALL of these tags (AND-match). Additive with `tag` — see `ListFilter.tags`. */
+  tags?: string[];
+  /** Only links created at or after this ISO datetime. See `ListFilter.since`. */
+  since?: string;
+  /** Only links created strictly before this ISO datetime. See `ListFilter.until`. */
+  until?: string;
+  /**
+   * Result ordering (agent-navigation slice U1). `'relevance'` (default,
+   * unchanged prior behavior) orders by `combinedRank` DESC. `'newest'`/
+   * `'oldest'` order by `created_at` DESC/ASC instead — the tsquery STILL
+   * filters (a row must still match the text query), it just stops
+   * controlling order. Every ordering carries an `id` tiebreak (see `search`'s
+   * doc comment) so pagination is deterministic and stable across pages
+   * regardless of which sort is chosen.
+   */
+  sort?: 'relevance' | 'newest' | 'oldest';
 };
 
 export async function search(
@@ -682,6 +769,7 @@ export async function search(
   const limit = effectiveLimit(page.limit);
   const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
   const tag = filter.tag;
+  const sort = filter.sort ?? 'relevance';
 
   const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
   const titleRank = sql`ts_rank(${links.searchVector}, ${tsQuery})`;
@@ -702,6 +790,33 @@ export async function search(
       )`
     : undefined;
 
+  // `source`/`tags[]`/`since`/`until` (agent-navigation slice U1): additional
+  // ANDed predicates, all OPTIONAL — omitted, this array is empty and the
+  // WHERE clause below is unchanged from before this slice. `tags[]` reuses
+  // `requiredTagConditions` (see its doc comment); `filter.tag` above already
+  // covers the singular case via `tagScopeCondition`, so `requiredTagConditions`
+  // here is deliberately given ONLY `filter.tags` (not merged with `tag`) —
+  // merging would double-apply the singular tag's EXISTS redundantly (harmless
+  // but wasteful); the two conditions target the same rows regardless.
+  const extraConditions: ReturnType<typeof sql>[] = [];
+  if (filter.source) extraConditions.push(eq(links.sourceKind, filter.source));
+  if (filter.since) extraConditions.push(sinceCondition(filter.since));
+  if (filter.until) extraConditions.push(untilCondition(filter.until));
+  extraConditions.push(...requiredTagConditions(filter.tags ?? []));
+
+  // Deterministic order + tiebreak (spec: "ensure the sort is deterministic
+  // with an id tiebreak" so the offset cursor stays stable across pages
+  // regardless of which sort is active). `id` is a random UUID with no
+  // relation to insertion order, but any FIXED tiebreak column makes ties
+  // deterministic — it need not be meaningful, only stable across the two
+  // `search()` calls (page 1, page 2) that must agree on relative order.
+  const orderBy =
+    sort === 'newest'
+      ? [desc(links.createdAt), desc(links.id)]
+      : sort === 'oldest'
+        ? [links.createdAt, links.id]
+        : [desc(combinedRank), desc(links.id)];
+
   const rows = await db
     .select({
       link: links,
@@ -712,9 +827,10 @@ export async function search(
       whereLive(
         sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`,
         ...(tagScopeCondition ? [tagScopeCondition] : []),
+        ...extraConditions,
       ),
     )
-    .orderBy(desc(combinedRank))
+    .orderBy(...orderBy)
     .limit(limit + 1)
     .offset(offset);
 
@@ -728,6 +844,97 @@ export async function search(
   );
   const results = hydrated.map((link, i) => ({ ...link, rank: page_[i]?.rank ?? 0 }));
   return nextCursor === undefined ? { results } : { results, nextCursor };
+}
+
+/**
+ * `countLinks` input: the SAME mechanical filters `list`/`search` accept
+ * (`source`/`tags`/`tag`/`since`/`until`), plus an OPTIONAL `query` — when
+ * given, counts are scoped to links matching that full-text query (the exact
+ * same `search_vector`/`tagSearchVector` OR-match `search()` uses), turning
+ * this into the "facets for a search" mode; omitted, it counts across ALL
+ * live links matching the mechanical filters alone (facets for `list`). No
+ * `status` filter: counts are always over LIVE links, matching `list`'s
+ * default live scope.
+ */
+export type CountFilter = {
+  query?: string;
+  tag?: string;
+  tags?: string[];
+  source?: string;
+  since?: string;
+  until?: string;
+};
+
+export type LinkCounts = {
+  total: number;
+  bySource: Record<string, number>;
+  topTags: { tag: string; count: number }[];
+};
+
+/** Cap on `topTags` rows returned by `countLinks` — a facet list, not a full tag browse. */
+const TOP_TAGS_LIMIT = 20;
+
+/**
+ * Mechanical count/facets over live links (agent-navigation slice U1): a
+ * total, a per-`source_kind` breakdown, and the top `topTags` tags — the
+ * SAME filters `list`/`search` apply (source/tags/since/until, plus an
+ * optional full-text `query`), returning aggregate counts instead of rows.
+ * No AI, no ranking decisions — three mechanical `count`/`group by` queries
+ * sharing one WHERE-condition builder with `list`/`search` so the "shape of
+ * the corpus" a caller sees here always agrees with what `list`/`search`
+ * would actually return for the same filter.
+ *
+ * Runs as three independent queries (total, bySource, topTags) rather than
+ * one combined aggregate — each has its own `GROUP BY` shape (none, source,
+ * tag), so folding them into a single round trip would need three separate
+ * subqueries anyway; three plain queries are simpler and no slower at
+ * personal-store scale.
+ */
+export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> {
+  const tsQuery = filter.query ? sql`websearch_to_tsquery('english', ${filter.query})` : undefined;
+  const textMatchCondition = tsQuery
+    ? sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`
+    : undefined;
+
+  const tagKeys = requiredTagKeys(filter);
+  const sharedConditions: ReturnType<typeof sql>[] = [];
+  if (textMatchCondition) sharedConditions.push(textMatchCondition);
+  if (filter.source) sharedConditions.push(eq(links.sourceKind, filter.source));
+  if (filter.since) sharedConditions.push(sinceCondition(filter.since));
+  if (filter.until) sharedConditions.push(untilCondition(filter.until));
+  sharedConditions.push(...requiredTagConditions(tagKeys));
+
+  const [totalRows, bySourceRows, topTagRows] = await Promise.all([
+    db
+      .select({ total: sql<string>`count(*)` })
+      .from(links)
+      .where(whereLive(...sharedConditions)),
+    db
+      .select({ source: links.sourceKind, count: sql<string>`count(*)` })
+      .from(links)
+      .where(whereLive(...sharedConditions))
+      .groupBy(links.sourceKind),
+    db
+      .select({ tag: tags.name, count: sql<string>`count(distinct ${links.id})` })
+      .from(links)
+      .innerJoin(linkTags, eq(linkTags.linkId, links.id))
+      .innerJoin(tags, eq(tags.id, linkTags.tagId))
+      .where(whereLive(...sharedConditions))
+      .groupBy(tags.id, tags.name)
+      .orderBy(desc(sql`count(distinct ${links.id})`), asc(tags.name))
+      .limit(TOP_TAGS_LIMIT),
+  ]);
+
+  const bySource: Record<string, number> = {};
+  for (const row of bySourceRows) {
+    bySource[row.source] = Number(row.count);
+  }
+
+  return {
+    total: Number(totalRows[0]?.total ?? '0'),
+    bySource,
+    topTags: topTagRows.map((row) => ({ tag: row.tag, count: Number(row.count) })),
+  };
 }
 
 export type EditLinkInput = {
