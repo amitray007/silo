@@ -11,7 +11,16 @@ import { ThemeProvider } from './theme/ThemeProvider';
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
-      refetchOnWindowFocus: false,
+      // Refetch when the tab regains focus so links captured OUT-OF-BAND —
+      // by Raycast, the Chrome extension, an agent over MCP, or another tab —
+      // appear the moment you switch back to the browser, without a manual
+      // reload. silo is written to from several surfaces now, and the web UI
+      // otherwise has no signal for an external add (it only invalidates on its
+      // OWN mutations, and the enriching poll stops once nothing is in flight),
+      // so a link saved elsewhere stayed invisible until a page reload — the
+      // bug this turns off. TanStack dedupes concurrent refetches, so the
+      // focus refetch is cheap.
+      refetchOnWindowFocus: true,
       retry: 1,
     },
   },
