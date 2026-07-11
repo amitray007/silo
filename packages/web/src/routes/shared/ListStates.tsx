@@ -96,11 +96,16 @@ export function LoadingState() {
 export function EmptyState({ title, body }: { title: string; body: ReactNode }) {
   return (
     <CenteredPanel>
-      <GrainDot size={22} />
+      {/* The PLATED brand mark (not the bare bars): the tile gives the mark a
+          container so it reads as an intentional logo anchoring the empty
+          pane, rather than a stray glyph floating in a large dark card (direct
+          user feedback that the small bare mark "looked bad"). Sized up to 40
+          so it holds the composition. */}
+      <GrainDot size={40} plate />
       <p
         style={{
-          margin: '22px 0 0',
-          fontSize: 'var(--text-md)',
+          margin: '18px 0 0',
+          fontSize: 'var(--text-lg)',
           fontWeight: 500,
           color: 'var(--ink)',
           letterSpacing: 'var(--tracking-tight)',
@@ -109,17 +114,18 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
       >
         {title}
       </p>
-      <p
+      <div
         style={{
-          margin: '6px 0 0',
+          margin: '8px 0 0',
           fontSize: 'var(--text-base)',
           color: 'var(--mut)',
           maxWidth: '24rem',
+          lineHeight: 1.55,
           textWrap: 'pretty',
         }}
       >
         {body}
-      </p>
+      </div>
     </CenteredPanel>
   );
 }

@@ -11,9 +11,15 @@ function LibraryEmptyState() {
       body={
         <>
           Paste a link anywhere on this page — it's saved the moment it lands.
-          <br />
-          <span style={{ fontSize: '0.9em', color: 'var(--fnt)' }}>
-            Claude can add links here too, once you connect it in Settings → Access.
+          <span
+            style={{
+              display: 'block',
+              marginTop: 14,
+              fontSize: '0.9em',
+              color: 'var(--fnt)',
+            }}
+          >
+            Claude can add links here too, once you connect it in Settings → API / MCP.
           </span>
         </>
       }

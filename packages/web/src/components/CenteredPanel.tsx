@@ -14,7 +14,11 @@ export function CenteredPanel({ children }: { children: ReactNode }) {
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
-        padding: '104px 0 40px',
+        // Was `104px 0 40px` — the big fixed top gap left the content floating
+        // near the top of a tall, otherwise-empty pane (user feedback: "looks
+        // bad"). A smaller top inset + generous bottom reads as a composed,
+        // intentional cluster rather than a stranded one.
+        padding: '72px 24px 48px',
         textAlign: 'center',
       }}
     >
