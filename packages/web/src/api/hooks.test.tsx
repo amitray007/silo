@@ -51,6 +51,15 @@ describe('queryKeys', () => {
     expect(queryKeys.links()).toEqual(['links', {}]);
     expect(queryKeys.link('abc')).toEqual(['link', 'abc']);
   });
+
+  it('omits an explicit undefined filter field rather than hashing it in (cache-key hardening)', () => {
+    // TanStack hashes keys structurally and does NOT strip an explicit
+    // `undefined` — `{ tag: 'x', status: undefined }` would hash differently
+    // from `{ tag: 'x' }` if spread verbatim, silently missing the cache.
+    expect(queryKeys.links({ tag: 'x', status: undefined })).toEqual(queryKeys.links({ tag: 'x' }));
+    expect(queryKeys.links({ tag: 'x', status: undefined })).toEqual(['links', { tag: 'x' }]);
+    expect(queryKeys.links()).toEqual(['links', {}]);
+  });
 });
 
 describe('useCounts', () => {
@@ -564,7 +573,7 @@ describe('useCaptureLink', () => {
     resolveSecond(jsonResponse({ link: makeLink({ id: 's2' }), deduped: false }, 201));
   });
 
-  it('invalidates links/counts/tags on settle (success), reconciling with the server (dedup-safe)', async () => {
+  it('invalidates links/counts/tags on settle (success), reconciling with the server (dedup-safe) — without a redundant duplicate invalidate on the ["links", {}] subkey', async () => {
     const { queryClient, CaptureWrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     const created = makeLink({ id: 'server-1', url: 'https://example.com' });
@@ -581,6 +590,13 @@ describe('useCaptureLink', () => {
     expect(invalidatedKeys).toContainEqual(queryKeys.counts());
     expect(invalidatedKeys).toContainEqual(queryKeys.tags());
     expect(invalidatedKeys).toContainEqual(['links']);
+    // queryKeys.links() (= ['links', {}]) is a subkey the ['links'] prefix
+    // invalidate above already covers — a separate call on it would be
+    // fully redundant, so onSettled must not fire it.
+    const linksInvalidateCalls = invalidateSpy.mock.calls.filter(
+      (call) => JSON.stringify(call[0]?.queryKey) === JSON.stringify(queryKeys.links()),
+    );
+    expect(linksInvalidateCalls).toHaveLength(0);
   });
 
   it('two concurrent captures both land as optimistic rows without stomping each other', async () => {
@@ -656,7 +672,7 @@ describe('useEditLink', () => {
     expect(response).toEqual({ link: updated });
   });
 
-  it('invalidates links/link/counts/tags on settle', async () => {
+  it('invalidates links/link on settle, but NOT counts/tags (an edit never touches tag membership or live/trash counts)', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function TestWrapper({ children }: { children: ReactNode }) {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -673,8 +689,8 @@ describe('useEditLink', () => {
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(['links']);
     expect(invalidatedKeys).toContainEqual(['link']);
-    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
-    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+    expect(invalidatedKeys).not.toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).not.toContainEqual(queryKeys.tags());
   });
 
   it('surfaces an error for a failed edit', async () => {
@@ -825,7 +841,7 @@ describe('useTrashLink', () => {
     expect(ids).toEqual(['other', 'target']);
   });
 
-  it('invalidates links/counts/tags on settle', async () => {
+  it("invalidates links/counts/tags on settle (a link moving to trash drops the live count AND its tags' per-tag counts)", async () => {
     const { queryClient, TrashWrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     vi.mocked(fetch).mockResolvedValueOnce(
@@ -888,7 +904,7 @@ describe('useAddTag / useRemoveTag', () => {
     });
   });
 
-  it('both invalidate links/counts/tags on settle', async () => {
+  it('useAddTag invalidates links/tags on settle, but NOT counts (tag membership changes, live/trash counts do not)', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function TagsWrapper({ children }: { children: ReactNode }) {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -903,8 +919,27 @@ describe('useAddTag / useRemoveTag', () => {
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(['links']);
-    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
     expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+    expect(invalidatedKeys).not.toContainEqual(queryKeys.counts());
+  });
+
+  it('useRemoveTag invalidates links/tags on settle, but NOT counts (mirrors useAddTag)', async () => {
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    function TagsWrapper({ children }: { children: ReactNode }) {
+      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+    }
+    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: makeLink({ id: '1' }) }, 200));
+
+    const { result } = renderHook(() => useRemoveTag('1'), { wrapper: TagsWrapper });
+    await act(async () => {
+      await result.current.mutateAsync('mcp');
+    });
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
+    expect(invalidatedKeys).not.toContainEqual(queryKeys.counts());
   });
 });
 
@@ -1229,7 +1264,7 @@ describe('useRetryCapture', () => {
     vi.unstubAllGlobals();
   });
 
-  it('POSTs to /api/links/:id/retry and invalidates on settle', async () => {
+  it("POSTs to /api/links/:id/retry and invalidates links/link on settle, but NOT counts/tags (a retry only resets this link's own captureStatus)", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function RetryWrapper({ children }: { children: ReactNode }) {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -1253,6 +1288,9 @@ describe('useRetryCapture', () => {
     });
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(['link']);
+    expect(invalidatedKeys).not.toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).not.toContainEqual(queryKeys.tags());
   });
 });
 
@@ -1319,7 +1357,7 @@ describe('useBulkTrash', () => {
     );
   });
 
-  it('invalidates links/trash/counts/tags once at the end, not once per id', async () => {
+  it("invalidates links/trash/counts/tags once at the end, not once per id (each moved link drops its own tags' counts AND the live/trash tally)", async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     function BulkWrapper({ children }: { children: ReactNode }) {
       return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
@@ -1337,6 +1375,12 @@ describe('useBulkTrash', () => {
       (call) => JSON.stringify(call[0]?.queryKey) === JSON.stringify(queryKeys.trash()),
     );
     expect(trashInvalidateCalls).toHaveLength(1);
+
+    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
+    expect(invalidatedKeys).toContainEqual(['links']);
+    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
+    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
+    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
   });
 
   it('a partial failure still resolves — the mutation does not reject overall', async () => {

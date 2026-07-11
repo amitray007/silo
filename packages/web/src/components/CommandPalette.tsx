@@ -190,7 +190,7 @@ function PaletteTagRow({ tag }: { tag: TagCount }) {
   );
 }
 
-export type CommandPaletteResult =
+type CommandPaletteResult =
   | { kind: 'link'; link: PaletteLinkResult }
   | { kind: 'tag'; tag: TagCount };
 
@@ -486,16 +486,25 @@ function selectIsSettling(args: {
  * here — `Command.Input` is the sole focusable control in the panel (result
  * rows are `Command.Item`s, not native buttons/links, so Tab has nothing else
  * to cycle to), so trapping Tab would be dead code.
+ *
+ * Thin `open`-gated wrapper (perf fix, dedupe-api-calls slice unit 1): this
+ * component is mounted PERMANENTLY at the app root, so if it called
+ * `usePaletteResults` itself, that hook's data subscriptions
+ * (`useInfiniteLinks`/`useTrashList`/`useTags`/`useSearchLinks`/
+ * `useLinksByTag`/`useSearchTrash`) would run on EVERY page — React runs all
+ * hooks before an early `if (!open) return null`, so an early return here
+ * can't gate them. Instead the data-hook-bearing work is pushed into
+ * `CommandPaletteInner`, which this wrapper mounts ONLY when `open` — closed,
+ * nothing below this line ever renders, so none of those queries subscribe
+ * (no phantom `/api/links` poll on `/trash`, no phantom `/api/trash` on `/`
+ * or `/tags/*`). The capture-phase Escape listener stays HERE rather than
+ * moving into the inner: it needs to be armed the instant `open` flips true
+ * (same render that mounts the inner), and its own `if (!open) return`
+ * guard already makes it a no-op while closed, so keeping it in the wrapper
+ * is behavior-identical to before the split.
  */
 export function CommandPalette({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
-  const { open, closePalette, q, setQ, parsed, parsedDebounced } = palette;
-  const scope = usePaletteScope();
-  const { results, showTagSuggestions, isFullyEmpty } = usePaletteResults(
-    parsed,
-    parsedDebounced,
-    scope,
-  );
-  const panelRef = useRef<HTMLDivElement>(null);
+  const { open, closePalette } = palette;
 
   // Mirrors `ModalShell`'s own capture-phase Escape listener 1-to-1 (see that
   // component's doc comment for why capture-phase: it must win over
@@ -516,6 +525,30 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
   }, [open, closePalette]);
 
   if (!open) return null;
+
+  return <CommandPaletteInner palette={palette} />;
+}
+
+/**
+ * Everything that needs `open` to actually be true — split out of
+ * `CommandPalette` (see that component's doc comment) purely so its data
+ * hooks (`usePaletteScope`/`usePaletteResults`) never mount while the
+ * palette is closed. Not exported: `CommandPalette` above is the only
+ * public surface, this is an implementation detail of the open-gating.
+ * Reads `open`/`closePalette` back off `palette` (rather than trusting the
+ * wrapper's own `if (!open) return null` implicitly) only for `closePalette`
+ * — `open` itself is guaranteed true by the wrapper, this component never
+ * needs to branch on it again.
+ */
+function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
+  const { closePalette, q, setQ, parsed, parsedDebounced } = palette;
+  const scope = usePaletteScope();
+  const { results, showTagSuggestions, isFullyEmpty } = usePaletteResults(
+    parsed,
+    parsedDebounced,
+    scope,
+  );
+  const panelRef = useRef<HTMLDivElement>(null);
 
   const openLinkResult = (link: PaletteLinkResult) => {
     // Mirrors `LinkRow`'s own anchor semantics (`target="_blank" rel="noopener"`).

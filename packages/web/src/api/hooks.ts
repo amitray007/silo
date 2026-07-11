@@ -40,7 +40,20 @@ import type {
 export const queryKeys = {
   counts: () => ['counts'] as const,
   tags: () => ['tags'] as const,
-  links: (filter?: { tag?: string; status?: string }) => ['links', filter ?? {}] as const,
+  /**
+   * TanStack hashes keys structurally and does NOT strip an explicit
+   * `undefined` field, so `{ tag: 'x', status: undefined }` would hash
+   * DIFFERENTLY from `{ tag: 'x' }` — a silent cache miss / duplicate fetch
+   * of the same data. Built by OMITTING undefined fields rather than
+   * spreading `filter` verbatim; any new filter field must follow the same
+   * omit-when-undefined discipline, never `key.field = undefined`.
+   */
+  links: (filter?: { tag?: string | undefined; status?: string | undefined }) => {
+    const key: { tag?: string; status?: string } = {};
+    if (filter?.tag !== undefined) key.tag = filter.tag;
+    if (filter?.status !== undefined) key.status = filter.status;
+    return ['links', key] as const;
+  },
   link: (id: string) => ['link', id] as const,
   /**
    * `tag` (optional, command-center search plan 024) is folded into the key
@@ -338,7 +351,8 @@ export function useCaptureLink() {
       if (context?.optimisticLinkId) removeOptimisticLink(queryClient, context.optimisticLinkId);
     },
     onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: queryKeys.links() });
+      // The ['links'] prefix invalidate below already covers queryKeys.links()
+      // (= ['links', {}]) — a separate invalidate on that exact key is redundant.
       queryClient.invalidateQueries({ queryKey: ['links'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
       queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
@@ -348,19 +362,23 @@ export function useCaptureLink() {
 
 /**
  * The shared "settle" tail for every mutation below that doesn't optimistically
- * touch the cache itself (edit/tag add/tag remove/create-tag): invalidate the
- * broad `['links']` family (covers every tag-scoped + untagged cache),
- * `counts`, and `tags` so the server's reconciled state (new tag counts, edited
- * title/description, etc.) reliably replaces whatever was showing. A plain
- * invalidate is deliberately simpler than an optimistic patch here — these
- * mutations touch fields (`tags`, `title`, `description`, `note`) that don't
- * need to feel instantaneous the way capture/trash do, per the build brief.
+ * touch the cache itself (edit/trash/tag add/tag remove/retry/bulk-trash):
+ * always invalidates `['links']` (covers every tag-scoped + untagged cache)
+ * and `['link']` — a link's own fields always changed. `tags`/`counts` are
+ * OPTED IN per mutation via `affects`, rather than blanket-invalidated, since
+ * most of these mutations don't touch tag membership or live/trash counts
+ * (e.g. editing a title used to also refetch `/api/tags` + `/api/counts` for
+ * no reason). Each call site's `affects` argument carries a one-line comment
+ * on WHY that set, so it doesn't drift back to blanket invalidation.
  */
-function invalidateLinkQueries(queryClient: ReturnType<typeof useQueryClient>): void {
+function invalidateLinkQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  affects: { tags?: boolean; counts?: boolean } = {},
+): void {
   queryClient.invalidateQueries({ queryKey: ['links'] });
   queryClient.invalidateQueries({ queryKey: ['link'] });
-  queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
-  queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+  if (affects.tags) queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+  if (affects.counts) queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
 }
 
 /**
@@ -377,6 +395,9 @@ export function useEditLink(id: string) {
 
   return useMutation({
     mutationFn: (input: EditLinkRequest) => apiPatch<LinkResponse>(`/api/links/${id}`, input),
+    // An edit only touches this link's own fields (title/description/note) —
+    // never tag membership or live/trash counts — so neither tags nor counts
+    // need to be invalidated here.
     onSettled: () => invalidateLinkQueries(queryClient),
   });
 }
@@ -417,7 +438,9 @@ export function useTrashLink(id: string) {
     onError: (_error, _vars, context) => {
       if (context?.removedLink) insertOptimisticLink(queryClient, context.removedLink);
     },
-    onSettled: () => invalidateLinkQueries(queryClient),
+    // A link moving to trash drops the live count AND every tag it carried
+    // drops a per-tag count — both need refetching, unlike a plain edit.
+    onSettled: () => invalidateLinkQueries(queryClient, { tags: true, counts: true }),
   });
 }
 
@@ -434,7 +457,9 @@ export function useAddTag(id: string) {
 
   return useMutation({
     mutationFn: (tag: string) => apiPost<LinkResponse>(`/api/links/${id}/tags`, { tag }),
-    onSettled: () => invalidateLinkQueries(queryClient),
+    // Adding a tag changes that tag's per-tag count (sidebar) but not the
+    // live/trash counts — invalidate tags, not counts.
+    onSettled: () => invalidateLinkQueries(queryClient, { tags: true }),
   });
 }
 
@@ -445,7 +470,9 @@ export function useRemoveTag(id: string) {
   return useMutation({
     mutationFn: (tag: string) =>
       apiDelete<LinkResponse>(`/api/links/${id}/tags/${encodeURIComponent(tag)}`),
-    onSettled: () => invalidateLinkQueries(queryClient),
+    // Removing a tag changes that tag's per-tag count the same way adding
+    // one does — invalidate tags, not counts.
+    onSettled: () => invalidateLinkQueries(queryClient, { tags: true }),
   });
 }
 
@@ -632,6 +659,8 @@ export function useRetryCapture(id: string) {
 
   return useMutation({
     mutationFn: () => apiPost<LinkResponse>(`/api/links/${id}/retry`, {}),
+    // A retry only resets this link's own captureStatus — never tag
+    // membership or live/trash counts.
     onSettled: () => invalidateLinkQueries(queryClient),
   });
 }
@@ -675,7 +704,10 @@ export function useBulkTrash() {
   return useMutation({
     mutationFn: (ids: string[]) => runBulk(ids, (id) => apiPost(`/api/links/${id}/trash`, {})),
     onSettled: () => {
-      invalidateLinkQueries(queryClient);
+      // Each moved link drops its own tags' per-tag counts; `invalidateTrashQueries`
+      // below already covers `counts` (the live/trash tally moving), so only
+      // `tags` needs opting in here.
+      invalidateLinkQueries(queryClient, { tags: true });
       invalidateTrashQueries(queryClient);
     },
   });

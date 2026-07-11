@@ -83,6 +83,54 @@ describe('CommandPalette', () => {
     expect(container.textContent).toBe('');
   });
 
+  /**
+   * Perf regression guard (dedupe-api-calls slice, unit 1): `CommandPalette`
+   * is mounted PERMANENTLY at the app root (`AppFrame.tsx`), so if its data
+   * hooks (`usePaletteResults`, buried inside the pre-split component) ran
+   * unconditionally, EVERY page would fire a phantom `/api/links` or
+   * `/api/trash` fetch even while the palette is closed. Builds a minimal
+   * `palette` stub (matching `useCommandPalette()`'s return shape) with
+   * `open: false` rather than going through the real hook + ⌘K, so this test
+   * asserts the CLOSED state directly without a keypress ever flipping it
+   * open. Then flips the SAME stub to `open: true` and re-renders to confirm
+   * the inner does mount and does fetch once open — proving the wrapper's
+   * gate, not just an absence of setup.
+   */
+  describe('closed-state fetch gating (perf: CommandPaletteInner only mounts when open)', () => {
+    function paletteStub(open: boolean) {
+      return {
+        open,
+        openPalette: vi.fn(),
+        closePalette: vi.fn(),
+        q: '',
+        setQ: vi.fn(),
+        debouncedQ: '',
+        parsed: { text: '' },
+        parsedDebounced: { text: '' },
+        activeIndex: 0,
+        setActiveIndex: vi.fn(),
+        moveActive: vi.fn(),
+        inputRef: { current: null },
+      };
+    }
+
+    it('fires no /api/links or /api/trash fetch while closed', async () => {
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      render(<CommandPalette palette={paletteStub(false)} />, { wrapper });
+      // No fetch of any kind — a closed palette shouldn't even subscribe to
+      // `useTags`, let alone the link/trash data hooks.
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('fetches once flipped open (the gate lifts, not just permanently withheld)', async () => {
+      mockFetchByPath({ '/api/tags': { tags: [] }, '/api/links': { links: [] } });
+      render(<CommandPalette palette={paletteStub(true)} />, { wrapper });
+      await waitFor(() => expect(screen.getByRole('dialog')).toBeDefined());
+      await waitFor(() => expect(fetch).toHaveBeenCalled());
+    });
+  });
+
   it('⌘K opens the dialog with the combobox focused', async () => {
     mockFetchByPath({ '/api/tags': { tags: [] }, '/api/links': { links: [] } });
     await renderPalette();
