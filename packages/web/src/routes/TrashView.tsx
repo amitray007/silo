@@ -19,6 +19,7 @@ import {
 } from '../components/Dock';
 import { TrashIcon } from '../components/NavIcons';
 import { useTrashSelection } from '../components/SelectionContext';
+import { Skeleton } from '../components/Skeleton';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
 
@@ -161,16 +162,7 @@ function TrashBody({
     return (
       <div style={{ padding: '20px 11px' }} role="status" aria-label="Loading…">
         {[0, 1].map((i) => (
-          <div
-            key={i}
-            style={{
-              height: 34,
-              borderRadius: 8,
-              background: 'var(--bg2)',
-              marginBottom: 8,
-              opacity: 0.6,
-            }}
-          />
+          <Skeleton key={i} height={34} radius={8} style={{ marginBottom: 8 }} />
         ))}
       </div>
     );

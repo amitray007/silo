@@ -161,6 +161,37 @@ describe('McpSetupDialog', () => {
     });
   });
 
+  it('shows a skeleton in the URL row (not the localhost fallback) while appConfig is loading, with Copy disabled', async () => {
+    const neverResolves = new Promise<Response>(() => {});
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/config')) return neverResolves;
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <McpSetupDialog onClose={() => {}} />
+      </QueryClientProvider>,
+    );
+
+    // The dev-default fallback never appears — no pop once appConfig resolves.
+    expect(screen.queryByText('http://127.0.0.1:8788/mcp')).toBeNull();
+    expect(screen.getByText('URL')).toBeDefined();
+
+    // Transport + Auth header don't depend on the late-resolving URL, so they
+    // render immediately even while the URL/CLI/JSON rows are skeletons.
+    expect(screen.getByText('Streamable HTTP')).toBeDefined();
+    expect(screen.getByText('Authorization: Bearer <YOUR_SILO_API_TOKEN>')).toBeDefined();
+
+    // Every Copy button tied to the url-dependent rows (URL, CLI, JSON) is
+    // disabled while loading — Auth header's Copy stays enabled.
+    const copyButtons = screen.getAllByRole('button', { name: 'Copy' });
+    const disabledCount = copyButtons.filter((b) => (b as HTMLButtonElement).disabled).length;
+    expect(disabledCount).toBe(3);
+  });
+
   it('pressing Escape calls onClose', async () => {
     stubConfig();
     const onClose = vi.fn();

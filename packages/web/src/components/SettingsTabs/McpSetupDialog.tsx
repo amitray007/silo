@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import { useAppConfig } from '../../api/hooks';
 import { resolveMcpUrl } from '../../lib/mcpUrl';
 import { ModalHeader, ModalShell } from '../ModalShell';
+import { Skeleton } from '../Skeleton';
 import { copyLabel, useCopyFlash } from './copyFlash';
 import { rowDesc } from './rowStyles';
 
@@ -103,15 +104,26 @@ const connectionGroup: CSSProperties = {
  * right). Each instance owns its OWN `useCopyFlash()` (per the hook's own
  * doc comment) so copying one field's value never flips another field's
  * button label.
+ *
+ * `loading` swaps the `<code>` for a `Skeleton` and disables Copy — for the
+ * URL/CLI/JSON rows, whose `value` embeds `useAppConfig`'s late-resolving
+ * `mcpUrl` (see `McpSetupDialog`'s doc comment): without this, they'd render
+ * the localhost fallback first and visibly swap to the real host once the
+ * config loads.
  */
-function CopyField({ label, value }: { label: string; value: string }) {
+function CopyField({ label, value, loading }: { label: string; value: string; loading?: boolean }) {
   const copy = useCopyFlash();
   return (
     <div style={fieldBlock}>
       <div style={fieldLabel}>{label}</div>
       <div style={copyRow}>
-        <code style={copyRowCode}>{value}</code>
-        <button type="button" className="silo-settings-btn" onClick={() => copy.copyText(value)}>
+        {loading ? <Skeleton height={20} /> : <code style={copyRowCode}>{value}</code>}
+        <button
+          type="button"
+          className="silo-settings-btn"
+          disabled={loading}
+          onClick={() => copy.copyText(value)}
+        >
           {copyLabel(copy.copied, 'Copy')}
         </button>
       </div>
@@ -139,9 +151,17 @@ function CopyField({ label, value }: { label: string; value: string }) {
  * `resolveMcpUrl` rather than taking `url` as a prop, so `AccessTab` only
  * has to own the open/close boolean, not a piece of derived state that
  * duplicates what this dialog needs anyway.
+ *
+ * While `useAppConfig` is loading, `url` is derived from `appConfig?.mcpUrl`
+ * being `undefined` — `resolveMcpUrl` falls back to the localhost dev
+ * default, which may not be the real host once the config lands. The URL,
+ * CLI, and JSON rows all embed `url`, so all three show a `Skeleton` for
+ * that window (`CopyField`'s `loading` prop) rather than flashing the
+ * fallback then popping to the real value. Transport and Auth header don't
+ * depend on `url`, so they render immediately.
  */
 export function McpSetupDialog({ onClose }: { onClose: () => void }) {
-  const { data: appConfig } = useAppConfig();
+  const { data: appConfig, isLoading } = useAppConfig();
   const url = resolveMcpUrl(appConfig?.mcpUrl, window.location);
 
   return (
@@ -158,7 +178,7 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
       <div style={groupHeading}>Connection</div>
       <div style={groupNote}>Use these three together to add silo manually.</div>
       <div style={connectionGroup}>
-        <CopyField label="URL" value={url} />
+        <CopyField label="URL" value={url} loading={isLoading} />
         <div style={fieldBlock}>
           <div style={fieldLabel}>Transport</div>
           <div style={copyRow}>
@@ -174,9 +194,9 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
           assembling the group above, not part of it. */}
       <div style={groupHeading}>Or paste a ready-made config</div>
       <div style={groupNote}>Each of these is complete on its own.</div>
-      <CopyField label="Claude Code CLI" value={claudeCodeCliCommand(url)} />
+      <CopyField label="Claude Code CLI" value={claudeCodeCliCommand(url)} loading={isLoading} />
       <div style={{ marginBottom: 0 }}>
-        <CopyField label="JSON config" value={mcpClientConfig(url)} />
+        <CopyField label="JSON config" value={mcpClientConfig(url)} loading={isLoading} />
       </div>
     </ModalShell>
   );

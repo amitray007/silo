@@ -1113,6 +1113,21 @@ select {
   }
 }
 
+/* The <Skeleton> loading placeholder's shimmer — a light band sweeps L→R
+   across the block. Driven by background-position on an oversized (200%)
+   gradient so no layout/paint of siblings is triggered (only the element's
+   own background repaints). Under prefers-reduced-motion the global
+   `* { animation: none }` above stills it, leaving a flat `--bg2` block —
+   which is exactly the skeleton's base color, so it degrades cleanly. */
+@keyframes siloShimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
 /* Popovers (RowMenu, its tags fly-out, EditModal's tags fly-out, the
    HoverPreview card): opened/closed far more often than a modal — dozens of
    times per session — so per the review-animations STANDARDS these need to

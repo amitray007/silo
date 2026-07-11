@@ -245,6 +245,31 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     ).toBeDefined();
   });
 
+  it('shows skeleton rows (not nothing) while the token list is loading', () => {
+    const neverResolves = new Promise<Response>(() => {});
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      // Settings resolves normally (unrelated to this list's loading state);
+      // only `/api/access-tokens` hangs, so `useAccessTokens().isLoading`
+      // stays true for the assertion below.
+      if (url.includes('/api/settings')) return Promise.resolve(jsonResponse(defaultSettings()));
+      if (url.includes('/api/access-tokens')) return neverResolves;
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <AccessTab />
+      </QueryClientProvider>,
+    );
+
+    // Neither the empty state nor any real token row has rendered — only the
+    // loading container, carrying the a11y contract.
+    expect(screen.getByRole('status', { name: 'Loading…' })).toBeDefined();
+    expect(screen.queryByText('No tokens yet — create one to let an agent connect.')).toBeNull();
+  });
+
   it('does not show the raw token anywhere in the list rows', async () => {
     renderTab({
       tokens: [

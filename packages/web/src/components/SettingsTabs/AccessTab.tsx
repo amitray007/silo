@@ -7,6 +7,7 @@ import {
   useUpdateSettings,
 } from '../../api/hooks';
 import type { AccessTokenJson } from '../../api/types';
+import { Skeleton } from '../Skeleton';
 import { copyLabel, useCopyFlash } from './copyFlash';
 import { McpSetupDialog } from './McpSetupDialog';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
@@ -211,12 +212,39 @@ function CreateTokenForm() {
 }
 
 /**
+ * One skeleton row shaped like `TokenRow` — same `settingsRow` shell, a
+ * name-line + meta-line skeleton stacked on the left (mirroring
+ * `tokenNameStyle`/`tokenMetaStyle`'s sizes so the real row doesn't shift
+ * when it replaces this), and a button-shaped skeleton on the right sized to
+ * the Revoke button. A local helper (not `TokenRow` itself) since there's no
+ * real token to render yet — pulled out so `AccessTokensSection` can render
+ * 2–3 without repeating the row markup (jscpd).
+ */
+function TokenRowSkeleton() {
+  return (
+    <div style={settingsRow}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Skeleton height={14} width="40%" />
+        <Skeleton height={11} width="65%" style={{ marginTop: 6 }} />
+      </div>
+      <Skeleton height={30} width={64} />
+    </div>
+  );
+}
+
+/**
  * The token-management section (U4): a create flow, then the list of
  * existing tokens. Replaces the old inert single "Access token" row — that
  * row copied the LOGGED-IN session token (an env secret proxy that couldn't
  * really be "shown"), whereas this section manages real, named, DB-backed
  * tokens the user creates/revokes directly (`docs/superpowers/specs/
  * 2026-07-11-access-tokens-design.md`).
+ *
+ * While `useAccessTokens` is loading, three `TokenRowSkeleton`s stand in for
+ * the list — it used to render nothing here, so the real rows would flash
+ * in once the fetch resolved. `role="status"` carries the loading semantics
+ * (the skeleton blocks themselves are `aria-hidden`), matching the pattern
+ * `LoadingState`/`TrashBody` use elsewhere.
  */
 function AccessTokensSection() {
   const { data: tokens, isLoading } = useAccessTokens();
@@ -233,6 +261,13 @@ function AccessTokensSection() {
         </div>
       </div>
       <CreateTokenForm />
+      {isLoading && (
+        <div role="status" aria-label="Loading…">
+          <TokenRowSkeleton />
+          <TokenRowSkeleton />
+          <TokenRowSkeleton />
+        </div>
+      )}
       {!isLoading && tokens && tokens.length === 0 && (
         <div style={settingsRow}>
           <div style={rowDesc}>No tokens yet — create one to let an agent connect.</div>

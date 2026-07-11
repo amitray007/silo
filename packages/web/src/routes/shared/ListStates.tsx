@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import type { ApiError } from '../../api/client';
 import { CenteredPanel } from '../../components/CenteredPanel';
 import { GrainDot } from '../../components/GrainDot';
+import { Skeleton } from '../../components/Skeleton';
 
 /**
  * Render-state components shared by every list view that pairs an omnibar
@@ -12,21 +13,12 @@ import { GrainDot } from '../../components/GrainDot';
  * would otherwise be copy-pasted between two route files (and trip jscpd).
  */
 
-/** The calm first-page loading placeholder — a couple of muted skeleton rows, not a spinner (CLAUDE.md "calm" states). */
+/** The calm first-page loading placeholder — a few shimmering skeleton rows, not a spinner (CLAUDE.md "calm" states). Shared by `LibraryView` and `TagView`. */
 export function LoadingState() {
   return (
     <div style={{ padding: '20px 11px' }} role="status" aria-label="Loading…">
       {[0, 1, 2].map((i) => (
-        <div
-          key={i}
-          style={{
-            height: 34,
-            borderRadius: 8,
-            background: 'var(--bg2)',
-            marginBottom: 8,
-            opacity: 0.6,
-          }}
-        />
+        <Skeleton key={i} height={34} radius={8} style={{ marginBottom: 8 }} />
       ))}
     </div>
   );
