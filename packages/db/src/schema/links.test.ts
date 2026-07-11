@@ -197,6 +197,68 @@ describeIfPg('links schema (integration)', () => {
     expect(titleMatch?.rank).toBeGreaterThan(notesMatch?.rank ?? Number.POSITIVE_INFINITY);
   });
 
+  it('populates search_vector from canonical_url and matches domain/path words (search-url method)', async () => {
+    await db.insert(links).values({
+      url: 'https://github.com/amitray007/silo',
+      canonicalUrl: 'https://github.com/amitray007/silo',
+      sourceKind: 'link',
+    });
+
+    const matchesFor = async (term: string): Promise<boolean> => {
+      const rows = await db.execute<{ url: string }>(
+        sql`select url from links where search_vector @@ websearch_to_tsquery('english', ${term})`,
+      );
+      return rows.rows.length === 1;
+    };
+
+    expect(await matchesFor('amitray007')).toBe(true);
+    expect(await matchesFor('silo')).toBe(true);
+    expect(await matchesFor('github')).toBe(true);
+  });
+
+  it('ranks a title match above a url-only match (weighting A > C)', async () => {
+    await db.insert(links).values([
+      {
+        url: 'https://example.com/quibbleflarn-title',
+        canonicalUrl: 'https://example.com/quibbleflarn-title',
+        title: 'quibbleflarn',
+        sourceKind: 'link',
+      },
+      {
+        url: 'https://quibbleflarn.example.com/unrelated',
+        canonicalUrl: 'https://quibbleflarn.example.com/unrelated',
+        title: 'unrelated headline',
+        sourceKind: 'link',
+      },
+    ]);
+
+    const rows = await db.execute<{ url: string; rank: number }>(
+      sql`select url, ts_rank(search_vector, websearch_to_tsquery('english', 'quibbleflarn')) as rank
+          from links
+          where search_vector @@ websearch_to_tsquery('english', 'quibbleflarn')
+          order by rank desc`,
+    );
+
+    expect(rows.rows).toHaveLength(2);
+    const [titleMatch, urlMatch] = rows.rows;
+    expect(titleMatch?.url).toBe('https://example.com/quibbleflarn-title');
+    expect(titleMatch?.rank).toBeGreaterThan(urlMatch?.rank ?? Number.POSITIVE_INFINITY);
+  });
+
+  it('does NOT match "amitray" alone against a stored "amitray007" token (documents the digit-joined caveat)', async () => {
+    await db.insert(links).values({
+      url: 'https://github.com/amitray007/silo',
+      canonicalUrl: 'https://github.com/amitray007/silo',
+      sourceKind: 'link',
+    });
+
+    const rows = await db.execute<{ url: string }>(
+      sql`select url from links where search_vector @@ websearch_to_tsquery('english', 'amitray')`,
+    );
+
+    expect(rows.rows).toHaveLength(0);
+  });
+
   it('produces a non-null search_vector when description and extracted_text are null (coalesce)', async () => {
     await db.insert(links).values({
       url: 'https://example.com/title-only',

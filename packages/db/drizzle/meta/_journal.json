@@ -71,6 +71,13 @@
       "when": 1783712855081,
       "tag": "0009_warm_sugar_man",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1783812291765,
+      "tag": "0010_dark_microbe",
+      "breakpoints": true
     }
   ]
 }

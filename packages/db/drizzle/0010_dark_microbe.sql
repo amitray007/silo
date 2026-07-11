@@ -1,0 +1,63 @@
+-- Index `canonical_url` in full-text search (search-url method): the URL
+-- word is now part of the generated `search_vector` at weight C, so the web
+-- command palette (which delegates free text to `core.search()`) finds a
+-- link by domain or path words, not just its displayed title/description/
+-- body/notes. Before this change the URL was only displayed/opened, never
+-- matched.
+--
+-- The `english` tsvector config treats a whole URL as one opaque host/path
+-- token, so typing part of a domain (e.g. `github`) would never match it. We
+-- pre-split the URL by replacing every run of non-alphanumeric characters
+-- with a space — `regexp_replace(..., '[^a-zA-Z0-9]+', ' ', 'g')` — BEFORE
+-- handing it to to_tsvector, so each domain/path segment becomes its own
+-- lexeme. Consequence accepted (see `links.ts`'s column comment for the
+-- full rationale): digit-joined segments are NOT sub-split by this regex, so
+-- a path segment like `amitray007` stays one token — searching `amitray`
+-- alone will NOT match a stored `amitray007`. Deliberate, documented
+-- tradeoff, not a bug.
+--
+-- Only `canonical_url` is indexed (never the raw `url`): it is NOT NULL and
+-- dedup-normalized, so indexing it alone avoids double-indexing near-
+-- identical raw+canonical strings. It is clamped with `left(..., 4000)`,
+-- following this column's existing byte-clamp discipline (URLs are short,
+-- so 4000 bytes is ample headroom, not a realistic truncation path) — see
+-- 0006_gorgeous_makkari's comment for why every FTS input is bounded (a
+-- single tsvector's serialized form must stay under Postgres's hard
+-- 1,048,576-byte ceiling).
+--
+-- Postgres does not support ALTERing a generated column's expression in
+-- place — the only path is DROP then re-ADD with the new expression, same
+-- pattern as 0006_gorgeous_makkari (which added the `left()` clamps to this
+-- same column):
+--
+--   1. DROP COLUMN "search_vector". A plain drop (no explicit CASCADE
+--      keyword, no separate DROP INDEX statement) is sufficient: Postgres
+--      silently drops the dependent partial GIN index
+--      (links_search_vector_live_idx) along with the column it indexes.
+--      There is nothing left referencing search_vector afterward.
+--   2. ADD COLUMN "search_vector" back with the new expression, appending
+--      the space-split canonical_url term at weight C. Because the column
+--      is STORED, Postgres recomputes and backfills it for EVERY existing
+--      row as part of this ALTER — no separate UPDATE/backfill step is
+--      needed, and no row is left with a stale/missing vector.
+--   3. Re-CREATE the partial GIN index
+--      (`... WHERE deleted_at IS NULL`) that step 1 dropped, so search
+--      stays index-backed instead of falling back to a sequential scan.
+--
+-- NOTE: drizzle-kit's raw generated output for this migration was wrong on
+-- two counts, hand-corrected before this file was applied, same class of
+-- bug 0006's own comment documents: (1) it omitted the re-CREATE INDEX
+-- statement entirely — it doesn't model that dropping a column silently
+-- drops indexes depending on it; (2) it emitted TWO spurious DROP TYPE
+-- statements (`link_origin` and `capture_source`) — the generator's enum
+-- tracking momentarily lost both enums from its diff even though
+-- `links.added_by` and `links.source` still use them. All three spurious
+-- lines were removed by hand; `meta/0010_snapshot.json` was hand-corrected
+-- to restore the full `enums` map (matching 0009's) so the NEXT
+-- `db:generate` diffs against the true state instead of re-proposing the
+-- same bogus drops.
+ALTER TABLE "links" DROP COLUMN "search_vector";--> statement-breakpoint
+
+ALTER TABLE "links" ADD COLUMN "search_vector" "tsvector" GENERATED ALWAYS AS (setweight(to_tsvector('english', left(coalesce("links"."title", ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce("links"."description", ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce("links"."extracted_text", ''), 600000)), 'C') || setweight(to_tsvector('english', regexp_replace(left(coalesce("links"."canonical_url", ''), 4000), '[^a-zA-Z0-9]+', ' ', 'g')), 'C') || setweight(to_tsvector('english', left(coalesce("links"."notes", ''), 100000)), 'D')) STORED;--> statement-breakpoint
+
+CREATE INDEX "links_search_vector_live_idx" ON "links" USING gin ("search_vector") WHERE "links"."deleted_at" is null;

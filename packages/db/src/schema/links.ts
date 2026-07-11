@@ -77,11 +77,11 @@ export const links = pgTable(
     notes: text('notes'),
 
     // Generated, read-only full-text column — Postgres keeps it in sync on
-    // every insert/update of title/description/extracted_text/notes. MUST use
-    // the explicit 'english' config: the single-arg to_tsvector(text) form is
-    // not immutable and Postgres rejects it in a generated column.
-    // coalesce(...) on every input column so one NULL doesn't null the whole
-    // vector.
+    // every insert/update of title/description/extracted_text/notes/
+    // canonical_url. MUST use the explicit 'english' config: the single-arg
+    // to_tsvector(text) form is not immutable and Postgres rejects it in a
+    // generated column. coalesce(...) on every input column so one NULL
+    // doesn't null the whole vector.
     //
     // `notes` (H2, plan 006) is weight D — the lowest — since it's a personal
     // annotation, below even the extracted body text. It CAN live in this
@@ -91,6 +91,24 @@ export const links = pgTable(
     // (`link_tags`/`tags`) reached by a join. Tag-name matching is therefore
     // done at query time in `core`'s `search()`, not here — see that
     // function's doc comment for the query-time approach and its tradeoffs.
+    //
+    // `canonical_url` (search-url method) is ALSO indexed at weight C —
+    // the same tier as `extracted_text`, a real but secondary signal, below
+    // title (A) and description (B). Only `canonical_url` is indexed, never
+    // the raw `url`: `canonical_url` is NOT NULL (never null, always falls
+    // back to the raw url on canonicalization failure — see the column's own
+    // comment) and dedup-normalized, so indexing it alone avoids
+    // double-indexing near-identical raw+canonical strings. The `english` tsvector
+    // config treats a whole URL as one opaque host/path token, so typing part
+    // of a domain or path (e.g. `github`) would never match — we pre-split it
+    // by replacing every run of non-alphanumeric characters with a space via
+    // `regexp_replace(..., '[^a-zA-Z0-9]+', ' ', 'g')` BEFORE handing it to
+    // to_tsvector, so each domain/path segment becomes its own lexeme.
+    // Consequence accepted: digit-joined segments are NOT sub-split by this
+    // regex, so a path segment like `amitray007` stays one token — searching
+    // `amitray` alone will NOT match a stored `amitray007` (only the exact
+    // joined token, or a longer prefix via websearch's own tokenizing, would).
+    // This is a deliberate, documented tradeoff, not a bug.
     //
     // Each coalesce'd input is also wrapped in `left(..., N)` — a HARD Postgres
     // limit, not a style choice: a single tsvector's serialized form must stay
@@ -104,14 +122,17 @@ export const links = pgTable(
     // ='enriching'` — the SAME failure class the clamp fix closed, reintroduced
     // one layer down at the DB. The `left()` bounds below cap only the FTS
     // INPUT per field, never the stored value — `extracted_text` itself stays
-    // unbounded for display/MCP. Worst case ~830K chars of source text across
-    // all four fields keeps the serialized tsvector comfortably under the
-    // 1,048,575-byte ceiling even for pathological all-unique-tokens input;
-    // typical prose is far smaller, and nobody searches for a term that
-    // appears only past ~½MB into one document.
+    // unbounded for display/MCP. `canonical_url` is clamped to 4,000 bytes —
+    // URLs are short, so this is ample headroom, not a realistic truncation
+    // path. Worst case ~830K chars of source text across the title/
+    // description/extracted_text/notes fields plus ~4K of URL keeps the
+    // serialized tsvector comfortably under the 1,048,575-byte ceiling even
+    // for pathological all-unique-tokens input; typical prose is far smaller,
+    // and nobody searches for a term that appears only past ~½MB into one
+    // document.
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('english', left(coalesce(${links.title}, ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce(${links.description}, ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce(${links.extractedText}, ''), 600000)), 'C') || setweight(to_tsvector('english', left(coalesce(${links.notes}, ''), 100000)), 'D')`,
+        sql`setweight(to_tsvector('english', left(coalesce(${links.title}, ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce(${links.description}, ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce(${links.extractedText}, ''), 600000)), 'C') || setweight(to_tsvector('english', regexp_replace(left(coalesce(${links.canonicalUrl}, ''), 4000), '[^a-zA-Z0-9]+', ' ', 'g')), 'C') || setweight(to_tsvector('english', left(coalesce(${links.notes}, ''), 100000)), 'D')`,
     ),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

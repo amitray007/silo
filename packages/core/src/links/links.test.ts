@@ -741,6 +741,25 @@ describeIfPg('links operations (integration)', () => {
       const notesOnlyRank = byId.get(notesOnly.id)?.rank ?? -1;
       expect(bothRank).toBeGreaterThanOrEqual(notesOnlyRank);
     });
+
+    it('finds a link by a word that appears ONLY in its canonical URL (search-url method: palette free-text over domain/path)', async () => {
+      const urlMatch = await ops.createLink({
+        url: 'https://zibblequorpwidget.example.com/docs',
+        title: 'an unrelated title',
+        extractedText: 'an unrelated body of text',
+        sourceKind: 'link',
+      });
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/search-url-unrelated',
+        title: 'a completely different link',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('zibblequorpwidget');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(urlMatch.id);
+      expect(ids).not.toContain(unrelated.id);
+    });
   });
 
   describe('search — tag scope (command-center plan 024)', () => {
