@@ -13,7 +13,7 @@
     "check-types": "tsc --noEmit",
     "dev": "tsx --env-file-if-exists=../../.env src/worker.ts",
     "start": "tsx src/worker.ts",
-    "test": "vitest run"
+    "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
     "@mozilla/readability": "catalog:",

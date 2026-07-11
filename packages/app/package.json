@@ -17,7 +17,7 @@
     "start": "tsx --env-file-if-exists=../../.env src/main.ts",
     "start:mcp-http": "tsx --env-file-if-exists=../../.env src/mcp-http-main.ts",
     "start:api": "tsx --env-file-if-exists=../../.env src/api-main.ts",
-    "test": "vitest run"
+    "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
     "@hono/node-server": "catalog:",
