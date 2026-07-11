@@ -76,13 +76,19 @@ jobs:
 
       - name: commit the version bump
         if: steps.plan.outputs.releases != '[]'
+        # LEFTHOOK=0 + --no-verify: skip the local git hooks (pre-commit Biome,
+        # pre-push type/test/quality gate). Those are for developer machines;
+        # here they'd run the DB-backed test suite with no Postgres in this
+        # runner and fail the bump. CI's own test job is the gate for main.
+        env:
+          LEFTHOOK: '0'
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add -A
           # [skip ci] so the bump commit doesn't re-trigger this workflow.
-          git commit -m "chore(release): version bump [skip ci]"
-          git push
+          git commit --no-verify -m "chore(release): version bump [skip ci]"
+          git push --no-verify
 
   release:
     name: build · tag · release
@@ -203,5 +209,6 @@ jobs:
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add Formula/silo.rb
-          git commit -m "silo: bump to ${VERSION}"
-          git push origin HEAD
+          # --no-verify: no local hooks should gate a CI push into the tap.
+          git commit --no-verify -m "silo: bump to ${VERSION}"
+          git push --no-verify origin HEAD
