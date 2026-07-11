@@ -80,8 +80,8 @@ Three ways to reach silo from outside the app — each released independently
 
 - **CLI** (`silo` — capture/search/list/open from the terminal):
   ```sh
-  brew tap amitray007/silo https://github.com/amitray007/silo
-  brew install amitray007/silo/silo
+  brew tap amitray007/tap
+  brew install amitray007/tap/silo
   ```
   Or grab the tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases).
 

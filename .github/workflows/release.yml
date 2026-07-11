@@ -169,24 +169,39 @@ jobs:
             silo-cli-${{ matrix.entry.to }}.tgz
           fail_on_unmatched_files: false
 
-      # --- CLI only: point the Homebrew formula at the new release -------------
-      # Rewrites Formula/silo.rb's version/url/sha256 to the tarball just built +
-      # released, and commits it — so `brew upgrade` picks up the new CLI.
-      - name: update Homebrew formula
+      # --- CLI only: render the Homebrew formula + push it to the tap ----------
+      # Mirrors the amitray007/homebrew-tap pattern: compute the tarball sha256,
+      # render scripts/silo-formula.template.rb, and push Formula/silo.rb into
+      # amitray007/homebrew-tap so `brew install amitray007/tap/silo` picks up
+      # the new version. silo is PUBLIC, so the formula's url points straight at
+      # this repo's Release asset (no re-hosting on the tap needed).
+      # GATED on HOMEBREW_TAP_TOKEN existing (skips cleanly until you add it).
+      - name: compute tarball sha256
+        id: sha
         if: matrix.entry.distributable == 'cli'
+        run: echo "sha=$(shasum -a 256 "silo-cli-${{ matrix.entry.to }}.tgz" | awk '{print $1}')" >> "$GITHUB_OUTPUT"
+
+      - name: checkout homebrew-tap
+        if: matrix.entry.distributable == 'cli' && vars.HOMEBREW_TAP_ENABLED == 'true'
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        with:
+          repository: amitray007/homebrew-tap
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          path: homebrew-tap
+
+      - name: render + push the formula to the tap
+        if: matrix.entry.distributable == 'cli' && vars.HOMEBREW_TAP_ENABLED == 'true'
         run: |
           VERSION='${{ matrix.entry.to }}'
-          TARBALL="silo-cli-${VERSION}.tgz"
-          SHA="$(shasum -a 256 "$TARBALL" | awk '{print $1}')"
-          URL="https://github.com/${{ github.repository }}/releases/download/${{ matrix.entry.tag }}/${TARBALL}"
-          # Rewrite the three release-managed lines in the formula.
-          sed -i \
-            -e "s|^  version \".*\"|  version \"${VERSION}\"|" \
-            -e "s|^  url \".*\"|  url \"${URL}\"|" \
-            -e "s|^  sha256 \".*\"|  sha256 \"${SHA}\"|" \
-            Formula/silo.rb
+          URL="https://github.com/${{ github.repository }}/releases/download/${{ matrix.entry.tag }}/silo-cli-${VERSION}.tgz"
+          mkdir -p homebrew-tap/Formula
+          sed -e "s|{{VERSION}}|${VERSION}|g" \
+              -e "s|{{URL}}|${URL}|g" \
+              -e "s|{{SHA256}}|${{ steps.sha.outputs.sha }}|g" \
+              scripts/silo-formula.template.rb > homebrew-tap/Formula/silo.rb
+          cd homebrew-tap
           git config user.name 'github-actions[bot]'
           git config user.email 'github-actions[bot]@users.noreply.github.com'
           git add Formula/silo.rb
-          git commit -m "chore(release): brew formula → silo ${VERSION} [skip ci]"
-          git push
+          git commit -m "silo: bump to ${VERSION}"
+          git push origin HEAD

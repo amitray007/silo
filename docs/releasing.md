@@ -48,20 +48,29 @@ artifact, and creates the Release. The detection logic is pure + unit-tested
 The GitHub Release + artifacts happen automatically. **Store publishing needs
 your accounts + review submissions** — here's what each requires.
 
-### CLI → Homebrew (works today, no account needed)
+### CLI → Homebrew (via the `amitray007/homebrew-tap` tap)
 
-The release workflow updates `Formula/silo.rb` (version/url/sha256) on every
-`cli-v*` release. Users install with:
+On every `cli-v*` release, the workflow renders
+`scripts/silo-formula.template.rb` and pushes `Formula/silo.rb` into the
+public **`amitray007/homebrew-tap`** repo (same pattern as the orpheus cask).
+Since silo is a public repo, the formula's `url` points straight at silo's own
+Release asset — no re-hosting on the tap. Users install with:
 
 ```sh
-brew tap amitray007/silo https://github.com/amitray007/silo
-brew install amitray007/silo/silo
+brew tap amitray007/tap
+brew install amitray007/tap/silo
 brew upgrade silo   # picks up new cli-v* releases
 ```
 
+**Enable it (one-time):**
+- Create a fine-grained PAT with **`contents: write` on `amitray007/homebrew-tap`**
+  and add it as the repo secret **`HOMEBREW_TAP_TOKEN`**.
+- Add a repo **variable** `HOMEBREW_TAP_ENABLED` = `true` (the gate — the
+  tap-push steps skip cleanly until it's set). The sha256 is still computed on
+  every `cli-v*` release regardless, so the artifact is always ready.
+
 The formula depends on `node` and runs the CLI's `dist/main.js` (zero npm
-runtime deps). Later you can move the formula to a dedicated
-`amitray007/homebrew-silo` tap repo for a cleaner `brew tap amitray007/silo`.
+runtime deps).
 
 ### Chrome extension → Chrome Web Store (needs your dev account + secrets)
 
