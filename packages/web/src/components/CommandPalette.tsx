@@ -264,10 +264,17 @@ function usePaletteResults(
     hasSettledTag ? settledTag : undefined,
   );
   const tagOnlyQuery = useLinksByTag(hasSettledTag && !hasText ? settledTag : undefined);
-  const recentQuery = useInfiniteLinks(isTrashScope ? undefined : routeTag);
+  // Each scope's "recent" fallback list is gated to the scope it belongs to
+  // (perf: palette-open over-fetch) — opening the palette on the LIBRARY page
+  // no longer eagerly fetches `/api/trash`, and opening it on TRASH no longer
+  // fetches `/api/links`. Only the current scope's recents are shown before you
+  // type; the other scope's list loads if/when you switch to it.
+  const recentQuery = useInfiniteLinks(isTrashScope ? undefined : routeTag, {
+    enabled: !isTrashScope,
+  });
 
   const trashSearchQuery = useSearchTrash(trashHasText ? parsedDebounced.text : '');
-  const trashRecentQuery = useTrashList();
+  const trashRecentQuery = useTrashList({ enabled: isTrashScope });
 
   const isFullyEmpty = !showTagSuggestions && !hasText && !hasSettledTag && !trashHasText;
 

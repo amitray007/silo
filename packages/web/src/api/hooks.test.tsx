@@ -165,6 +165,13 @@ describe('useInfiniteLinks', () => {
     expect(result.current.data?.pages).toEqual([page1]);
   });
 
+  it('does NOT fetch when enabled: false (the command palette gates this per scope)', async () => {
+    renderHook(() => useInfiniteLinks(undefined, { enabled: false }), { wrapper });
+    // No await/waitFor for a fetch that must never happen — assert the query
+    // stays idle and the network was never touched.
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
   it('surfaces an error state when the request fails', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({ error: 'internal_error', message: 'Internal server error' }, 500),
@@ -1010,6 +1017,11 @@ describe('useTrashList', () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(trash);
     expect(fetch).toHaveBeenCalledWith('/api/trash', { credentials: 'include' });
+  });
+
+  it('does NOT fetch when enabled: false (the command palette gates this to trash scope)', async () => {
+    renderHook(() => useTrashList({ enabled: false }), { wrapper });
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it('surfaces an error state when the request fails', async () => {

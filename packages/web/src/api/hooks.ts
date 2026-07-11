@@ -151,7 +151,7 @@ function hasEnrichingLink(data: LinksInfiniteData | undefined): boolean {
  * transient omnibar view — polling it is a possible follow-up, out of scope
  * here).
  */
-export function useInfiniteLinks(tag?: string) {
+export function useInfiniteLinks(tag?: string, options: { enabled?: boolean } = {}) {
   return useInfiniteQuery({
     queryKey: queryKeys.links(tag ? { tag } : undefined),
     queryFn: ({ pageParam }: { pageParam: string | undefined }) => {
@@ -164,6 +164,11 @@ export function useInfiniteLinks(tag?: string) {
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (lastPage: LinksResponse) => lastPage.nextCursor,
     refetchInterval: (query) => (hasEnrichingLink(query.state.data) ? 1500 : false),
+    // Defaults to enabled (Library/Tag pages always want the feed). The command
+    // palette passes `enabled: !isTrashScope` so opening it in TRASH scope
+    // doesn't eagerly fetch `/api/links` for a library-recents list it isn't
+    // showing (perf: palette-open over-fetch — mirrors `useTrashList`).
+    enabled: options.enabled ?? true,
   });
 }
 
@@ -502,10 +507,15 @@ export function useCreateTag() {
  * `useInfiniteQuery` if the trash list grows large enough to need it, without
  * changing this hook's call sites (same query key family, `['trash', ...]`).
  */
-export function useTrashList() {
+export function useTrashList(options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.trash(),
     queryFn: () => apiGet<TrashResponse>('/api/trash'),
+    // Defaults to enabled (the `/trash` page always wants it). The command
+    // palette passes `enabled: isTrashScope` so opening the palette on a
+    // NON-trash page doesn't eagerly fetch `/api/trash` for a trash-recents
+    // list it isn't even showing yet (perf: palette-open over-fetch).
+    enabled: options.enabled ?? true,
   });
 }
 
