@@ -123,6 +123,15 @@ jobs:
           RELEASE_REPO_ROOT: ${{ github.workspace }}
         run: pnpm --filter @silo/release run release
 
+      # The bump writes version files with JSON.stringify (2-space indent), which
+      # expands short arrays onto multiple lines — but Biome inlines them. Format
+      # the bumped files so the commit matches the repo's own format gate;
+      # otherwise every chrome bump (its manifest.json has permission arrays)
+      # would land on main already failing `pnpm quality`.
+      - name: format bumped files
+        if: steps.plan.outputs.releases != '[]'
+        run: pnpm exec biome format --write extensions packages
+
       - name: commit the version bump
         if: steps.plan.outputs.releases != '[]'
         # LEFTHOOK=0 + --no-verify: skip the local git hooks (pre-commit Biome,

@@ -22,19 +22,9 @@
     "type": "module"
   },
   "options_page": "options.html",
-  "permissions": [
-    "activeTab",
-    "contextMenus",
-    "storage",
-    "scripting"
-  ],
-  "host_permissions": [
-    "http://localhost:8787/*"
-  ],
-  "optional_host_permissions": [
-    "http://*/*",
-    "https://*/*"
-  ],
+  "permissions": ["activeTab", "contextMenus", "storage", "scripting"],
+  "host_permissions": ["http://localhost:8787/*"],
+  "optional_host_permissions": ["http://*/*", "https://*/*"],
   "commands": {
     "capture-page": {
       "suggested_key": {
