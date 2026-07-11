@@ -15,6 +15,19 @@ name: Release
 on:
   push:
     branches: [main]
+  workflow_dispatch:
+    inputs:
+      distributables:
+        description: >-
+          Comma-separated distributables to force-release (chrome, raycast,
+          cli). Use to re-run a release that a push missed. Leave blank on a
+          normal push-triggered run.
+        required: false
+        default: ''
+      bump:
+        description: 'Bump size for a manual run (patch, minor, major)'
+        required: false
+        default: 'patch'
 
 permissions:
   contents: write # create tags, commits, and GitHub Releases
@@ -47,7 +60,38 @@ jobs:
       # release runner via env, matching run.ts's contract.
       - name: compute changed paths + commit messages
         id: ctx
+        env:
+          FORCE_DISTS: ${{ github.event.inputs.distributables }}
+          FORCE_BUMP: ${{ github.event.inputs.bump }}
         run: |
+          # Manual dispatch with an explicit distributables list: synthesize a
+          # representative changed-path per requested distributable so the
+          # planner selects exactly those (used to recover a release a push
+          # missed). The bump size comes from the `bump` input via a #flag.
+          if [ -n "$FORCE_DISTS" ]; then
+            PATHS=""
+            IFS=',' read -ra WANT <<< "$FORCE_DISTS"
+            for d in "${WANT[@]}"; do
+              d="$(echo "$d" | tr -d '[:space:]')"
+              case "$d" in
+                chrome)  PATHS+="extensions/chrome/package.json"$'\n' ;;
+                raycast) PATHS+="extensions/raycast/package.json"$'\n' ;;
+                cli)     PATHS+="packages/cli/package.json"$'\n' ;;
+                *) echo "::error::unknown distributable '$d'"; exit 1 ;;
+              esac
+            done
+            case "$FORCE_BUMP" in
+              minor) MSGS='manual release #minor' ;;
+              major) MSGS='manual release #major' ;;
+              *)     MSGS='manual release' ;;
+            esac
+            {
+              echo 'paths<<__EOF__'; printf '%s' "$PATHS"; echo '__EOF__'
+            } >> "$GITHUB_OUTPUT"
+            echo "messages=$MSGS" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           BEFORE='${{ github.event.before }}'
           AFTER='${{ github.sha }}'
           # On the branch's very first push, `before` is all-zeros — fall back to
