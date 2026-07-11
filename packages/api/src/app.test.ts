@@ -71,6 +71,19 @@ describe('createApp', () => {
     expect(await res.json()).toEqual({ ok: true });
   });
 
+  it('GET /health carries CORS headers for an allowed origin (the Chrome extension probes it cross-origin)', async () => {
+    // /health must be CORS-wrapped like /api/*: the Chrome extension's
+    // checkHealth() fetches it from a chrome-extension:// origin, and without
+    // CORS headers the browser blocks the response (a CORS error even when
+    // /api/* would work). An allowed origin gets its origin echoed back.
+    const { createApp } = await import('./app.js');
+    const app = createApp();
+    const res = await app.request('/health', {
+      headers: { Origin: 'http://localhost:5173' },
+    });
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+  });
+
   it('an unknown route returns 404 with the not_found envelope', async () => {
     const { createApp } = await import('./app.js');
     const app = createApp();

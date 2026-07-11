@@ -134,6 +134,13 @@ export function createApp(): Hono {
     );
   }
 
+  // CORS-wrap `/health` too: the Chrome extension's `checkHealth()` probe
+  // fetches `GET /health` from its `chrome-extension://` origin to test
+  // reachability before/around a capture. Without CORS headers here the
+  // browser blocks that cross-origin response — surfacing as a CORS error in
+  // the extension even when the capture endpoints (all under `/api/*`, which
+  // ARE wrapped) would work. Same allowlist as everything else.
+  app.use('/health', corsMiddleware());
   app.get('/health', (c) => c.json({ ok: true }));
 
   // `/api/auth/check` MUST be registered on the root app, BEFORE the `/api`
