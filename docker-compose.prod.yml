@@ -28,16 +28,25 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB:-silo}
     volumes:
-      - silo-pgdata:/var/lib/postgresql/data
+      # pg18 changed where data lives INSIDE the container: it's now
+      # /var/lib/postgresql/<major>/docker (a version-specific subdir), NOT the
+      # old /var/lib/postgresql/data. So the volume mounts the PARENT
+      # /var/lib/postgresql (the version subdir persists inside it) — mounting
+      # the old .../data path makes pg18 refuse to start ("PostgreSQL data in
+      # /var/lib/postgresql/data (unused mount/volume)", docker-library/
+      # postgres#1259). If you're upgrading a volume that was created against
+      # the old path, wipe it and let pg18 re-init (a fresh deploy has no data
+      # to keep).
+      - silo-pgdata:/var/lib/postgresql
     healthcheck:
-      # The simplest reliable check: `pg_isready` with NO -U/-d — it only asks
-      # "is the local server accepting connections?", which is exactly what the
-      # `depends_on: service_healthy` gate needs, and it can't fail on a user/db
-      # name mismatch (a prior `-U "$POSTGRES_USER"` form failed when that env
-      # var wasn't populated in the healthcheck's shell). Defaults to the local
-      # socket as the postgres superuser context, always valid once the server
-      # is up.
-      test: ['CMD-SHELL', 'pg_isready']
+      # `pg_isready -U postgres`: name the ALWAYS-PRESENT superuser the image
+      # creates unconditionally (POSTGRES_USER only adds an EXTRA user; the
+      # `postgres` role always exists). Bare `pg_isready` (no -U) defaults the
+      # user/db to the healthcheck process's OS-user name, which has no matching
+      # role → it never reports ready. `-U postgres` is the documented, reliable
+      # form. No `-d` so it checks server-accepting-connections, not a specific
+      # database's existence (which lags behind the server during init).
+      test: ['CMD-SHELL', 'pg_isready -U postgres']
       interval: 5s
       timeout: 5s
       retries: 20
