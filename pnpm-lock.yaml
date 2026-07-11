@@ -195,11 +195,11 @@ importers:
   extensions/raycast:
     dependencies:
       '@raycast/api':
-        specifier: ^1.104.21
-        version: 1.104.21(@types/node@24.13.2)(@types/react@19.2.17)
+        specifier: ^1.104.22
+        version: 1.104.22(@types/node@24.13.2)(@types/react@19.2.17)
       '@raycast/utils':
         specifier: ^2.2.7
-        version: 2.2.7(@raycast/api@1.104.21(@types/node@24.13.2)(@types/react@19.2.17))(react@19.2.7)
+        version: 2.2.7(@raycast/api@1.104.22(@types/node@24.13.2)(@types/react@19.2.17))(react@19.2.7)
     devDependencies:
       '@silo/tsconfig':
         specifier: workspace:*
@@ -2018,8 +2018,8 @@ packages:
       '@types/react':
         optional: true
 
-  '@raycast/api@1.104.21':
-    resolution: {integrity: sha512-0s6OLx/cIgAIhZPQp3dmMCCZoWFbtgnQUTbnpTzhitwKuPVy20DpnyKJPwqsODHBLmNlhO3FgzpzkkoIrRkjjQ==}
+  '@raycast/api@1.104.22':
+    resolution: {integrity: sha512-t4HwubTb1qpbaxdP8mu62Ugd1qYgcOM4Lc4+7EsxPPm7g3g5xlarH+MG+/kQEGrUukctGwrNL8S6VCVnuGIutw==}
     engines: {node: '>=22.22.2'}
     hasBin: true
     peerDependencies:
@@ -2399,8 +2399,8 @@ packages:
   boolbase@1.0.0:
     resolution: {integrity: sha512-JZOSA7Mo9sNGB8+UjSgzdLtokWAky1zbztM3WRLCbZ70/3cTANmQmOdR7y2g+J0e2WXywy1yS468tY+IruqEww==}
 
-  brace-expansion@2.1.1:
-    resolution: {integrity: sha512-WR1cURNjuvBLMZBMbqM0UoE+WAfdUcEV1ccD8PVBVOI+Z3ND4+SZbN8RsfT2bMuG1qwz5RFvPukSZm5fF2D5eA==}
+  brace-expansion@2.1.2:
+    resolution: {integrity: sha512-w5JZcKgdhDOgOwm8H+KgbosopHMuGcl6qbulwjtz3SM7I7P3yW1eAjzMPLrIE+NQ9vjgANKHWeMHnrT0OXW1oA==}
 
   brace-expansion@5.0.7:
     resolution: {integrity: sha512-7oFy703dxfY3/NLxC1fh2SUCQ0H9rmAY+5EpDVfXjUTTs+HEwR2nYaqLv+GWcTsumwxPfiz6CzCNkwXwBUwqCA==}
@@ -5157,7 +5157,7 @@ snapshots:
     optionalDependencies:
       '@types/react': 19.2.17
 
-  '@raycast/api@1.104.21(@types/node@24.13.2)(@types/react@19.2.17)':
+  '@raycast/api@1.104.22(@types/node@24.13.2)(@types/react@19.2.17)':
     dependencies:
       '@oclif/core': 4.11.14
       '@oclif/plugin-autocomplete': 3.2.53
@@ -5171,9 +5171,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@raycast/utils@2.2.7(@raycast/api@1.104.21(@types/node@24.13.2)(@types/react@19.2.17))(react@19.2.7)':
+  '@raycast/utils@2.2.7(@raycast/api@1.104.22(@types/node@24.13.2)(@types/react@19.2.17))(react@19.2.7)':
     dependencies:
-      '@raycast/api': 1.104.21(@types/node@24.13.2)(@types/react@19.2.17)
+      '@raycast/api': 1.104.22(@types/node@24.13.2)(@types/react@19.2.17)
       dequal: 2.0.3
     optionalDependencies:
       react: 19.2.7
@@ -5482,7 +5482,7 @@ snapshots:
 
   boolbase@1.0.0: {}
 
-  brace-expansion@2.1.1:
+  brace-expansion@2.1.2:
     dependencies:
       balanced-match: 1.0.2
 
@@ -6370,7 +6370,7 @@ snapshots:
 
   minimatch@5.1.9:
     dependencies:
-      brace-expansion: 2.1.1
+      brace-expansion: 2.1.2
 
   minimist@1.2.8: {}
 

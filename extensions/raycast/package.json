@@ -61,7 +61,7 @@
     "develop": "ray develop"
   },
   "dependencies": {
-    "@raycast/api": "^1.104.21",
+    "@raycast/api": "^1.104.22",
     "@raycast/utils": "^2.2.7"
   },
   "devDependencies": {
