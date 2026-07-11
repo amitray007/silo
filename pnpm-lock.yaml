@@ -103,8 +103,8 @@ catalogs:
       specifier: 8.22.0
       version: 8.22.0
     pg-boss:
-      specifier: 12.25.0
-      version: 12.25.0
+      specifier: 12.26.0
+      version: 12.26.0
     react:
       specifier: 19.2.7
       version: 19.2.7
@@ -457,7 +457,7 @@ importers:
         version: 0.45.2(@types/pg@8.20.0)(pg@8.22.0)
       pg-boss:
         specifier: 'catalog:'
-        version: 12.25.0
+        version: 12.26.0
     devDependencies:
       '@silo/db':
         specifier: workspace:*
@@ -599,7 +599,7 @@ importers:
         version: 5.51.1(debug@4.4.3)
       pg-boss:
         specifier: 'catalog:'
-        version: 12.25.0
+        version: 12.26.0
       undici:
         specifier: 'catalog:'
         version: 8.6.0
@@ -3465,8 +3465,8 @@ packages:
   pathe@2.0.3:
     resolution: {integrity: sha512-WUjGcAqP1gQacoQe+OBJsFA7Ld4DyXuUIjZ5cc75cLHvJ7dtNsTugphxIADwspS+AraAUePCKrSVtPLFj/F88w==}
 
-  pg-boss@12.25.0:
-    resolution: {integrity: sha512-m0kpRsrj5j3hGtzslQzLo/5EfSDtQlNf2N6uvCft3tPHrbSXqdxJRzjb675gf3ZnWcTsu6IIYjCN5zezkZQ+WQ==}
+  pg-boss@12.26.0:
+    resolution: {integrity: sha512-qMLyokiG2/Ey8U3sptl0We4nRGr1iveHL/lQ7g6n7cI/ubp9HVJZJnfPf6B9jzAbpd55uSdltKL/DMkyBC0ynw==}
     engines: {node: '>=22.12.0'}
     hasBin: true
 
@@ -6509,7 +6509,7 @@ snapshots:
 
   pathe@2.0.3: {}
 
-  pg-boss@12.25.0:
+  pg-boss@12.26.0:
     dependencies:
       cron-parser: 5.6.1
       pg: 8.22.0
