@@ -39,14 +39,16 @@ services:
       # to keep).
       - silo-pgdata:/var/lib/postgresql
     healthcheck:
-      # `pg_isready -U postgres`: name the ALWAYS-PRESENT superuser the image
-      # creates unconditionally (POSTGRES_USER only adds an EXTRA user; the
-      # `postgres` role always exists). Bare `pg_isready` (no -U) defaults the
-      # user/db to the healthcheck process's OS-user name, which has no matching
-      # role → it never reports ready. `-U postgres` is the documented, reliable
-      # form. No `-d` so it checks server-accepting-connections, not a specific
-      # database's existence (which lags behind the server during init).
-      test: ['CMD-SHELL', 'pg_isready -U postgres']
+      # `pg_isready -U "$$POSTGRES_USER"`: name the user the container ACTUALLY
+      # created. The postgres image makes `POSTGRES_USER` (here `silo`) the
+      # superuser and does NOT also create a `postgres` role — so `-U postgres`
+      # fails with `FATAL: role "postgres" does not exist`, and bare `pg_isready`
+      # defaults to the healthcheck process's OS-user (also no matching role).
+      # `$$POSTGRES_USER` (escaped `$$` → a literal `$` for the container's
+      # shell to expand at runtime) resolves to the real user the image set in
+      # the container's own env. No `-d` — checks server-accepting-connections,
+      # not a specific database's existence.
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER"']
       interval: 5s
       timeout: 5s
       retries: 20
