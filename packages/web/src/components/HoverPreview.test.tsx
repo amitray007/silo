@@ -747,5 +747,30 @@ describe('HoverPreview', () => {
       // linger.
       expect(document.querySelector('img')).toBeNull();
     });
+
+    it('the cover image occupies no space until it has loaded, then reveals (no blank band first)', () => {
+      // "Show it only when the whole thing is ready": before `onLoad` the <img>
+      // is collapsed (height 0, opacity 0) so there's no blank 130px band; the
+      // decode event expands + reveals it.
+      renderPreview(
+        makeLink({
+          id: 'img-link',
+          title: 'Has an image',
+          sourceData: { kind: 'link' },
+          imageUrl: 'https://example.com/cover.png',
+        }),
+        allOn,
+      );
+      const img = document.querySelector('img') as HTMLImageElement;
+      expect(img).not.toBeNull();
+      // Pre-load: collapsed + invisible (no reserved blank band).
+      expect(img.style.height).toBe('0px');
+      expect(img.style.opacity).toBe('0');
+
+      // Simulate the image finishing decode.
+      fireEvent.load(img);
+      expect(img.style.height).toBe('130px');
+      expect(img.style.opacity).toBe('1');
+    });
   });
 });

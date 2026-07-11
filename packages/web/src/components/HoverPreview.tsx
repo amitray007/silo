@@ -63,20 +63,39 @@ function VariantBody({ title, children }: { title: string; children?: ReactNode 
  * this handles the visual bleed.
  */
 function PreviewCoverImage({ linkId, onError }: { linkId: string; onError: () => void }) {
+  // Show the cover ONLY when it's fully ready — never a blank/placeholder band
+  // first (user feedback). While the image is still loading it occupies ZERO
+  // space (height 0, hidden), so the card shows just title/tags with no cover
+  // area; the instant it decodes (`onLoad`) it expands to its 130px slot and
+  // fades in. And if there's no image or it fails, it's removed entirely
+  // (`onError` → the caller's `imageFailed` gate stops rendering this), so a
+  // link without a preview image shows NO cover area at all — not a grey
+  // placeholder, not a gap. `key={linkId}` (see the module note) keeps `loaded`
+  // fresh per link. The height+opacity transition honours prefers-reduced-
+  // motion via the global `* { transition: none }` rule in base.css (it then
+  // snaps rather than animates).
+  const [loaded, setLoaded] = useState(false);
   return (
-    // Decorative supplement to the title/stats below — alt="" is
-    // intentional (the title conveys the content).
+    // Decorative supplement to the title/stats below — alt="" is intentional
+    // (the title conveys the content).
     <img
       key={linkId}
       src={previewImageUrl(linkId)}
       alt=""
+      onLoad={() => setLoaded(true)}
       onError={onError}
       style={{
         display: 'block',
         width: '100%',
-        height: 130,
+        // Collapsed (no space, no border) until the image is actually decoded,
+        // then it expands into its slot — so nothing shows until the whole
+        // image is ready, and a not-yet-loaded (or never-loading) image leaves
+        // no blank band behind.
+        height: loaded ? 130 : 0,
         objectFit: 'cover',
-        borderBottom: '1px solid var(--line)',
+        opacity: loaded ? 1 : 0,
+        borderBottom: loaded ? '1px solid var(--line)' : 'none',
+        transition: 'opacity 0.2s var(--ease-out), height 0.2s var(--ease-out)',
       }}
     />
   );
