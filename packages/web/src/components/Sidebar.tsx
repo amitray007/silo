@@ -213,10 +213,14 @@ interface SidebarProps {
  * closed, mobile or desktop — rather than swapping to a `dialog` role, so
  * assistive tech sees one stable, correctly-labeled navigation region.
  *
- * Loading/empty/error states are handled calmly: while counts/tags are
- * loading we simply omit the meta/section content (no layout-shifting
- * skeleton chrome); an empty tag list renders no Tags section at all; a
- * failed tags fetch renders nothing rather than crashing the sidebar.
+ * Loading/empty/error states are handled calmly: counts simply omit their
+ * meta content while loading (Library/Trash rows render with no number
+ * rather than a placeholder); the Tags list renders `SidebarTags`' own
+ * skeleton rows (matching a real tag `NavItem`'s footprint, see
+ * `SidebarTags.tsx`) while `useTags()` is in flight, via `tagsLoading`
+ * below — a genuinely empty tag list (once loaded) still shows the "Tags"
+ * header + tools, just zero rows; a failed tags fetch renders nothing
+ * (`tags` forced to `[]`) rather than crashing the sidebar.
  */
 export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar(
   { id, open = false, onNavigate = noop, onOpenSearch = noop },
@@ -224,7 +228,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
 ) {
   const navigate = useNavigate();
   const { data: counts } = useCounts();
-  const { data: tagsData, isError: tagsErrored } = useTags();
+  const { data: tagsData, isError: tagsErrored, isLoading: tagsLoading } = useTags();
   const { openSettings } = useSettings();
   const { state: authState, logout } = useAuth();
 
@@ -298,6 +302,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
 
       <SidebarTags
         tags={tags}
+        loading={tagsLoading}
         renderTagLink={(tag: TagCount) => (
           <NavItemLink
             key={tag.name}

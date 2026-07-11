@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
+import { Skeleton } from './Skeleton';
 
 /**
  * A `NavItemLink`-shaped callback the caller (`Sidebar`) supplies so this
@@ -11,7 +12,34 @@ import type { TagCount } from '../api/types';
  */
 interface SidebarTagsProps {
   tags: TagCount[];
+  /** True while `useTags()` is still loading (`Sidebar`'s own `isLoading`) — renders skeleton tag rows in place of `tags` (which is `[]` until it resolves) instead of a flash of empty. Defaults to `false` so existing callers/tests are unaffected. */
+  loading?: boolean;
   renderTagLink: (tag: TagCount) => React.ReactNode;
+}
+
+/** Per-row label-line widths for the skeleton tag list — varied so the placeholder rows don't read as a mechanical striped pattern before real tag names land. */
+const SKELETON_TAG_WIDTHS = ['50%', '65%', '40%', '60%', '55%'];
+
+/**
+ * One placeholder tag row, shaped exactly like a real tag `NavItem` (`tag`
+ * variant, `NavItem.tsx`'s `VARIANT_STYLE.tag`): `padding: 7px var(--s2-5)`
+ * (7px 10px), `gap: var(--s1-5)`, a left label line + a right-aligned count
+ * block — so swapping this for the real tag row produces no layout shift.
+ */
+function SkeletonTagRow({ labelWidth }: { labelWidth: string }) {
+  const rowStyle = {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--s1-5)',
+    padding: '7px var(--s2-5)',
+  };
+  return (
+    <div style={rowStyle}>
+      <Skeleton height={12} width={labelWidth} radius={4} />
+      <span style={{ flex: 1 }} />
+      <Skeleton width={14} height={10} radius={4} />
+    </div>
+  );
 }
 
 /**
@@ -31,7 +59,7 @@ interface SidebarTagsProps {
  * nothing is hidden behind a click. Filtering (case-insensitive substring
  * match on `tagQ`) still narrows the list before it renders.
  */
-export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
+export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTagsProps) {
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [newTagOpen, setNewTagOpen] = useState(false);
@@ -212,8 +240,17 @@ export function SidebarTags({ tags, renderTagLink }: SidebarTagsProps) {
           `max-height` + soft custom scrollbar (`.silo-tag-scroll`, base.css) so a
           long tag list scrolls in place instead of pushing Settings
           off-screen — every tag (or every filtered match) renders here, no
-          truncation. */}
-      <div className="silo-tag-scroll">{visibleTags.map((tag) => renderTagLink(tag))}</div>
+          truncation. While `useTags()` is still loading (`tags` is `[]`),
+          skeleton tag rows render in its place instead of a flash of empty —
+          the "Tags" header + find button above stay visible throughout. */}
+      <div className="silo-tag-scroll">
+        {loading && tags.length === 0
+          ? SKELETON_TAG_WIDTHS.map((width, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
+              <SkeletonTagRow key={i} labelWidth={width} />
+            ))
+          : visibleTags.map((tag) => renderTagLink(tag))}
+      </div>
 
       {newTagOpen ? (
         <>

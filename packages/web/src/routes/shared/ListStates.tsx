@@ -13,12 +13,80 @@ import { Skeleton } from '../../components/Skeleton';
  * would otherwise be copy-pasted between two route files (and trip jscpd).
  */
 
-/** The calm first-page loading placeholder — a few shimmering skeleton rows, not a spinner (CLAUDE.md "calm" states). Shared by `LibraryView` and `TagView`. */
+/**
+ * Per-row title-line widths for the skeleton feed below, grouped into two
+ * day-clusters (mirrors `bucketByDay`'s real output shape) — varied widths
+ * (not a uniform 60%) so the placeholder rows don't read as a mechanical
+ * striped pattern before real titles land.
+ */
+const SKELETON_GROUPS: string[][] = [
+  ['60%', '45%', '70%'],
+  ['52%', '38%'],
+];
+
+/**
+ * One placeholder day-heading, shaped exactly like a real `DayGroupHeading`
+ * (`--text-sm` ≈ 12.8px line, `padding: var(--s3) var(--s2-5) var(--s1-5)
+ * var(--s2-5)` = 12px 10px 6px 10px, no margin) — same box, so the skeleton
+ * heading occupies the identical footprint the real "Today"/"Yesterday"/
+ * month label will land in.
+ */
+function SkeletonDayHeading() {
+  return (
+    <div style={{ padding: 'var(--s3) var(--s2-5) var(--s1-5) var(--s2-5)' }}>
+      <Skeleton height={13} width={64} radius={4} />
+    </div>
+  );
+}
+
+/**
+ * One placeholder row shaped exactly like a real `.silo-link-row`
+ * (`LinkRow.tsx`) — same outer padding (`var(--s2-5)` = 10px, matching the
+ * `.silo-link-row` CSS rule in base.css) and the same inner flex anatomy
+ * (`gap: var(--s3)` = 12px, an 18×18 radius-4 favicon chip, then a title
+ * line), so swapping this for the real row produces no layout shift in row
+ * height or horizontal alignment — no `role`/`aria-hidden` here, the
+ * shimmer blocks are already `aria-hidden` and the loading announcement
+ * lives once on the outer container below.
+ */
+function SkeletonRow({ titleWidth }: { titleWidth: string }) {
+  const rowStyle = {
+    padding: 'var(--s2-5)',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 'var(--s3)',
+  };
+  return (
+    <div style={rowStyle}>
+      <Skeleton width={18} height={18} radius={4} />
+      <Skeleton height={14} width={titleWidth} radius={4} />
+    </div>
+  );
+}
+
+/**
+ * The calm first-page loading placeholder — shimmering day-groups shaped
+ * like the real `DayGroup`s they'll be replaced by (fix, direct user
+ * feedback: the old flat `height:34` blocks with `padding:'20px 11px'`
+ * matched neither the real rows' `10px` inset/anatomy NOR the day-heading
+ * chrome above them, so the feed visibly jumped — both horizontally and
+ * vertically — once data landed). Two heading+rows clusters (mirroring
+ * `DayGroup.tsx`'s own heading-then-rows shell) with 5 rows total — enough
+ * to fill a first viewport, like a real first page. Shared by `LibraryView`
+ * and `TagView`.
+ */
 export function LoadingState() {
   return (
-    <div style={{ padding: '20px 11px' }} role="status" aria-label="Loading…">
-      {[0, 1, 2].map((i) => (
-        <Skeleton key={i} height={34} radius={8} style={{ marginBottom: 8 }} />
+    <div role="status" aria-label="Loading…">
+      {SKELETON_GROUPS.map((rowWidths, groupIndex) => (
+        // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
+        <div key={groupIndex}>
+          <SkeletonDayHeading />
+          {rowWidths.map((width, rowIndex) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
+            <SkeletonRow key={rowIndex} titleWidth={width} />
+          ))}
+        </div>
       ))}
     </div>
   );
