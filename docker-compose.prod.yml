@@ -30,17 +30,19 @@ services:
     volumes:
       - silo-pgdata:/var/lib/postgresql/data
     healthcheck:
-      # Use the container's OWN $POSTGRES_USER/$POSTGRES_DB (already set as env
-      # vars inside the container by the postgres image) rather than compose-time
-      # ${...} interpolation — so the check always names the exact user/db
-      # Postgres actually initialized with, immune to an env-not-applied or
-      # interpolation-default mismatch. `sh -c` so the vars expand at runtime.
-      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      # The simplest reliable check: `pg_isready` with NO -U/-d — it only asks
+      # "is the local server accepting connections?", which is exactly what the
+      # `depends_on: service_healthy` gate needs, and it can't fail on a user/db
+      # name mismatch (a prior `-U "$POSTGRES_USER"` form failed when that env
+      # var wasn't populated in the healthcheck's shell). Defaults to the local
+      # socket as the postgres superuser context, always valid once the server
+      # is up.
+      test: ['CMD-SHELL', 'pg_isready']
       interval: 5s
       timeout: 5s
       retries: 20
-      # Give a slow first-boot (volume init + pgvector) time before the app
-      # services' `depends_on: service_healthy` gate starts counting failures.
+      # A slow first boot (volume init + pgvector extension) shouldn't burn the
+      # 20 retries before the server is even accepting connections.
       start_period: 30s
     networks:
       - silo
