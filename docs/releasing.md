@@ -50,11 +50,19 @@ your accounts + review submissions** — here's what each requires.
 
 ### CLI → Homebrew (via the `amitray007/homebrew-tap` tap)
 
-On every `cli-v*` release, the workflow renders
-`scripts/silo-formula.template.rb` and pushes `Formula/silo.rb` into the
-public **`amitray007/homebrew-tap`** repo (same pattern as the orpheus cask).
-Since silo is a public repo, the formula's `url` points straight at silo's own
-Release asset — no re-hosting on the tap. Users install with:
+On every `cli-v*` release, the workflow (mirroring the orpheus pattern):
+1. attaches `silo-cli-<ver>.tgz` to silo's own `cli-v*` Release (provenance /
+   direct downloaders),
+2. **publishes the same tarball to a `cli-v*` Release on the public
+   `amitray007/homebrew-tap`** — created immutable-safe (delete-then-recreate
+   with the asset attached in one shot, since the tap has immutable releases),
+3. renders `scripts/silo-formula.template.rb` with the formula `url` pointing at
+   the **tap** release, and pushes `Formula/silo.rb` + a scoped `silo/cli-v*`
+   tag into the tap.
+
+Hosting the tarball on the public tap means `brew install` works **without auth
+regardless of whether the silo source repo is public or private**. Users install
+with:
 
 ```sh
 brew tap amitray007/tap

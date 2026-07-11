@@ -236,13 +236,12 @@ jobs:
             silo-cli-${{ matrix.entry.to }}.tgz
           fail_on_unmatched_files: false
 
-      # --- CLI only: render the Homebrew formula + push it to the tap ----------
-      # Mirrors the amitray007/homebrew-tap pattern: compute the tarball sha256,
-      # render scripts/silo-formula.template.rb, and push Formula/silo.rb into
-      # amitray007/homebrew-tap so `brew install amitray007/tap/silo` picks up
-      # the new version. silo is PUBLIC, so the formula's url points straight at
-      # this repo's Release asset (no re-hosting on the tap needed).
-      # GATED on HOMEBREW_TAP_TOKEN existing (skips cleanly until you add it).
+      # --- CLI only: publish the tarball to a homebrew-tap RELEASE + push the
+      # formula (mirrors the amitray007/orpheus pattern). The tarball is hosted
+      # on the PUBLIC tap's own release so `brew install amitray007/tap/silo`
+      # works WITHOUT auth regardless of whether the silo source repo is public
+      # or private. The same tarball is also attached to silo's cli-v* release
+      # above (provenance / direct downloaders). GATED on HOMEBREW_TAP_ENABLED.
       - name: compute tarball sha256
         id: sha
         if: matrix.entry.distributable == 'cli'
@@ -256,11 +255,38 @@ jobs:
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
           path: homebrew-tap
 
+      - name: publish tarball to the homebrew-tap release
+        if: matrix.entry.distributable == 'cli' && vars.HOMEBREW_TAP_ENABLED == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          # The tap has IMMUTABLE releases enabled: assets must be attached AT
+          # CREATION (a separate `gh release upload` 422s, and the release can't
+          # be clobbered). So if a release for this tag already exists (e.g. a
+          # retried/re-dispatched run), delete it + its tag first, then create
+          # fresh with the tarball attached in one shot. This makes the step
+          # idempotent across re-runs.
+          TAP_TAG='${{ matrix.entry.tag }}'
+          TARBALL="silo-cli-${{ matrix.entry.to }}.tgz"
+          if gh release view "$TAP_TAG" --repo amitray007/homebrew-tap >/dev/null 2>&1; then
+            echo "[tap] $TAP_TAG already exists (immutable) — deleting to recreate with asset"
+            gh release delete "$TAP_TAG" --repo amitray007/homebrew-tap --yes --cleanup-tag || \
+              gh release delete "$TAP_TAG" --repo amitray007/homebrew-tap --yes
+            # --cleanup-tag may be unavailable on older gh; force-remove the tag too.
+            gh api -X DELETE "repos/amitray007/homebrew-tap/git/refs/tags/$TAP_TAG" 2>/dev/null || true
+          fi
+          gh release create "$TAP_TAG" \
+            "$TARBALL" \
+            --repo amitray007/homebrew-tap \
+            --title "silo cli ${{ matrix.entry.to }}" \
+            --notes "silo CLI ${{ matrix.entry.to }} — \`brew install amitray007/tap/silo\`. Source: https://github.com/${{ github.repository }}/releases/tag/${TAP_TAG}"
+
       - name: render + push the formula to the tap
         if: matrix.entry.distributable == 'cli' && vars.HOMEBREW_TAP_ENABLED == 'true'
         run: |
           VERSION='${{ matrix.entry.to }}'
-          URL="https://github.com/${{ github.repository }}/releases/download/${{ matrix.entry.tag }}/silo-cli-${VERSION}.tgz"
+          # Point the formula at the TAP release (public, auth-free), not silo's.
+          URL="https://github.com/amitray007/homebrew-tap/releases/download/${{ matrix.entry.tag }}/silo-cli-${VERSION}.tgz"
           mkdir -p homebrew-tap/Formula
           sed -e "s|{{VERSION}}|${VERSION}|g" \
               -e "s|{{URL}}|${URL}|g" \
@@ -272,4 +298,10 @@ jobs:
           git add Formula/silo.rb
           # --no-verify: no local hooks should gate a CI push into the tap.
           git commit --no-verify -m "silo: bump to ${VERSION}"
+          # Scoped tag on the tap for traceability (namespaced so it can't
+          # collide with the release tag the tarball upload created above).
+          # -f + push refspec keeps a re-dispatched run idempotent.
+          SCOPED_TAG="silo/${{ matrix.entry.tag }}"
+          git tag -f "$SCOPED_TAG"
           git push --no-verify origin HEAD
+          git push --no-verify -f origin "$SCOPED_TAG"

@@ -9,11 +9,12 @@
 #   brew tap amitray007/tap
 #   brew install amitray007/tap/silo
 #
-# silo is a PUBLIC repo, so the tarball is fetched straight from silo's own
-# GitHub Release (no re-hosting on the tap, unlike the private-source casks).
-# The CLI has ZERO runtime npm deps (Node built-ins only) — the formula just
-# needs Node + the tarball's dist/ on disk; `silo` is a launcher that runs the
-# entry with the Homebrew-managed node.
+# The tarball is hosted on the PUBLIC homebrew-tap's own release (mirroring the
+# orpheus pattern), so `brew install` works without auth regardless of whether
+# the silo source repo is public or private. (The same tarball is also attached
+# to silo's own cli-v* release for direct downloaders.) The CLI has ZERO runtime
+# npm deps (Node built-ins only) — the formula just needs Node + the tarball's
+# dist/ on disk; `silo` is a launcher that runs the entry with Homebrew's node.
 class Silo < Formula
   desc "Terminal client for silo — capture, search, list, and open your links"
   homepage "https://github.com/amitray007/silo"
