@@ -14,6 +14,15 @@ export type IngestXOptions = {
   dryRun: boolean;
   json: boolean;
   hasToken: boolean;
+  /**
+   * Bypass the seen-set skip for this run: every mappable bookmark is
+   * (re-)queued regardless of prior "already sent" state. The escape hatch
+   * for server-side drift (e.g. a soft-deleted row whose id is still in the
+   * local seen-set) — see the "heal the seen-set" method doc. Canonical-url
+   * dedup on the server makes already-present rows harmless no-ops
+   * (`deduped: true`), so `--resend` never duplicates anything.
+   */
+  resend: boolean;
 };
 
 const CONCURRENCY = 8;
@@ -21,7 +30,13 @@ const PLUGIN = 'x';
 
 type RunSummary = {
   total: number;
-  sent: number;
+  /** Count of `deduped: false` responses — rows the server actually created. */
+  created: number;
+  /** Count of `deduped: true` responses — the server merged into an existing
+   * row by canonical-url; nothing new was created. Distinguishing this from
+   * `created` is the whole point of Fix A: a 2xx is not the same fact as
+   * "a new row now exists". */
+  deduped: number;
   skippedAlreadySeen: number;
   skippedUnmappable: number;
   failed: number;
@@ -42,11 +57,21 @@ type ScanResult = {
  * pending-send — stopping early once `limit` pending bookmarks are queued.
  * Factored out of `runIngestX` to keep that function's cognitive complexity
  * under the lint's ceiling; this is purely the SCAN phase, no network calls.
+ *
+ * `resend`, when `true`, skips the seen-set check entirely — every mappable
+ * bookmark is queued regardless of prior "already sent" state, and nothing
+ * is counted as `skippedAlreadySeen`. This is the escape hatch for
+ * server-side drift (e.g. `bookmarks.jsonl` still lists a bookmark whose
+ * silo row was soft-deleted server-side): the seen-set has no way to know
+ * the row is gone, so the user tells the CLI to ignore it for one run.
+ * Canonical-url dedup on the server (`deduped: true`) makes re-sending
+ * still-live rows a harmless no-op — see `IngestXOptions.resend`.
  */
 async function scanBookmarks(
   filePath: string,
   seen: Set<string>,
   limit: number | undefined,
+  resend: boolean,
 ): Promise<ScanResult> {
   const toSend: PendingBookmark[] = [];
   let scanned = 0;
@@ -55,7 +80,7 @@ async function scanBookmarks(
 
   for await (const bookmark of readFieldTheoryBookmarks(filePath)) {
     scanned += 1;
-    if (seen.has(bookmark.id)) {
+    if (!resend && seen.has(bookmark.id)) {
       skippedAlreadySeen += 1;
       continue;
     }
@@ -94,10 +119,21 @@ async function sendBookmarks(
     async ({ payload }) => client.ingest(payload),
     (result) => {
       if (result.ok) {
-        summary.sent += 1;
+        // A merge is still a successful, resolved send — the bookmark's
+        // content is confirmed present in silo either way — so both
+        // outcomes add to `newlySeen` (see `IngestXOptions.resend` for the
+        // escape hatch when a previously-seen id needs re-sending). Only
+        // `result.value.deduped === true` counts as a merge; anything else
+        // (a fresh row, or — defensively — a server that omitted the flag)
+        // counts as newly created, so a contract drift over-reports "new"
+        // loudly rather than silently swallowing real creations.
+        if (result.value.deduped === true) summary.deduped += 1;
+        else summary.created += 1;
         newlySeen.add(result.item.id);
-        if (!json)
-          process.stdout.write(`\r${green('ingesting')} ${summary.sent}/${summary.total}…`);
+        if (!json) {
+          const sent = summary.created + summary.deduped;
+          process.stdout.write(`\r${green('ingesting')} ${sent}/${summary.total}…`);
+        }
         return;
       }
       summary.failed += 1;
@@ -112,13 +148,14 @@ async function sendBookmarks(
 }
 
 /**
- * `silo ingest x [--limit] [--dry-run]` — reads Field Theory's
+ * `silo ingest x [--limit] [--dry-run] [--resend]` — reads Field Theory's
  * `bookmarks.jsonl`, maps each NEW bookmark (not already in the local
- * seen-set) to the `/api/ingest` payload, and sends it with bounded
- * concurrency. Requires a token (checked by the caller — `main.ts` — before
- * this runs, per the plan's "fail gracefully, don't dump a 401"); this
- * function assumes `options.hasToken` is already `true` unless `--dry-run`
- * (a dry run never calls the API, so it needs no token at all).
+ * seen-set, unless `--resend`) to the `/api/ingest` payload, and sends it
+ * with bounded concurrency. Requires a token (checked by the caller —
+ * `main.ts` — before this runs, per the plan's "fail gracefully, don't dump
+ * a 401"); this function assumes `options.hasToken` is already `true`
+ * unless `--dry-run` (a dry run never calls the API, so it needs no token
+ * at all).
  */
 export async function runIngestX(client: Client, options: IngestXOptions): Promise<void> {
   const filePath = bookmarksFilePath();
@@ -127,7 +164,7 @@ export async function runIngestX(client: Client, options: IngestXOptions): Promi
 
   let scan: ScanResult;
   try {
-    scan = await scanBookmarks(filePath, seen, options.limit);
+    scan = await scanBookmarks(filePath, seen, options.limit, options.resend);
   } catch (error) {
     if (error instanceof BookmarksFileNotFoundError) {
       console.error(error.message);
@@ -151,7 +188,8 @@ export async function runIngestX(client: Client, options: IngestXOptions): Promi
 
   const summary: RunSummary = {
     total: toSend.length,
-    sent: 0,
+    created: 0,
+    deduped: 0,
     skippedAlreadySeen,
     skippedUnmappable,
     failed: 0,
@@ -212,7 +250,19 @@ function printSummary(summary: RunSummary, json: boolean): void {
     console.log(JSON.stringify(summary));
     return;
   }
-  const parts = [`${green(`${summary.sent} sent`)}`];
+  const parts = [green(`${summary.created} new`)];
+  // Only mention dedups when there were any — a merge means the URL was
+  // already captured, which is worth surfacing but shouldn't clutter the
+  // common case (zero dedups) with a "0 already in silo" segment.
+  //
+  // NOTE: a `deduped` under `--resend` can be either a true no-op (the row was
+  // already live) OR a REVIVE (the server's `mergeIntoExisting` cleared a
+  // `deleted_at`, resurrecting a soft-deleted row — see core `links.ts`). The
+  // ingest response carries the same `deduped: true` for both, so the CLI
+  // cannot tell them apart and honestly reports both as "already in silo".
+  // Distinguishing a revive would need the API to return a separate flag; that
+  // is deliberately out of scope here (a CLI-only fix can't invent the signal).
+  if (summary.deduped > 0) parts.push(dim(`${summary.deduped} already in silo`));
   if (summary.failed > 0) parts.push(red(`${summary.failed} failed`));
   if (summary.skippedAlreadySeen > 0) parts.push(dim(`${summary.skippedAlreadySeen} already sent`));
   if (summary.skippedUnmappable > 0) parts.push(yellow(`${summary.skippedUnmappable} unmappable`));

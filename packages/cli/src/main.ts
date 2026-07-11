@@ -17,7 +17,7 @@ ${bold('Usage')}
   silo search <query>
   silo list [--tag <t>] [--limit <n>]
   silo open <id|url>
-  silo ingest x [--limit <n>] [--dry-run]
+  silo ingest x [--limit <n>] [--dry-run] [--resend]
   silo config get [key] | silo config set <key> <value>
 
 ${bold('Global flags')}
@@ -45,6 +45,10 @@ const SUBCOMMAND_OPTIONS = {
   wait: { type: 'boolean' as const, default: false },
   limit: { type: 'string' as const },
   'dry-run': { type: 'boolean' as const, default: false },
+  // `--resend`'s alias, `--force`: `parseArgs` has no native alias support,
+  // so both are declared and OR'd together in `handleIngest`.
+  resend: { type: 'boolean' as const, default: false },
+  force: { type: 'boolean' as const, default: false },
 };
 
 function parseInvocationArgs() {
@@ -121,6 +125,9 @@ async function handleIngest(inv: Invocation): Promise<void> {
     dryRun,
     json: inv.json,
     hasToken: Boolean(inv.connection.token),
+    // `--force` is a plain alias for `--resend` (no native alias support in
+    // `parseArgs` — see `SUBCOMMAND_OPTIONS`), so either flag being set wins.
+    resend: Boolean(inv.globals.resend) || Boolean(inv.globals.force),
   };
   if (inv.globals.limit !== undefined) options.limit = Number(inv.globals.limit);
   await runIngestX(inv.client, options);
