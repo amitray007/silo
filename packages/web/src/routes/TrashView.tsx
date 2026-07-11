@@ -19,9 +19,9 @@ import {
 } from '../components/Dock';
 import { TrashIcon } from '../components/NavIcons';
 import { useTrashSelection } from '../components/SelectionContext';
-import { Skeleton } from '../components/Skeleton';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
+import { LoadingState } from './shared/ListStates';
 
 /**
  * The trash selection dock (v3's `trSelActive`, `Silo-v3.html:296-305`) — "N
@@ -158,14 +158,14 @@ function TrashBody({
   shownLinks: TrashLinkJson[];
   purgeWindowDays: number;
 }) {
+  // Reuse the shared list `LoadingState` (Library/Tag) — Trash is also
+  // day-grouped (`TrashDayGroup` → the same `DayGroupHeading`) and `TrashRow`
+  // shares `.silo-link-row`'s exact 10px padding / 12px gap / 18px favicon
+  // anatomy (the K3 oat-conformance alignment), so the same CLS-correct
+  // heading+row skeleton fits Trash with no drift — no reason to hand-roll a
+  // second, different loader here (the old flat blocks it replaces did drift).
   if (loading) {
-    return (
-      <div style={{ padding: '20px 11px' }} role="status" aria-label="Loading…">
-        {[0, 1].map((i) => (
-          <Skeleton key={i} height={34} radius={8} style={{ marginBottom: 8 }} />
-        ))}
-      </div>
-    );
+    return <LoadingState />;
   }
 
   if (isError) {
