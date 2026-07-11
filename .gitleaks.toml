@@ -1,0 +1,24 @@
+# gitleaks configuration for silo.
+#
+# We extend gitleaks' built-in default ruleset (so every stock secret rule
+# still applies to all source code) and add a NARROW allowlist for known test
+# fixtures: fake `silo_…` access tokens hard-coded in *.test.* files to
+# exercise the "show the raw token once" UI flow.
+#
+# These are not real credentials — a real token is `silo_` + 32 random bytes
+# base64url (~43 high-entropy mixed-case chars; see
+# packages/core/src/auth/tokens.ts), whereas the fixtures are short, lowercase,
+# obviously-patterned strings (e.g. `silo_freshraw0987654321zzzz`).
+#
+# The allowlist is scoped to test paths, so a real secret accidentally
+# committed to any SOURCE file is still caught by the full default ruleset.
+
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Fake token fixtures in test files (not real credentials)"
+paths = [
+  '''.*\.test\.(ts|tsx)$''',
+  '''.*/test-support/.*''',
+]

@@ -4,12 +4,12 @@ packages:
   - "extensions/*"
 
 catalog:
-  lefthook: 2.1.9
-  typescript: 6.0.3
-  vitest: 4.1.9
+  lefthook: 2.1.10
+  typescript: 7.0.2
+  vitest: 4.1.10
   react: 19.2.7
   react-dom: 19.2.7
-  vite: 8.1.3
+  vite: 8.1.4
   "@vitejs/plugin-react": 6.0.3
   "@tanstack/react-query": 5.101.2
   react-router-dom: 7.18.1
@@ -17,11 +17,11 @@ catalog:
   "@types/react-dom": 19.2.3
   "@testing-library/react": 16.3.2
   agentation: 3.0.2
-  "@biomejs/biome": 2.5.2
+  "@biomejs/biome": 2.5.3
   "@types/node": 24.13.2
   "dependency-cruiser": 18.0.0
   jscpd: 5.0.11
-  knip: 6.24.0
+  knip: 6.26.0
   drizzle-orm: 0.45.2
   drizzle-kit: 0.31.10
   pg: 8.22.0
@@ -29,7 +29,7 @@ catalog:
   tsx: 4.23.0
   zod: 4.4.3
   normalize-url: 9.0.1
-  undici: 8.6.0
+  undici: 8.7.0
   "ipaddr.js": 2.4.0
   metascraper: 5.51.1
   metascraper-title: 5.51.1
@@ -41,7 +41,7 @@ catalog:
   "@mozilla/readability": 0.6.0
   jsdom: 29.1.1
   "@types/jsdom": 28.0.3
-  pg-boss: 12.25.0
+  pg-boss: 12.26.0
   "@modelcontextprotocol/sdk": 1.29.0
   hono: 4.12.27
   "@hono/node-server": 2.0.8
