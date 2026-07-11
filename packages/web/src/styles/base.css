@@ -233,22 +233,22 @@ select {
   flex: 1;
   min-width: 0;
   min-height: 0;
-  /* Full window height now that the frame has no outer padding (edge-to-edge,
-     user feedback). Was `calc(100vh - --s6*2)` to leave room for the floating
-     panel's margin — that margin is gone. */
-  max-height: 100vh;
+  /* A rounded, softly-floating content panel (user feedback: the edge-to-edge
+     box read as too hard/square). It sits inset from the window with a small
+     gutter so the corners have --bg ground to breathe against — `max-height`
+     accounts for the top+bottom margin so it never overflows the viewport. */
+  margin: var(--s3) var(--s3) var(--s3) 0;
+  max-height: calc(100vh - var(--s3) * 2);
   display: flex;
   flex-direction: column;
-  /* Full-bleed content surface (the floating-panel radius + elevation were
-     retired when the app went edge-to-edge): a --bg2 fill separated from the
-     transparent sidebar by a single hairline on its left edge. The divider is
-     a translucent light hairline (rgba white .06) rather than the solid brown
-     --line, so it reads as a soft Apple/iOS-style seam — barely there, a
-     whisper of light on the dark ground — not a hard drawn rule (user
-     feedback: shiori's divider is far lighter-weight). No radius (the window's
-     own corners are the only rounding now), no drop shadow. */
+  /* The floating panel: a --bg2 fill, a full soft border all the way around
+     (the old left-only hairline became a full radiused edge), rounded corners,
+     and a gentle elevation so it reads as lifted off the --bg ground rather
+     than flush to the window. */
   background: var(--bg2);
-  border-left: 1px solid rgba(255, 255, 255, 0.06);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--elev-2);
   overflow: hidden;
 }
 
@@ -301,9 +301,15 @@ select {
   }
 
   .silo-content {
-    /* No sidebar beside it in the stacked mobile layout (it's an off-canvas
-       drawer), so the desktop left-edge divider would read as a stray rule. */
-    border-left: none;
+    /* Edge-to-edge on mobile: the rounded floating panel is a desktop treatment
+       — on a phone the content should fill the screen, so drop the margin,
+       radius, border, and elevation and go flush (a stacked single-column
+       layout has no sidebar beside it to float away from). */
+    margin: 0;
+    max-height: 100vh;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
   }
 
   .silo-topbar {
