@@ -49,4 +49,6 @@ jobs:
             | tar -xz -C /usr/local/bin gitleaks
           gitleaks version
       - name: Scan for secrets
-        run: gitleaks detect --source . --redact --no-git --verbose
+        # --config points at .gitleaks.toml (extends the default ruleset + a
+        # narrow allowlist for fake silo_ token fixtures in test files).
+        run: gitleaks detect --source . --config .gitleaks.toml --redact --no-git --verbose
