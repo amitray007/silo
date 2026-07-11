@@ -1,11 +1,24 @@
 # silo
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Node](https://img.shields.io/badge/node-%E2%89%A524-3c873a.svg)](package.json)
+[![MCP](https://img.shields.io/badge/protocol-MCP-6c5ce7.svg)](https://modelcontextprotocol.io)
+
 An **agent-native personal link store**. Feed in web material (links, Twitter/X
 posts, HN posts, videos) captured with rich metadata + full text, organized by
 tags and a single note field, searchable, and served over **MCP** so an external
 agent (Claude) does all the intelligence.
 
 **No AI lives inside silo** — silo is the substrate; the mind sits on top, over MCP.
+
+![silo's library — day-grouped, searchable, in the "Oat" design](docs/design/app/library-sidebar-light.png)
+
+> **Try it in one line** (the terminal client):
+> ```sh
+> brew install amitray007/tap/silo
+> ```
+> Or run the whole thing locally — see [Getting started](#getting-started). Point any
+> client (CLI, Chrome/Raycast extension, or an MCP agent) at your silo.
 
 ## What works today
 
