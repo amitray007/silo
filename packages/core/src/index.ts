@@ -115,14 +115,17 @@ export { InvalidImportError, importLinks, MAX_IMPORT_LINKS } from './links/impor
 // tag, trash/restore. See docs/rules/architecture.md — this is the one
 // place business logic over `@silo/db` lives.
 export type {
+  CountFilter,
   CreateLinkInput,
   EditLinkInput,
   GetByIdOptions,
   Link,
+  LinkCounts,
   LinkWithTags,
   LinkWithTextWindow,
   ListFilter,
   ListPage,
+  ListResultRow,
   PageParams,
   RestoreResult,
   SearchFilter,
@@ -133,6 +136,7 @@ export type {
 } from './links/links.js';
 export {
   addTag,
+  countLinks,
   createLink,
   editLink,
   findByCanonicalUrl,

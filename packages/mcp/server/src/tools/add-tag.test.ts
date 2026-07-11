@@ -96,5 +96,130 @@ describeMcpTool(
       expect(result.structuredContent).toBeDefined();
       expectValidLinkStructuredContent(result.structuredContent as Record<string, unknown>);
     });
+
+    // --- agent-navigation slice U4: `ids` batch (one-or-many) ---
+
+    it('`ids` with a mixed good/bad set: applies the good ones, reports per-item results', async () => {
+      const { core, client } = getContext();
+      const good1 = await seedLink(getContext, 'https://example.com/add-tag-bulk-good-1');
+      const good2 = await seedLink(getContext, 'https://example.com/add-tag-bulk-good-2');
+      const unknownId = '00000000-0000-0000-0000-000000000000';
+
+      const result = await client.callTool({
+        name: 'add_tag',
+        arguments: { ids: [good1, good2, unknownId], tag: 'bulktag' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        found: boolean;
+        results: Array<{ id: string; ok: boolean; reason?: string }>;
+      };
+      expect(structured.results).toHaveLength(3);
+      expect(structured.results.find((r) => r.id === good1)).toMatchObject({ ok: true });
+      expect(structured.results.find((r) => r.id === good2)).toMatchObject({ ok: true });
+      const badResult = structured.results.find((r) => r.id === unknownId);
+      expect(badResult?.ok).toBe(false);
+      expect(typeof badResult?.reason).toBe('string');
+
+      // The good ids were actually tagged.
+      const fetched1 = await core.getById(good1);
+      const fetched2 = await core.getById(good2);
+      expect(fetched1?.tags).toEqual(['bulktag']);
+      expect(fetched2?.tags).toEqual(['bulktag']);
+
+      const [content] = result.content as Array<{ type: 'text'; text: string }>;
+      expect(content?.text).toContain('2 of 3 succeeded');
+    });
+
+    it('`ids` wins over `id` when both given', async () => {
+      const { core, client } = getContext();
+      const a = await seedLink(getContext, 'https://example.com/add-tag-ids-wins-a');
+      const b = await seedLink(getContext, 'https://example.com/add-tag-ids-wins-b');
+
+      const result = await client.callTool({
+        name: 'add_tag',
+        arguments: { id: a, ids: [b], tag: 'winner' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results?: Array<{ id: string }> };
+      expect(structured.results?.map((r) => r.id)).toEqual([b]);
+
+      const fetchedA = await core.getById(a);
+      const fetchedB = await core.getById(b);
+      expect(fetchedA?.tags).toEqual([]);
+      expect(fetchedB?.tags).toEqual(['winner']);
+    });
+
+    // --- U4 adversarial review: F1 (oversized batch), F3 (test gaps), F4 (batch discriminator) ---
+
+    it('neither `id` nor `ids` -> clean tool error (F3, model per get_link)', async () => {
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'add_tag',
+        arguments: { tag: 'reading' },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('Pass either'),
+        }),
+      ]);
+    });
+
+    it('empty `ids: []` -> clean empty batch result, not a crash (F3)', async () => {
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'add_tag',
+        arguments: { ids: [], tag: 'reading' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        found: boolean;
+        batch?: boolean;
+        results: unknown[];
+      };
+      expect(structured.results).toEqual([]);
+      const [content] = result.content as Array<{ type: 'text'; text: string }>;
+      expect(content?.text).toContain('0 of 0 succeeded');
+    });
+
+    it('`ids` over the 500 cap -> clean tool error, not a raw throw (F1, F3)', async () => {
+      const { client } = getContext();
+      // Genuinely valid-format UUIDs (not zero-padded fakes): the Zod
+      // `z.uuid()` input-schema check runs BEFORE the handler and would
+      // reject a malformed id with a DIFFERENT (SDK input-validation) error,
+      // masking the F1 batch-cap error this test targets.
+      const tooMany = Array.from({ length: 501 }, () => crypto.randomUUID());
+      const result = await client.callTool({
+        name: 'add_tag',
+        arguments: { ids: tooMany, tag: 'reading' },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('Too many ids'),
+        }),
+      ]);
+      // No leaked internals (raw stack/error class name) in the message.
+      const [content] = result.content as Array<{ type: 'text'; text: string }>;
+      expect(content?.text).not.toContain('Error');
+      expect(content?.text).toContain('500');
+    });
+
+    it('a successful batch carries `batch: true` alongside `found: false` (F4 — distinguishable from a real not-found)', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/add-tag-batch-discriminator');
+
+      const result = await client.callTool({
+        name: 'add_tag',
+        arguments: { ids: [id], tag: 'discriminator' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { found: boolean; batch?: boolean };
+      expect(structured.found).toBe(false);
+      expect(structured.batch).toBe(true);
+    });
   },
 );

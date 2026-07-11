@@ -61,6 +61,26 @@ export const baseLinkShape = {
 export type BaseLinkContent = z.infer<z.ZodObject<typeof baseLinkShape>>;
 
 /**
+ * Agent-facing output shape for a `search_links`/`list_links` RESULT ROW
+ * (agent-navigation slice U4): the shared whitelist MINUS `extractedText`,
+ * PLUS a short `snippet` — mirrors core's `ListResultRow`/`SearchResultRow`
+ * (`Omit<LinkWithTags, 'extractedText'> & { snippet }`, see `links.ts`).
+ * `get_link` is unaffected: it keeps `baseLinkShape`'s full `extractedText`,
+ * since its whole job is "read the full content of a link I've identified"
+ * (see `get-link.ts`) — only the two discovery tools (search by words,
+ * browse newest-first) drop the full body from their result ROWS, so a page
+ * of hits doesn't drag every article's full text into an agent's context.
+ */
+const { extractedText: _extractedText, ...snippetLinkBaseShape } = baseLinkShape;
+void _extractedText;
+export const snippetLinkShape = {
+  ...snippetLinkBaseShape,
+  snippet: z.string().nullable(),
+};
+
+export type SnippetLinkContent = z.infer<z.ZodObject<typeof snippetLinkShape>>;
+
+/**
  * Re-validate the DB's loosely-typed `source_data` jsonb into the strict
  * `SourceData` union before it's ever handed to an agent — mirrors
  * `@silo/api`'s `link-json.ts`'s identical `shapeSourceData` (deliberately
@@ -112,4 +132,45 @@ export function toBaseLinkContent(link: LinkWithTags): BaseLinkContent {
     createdAt: link.createdAt.toISOString(),
     updatedAt: link.updatedAt.toISOString(),
   };
+}
+
+/**
+ * A row shape shared by core's `ListResultRow`/`SearchResultRow`: the same
+ * fields `LinkWithTags` has, minus `extractedText`, plus `snippet`. Narrowed
+ * with a structural type (not imported from `@silo/core`'s two distinct
+ * exported row types) so one function serves both `search_links` and
+ * `list_links` — the fields this function reads are identical across both.
+ */
+type SnippetSourceRow = Omit<LinkWithTags, 'extractedText'> & { snippet: string | null };
+
+/**
+ * Builds the whitelisted `search_links`/`list_links` result-row fields by
+ * delegating to `toBaseLinkContent` (same field-by-field whitelist pick, so
+ * the two can never drift on which fields are exposed) — `link` is missing
+ * `extractedText` (`SnippetSourceRow` omits it), so a placeholder `null` is
+ * passed through to satisfy `toBaseLinkContent`'s `LinkWithTags` param and
+ * immediately dropped from the result — then swaps in `snippet`. Never a
+ * spread of the raw row. Callers that need extra fields (e.g. `search_links`'s
+ * `rank`) spread this result and add their own on top.
+ */
+export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent {
+  const { extractedText: _extractedText, ...base } = toBaseLinkContent({
+    ...link,
+    extractedText: null,
+  });
+  void _extractedText;
+  return { ...base, snippet: link.snippet };
+}
+
+/**
+ * One `content[0].text` line for a ranked, snippet-carrying result — shared
+ * by `search_links` and `find_related` (agent-navigation slice U4), both of
+ * which list `SnippetLinkContent & { rank: number }` rows: `- (rank 0.123)
+ * Title — url [tags] — snippet`. Factored out once the two tools' otherwise
+ * near-identical `toTextSummary` loop bodies were flagged as a jscpd clone.
+ */
+export function toRankedResultLine(result: SnippetLinkContent & { rank: number }): string {
+  const tagsPart = result.tags.length > 0 ? ` [${result.tags.join(', ')}]` : '';
+  const snippetPart = result.snippet ? ` — ${result.snippet}` : '';
+  return `- (rank ${result.rank.toFixed(3)}) ${result.title ?? result.url} — ${result.url}${tagsPart}${snippetPart}`;
 }

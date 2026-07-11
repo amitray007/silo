@@ -1,8 +1,20 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { softDelete } from '@silo/core';
+import { softDelete, trashMany } from '@silo/core';
 import { z } from 'zod';
-import { foundLinkOutputShape, notFoundResult } from './found-result.js';
+import {
+  bulkItemResultShape,
+  foundLinkOutputShape,
+  notFoundResult,
+  runBulkGuarded,
+  toBulkItemResult,
+  toBulkTextSummary,
+} from './found-result.js';
+
+const trashLinkOutputSchema = {
+  ...foundLinkOutputShape,
+  results: z.array(z.object(bulkItemResultShape)).optional(),
+};
 
 /**
  * Registers `trash_link` on `server`: parse (Zod) -> one `core.softDelete`
@@ -31,17 +43,46 @@ export function registerTrashLink(server: McpServer): void {
     {
       title: 'Trash link',
       description:
-        'Move a saved link to the trash (soft delete) — it stops appearing ' +
-        'in get_link/list_links/search_links but is not permanently deleted. ' +
-        'Use restore_link to bring it back. Returns a clean not-found result ' +
-        '(not an error) if the id is unknown or the link is already trashed ' +
-        '(the two cases cannot be told apart).',
+        'Move one or more saved links to the trash (soft delete) — a ' +
+        'trashed link stops appearing in get_link/list_links/search_links ' +
+        'but is not permanently deleted. Pass `id` for ONE link, or `ids` ' +
+        'for MANY in one call (if both are given, `ids` wins) — the batch ' +
+        'call returns a `results` array (`{ id, ok, reason? }`) so one bad ' +
+        'id never blocks the rest. Use restore_link to bring a trashed link ' +
+        'back. The single-`id` path returns a clean not-found result (not ' +
+        'an error) if the id is unknown or the link is already trashed (the ' +
+        'two cases cannot be told apart).',
       inputSchema: {
-        id: z.uuid().describe('The link id (uuid) to trash.'),
+        id: z.uuid().optional().describe('The link id (uuid) to trash (single-link mode).'),
+        ids: z
+          .array(z.uuid())
+          .optional()
+          .describe(
+            'Link ids (uuids) to trash in one batch call, up to 500 per call. Wins over `id` if both are given.',
+          ),
       },
-      outputSchema: foundLinkOutputShape,
+      outputSchema: trashLinkOutputSchema,
     },
-    async ({ id }): Promise<CallToolResult> => {
+    async ({ id, ids }): Promise<CallToolResult> => {
+      if (ids !== undefined) {
+        const outcome = await runBulkGuarded(() => trashMany(ids));
+        if (!outcome.ok) return outcome.error;
+        const results = outcome.value.map(toBulkItemResult);
+        return {
+          content: [{ type: 'text', text: toBulkTextSummary('Trash', results) }],
+          structuredContent: { found: false, batch: true, results },
+        };
+      }
+
+      if (id === undefined) {
+        return {
+          isError: true,
+          content: [
+            { type: 'text', text: 'Pass either `id` (single) or `ids` (batch) to trash_link.' },
+          ],
+        };
+      }
+
       const deleted = await softDelete(id);
       if (!deleted) {
         return notFoundResult(

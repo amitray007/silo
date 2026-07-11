@@ -299,5 +299,219 @@ describeMcpTool(
       const result = await client.callTool({ name: 'search_links', arguments: { query: '' } });
       expect(result.isError).toBe(true);
     });
+
+    // --- agent-navigation slice U4: composed filters, snippet, count_only ---
+
+    it('composed filter (source + since/until + tags) narrows results to the matching link only', async () => {
+      const { core, client } = getContext();
+      // Matching: twitter source, tagged 'ai', captured "now" (within the
+      // since/until window asserted below).
+      const match = await core.createLink({
+        url: 'https://x.com/someone/status/1234567890',
+        sourceKind: 'twitter',
+        tags: ['ai'],
+      });
+      await core.recordEnrichment(match.id, {
+        title: 'Composedfilter term about AI agents',
+        status: 'full',
+      });
+
+      // Wrong source (plain link, not twitter) — must be excluded.
+      await seedLink(getContext, 'https://example.com/composed-wrong-source', {
+        title: 'Composedfilter term but wrong source',
+        tags: ['ai'],
+      });
+      // Wrong tag (no 'ai') — must be excluded.
+      const wrongTag = await core.createLink({
+        url: 'https://x.com/someone/status/1234567891',
+        sourceKind: 'twitter',
+      });
+      await core.recordEnrichment(wrongTag.id, {
+        title: 'Composedfilter term but wrong tag',
+        status: 'full',
+      });
+
+      // A `since` well in the past and an `until` well in the future both
+      // include `match` (proving the range filter composes with source/tags
+      // without narrowing away the real match), while `wrongTag`/the
+      // wrong-source link are excluded by source/tags, not by date.
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: {
+          query: 'composedfilter',
+          source: 'twitter',
+          tags: ['ai'],
+          since: '2020-01-01T00:00:00.000Z',
+          until: '2100-01-01T00:00:00.000Z',
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results: Array<{ id: string }> };
+      expect(structured.results.map((r) => r.id)).toEqual([match.id]);
+    });
+
+    it('`since` in the future excludes an otherwise-matching link', async () => {
+      const { client } = getContext();
+      await seedLink(getContext, 'https://example.com/since-future-exclude', {
+        title: 'Sincefutureterm article',
+      });
+
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'sincefutureterm', since: '2100-01-01T00:00:00.000Z' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results: unknown[]; count: number };
+      expect(structured.count).toBe(0);
+    });
+
+    it('search results carry `snippet` and never `extractedText`', async () => {
+      await seedLink(getContext, 'https://example.com/search-snippet-check', {
+        title: 'Snippetcheck term article',
+        text: 'Snippetcheck term appears in the body of this long article about many things.',
+      });
+
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'snippetcheck' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results: Array<Record<string, unknown>> };
+      expect(structured.results).toHaveLength(1);
+      const [first] = structured.results;
+      expect(first).not.toHaveProperty('extractedText');
+      expect(typeof first?.snippet).toBe('string');
+      expect(first?.snippet as string).toContain('Snippetcheck');
+    });
+
+    it('count_only: true returns total + bySource + topTags, no result rows', async () => {
+      const { core, client } = getContext();
+      const a = await core.createLink({
+        url: 'https://x.com/someone/status/1111111111',
+        sourceKind: 'twitter',
+        tags: ['countonlyterm'],
+      });
+      await core.recordEnrichment(a.id, { title: 'Countonlyterm alpha', status: 'full' });
+      const b = await core.createLink({
+        url: 'https://example.com/count-only-b',
+        sourceKind: 'link',
+        tags: ['countonlyterm'],
+      });
+      await core.recordEnrichment(b.id, { title: 'Countonlyterm beta', status: 'full' });
+
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'countonlyterm', count_only: true },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        total?: number;
+        bySource?: Record<string, number>;
+        topTags?: Array<{ tag: string; count: number }>;
+        results?: unknown[];
+        count?: number;
+      };
+      expect(structured.results).toBeUndefined();
+      expect(structured.count).toBeUndefined();
+      expect(structured.total).toBe(2);
+      expect(structured.bySource?.twitter).toBe(1);
+      expect(structured.bySource?.link).toBe(1);
+      expect(structured.topTags?.some((t) => t.tag === 'countonlyterm' && t.count === 2)).toBe(
+        true,
+      );
+
+      const [content] = result.content as Array<{ type: 'text'; text: string }>;
+      expect(content?.text).toContain('2 links match');
+    });
+
+    it('malformed `since` -> a clean tool error, not a raw Postgres 500', async () => {
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'anything', since: 'not-a-date' },
+      });
+      expect(result.isError).toBe(true);
+      // A raw Postgres error would carry SQL/driver internals; the clean edge
+      // rejection is a plain Zod validation failure instead.
+      expect(result.content).toEqual([
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('since') }),
+      ]);
+    });
+
+    it('malformed `until` -> a clean tool error, not a raw Postgres 500', async () => {
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'anything', until: 'garbage-not-iso' },
+      });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        expect.objectContaining({ type: 'text', text: expect.stringContaining('until') }),
+      ]);
+    });
+
+    // --- U4 adversarial review: F2 (date-only / offset `since`/`until` forms) ---
+
+    it("date-only `since` (e.g. '2026-07-01', the spec's own worked example) is ACCEPTED and filters correctly", async () => {
+      const { client } = getContext();
+      await seedLink(getContext, 'https://example.com/since-date-only-accept', {
+        title: 'Datonlyterm article',
+      });
+
+      // A date-only `since` well in the past must include the just-seeded link.
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'datonlyterm', since: '2020-01-01' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results: unknown[]; count: number };
+      expect(structured.count).toBe(1);
+    });
+
+    it("date-only `until` in the past excludes an otherwise-matching link (proves it's actually parsed, not ignored)", async () => {
+      const { client } = getContext();
+      await seedLink(getContext, 'https://example.com/until-date-only-exclude', {
+        title: 'Untildateonlyterm article',
+      });
+
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'untildateonlyterm', until: '2020-01-01' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results: unknown[]; count: number };
+      expect(structured.count).toBe(0);
+    });
+
+    it('a numeric-offset `since` (e.g. +05:30) is ACCEPTED, not rejected as malformed', async () => {
+      const { client } = getContext();
+      await seedLink(getContext, 'https://example.com/since-offset-accept', {
+        title: 'Offsettermarticle content',
+      });
+
+      const result = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'offsettermarticle', since: '2020-01-01T00:00:00+05:30' },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { results: unknown[]; count: number };
+      expect(structured.count).toBe(1);
+    });
+
+    it('genuine garbage dates are still rejected (F2 fix does not loosen validation past the three accepted ISO shapes)', async () => {
+      const { client } = getContext();
+      const yesterday = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'anything', since: 'yesterday' },
+      });
+      expect(yesterday.isError).toBe(true);
+
+      const badMonth = await client.callTool({
+        name: 'search_links',
+        arguments: { query: 'anything', since: '2026-13-40' },
+      });
+      expect(badMonth.isError).toBe(true);
+    });
   },
 );
