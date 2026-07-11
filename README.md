@@ -73,6 +73,28 @@ stop it with Ctrl-C.
 > (the first migration runs `CREATE EXTENSION vector`). Set `DATABASE_URL` in
 > `.env` to your instance and skip `pnpm db:up`.
 
+## Download & install the clients
+
+Three ways to reach silo from outside the app — each released independently
+(see [`docs/releasing.md`](docs/releasing.md)):
+
+- **CLI** (`silo` — capture/search/list/open from the terminal):
+  ```sh
+  brew tap amitray007/silo https://github.com/amitray007/silo
+  brew install amitray007/silo/silo
+  ```
+  Or grab the tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases).
+
+- **Chrome extension** — download `silo-capture-*.zip` from the latest
+  [`chrome-v*` release](https://github.com/amitray007/silo/releases) and load it
+  unpacked, or install from the Chrome Web Store (once listed).
+
+- **Raycast extension** — install from the Raycast Store (search "silo"), once
+  listed.
+
+Point any of them at your silo with its base URL + an API token (create tokens
+in **Settings → API / MCP**).
+
 ## Connect an MCP client
 
 silo is a stdio MCP server. To use it from Claude Desktop / Claude Code, add an
