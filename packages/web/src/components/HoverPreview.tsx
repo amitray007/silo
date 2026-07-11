@@ -50,12 +50,24 @@ function VariantBody({ title, children }: { title: string; children?: ReactNode 
  * link B's image) and swap to a caller-supplied fallback on `onError` —
  * `RepoVariant` simply omits the image, `VideoVariant` shows a dashed
  * placeholder, so the fallback stays a prop rather than being baked in here.
+ *
+ * `key={linkId}` on the `<img>` is LOAD-BEARING, not cosmetic: the popover is
+ * ONE reused instance (portal-mounted, its `link` prop swapped on a warm
+ * row-to-row switch), so without a key React reconciles the SAME `<img>` DOM
+ * node across links and only mutates its `src`. The browser keeps painting
+ * link A's already-decoded pixels until link B's image finishes decoding —
+ * i.e. hovering a plain link right after a Hacker News link would briefly show
+ * the HN image under the plain link's title (direct user report). Keying by
+ * `linkId` forces a FRESH `<img>` element per link, so B starts blank and can
+ * never inherit A's pixels — the `imageFailed` reset handles the failure flag,
+ * this handles the visual bleed.
  */
 function PreviewCoverImage({ linkId, onError }: { linkId: string; onError: () => void }) {
   return (
     // Decorative supplement to the title/stats below — alt="" is
     // intentional (the title conveys the content).
     <img
+      key={linkId}
       src={previewImageUrl(linkId)}
       alt=""
       onError={onError}
@@ -677,7 +689,17 @@ export function HoverPreview({
         transformOrigin: 'left center',
       }}
     >
+      {/* `key={link.id}` remounts the ENTIRE variant subtree on a link switch,
+          so NOTHING is shared between one link's preview and the next — not the
+          image node, not `imageFailed`, not any per-variant state. The popover
+          is one reused instance whose `link` prop swaps on a warm row-to-row
+          switch; without this key React would reconcile the same variant nodes
+          across links and could bleed link A's rendered content (esp. a decoded
+          cover image) onto link B before B's own data paints. Belt-and-braces
+          with `PreviewCoverImage`'s own `key` — this guarantees a clean slate
+          per link even across variant TYPE changes (HN → plain link, etc.). */}
       <SourceVariant
+        key={link.id}
         link={link}
         title={title}
         tagLine={tagLine}

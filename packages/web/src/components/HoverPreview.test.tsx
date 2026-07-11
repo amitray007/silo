@@ -658,5 +658,94 @@ describe('HoverPreview', () => {
       expect(imgB).not.toBeNull();
       expect(imgB.getAttribute('src')).toBe('/api/preview-image?linkId=link-b');
     });
+
+    it('does not share the image node across a link switch — link B never renders link A’s image (no stale-pixel bleed)', () => {
+      // The exact reported bug: hover a link with an image, then a DIFFERENT
+      // link — the shared popover reused the same <img> node and kept painting
+      // link A's decoded pixels under link B. `key={linkId}` on the image (and
+      // `key={link.id}` on the variant) force a fresh node per link. Assert the
+      // rendered image's src is ALWAYS the current link's, never the previous.
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(queryKeys.settings(), {
+        theme: 'system',
+        trashPurgeDays: 30,
+        mcpAccess: true,
+        linkPreviewImages: true,
+        plugins: allOn,
+      } satisfies SettingsMap);
+      const renderFor = (id: string) => (
+        <QueryClientProvider client={queryClient}>
+          <HoverPreview
+            link={makeLink({
+              id,
+              title: id,
+              sourceData: { kind: 'link' },
+              imageUrl: `https://x/${id}.png`,
+            })}
+            position={position}
+            onKeep={vi.fn()}
+            onHide={vi.fn()}
+          />
+        </QueryClientProvider>
+      );
+      const { rerender } = render(renderFor('link-a'));
+      expect((document.querySelector('img') as HTMLImageElement).getAttribute('src')).toBe(
+        '/api/preview-image?linkId=link-a',
+      );
+
+      rerender(renderFor('link-b'));
+      // The image now points at link-b — it did not linger on link-a's src.
+      expect((document.querySelector('img') as HTMLImageElement).getAttribute('src')).toBe(
+        '/api/preview-image?linkId=link-b',
+      );
+    });
+
+    it('switching from an image link to a Hacker News link (no image) leaves NO stale <img>', () => {
+      // The user's exact case: an image-bearing link → a Hacker News row (which
+      // renders points/comments, no cover image). The reused popover must not
+      // keep the previous link's <img> around.
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(queryKeys.settings(), {
+        theme: 'system',
+        trashPurgeDays: 30,
+        mcpAccess: true,
+        linkPreviewImages: true,
+        plugins: allOn,
+      } satisfies SettingsMap);
+      const { rerender } = render(
+        <QueryClientProvider client={queryClient}>
+          <HoverPreview
+            link={makeLink({
+              id: 'img-link',
+              title: 'Image link',
+              sourceData: { kind: 'link' },
+              imageUrl: 'https://x/a.png',
+            })}
+            position={position}
+            onKeep={vi.fn()}
+            onHide={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      expect(document.querySelector('img')).not.toBeNull();
+
+      rerender(
+        <QueryClientProvider client={queryClient}>
+          <HoverPreview
+            link={makeLink({
+              id: 'hn-link',
+              title: 'HN post',
+              sourceData: { kind: 'hacker_news', points: 42, comments: 7, author: 'pg' },
+            })}
+            position={position}
+            onKeep={vi.fn()}
+            onHide={vi.fn()}
+          />
+        </QueryClientProvider>,
+      );
+      // The HN variant has no cover image — nothing from the previous link may
+      // linger.
+      expect(document.querySelector('img')).toBeNull();
+    });
   });
 });
