@@ -196,4 +196,64 @@ describe('TagView', () => {
       ),
     );
   });
+
+  /**
+   * The header's "Delete" button (`DeleteTagButton`) — a two-step in-button
+   * confirm mirroring `TrashView`'s `TrashEmptyNowButton` EXACTLY: first
+   * click flips the label to "Confirm?"; the second click actually calls
+   * `DELETE /api/tags/:name` and navigates to `/` on success. Also proves
+   * both header buttons ("Delete" + "Add") render as siblings under
+   * `ContentHeader`'s own `gap: 13` flex row (the fragment `headerSlot`
+   * passes doesn't create a wrapping DOM node, so no extra gap wrapper is
+   * needed here).
+   */
+  it('the header Delete button requires two clicks (confirm), then deletes the tag and navigates to /', async () => {
+    const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/links?tag=mcp') {
+        return Promise.resolve(jsonResponse({ links: [] }));
+      }
+      if (method === 'DELETE' && url === '/api/tags/mcp') {
+        return Promise.resolve(jsonResponse({ deleted: true }));
+      }
+      throw new Error(`unexpected fetch: ${method} ${url}`);
+    }) as unknown as typeof fetch;
+
+    renderTagView('mcp', fetchImpl);
+
+    // Both header buttons render. Each `HeaderActionButton` wraps itself in
+    // its own `position:relative` div (for its flash toast), so the two
+    // buttons' own parents differ — but those two wrapper divs are
+    // THEMSELVES siblings directly under `ContentHeader`'s flex row (no
+    // extra gap-wrapper span in between), which is what actually produces
+    // the visible gap between "Delete" and "Add" via the header's own
+    // `gap: 13`.
+    const deleteButton = await screen.findByRole('button', { name: 'Delete this tag' });
+    const addButton = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const deleteWrapper = deleteButton.parentElement;
+    const addWrapper = addButton.parentElement;
+    expect(deleteWrapper?.parentElement).toBe(addWrapper?.parentElement);
+    expect(Array.from(deleteWrapper?.parentElement?.children ?? [])).toEqual(
+      expect.arrayContaining([deleteWrapper, addWrapper]),
+    );
+
+    // First click arms the confirm state — no delete request fired yet.
+    fireEvent.click(deleteButton);
+    const confirmButton = await screen.findByRole('button', { name: 'Confirm deleting this tag' });
+    expect(fetchImpl).not.toHaveBeenCalledWith('/api/tags/mcp', expect.anything());
+
+    // Second click actually deletes and navigates to '/'.
+    fireEvent.click(confirmButton);
+    await waitFor(() =>
+      expect(fetchImpl).toHaveBeenCalledWith(
+        '/api/tags/mcp',
+        expect.objectContaining({ method: 'DELETE' }),
+      ),
+    );
+    await waitFor(() => expect(screen.getByText('landed on library')).toBeDefined());
+  });
 });
