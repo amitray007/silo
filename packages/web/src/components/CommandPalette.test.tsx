@@ -1015,4 +1015,175 @@ describe('CommandPalette', () => {
       expect(document.querySelector('.silo-popover')).toBeNull();
     });
   });
+
+  /**
+   * Keyboard-nav hover (palette-keyboard-hover slice, Task 2's `activeValue`
+   * effect in `CommandPaletteInner`): the controlled `<Command value=
+   * onValueChange=>` means cmdk echoes its OWN active-item state (arrow keys,
+   * AND cmdk auto-selecting the first row on mount) back into `activeValue`,
+   * which drives the same `scheduleShow`/`dismissAll` + `palettePluginOn` gate
+   * as the mouse path — but unconditionally (no `isHoverCapable()` check; see
+   * that effect's doc comment). Two ways this is proven reliable in jsdom
+   * without a brittle synthetic cmdk internals reach-around:
+   *
+   * 1. cmdk selects the FIRST item as active the instant results mount (the
+   *    "flicker fix" describe block above already leans on this, see its own
+   *    comment: "the sole result becomes cmdk's active row on mount"), so
+   *    rendering with results already exercises the effect with zero
+   *    keypresses.
+   * 2. Real `ArrowDown`/`ArrowUp` keydowns on the input (already proven to
+   *    move `aria-selected` in the "ArrowDown/ArrowUp move the active option"
+   *    test above) reliably re-fire `onValueChange`, so arrowing from row A to
+   *    row B is exercised directly, not inferred.
+   *
+   * Reuses the same `matchMedia` stub as the sibling hover-gating block above
+   * for parity with the mouse-path tests, even though the keyboard effect
+   * itself never calls `isHoverCapable()` — it's inert here (no mouse handler
+   * runs), included only so this block's setup matches its neighbor.
+   */
+  describe('keyboard-nav palette hover gating (activeValue effect)', () => {
+    const originalMatchMedia = window.matchMedia;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(hover: hover)',
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      })) as unknown as typeof matchMedia;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      window.matchMedia = originalMatchMedia;
+    });
+
+    it('cmdk auto-selecting the first (twitter) row on mount opens the hover card when plugins.twitter.palette is true — no keypress required', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'kb1', title: 'Keyboard tweet', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'keyboard' } });
+      await waitFor(() => expect(screen.getByText('Keyboard tweet')).toBeDefined(), {
+        timeout: 2000,
+      });
+      // cmdk already marked this sole row active on mount — no ArrowDown
+      // needed for `activeValue` to have been set at least once.
+      expect(optionRowFor('Keyboard tweet').getAttribute('aria-selected')).toBe('true');
+
+      // The effect's `scheduleShow` still runs on its own show-delay timer
+      // (no `isHoverCapable()` guard, but the shared provider's delay still
+      // applies) — advance fake timers the same amount the sibling
+      // mouse-hover tests do.
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+
+      expect(document.querySelector('.silo-popover')).not.toBeNull();
+    });
+
+    it('cmdk auto-selecting the first (twitter) row on mount does NOT open the hover card when plugins.twitter.palette is false (dismissAll path)', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: false },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'kb2', title: 'Gated tweet', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'gated' } });
+      await waitFor(() => expect(screen.getByText('Gated tweet')).toBeDefined(), {
+        timeout: 2000,
+      });
+      expect(optionRowFor('Gated tweet').getAttribute('aria-selected')).toBe('true');
+
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(document.querySelector('.silo-popover')).toBeNull();
+    });
+
+    it('arrowing off a gate-enabled twitter row onto a plain link row moves the card, then arrowing onto a tag suggestion dismisses it', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [{ name: 'frontend', count: 2 }] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'kb3', title: 'First tweet', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+            { ...makeLink({ id: 'kb4', title: 'Second link' }), rank: 1 },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'link' } });
+      await waitFor(() => expect(screen.getByText('First tweet')).toBeDefined(), {
+        timeout: 2000,
+      });
+      await waitFor(() => expect(screen.getByText('Second link')).toBeDefined(), {
+        timeout: 2000,
+      });
+
+      // Row 1 (twitter, palette:true) is active on mount — card shows.
+      expect(optionRowFor('First tweet').getAttribute('aria-selected')).toBe('true');
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+      expect(document.querySelector('.silo-popover')).not.toBeNull();
+
+      // ArrowDown onto the plain link row: real keyboard nav re-fires
+      // onValueChange, the effect re-runs for the new activeValue, and the
+      // card follows (generic links are ungated per `palettePluginOn`).
+      fireEvent.keyDown(input, { key: 'ArrowDown' });
+      expect(optionRowFor('Second link').getAttribute('aria-selected')).toBe('true');
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+      expect(document.querySelector('.silo-popover')).not.toBeNull();
+
+      // Now switch the query to surface a TAG suggestion row instead —
+      // arrowing onto (mounting active on) a tag row must dismiss the card,
+      // since `resultByValue.get(activeValue)?.kind !== 'link'`.
+      fireEvent.change(input, { target: { value: '#front' } });
+      await waitFor(() => expect(screen.getByText('frontend')).toBeDefined(), { timeout: 2000 });
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+      expect(document.querySelector('.silo-popover')).toBeNull();
+    });
+  });
 });
