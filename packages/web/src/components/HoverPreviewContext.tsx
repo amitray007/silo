@@ -187,16 +187,29 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
   // no matching `scheduleHide` ever fires. The card then floats with the
   // pointer nowhere near it. This listener — armed ONLY while a preview is on
   // screen, so there's zero cost otherwise — watches raw pointer moves and,
-  // whenever the pointer is over NEITHER a link row (`.silo-link-row`) NOR the
-  // preview card (`.silo-popover`), closes the preview. That's the one signal
-  // the per-element `mouseleave` handlers can drop; the row/card enter
-  // handlers still own the normal open/keep path, so this only ever fires in
-  // the genuinely-left-everything case.
+  // whenever the pointer is over NONE of a library link row (`.silo-link-row`),
+  // a command-palette row (`.silo-palette-row`), or the preview card
+  // (`.silo-popover`), closes the preview. That's the one signal the
+  // per-element `mouseleave` handlers can drop; the row/card enter handlers
+  // still own the normal open/keep path, so this only ever fires in the
+  // genuinely-left-everything case.
+  //
+  // `.silo-palette-row` MUST be whitelisted here (palette-rich-rows slice):
+  // the command palette now also opens this shared preview, and its rows carry
+  // that class, NOT `.silo-link-row`. Without it, any pointer move landing on a
+  // palette row (e.g. a tiny jitter while the card is up, or moving between two
+  // palette rows) reads as "left everything" and wrongly dismisses the
+  // palette's own hover card — a real bug caught in browser QA.
   useEffect(() => {
     if (preview === null) return;
     const onPointerMove = (event: PointerEvent) => {
       const target = event.target as Element | null;
-      if (target?.closest('.silo-link-row') || target?.closest('.silo-popover')) return;
+      if (
+        target?.closest('.silo-link-row') ||
+        target?.closest('.silo-palette-row') ||
+        target?.closest('.silo-popover')
+      )
+        return;
       hide();
     };
     document.addEventListener('pointermove', onPointerMove);
