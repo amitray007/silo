@@ -67,10 +67,10 @@ describeIfPg('enrichLink (integration)', () => {
       // — these generic tests don't care about the toggle state.
       getPluginsSetting: () =>
         Promise.resolve({
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         }),
     };
   }
@@ -199,10 +199,10 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: () => Promise.resolve(undefined),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: true, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       }),
     ).rejects.toThrow('unexpected extract crash');
@@ -227,10 +227,10 @@ describeIfPg('enrichLink (integration)', () => {
           Promise.resolve({ kind: 'hacker_news', points: 500, comments: 200, author: 'pg' }),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: true, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       });
       const link = await core.getById(id);
@@ -256,10 +256,10 @@ describeIfPg('enrichLink (integration)', () => {
           Promise.resolve({ kind: 'hacker_news', points: 10, comments: 3, author: 'x' }),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: true, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       });
       const link = await core.getById(id);
@@ -328,10 +328,10 @@ describeIfPg('enrichLink (integration)', () => {
           }),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: true, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       });
       const link = await core.getById(id);
@@ -367,10 +367,10 @@ describeIfPg('enrichLink (integration)', () => {
           }),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: true, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       });
       const link = await core.getById(id);
@@ -399,10 +399,10 @@ describeIfPg('enrichLink (integration)', () => {
           Promise.resolve({ kind: 'hacker_news', points: 5, comments: 1, author: 'x' }),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: true, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       });
       const link = await core.getById(id);
@@ -447,10 +447,10 @@ describeIfPg('enrichLink (integration)', () => {
         getPluginsSetting: () => {
           getPluginsSettingCallCount += 1;
           return Promise.resolve({
-            hacker_news: { enabled: false, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           });
         },
       });
@@ -458,10 +458,10 @@ describeIfPg('enrichLink (integration)', () => {
       expect(getPluginsSettingCallCount).toBe(1);
       expect(calls).toHaveLength(1);
       expect(calls[0]?.[2]).toEqual({
-        hacker_news: { enabled: false, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       });
     });
 
@@ -473,10 +473,10 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: spyingEnrichSource([]),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: false, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       });
       const link = await core.getById(id);
@@ -495,10 +495,10 @@ describeIfPg('enrichLink (integration)', () => {
         enrichSource: spyingEnrichSource([]),
         getPluginsSetting: () =>
           Promise.resolve({
-            hacker_news: { enabled: true, inline: true, hover: true },
-            github: { enabled: true, hover: true },
-            youtube: { enabled: true, hover: true },
-            twitter: { enabled: true, inline: true, hover: true },
+            hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+            github: { enabled: true, hover: true, palette: true },
+            youtube: { enabled: true, hover: true, palette: true },
+            twitter: { enabled: true, inline: true, hover: true, palette: true },
           }),
       });
       const link = await core.getById(id);
@@ -523,12 +523,11 @@ describeIfPg('enrichLink (integration)', () => {
       ).resolves.toBeUndefined();
 
       // Degraded to the all-enabled default, not left undefined/false.
-      expect(calls[0]?.[2]).toEqual({
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
-      });
+      // Assert against SETTINGS_DEFAULTS.plugins directly (rather than a
+      // hand-copied literal) so this can never drift when a new per-plugin
+      // feature flag is added — e.g. the `palette` flag (palette-rich-rows
+      // slice) that widened every source object from 3 fields to 4.
+      expect(calls[0]?.[2]).toEqual(core.SETTINGS_DEFAULTS.plugins);
       const link = await core.getById(id);
       expect(link?.sourceData).toEqual({
         kind: 'hacker_news',

@@ -25,10 +25,10 @@ type SettingsBody = {
   mcpAccess: boolean;
   linkPreviewImages: boolean;
   plugins: {
-    hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
-    github: { enabled: boolean; hover: boolean };
-    youtube: { enabled: boolean; hover: boolean };
-    twitter: { enabled: boolean; inline: boolean; hover: boolean };
+    hacker_news: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
+    github: { enabled: boolean; hover: boolean; palette: boolean };
+    youtube: { enabled: boolean; hover: boolean; palette: boolean };
+    twitter: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
   };
 };
 
@@ -57,10 +57,10 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       mcpAccess: true,
       linkPreviewImages: true,
       plugins: {
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       },
     });
   });
@@ -111,20 +111,20 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     const { app } = harness.mod();
     const patchRes = await patchSettings(app, {
       plugins: {
-        hacker_news: { enabled: false, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       },
     });
     expect(patchRes.status).toBe(200);
 
     const getBody = await expectOk<SettingsBody>(app, '/api/settings');
     expect(getBody.plugins).toEqual({
-      hacker_news: { enabled: false, inline: true, hover: true },
-      github: { enabled: true, hover: true },
-      youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, inline: true, hover: true },
+      hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+      github: { enabled: true, hover: true, palette: true },
+      youtube: { enabled: true, hover: true, palette: true },
+      twitter: { enabled: true, inline: true, hover: true, palette: true },
     });
   });
 
@@ -178,10 +178,10 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     const { app } = harness.mod();
     const res = await patchSettings(app, {
       plugins: {
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
         evilPlugin: true,
       },
     });
