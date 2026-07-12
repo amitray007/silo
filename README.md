@@ -118,7 +118,7 @@ pnpm start   # for an agent: the MCP server (stdio) + worker, no web UI
 
 silo speaks MCP over three transports. Pick the one that matches where your agent runs.
 
-**Local subprocess (stdio)** — for Claude Desktop / Claude Code on the same machine. No network,
+**1 · Local subprocess (stdio)** — Claude Desktop / Claude Code on the same machine. No network,
 no auth: the process boundary is the trust boundary. Add to your MCP config:
 
 ```json
@@ -133,15 +133,42 @@ no auth: the process boundary is the trust boundary. Add to your MCP config:
 }
 ```
 
-**Remote, with a token (HTTP)** — for a self-hosted silo an agent reaches over the network. Set
-`SILO_MCP_HTTP_PORT` and `SILO_API_TOKEN`; the agent connects to `https://<host>/mcp` with an
-`Authorization: Bearer <token>` header. The MCP settings tab's **Copy config** button generates
-this for you.
+**2 · Remote, with a token (HTTP)** — a self-hosted silo an agent reaches over the network. Run
+the MCP endpoint (`SILO_MCP_HTTP_PORT` + `SILO_API_TOKEN`; see [Deploy](#deploy)) on whatever host
+you choose, then point the agent at its `/mcp` URL with a bearer token — mint one in
+**Settings → API / MCP**, where the **Copy config** button generates exactly this:
 
-**URL-only connector (OAuth)** — for **Claude** and **ChatGPT** hosted connectors. Paste
-`https://mcp.<domain>/mcp` into "Add custom connector" and sign in — no token to copy. silo
-implements OAuth 2.1 + PKCE, Dynamic Client Registration, and discovery, so the whole flow is
-URL-only. See [`docs/methods/mcp-oauth.md`](docs/methods/mcp-oauth.md).
+```json
+{
+  "mcpServers": {
+    "silo": {
+      "url": "https://<your-mcp-host>/mcp",
+      "headers": { "Authorization": "Bearer <YOUR_SILO_API_TOKEN>" }
+    }
+  }
+}
+```
+
+Or, for Claude Code, one line:
+
+```sh
+claude mcp add --transport http silo https://<your-mcp-host>/mcp \
+  --header "Authorization: Bearer <YOUR_SILO_API_TOKEN>"
+```
+
+**3 · URL-only connector (OAuth)** — **Claude** and **ChatGPT** hosted connectors. No token to
+copy: paste the URL into "Add custom connector" and sign in. silo implements OAuth 2.1 + PKCE,
+Dynamic Client Registration, and discovery, so the whole flow is URL-only.
+
+```text
+https://<your-mcp-host>/mcp
+```
+
+> `<your-mcp-host>` is any host you point at the MCP endpoint — pick the name you like. The one
+> rule: make it a **single-level** subdomain (e.g. `mcp-links.example.com`), **not** a nested one
+> like `mcp.links.example.com` — many wildcard TLS certs don't cover a second level, and the OAuth
+> discovery flow then fails at the proxy. Details:
+> [`docs/methods/mcp-oauth.md`](docs/methods/mcp-oauth.md).
 
 ## Deploy
 
