@@ -99,13 +99,19 @@ Set these on deployment (see `.env.example` for the full annotated list):
 
 | Var | Container(s) | What |
 |---|---|---|
-| `SILO_PUBLIC_MCP_URL` | **api and mcp** | The canonical `https://mcp.<domain>/mcp` resource string. Both containers must be set to the **identical** value — it's the RFC 8707 audience both sides check against. Previously api-only; the mcp container now reads it too. |
+| `SILO_PUBLIC_MCP_URL` | **api and mcp** | The canonical `https://<mcp-host>/mcp` resource string (e.g. `https://mcp-silo.example.com/mcp`). **Required for any hosted deployment** — the web UI does NOT guess an MCP URL, it uses this value verbatim (and shows a "not configured" prompt if unset). Both containers must be set to the **identical** value — it's the RFC 8707 audience both sides check against. |
 | `SILO_PUBLIC_API_URL` | mcp (and optionally api) | The public origin of the api/auth-server (e.g. `https://silo.example.com`). Used as the OAuth `issuer` and advertised in mcp's protected-resource metadata as `authorization_servers`. |
-| `SILO_MCP_ALLOWED_HOSTS` | mcp | Unrelated to OAuth itself but required for the same reverse-proxy deployment — the MCP SDK's DNS-rebinding allowlist (see `docs/deploy.md`). |
+| `SILO_MCP_ALLOWED_HOSTS` | mcp | Unrelated to OAuth itself but required for the same reverse-proxy deployment — the MCP SDK's DNS-rebinding allowlist, set to your MCP host (see `docs/deploy.md`). |
 
 Both `.well-known/*` and `/oauth/*` must be reachable through the reverse proxy
 **unauthenticated** — don't put them behind Traefik/Dokploy basic-auth or an IP allowlist, or
 the discovery handshake breaks before it starts.
+
+> ⚠️ **Use a single-level MCP host** (`mcp-silo.example.com`), not a nested one
+> (`mcp.silo.example.com`). Cloudflare's free Universal SSL wildcard covers only
+> one label deep, so a nested MCP host fails its TLS handshake and this whole
+> handshake dies at discovery — the agent reports *"couldn't register with the
+> sign-in service"* even though the OAuth server is fine. See `docs/deploy.md`.
 
 ## Connected apps
 

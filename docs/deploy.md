@@ -5,9 +5,20 @@ silo ships as **one Docker image** run as **two application containers**
 
 | Subdomain | Container | Serves |
 |---|---|---|
-| `silo.<domain>/` | **api** | the web UI (`/`), the REST API (`/api/*`), and the enrichment **worker** (in-process) |
-| `mcp.silo.<domain>/` | **mcp** | the HTTP MCP endpoint (`/mcp`) an agent connects to |
+| `silo.<domain>/` | **api** | the web UI (`/`), the REST API (`/api/*`), the OAuth authorization server (`/oauth/*`, `/.well-known/oauth-authorization-server`), and the enrichment **worker** (in-process) |
+| `mcp-silo.<domain>/` | **mcp** | the HTTP MCP endpoint (`/mcp`) + `/.well-known/oauth-protected-resource` an agent connects to |
 | (internal only) | **postgres** | `pgvector/pgvector:pg18` — the data store |
+
+> ⚠️ **Pick a SINGLE-LEVEL MCP subdomain** (e.g. `mcp-silo.<domain>` or
+> `silo-mcp.<domain>`), **not** a nested one like `mcp.silo.<domain>`. Many
+> managed TLS setups — notably **Cloudflare's free Universal SSL** — issue a
+> wildcard cert that covers only ONE label deep (`*.<domain>` matches
+> `silo.<domain>` but NOT `mcp.silo.<domain>`). A nested MCP host then fails the
+> TLS handshake, and the agent's OAuth flow dies at discovery with a confusing
+> *"couldn't register with the sign-in service"* — even though the OAuth server
+> itself is fine. A single-level host is covered by the same wildcard as the api
+> host. (If you must use a nested host, provision an explicit cert for it, e.g.
+> Cloudflare Advanced Certificate Manager for `*.silo.<domain>`.)
 
 The same image runs both roles; the **command** selects the role:
 - **api role** → `tsx packages/app/src/api-main.ts` (the `@silo/app`
