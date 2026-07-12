@@ -498,6 +498,12 @@ describeIfPg('links schema (integration)', () => {
       const plan = explain.rows.map((r) => r['QUERY PLAN']).join('\n');
       expect(plan).toContain('links_trgm_live_idx');
       expect(plan.toLowerCase()).toContain('bitmap index scan');
-    });
+      // 30s timeout (vs vitest's 5s default): the 40,000-row generate_series
+      // insert + ANALYZE + EXPLAIN is inherently heavy and legitimately
+      // exceeds 5s on CI's slower/shared Postgres (observed: timeout at
+      // 5000ms in GitHub Actions while passing locally). The row count is
+      // load-bearing for planner determinism (see the comment above) and
+      // must not be reduced, so the fix is a longer budget, not less data.
+    }, 30_000);
   });
 });
