@@ -33,8 +33,9 @@ export function registerDeleteTag(server: McpServer): void {
           .string()
           .min(1)
           .describe(
-            'The tag to delete from the whole library (case-insensitive). Unlinks it from ' +
-              'every link; the links are kept. Use remove_tag to detach a tag from just one link.',
+            'The tag to delete from the ENTIRE library (case-insensitive) — EVERY link loses ' +
+              'it, though the links themselves are kept. Use remove_tag instead if you only ' +
+              'want to detach a tag from ONE specific link.',
           ),
       },
       outputSchema: deleteTagOutputSchema,

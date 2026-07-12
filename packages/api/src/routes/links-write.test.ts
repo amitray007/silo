@@ -505,6 +505,16 @@ describeIfPg('A3 write routes (integration)', () => {
       expect(res.status).toBe(200);
       expect(await res.json()).toEqual({ deleted: false });
     });
+
+    it('a whitespace-only name (URL-encoded) passes min(1) but deletes nothing -> 200 { deleted: false }', async () => {
+      // `%20` is a single space: the `min(1)` param schema accepts it, but
+      // `core.deleteTag` normalizes it to '' and short-circuits without a
+      // DELETE (review: ce-correctness — guard the whitespace path end-to-end).
+      const { app } = harness.mod();
+      const res = await del(app, '/api/tags/%20');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ deleted: false });
+    });
   });
 
   describe('POST /api/links/batch/tags — bulk add-tag (U5)', () => {

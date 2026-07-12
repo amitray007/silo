@@ -240,5 +240,27 @@ describeIfPg('listTagsWithCounts (integration, C3)', () => {
     it('deleteTag returns false for a tag that does not exist (idempotent, not an error)', async () => {
       expect(await ops.deleteTag('does-not-exist-xyz')).toBe(false);
     });
+
+    it('deleteTag ignores a blank / whitespace-only name (no-op, returns false)', async () => {
+      // `normalizeTagKey('   ')` collapses to '' — deleteTag short-circuits
+      // before issuing any DELETE (review: ce-correctness — guard the
+      // whitespace path the API's `min(1)` lets through).
+      expect(await ops.deleteTag('   ')).toBe(false);
+    });
+
+    it('a tag can be recreated and reused after deletion (delete -> createTag -> addTag)', async () => {
+      // Regression guard (review: ce-data-integrity): the unique constraint is
+      // on `normalized_key`, and deleteTag fully removes the row, so the same
+      // name must be freshly creatable + attachable afterward with no lingering
+      // constraint collision.
+      const a = await ops.createLink({ url: 'https://recreate.example', sourceKind: 'link' });
+      await ops.addTag(a.id, 'seasonal');
+      expect(await ops.deleteTag('seasonal')).toBe(true);
+      // Recreate the same name and re-attach it to the (still-live) link.
+      expect(await ops.createTag('seasonal')).toBe('seasonal');
+      await ops.addTag(a.id, 'seasonal');
+      expect((await ops.getById(a.id))?.tags ?? []).toContain('seasonal');
+      expect((await ops.listTagsWithCounts()).map((t) => t.name)).toContain('seasonal');
+    });
   });
 });
