@@ -5,7 +5,7 @@ import type {
   oauthCodes as OAuthCodesTable,
 } from '@silo/db';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
@@ -166,6 +166,127 @@ describeIfPg('oauth core logic (integration)', () => {
 
     it('returns null for an unknown client id', async () => {
       expect(await ops.getOAuthClient('cli_does-not-exist')).toBeNull();
+    });
+
+    describe('DCR dedup (oauth-dcr-dedup-and-cleanup slice)', () => {
+      it('re-registering the identical (name, redirect_uris) returns the SAME cli_ id, no new row', async () => {
+        const first = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+        });
+        const second = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+        });
+
+        expect(second.id).toBe(first.id);
+
+        const rows = await rawDb.select().from(oauthClients);
+        expect(rows).toHaveLength(1);
+      });
+
+      it('different redirect_uris produce a new client', async () => {
+        const first = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+        });
+        const second = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://claude.ai/api/mcp/other_callback'],
+        });
+
+        expect(second.id).not.toBe(first.id);
+        const rows = await rawDb.select().from(oauthClients);
+        expect(rows).toHaveLength(2);
+      });
+
+      it('different name produces a new client', async () => {
+        const first = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+        });
+        const second = await ops.registerOAuthClient({
+          clientName: 'ChatGPT',
+          redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+        });
+
+        expect(second.id).not.toBe(first.id);
+        const rows = await rawDb.select().from(oauthClients);
+        expect(rows).toHaveLength(2);
+      });
+
+      it('redirect_uris in a different order still match (order-insensitive)', async () => {
+        const first = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://a.example.com/cb', 'https://b.example.com/cb'],
+        });
+        const second = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://b.example.com/cb', 'https://a.example.com/cb'],
+        });
+
+        expect(second.id).toBe(first.id);
+        const rows = await rawDb.select().from(oauthClients);
+        expect(rows).toHaveLength(1);
+        // Storage order of the ORIGINAL row is untouched by the comparison.
+        expect(second.redirectUris).toEqual([
+          'https://a.example.com/cb',
+          'https://b.example.com/cb',
+        ]);
+      });
+
+      it('name match is case-insensitive', async () => {
+        const first = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+        });
+        const second = await ops.registerOAuthClient({
+          clientName: 'CLAUDE',
+          redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+        });
+
+        expect(second.id).toBe(first.id);
+      });
+
+      it('with multiple pre-existing duplicates, returns the EARLIEST-created one', async () => {
+        // Seed duplicates the way they could arise from BEFORE dedup existed
+        // — insert directly rather than via registerOAuthClient (which would
+        // itself now dedupe them).
+        const redirectUris = ['https://claude.ai/api/mcp/auth_callback'];
+        const [older] = await rawDb
+          .insert(oauthClients)
+          .values({
+            id: 'cli_older',
+            name: 'Claude',
+            redirectUris,
+            grantTypes: ['authorization_code', 'refresh_token'],
+            tokenEndpointAuthMethod: 'none',
+            createdAt: new Date(Date.now() - 60_000),
+          })
+          .returning();
+        const [newer] = await rawDb
+          .insert(oauthClients)
+          .values({
+            id: 'cli_newer',
+            name: 'Claude',
+            redirectUris,
+            grantTypes: ['authorization_code', 'refresh_token'],
+            tokenEndpointAuthMethod: 'none',
+            createdAt: new Date(),
+          })
+          .returning();
+        expect(older).toBeDefined();
+        expect(newer).toBeDefined();
+
+        const result = await ops.registerOAuthClient({
+          clientName: 'Claude',
+          redirectUris,
+        });
+
+        expect(result.id).toBe('cli_older');
+        const rows = await rawDb.select().from(oauthClients);
+        expect(rows).toHaveLength(2); // no new row inserted
+      });
     });
   });
 
@@ -519,8 +640,24 @@ describeIfPg('oauth core logic (integration)', () => {
 
   describe('listOAuthClientsForOwner', () => {
     it('dedups multiple cli_ registrations under the same (case-insensitive) name into one group', async () => {
+      // Since DCR dedup (oauth-dcr-dedup-and-cleanup slice), registerClient
+      // with the SAME name+redirect_uris now returns the same cli_ id — so
+      // simulating two genuinely-distinct pre-existing rows (the scenario
+      // this test covers: listOAuthClientsForOwner's own display-time dedup
+      // across rows minted before registration-time dedup existed) requires
+      // inserting directly rather than going through registerOAuthClient.
       const claude1 = await registerClient('Claude');
-      const claude2 = await registerClient('claude'); // re-registration, different case
+      const [claude2] = await rawDb
+        .insert(oauthClients)
+        .values({
+          id: 'cli_claude_pre_dedup_dupe',
+          name: 'claude', // re-registration, different case
+          redirectUris: claude1.redirectUris,
+          grantTypes: claude1.grantTypes,
+          tokenEndpointAuthMethod: claude1.tokenEndpointAuthMethod,
+        })
+        .returning();
+      if (!claude2) throw new Error('setup: expected an inserted row');
       const chatgpt = await registerClient('ChatGPT');
 
       await ops.issueOAuthTokens({ clientId: claude1.id, resource: RESOURCE });
@@ -689,6 +826,190 @@ describeIfPg('oauth core logic (integration)', () => {
       const remaining = await rawDb.select().from(accessTokens);
       expect(remaining).toHaveLength(1);
       expect(remaining[0]?.kind).toBe('bearer');
+    });
+  });
+
+  describe('cleanupExpiredOAuth', () => {
+    async function forceExpired(clientId: string, kind: 'oauth_access' | 'oauth_refresh') {
+      await rawDb
+        .update(accessTokens)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(and(eq(accessTokens.clientId, clientId), eq(accessTokens.kind, kind)));
+    }
+
+    it('deletes expired oauth_codes, leaves unexpired ones', async () => {
+      const client = await registerClient();
+      const expiredCode = await ops.createAuthCode({
+        clientId: client.id,
+        redirectUri: client.redirectUris[0] ?? '',
+        codeChallenge: 'challenge-value',
+        codeChallengeMethod: 'S256',
+        resource: RESOURCE,
+      });
+      await rawDb
+        .update(oauthCodes)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(oauthCodes.code, expiredCode));
+
+      const liveCode = await ops.createAuthCode({
+        clientId: client.id,
+        redirectUri: client.redirectUris[0] ?? '',
+        codeChallenge: 'challenge-value',
+        codeChallengeMethod: 'S256',
+        resource: RESOURCE,
+      });
+
+      const counts = await ops.cleanupExpiredOAuth();
+      expect(counts.codes).toBe(1);
+
+      const remainingCodes = await rawDb.select().from(oauthCodes);
+      expect(remainingCodes.map((r) => r.code)).toEqual([liveCode]);
+    });
+
+    it('deletes expired oauth_access/oauth_refresh rows, leaves unexpired ones', async () => {
+      const client = await registerClient();
+      const expiring = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+      await forceExpired(client.id, 'oauth_access');
+      await forceExpired(client.id, 'oauth_refresh');
+
+      const other = await registerClient('ChatGPT');
+      const live = await ops.issueOAuthTokens({ clientId: other.id, resource: RESOURCE });
+
+      const counts = await ops.cleanupExpiredOAuth();
+      expect(counts.tokens).toBe(2);
+
+      expect(await ops.authenticateOAuthToken(expiring.accessToken, RESOURCE)).toBe(false);
+      expect(await ops.authenticateOAuthToken(live.accessToken, RESOURCE)).toBe(true);
+    });
+
+    it('a grace-window successor refresh row (expiresAt in the future) survives cleanup', async () => {
+      // Fix #1 regression guard: rotateRefreshToken pulls the OLD refresh
+      // row's expiresAt in to now + GRACE_MS (still in the future) instead of
+      // deleting it outright, so a retried rotation can replay the recorded
+      // successor idempotently within that window. cleanupExpiredOAuth's
+      // plain `expiresAt < now()` filter must NOT sweep that row away while
+      // it's still inside its grace window.
+      const client = await registerClient();
+      const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const rotated = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(rotated).not.toBeNull();
+
+      const oldHash = createHash('sha256').update(issued.refreshToken).digest('hex');
+      const beforeCleanup = await rawDb
+        .select()
+        .from(accessTokens)
+        .where(eq(accessTokens.tokenHash, oldHash));
+      expect(beforeCleanup).toHaveLength(1);
+      expect(beforeCleanup[0]?.successorAccessToken).not.toBeNull();
+
+      const counts = await ops.cleanupExpiredOAuth();
+      // Nothing genuinely expired yet: the dying row is still inside its
+      // grace window, the new pair is fresh.
+      expect(counts.tokens).toBe(0);
+
+      const afterCleanup = await rawDb
+        .select()
+        .from(accessTokens)
+        .where(eq(accessTokens.tokenHash, oldHash));
+      expect(afterCleanup).toHaveLength(1);
+
+      // The replay path (rotateRefreshToken called again with the same old
+      // token) still works after cleanup ran — the grace-window row wasn't
+      // touched.
+      const replay = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(replay?.accessToken).toBe(rotated?.accessToken);
+    });
+
+    it('removes an orphaned client (zero remaining tokens/codes) after its tokens expire', async () => {
+      const client = await registerClient('Orphan-to-be');
+      await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+      await forceExpired(client.id, 'oauth_access');
+      await forceExpired(client.id, 'oauth_refresh');
+
+      const counts = await ops.cleanupExpiredOAuth();
+      expect(counts.tokens).toBe(2);
+      expect(counts.clients).toBe(1);
+
+      expect(await ops.getOAuthClient(client.id)).toBeNull();
+    });
+
+    it('does NOT remove a client that still has a live (unexpired) token', async () => {
+      const client = await registerClient('Still Live');
+      await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const counts = await ops.cleanupExpiredOAuth();
+      expect(counts.clients).toBe(0);
+      expect(await ops.getOAuthClient(client.id)).not.toBeNull();
+    });
+
+    it('does NOT remove a client that has zero tokens but a live pending auth code', async () => {
+      const client = await registerClient('Pending Consent');
+      await ops.createAuthCode({
+        clientId: client.id,
+        redirectUri: client.redirectUris[0] ?? '',
+        codeChallenge: 'challenge-value',
+        codeChallengeMethod: 'S256',
+        resource: RESOURCE,
+      });
+
+      const counts = await ops.cleanupExpiredOAuth();
+      expect(counts.codes).toBe(0);
+      expect(counts.clients).toBe(0);
+      expect(await ops.getOAuthClient(client.id)).not.toBeNull();
+    });
+
+    it('removes a client whose only reference was an expired auth code (code swept first, then client)', async () => {
+      const client = await registerClient('Abandoned Flow');
+      const code = await ops.createAuthCode({
+        clientId: client.id,
+        redirectUri: client.redirectUris[0] ?? '',
+        codeChallenge: 'challenge-value',
+        codeChallengeMethod: 'S256',
+        resource: RESOURCE,
+      });
+      await rawDb
+        .update(oauthCodes)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(oauthCodes.code, code));
+
+      const counts = await ops.cleanupExpiredOAuth();
+      expect(counts.codes).toBe(1);
+      expect(counts.clients).toBe(1);
+      expect(await ops.getOAuthClient(client.id)).toBeNull();
+    });
+
+    it('leaves a pre-existing (pre-dedup) duplicate client alone until ITS tokens also expire', async () => {
+      const client = await registerClient('Dup App');
+      const dupe = await rawDb
+        .insert(oauthClients)
+        .values({
+          id: 'cli_pre_dedup_dupe',
+          name: 'Dup App',
+          redirectUris: client.redirectUris,
+          grantTypes: client.grantTypes,
+          tokenEndpointAuthMethod: client.tokenEndpointAuthMethod,
+        })
+        .returning();
+      expect(dupe).toHaveLength(1);
+
+      // The original client has a live token; the duplicate has none at all.
+      await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const counts = await ops.cleanupExpiredOAuth();
+      // The duplicate has zero references from the start — it's orphaned
+      // immediately, independent of the original client's live token.
+      expect(counts.clients).toBe(1);
+      expect(await ops.getOAuthClient(client.id)).not.toBeNull();
+      expect(await ops.getOAuthClient('cli_pre_dedup_dupe')).toBeNull();
     });
   });
 });

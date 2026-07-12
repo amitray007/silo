@@ -62,16 +62,25 @@ describeIfPg('registerScheduledJobs (integration)', () => {
     expect(await scheduleRowCount(jobsMod.PURGE_TRASH_QUEUE)).toBe(1);
     expect(await scheduleRowCount(jobsMod.SWEEP_ENRICHING_QUEUE)).toBe(1);
     expect(await scheduleRowCount(jobsMod.DLQ_ALERT_QUEUE)).toBe(1);
+    expect(await scheduleRowCount(jobsMod.OAUTH_CLEANUP_QUEUE)).toBe(1);
   });
 
   it('registered schedules carry the documented cron cadence', async () => {
     const rows = await rawPool.query<{ name: string; cron: string }>(
       `select name, cron from pgboss.schedule where name = any($1::text[])`,
-      [[jobsMod.PURGE_TRASH_QUEUE, jobsMod.SWEEP_ENRICHING_QUEUE, jobsMod.DLQ_ALERT_QUEUE]],
+      [
+        [
+          jobsMod.PURGE_TRASH_QUEUE,
+          jobsMod.SWEEP_ENRICHING_QUEUE,
+          jobsMod.DLQ_ALERT_QUEUE,
+          jobsMod.OAUTH_CLEANUP_QUEUE,
+        ],
+      ],
     );
     const byName = Object.fromEntries(rows.rows.map((r) => [r.name, r.cron]));
     expect(byName[jobsMod.PURGE_TRASH_QUEUE]).toBe(jobsMod.PURGE_TRASH_CRON);
     expect(byName[jobsMod.SWEEP_ENRICHING_QUEUE]).toBe(jobsMod.SWEEP_ENRICHING_CRON);
     expect(byName[jobsMod.DLQ_ALERT_QUEUE]).toBe(jobsMod.DLQ_ALERT_CRON);
+    expect(byName[jobsMod.OAUTH_CLEANUP_QUEUE]).toBe(jobsMod.OAUTH_CLEANUP_CRON);
   });
 });

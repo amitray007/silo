@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { accessTokens, db, oauthClients, oauthCodes } from '@silo/db';
-import { and, desc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, lt, notExists, sql } from 'drizzle-orm';
 
 /** The pooled `db` singleton or a transaction handle — lets `issueOAuthTokens`
  * run its inserts inside a caller-supplied transaction (`rotateRefreshToken`,
@@ -106,10 +106,45 @@ export type OAuthClient = {
 };
 
 /**
+ * Sorted, deduped, lowercase-invariant key for a redirect_uris array, used
+ * only to COMPARE two clients' redirect sets order-insensitively — never to
+ * decide storage order (the original array/order a caller passes is always
+ * what gets persisted). Uses `JSON.stringify` over a sorted array rather than
+ * e.g. joining with a delimiter, since a URI could theoretically contain any
+ * separator character; a stringified sorted array has no such ambiguity.
+ */
+function redirectUrisKey(uris: string[]): string {
+  return JSON.stringify([...uris].sort());
+}
+
+/**
  * Registers a new public OAuth client (RFC 7591 dynamic registration).
  * Public clients only — callers (the `@silo/api` DCR route) are responsible
  * for rejecting any `tokenEndpointAuthMethod` other than `'none'` before
  * calling this; this function does not itself validate the auth method.
+ *
+ * Dedup (DCR-dedup slice): Claude/ChatGPT re-run dynamic registration on
+ * every connect, which used to mint a fresh `cli_…` id each time — this
+ * caused both unbounded `oauth_clients` growth AND refresh breakage (a
+ * refresh token bound to the OLD `cli_…` id stops matching once the
+ * connector starts sending requests under a newly-minted id). RFC 7591 does
+ * not forbid returning an existing registration for an identical request,
+ * and `listOAuthClientsForOwner` already dedupes by lowercased name at
+ * *display* time — doing it at *registration* time is the durable fix, so a
+ * connector that re-registers with identical metadata gets its stable
+ * `cli_…` back instead of a new one.
+ *
+ * A match requires the SAME lowercased `name`, the SAME `redirectUris` set
+ * (order-insensitive — compared via `redirectUrisKey`, storage order is
+ * never touched), the SAME `tokenEndpointAuthMethod`, and the SAME
+ * `grantTypes` set. If more than one existing row matches (possible from
+ * registrations made before this dedup existed), the EARLIEST-created one is
+ * returned — a stable identity that every subsequent re-registration
+ * converges back onto. This does NOT retroactively collapse those
+ * pre-existing duplicate clients into one; they remain as separate rows
+ * until `cleanupExpiredOAuth` garbage-collects the orphaned ones once their
+ * tokens expire (see that function's doc comment) — only NEW duplicates are
+ * prevented going forward.
  */
 export async function registerOAuthClient(opts: {
   clientName: string;
@@ -117,9 +152,29 @@ export async function registerOAuthClient(opts: {
   grantTypes?: string[];
   tokenEndpointAuthMethod?: string;
 }): Promise<OAuthClient> {
-  const id = generateOpaque('cli_', 24);
   const grantTypes = opts.grantTypes ?? ['authorization_code', 'refresh_token'];
   const tokenEndpointAuthMethod = opts.tokenEndpointAuthMethod ?? 'none';
+  const normalizedName = opts.clientName.toLowerCase();
+  const wantedRedirectKey = redirectUrisKey(opts.redirectUris);
+  const wantedGrantTypesKey = redirectUrisKey(grantTypes);
+
+  const existingCandidates = await db
+    .select()
+    .from(oauthClients)
+    .where(sql`lower(${oauthClients.name}) = ${normalizedName}`)
+    .orderBy(oauthClients.createdAt);
+
+  const match = existingCandidates.find(
+    (candidate) =>
+      redirectUrisKey(candidate.redirectUris) === wantedRedirectKey &&
+      candidate.tokenEndpointAuthMethod === tokenEndpointAuthMethod &&
+      redirectUrisKey(candidate.grantTypes) === wantedGrantTypesKey,
+  );
+  if (match) {
+    return match;
+  }
+
+  const id = generateOpaque('cli_', 24);
 
   const [row] = await db
     .insert(oauthClients)
@@ -563,4 +618,97 @@ export async function revokeAllOAuthClients(): Promise<void> {
         inArray(accessTokens.kind, ['oauth_access', 'oauth_refresh']),
       ),
     );
+}
+
+/** Counts of rows removed by one `cleanupExpiredOAuth` pass. Logged (counts only, never token/client values) by the `oauth-cleanup` worker job. */
+export type OAuthCleanupCounts = {
+  codes: number;
+  tokens: number;
+  clients: number;
+};
+
+/**
+ * Garbage-collects the OAuth tables' never-swept growth sinks (P1 review
+ * finding — nothing previously purged expired codes/tokens or orphaned
+ * clients, so all three grow forever): expired `oauth_codes`, expired
+ * `oauth_access`/`oauth_refresh` rows, and `oauth_clients` left behind with
+ * no remaining reference. Scheduled daily by
+ * `packages/worker/src/jobs/oauth-cleanup.ts`; also safe to call ad hoc.
+ *
+ * Runs as three deletes inside one `db.transaction` (a consistent pass — no
+ * caller ever observes a state where e.g. tokens are gone but their
+ * now-orphaned client hasn't been swept yet), in this order:
+ *
+ * 1. **Expired codes** — `oauth_codes` rows past `expiresAt`. These are
+ *    already dead weight: `consumeAuthCode` deletes on successful exchange,
+ *    so a surviving expired row was abandoned mid-flow and can never be
+ *    exchanged again (the `expiresAt` filter there excludes it already).
+ * 2. **Expired tokens** — `access_tokens` rows with `kind IN
+ *    ('oauth_access','oauth_refresh')` past `expiresAt`. Care taken here for
+ *    Fix #1's refresh grace window (`rotateRefreshToken`): a just-rotated
+ *    refresh row has its `expiresAt` pulled IN to `now + GRACE_MS` (still in
+ *    the future) rather than deleted outright, specifically so a
+ *    retried/racing rotation request can replay it idempotently within that
+ *    window. This delete's plain `expiresAt < now()` filter naturally leaves
+ *    such a row alone — it is not yet expired by definition while inside its
+ *    grace window — so this pass never races or undermines that mechanism.
+ *    Only genuinely-expired rows (grace window elapsed, or never rotated) are
+ *    removed.
+ * 3. **Orphaned clients** — `oauth_clients` rows with ZERO remaining
+ *    references, run AFTER step 2 so a client whose only tokens just expired
+ *    in this same pass is correctly collected too. "No remaining reference"
+ *    means neither table with a `client_id` FK to `oauth_clients` still
+ *    points at it: `access_tokens` (any kind/expiry — a client with even an
+ *    expired-but-not-yet-swept token is not orphaned, though by this point in
+ *    the transaction step 2 has already cleared expired ones) AND
+ *    `oauth_codes` (a client with a live PENDING code — mid authorization-
+ *    code flow, not yet exchanged or expired — must not be deleted out from
+ *    under it). Both schemas declare `client_id` with `onDelete: 'cascade'`
+ *    (see `access-tokens.ts`/`oauth-codes.ts`), so relying on the FK alone
+ *    would happily cascade-delete a client that still has live rows —
+ *    exactly the correctness bug this must avoid. Instead this uses an
+ *    explicit `NOT EXISTS (access_tokens) AND NOT EXISTS (oauth_codes)`
+ *    anti-join guard: a client is only ever deleted when truly unreferenced,
+ *    regardless of what the FK's cascade action would otherwise permit.
+ *
+ * Returns the count removed from each table (never token/client values) so
+ * the caller can log volume without ever logging anything secret.
+ */
+export async function cleanupExpiredOAuth(): Promise<OAuthCleanupCounts> {
+  return db.transaction(async (tx) => {
+    const now = new Date();
+
+    const deletedCodes = await tx
+      .delete(oauthCodes)
+      .where(lt(oauthCodes.expiresAt, now))
+      .returning({ code: oauthCodes.code });
+
+    const deletedTokens = await tx
+      .delete(accessTokens)
+      .where(
+        and(
+          inArray(accessTokens.kind, ['oauth_access', 'oauth_refresh']),
+          lt(accessTokens.expiresAt, now),
+        ),
+      )
+      .returning({ id: accessTokens.id });
+
+    const deletedClients = await tx
+      .delete(oauthClients)
+      .where(
+        and(
+          notExists(
+            tx.select().from(accessTokens).where(eq(accessTokens.clientId, oauthClients.id)),
+          ),
+          notExists(tx.select().from(oauthCodes).where(eq(oauthCodes.clientId, oauthClients.id))),
+        ),
+      )
+      .returning({ id: oauthClients.id });
+
+    return {
+      codes: deletedCodes.length,
+      tokens: deletedTokens.length,
+      clients: deletedClients.length,
+    };
+  });
 }

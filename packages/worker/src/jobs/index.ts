@@ -12,10 +12,17 @@
 
 import type { PgBoss } from 'pg-boss';
 import { registerDlqAlertJob } from './dlq-alert.js';
+import { registerOAuthCleanupJob } from './oauth-cleanup.js';
 import { registerPurgeTrashJob } from './purge-trash.js';
 import { registerSweepEnrichingJob } from './sweep-enriching.js';
 
 export { DLQ_ALERT_CRON, DLQ_ALERT_QUEUE, registerDlqAlertJob } from './dlq-alert.js';
+export {
+  OAUTH_CLEANUP_CRON,
+  OAUTH_CLEANUP_QUEUE,
+  registerOAuthCleanupJob,
+  runOAuthCleanup,
+} from './oauth-cleanup.js';
 export {
   PURGE_TRASH_CRON,
   PURGE_TRASH_QUEUE,
@@ -33,4 +40,5 @@ export async function registerScheduledJobs(boss: PgBoss): Promise<void> {
   await registerPurgeTrashJob(boss);
   await registerSweepEnrichingJob(boss);
   await registerDlqAlertJob(boss);
+  await registerOAuthCleanupJob(boss);
 }

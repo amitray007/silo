@@ -24,12 +24,14 @@ export {
 export type {
   ConnectedOAuthClient,
   IssuedOAuthTokens,
+  OAuthCleanupCounts,
   OAuthClient,
   OAuthCode,
 } from './auth/oauth.js';
 export {
   authenticateOAuthToken,
   canonicalMcpResource,
+  cleanupExpiredOAuth,
   consumeAuthCode,
   createAuthCode,
   generateOpaque,
