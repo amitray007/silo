@@ -89,6 +89,14 @@ interface HoverPreviewContextValue {
    * is the "the row is gone, there is no delay to honor" path.
    */
   dismiss: (linkId: string) => void;
+  /**
+   * Immediately close ANY currently-showing/pending preview, regardless of
+   * which link it belongs to (no id guard). For when a different full-screen
+   * surface takes over the viewport — specifically the command palette opening
+   * while a library row's hover card is still up. See the implementation's doc
+   * comment for why the id-keyed `dismiss` is insufficient here.
+   */
+  dismissAll: () => void;
 }
 
 const HoverPreviewContext = createContext<HoverPreviewContextValue | null>(null);
@@ -139,9 +147,34 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
 
   const scheduleShow = useCallback(
     (link: LinkJson, rect: DOMRect, options?: { suppress?: boolean }) => {
+      // Always cancel a pending SHOW (a queued open for some other row must not
+      // fire now that a new enter happened).
       if (showTimer.current) clearTimeout(showTimer.current);
+
+      // Suppressed enter (this row's `⋯` menu is open, a modal is open, a
+      // touch/coarse pointer, or — for the command palette — this row's plugin
+      // has its `palette` surface toggled off). The intent is "do NOT show a
+      // card for THIS row", but any card ALREADY showing for a DIFFERENT row
+      // must still be dismissed — otherwise moving the pointer from an enabled
+      // row onto a suppressed one would strand the previous card open with no
+      // pending hide to close it (the pointermove fallback can't rescue it once
+      // the pointer rests over a whitelisted `.silo-palette-row`). So a
+      // suppressed enter SCHEDULES A HIDE of whatever is currently showing
+      // rather than merely cancelling the pending hide (review: ce-adversarial
+      // + ce-julik-frontend-races — the enabled→suppressed palette-row
+      // stranding). It closes unconditionally after the normal hide delay (not
+      // keyed to a link id — this row explicitly wants NO card, and whatever is
+      // shown belongs to a row the pointer has now left), and keeps the hide
+      // DELAY so a fast enabled→suppressed→enabled sweep re-opens smoothly on
+      // the WARM path instead of flickering closed-then-open.
+      if (options?.suppress) {
+        if (hideTimer.current) clearTimeout(hideTimer.current);
+        hideTimer.current = setTimeout(() => setPreview(null), HIDE_DELAY_MS);
+        return;
+      }
+
+      // Non-suppressed: a real show is coming, so cancel any pending hide.
       if (hideTimer.current) clearTimeout(hideTimer.current);
-      if (options?.suppress) return;
 
       // WARM (a preview already open → just move it to this row) is near-
       // instant; COLD (opening the first preview) keeps a short delay so a
@@ -228,9 +261,24 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
     setPreview((current) => (current && current.link.id === linkId ? null : current));
   }, []);
 
+  // Unconditionally close ANY showing/pending preview, no id guard (review:
+  // ce-julik-frontend-races). Used when a full-screen overlay takes over the
+  // viewport — the command palette opening (`⌘K`/`/`) while a library row's
+  // card is up would otherwise leave that card floating (z-index 36) under the
+  // palette's scrim (z-index 40) until an incidental pointer move triggered the
+  // `pointermove` fallback. Distinct from `dismiss(linkId)` (id-keyed, per-row
+  // unmount) and `hide` (internal, card-mouseleave): this is the "some other
+  // surface is taking over, clear the shared card regardless of which link it
+  // was for" path.
+  const dismissAll = useCallback(() => {
+    if (showTimer.current) clearTimeout(showTimer.current);
+    if (hideTimer.current) clearTimeout(hideTimer.current);
+    setPreview(null);
+  }, []);
+
   const value = useMemo(
-    () => ({ scheduleShow, scheduleHide, dismiss }),
-    [scheduleShow, scheduleHide, dismiss],
+    () => ({ scheduleShow, scheduleHide, dismiss, dismissAll }),
+    [scheduleShow, scheduleHide, dismiss, dismissAll],
   );
 
   return (

@@ -597,6 +597,18 @@ function selectIsSettling(args: {
  */
 export function CommandPalette({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
   const { open, closePalette } = palette;
+  const { dismissAll } = useHoverPreview();
+
+  // Opening the palette (⌘K / `/`) is a full-screen takeover — dismiss any
+  // library-row hover card that's still showing (review: ce-julik-frontend-
+  // races). Without this, a keyboard-only open while a library row is hovered
+  // leaves that card floating under the palette's scrim until an incidental
+  // pointer move triggers the `pointermove` fallback. Mirrors the existing
+  // Settings/Edit mutual-exclusion pattern in `RowMenuLayer`. Runs on the
+  // `open` edge; a no-op when nothing is showing.
+  useEffect(() => {
+    if (open) dismissAll();
+  }, [open, dismissAll]);
 
   // Mirrors `ModalShell`'s own capture-phase Escape listener 1-to-1 (see that
   // component's doc comment for why capture-phase: it must win over
