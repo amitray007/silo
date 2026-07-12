@@ -30,6 +30,16 @@ const ACCESS_TTL_MS = 60 * 60 * 1000; // 1 hour
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
+/**
+ * OAuth refresh reuse grace window: how long a just-rotated refresh token
+ * stays valid for a RETRIED/racing rotation request to replay idempotently
+ * (see `rotateRefreshToken`'s doc comment). Access tokens live 1h, so a
+ * well-behaved connector refreshes roughly hourly; a slow response or
+ * dropped socket on any one of those refreshes must not read as
+ * "connection expired".
+ */
+const GRACE_MS = 60 * 1000; // 60 seconds
+
 /** The single scope silo issues today (see design doc's non-goals — no per-scope permissions). */
 const OAUTH_SCOPE = 'silo';
 
@@ -274,17 +284,42 @@ export async function issueOAuthTokens(
 
 /**
  * Rotates a refresh token: verifies it belongs to `clientId`, is not
- * expired, and matches the bound `resource`; deletes the old access+refresh
- * pair; issues a fresh pair. A stolen/reused old refresh token cannot be
- * replayed — its row is gone the moment rotation succeeds. Returns `null` on
- * any verification failure (unknown hash, wrong client, expired, resource
- * mismatch) without leaking which check failed.
+ * expired, and matches the bound `resource`; issues a fresh pair; returns
+ * `null` on any verification failure (unknown hash, wrong client, expired,
+ * resource mismatch) without leaking which check failed.
  *
- * The delete-old + issue-new sequence runs inside a single `db.transaction`
- * (review fix M3) — without it, a crash between the deletes and the inserts
- * would strand the client with neither a valid old pair nor a new one. The
- * lookup SELECT stays outside the transaction (it's read-only and the `null`
- * short-circuits don't need one); only the mutating tail is wrapped.
+ * Grace window + idempotent successor replay (fix for connectors reading a
+ * RETRIED refresh as "connection expired"): access tokens live 1h, so a
+ * refresh fires roughly hourly. If a client's refresh request is retried
+ * (slow response, dropped socket, two tabs racing) after the FIRST attempt
+ * already rotated the token server-side, the naive "delete old pair
+ * instantly" behavior makes the retry's lookup miss (row gone) and return
+ * `null` → `invalid_grant` → "connection expired", even though the first
+ * attempt actually succeeded. To tolerate this:
+ *
+ * - On a FRESH rotation (the old refresh row has no recorded successor
+ *   yet): the paired old ACCESS token is deleted immediately (1h access
+ *   tokens have no retry semantics — only the refresh leg needs grace); the
+ *   old REFRESH row is kept, but its `expiresAt` is pulled in to
+ *   `now + GRACE_MS` and the newly-minted successor's raw tokens are
+ *   recorded on it (`successorAccessToken`/`successorRefreshToken` —
+ *   see `access-tokens.ts`'s doc comment for why raw, time-boxed storage is
+ *   the deliberate, narrow exception here). The new pair is returned.
+ * - On a REPLAYED rotation (same old refresh token presented again, and the
+ *   old row still carries a recorded successor): if still within the grace
+ *   window, the SAME successor pair is returned again — idempotent, no third
+ *   pair minted, no additional writes. Once the grace window has elapsed,
+ *   the row's own `expiresAt` filter in the lookup excludes it, so the call
+ *   falls through to `null` — this is now genuine reuse of a long-dead
+ *   token, correctly treated as `invalid_grant`.
+ * - A refresh token that was never rotated (no successor recorded) rotates
+ *   normally, per the fresh-rotation path above.
+ *
+ * The mutating tail (successor bookkeeping + delete old access + issue new
+ * pair) runs inside a single `db.transaction` (review fix M3) — without it,
+ * a crash mid-sequence would strand the client with neither a valid old pair
+ * nor a new one. The lookup SELECT stays outside the transaction (read-only,
+ * and the `null` short-circuits don't need one).
  */
 export async function rotateRefreshToken(opts: {
   refreshToken: string;
@@ -310,18 +345,33 @@ export async function rotateRefreshToken(opts: {
   if (!refreshRow) return null;
   if ((refreshRow.resource ?? null) !== opts.resource) return null;
 
+  // Idempotent replay: this old refresh row already has a recorded
+  // successor (a prior call rotated it) and we're still inside its grace
+  // window (guaranteed by the `gt(expiresAt, now)` filter above, since a
+  // fresh rotation pulls `expiresAt` in to `now + GRACE_MS`). Hand back the
+  // exact same pair — do not mint a third.
+  if (refreshRow.successorAccessToken && refreshRow.successorRefreshToken) {
+    return {
+      accessToken: refreshRow.successorAccessToken,
+      refreshToken: refreshRow.successorRefreshToken,
+      accessExpiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+      refreshExpiresIn: Math.floor(REFRESH_TTL_MS / 1000),
+      scope: refreshRow.scope ?? OAUTH_SCOPE,
+    };
+  }
+
   return db.transaction(async (tx) => {
-    // Delete the paired access token (looked up by the refresh row's own
-    // hash, since the ACCESS row is the one carrying `refreshTokenHash`) and
-    // the refresh row itself.
+    // Delete the paired access token immediately (looked up by the refresh
+    // row's own hash, since the ACCESS row is the one carrying
+    // `refreshTokenHash`) — the 1h access token has no retry semantics, only
+    // the refresh leg needs the grace window.
     await tx
       .delete(accessTokens)
       .where(
         and(eq(accessTokens.refreshTokenHash, refreshHash), eq(accessTokens.kind, 'oauth_access')),
       );
-    await tx.delete(accessTokens).where(eq(accessTokens.id, refreshRow.id));
 
-    return issueOAuthTokens(
+    const issued = await issueOAuthTokens(
       {
         clientId: opts.clientId,
         scope: refreshRow.scope ?? OAUTH_SCOPE,
@@ -329,6 +379,20 @@ export async function rotateRefreshToken(opts: {
       },
       tx,
     );
+
+    // Keep the old refresh row alive for GRACE_MS instead of deleting it,
+    // recording the successor so a retried rotation within the window
+    // replays idempotently (see this function's doc comment).
+    await tx
+      .update(accessTokens)
+      .set({
+        expiresAt: new Date(Date.now() + GRACE_MS),
+        successorAccessToken: issued.accessToken,
+        successorRefreshToken: issued.refreshToken,
+      })
+      .where(eq(accessTokens.id, refreshRow.id));
+
+    return issued;
   });
 }
 

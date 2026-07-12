@@ -425,15 +425,17 @@ describeIfPg('migrate (integration)', () => {
    * columns typed against them) must survive untouched.
    *
    * Also proves a real drizzle-kit generation gap found while building both
-   * migrations (same class as 0004's/0008's): the raw `drizzle-kit generate`
-   * output emitted a spurious `DROP TYPE "public"."link_origin"` AND `DROP
-   * TYPE "public"."capture_source"` — the generated snapshot's `enums`
-   * section had silently dropped BOTH pre-existing entries (confirmed by
-   * diffing it against the prior migration's snapshot, which still has all
-   * three), so drizzle-kit's diff read that as "these enums were removed"
-   * and would have run DROPs against types still in active use by
-   * `links.added_by`/`links.source`. Both committed migrations hand-drop the
-   * two incorrect `DROP TYPE` lines (snapshot JSON hand-corrected to match);
+   * migrations (same class as 0004's/0008's, and hit AGAIN by
+   * 0015_lively_energizer.sql, the OAuth refresh-grace-window migration):
+   * the raw `drizzle-kit generate` output emitted a spurious `DROP TYPE
+   * "public"."link_origin"` AND `DROP TYPE "public"."capture_source"` — the
+   * generated snapshot's `enums` section had silently dropped BOTH
+   * pre-existing entries (confirmed by diffing it against the prior
+   * migration's snapshot, which still has all three), so drizzle-kit's diff
+   * read that as "these enums were removed" and would have run DROPs
+   * against types still in active use by `links.added_by`/`links.source`.
+   * Every affected committed migration (0008, 0015) hand-drops the two
+   * incorrect `DROP TYPE` lines (snapshot JSON hand-corrected to match);
    * this test proves the hand-fixed files apply cleanly against the full
    * (non-truncated) migration set and that all three enums are untouched.
    */
@@ -481,6 +483,11 @@ describeIfPg('migrate (integration)', () => {
           { column_name: 'refresh_token_hash', data_type: 'text', is_nullable: 'YES' },
           { column_name: 'scope', data_type: 'text', is_nullable: 'YES' },
           { column_name: 'resource', data_type: 'text', is_nullable: 'YES' },
+          // OAuth refresh grace window: raw, time-boxed successor tokens
+          // (see access-tokens.ts's doc comment) — nullable, set only for
+          // up to 60s on a just-rotated oauth_refresh row.
+          { column_name: 'successor_access_token', data_type: 'text', is_nullable: 'YES' },
+          { column_name: 'successor_refresh_token', data_type: 'text', is_nullable: 'YES' },
         ]);
 
         const uniqueConstraint = await check.query<{ n: number }>(

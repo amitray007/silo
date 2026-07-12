@@ -315,7 +315,7 @@ describeIfPg('oauth core logic (integration)', () => {
   });
 
   describe('rotateRefreshToken', () => {
-    it('issues a fresh pair and invalidates the old access+refresh pair', async () => {
+    it('issues a fresh pair; the old access token stops authenticating immediately', async () => {
       const client = await registerClient();
       const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
 
@@ -329,25 +329,123 @@ describeIfPg('oauth core logic (integration)', () => {
       expect(rotated?.accessToken).not.toBe(issued.accessToken);
       expect(rotated?.refreshToken).not.toBe(issued.refreshToken);
 
-      // Old pair no longer authenticates / cannot be re-rotated.
+      // Old access token is deleted immediately on rotation (no grace for
+      // the access leg — only the refresh leg gets a grace window).
       expect(await ops.authenticateOAuthToken(issued.accessToken, RESOURCE)).toBe(false);
-      const replay = await ops.rotateRefreshToken({
-        refreshToken: issued.refreshToken,
-        clientId: client.id,
-        resource: RESOURCE,
-      });
-      expect(replay).toBeNull();
 
       // New pair works.
       expect(await ops.authenticateOAuthToken(rotated?.accessToken ?? '', RESOURCE)).toBe(true);
     });
 
-    it('leaves exactly one access + one refresh row for the client after rotation, no partial state (M3)', async () => {
-      // Regression guard for review fix M3: the delete-old + issue-new
-      // sequence now runs inside a single db.transaction, so a successful
-      // rotation is all-or-nothing — never stuck with only the old pair
-      // deleted and no new pair issued, or duplicate rows from a partial
-      // retry.
+    it('replays the SAME successor pair for a retried rotation within the 60s grace window (idempotent)', async () => {
+      // Root-cause fix: rotateRefreshToken used to delete the old refresh
+      // row instantly, so a RETRIED refresh (slow response, dropped socket)
+      // found the row gone and returned null -> invalid_grant -> connectors
+      // read this as "connection expired". Within the grace window, a
+      // replay of the same old refresh token must now return the identical
+      // successor pair, not null and not a third pair.
+      const client = await registerClient();
+      const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const first = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(first).not.toBeNull();
+
+      const replay = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+
+      expect(replay).not.toBeNull();
+      expect(replay?.accessToken).toBe(first?.accessToken);
+      expect(replay?.refreshToken).toBe(first?.refreshToken);
+
+      // The replayed successor pair is fully live: the access token
+      // authenticates and the refresh token can itself rotate onward.
+      expect(await ops.authenticateOAuthToken(replay?.accessToken ?? '', RESOURCE)).toBe(true);
+
+      // A second replay call also returns the same pair (not just the first
+      // replay) — genuinely idempotent, not "replay once".
+      const secondReplay = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(secondReplay?.accessToken).toBe(first?.accessToken);
+      expect(secondReplay?.refreshToken).toBe(first?.refreshToken);
+    });
+
+    it('rejects replay of an old refresh token AFTER its grace window has elapsed (reuse detection)', async () => {
+      const client = await registerClient();
+      const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const rotated = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(rotated).not.toBeNull();
+
+      // Force the old row's grace-extended expiresAt into the past directly
+      // — rotateRefreshToken itself always sets a future (now + GRACE_MS)
+      // expiry, so this is the only way to exercise "grace window elapsed"
+      // without an injectable clock.
+      const oldHash = createHash('sha256').update(issued.refreshToken).digest('hex');
+      await rawDb
+        .update(accessTokens)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(accessTokens.tokenHash, oldHash));
+
+      const replayAfterGrace = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(replayAfterGrace).toBeNull();
+
+      // The successor pair minted by the original rotation is unaffected —
+      // reuse of the OLD token is rejected, the live successor still works.
+      expect(await ops.authenticateOAuthToken(rotated?.accessToken ?? '', RESOURCE)).toBe(true);
+    });
+
+    it('a normal single rotation still works, and the successor can itself rotate again', async () => {
+      const client = await registerClient();
+      const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const rotated = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(rotated).not.toBeNull();
+
+      const rotatedAgain = await ops.rotateRefreshToken({
+        refreshToken: rotated?.refreshToken ?? '',
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(rotatedAgain).not.toBeNull();
+      expect(rotatedAgain?.accessToken).not.toBe(rotated?.accessToken);
+      expect(rotatedAgain?.refreshToken).not.toBe(rotated?.refreshToken);
+      expect(await ops.authenticateOAuthToken(rotatedAgain?.accessToken ?? '', RESOURCE)).toBe(
+        true,
+      );
+    });
+
+    it('leaves one live access row and the successor refresh row for the client after rotation (M3, grace-window-aware)', async () => {
+      // Regression guard for review fix M3: the mutating tail still runs
+      // inside a single db.transaction, so a successful rotation is
+      // all-or-nothing. Reconciled for the grace window (this method's
+      // spec): rotation no longer deletes the old refresh row outright, so
+      // there are briefly THREE rows for the client — the new access row,
+      // the new (successor) refresh row, and the old (dying, grace-window)
+      // refresh row carrying the recorded successor. Exactly one access row
+      // and exactly one LIVE (non-dying) refresh row exist; the old row is
+      // distinguishable by carrying successor tokens.
       const client = await registerClient();
       const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
 
@@ -362,9 +460,25 @@ describeIfPg('oauth core logic (integration)', () => {
         .select()
         .from(accessTokens)
         .where(eq(accessTokens.clientId, client.id));
-      expect(rows).toHaveLength(2);
+      expect(rows).toHaveLength(3);
       expect(rows.filter((r) => r.kind === 'oauth_access')).toHaveLength(1);
-      expect(rows.filter((r) => r.kind === 'oauth_refresh')).toHaveLength(1);
+
+      const refreshRows = rows.filter((r) => r.kind === 'oauth_refresh');
+      expect(refreshRows).toHaveLength(2);
+
+      const dyingRow = refreshRows.find((r) => r.successorAccessToken !== null);
+      const liveRow = refreshRows.find((r) => r.successorAccessToken === null);
+      expect(dyingRow).toBeDefined();
+      expect(liveRow).toBeDefined();
+      expect(dyingRow?.successorRefreshToken).toBe(rotated?.refreshToken);
+      expect(dyingRow?.tokenHash).toBe(
+        createHash('sha256').update(issued.refreshToken).digest('hex'),
+      );
+      expect(liveRow?.tokenHash).toBe(
+        createHash('sha256')
+          .update(rotated?.refreshToken ?? '')
+          .digest('hex'),
+      );
     });
 
     it('rejects rotation for the wrong client', async () => {
