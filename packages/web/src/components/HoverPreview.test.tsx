@@ -359,10 +359,10 @@ describe('HoverPreview', () => {
 
   describe('plugin hover gate (plan 026)', () => {
     const allOn: SettingsMap['plugins'] = {
-      hacker_news: { enabled: true, inline: true, hover: true },
-      github: { enabled: true, hover: true },
-      youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, inline: true, hover: true },
+      hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+      github: { enabled: true, hover: true, palette: true },
+      youtube: { enabled: true, hover: true, palette: true },
+      twitter: { enabled: true, inline: true, hover: true, palette: true },
     };
 
     it('github: hover:false falls back to the generic variant (repo stats absent, generic card shown)', () => {
@@ -372,7 +372,7 @@ describe('HoverPreview', () => {
           sourceData: githubSourceData,
           url: 'https://github.com/modelcontextprotocol/servers',
         }),
-        { ...allOn, github: { enabled: true, hover: false } },
+        { ...allOn, github: { enabled: true, hover: false, palette: true } },
       );
       // RepoVariant's stats row is absent.
       expect(screen.queryByText('58100')).toBeNull();
@@ -389,7 +389,7 @@ describe('HoverPreview', () => {
           sourceData: githubSourceData,
           url: 'https://github.com/modelcontextprotocol/servers',
         }),
-        { ...allOn, github: { enabled: false, hover: true } },
+        { ...allOn, github: { enabled: false, hover: true, palette: true } },
       );
       expect(screen.queryByText('58100')).toBeNull();
       expect(screen.queryByText('stars')).toBeNull();
@@ -418,7 +418,7 @@ describe('HoverPreview', () => {
           sourceData: youtubeSourceData,
           url: 'https://youtu.be/abc123',
         }),
-        { ...allOn, youtube: { enabled: true, hover: false } },
+        { ...allOn, youtube: { enabled: true, hover: false, palette: true } },
       );
       // VideoVariant's channel line and img are absent.
       expect(screen.queryByText('Fireship')).toBeNull();
@@ -450,7 +450,7 @@ describe('HoverPreview', () => {
           sourceData: hackerNewsSourceData,
           url: 'https://news.ycombinator.com/item?id=1',
         }),
-        { ...allOn, hacker_news: { enabled: true, inline: true, hover: false } },
+        { ...allOn, hacker_news: { enabled: true, inline: true, hover: false, palette: true } },
       );
       expect(screen.queryByText('▲ 342 points')).toBeNull();
       expect(screen.queryByText('128 comments')).toBeNull();
@@ -477,7 +477,7 @@ describe('HoverPreview', () => {
           sourceData: twitterSourceData,
           url: 'https://x.com/amitray007/status/1',
         }),
-        { ...allOn, twitter: { enabled: true, inline: false, hover: false } },
+        { ...allOn, twitter: { enabled: true, inline: false, hover: false, palette: true } },
       );
       expect(screen.queryByText('@amitray007')).toBeNull();
       expect(screen.queryByText('♥ 512')).toBeNull();
@@ -491,7 +491,7 @@ describe('HoverPreview', () => {
           sourceData: twitterSourceData,
           url: 'https://x.com/amitray007/status/1',
         }),
-        { ...allOn, twitter: { enabled: false, inline: true, hover: true } },
+        { ...allOn, twitter: { enabled: false, inline: true, hover: true, palette: true } },
       );
       expect(screen.queryByText('@amitray007')).toBeNull();
       expect(screen.getByText('Amit Ray on X')).toBeDefined();
@@ -525,10 +525,10 @@ describe('HoverPreview', () => {
 
   describe('silo section: og:image in the generic (plain-link) variant', () => {
     const allOn: SettingsMap['plugins'] = {
-      hacker_news: { enabled: true, inline: true, hover: true },
-      github: { enabled: true, hover: true },
-      youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, inline: true, hover: true },
+      hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+      github: { enabled: true, hover: true, palette: true },
+      youtube: { enabled: true, hover: true, palette: true },
+      twitter: { enabled: true, inline: true, hover: true, palette: true },
     };
 
     it('renders the proxied cover image when imageUrl is present and linkPreviewImages is true', () => {

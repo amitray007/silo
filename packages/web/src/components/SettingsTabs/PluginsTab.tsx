@@ -15,10 +15,10 @@ import { ToggleSwitch } from './ToggleSwitch';
  * `?? true` optimism field-for-field).
  */
 const LOADING_PLUGINS: PluginsMap = {
-  hacker_news: { enabled: true, inline: true, hover: true },
-  github: { enabled: true, hover: true },
-  youtube: { enabled: true, hover: true },
-  twitter: { enabled: true, inline: true, hover: true },
+  hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+  github: { enabled: true, hover: true, palette: true },
+  youtube: { enabled: true, hover: true, palette: true },
+  twitter: { enabled: true, inline: true, hover: true, palette: true },
 };
 
 /**
