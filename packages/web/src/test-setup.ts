@@ -44,12 +44,15 @@ if (!Element.prototype.scrollIntoView) {
 // keyboard-hover effect (CommandPalette.tsx) calls it to build the active
 // row's attribute selector on every cmdk `onValueChange`, which fires as
 // soon as `<Command>`'s controlled `value` mounts/changes, so any test that
-// renders the palette hits this the moment cmdk reports an active item. The
-// real (spec) implementation is simple enough to inline rather than pull in
-// a polyfill package: escape any character CSS.escape must per the spec
-// (https://drafts.csswg.org/cssom/#serialize-an-identifier) — none of this
-// repo's values (`link:<uuid>` / `tag:<name>`) need it today, but tests
-// should exercise the same code path production browsers run.
+// renders the palette hits this the moment cmdk reports an active item. This
+// is a NARROW polyfill, not a full spec implementation — it backslash-escapes
+// every non-`[A-Za-z0-9_-]` character but omits CSSOM's leading-digit /
+// leading-hyphen-digit / NULL codepoint rules
+// (https://drafts.csswg.org/cssom/#serialize-an-identifier). That's sufficient
+// for this repo's actual values (`link:<uuid>` / `tag:<name>`, which only ever
+// need the `:` escaped) and keeps the test path close to what a production
+// browser's real CSS.escape would produce for those inputs; do not rely on it
+// for spec-general escaping.
 if (!window.CSS) {
   // @ts-expect-error -- jsdom has no global CSS at all in some environments.
   window.CSS = {};

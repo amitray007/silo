@@ -634,6 +634,75 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
 }
 
 /**
+ * Keyboard-nav hover (palette-keyboard-hover slice), extracted as a named hook
+ * to match this file's own convention (`usePaletteResults`/`useStableResults`)
+ * of keeping self-contained derived-state logic out of `CommandPaletteInner`'s
+ * body. Owns the controlled cmdk active value and drives the shared hover
+ * card off it. Returns `[activeValue, setActiveValue]` to wire onto
+ * `<Command value onValueChange>`.
+ *
+ * `onValueChange` fires for BOTH arrow-key navigation AND pointer movement
+ * (cmdk's `Item` has an `onPointerMove` that sets the active value;
+ * `disablePointerSelection` defaults false) — so this is NOT keyboard-only, and
+ * it MUST apply the same `isHoverCapable()` touch guard the mouse
+ * `handleEnter` uses (review: ce-correctness). Without it, a touch/coarse-
+ * pointer tap onto an enabled row would fire this effect and open a card the
+ * pointer path deliberately suppresses (and the two would race). With the guard,
+ * both the pointer-driven `onValueChange` here and the row's own
+ * `handleEnter`/`handleLeave` agree, and arrow-key nav on a real
+ * (hover-capable) desktop still shows the card as intended.
+ *
+ * When the active row is a tag row, a gate-suppressed link, resolves to
+ * nothing after a results swap, or cmdk collapses the value to '' (empty
+ * result set), the card is DISMISSED rather than left stranded (review:
+ * ce-julik-frontend-races — an earlier `!activeValue` early-return skipped both
+ * branches and stranded a pending/open card).
+ */
+function usePaletteKeyboardHover(
+  results: readonly CommandPaletteResult[],
+  panelRef: React.RefObject<HTMLDivElement | null>,
+  plugins: SettingsMap['plugins'] | undefined,
+): [string, (value: string) => void] {
+  const { scheduleShow, dismissAll } = useHoverPreview();
+  const [activeValue, setActiveValue] = useState('');
+
+  // Map an active cmdk value (`link:<id>` / `tag:<name>`) back to its result.
+  // Rebuilt when `results` changes (identity of the visible set).
+  const resultByValue = useMemo(() => {
+    const m = new Map<string, CommandPaletteResult>();
+    for (const result of results) m.set(resultValue(result), result);
+    return m;
+  }, [results]);
+
+  useEffect(() => {
+    const result = activeValue ? resultByValue.get(activeValue) : undefined;
+    // No enabled link row to preview → dismiss any showing/pending card.
+    if (
+      result?.kind !== 'link' ||
+      !palettePluginOn(result.link.sourceData.kind, plugins) ||
+      // Touch/coarse-pointer: no hover affordance (mirrors the mouse path's own
+      // `isHoverCapable()` suppress). See this hook's doc comment.
+      !isHoverCapable()
+    ) {
+      dismissAll();
+      return;
+    }
+    // `CSS.escape` guards ids/values containing characters that would break the
+    // attribute selector (ids are UUIDs today, but the value is `link:<id>` and
+    // this stays correct if id shape ever changes). Reads the active row's rect
+    // straight from the DOM node cmdk marked active, after React committed the
+    // new value (so the row is already scrolled into view).
+    const node = panelRef.current?.querySelector<HTMLElement>(
+      `[cmdk-item][data-value="${CSS.escape(activeValue)}"]`,
+    );
+    if (!node) return; // not yet in the DOM this tick; a later change re-runs
+    scheduleShow(result.link, node.getBoundingClientRect());
+  }, [activeValue, resultByValue, plugins, panelRef, scheduleShow, dismissAll]);
+
+  return [activeValue, setActiveValue];
+}
+
+/**
  * Everything that needs `open` to actually be true — split out of
  * `CommandPalette` (see that component's doc comment) purely so its data
  * hooks (`usePaletteScope`/`usePaletteResults`) never mount while the
@@ -654,49 +723,11 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
   );
   const panelRef = useRef<HTMLDivElement>(null);
   const { data: settings } = useSettings();
-  const { scheduleShow, dismissAll } = useHoverPreview();
-  const [activeValue, setActiveValue] = useState('');
-
-  // Map an active cmdk value (`link:<id>` / `tag:<name>`) back to its result.
-  // Rebuilt when `results` changes (identity of the visible set).
-  const resultByValue = useMemo(() => {
-    const m = new Map<string, CommandPaletteResult>();
-    for (const result of results) m.set(resultValue(result), result);
-    return m;
-  }, [results]);
-
-  // Keyboard-nav hover (palette-keyboard-hover slice): when the cmdk-active row
-  // changes (arrow keys — or mouse hover, which also sets the active value),
-  // open the shared hover card for the focused LINK row, gated by the same
-  // per-plugin `palette` surface as the mouse path. Tag rows and gate-suppressed
-  // links dismiss the card instead. Reads the active row's rect straight from
-  // the DOM node cmdk marked active, AFTER React committed the new value (so the
-  // row is already scrolled into view). No pointer-capability guard here: this
-  // is keyboard intent, not a stray pointer, and `scheduleShow` with no
-  // `suppress` shows unconditionally (the touch guard lives only in the mouse
-  // `handleEnter`).
-  useEffect(() => {
-    if (!activeValue) return;
-    const result = resultByValue.get(activeValue);
-    if (result?.kind !== 'link') {
-      // Tag row active (or nothing resolvable) — no preview for tags.
-      dismissAll();
-      return;
-    }
-    const link = result.link;
-    if (!palettePluginOn(link.sourceData.kind, settings?.plugins)) {
-      dismissAll();
-      return;
-    }
-    // `CSS.escape` guards ids/values containing characters that would break the
-    // attribute selector (ids are UUIDs today, but the value is `link:<id>` and
-    // this stays correct if id shape ever changes).
-    const node = panelRef.current?.querySelector<HTMLElement>(
-      `[cmdk-item][data-value="${CSS.escape(activeValue)}"]`,
-    );
-    if (!node) return; // not yet in the DOM this tick; a later change re-runs
-    scheduleShow(link, node.getBoundingClientRect());
-  }, [activeValue, resultByValue, settings?.plugins, scheduleShow, dismissAll]);
+  const [activeValue, setActiveValue] = usePaletteKeyboardHover(
+    results,
+    panelRef,
+    settings?.plugins,
+  );
 
   const openLinkResult = (link: PaletteLinkResult) => {
     // Mirrors `LinkRow`'s own anchor semantics (`target="_blank" rel="noopener"`).

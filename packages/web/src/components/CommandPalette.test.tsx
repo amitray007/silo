@@ -1089,15 +1089,62 @@ describe('CommandPalette', () => {
       // needed for `activeValue` to have been set at least once.
       expect(optionRowFor('Keyboard tweet').getAttribute('aria-selected')).toBe('true');
 
-      // The effect's `scheduleShow` still runs on its own show-delay timer
-      // (no `isHoverCapable()` guard, but the shared provider's delay still
-      // applies) — advance fake timers the same amount the sibling
-      // mouse-hover tests do.
+      // The effect's `scheduleShow` runs on its own show-delay timer — advance
+      // fake timers the same amount the sibling mouse-hover tests do. The
+      // keyboard effect applies the same `isHoverCapable()` guard as the mouse
+      // path (this block's `matchMedia` stub reports `(hover: hover)` true, so
+      // the guard passes — the touch-guard case is its own test below).
       await act(async () => {
         vi.advanceTimersByTime(350);
       });
 
       expect(document.querySelector('.silo-popover')).not.toBeNull();
+    });
+
+    it('does NOT open the hover card on a coarse/touch pointer (isHoverCapable() false) even for an enabled twitter row', async () => {
+      // Regression (review: ce-correctness): cmdk's `onValueChange` fires on
+      // POINTER MOVE as well as arrow keys (`disablePointerSelection` defaults
+      // false), so the keyboard-hover effect must honor the same
+      // `isHoverCapable()` touch guard the mouse `handleEnter` uses — otherwise
+      // a tap on a touch device would open a card the pointer path suppresses.
+      // Here `(hover: hover)` reports FALSE (coarse pointer), so even the
+      // gate-enabled, auto-active twitter row must NOT show a card.
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: false, // no hover capability (touch/coarse pointer)
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      })) as unknown as typeof matchMedia;
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'kbtouch', title: 'Touch tweet', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'touch' } });
+      await waitFor(() => expect(screen.getByText('Touch tweet')).toBeDefined(), { timeout: 2000 });
+      expect(optionRowFor('Touch tweet').getAttribute('aria-selected')).toBe('true');
+
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(document.querySelector('.silo-popover')).toBeNull();
     });
 
     it('cmdk auto-selecting the first (twitter) row on mount does NOT open the hover card when plugins.twitter.palette is false (dismissAll path)', async () => {
