@@ -34,7 +34,7 @@
 
 **Files:**
 - Modify: `packages/core/src/links/tags.ts`, `packages/core/src/index.ts`
-- Test: `packages/core/src/links/tags.test.ts` (or the existing tag test file — check which exists; `grep -l "createTag\|listTagsWithCounts" packages/core/src/**/*.test.ts`)
+- Test: `packages/core/src/links/tags.test.ts` (confirmed to exist — the tag core test file)
 
 **Interfaces:**
 - Consumes: `normalizeTagKey` (from `./links.js`), the `tags`/`linkTags`/`links` drizzle tables.
@@ -144,7 +144,9 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 
 **Files:**
 - Modify: `packages/api/src/routes/links-write.ts`, `packages/api/src/query-schemas.ts`
-- Test: the API tag-route test file (find it: `grep -rl "POST /api/tags\|/api/links/:id/tags\|createTag" packages/api/src/**/*.test.ts`)
+- Test: `packages/api/src/routes/links-write.test.ts` (confirmed — where `POST /api/tags` + the
+  per-link tag routes are tested; the `DELETE /api/tags/:name` test goes here, NOT in `tags.test.ts`
+  which only covers `GET /api/tags`)
 
 **Interfaces:**
 - Consumes: `core.deleteTag` (Task 1).
@@ -236,7 +238,8 @@ Co-Authored-By: Claude <noreply@anthropic.com>"
 - Create: `packages/mcp/server/src/tools/delete-tag.ts`
 - Modify: `packages/mcp/server/src/server.ts`, `packages/mcp/server/src/tools/remove-tag.ts`
   (one cross-ref clause)
-- Test: the MCP tag-tool test file (find: `grep -rl "remove_tag\|add_tag" packages/mcp/server/src/**/*.test.ts`)
+- Test: create `packages/mcp/server/src/tools/delete-tag.test.ts` (mirror
+  `packages/mcp/server/src/tools/remove-tag.test.ts` — the confirmed sibling tag-tool test)
 
 **Interfaces:**
 - Consumes: `core.deleteTag`.
