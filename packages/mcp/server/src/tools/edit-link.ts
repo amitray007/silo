@@ -22,9 +22,10 @@ export function registerEditLink(server: McpServer): void {
         "Update a saved link's title, description, and/or note. Only the " +
         'fields you pass are changed; omitted fields are left as-is (an ' +
         'edit with no fields is a no-op that returns the link unchanged). ' +
-        "Cannot change the link's url, sourceKind, or tags — use `add_tag`/" +
-        '`remove_tag` for tags. Returns a clean not-found result (not an ' +
-        'error) if the id is unknown or the link has been trashed.',
+        "Cannot change the link's url, sourceKind, or tags — use " +
+        '`add_link_tag`/`remove_link_tag` for tags. Returns a clean ' +
+        'not-found result (not an error) if the id is unknown or the link ' +
+        'has been trashed.',
       inputSchema: {
         id: z.uuid().describe('The link id (uuid) to edit.'),
         title: z.string().optional().describe('New title. Omit to leave unchanged.'),

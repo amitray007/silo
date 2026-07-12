@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { accessTokens, db, oauthClients, oauthCodes } from '@silo/db';
-import { and, desc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
+import { and, desc, eq, gt, inArray, isNotNull, lt, notExists, sql } from 'drizzle-orm';
 
 /** The pooled `db` singleton or a transaction handle — lets `issueOAuthTokens`
  * run its inserts inside a caller-supplied transaction (`rotateRefreshToken`,
@@ -29,6 +29,16 @@ type Executor = typeof db | Parameters<Parameters<(typeof db)['transaction']>[0]
 const ACCESS_TTL_MS = 60 * 60 * 1000; // 1 hour
 const REFRESH_TTL_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CODE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * OAuth refresh reuse grace window: how long a just-rotated refresh token
+ * stays valid for a RETRIED/racing rotation request to replay idempotently
+ * (see `rotateRefreshToken`'s doc comment). Access tokens live 1h, so a
+ * well-behaved connector refreshes roughly hourly; a slow response or
+ * dropped socket on any one of those refreshes must not read as
+ * "connection expired".
+ */
+const GRACE_MS = 60 * 1000; // 60 seconds
 
 /** The single scope silo issues today (see design doc's non-goals — no per-scope permissions). */
 const OAUTH_SCOPE = 'silo';
@@ -96,10 +106,45 @@ export type OAuthClient = {
 };
 
 /**
+ * Sorted, deduped, lowercase-invariant key for a redirect_uris array, used
+ * only to COMPARE two clients' redirect sets order-insensitively — never to
+ * decide storage order (the original array/order a caller passes is always
+ * what gets persisted). Uses `JSON.stringify` over a sorted array rather than
+ * e.g. joining with a delimiter, since a URI could theoretically contain any
+ * separator character; a stringified sorted array has no such ambiguity.
+ */
+function redirectUrisKey(uris: string[]): string {
+  return JSON.stringify([...uris].sort());
+}
+
+/**
  * Registers a new public OAuth client (RFC 7591 dynamic registration).
  * Public clients only — callers (the `@silo/api` DCR route) are responsible
  * for rejecting any `tokenEndpointAuthMethod` other than `'none'` before
  * calling this; this function does not itself validate the auth method.
+ *
+ * Dedup (DCR-dedup slice): Claude/ChatGPT re-run dynamic registration on
+ * every connect, which used to mint a fresh `cli_…` id each time — this
+ * caused both unbounded `oauth_clients` growth AND refresh breakage (a
+ * refresh token bound to the OLD `cli_…` id stops matching once the
+ * connector starts sending requests under a newly-minted id). RFC 7591 does
+ * not forbid returning an existing registration for an identical request,
+ * and `listOAuthClientsForOwner` already dedupes by lowercased name at
+ * *display* time — doing it at *registration* time is the durable fix, so a
+ * connector that re-registers with identical metadata gets its stable
+ * `cli_…` back instead of a new one.
+ *
+ * A match requires the SAME lowercased `name`, the SAME `redirectUris` set
+ * (order-insensitive — compared via `redirectUrisKey`, storage order is
+ * never touched), the SAME `tokenEndpointAuthMethod`, and the SAME
+ * `grantTypes` set. If more than one existing row matches (possible from
+ * registrations made before this dedup existed), the EARLIEST-created one is
+ * returned — a stable identity that every subsequent re-registration
+ * converges back onto. This does NOT retroactively collapse those
+ * pre-existing duplicate clients into one; they remain as separate rows
+ * until `cleanupExpiredOAuth` garbage-collects the orphaned ones once their
+ * tokens expire (see that function's doc comment) — only NEW duplicates are
+ * prevented going forward.
  */
 export async function registerOAuthClient(opts: {
   clientName: string;
@@ -107,9 +152,29 @@ export async function registerOAuthClient(opts: {
   grantTypes?: string[];
   tokenEndpointAuthMethod?: string;
 }): Promise<OAuthClient> {
-  const id = generateOpaque('cli_', 24);
   const grantTypes = opts.grantTypes ?? ['authorization_code', 'refresh_token'];
   const tokenEndpointAuthMethod = opts.tokenEndpointAuthMethod ?? 'none';
+  const normalizedName = opts.clientName.toLowerCase();
+  const wantedRedirectKey = redirectUrisKey(opts.redirectUris);
+  const wantedGrantTypesKey = redirectUrisKey(grantTypes);
+
+  const existingCandidates = await db
+    .select()
+    .from(oauthClients)
+    .where(sql`lower(${oauthClients.name}) = ${normalizedName}`)
+    .orderBy(oauthClients.createdAt);
+
+  const match = existingCandidates.find(
+    (candidate) =>
+      redirectUrisKey(candidate.redirectUris) === wantedRedirectKey &&
+      candidate.tokenEndpointAuthMethod === tokenEndpointAuthMethod &&
+      redirectUrisKey(candidate.grantTypes) === wantedGrantTypesKey,
+  );
+  if (match) {
+    return match;
+  }
+
+  const id = generateOpaque('cli_', 24);
 
   const [row] = await db
     .insert(oauthClients)
@@ -274,17 +339,42 @@ export async function issueOAuthTokens(
 
 /**
  * Rotates a refresh token: verifies it belongs to `clientId`, is not
- * expired, and matches the bound `resource`; deletes the old access+refresh
- * pair; issues a fresh pair. A stolen/reused old refresh token cannot be
- * replayed — its row is gone the moment rotation succeeds. Returns `null` on
- * any verification failure (unknown hash, wrong client, expired, resource
- * mismatch) without leaking which check failed.
+ * expired, and matches the bound `resource`; issues a fresh pair; returns
+ * `null` on any verification failure (unknown hash, wrong client, expired,
+ * resource mismatch) without leaking which check failed.
  *
- * The delete-old + issue-new sequence runs inside a single `db.transaction`
- * (review fix M3) — without it, a crash between the deletes and the inserts
- * would strand the client with neither a valid old pair nor a new one. The
- * lookup SELECT stays outside the transaction (it's read-only and the `null`
- * short-circuits don't need one); only the mutating tail is wrapped.
+ * Grace window + idempotent successor replay (fix for connectors reading a
+ * RETRIED refresh as "connection expired"): access tokens live 1h, so a
+ * refresh fires roughly hourly. If a client's refresh request is retried
+ * (slow response, dropped socket, two tabs racing) after the FIRST attempt
+ * already rotated the token server-side, the naive "delete old pair
+ * instantly" behavior makes the retry's lookup miss (row gone) and return
+ * `null` → `invalid_grant` → "connection expired", even though the first
+ * attempt actually succeeded. To tolerate this:
+ *
+ * - On a FRESH rotation (the old refresh row has no recorded successor
+ *   yet): the paired old ACCESS token is deleted immediately (1h access
+ *   tokens have no retry semantics — only the refresh leg needs grace); the
+ *   old REFRESH row is kept, but its `expiresAt` is pulled in to
+ *   `now + GRACE_MS` and the newly-minted successor's raw tokens are
+ *   recorded on it (`successorAccessToken`/`successorRefreshToken` —
+ *   see `access-tokens.ts`'s doc comment for why raw, time-boxed storage is
+ *   the deliberate, narrow exception here). The new pair is returned.
+ * - On a REPLAYED rotation (same old refresh token presented again, and the
+ *   old row still carries a recorded successor): if still within the grace
+ *   window, the SAME successor pair is returned again — idempotent, no third
+ *   pair minted, no additional writes. Once the grace window has elapsed,
+ *   the row's own `expiresAt` filter in the lookup excludes it, so the call
+ *   falls through to `null` — this is now genuine reuse of a long-dead
+ *   token, correctly treated as `invalid_grant`.
+ * - A refresh token that was never rotated (no successor recorded) rotates
+ *   normally, per the fresh-rotation path above.
+ *
+ * The mutating tail (successor bookkeeping + delete old access + issue new
+ * pair) runs inside a single `db.transaction` (review fix M3) — without it,
+ * a crash mid-sequence would strand the client with neither a valid old pair
+ * nor a new one. The lookup SELECT stays outside the transaction (read-only,
+ * and the `null` short-circuits don't need one).
  */
 export async function rotateRefreshToken(opts: {
   refreshToken: string;
@@ -310,18 +400,33 @@ export async function rotateRefreshToken(opts: {
   if (!refreshRow) return null;
   if ((refreshRow.resource ?? null) !== opts.resource) return null;
 
+  // Idempotent replay: this old refresh row already has a recorded
+  // successor (a prior call rotated it) and we're still inside its grace
+  // window (guaranteed by the `gt(expiresAt, now)` filter above, since a
+  // fresh rotation pulls `expiresAt` in to `now + GRACE_MS`). Hand back the
+  // exact same pair — do not mint a third.
+  if (refreshRow.successorAccessToken && refreshRow.successorRefreshToken) {
+    return {
+      accessToken: refreshRow.successorAccessToken,
+      refreshToken: refreshRow.successorRefreshToken,
+      accessExpiresIn: Math.floor(ACCESS_TTL_MS / 1000),
+      refreshExpiresIn: Math.floor(REFRESH_TTL_MS / 1000),
+      scope: refreshRow.scope ?? OAUTH_SCOPE,
+    };
+  }
+
   return db.transaction(async (tx) => {
-    // Delete the paired access token (looked up by the refresh row's own
-    // hash, since the ACCESS row is the one carrying `refreshTokenHash`) and
-    // the refresh row itself.
+    // Delete the paired access token immediately (looked up by the refresh
+    // row's own hash, since the ACCESS row is the one carrying
+    // `refreshTokenHash`) — the 1h access token has no retry semantics, only
+    // the refresh leg needs the grace window.
     await tx
       .delete(accessTokens)
       .where(
         and(eq(accessTokens.refreshTokenHash, refreshHash), eq(accessTokens.kind, 'oauth_access')),
       );
-    await tx.delete(accessTokens).where(eq(accessTokens.id, refreshRow.id));
 
-    return issueOAuthTokens(
+    const issued = await issueOAuthTokens(
       {
         clientId: opts.clientId,
         scope: refreshRow.scope ?? OAUTH_SCOPE,
@@ -329,6 +434,20 @@ export async function rotateRefreshToken(opts: {
       },
       tx,
     );
+
+    // Keep the old refresh row alive for GRACE_MS instead of deleting it,
+    // recording the successor so a retried rotation within the window
+    // replays idempotently (see this function's doc comment).
+    await tx
+      .update(accessTokens)
+      .set({
+        expiresAt: new Date(Date.now() + GRACE_MS),
+        successorAccessToken: issued.accessToken,
+        successorRefreshToken: issued.refreshToken,
+      })
+      .where(eq(accessTokens.id, refreshRow.id));
+
+    return issued;
   });
 }
 
@@ -499,4 +618,97 @@ export async function revokeAllOAuthClients(): Promise<void> {
         inArray(accessTokens.kind, ['oauth_access', 'oauth_refresh']),
       ),
     );
+}
+
+/** Counts of rows removed by one `cleanupExpiredOAuth` pass. Logged (counts only, never token/client values) by the `oauth-cleanup` worker job. */
+export type OAuthCleanupCounts = {
+  codes: number;
+  tokens: number;
+  clients: number;
+};
+
+/**
+ * Garbage-collects the OAuth tables' never-swept growth sinks (P1 review
+ * finding — nothing previously purged expired codes/tokens or orphaned
+ * clients, so all three grow forever): expired `oauth_codes`, expired
+ * `oauth_access`/`oauth_refresh` rows, and `oauth_clients` left behind with
+ * no remaining reference. Scheduled daily by
+ * `packages/worker/src/jobs/oauth-cleanup.ts`; also safe to call ad hoc.
+ *
+ * Runs as three deletes inside one `db.transaction` (a consistent pass — no
+ * caller ever observes a state where e.g. tokens are gone but their
+ * now-orphaned client hasn't been swept yet), in this order:
+ *
+ * 1. **Expired codes** — `oauth_codes` rows past `expiresAt`. These are
+ *    already dead weight: `consumeAuthCode` deletes on successful exchange,
+ *    so a surviving expired row was abandoned mid-flow and can never be
+ *    exchanged again (the `expiresAt` filter there excludes it already).
+ * 2. **Expired tokens** — `access_tokens` rows with `kind IN
+ *    ('oauth_access','oauth_refresh')` past `expiresAt`. Care taken here for
+ *    Fix #1's refresh grace window (`rotateRefreshToken`): a just-rotated
+ *    refresh row has its `expiresAt` pulled IN to `now + GRACE_MS` (still in
+ *    the future) rather than deleted outright, specifically so a
+ *    retried/racing rotation request can replay it idempotently within that
+ *    window. This delete's plain `expiresAt < now()` filter naturally leaves
+ *    such a row alone — it is not yet expired by definition while inside its
+ *    grace window — so this pass never races or undermines that mechanism.
+ *    Only genuinely-expired rows (grace window elapsed, or never rotated) are
+ *    removed.
+ * 3. **Orphaned clients** — `oauth_clients` rows with ZERO remaining
+ *    references, run AFTER step 2 so a client whose only tokens just expired
+ *    in this same pass is correctly collected too. "No remaining reference"
+ *    means neither table with a `client_id` FK to `oauth_clients` still
+ *    points at it: `access_tokens` (any kind/expiry — a client with even an
+ *    expired-but-not-yet-swept token is not orphaned, though by this point in
+ *    the transaction step 2 has already cleared expired ones) AND
+ *    `oauth_codes` (a client with a live PENDING code — mid authorization-
+ *    code flow, not yet exchanged or expired — must not be deleted out from
+ *    under it). Both schemas declare `client_id` with `onDelete: 'cascade'`
+ *    (see `access-tokens.ts`/`oauth-codes.ts`), so relying on the FK alone
+ *    would happily cascade-delete a client that still has live rows —
+ *    exactly the correctness bug this must avoid. Instead this uses an
+ *    explicit `NOT EXISTS (access_tokens) AND NOT EXISTS (oauth_codes)`
+ *    anti-join guard: a client is only ever deleted when truly unreferenced,
+ *    regardless of what the FK's cascade action would otherwise permit.
+ *
+ * Returns the count removed from each table (never token/client values) so
+ * the caller can log volume without ever logging anything secret.
+ */
+export async function cleanupExpiredOAuth(): Promise<OAuthCleanupCounts> {
+  return db.transaction(async (tx) => {
+    const now = new Date();
+
+    const deletedCodes = await tx
+      .delete(oauthCodes)
+      .where(lt(oauthCodes.expiresAt, now))
+      .returning({ code: oauthCodes.code });
+
+    const deletedTokens = await tx
+      .delete(accessTokens)
+      .where(
+        and(
+          inArray(accessTokens.kind, ['oauth_access', 'oauth_refresh']),
+          lt(accessTokens.expiresAt, now),
+        ),
+      )
+      .returning({ id: accessTokens.id });
+
+    const deletedClients = await tx
+      .delete(oauthClients)
+      .where(
+        and(
+          notExists(
+            tx.select().from(accessTokens).where(eq(accessTokens.clientId, oauthClients.id)),
+          ),
+          notExists(tx.select().from(oauthCodes).where(eq(oauthCodes.clientId, oauthClients.id))),
+        ),
+      )
+      .returning({ id: oauthClients.id });
+
+    return {
+      codes: deletedCodes.length,
+      tokens: deletedTokens.length,
+      clients: deletedClients.length,
+    };
+  });
 }

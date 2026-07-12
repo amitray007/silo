@@ -21,7 +21,7 @@ const trashLinkOutputSchema = {
  * call -> shape the MCP result.
  *
  * `core.softDelete` is live-scoped and returns bare `Link | null` (never
- * `LinkWithTags`) — unlike `edit_link`/`add_tag`/`remove_tag`, a successful
+ * `LinkWithTags`) — unlike `edit_link`/`add_link_tag`/`remove_link_tag`, a successful
  * trash CANNOT be re-hydrated via `getById` afterward, because `getById` is
  * itself live-scoped and the row is now trashed (it would return `null`,
  * indistinguishable from "vanished"). So the success branch shapes

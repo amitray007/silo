@@ -24,12 +24,14 @@ export {
 export type {
   ConnectedOAuthClient,
   IssuedOAuthTokens,
+  OAuthCleanupCounts,
   OAuthClient,
   OAuthCode,
 } from './auth/oauth.js';
 export {
   authenticateOAuthToken,
   canonicalMcpResource,
+  cleanupExpiredOAuth,
   consumeAuthCode,
   createAuthCode,
   generateOpaque,
@@ -207,7 +209,7 @@ export { findStrandedEnriching } from './links/sweep.js';
 // Tag list with live-link counts (plan 007, C3): the sidebar's per-tag
 // counts, e.g. "ai 23" — see tags.ts for the zero-count/ordering decisions.
 export type { TagCount } from './links/tags.js';
-export { createTag, listTagsWithCounts } from './links/tags.js';
+export { createTag, deleteTag, listTagsWithCounts } from './links/tags.js';
 // Trash reads + counts (plan 007, C2): listTrash is the ONE read in this
 // package deliberately NOT scoped through `whereLive` — see trash.ts's doc
 // comment for why it's quarantined in its own module. getCounts/countLive/

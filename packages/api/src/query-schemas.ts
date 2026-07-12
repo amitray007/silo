@@ -161,6 +161,9 @@ export const createTagBodySchema = z.object({
   name: z.string().min(1),
 });
 
+/** `DELETE /api/tags/:name` param — the tag to delete library-wide (min 1 char). */
+export const tagNameParamSchema = z.object({ name: z.string().min(1) });
+
 /**
  * Shared `{ ids: string[] }` batch-write body schema (agent-navigation slice
  * U5) — the HTTP mirror of the MCP write tools' `ids[]` batch mode

@@ -6,28 +6,31 @@ import {
   seedLink,
 } from './test-support/mcp-server-harness.js';
 
-// Integration tests for `add_tag` via a real MCP client<->server pair
+// Integration tests for `add_link_tag` via a real MCP client<->server pair
 // against a real Postgres — proving the whole path (Zod input validation,
 // `registerTool` wiring, the `getById` live-scoping guard, `core.addTag`'s
 // idempotent case-insensitive dedup), not the handler alone. Setup/teardown
 // is shared via the harness module (see its doc comment for the rationale).
 describeMcpTool(
-  'silo_mcp_add_tag_test',
-  'add_tag (integration, via MCP client<->server)',
+  'silo_mcp_add_link_tag_test',
+  'add_link_tag (integration, via MCP client<->server)',
   (getContext) => {
-    it('tools/list lists add_tag alongside the other tools', async () => {
+    it('tools/list lists add_link_tag alongside the other tools', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name);
-      expect(names).toContain('add_tag');
-      expect(names).toContain('remove_tag');
+      expect(names).toContain('add_link_tag');
+      expect(names).toContain('remove_link_tag');
     });
 
     it('adds a tag -> link has it', async () => {
       const { core, client } = getContext();
       const id = await seedLink(getContext, 'https://example.com/add-tag-basic');
 
-      const result = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'reading' } });
+      const result = await client.callTool({
+        name: 'add_link_tag',
+        arguments: { id, tag: 'reading' },
+      });
 
       expect(result.isError).toBeFalsy();
       const structured = result.structuredContent as Record<string, unknown>;
@@ -42,9 +45,9 @@ describeMcpTool(
       const { client } = getContext();
       const id = await seedLink(getContext, 'https://example.com/add-tag-idempotent');
 
-      await client.callTool({ name: 'add_tag', arguments: { id, tag: 'reading' } });
+      await client.callTool({ name: 'add_link_tag', arguments: { id, tag: 'reading' } });
       const second = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { id, tag: 'reading' },
       });
 
@@ -57,10 +60,10 @@ describeMcpTool(
       const { client } = getContext();
       const id = await seedLink(getContext, 'https://example.com/add-tag-case');
 
-      const first = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'AI' } });
+      const first = await client.callTool({ name: 'add_link_tag', arguments: { id, tag: 'AI' } });
       expect((first.structuredContent as Record<string, unknown>).tags).toEqual(['AI']);
 
-      const second = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'ai' } });
+      const second = await client.callTool({ name: 'add_link_tag', arguments: { id, tag: 'ai' } });
       const structured = second.structuredContent as Record<string, unknown>;
       // One tag survives, keeping the first-entered display casing.
       expect(structured.tags).toEqual(['AI']);
@@ -69,7 +72,7 @@ describeMcpTool(
     it('adding to an unknown id -> found: false, no tag created', async () => {
       const { client } = getContext();
       const result = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { id: '00000000-0000-0000-0000-000000000000', tag: 'reading' },
       });
       expect(result.isError).toBeFalsy();
@@ -83,7 +86,10 @@ describeMcpTool(
       const id = await seedLink(getContext, 'https://example.com/add-tag-trashed');
       await core.softDelete(id);
 
-      const result = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'reading' } });
+      const result = await client.callTool({
+        name: 'add_link_tag',
+        arguments: { id, tag: 'reading' },
+      });
       expect(result.isError).toBeFalsy();
       expect(result.structuredContent).toEqual({ found: false });
     });
@@ -91,7 +97,7 @@ describeMcpTool(
     it('outputSchema round-trip: a found:true result validates against the declared schema', async () => {
       const { client } = getContext();
       const id = await seedLink(getContext, 'https://example.com/add-tag-schema-roundtrip');
-      const result = await client.callTool({ name: 'add_tag', arguments: { id, tag: 'x' } });
+      const result = await client.callTool({ name: 'add_link_tag', arguments: { id, tag: 'x' } });
       expect(result.isError).toBeFalsy();
       expect(result.structuredContent).toBeDefined();
       expectValidLinkStructuredContent(result.structuredContent as Record<string, unknown>);
@@ -106,7 +112,7 @@ describeMcpTool(
       const unknownId = '00000000-0000-0000-0000-000000000000';
 
       const result = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { ids: [good1, good2, unknownId], tag: 'bulktag' },
       });
       expect(result.isError).toBeFalsy();
@@ -137,7 +143,7 @@ describeMcpTool(
       const b = await seedLink(getContext, 'https://example.com/add-tag-ids-wins-b');
 
       const result = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { id: a, ids: [b], tag: 'winner' },
       });
       expect(result.isError).toBeFalsy();
@@ -155,7 +161,7 @@ describeMcpTool(
     it('neither `id` nor `ids` -> clean tool error (F3, model per get_link)', async () => {
       const { client } = getContext();
       const result = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { tag: 'reading' },
       });
       expect(result.isError).toBe(true);
@@ -170,7 +176,7 @@ describeMcpTool(
     it('empty `ids: []` -> clean empty batch result, not a crash (F3)', async () => {
       const { client } = getContext();
       const result = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { ids: [], tag: 'reading' },
       });
       expect(result.isError).toBeFalsy();
@@ -192,7 +198,7 @@ describeMcpTool(
       // masking the F1 batch-cap error this test targets.
       const tooMany = Array.from({ length: 501 }, () => crypto.randomUUID());
       const result = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { ids: tooMany, tag: 'reading' },
       });
       expect(result.isError).toBe(true);
@@ -213,7 +219,7 @@ describeMcpTool(
       const id = await seedLink(getContext, 'https://example.com/add-tag-batch-discriminator');
 
       const result = await client.callTool({
-        name: 'add_tag',
+        name: 'add_link_tag',
         arguments: { ids: [id], tag: 'discriminator' },
       });
       expect(result.isError).toBeFalsy();

@@ -143,7 +143,8 @@ describe('HoverPreview', () => {
     );
     // baseElement is document.body itself in jsdom; the card should be a
     // direct(ish) child of body, not nested under the render container.
-    expect(baseElement.querySelector('div[style*="z-index: 36"]')).not.toBeNull();
+    // z-index 41 sits above the command-palette scrim (40) — see HoverPreview.tsx.
+    expect(baseElement.querySelector('div[style*="z-index: 41"]')).not.toBeNull();
   });
 
   describe('rich variants (plan 012 phase 2)', () => {

@@ -199,7 +199,7 @@ describeIfPg('POST /oauth/token (MCP OAuth slice U2)', () => {
     expect(body.error).toBe('invalid_grant');
   });
 
-  it('refresh_token grant happy path: 200 with a fresh token pair, old refresh token invalidated', async () => {
+  it('refresh_token grant happy path: 200 with a fresh token pair; immediate replay within the grace window returns the SAME successor (idempotent)', async () => {
     const { core, app } = harness.mod();
     const clientId = await registerClient(app);
     const { verifier, challenge } = pkcePair();
@@ -232,14 +232,23 @@ describeIfPg('POST /oauth/token (MCP OAuth slice U2)', () => {
     expect(rotated.access_token).not.toBe(issued.access_token);
     expect(rotated.refresh_token).not.toBe(issued.refresh_token);
 
-    // The OLD refresh token can no longer be used (rotation invalidates it).
+    // Grace window (refresh reuse tolerance, see core `rotateRefreshToken` /
+    // `docs/methods/oauth-refresh-grace-window.md`): a RETRIED refresh of the
+    // same old token within the grace window must NOT fail with invalid_grant
+    // (which a connector reads as "connection expired"). It returns 200 with
+    // the *same* successor pair the first rotation minted — idempotent replay,
+    // so a client that retried a slow/dropped refresh converges on one live
+    // credential rather than being locked out.
     const replay = await tokenRequest(app, {
       grant_type: 'refresh_token',
       refresh_token: issued.refresh_token,
       client_id: clientId,
       resource: RESOURCE,
     });
-    expect(replay.status).toBe(400);
+    expect(replay.status).toBe(200);
+    const replayed = (await replay.json()) as TokenSuccess;
+    expect(replayed.access_token).toBe(rotated.access_token);
+    expect(replayed.refresh_token).toBe(rotated.refresh_token);
   });
 
   it('unsupported grant_type: 400 unsupported_grant_type', async () => {

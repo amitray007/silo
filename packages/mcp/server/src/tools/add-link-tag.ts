@@ -18,7 +18,7 @@ const addTagOutputSchema = {
 };
 
 /**
- * Registers `add_tag` on `server`: parse (Zod) -> GUARD with `getById`
+ * Registers `add_link_tag` on `server`: parse (Zod) -> GUARD with `getById`
  * (single) or one `core.addTagMany` call (batch) -> shape the MCP result.
  *
  * One-or-many (agent-navigation slice U4): `id` (single) OR `ids` (batch) —
@@ -33,11 +33,11 @@ const addTagOutputSchema = {
  * per-item `ok: false` (see its doc comment) rather than duplicating the
  * guard here.
  */
-export function registerAddTag(server: McpServer): void {
+export function registerAddLinkTag(server: McpServer): void {
   server.registerTool(
-    'add_tag',
+    'add_link_tag',
     {
-      title: 'Add tag',
+      title: 'Add tag to link',
       description:
         'Attach a tag to one or more saved links. Pass `id` for ONE link, or ' +
         '`ids` for MANY in one call (if both are given, `ids` wins) — the ' +
@@ -45,9 +45,12 @@ export function registerAddTag(server: McpServer): void {
         'bad id never blocks the rest. Matching is case-insensitive: adding ' +
         "'ai' to a link that already has 'AI' is a no-op (one tag survives, " +
         'keeping whichever casing was entered first) — this call is safe to ' +
-        'repeat. The single-`id` path returns a clean not-found result (not ' +
-        'an error) if the id is unknown or the link has been trashed ' +
-        '(trashed links cannot be tagged).',
+        'repeat. If the tag does not exist yet, it is created automatically ' +
+        '(same effect as `create_tag`, just implicit) — use `create_tag` ' +
+        'instead if you want to make an empty tag ahead of time, with no ' +
+        'link attached yet. The single-`id` path returns a clean not-found ' +
+        'result (not an error) if the id is unknown or the link has been ' +
+        'trashed (trashed links cannot be tagged).',
       inputSchema: {
         id: z.uuid().optional().describe('The link id (uuid) to tag (single-link mode).'),
         ids: z
@@ -75,7 +78,7 @@ export function registerAddTag(server: McpServer): void {
         return {
           isError: true,
           content: [
-            { type: 'text', text: 'Pass either `id` (single) or `ids` (batch) to add_tag.' },
+            { type: 'text', text: 'Pass either `id` (single) or `ids` (batch) to add_link_tag.' },
           ],
         };
       }

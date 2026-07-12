@@ -26,7 +26,7 @@ const retryCaptureOutputSchema = {
  * single-id retry re-fetches before shaping rather than echoing the bare row.
  *
  * One-or-many (agent-navigation slice U4): `id`/`ids` precedence mirrors
- * `add_tag`'s — `ids` wins if both given.
+ * `add_link_tag`'s — `ids` wins if both given.
  *
  * Closes an agent-native parity gap (scope.html Now-tier): a human UI can
  * retry a degraded capture, and core already has `requestRetry` (U4) — this

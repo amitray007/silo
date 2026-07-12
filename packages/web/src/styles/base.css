@@ -740,6 +740,17 @@ select {
   background: transparent;
 }
 
+/* The keyboard-active (cmdk-highlighted) row. cmdk sets `aria-selected="true"`
+   on whichever row the arrow keys / mouse last made active; without a rule
+   here the row had NO visible highlight, so arrow navigation looked like it
+   did nothing (user-reported: "keyboard nav doesn't work at all"). Same `--hov`
+   token as the pointer-hover rule below, so keyboard-highlight and mouse-hover
+   read as one "this is the row Enter/click will fire" affordance rather than
+   two visual languages. */
+.silo-palette-row[aria-selected="true"] {
+  background: var(--hov);
+}
+
 @media (hover: hover) and (pointer: fine) {
   .silo-palette-row:hover:not([aria-selected="true"]) {
     background: var(--hov);

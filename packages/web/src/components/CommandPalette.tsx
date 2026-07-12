@@ -729,6 +729,26 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
     settings?.plugins,
   );
 
+  // Type-to-refocus (user-requested): "if I'm between navigation and start
+  // typing, focus returns to the input — except for the up/down arrows." In
+  // practice cmdk already keeps focus on the input through arrow navigation
+  // (rows are `role="option"`, never focusable, and the palette has no other
+  // tabbable control inside it), so typing already lands in the input on the
+  // normal path. This handler is the guarantee for any state where focus DID
+  // land off the input: a BARE printable character (no ⌘/Ctrl/Alt) pressed
+  // anywhere in the dialog while the input isn't focused snaps focus back to it
+  // and lets the character fall through (no `preventDefault`, so the now-focused
+  // input receives it in the same keystroke). Arrow keys, Enter, Escape, Tab,
+  // and every modifier combo are `key.length !== 1` or modifier-guarded, so
+  // they pass straight through to cmdk / the existing handlers — the "except
+  // for the up/down arrows" part of the requirement.
+  const handleRefocusOnType = (event: React.KeyboardEvent) => {
+    if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return;
+    const input = palette.inputRef.current;
+    if (!input || document.activeElement === input) return;
+    input.focus();
+  };
+
   const openLinkResult = (link: PaletteLinkResult) => {
     // Mirrors `LinkRow`'s own anchor semantics (`target="_blank" rel="noopener"`).
     // Scheme guard (defense-in-depth, review fix): `link.url` is stored,
@@ -795,13 +815,17 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
         animation: 'siloFade .16s var(--ease-out)',
       }}
     >
-      {/* biome-ignore lint/a11y/useKeyWithClickEvents: this onClick is a stopPropagation guard (not a control) that keeps the scrim's onClick above from closing when clicking inside the panel — no interactive semantics of its own; role="dialog" below already gives this element real a11y semantics. */}
+      {/* The panel's `onClick` is a stopPropagation guard (keeps the scrim's
+          onClick from closing when clicking inside); `onKeyDown` is the
+          type-to-refocus handler. Both a click and a key handler are present,
+          plus real `role="dialog"` semantics, so no a11y ignore is needed. */}
       <div
         ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label="Command palette"
         onClick={(e) => e.stopPropagation()}
+        onKeyDown={handleRefocusOnType}
         style={{
           // Wide top-centered panel (~640px) — deliberately wider than
           // `ModalShell`'s form modals (520/560px): those hold narrow label+
@@ -839,18 +863,12 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               flex: 'none',
             }}
           >
-            {/* Type-to-refocus (palette-keyboard-hover slice): the requirement
-                "typing while a row is focused returns focus to the input" is
-                satisfied INHERENTLY by cmdk's focus model — its rows are
-                `role="option"` (never focusable), so DOM focus stays on this
-                input through all arrow navigation (verified in browser QA:
-                `document.activeElement` is this `[cmdk-input]` after ArrowDown,
-                and a keystroke lands in `value`). No keydown-refocus handler is
-                added because there is no reachable state where a printable key
-                lands anywhere but here — such a handler could never fire, and
-                dead code is worse than none. If a future change makes rows
-                focusable, add the bare-printable → `inputRef.current.focus()`
-                guard then (see the keyboard-hover design doc). */}
+            {/* Type-to-refocus: cmdk keeps focus on this input through ARROW
+                navigation (rows are `role="option"`, never focusable), so the
+                common case already lands typed characters here. The dialog's
+                `handleRefocusOnType` (see its doc comment) is the belt-and-
+                suspenders guarantee for any state where focus is off the input
+                — a bare printable keystroke returns focus here. */}
             <Command.Input
               ref={palette.inputRef}
               autoFocus

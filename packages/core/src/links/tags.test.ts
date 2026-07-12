@@ -207,4 +207,60 @@ describeIfPg('listTagsWithCounts (integration, C3)', () => {
       expect(filtered.links.some((l) => l.id === link.id)).toBe(true);
     });
   });
+
+  describe('deleteTag', () => {
+    it('deleteTag removes the tag and its link associations but keeps the links', async () => {
+      // Arrange: create two links, tag both with 'work', one also with 'keep'.
+      const a = await ops.createLink({ url: 'https://a.example', sourceKind: 'link' });
+      const b = await ops.createLink({ url: 'https://b.example', sourceKind: 'link' });
+      await ops.addTag(a.id, 'work');
+      await ops.addTag(b.id, 'work');
+      await ops.addTag(b.id, 'keep');
+
+      const deleted = await ops.deleteTag('work');
+
+      expect(deleted).toBe(true);
+      // Both links still exist and are live.
+      expect(await ops.getById(a.id)).not.toBeNull();
+      expect(await ops.getById(b.id)).not.toBeNull();
+      // 'work' is gone from both links; 'keep' survives on b.
+      expect((await ops.getById(a.id))?.tags ?? []).not.toContain('work');
+      expect((await ops.getById(b.id))?.tags ?? []).toEqual(['keep']);
+      // The tag no longer appears in the tag list.
+      expect((await ops.listTagsWithCounts()).map((t) => t.name)).not.toContain('work');
+    });
+
+    it('deleteTag is case-insensitive', async () => {
+      const a = await ops.createLink({ url: 'https://c.example', sourceKind: 'link' });
+      await ops.addTag(a.id, 'AI');
+      expect(await ops.deleteTag('ai')).toBe(true); // lowercase deletes the 'AI'-cased tag
+      expect((await ops.getById(a.id))?.tags ?? []).not.toContain('AI');
+    });
+
+    it('deleteTag returns false for a tag that does not exist (idempotent, not an error)', async () => {
+      expect(await ops.deleteTag('does-not-exist-xyz')).toBe(false);
+    });
+
+    it('deleteTag ignores a blank / whitespace-only name (no-op, returns false)', async () => {
+      // `normalizeTagKey('   ')` collapses to '' — deleteTag short-circuits
+      // before issuing any DELETE (review: ce-correctness — guard the
+      // whitespace path the API's `min(1)` lets through).
+      expect(await ops.deleteTag('   ')).toBe(false);
+    });
+
+    it('a tag can be recreated and reused after deletion (delete -> createTag -> addTag)', async () => {
+      // Regression guard (review: ce-data-integrity): the unique constraint is
+      // on `normalized_key`, and deleteTag fully removes the row, so the same
+      // name must be freshly creatable + attachable afterward with no lingering
+      // constraint collision.
+      const a = await ops.createLink({ url: 'https://recreate.example', sourceKind: 'link' });
+      await ops.addTag(a.id, 'seasonal');
+      expect(await ops.deleteTag('seasonal')).toBe(true);
+      // Recreate the same name and re-attach it to the (still-live) link.
+      expect(await ops.createTag('seasonal')).toBe('seasonal');
+      await ops.addTag(a.id, 'seasonal');
+      expect((await ops.getById(a.id))?.tags ?? []).toContain('seasonal');
+      expect((await ops.listTagsWithCounts()).map((t) => t.name)).toContain('seasonal');
+    });
+  });
 });

@@ -14,7 +14,7 @@ describeMcpTool(
   'silo_mcp_retry_capture_test',
   'retry_capture (integration, via MCP client<->server)',
   (getContext) => {
-    it('tools/list lists retry_capture alongside the other 11 tools (12 total)', async () => {
+    it('tools/list lists retry_capture alongside the other 13 tools (14 total)', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();
       const names = tools.map((t) => t.name);
@@ -26,17 +26,23 @@ describeMcpTool(
           'list_links',
           'capture_link',
           'edit_link',
-          'add_tag',
-          'remove_tag',
+          'add_link_tag',
+          'remove_link_tag',
           'export_links',
           // agent-navigation slice U4: the one genuinely new tool this slice
           // adds (see docs/superpowers/specs/2026-07-12-richer-query-
           // filters-design.md's guiding constraint) — every other change
           // enriches an existing tool's input/output instead.
           'find_related',
+          // delete-tag slice: delete a tag from the ENTIRE library (distinct
+          // from remove_link_tag, which only detaches a tag from one link).
+          'delete_tag',
+          // tag-tools slice: create a standalone (empty) tag ahead of time —
+          // agent parity with the web '+ New tag' action.
+          'create_tag',
         ]),
       );
-      expect(names).toHaveLength(12);
+      expect(names).toHaveLength(14);
     });
 
     // A degraded capture ('partial' or 'bare') is retryable: retry_capture

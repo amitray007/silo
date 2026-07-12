@@ -45,4 +45,25 @@ export const accessTokens = pgTable('access_tokens', {
   scope: text('scope'),
   /** Set only for `oauth_access`/`oauth_refresh` rows — the RFC 8707 canonical resource URL this token is bound to. */
   resource: text('resource'),
+  /**
+   * OAuth refresh grace window (rotateRefreshToken): set ONLY on an
+   * `oauth_refresh` row that has just been rotated, and ONLY for up to 60s
+   * (`GRACE_MS` in `packages/core/src/auth/oauth.ts`) afterward. Holds the
+   * RAW successor access + refresh tokens (not hashes) so a retried/racing
+   * refresh request presenting this SAME old refresh token within the grace
+   * window can be handed back the identical successor pair (idempotent
+   * replay) instead of failing with `invalid_grant` — the fix for connectors
+   * reading a retried refresh as "connection expired". This is a deliberate,
+   * narrow exception to the table's "hashes only" posture: the raw values
+   * exist in plaintext here for at most `GRACE_MS`, for a single
+   * already-in-flight successor pair the client already holds in plaintext
+   * itself. Both columns are cleared back to null the moment the grace
+   * window is exceeded (checked, never proactively swept) or once the
+   * successor itself completes its own rotation. Null for every other row
+   * (`bearer`, `oauth_access`, and any `oauth_refresh` row outside its grace
+   * window).
+   */
+  successorAccessToken: text('successor_access_token'),
+  /** Paired with `successorAccessToken` — see its doc comment for the 60s time-box. */
+  successorRefreshToken: text('successor_refresh_token'),
 });

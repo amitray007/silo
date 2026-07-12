@@ -12,8 +12,12 @@ import { DEFAULT_BASE_URL, getSettings, saveSettings } from '../lib/settings.js'
  * CORS allowlist.
  */
 
-const root = document.getElementById('root');
-if (!root) throw new Error('options: #root missing');
+const rootMaybe = document.getElementById('root');
+if (!rootMaybe) throw new Error('options: #root missing');
+// Narrowed to a non-null local so the `init()` closure below doesn't re-widen
+// it back to `HTMLElement | null` (which forced a `root!` non-null assertion —
+// biome's noNonNullAssertion). `const` guarantees this stays the guarded value.
+const root: HTMLElement = rootMaybe;
 
 async function init(): Promise<void> {
   const settings = await getSettings();
@@ -26,7 +30,7 @@ async function init(): Promise<void> {
   // value written by something other than this page (or containing `">`
   // to escape the `value="..."` attribute) would execute in the options
   // page's chrome-extension:// origin on next open.
-  root!.innerHTML = `
+  root.innerHTML = `
     <div class="header">
       <div class="dot"></div>
       <div class="wordmark">silo — options</div>
