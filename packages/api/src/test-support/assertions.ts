@@ -41,6 +41,33 @@ export function expectWhitelistedLinkShape(json: Record<string, unknown>): void 
   expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
 }
 
+/**
+ * The whitelisted-response field names a `list`/`search` RESULT ROW carries
+ * (agent-navigation slice U5): `LINK_JSON_FIELDS` minus `extractedText`,
+ * plus `snippet` — mirrors `link-json.ts`'s `SnippetLinkJson`.
+ */
+const SNIPPET_LINK_JSON_FIELDS = [
+  ...LINK_JSON_FIELDS.filter((field) => field !== 'extractedText'),
+  'snippet',
+] as const;
+
+/**
+ * Asserts `json` carries exactly the whitelisted `SnippetLinkJson` fields
+ * (agent-navigation slice U5) — the shape `GET /api/links`/
+ * `GET /api/links/search`/`GET /api/links/:id/related` results carry:
+ * `snippet` present, `extractedText` and the same internal-only fields
+ * `expectWhitelistedLinkShape` guards ABSENT.
+ */
+export function expectWhitelistedSnippetShape(json: Record<string, unknown>): void {
+  for (const field of SNIPPET_LINK_JSON_FIELDS) {
+    expect(Object.hasOwn(json, field)).toBe(true);
+  }
+  expect(Object.hasOwn(json, 'extractedText')).toBe(false);
+  expect(Object.hasOwn(json, 'searchVector')).toBe(false);
+  expect(Object.hasOwn(json, 'canonicalUrl')).toBe(false);
+  expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
+}
+
 /** Requests `path` on `app` and asserts the response is a 400 with the given `error` code — the shared shape of every "bad input" test across the read routes. */
 export async function expect400(
   app: Hono,

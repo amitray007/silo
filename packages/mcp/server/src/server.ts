@@ -3,6 +3,7 @@ import { registerAddTag } from './tools/add-tag.js';
 import { registerCaptureLink } from './tools/capture-link.js';
 import { registerEditLink } from './tools/edit-link.js';
 import { registerExportLinks } from './tools/export-links.js';
+import { registerFindRelated } from './tools/find-related.js';
 import { registerGetLink } from './tools/get-link.js';
 import { registerListLinks } from './tools/list-links.js';
 import { registerRemoveTag } from './tools/remove-tag.js';
@@ -57,6 +58,13 @@ export function createSiloMcpServer(): McpServer {
   // Export slice U3 registers export_links — a full-library snapshot
   // (json/yaml/csv) for backup or bulk agent ingestion.
   registerExportLinks(server);
+  // Agent-navigation slice U4 registers find_related — the one genuinely
+  // new tool this slice adds ("more like this", seeded from a link's own
+  // tags/title terms rather than agent-supplied words). Every other change
+  // in this slice enriches an EXISTING tool's input/output instead of
+  // adding a new one (see docs/superpowers/specs/2026-07-12-richer-query-
+  // filters-design.md's guiding constraint).
+  registerFindRelated(server);
 
   return server;
 }

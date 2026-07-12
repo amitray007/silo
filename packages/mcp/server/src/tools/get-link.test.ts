@@ -196,5 +196,98 @@ describeMcpTool(
         }),
       ]);
     });
+
+    // --- agent-navigation slice U4: batch `ids`, `textWindow` ---
+
+    it('`ids` batch: mixed found + missing, order preserved, each carries full text', async () => {
+      const { client } = getContext();
+      const foundId = await newLink('https://example.com/get-link-batch-found', ['batch']);
+      const unknownId = '00000000-0000-0000-0000-000000000000';
+
+      const result = await client.callTool({
+        name: 'get_link',
+        arguments: { ids: [foundId, unknownId] },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results: Array<{ id: string; found: boolean; url?: string; extractedText?: string }>;
+      };
+      expect(structured.results).toHaveLength(2);
+      expect(structured.results[0]).toMatchObject({ id: foundId, found: true });
+      expect(structured.results[1]).toMatchObject({ id: unknownId, found: false });
+      expectNoLeakedFields(structured.results[0]);
+
+      const [content] = result.content as Array<{ type: 'text'; text: string }>;
+      expect(content?.text).toContain('1 of 2');
+    });
+
+    it('`ids` wins over `id` when both are given', async () => {
+      const { client } = getContext();
+      const a = await newLink('https://example.com/get-link-ids-wins-a');
+      const b = await newLink('https://example.com/get-link-ids-wins-b');
+
+      const result = await client.callTool({
+        name: 'get_link',
+        arguments: { id: a, ids: [b] },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results?: Array<{ id: string }>;
+        found?: boolean;
+      };
+      expect(structured.results).toBeDefined();
+      expect(structured.results?.map((r) => r.id)).toEqual([b]);
+    });
+
+    it('`textWindow` returns a character slice + `extractedTextLength` (single-id mode)', async () => {
+      const { core, client } = getContext();
+      const fullText = 'ABCDEFGHIJ'.repeat(10); // 100 chars
+      const id = await newLink('https://example.com/get-link-textwindow');
+      await core.recordEnrichment(id, { text: fullText, status: 'full' });
+
+      const result = await client.callTool({
+        name: 'get_link',
+        arguments: { id, textWindow: { offset: 10, limit: 5 } },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        extractedText?: string;
+        extractedTextLength?: number;
+      };
+      expect(structured.extractedText).toBe(fullText.slice(10, 15));
+      expect(structured.extractedTextLength).toBe(fullText.length);
+
+      const [content] = result.content as Array<{ type: 'text'; text: string }>;
+      expect(content?.text).toContain(String(fullText.length));
+    });
+
+    it('`textWindow` is NOT applied in batch (`ids`) mode — full text returned', async () => {
+      const { core, client } = getContext();
+      const fullText = 'Z'.repeat(50);
+      const id = await newLink('https://example.com/get-link-textwindow-batch-ignored');
+      await core.recordEnrichment(id, { text: fullText, status: 'full' });
+
+      const result = await client.callTool({
+        name: 'get_link',
+        arguments: { ids: [id], textWindow: { offset: 0, limit: 5 } },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results: Array<{ extractedText?: string }>;
+      };
+      expect(structured.results[0]?.extractedText).toBe(fullText);
+    });
+
+    it('neither `id` nor `ids` -> clean tool error', async () => {
+      const { client } = getContext();
+      const result = await client.callTool({ name: 'get_link', arguments: {} });
+      expect(result.isError).toBe(true);
+      expect(result.content).toEqual([
+        expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('Pass either'),
+        }),
+      ]);
+    });
   },
 );

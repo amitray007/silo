@@ -1,9 +1,24 @@
 import type { CreateLinkInput } from '@silo/core';
-import { addTag, createTag, editLink, getById, removeTag } from '@silo/core';
+import {
+  addTag,
+  addTagMany,
+  captureMany,
+  createTag,
+  editLink,
+  getById,
+  getByIds,
+  removeTag,
+  removeTagMany,
+} from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
+import { runBulkGuarded } from '../bulk-result.js';
+import { toLinkJson } from '../link-json.js';
 import {
   addTagBodySchema,
+  batchCaptureBodySchema,
+  batchIdsBodySchema,
+  batchTagBodySchema,
   captureBodySchema,
   createTagBodySchema,
   editBodySchema,
@@ -102,6 +117,39 @@ export function registerLinksWriteRoutes(app: Hono): void {
   });
 
   /**
+   * `POST /api/links/batch/tags`, `POST /api/links/batch/untag`
+   * (agent-navigation slice U5) — registered BEFORE `POST /links/:id/tags`/
+   * `DELETE /links/:id/tags/:tag` below for the SAME route-ordering reason
+   * `trash.ts` documents for its own `/links/batch/*` routes (which itself
+   * mirrors `links.ts`'s `/links/search` vs `/links/:id`): a literal `batch`
+   * segment has no priority over `:id` by registration order alone — Hono
+   * matches whichever handler was registered FIRST, so `/links/:id/tags`
+   * registered first would swallow `/links/batch/tags` as `:id = "batch"`.
+   */
+  app.post('/links/batch/tags', async (c) => {
+    const body = batchTagBodySchema.parse(await c.req.json());
+    const outcome = await runBulkGuarded(c, () => addTagMany(body.ids, body.tag));
+    if (!outcome.ok) return outcome.response;
+    return c.json({ results: outcome.value }, 200);
+  });
+
+  /**
+   * `POST /api/links/batch/untag` — bulk remove-tag (agent-navigation slice
+   * U5), the HTTP mirror of `remove_tag`'s MCP `ids[]` batch mode
+   * (`remove-tag.ts`). `DELETE` is not used here (a batch operation needs a
+   * JSON body — `ids` + `tag` — which a bare `DELETE` request is a poor fit
+   * for in this codebase's existing route style; every other batch route is
+   * `POST` for the same reason). `core.removeTagMany` reports every item
+   * `ok: true` unless the underlying call throws (see its doc comment).
+   */
+  app.post('/links/batch/untag', async (c) => {
+    const body = batchTagBodySchema.parse(await c.req.json());
+    const outcome = await runBulkGuarded(c, () => removeTagMany(body.ids, body.tag));
+    if (!outcome.ok) return outcome.response;
+    return c.json({ results: outcome.value }, 200);
+  });
+
+  /**
    * `POST /api/links/:id/tags` — add tag. Body: `{ tag }`. `core.addTag` is
    * NOT live-scoped (see `add-tag.ts`'s MCP doc comment) — it would FK-throw
    * on a bogus id or silently tag an already-trashed link — so `getById` is
@@ -161,5 +209,60 @@ export function registerLinksWriteRoutes(app: Hono): void {
       return c.json({ error: 'validation_error', message: 'Tag name must not be blank' }, 400);
     }
     return c.json({ name }, 201);
+  });
+
+  /**
+   * `POST /api/links/batch/capture` — bulk capture (agent-navigation slice
+   * U5), the HTTP mirror of `capture_link`'s MCP `urls[]` batch mode
+   * (`capture-link.ts`). `tags`/`note`/`sourceKind` apply to every url in the
+   * batch (same as the MCP tool). Every capture through this route is
+   * `origin: 'user'` (web/API captures — the `◆` agent mark is MCP-only, same
+   * as the single-URL `POST /api/links` route). Per-item results carry
+   * `{ url, ok, id?, deduped?, reason? }` (mirrors `core.captureMany`'s
+   * `BulkCaptureResult`) rather than the flat `{ id, ok, reason? }` the other
+   * batch routes use — a capture has no `id` to key on until AFTER it
+   * succeeds, so the result is keyed on the input `url` instead.
+   */
+  app.post('/links/batch/capture', async (c) => {
+    const body = batchCaptureBodySchema.parse(await c.req.json());
+    const inputs: CreateLinkInput[] = body.urls.map((url) => {
+      const input: CreateLinkInput = {
+        url,
+        sourceKind: body.sourceKind ?? 'link',
+        origin: 'user',
+      };
+      if (body.tags !== undefined) input.tags = body.tags;
+      if (body.note !== undefined) input.notes = body.note;
+      return input;
+    });
+    const outcome = await runBulkGuarded(c, () => captureMany(inputs));
+    if (!outcome.ok) return outcome.response;
+    return c.json({ results: outcome.value }, 201);
+  });
+
+  /**
+   * `POST /api/links/batch-get` — batch read (agent-navigation slice U5),
+   * the HTTP mirror of `get_link`'s MCP `ids[]` batch mode
+   * (`get-link.ts`). Distinct name (`batch-get`, not `batch/get`) from the
+   * `/links/batch/*` write routes above: this is a READ, and `GET` can't
+   * carry a JSON body of ids in this codebase's existing route conventions
+   * (every other GET route here takes only query-string/path params) — a
+   * `POST` with a body is the pragmatic shape for "look up N ids at once"
+   * over HTTP, same reason `/links/batch/untag` uses `POST` instead of
+   * `DELETE`. Returns full text per link (no `textWindow` — same
+   * documented choice `core.getByIds`'s doc comment makes: a single shared
+   * window doesn't fit a multi-article batch read). Each requested id
+   * resolves independently: an unknown/trashed id reports `{ id, link: null
+   * }` rather than failing the whole batch.
+   */
+  app.post('/links/batch-get', async (c) => {
+    const body = batchIdsBodySchema.parse(await c.req.json());
+    const outcome = await runBulkGuarded(c, () => getByIds(body.ids));
+    if (!outcome.ok) return outcome.response;
+    const results = outcome.value.map((r) => ({
+      id: r.id,
+      link: r.link ? toLinkJson(r.link) : null,
+    }));
+    return c.json({ results }, 200);
   });
 }
