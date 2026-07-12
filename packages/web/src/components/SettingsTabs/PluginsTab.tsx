@@ -41,7 +41,7 @@ const PLUGIN_SOURCES = [
 /** The feature toggles a given source supports — HN and Twitter render both an inline row line and a hover preview; GitHub/YouTube are hover-only (see `packages/core/src/settings/schema.ts`'s doc comment). Keyed so the panel only ever shows toggles the source's schema actually has. */
 const FEATURE_ROWS_BY_SOURCE: Record<
   PluginSource,
-  ReadonlyArray<{ field: 'inline' | 'hover'; name: string; desc: string }>
+  ReadonlyArray<{ field: 'inline' | 'hover' | 'palette'; name: string; desc: string }>
 > = {
   hacker_news: [
     {
@@ -54,6 +54,11 @@ const FEATURE_ROWS_BY_SOURCE: Record<
       name: 'On hover (preview card)',
       desc: 'Points and comments in the hover preview',
     },
+    {
+      field: 'palette',
+      name: 'In the command palette',
+      desc: 'Hover card + inline points/comments in the ⌘K palette',
+    },
   ],
   github: [
     {
@@ -61,12 +66,22 @@ const FEATURE_ROWS_BY_SOURCE: Record<
       name: 'On hover (preview card)',
       desc: 'Stars, forks, and issues in the hover preview',
     },
+    {
+      field: 'palette',
+      name: 'In the command palette',
+      desc: 'Hover card in the ⌘K palette',
+    },
   ],
   youtube: [
     {
       field: 'hover',
       name: 'On hover (preview card)',
       desc: 'Thumbnail and channel in the hover preview',
+    },
+    {
+      field: 'palette',
+      name: 'In the command palette',
+      desc: 'Hover card in the ⌘K palette',
     },
   ],
   twitter: [
@@ -79,6 +94,11 @@ const FEATURE_ROWS_BY_SOURCE: Record<
       field: 'hover',
       name: 'On hover (preview card)',
       desc: 'Author, text, and engagement in the hover preview',
+    },
+    {
+      field: 'palette',
+      name: 'In the command palette',
+      desc: 'Hover card + inline tweet text in the ⌘K palette',
     },
   ],
 };
