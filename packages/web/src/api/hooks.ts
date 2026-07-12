@@ -502,6 +502,26 @@ export function useCreateTag() {
 }
 
 /**
+ * Delete a tag from the ENTIRE library (`DELETE /api/tags/:name`) — removes
+ * the tag and unlinks it from every link, keeping the links. Mirrors
+ * `useCreateTag` but invalidates more: a deleted tag vanishes from the
+ * sidebar tag list (`tags`), changes the tag set of every affected link
+ * (`links` / `links-tag-only`), and shifts counts. Distinct from
+ * `useRemoveTag`, which detaches a tag from one link.
+ */
+export function useDeleteTag() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (name: string) =>
+      apiDelete<{ deleted: boolean }>(`/api/tags/${encodeURIComponent(name)}`),
+    onSettled: () => {
+      invalidateLinkQueries(queryClient, { tags: true, counts: true });
+      queryClient.invalidateQueries({ queryKey: ['links-tag-only'] });
+    },
+  });
+}
+
+/**
  * The Trash screen's feed (`GET /api/trash`, plan 011 V3-5). Unlike
  * `useInfiniteLinks`, this is a plain (non-paginated) query — the Trash
  * screen's build brief doesn't call for "load more" chrome, and v3's mock
