@@ -46,7 +46,9 @@ export function registerRemoveTag(server: McpServer): void {
         "removing 'ai' also removes a tag stored as 'AI'. A no-op (still " +
         "found: true / ok: true) if a link doesn't currently carry that " +
         'tag. The single-`id` path returns a clean not-found result (not an ' +
-        'error) if the id is unknown or the link has been trashed.',
+        'error) if the id is unknown or the link has been trashed. To delete ' +
+        'a tag from EVERY link at once (not just this one), use delete_tag ' +
+        'instead.',
       inputSchema: {
         id: z.uuid().optional().describe('The link id (uuid) to untag (single-link mode).'),
         ids: z

@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAddTag } from './tools/add-tag.js';
 import { registerCaptureLink } from './tools/capture-link.js';
+import { registerDeleteTag } from './tools/delete-tag.js';
 import { registerEditLink } from './tools/edit-link.js';
 import { registerExportLinks } from './tools/export-links.js';
 import { registerFindRelated } from './tools/find-related.js';
@@ -49,6 +50,7 @@ export function createSiloMcpServer(): McpServer {
   registerEditLink(server);
   registerAddTag(server);
   registerRemoveTag(server);
+  registerDeleteTag(server);
   // W4 registers trash_link and restore_link.
   registerTrashLink(server);
   registerRestoreLink(server);
