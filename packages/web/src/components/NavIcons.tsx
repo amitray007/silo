@@ -126,6 +126,40 @@ export function LogOutIcon() {
 }
 
 /**
+ * A clipboard-paste glyph for the Library header's "paste to capture" button
+ * (`LibraryView.tsx`'s `PasteCaptureButton`) — a clipboard body (the
+ * rectangle + its top clip tab) with a small downward arrow inside, so it
+ * reads distinctly as PASTE (content going IN) rather than the generic
+ * copy-a-clipboard icon most icon sets reuse for both actions. Follows the
+ * shared nav-icon convention: `viewBox="0 0 16 16"`, 16px render size,
+ * `stroke="currentColor"` (inherits the button's idle/hover color, no
+ * hardcoded hex), `strokeWidth 1.4`, round caps/joins, `aria-hidden` (the
+ * button itself carries the `aria-label`).
+ */
+export function PasteIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.4"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {/* Clipboard body */}
+      <path d="M5.4 3.2h-1a.8.8 0 0 0-.8.8v9a.8.8 0 0 0 .8.8h7.2a.8.8 0 0 0 .8-.8V4a.8.8 0 0 0-.8-.8h-1" />
+      {/* Clip tab on top of the clipboard */}
+      <path d="M6.2 2.2c0-.55.45-1 1-1h1.6c.55 0 1 .45 1 1v1H6.2v-1Z" />
+      {/* Down arrow — content pasting IN */}
+      <path d="M8 6.6v4M6.1 8.9 8 10.8l1.9-1.9" />
+    </svg>
+  );
+}
+
+/**
  * The magnifier glyph shared by every search-style input's leading icon —
  * `Omnibar` and the Trash screen's search input (`TrashView.tsx`'s
  * `TrashSearchInput`) both render this exact 15×15 `stroke="var(--ghost)"`
