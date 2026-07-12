@@ -78,9 +78,18 @@ afterEach(async () => {
   await core.setSetting('mcpAccess', true);
 });
 
-async function startTestServer(): Promise<{ baseUrl: string; port: number }> {
+async function startTestServer(opts?: {
+  publicMcpUrl?: string;
+  publicApiUrl?: string;
+}): Promise<{ baseUrl: string; port: number }> {
   const { startMcpHttpServer } = await import('./mcp-http.js');
-  server = startMcpHttpServer({ port: 0, token: TOKEN, host: '127.0.0.1' });
+  server = startMcpHttpServer({
+    port: 0,
+    token: TOKEN,
+    host: '127.0.0.1',
+    publicMcpUrl: opts?.publicMcpUrl,
+    publicApiUrl: opts?.publicApiUrl,
+  });
   await new Promise<void>((resolve) => server?.once('listening', resolve));
   const address = server.address();
   if (address === null || typeof address === 'string') {
@@ -445,6 +454,155 @@ describeIfPg('startMcpHttpServer — extraAllowedHosts (proxied deploys)', () =>
       body: JSON.stringify(INITIALIZE_BODY),
     });
     expect(res.status).toBe(200);
+  });
+});
+
+describeIfPg('startMcpHttpServer — MCP OAuth resource server (Unit 3)', () => {
+  it('GET /.well-known/oauth-protected-resource returns the RFC 9728 metadata shape', async () => {
+    const { baseUrl } = await startTestServer({
+      publicMcpUrl: 'https://mcp.silo.example.com/mcp',
+      publicApiUrl: 'https://silo.example.com',
+    });
+    const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    expect(res.status).toBe(200);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(await res.json()).toEqual({
+      resource: 'https://mcp.silo.example.com/mcp',
+      authorization_servers: ['https://silo.example.com'],
+      scopes_supported: ['silo'],
+      bearer_methods_supported: ['header'],
+    });
+  });
+
+  it('OPTIONS /.well-known/oauth-protected-resource is a wildcard-CORS preflight (204, no body)', async () => {
+    const { baseUrl } = await startTestServer();
+    const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`, {
+      method: 'OPTIONS',
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('access-control-allow-methods')).toContain('GET');
+    expect(await res.text()).toBe('');
+  });
+
+  it('without publicMcpUrl/publicApiUrl configured, protected-resource metadata falls back to a derived local origin', async () => {
+    const { baseUrl, port } = await startTestServer();
+    const res = await fetch(`${baseUrl}/.well-known/oauth-protected-resource`);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      resource: string;
+      authorization_servers: string[];
+    };
+    expect(body.resource).toBe(`http://127.0.0.1:${port}/mcp`);
+    expect(body.authorization_servers).toEqual([`http://127.0.0.1:${port}`]);
+  });
+
+  it('a 401 on POST /mcp carries WWW-Authenticate with resource_metadata pointing at this mcp origin', async () => {
+    const { baseUrl } = await startTestServer({
+      publicMcpUrl: 'https://mcp.silo.example.com/mcp',
+      publicApiUrl: 'https://silo.example.com',
+    });
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(401);
+    expect(res.headers.get('www-authenticate')).toBe(
+      'Bearer resource_metadata="https://mcp.silo.example.com/.well-known/oauth-protected-resource"',
+    );
+    // The body stays the same uninformative shape — no auth oracle.
+    expect(await res.json()).toEqual({
+      jsonrpc: '2.0',
+      error: { code: -32001, message: 'Unauthorized' },
+      id: null,
+    });
+  });
+
+  it("an oat_ OAuth access token minted for THIS server's canonical resource is accepted on POST /mcp", async () => {
+    const core = await import('@silo/core');
+    const publicMcpUrl = 'https://mcp.silo.example.com/mcp';
+    const resource = core.canonicalMcpResource(publicMcpUrl);
+
+    const client = await core.registerOAuthClient({
+      clientName: 'Claude',
+      redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+    });
+    const issued = await core.issueOAuthTokens({ clientId: client.id, resource });
+
+    const { baseUrl } = await startTestServer({
+      publicMcpUrl,
+      publicApiUrl: 'https://silo.example.com',
+    });
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${issued.accessToken}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(200);
+  });
+
+  it('an oat_ OAuth access token minted for a DIFFERENT resource is rejected (401, audience mismatch)', async () => {
+    const core = await import('@silo/core');
+    const client = await core.registerOAuthClient({
+      clientName: 'ChatGPT',
+      redirectUris: ['https://chatgpt.com/connector_platform_oauth_redirect'],
+    });
+    const issued = await core.issueOAuthTokens({
+      clientId: client.id,
+      resource: 'https://mcp.some-other-silo.example.com/mcp',
+    });
+
+    const { baseUrl } = await startTestServer({
+      publicMcpUrl: 'https://mcp.silo.example.com/mcp',
+      publicApiUrl: 'https://silo.example.com',
+    });
+    const res = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${issued.accessToken}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(res.status).toBe(401);
+  });
+
+  it('the legacy env token and a DB bearer token still work unchanged alongside OAuth (regression)', async () => {
+    const core = await import('@silo/core');
+    const created = await core.generateAccessToken('mcp-http-oauth-regression db-token');
+
+    const { baseUrl } = await startTestServer({
+      publicMcpUrl: 'https://mcp.silo.example.com/mcp',
+      publicApiUrl: 'https://silo.example.com',
+    });
+
+    const envRes = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${TOKEN}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(envRes.status).toBe(200);
+
+    const dbRes = await fetch(`${baseUrl}/mcp`, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        accept: 'application/json, text/event-stream',
+        authorization: `Bearer ${created.token}`,
+      },
+      body: JSON.stringify(INITIALIZE_BODY),
+    });
+    expect(dbRes.status).toBe(200);
   });
 });
 

@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto';
 import { accessTokens, db } from '@silo/db';
-import { desc, eq, sql } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 
 /**
  * DB-backed named access tokens (access-tokens slice, U1): lets the user
@@ -123,6 +123,15 @@ export async function revokeAccessToken(id: string): Promise<boolean> {
  * try/catch so a failure to write that bookkeeping column can NEVER cause an
  * otherwise-valid credential to be rejected; the function still returns
  * `true` even if the update throws.
+ *
+ * Scoped to `kind='bearer'` (MCP OAuth slice, Unit 3 fix): `access_tokens`
+ * is now a unified store shared with `oauth_access`/`oauth_refresh` rows
+ * (`@silo/core`'s `oauth.ts`, Unit 1). Without this filter, a hash lookup
+ * here would match an `oat_`/`ort_` row too — silently bypassing
+ * `authenticateOAuthToken`'s expiry AND resource/audience (RFC 8707) checks
+ * for any caller trying this legacy path with an OAuth token. `kind='bearer'`
+ * keeps this function scoped to exactly the manual/DB-token path it always
+ * was; OAuth tokens are authenticated exclusively via `authenticateOAuthToken`.
  */
 export async function verifyAccessToken(rawToken: string): Promise<boolean> {
   const tokenHash = sha256Hex(rawToken);
@@ -130,7 +139,7 @@ export async function verifyAccessToken(rawToken: string): Promise<boolean> {
   const [row] = await db
     .select({ id: accessTokens.id })
     .from(accessTokens)
-    .where(eq(accessTokens.tokenHash, tokenHash))
+    .where(and(eq(accessTokens.tokenHash, tokenHash), eq(accessTokens.kind, 'bearer')))
     .limit(1);
 
   if (!row) return false;
