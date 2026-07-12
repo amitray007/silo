@@ -91,22 +91,26 @@ function PasteCaptureButton() {
         type="button"
         onClick={handleClick}
         disabled={captureLink.isPending}
-        title="Paste a link from clipboard"
-        aria-label="Paste a link from clipboard"
+        title="Paste a link from the clipboard"
+        aria-label="Add a link from the clipboard"
         className="silo-icon-btn-sm"
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          border: 0,
-          background: 'none',
+          gap: 'var(--s1-5)',
+          border: '1px solid var(--line)',
+          background: 'var(--bg2)',
           borderRadius: 6,
-          padding: 'var(--s1)',
-          color: 'var(--mut)',
+          padding: '6px 12px',
+          fontSize: 'var(--text-base)',
+          fontFamily: 'inherit',
+          color: 'var(--ink)',
           cursor: 'pointer',
+          opacity: captureLink.isPending ? 0.6 : 1,
         }}
       >
         <PasteIcon />
+        Add
       </button>
       {message && (
         <span

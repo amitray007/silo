@@ -81,7 +81,7 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard({ readText: () => Promise.resolve('https://example.com/post') });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Paste a link from clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
     fireEvent.click(button);
 
     await waitFor(() =>
@@ -100,7 +100,7 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard({ readText: () => Promise.resolve('   ') });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Paste a link from clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
     fireEvent.click(button);
 
     expect((await screen.findByRole('alert')).textContent).toBe('Clipboard is empty');
@@ -114,7 +114,7 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard({ readText: () => Promise.resolve('just some notes') });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Paste a link from clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
     fireEvent.click(button);
 
     expect((await screen.findByRole('alert')).textContent).toBe("That doesn't look like a link");
@@ -128,7 +128,7 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard(undefined);
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Paste a link from clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
     fireEvent.click(button);
 
     expect((await screen.findByRole('alert')).textContent).toBe('Clipboard access blocked');
@@ -138,7 +138,7 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard({ readText: () => Promise.reject(new Error('Permission denied')) });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Paste a link from clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
     // A rejected readText() must be swallowed by the component's own
     // try/catch — fireEvent.click must not throw/reject up through the test.
     fireEvent.click(button);
