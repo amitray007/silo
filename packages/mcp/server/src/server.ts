@@ -1,6 +1,7 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { registerAddLinkTag } from './tools/add-link-tag.js';
 import { registerCaptureLink } from './tools/capture-link.js';
+import { registerCreateTag } from './tools/create-tag.js';
 import { registerDeleteTag } from './tools/delete-tag.js';
 import { registerEditLink } from './tools/edit-link.js';
 import { registerExportLinks } from './tools/export-links.js';
@@ -51,6 +52,9 @@ export function createSiloMcpServer(): McpServer {
   registerAddLinkTag(server);
   registerRemoveLinkTag(server);
   registerDeleteTag(server);
+  // Tag-tools slice registers create_tag — makes a standalone (empty) tag,
+  // agent-native parity with the web '+ New tag' action / POST /api/tags.
+  registerCreateTag(server);
   // W4 registers trash_link and restore_link.
   registerTrashLink(server);
   registerRestoreLink(server);

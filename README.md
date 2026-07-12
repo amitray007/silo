@@ -66,10 +66,11 @@ The web UI (`@silo/web`, React + Vite in the "Oat" design system) in light and d
 ## How it works
 
 silo runs as one turnkey process (`silo`) that serves the store over MCP and enriches captures
-in the background. An agent can fully operate it through **11 MCP tools**:
+in the background. An agent can fully operate it through **12 MCP tools**:
 
-`capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` · `add_link_tag` ·
-`remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` · `retry_capture`
+`capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` · `create_tag` ·
+`add_link_tag` · `remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` ·
+`retry_capture`
 
 The same operations are exposed over an **HTTP API** (`@silo/api`) that the human web UI uses.
 Both adapters call one core, so the agent's view and the human's view are always the same data.
