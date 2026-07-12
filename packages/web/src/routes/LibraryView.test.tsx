@@ -269,9 +269,11 @@ describe('LibraryView (real useInfiniteLinks, mocked fetch only)', () => {
  * non-interactive hint box — no input, no Enter-to-keep, no click-to-search.
  * The former "Capture (plan 011, V3-3)" suite that drove Enter-to-keep
  * through this box's `<input>` no longer applies (there is no input left to
- * drive); paste-to-capture is covered end to end by
- * `usePasteCapture.test.tsx` instead, which is unaffected by this
- * component-scoped header change.
+ * drive); paste-to-capture (document-level) is covered end to end by
+ * `usePasteCapture.test.tsx`, which is unaffected by this component-scoped
+ * header change. The header's OWN paste-capture button (mobile/desktop tap
+ * affordance, `PasteCaptureButton` in `LibraryView.tsx`) is covered by
+ * `LibraryView.pasteButton.test.tsx`.
  */
 describe('LibraryView header (no paste box)', () => {
   beforeEach(() => {
@@ -298,10 +300,12 @@ describe('LibraryView header (no paste box)', () => {
     renderLibraryView();
     await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
 
-    // The header box is gone entirely — no hint text, no input, no button.
+    // The header box is gone entirely — no hint text, no input. The ONLY
+    // header button now is the paste-capture affordance (added below the
+    // omnibar's removal) — assert there's exactly one, and it's that one.
     expect(screen.queryByText('Paste a link to keep')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.queryByRole('button', { name: /paste a link/i })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Add a link from the clipboard' })).toBeDefined();
 
     // The title still renders (header didn't lose its heading).
     expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();

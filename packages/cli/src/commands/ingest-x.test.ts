@@ -55,7 +55,7 @@ describe('runIngestX', () => {
   it('prints a clear "run ft sync first" message when the FT file is missing, without throwing', async () => {
     const client = { ingest: vi.fn() } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: false, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: false });
 
     expect(client.ingest).not.toHaveBeenCalled();
     const printed = errorSpy.mock.calls.map((c: unknown[]) => c.join(' ')).join('\n');
@@ -69,12 +69,44 @@ describe('runIngestX', () => {
       .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
 
     expect(ingest).toHaveBeenCalledTimes(2);
     const summary = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
-    expect(summary.sent).toBe(2);
+    expect(summary.created).toBe(2);
+    expect(summary.deduped).toBe(0);
     expect(summary.failed).toBe(0);
+  });
+
+  it('splits truthful created/deduped counts from the deduped flag (Fix A)', async () => {
+    await writeBookmarksFile([bookmarkLine('1'), bookmarkLine('2'), bookmarkLine('3')]);
+    const ingest = vi
+      .fn()
+      .mockResolvedValueOnce({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse)
+      .mockResolvedValueOnce({ link: { id: 'x' }, deduped: true } as unknown as CaptureResponse)
+      .mockResolvedValueOnce({ link: { id: 'x' }, deduped: true } as unknown as CaptureResponse);
+    const client = { ingest } as unknown as Client;
+
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
+
+    const summary = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
+    expect(summary.created).toBe(1);
+    expect(summary.deduped).toBe(2);
+    expect(summary.total).toBe(3);
+  });
+
+  it('a zero-dedup run prints only the "N new" segment, no "already in silo"', async () => {
+    await writeBookmarksFile([bookmarkLine('1')]);
+    const ingest = vi
+      .fn()
+      .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
+    const client = { ingest } as unknown as Client;
+
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: false });
+
+    const printed = logSpy.mock.calls.map((c: unknown[]) => c.join(' ')).join('\n');
+    expect(printed).toContain('1 new');
+    expect(printed).not.toContain('already in silo');
   });
 
   it('dedups: a second run only sends bookmarks not already in the seen-set', async () => {
@@ -84,12 +116,12 @@ describe('runIngestX', () => {
       .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
     expect(ingest).toHaveBeenCalledTimes(2);
 
     ingest.mockClear();
     await writeBookmarksFile([bookmarkLine('1'), bookmarkLine('2'), bookmarkLine('3')]);
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
 
     expect(ingest).toHaveBeenCalledTimes(1);
     expect(ingest).toHaveBeenCalledWith(
@@ -107,11 +139,11 @@ describe('runIngestX', () => {
       .mockImplementationOnce(() => Promise.reject(new Error('network blip')));
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
 
     ingest.mockClear();
     ingest.mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
 
     // Exactly one bookmark (the one that failed last time) is retried.
     expect(ingest).toHaveBeenCalledTimes(1);
@@ -124,7 +156,13 @@ describe('runIngestX', () => {
       .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true, limit: 2 });
+    await runIngestX(client, {
+      dryRun: false,
+      json: true,
+      hasToken: true,
+      limit: 2,
+      resend: false,
+    });
 
     expect(ingest).toHaveBeenCalledTimes(2);
   });
@@ -134,7 +172,7 @@ describe('runIngestX', () => {
     const ingest = vi.fn();
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: true, json: true, hasToken: false });
+    await runIngestX(client, { dryRun: true, json: true, hasToken: false, resend: false });
 
     expect(ingest).not.toHaveBeenCalled();
     const report = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
@@ -149,7 +187,7 @@ describe('runIngestX', () => {
       .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
 
     expect(ingest).toHaveBeenCalledTimes(1);
     const summary = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
@@ -163,7 +201,7 @@ describe('runIngestX', () => {
       .mockRejectedValue(new ClientError(401, 'unauthorized', 'nope', 'Set a token.'));
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: true, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
 
     const printed = errorSpy.mock.calls.map((c: unknown[]) => c.join(' ')).join('\n');
     expect(printed).toContain('Set a token.');
@@ -176,10 +214,86 @@ describe('runIngestX', () => {
       .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
     const client = { ingest } as unknown as Client;
 
-    await runIngestX(client, { dryRun: false, json: false, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: false });
     ingest.mockClear();
-    await runIngestX(client, { dryRun: false, json: false, hasToken: true });
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: false });
 
+    expect(ingest).not.toHaveBeenCalled();
+  });
+
+  // Regression test for the original bug: a bookmark id sits in the seen-set
+  // (e.g. the user soft-deleted the corresponding row server-side, or it was
+  // sent in a prior run) — the DEFAULT run must skip it (never re-checks the
+  // server), but `--resend` must re-queue and re-send it. This is the test
+  // that would have failed before Fix B (no way to override the seen-set)
+  // and passes after.
+  it('a seen id is skipped by default but re-sent under --resend (heals server-side drift)', async () => {
+    await writeBookmarksFile([bookmarkLine('1')]);
+    const ingest = vi
+      .fn()
+      .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
+    const client = { ingest } as unknown as Client;
+
+    // First run: bookmark '1' is sent and recorded in the seen-set.
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: false });
+    expect(ingest).toHaveBeenCalledTimes(1);
+    ingest.mockClear();
+
+    // Imagine the user soft-deleted this row in silo for testing — the
+    // seen-set has no way to know that. A default re-run must still skip it.
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: false });
+    expect(ingest).not.toHaveBeenCalled();
+
+    // `--resend` is the escape hatch: it bypasses the seen-set and re-sends
+    // every mappable bookmark, healing the drift. The server's canonical-url
+    // dedup makes this safe even for rows that are still live.
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: true });
+    expect(ingest).toHaveBeenCalledTimes(1);
+    expect(ingest).toHaveBeenCalledWith(
+      expect.objectContaining({ url: 'https://x.com/a/status/1' }),
+    );
+  });
+
+  // Locks Fix A's core invariant against a run that hits all three outcomes at
+  // once — a miscount that shuffled a failure into `deduped` (or double-counted
+  // a merge) would break `created + deduped + failed === total` and fail here,
+  // even though each single-bucket test above would still pass.
+  it('created + deduped + failed always sums to total (mixed run)', async () => {
+    await writeBookmarksFile([bookmarkLine('1'), bookmarkLine('2'), bookmarkLine('3')]);
+    const ingest = vi
+      .fn()
+      .mockResolvedValueOnce({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse)
+      .mockResolvedValueOnce({ link: { id: 'x' }, deduped: true } as unknown as CaptureResponse)
+      .mockRejectedValueOnce(new Error('network blip'));
+    const client = { ingest } as unknown as Client;
+
+    await runIngestX(client, { dryRun: false, json: true, hasToken: true, resend: false });
+
+    const summary = JSON.parse(logSpy.mock.calls.at(-1)?.[0] as string);
+    expect(summary.created).toBe(1);
+    expect(summary.deduped).toBe(1);
+    expect(summary.failed).toBe(1);
+    expect(summary.created + summary.deduped + summary.failed).toBe(summary.total);
+  });
+
+  // A `--resend` run must still PERSIST its successes to the seen-set, so a
+  // later DEFAULT run skips them — otherwise `--resend` would silently disable
+  // resumability. Proves the seen-set is re-written by the resend, not just
+  // that the resend re-sent.
+  it('--resend persists its successes so a later default run skips them', async () => {
+    await writeBookmarksFile([bookmarkLine('1')]);
+    const ingest = vi
+      .fn()
+      .mockResolvedValue({ link: { id: 'x' }, deduped: false } as unknown as CaptureResponse);
+    const client = { ingest } as unknown as Client;
+
+    // Start from an empty seen-set and send via --resend.
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: true });
+    expect(ingest).toHaveBeenCalledTimes(1);
+
+    // A subsequent DEFAULT run must now treat it as already sent.
+    ingest.mockClear();
+    await runIngestX(client, { dryRun: false, json: false, hasToken: true, resend: false });
     expect(ingest).not.toHaveBeenCalled();
   });
 });

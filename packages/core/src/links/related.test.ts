@@ -138,6 +138,97 @@ describeIfPg('findRelated (integration, U3)', () => {
     expect(results).toHaveLength(2);
   });
 
+  it('HIGH-finding regression: a stopword title term does NOT trigram-flood unrelated substring matches', async () => {
+    // Before the ftsOnly fix, findRelated's per-term search ran through the
+    // full union path, whose trigram substring side is always-on and NOT
+    // stopword-aware: the seed's title term 'the' would issue an unfiltered
+    // `ILIKE '%the%'`, matching ANY row containing that substring anywhere
+    // (e.g. 'wEATHEr', 'togeTHEr') regardless of topical relevance. FTS-only
+    // matching empties out a pure-stopword term instead (to_tsquery('english',
+    // 'the') has no lexemes), so it contributes zero candidates for 'the' —
+    // the unrelated row must never appear via that noise.
+    const seed = await ops.createLink({
+      url: 'https://example.com/related-stopword-seed',
+      sourceKind: 'link',
+      title: 'The State of the Art and You',
+      tags: ['distributedsystems'],
+    });
+    const unrelatedSubstringOnly = await ops.createLink({
+      url: 'https://example.com/related-stopword-unrelated',
+      sourceKind: 'link',
+      title: 'Weather forecasting basics',
+    });
+
+    const results = await ops.findRelated(seed.id);
+    const resultIds = results.map((r) => r.id);
+
+    expect(resultIds).not.toContain(unrelatedSubstringOnly.id);
+    expect(resultIds).not.toContain(seed.id);
+  });
+
+  it('MEDIUM-finding regression: a high-overlap candidate outranks a single-term match even from a deep per-term window', async () => {
+    // Construct a seed with enough terms (tags + title words) that a shallow
+    // per-term fetch window (the old `effectiveLimit + 1`) would bury the
+    // high-overlap candidate below many single-term-only decoys ranked ahead
+    // of it within any ONE term's individual result set. The deepened
+    // `PER_TERM_FETCH` (`min(effectiveLimit*5, 100)`) window must still
+    // surface it, and matchCount-first ranking must put it above a
+    // single-term match.
+    const seed = await ops.createLink({
+      url: 'https://example.com/related-overlap-seed',
+      sourceKind: 'link',
+      title: 'Kubernetes networking deep dive',
+      tags: ['kubernetes', 'networking', 'deepdive'],
+    });
+    const highOverlap = await ops.createLink({
+      url: 'https://example.com/related-overlap-high',
+      sourceKind: 'link',
+      title: 'An unrelated headline entirely',
+      tags: ['kubernetes', 'networking', 'deepdive'],
+    });
+    const singleTermMatch = await ops.createLink({
+      url: 'https://example.com/related-overlap-single',
+      sourceKind: 'link',
+      title: 'Just about networking alone',
+      tags: ['networking'],
+    });
+    // Decoys ranked ahead of `highOverlap` within EACH single term's result
+    // set (created after `highOverlap`, so `links.id ASC`'s tiebreak alone
+    // wouldn't explain it — these share tags/rank comparably per-term, and
+    // a shallow effectiveLimit+1 window per term risks pushing `highOverlap`
+    // out before its cross-term overlap is ever counted).
+    for (let i = 0; i < 3; i++) {
+      await ops.createLink({
+        url: `https://example.com/related-overlap-decoy-kubernetes-${i}`,
+        sourceKind: 'link',
+        title: `Kubernetes decoy ${i}`,
+        tags: ['kubernetes'],
+      });
+      await ops.createLink({
+        url: `https://example.com/related-overlap-decoy-networking-${i}`,
+        sourceKind: 'link',
+        title: `Networking decoy ${i}`,
+        tags: ['networking'],
+      });
+      await ops.createLink({
+        url: `https://example.com/related-overlap-decoy-deepdive-${i}`,
+        sourceKind: 'link',
+        title: `Deepdive decoy ${i}`,
+        tags: ['deepdive'],
+      });
+    }
+
+    const results = await ops.findRelated(seed.id, 3);
+    const resultIds = results.map((r) => r.id);
+
+    expect(resultIds).toContain(highOverlap.id);
+    const highOverlapIndex = resultIds.indexOf(highOverlap.id);
+    const singleTermIndex = resultIds.indexOf(singleTermMatch.id);
+    if (singleTermIndex !== -1) {
+      expect(highOverlapIndex).toBeLessThan(singleTermIndex);
+    }
+  });
+
   it('returns snippet + rank fields, matching the search() result shape', async () => {
     const seed = await ops.createLink({
       url: 'https://example.com/related-shape-seed',

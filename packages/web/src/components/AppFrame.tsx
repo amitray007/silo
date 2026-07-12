@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Outlet, useLocation } from 'react-router-dom';
+import { Outlet, useLocation, useMatch } from 'react-router-dom';
 import { useCommandPalette } from '../lib/useCommandPalette';
 import { usePasteCapture } from '../lib/usePasteCapture';
 import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
@@ -188,7 +188,19 @@ export function AppFrame() {
   // Paste-to-capture (build brief, "Omnibar" item 3) — mounted once at the
   // app root, same as the other document-level singletons below, so a paste
   // anywhere on the page (not just inside the omnibar) can be caught.
-  usePasteCapture();
+  //
+  // Context-aware tag scoping (method file "tag-capture-empty-trash",
+  // decision 5): `AppFrame` sits ABOVE the `/tags/:name` route segment, so
+  // `useParams` can't see the tag name from here — `useMatch('/tags/:name')`
+  // is the router API for reading a route param from an ANCESTOR of that
+  // route, matching against the current location without needing to be
+  // inside it. On a tag route this yields the tag name; on every other route
+  // (Library, Trash, Settings) it's `null` → `currentTag` is `undefined`, so
+  // `usePasteCapture` falls back to its original untagged Library capture —
+  // this is also what makes "paste on the Trash route still saves to
+  // Library" (decision 2) fall out for free, with no Trash-specific case.
+  const currentTag = useMatch('/tags/:name')?.params.name;
+  usePasteCapture(currentTag);
 
   // The command palette (plan 024) — ONE instance mounted here, alongside
   // the other document-level singletons, so its ⌘K/`/` global listeners

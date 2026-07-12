@@ -282,26 +282,38 @@ describeIfPg('exportLinks (integration)', () => {
   });
 
   describe('sourceData null', () => {
-    it('a plain link with no sourceData exports with sourceData: null present (not omitted)', async () => {
+    it('a plain link with no sourceData exports with sourceData: {kind:"link"} (DB floor, not null)', async () => {
       // `core.createLink` always writes a `{ kind: 'link' }` floor into
-      // `sourceData` (see `links.ts`'s `resolveSource` doc comment) — there is
-      // no way to reach a genuinely NULL `source_data` column through it. The
-      // column itself IS nullable (no DB default — see
-      // `packages/db/src/schema/links.ts`), e.g. for pre-plan-012 rows created
-      // before that floor existed. Insert directly via the harness's
-      // `rawDb()` (a raw drizzle handle wired to THIS suite's disposable
-      // database — see `pg-harness.ts`'s doc comment) rather than the
-      // `@silo/db` singleton `db`. `links` (the table schema) is imported
-      // dynamically here too, NOT as a static top-of-file import: even a
-      // static import of ONLY the schema object still evaluates `@silo/db`'s
-      // single `index.ts` module graph (which also constructs the `db`/`pool`
-      // singleton in `client.ts` as a side effect) before `beforeAll` rewrites
-      // `DATABASE_URL` for the disposable database — poisoning that singleton
-      // for every OTHER module in this test run that later does
-      // `import { db } from '@silo/db'` (including `exportLinks` itself),
-      // which silently redirects reads/writes at the real dev database
-      // instead of the disposable one. This is exactly the footgun
-      // `pg-harness.ts`'s own doc comment warns every caller off of.
+      // `sourceData` (see `links.ts`'s `resolveSource` doc comment). Historically
+      // there was ALSO no DB-level guarantee: `source_data` was a bare nullable
+      // `jsonb` column (no default, no backfill — see
+      // `packages/db/src/schema/links.ts`), so pre-existing rows genuinely could
+      // be NULL, and this test used to prove `exportLinks` surfaces that as
+      // `sourceData: null` rather than omitting the key.
+      //
+      // The source-data NULL fix (migration 0013, `packages/db/drizzle/
+      // 0013_parched_aqueduct.sql`) closed that gap: `source_data` is now
+      // `NOT NULL DEFAULT '{"kind":"link"}'::jsonb`, backfilling every legacy
+      // NULL row and making a genuinely-NULL row unreachable in Postgres —
+      // even a raw insert that omits `sourceData` (bypassing `core.createLink`
+      // entirely, via the harness's `rawDb()`) now gets the DB default instead
+      // of NULL. This test is updated to assert exactly that: the DB-level
+      // floor, not the code-level one — proving the invariant holds even when
+      // `core`'s write path is bypassed.
+      //
+      // Insert directly via the harness's `rawDb()` (a raw drizzle handle
+      // wired to THIS suite's disposable database — see `pg-harness.ts`'s doc
+      // comment) rather than the `@silo/db` singleton `db`. `links` (the table
+      // schema) is imported dynamically here too, NOT as a static top-of-file
+      // import: even a static import of ONLY the schema object still
+      // evaluates `@silo/db`'s single `index.ts` module graph (which also
+      // constructs the `db`/`pool` singleton in `client.ts` as a side effect)
+      // before `beforeAll` rewrites `DATABASE_URL` for the disposable
+      // database — poisoning that singleton for every OTHER module in this
+      // test run that later does `import { db } from '@silo/db'` (including
+      // `exportLinks` itself), which silently redirects reads/writes at the
+      // real dev database instead of the disposable one. This is exactly the
+      // footgun `pg-harness.ts`'s own doc comment warns every caller off of.
       const { links } = await import('@silo/db');
       const [inserted] = await harness
         .rawDb()
@@ -310,7 +322,6 @@ describeIfPg('exportLinks (integration)', () => {
           url: 'https://example.com/no-source-data',
           canonicalUrl: 'https://example.com/no-source-data',
           sourceKind: 'link',
-          sourceData: null,
         })
         .returning({ id: links.id });
       if (!inserted) throw new Error('insert did not return a row');
@@ -320,7 +331,7 @@ describeIfPg('exportLinks (integration)', () => {
       const jsonLink = jsonParsed.links.find((l: { id: string }) => l.id === inserted.id);
       expect(jsonLink).toBeDefined();
       expect(jsonLink).toHaveProperty('sourceData');
-      expect(jsonLink.sourceData).toBeNull();
+      expect(jsonLink.sourceData).toEqual({ kind: 'link' });
     });
   });
 

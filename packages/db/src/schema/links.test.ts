@@ -197,6 +197,107 @@ describeIfPg('links schema (integration)', () => {
     expect(titleMatch?.rank).toBeGreaterThan(notesMatch?.rank ?? Number.POSITIVE_INFINITY);
   });
 
+  it('populates search_vector from canonical_url and matches domain/path words (search-url method)', async () => {
+    await db.insert(links).values({
+      url: 'https://github.com/amitray007/silo',
+      canonicalUrl: 'https://github.com/amitray007/silo',
+      sourceKind: 'link',
+    });
+
+    const matchesFor = async (term: string): Promise<boolean> => {
+      const rows = await db.execute<{ url: string }>(
+        sql`select url from links where search_vector @@ websearch_to_tsquery('english', ${term})`,
+      );
+      return rows.rows.length === 1;
+    };
+
+    expect(await matchesFor('amitray007')).toBe(true);
+    expect(await matchesFor('silo')).toBe(true);
+    expect(await matchesFor('github')).toBe(true);
+  });
+
+  it('ranks a title match above a url-only match (weighting A > C)', async () => {
+    await db.insert(links).values([
+      {
+        url: 'https://example.com/quibbleflarn-title',
+        canonicalUrl: 'https://example.com/quibbleflarn-title',
+        title: 'quibbleflarn',
+        sourceKind: 'link',
+      },
+      {
+        url: 'https://quibbleflarn.example.com/unrelated',
+        canonicalUrl: 'https://quibbleflarn.example.com/unrelated',
+        title: 'unrelated headline',
+        sourceKind: 'link',
+      },
+    ]);
+
+    const rows = await db.execute<{ url: string; rank: number }>(
+      sql`select url, ts_rank(search_vector, websearch_to_tsquery('english', 'quibbleflarn')) as rank
+          from links
+          where search_vector @@ websearch_to_tsquery('english', 'quibbleflarn')
+          order by rank desc`,
+    );
+
+    expect(rows.rows).toHaveLength(2);
+    const [titleMatch, urlMatch] = rows.rows;
+    expect(titleMatch?.url).toBe('https://example.com/quibbleflarn-title');
+    expect(titleMatch?.rank).toBeGreaterThan(urlMatch?.rank ?? Number.POSITIVE_INFINITY);
+  });
+
+  it('does NOT match "amitray" alone against a stored "amitray007" token (documents the digit-joined caveat)', async () => {
+    await db.insert(links).values({
+      url: 'https://github.com/amitray007/silo',
+      canonicalUrl: 'https://github.com/amitray007/silo',
+      sourceKind: 'link',
+    });
+
+    const rows = await db.execute<{ url: string }>(
+      sql`select url from links where search_vector @@ websearch_to_tsquery('english', 'amitray')`,
+    );
+
+    expect(rows.rows).toHaveLength(0);
+  });
+
+  it('populates search_vector from an IDN/unicode domain and path, matching both words (unicode-aware split)', async () => {
+    await db.insert(links).values({
+      url: 'https://bücher.example.de/kaffee',
+      canonicalUrl: 'https://bücher.example.de/kaffee',
+      sourceKind: 'link',
+    });
+
+    const matchesFor = async (term: string): Promise<boolean> => {
+      const rows = await db.execute<{ url: string }>(
+        sql`select url from links where search_vector @@ websearch_to_tsquery('english', ${term})`,
+      );
+      return rows.rows.length === 1;
+    };
+
+    expect(await matchesFor('bücher')).toBe(true);
+    expect(await matchesFor('kaffee')).toBe(true);
+  });
+
+  it('does NOT make the internal #unsafe-<uuid> dedup marker searchable, but still matches the pre-# path', async () => {
+    await db.insert(links).values({
+      url: 'https://example.com/distinctiveunsafepath#unsafe-9b1f7e2a-1c3d-4e5f-8a6b-7c8d9e0f1a2b',
+      canonicalUrl:
+        'https://example.com/distinctiveunsafepath#unsafe-9b1f7e2a-1c3d-4e5f-8a6b-7c8d9e0f1a2b',
+      sourceKind: 'link',
+    });
+
+    const matchesFor = async (term: string): Promise<boolean> => {
+      const rows = await db.execute<{ url: string }>(
+        sql`select url from links where search_vector @@ websearch_to_tsquery('english', ${term})`,
+      );
+      return rows.rows.length === 1;
+    };
+
+    // The fragment marker itself must never become a lexeme.
+    expect(await matchesFor('unsafe')).toBe(false);
+    // But the real path content before the `#` must still be indexed.
+    expect(await matchesFor('distinctiveunsafepath')).toBe(true);
+  });
+
   it('produces a non-null search_vector when description and extracted_text are null (coalesce)', async () => {
     await db.insert(links).values({
       url: 'https://example.com/title-only',
@@ -303,5 +404,106 @@ describeIfPg('links schema (integration)', () => {
     );
     // Only the one live 'full' row — the trashed 'full' row is excluded.
     expect(liveFull.rows[0]).toEqual({ n: 1 });
+  });
+
+  describe('source_data NOT NULL DEFAULT (migration 0013)', () => {
+    it('defaults source_data to the link floor when omitted on insert', async () => {
+      const [row] = await db
+        .insert(links)
+        .values({
+          url: 'https://example.com/source-data-default',
+          canonicalUrl: 'https://example.com/source-data-default',
+          sourceKind: 'link',
+        })
+        .returning({ sourceData: links.sourceData });
+
+      expect(row).toBeDefined();
+      expect(row?.sourceData).toEqual({ kind: 'link' });
+    });
+
+    it('rejects an explicit NULL source_data insert (column is NOT NULL)', async () => {
+      // Drizzle wraps the pg driver error; the real Postgres error (code
+      // 23502, "null value in column ... violates not-null constraint") is
+      // on `.cause` — same pattern the dedup test above uses.
+      const error = await db
+        .execute(
+          sql`insert into links (url, canonical_url, source_kind, source_data)
+              values ('https://example.com/source-data-null', 'https://example.com/source-data-null', 'link', null)`,
+        )
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(Error);
+      const cause = (error as Error).cause;
+      expect((cause as { code?: string } | undefined)?.code).toBe('23502');
+      expect((cause as { message?: string } | undefined)?.message).toMatch(/source_data/);
+    });
+  });
+
+  describe('pg_trgm substring index (search-substring method, migration 0012)', () => {
+    it('the pg_trgm extension is enabled', async () => {
+      const rows = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_extension where extname = 'pg_trgm'`,
+      );
+      expect(rows.rows[0]?.n).toBe(1);
+    });
+
+    it('the links_trgm_live_idx GIN trigram index exists', async () => {
+      const rows = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_indexes where indexname = 'links_trgm_live_idx'`,
+      );
+      expect(rows.rows[0]?.n).toBe(1);
+    });
+
+    it('an ILIKE substring query over the trigram expression is index-backed (bitmap index scan)', async () => {
+      // Enough live rows that the planner actually prefers the trgm index
+      // over a sequential scan — verified empirically against this exact
+      // migrated schema: Postgres's default cost model favors a seq scan
+      // (or an unrelated cheap partial index that happens to also satisfy
+      // `deleted_at IS NULL`) up to several thousand rows; the trgm index
+      // only wins on its own merits once the table is large enough that
+      // scanning it in full is genuinely more expensive than probing the
+      // GIN index. 40,000 rows (inserted server-side via `generate_series`
+      // for speed — a plain multi-row `INSERT ... VALUES` round-trip per
+      // batch would make this test slow) reproduces that threshold
+      // reliably; a smaller table would make this test flaky (may or may
+      // not pick the index depending on the planner's row estimates) rather
+      // than deterministically proving the index is USABLE.
+      await db.execute(sql`
+        insert into links (url, canonical_url, title, source_kind, capture_status)
+        select
+          'https://example.com/trgm-explain-' || i,
+          'https://example.com/trgm-explain-' || i,
+          case when i = 20000 then 'a distinctivezqxvneedle inside a title'
+               else 'filler title number ' || i end,
+          'link',
+          (array['full','partial','bare']::capture_status[])[1 + (i % 3)]
+        from generate_series(1, 40000) i
+      `);
+      await db.execute(sql`analyze links`);
+
+      // The concatenation expression MUST stay byte-identical to
+      // `links.ts`'s `table` index definition and `core`'s
+      // `search-query.ts` `trigramText` — see both doc comments for why a
+      // mismatched expression means the planner won't recognize this ILIKE
+      // as index-backed.
+      const explain = await db.execute<{ 'QUERY PLAN': string }>(sql`
+        explain
+        select id from links
+        where (coalesce(title, '') || ' ' || coalesce(description, '') || ' ' ||
+               regexp_replace(left(split_part(coalesce(canonical_url, ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g')
+               || ' ' || coalesce(notes, ''))
+              ilike '%zqxvneedle%' escape '\\'
+          and deleted_at is null
+      `);
+      const plan = explain.rows.map((r) => r['QUERY PLAN']).join('\n');
+      expect(plan).toContain('links_trgm_live_idx');
+      expect(plan.toLowerCase()).toContain('bitmap index scan');
+      // 30s timeout (vs vitest's 5s default): the 40,000-row generate_series
+      // insert + ANALYZE + EXPLAIN is inherently heavy and legitimately
+      // exceeds 5s on CI's slower/shared Postgres (observed: timeout at
+      // 5000ms in GitHub Actions while passing locally). The row count is
+      // load-bearing for planner determinism (see the comment above) and
+      // must not be reduced, so the fix is a longer budget, not less data.
+    }, 30_000);
   });
 });

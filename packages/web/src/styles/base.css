@@ -326,6 +326,12 @@ select {
     inset: 0 auto 0 0;
     z-index: 30;
     width: min(78vw, 300px);
+    /* Opaque on mobile (user decision) — desktop's `.silo-sidebar` above
+       stays `background: transparent` deliberately; here the sidebar is a
+       `position:fixed` drawer OVER the content, so a transparent fill let
+       the content underneath show through it. No blur (avoids mobile
+       `backdrop-filter` perf/jank) — opaque fully hides content on its own. */
+    background: var(--bg2);
     transform: translateX(-100%);
     /* `visibility: hidden` takes the closed off-canvas drawer OUT of the tab
        order + accessibility tree — `transform` alone leaves its nav links

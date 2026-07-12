@@ -42,6 +42,13 @@ export function isTextEntryElement(target: EventTarget | null): boolean {
  * the identical optimistic-insert/rollback/invalidate behavior, no separate
  * code path to keep in sync).
  *
+ * `currentTag` (method file "tag-capture-empty-trash", decision 5): when the
+ * active route is a tag page, `AppFrame` passes that tag here so a paste
+ * ANYWHERE on the page (not just via the tag page's own `PasteCaptureButton`)
+ * applies the SAME current-tag scoping a click on that button would. On
+ * every other route (Library, Trash, Settings) `AppFrame` passes `undefined`
+ * — an ordinary, untagged Library capture, unchanged from before.
+ *
  * Guards, in order:
  * - Never hijacks a paste INTO a real text-entry element (`isTextEntryElement`
  *   — an `<input>`/`<textarea>`/`contenteditable`, checked against the
@@ -69,7 +76,7 @@ export function isTextEntryElement(target: EventTarget | null): boolean {
  * can happen with nothing in particular focused, so there is no single
  * "owning" component for it to live inside.
  */
-export function usePasteCapture(): void {
+export function usePasteCapture(currentTag?: string): void {
   const captureLink = useCaptureLink();
 
   useEffect(() => {
@@ -80,7 +87,7 @@ export function usePasteCapture(): void {
       if (!text || !looksLikeUrl(text)) return;
 
       event.preventDefault();
-      captureLink.mutate({ url: text });
+      captureLink.mutate(currentTag ? { url: text, tags: [currentTag] } : { url: text });
     };
 
     document.addEventListener('paste', onPaste);
@@ -88,6 +95,9 @@ export function usePasteCapture(): void {
     // `captureLink.mutate` is TanStack Query's stable mutate function (same
     // reference for the mutation's lifetime), so listing it here doesn't
     // tear down/rebuild the listener on every render — it just satisfies the
-    // hook the honest way rather than suppressing the lint.
-  }, [captureLink.mutate]);
+    // hook the honest way rather than suppressing the lint. `currentTag` IS
+    // listed (unlike `mutate`, it's a real value that changes on navigation)
+    // so switching tag pages rebinds the listener to the new tag rather than
+    // closing over a stale one.
+  }, [captureLink.mutate, currentTag]);
 }

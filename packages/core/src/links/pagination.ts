@@ -63,7 +63,7 @@ type ListCursorPayload = {
   id: string;
 };
 
-/** The opaque offset cursor payload for `search` — position is a row offset. */
+/** The opaque offset cursor payload for `search` — position is a row offset within the result set. */
 type SearchCursorPayload = {
   kind: 'search';
   offset: number;
@@ -181,12 +181,30 @@ export function decodeTrashCursor(cursor: string): { deletedAt: string; id: stri
   return { deletedAt: payload.deletedAt, id: payload.id };
 }
 
-/** Encode a `search` offset cursor pointing at the next unread row. */
+/**
+ * Encode a `search` offset cursor pointing at the next unread row.
+ *
+ * Reworked (search-union rework) from the earlier tier-tagged cursor: the
+ * search query is now a single UNION (see `search-query.ts`'s
+ * `runUnionSearch`) with one composite ORDER BY, so an offset is meaningful
+ * on its own — there is no longer a second tier a cursor could pin paging
+ * to.
+ */
 export function encodeSearchCursor(offset: number): string {
   return encode({ kind: 'search', offset });
 }
 
-/** Decode + validate a `search` offset cursor. Throws `InvalidCursorError` on any mismatch. */
+/**
+ * Decode + validate a `search` offset cursor. Throws `InvalidCursorError` on
+ * any mismatch.
+ *
+ * Back-compat (search-union rework): a cursor encoded by the earlier
+ * tier-tagged design still carries a `tier` field (`'fts'` | `'trgm'`) —
+ * that field is simply IGNORED here, not rejected, since the shape check
+ * below only requires `kind`/`offset` to be present and valid. A stale
+ * `tier`-bearing cursor round-trips exactly like a plain `{ offset }`
+ * cursor: the union query has no tier to pin.
+ */
 export function decodeSearchCursor(cursor: string): { offset: number } {
   const parsed = decode(cursor);
   if (

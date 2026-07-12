@@ -603,6 +603,32 @@ describeIfPg('A2 read routes (integration)', () => {
       expect(ids.indexOf(newer.id)).toBeLessThan(ids.indexOf(older.id));
     });
 
+    it('sort=oldest orders search results created_at ascending (mirror of sort=newest)', async () => {
+      const { core, app } = harness.mod();
+      const older = await core.createLink({
+        url: 'https://example.com/search-sort-oldest/older',
+        sourceKind: 'link',
+        title: 'searchsortoldestmarker older',
+      });
+      const newer = await core.createLink({
+        url: 'https://example.com/search-sort-oldest/newer',
+        sourceKind: 'link',
+        title: 'searchsortoldestmarker newer',
+      });
+
+      const body = await expectOk<{ results: Array<{ id: string }> }>(
+        app,
+        '/api/links/search?q=searchsortoldestmarker&sort=oldest',
+      );
+      const ids = body.results.map((r) => r.id);
+      expect(ids).toContain(older.id);
+      expect(ids).toContain(newer.id);
+      // oldest first — the ascending-created_at branch of resolveOrderBy, the
+      // symmetric counterpart to the sort=newest assertion above (previously
+      // only exercised for non-throwing, never asserted to actually order).
+      expect(ids.indexOf(older.id)).toBeLessThan(ids.indexOf(newer.id));
+    });
+
     it('malformed since on search -> 400 validation_error', async () => {
       const { app } = harness.mod();
       await expect400(

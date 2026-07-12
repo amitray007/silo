@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from 'react';
 import {
   useBulkDeleteNow,
   useBulkRestore,
@@ -17,7 +18,8 @@ import {
   DockTrashIcon,
   SelectionDock,
 } from '../components/Dock';
-import { TrashIcon } from '../components/NavIcons';
+import { HeaderActionButton } from '../components/HeaderActionButton';
+import { CheckIcon, TrashIcon } from '../components/NavIcons';
 import { useTrashSelection } from '../components/SelectionContext';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
@@ -94,6 +96,67 @@ function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; a
         Empty all
       </DockIconAction>
     </Dock>
+  );
+}
+
+/** How long the "✓ Confirm?" state stays up before auto-resetting back to "Empty Now" if the user doesn't act on it (method file decision 4: "auto-resets on blur, or a short timeout"). */
+const CONFIRM_RESET_MS = 4000;
+
+/**
+ * The `ContentHeader` right-slot "Empty Now" button (method file
+ * "tag-capture-empty-trash", decision 4) — the SAME `HeaderActionButton`
+ * pill (one control, not a pair) that swaps its OWN icon/label in place: it
+ * starts as a trash-can icon + "Empty Now"; the FIRST click flips it to a
+ * check-mark icon + "Confirm?" (no separate Cancel control — a single
+ * `confirming` boolean drives both states); the SECOND click (on the
+ * "Confirm?" state) actually calls `useEmptyTrash().mutate()`. Emptying
+ * trash is destructive + irreversible, so a single tap must never fire it —
+ * this two-state toggle is the confirm gate, without a `window.confirm`
+ * dialog.
+ *
+ * The confirm state auto-resets — a timer (`CONFIRM_RESET_MS`) OR the
+ * mutation settling both clear it back to idle, so an accidental first tap
+ * doesn't leave a live "Confirm?" trap sitting in the header indefinitely.
+ * `isPending` disables the button so the in-flight mutation can't be
+ * re-triggered by a second click.
+ *
+ * This is a SEPARATE surface from `TrashIdleDock`'s existing "Empty all" —
+ * both stay (decision 4: "leave the existing idle-dock as-is"); this one
+ * lives in the header so it's reachable without scrolling to the bottom
+ * dock, and has its own confirm step since the dock's "empty all" has none.
+ */
+function TrashEmptyNowButton() {
+  const emptyTrash = useEmptyTrash();
+  const [confirming, setConfirming] = useState(false);
+  const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  useEffect(() => () => clearTimeout(resetTimer.current), []);
+
+  function armConfirm() {
+    setConfirming(true);
+    clearTimeout(resetTimer.current);
+    resetTimer.current = setTimeout(() => setConfirming(false), CONFIRM_RESET_MS);
+  }
+
+  function handleClick(): undefined {
+    if (!confirming) {
+      armConfirm();
+      return undefined;
+    }
+    clearTimeout(resetTimer.current);
+    emptyTrash.mutate(undefined, { onSettled: () => setConfirming(false) });
+    return undefined;
+  }
+
+  return (
+    <HeaderActionButton
+      icon={confirming ? <CheckIcon /> : <TrashIcon size={16} stroke="currentColor" />}
+      label={confirming ? 'Confirm?' : 'Empty Now'}
+      onClick={handleClick}
+      disabled={emptyTrash.isPending}
+      title={confirming ? 'Confirm emptying the trash' : 'Permanently empty the trash'}
+      ariaLabel={confirming ? 'Confirm emptying the trash' : 'Empty the trash now'}
+    />
   );
 }
 
@@ -215,8 +278,12 @@ function TrashBody({
  * REMOVED by a later user-feedback pass, mirroring the tag page's own
  * search-box removal (`TagView.tsx`'s doc comment): the command palette
  * (⌘K / `/`) handles trash search now, so `ContentHeader` here renders only
- * the route title. The trash count still lives in the sidebar nav item,
- * matching Library's own "count in sidebar, not heading bar" treatment.
+ * the route title (plus, per the method file "tag-capture-empty-trash",
+ * decision 4, the header-level "Empty Now" button — see `TrashEmptyNowButton`
+ * — passed as `ContentHeader`'s `children`, the same right-aligned slot
+ * `ContentFrame` gives Library/Tag's `PasteCaptureButton`). The trash count
+ * still lives in the sidebar nav item, matching Library's own "count in
+ * sidebar, not heading bar" treatment.
  */
 export function TrashView() {
   const { data: counts } = useCounts();
@@ -234,7 +301,7 @@ export function TrashView() {
 
   return (
     <>
-      <ContentHeader title="Trash" />
+      <ContentHeader title="Trash">{links.length > 0 && <TrashEmptyNowButton />}</ContentHeader>
       <div className="silo-content-body">
         <div className="silo-content-col silo-route-fade">
           <TrashBody

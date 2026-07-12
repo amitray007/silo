@@ -126,6 +126,67 @@ export function LogOutIcon() {
 }
 
 /**
+ * A clipboard-paste glyph for the Library header's "paste to capture" button
+ * (`LibraryView.tsx`'s `PasteCaptureButton`) — a clipboard body (the
+ * rectangle + its top clip tab) with a small downward arrow inside, so it
+ * reads distinctly as PASTE (content going IN) rather than the generic
+ * copy-a-clipboard icon most icon sets reuse for both actions. Follows the
+ * shared nav-icon convention: `viewBox="0 0 16 16"`, 16px render size,
+ * `stroke="currentColor"` (inherits the button's idle/hover color, no
+ * hardcoded hex), `strokeWidth 1.4`, round caps/joins, `aria-hidden` (the
+ * button itself carries the `aria-label`).
+ */
+/**
+ * A clean `+` glyph for the Library "Add" capture button. The button carries a
+ * visible "Add" label, so the icon just needs to read as "add" at a glance — a
+ * plus is crisper at 16px than the busier clipboard/paste glyph it replaced.
+ */
+export function AddIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M8 3.5v9M3.5 8h9" />
+    </svg>
+  );
+}
+
+/**
+ * A check-mark glyph for the Trash header's "Empty Now" button's confirm
+ * state (`TrashView.tsx`'s `TrashEmptyNowButton`) — the SAME button swaps
+ * its icon from `TrashIcon` to this on the first click, reading as "✓
+ * Confirm?" before the second click actually empties the trash. Follows the
+ * shared nav-icon convention: `viewBox="0 0 16 16"`, `stroke="currentColor"`,
+ * `strokeWidth 1.5`, round caps/joins, `aria-hidden` (the button itself
+ * carries the label/aria-label).
+ */
+export function CheckIcon() {
+  return (
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d="M3.2 8.4 6.4 11.6 12.8 4.8" />
+    </svg>
+  );
+}
+
+/**
  * The magnifier glyph shared by every search-style input's leading icon —
  * `Omnibar` and the Trash screen's search input (`TrashView.tsx`'s
  * `TrashSearchInput`) both render this exact 15×15 `stroke="var(--ghost)"`

@@ -1,0 +1,47 @@
+-- Trigram substring-search index (search-substring method, D1/D4): adds the
+-- pg_trgm fallback tier for the command palette's free-text search — the
+-- prefix-FTS tier (search-substring method) finds a WORD PREFIX (`sil`
+-- matches `silo`), but a bare substring anywhere in a word (`ilo` matching
+-- `silo`) has no tsvector/tsquery representation at all; that gap is what
+-- this migration exists to close.
+--
+-- Two statements:
+--
+--   1. `CREATE EXTENSION IF NOT EXISTS pg_trgm` — enables the `%`
+--      similarity operator, `similarity()`, and `gin_trgm_ops` GIN opclass.
+--      Must run BEFORE the CREATE INDEX below, which depends on
+--      `gin_trgm_ops` existing. Idempotent (`IF NOT EXISTS`), matching
+--      0000_enable-extensions's `pgvector` pattern.
+--
+--   2. `CREATE INDEX ... USING gin (<expr> gin_trgm_ops) WHERE deleted_at IS
+--      NULL` — a GIN trigram EXPRESSION index over the SAME field set
+--      `search_vector` covers, minus `extracted_text` (frozen method
+--      decision — see `@silo/core`'s `search-query.ts`, `buildSubstringMatch`
+--      doc comment, for why extracted_text is excluded from the trigram
+--      tier). Partial or live rows only, mirroring
+--      `links_search_vector_live_idx` — trashed rows never need to be
+--      searched. The concatenation expression
+--      (`coalesce(title,'') || ' ' || coalesce(description,'') || ' ' ||
+--      regexp_replace(left(split_part(coalesce(canonical_url,''), '#', 1),
+--      4000), '[^[:alnum:]]+', ' ', 'g') || ' ' || coalesce(notes,'')`) MUST
+--      stay byte-identical to `core`'s `buildSubstringMatch` SQL (same
+--      split-canonical-url term `search_vector`'s weight-C URL clause uses,
+--      see 0010_dark_microbe/0011_worthless_firestar) — the query planner
+--      only recognizes an ILIKE '%needle%' predicate as index-backed when
+--      the ILIKE'd expression matches this index's expression exactly.
+--
+-- NOTE: drizzle-kit's raw generated output for this migration was wrong on
+-- two counts, hand-corrected before this file was applied — the SAME class
+-- of bug 0006/0010/0011's own comments document: (1) it does not model
+-- `CREATE EXTENSION`/`gin_trgm_ops` at all, so the `CREATE EXTENSION IF NOT
+-- EXISTS pg_trgm;` statement below was added by hand, ordered FIRST; (2) it
+-- emitted TWO spurious `DROP TYPE` statements (`link_origin` and
+-- `capture_source`) — the generator's enum tracking momentarily lost both
+-- enums from its diff even though `links.added_by` and `links.source` still
+-- use them. Both spurious lines were removed by hand; `meta/0012_snapshot.json`
+-- was hand-corrected to restore the full `enums` map (matching 0011's) so the
+-- NEXT `db:generate` diffs against the true state instead of re-proposing
+-- the same bogus drops.
+CREATE EXTENSION IF NOT EXISTS pg_trgm;--> statement-breakpoint
+
+CREATE INDEX "links_trgm_live_idx" ON "links" USING gin ((coalesce("title", '') || ' ' || coalesce("description", '') || ' ' || regexp_replace(left(split_part(coalesce("canonical_url", ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g') || ' ' || coalesce("notes", '')) gin_trgm_ops) WHERE "links"."deleted_at" is null;

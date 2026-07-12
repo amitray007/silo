@@ -3,11 +3,25 @@ import { getById, type SearchResultRow, search } from './links.js';
 /**
  * "Find related links" (agent-navigation slice U3) — given a seed link, return
  * OTHER live links that mechanically overlap it on tags/title terms. No AI:
- * this is a seeded `search()` call, reusing the exact same full-text + tag
- * ranking machinery `search_links` uses (see `links.ts`'s `search` doc
- * comment) rather than a hand-rolled parallel query — sharing that query is
- * what keeps this unit's SQL footprint at zero (no new tsquery/ts_headline
- * logic, no jscpd risk).
+ * this runs the exact same `search()` full-text + tag ranking machinery
+ * `search_links` uses (see `links.ts`'s `search` doc comment), once PER seed
+ * term, and aggregates the per-term result sets by overlap — see
+ * `findRelated`'s doc comment for why per-term aggregation replaced a single
+ * OR-joined query. Reusing `search()` (rather than a hand-rolled parallel
+ * query) is what keeps this unit's SQL footprint at zero (no new tsquery/
+ * ts_headline logic, no jscpd risk).
+ *
+ * Each per-term search runs FTS-only (`search()`'s internal `ftsOnly` opt,
+ * see `links.ts`'s `SearchInternalOptions` / `search-query.ts`'s
+ * `UnionSearchOptions.ftsOnly`) — topical, stopword-aware matching via the
+ * `search_vector`/tag-vector side only. The union path's trigram substring
+ * side (always-on `ILIKE '%term%'`) is deliberately excluded here: it is NOT
+ * stopword/topical-aware, so a short/common title term like "the" would
+ * otherwise substring-match `weather`/`together`/almost every row and flood
+ * the overlap aggregation with noise (verified against real Postgres via
+ * adversarial review of this slice). FTS's `to_tsquery('english', ...)`
+ * empties out a pure-stopword term instead, contributing zero (correct)
+ * candidates for it.
  */
 
 /** Default/cap for `findRelated`'s result count — mirrors `effectiveLimit`'s
@@ -43,38 +57,68 @@ function significantTitleWords(title: string | null): string[] {
 }
 
 /**
- * Build the `websearch_to_tsquery`-friendly term string `findRelated` searches
- * with: the seed's tag names (strongest signal — a deliberately user-applied
- * label) followed by its significant title words, joined with the LITERAL
- * `OR` keyword `websearch_to_tsquery` recognizes for disjunction.
+ * Build the deduped term list `findRelated` searches with, ONE AT A TIME: the
+ * seed's tag names (strongest signal — a deliberately user-applied label)
+ * followed by its significant title words. Deduped case-insensitively (a
+ * `Set` over lowercased terms) so a title word that repeats a tag (e.g. tag
+ * `rust` + title word "rust") isn't searched twice — it would otherwise
+ * inflate that candidate's `matchCount` in `findRelated`'s aggregation
+ * without adding real signal, since both terms would match the exact same
+ * rows.
  *
- * IMPORTANT: bare space-separated terms are NOT ORed by `websearch_to_tsquery`
- * — they're ANDed (`websearch_to_tsquery('english', 'rust programming')` ->
- * `'rust' & 'program'`), same as a plain multi-word web search box requiring
- * every word. An AND-joined query here would only match a candidate carrying
- * EVERY seed term, which is far too narrow for "related" (a link sharing just
- * one of several tags should still surface). Explicit ` OR ` between each
- * term (`websearch_to_tsquery('english', 'rust OR programming')` ->
- * `'rust' | 'program'`) is what makes ANY term match, so a candidate matching
- * MORE terms ranks higher via `search()`'s existing `ts_rank` — exactly the
- * "rank by overlap" the spec asks for, with zero new ranking logic.
+ * Why per-term instead of one combined query: `search()`'s union path
+ * (`buildPrefixTsQuery`) ANDs every token of a single query string together
+ * (see `runUnionSearch`'s doc comment) — there is no more `websearch_to_tsquery`
+ * OR-keyword to lean on for disjunction (that path is gone from `search()`,
+ * see `links.ts`). Running ONE `search()` call per term instead gives true
+ * OR-over-terms: a candidate need only match ONE term to surface, and
+ * `findRelated` aggregates each candidate's overlap across terms itself
+ * (`matchCount`) rather than relying on `search()`'s internal `ts_rank` to
+ * encode "matched more terms" the way a single OR-tsquery used to. Each of
+ * these per-term searches also runs FTS-only (`{ ftsOnly: true }`, see
+ * `findRelated`'s doc comment) — topical, stopword-aware matching only, so
+ * the trigram substring noise the union path's always-on `ILIKE` side would
+ * otherwise introduce is excluded by design.
  *
- * Returns `''` (falsy) when the seed has NEITHER tags NOR any significant
- * title word — the "no signal" case `findRelated` handles by returning an
- * empty result (see its doc comment) rather than running a query that would
- * match everything.
+ * Returns `[]` when the seed has NEITHER tags NOR any significant title word
+ * — the "no signal" case `findRelated` handles by returning an empty result
+ * (see its doc comment) rather than running a query that would match
+ * everything.
  */
-function buildRelatedQueryTerms(tags: ReadonlyArray<string>, title: string | null): string {
+function buildRelatedSearchTerms(tags: ReadonlyArray<string>, title: string | null): string[] {
   const terms = [...tags, ...significantTitleWords(title)];
-  return terms.join(' OR ').trim();
+  const seen = new Set<string>();
+  const deduped: string[] = [];
+  for (const term of terms) {
+    const key = term.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(term);
+  }
+  return deduped;
 }
 
+/** Per-candidate accumulator for `findRelated`'s cross-term aggregation — see
+ * that function's doc comment for what `matchCount`/`rankSum` mean and how
+ * they're used to sort. */
+type RelatedCandidate = {
+  matchCount: number;
+  rankSum: number;
+  row: SearchResultRow;
+};
+
 /**
- * Find other LIVE links related to `id`, ranked by mechanical term overlap —
- * the seed's tags + significant title words become a `search()` query, and
- * `search()`'s existing combined `ts_rank` (title/description/text vector OR
- * tag-name vector) does the ranking. The seed itself is excluded from the
- * result (never returned as "related to itself").
+ * Find other LIVE links related to `id`, ranked by mechanical term overlap.
+ * Each of the seed's tags + significant title words is searched
+ * INDEPENDENTLY via `search()` (one call per term — see
+ * `buildRelatedSearchTerms`'s doc comment for why a single combined query no
+ * longer works), and candidates are ranked by how many DISTINCT terms they
+ * matched (`matchCount`, the primary overlap signal — a candidate sharing
+ * BOTH of the seed's tags appears in two terms' result sets and so outranks
+ * one sharing only one), with each term-search's `rank` summed
+ * (`rankSum`) as a secondary tiebreak within equal overlap, and `id` as a
+ * final deterministic tiebreak. The seed itself is excluded from the result
+ * (never returned as "related to itself").
  *
  * Documented edge-case behavior (spec: "decide + document"):
  * - **Seed id not found** (unknown id, or the seed is trashed — `getById` is
@@ -89,12 +133,16 @@ function buildRelatedQueryTerms(tags: ReadonlyArray<string>, title: string | nul
  *   arbitrarily. Silo never invents a semantic query, so "no signal" means
  *   "no related links," not a fallback to something arbitrary.
  *
- * Overfetches (`limit + 1` extra, capped) from `search()` before filtering out
- * the seed and truncating to `limit` — the seed itself is a strong self-match
- * (it always carries its own tags/title terms) and will otherwise consume one
- * of the requested slots before being dropped, silently under-filling the
- * page by one for a common case. `search()`'s own default relevance ordering
- * is kept (unchanged `sort` behavior) since overlap = relevance here.
+ * Each per-term `search()` call overfetches WELL beyond the final page size
+ * (`PER_TERM_FETCH`, below) for two reasons: (1) excluding the seed (a
+ * near-certain self-match on every one of its own terms) shouldn't under-fill
+ * the final aggregated page — the seed always carries its own tags/title
+ * terms and would otherwise consume one of the requested slots in EVERY
+ * term's result set before being dropped; (2) a candidate sharing MANY terms
+ * may still rank only mid-page within any ONE term's individual result set,
+ * yet deserves a top slot overall by total overlap (`matchCount`) — a
+ * shallow per-term fetch window would silently drop exactly those
+ * max-overlap candidates before `findRelated` ever sees them to aggregate.
  *
  * `limit` clamped to `[1, 50]`, default 10 (`effectiveRelatedLimit`) — smaller
  * ceiling than `list`/`search`'s `[1, 100]` since this is a fixed single page,
@@ -106,12 +154,44 @@ export async function findRelated(id: string, limit?: number): Promise<SearchRes
   const seed = await getById(id);
   if (!seed) return [];
 
-  const queryTerms = buildRelatedQueryTerms(seed.tags, seed.title);
-  if (!queryTerms) return [];
+  const terms = buildRelatedSearchTerms(seed.tags, seed.title);
+  if (terms.length === 0) return [];
 
-  // Overfetch by one extra page slot so excluding the seed (a near-certain
-  // self-match) doesn't under-fill the final page — see doc comment above.
-  const { results } = await search(queryTerms, {}, { limit: effectiveLimit + 1 });
+  // Fetch a DEEPER window per term than the final page: a candidate sharing
+  // many terms may rank only mid-page within each individual term, yet still
+  // deserve a top slot by overlap (matchCount). Pulling only `limit`-ish rows
+  // per term would drop exactly those max-overlap candidates. Cap the
+  // per-term window so a many-term seed's fan-out stays bounded — still a
+  // best-effort widening, not a hard guarantee at extreme corpus sizes, but
+  // no longer drops mid-page high-overlap candidates WITHIN this window.
+  // `100` mirrors search()'s own `effectiveLimit` ceiling ([1, 100]) — this
+  // never asks search() for more than it would itself allow.
+  const PER_TERM_FETCH = Math.min(effectiveLimit * 5, 100);
 
-  return results.filter((row) => row.id !== id).slice(0, effectiveLimit);
+  // Sequential (not Promise.all): term counts are tiny (a handful of tags +
+  // title words per link), so the marginal latency of awaiting one at a time
+  // is negligible — not worth the added complexity of a parallel fan-out for
+  // this bounded, small N.
+  const candidates = new Map<string, RelatedCandidate>();
+  for (const term of terms) {
+    const { results } = await search(term, {}, { limit: PER_TERM_FETCH }, { ftsOnly: true });
+    for (const row of results) {
+      if (row.id === id) continue;
+      const existing = candidates.get(row.id);
+      if (existing) {
+        existing.matchCount += 1;
+        existing.rankSum += row.rank;
+      } else {
+        candidates.set(row.id, { matchCount: 1, rankSum: row.rank, row });
+      }
+    }
+  }
+
+  const sorted = [...candidates.values()].sort((a, b) => {
+    if (a.matchCount !== b.matchCount) return b.matchCount - a.matchCount;
+    if (a.rankSum !== b.rankSum) return b.rankSum - a.rankSum;
+    return a.row.id < b.row.id ? -1 : a.row.id > b.row.id ? 1 : 0;
+  });
+
+  return sorted.slice(0, effectiveLimit).map((candidate) => candidate.row);
 }

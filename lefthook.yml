@@ -15,14 +15,21 @@ pre-commit:
       run: pnpm biome check --write --no-errors-on-unmatched {staged_files}
       stage_fixed: true
 
+# DB-backed suites (@silo/app, @silo/api, @silo/core, ...) read DATABASE_URL
+# from the environment and THROW when it is unset. The push hook otherwise
+# runs without it, so `test` failed with "DATABASE_URL must be set" unless the
+# committer had manually exported it. Each command sources a local `.env`
+# (gitignored — it holds the local DATABASE_URL) before running, so the gate
+# connects automatically. `[ -f .env ]` keeps this a no-op when there is no
+# .env (e.g. CI, where DATABASE_URL is injected by the environment instead).
 pre-push:
   parallel: true
   commands:
     check-types:
-      run: pnpm turbo run check-types
+      run: set -a; [ -f .env ] && . ./.env; set +a; pnpm turbo run check-types
     test:
-      run: pnpm turbo run test
+      run: set -a; [ -f .env ] && . ./.env; set +a; pnpm turbo run test
     build:
-      run: pnpm turbo run build
+      run: set -a; [ -f .env ] && . ./.env; set +a; pnpm turbo run build
     quality:
-      run: pnpm quality
+      run: set -a; [ -f .env ] && . ./.env; set +a; pnpm quality

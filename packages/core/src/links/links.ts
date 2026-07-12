@@ -8,14 +8,13 @@ import type { Executor, Link } from './executor.js';
 import { whereLive } from './live.js';
 import {
   decodeListCursor,
-  decodeSearchCursor,
   effectiveLimit,
   encodeListCursor,
-  encodeSearchCursor,
   hydrateTags,
   type LinkWithTags,
   type PageParams,
 } from './pagination.js';
+import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
 import { sourceDataSchema } from './source-data.js';
@@ -874,28 +873,45 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
 ), ''))`;
 
 /**
- * Full-text search over live links, ranked by `ts_rank` (highest first),
- * tag-hydrated and offset-paginated. Matches a row when EITHER the stored
- * `search_vector` (title/description/extracted_text/notes, per the schema's
- * generated column) OR the link's tag names (`tagSearchVector`, computed at
- * query time — see its doc comment for why tags can't live in the generated
- * column) satisfy the query. Rank combines both signals by SUMMING their
- * `ts_rank`s: a tag hit is a real relevance signal (an exact, deliberately
- * user-applied label), so it should be able to lift a link's rank rather than
- * being ignored whenever the stored vector alone would rank it lower — while
- * a link matching on both signals ranks above one matching on only one,
- * which a `GREATEST`/max-of-two would not distinguish.
+ * Union search over live links (search-union rework), tag-hydrated and
+ * offset-paginated. Delegates to `search-query.ts`'s `runUnionSearch`
+ * (shared with `trash.ts`'s `searchTrash`): a SINGLE query matches a row
+ * when EITHER of two independent predicates is true, never gated on the
+ * other's result count —
+ *
+ *   1. PREFIX full-text side: the query's LAST token is upgraded to a
+ *      prefix match (`sil:*` matches `silo`) via `buildPrefixTsQuery`,
+ *      ANDed with every earlier token as an exact lexeme — see that
+ *      function's doc comment for the app-side escaping that keeps this
+ *      injection-safe. Matches a row when EITHER the stored `search_vector`
+ *      (title/description/extracted_text/notes, per the schema's generated
+ *      column) OR the link's tag names (`tagSearchVector`, computed at
+ *      query time — see its doc comment for why tags can't live in the
+ *      generated column) satisfy the tsquery.
+ *   2. TRIGRAM substring side (runs ALWAYS, not as a fallback):
+ *      `buildSubstringMatch` runs an `ILIKE '%needle%'` over the SAME
+ *      title/description/canonical-url/notes field set (see that function's
+ *      doc comment for why `extracted_text` is excluded and the
+ *      needle-escaping that keeps `%`/`_`/`\` from becoming wildcards).
+ *      Finds `ilo` matching `silo` anywhere in a word, not just as a prefix.
+ *
+ * Both sides run in every query — a tag-prefix match on one row can no
+ * longer suppress a trigram substring match on a different row (the HIGH
+ * finding the union rework fixes; see `docs/methods/search-union-rework.md`).
+ * Ranking is a single composite `ORDER BY` that sorts FTS-matching rows
+ * (title/body/tag) above trigram-only rows, by combined `ts_rank` within the
+ * FTS group, then by `similarity()` within the trigram-only group — see
+ * `runUnionSearch`'s doc comment for the exact clause.
  *
  * `filter.tag` (optional, command-center search plan 024): an ADDITIONAL
  * scope on top of the text match above — when given, a result must also
  * carry that exact tag (`tags.normalizedKey = normalizeTagKey(tag)`, joined
  * through `linkTags`/`tags`, mirroring `list()`'s tag-filter branch). This is
  * an `EXISTS` membership check, layered on top of (ANDed with) the existing
- * OR-based text/tag-name match — it does NOT replace or widen that match, so
- * a `tag` scope never surfaces a link that fails the text query. Omitting
- * `filter` (or `filter.tag`) leaves every existing caller's behavior
- * byte-for-byte unchanged (the predicate below degrades to exactly the prior
- * query — see the regression test).
+ * text/tag-name match — it does NOT replace or widen that match, so a `tag`
+ * scope never surfaces a link that fails the text query. Omitting `filter`
+ * (or `filter.tag`) leaves every existing caller's behavior byte-for-byte
+ * unchanged.
  *
  * `filter` is an OPTIONS OBJECT (`SearchFilter`, mirroring `list()`'s own
  * `ListFilter` third… second parameter shape) rather than a positional
@@ -904,13 +920,14 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * an extra positional `undefined` through — a review flagged the original
  * positional `tag?: string` design (plan 024) for exactly this churn risk.
  *
- * Rank is not unique/keyset-able, so pagination uses a bounded offset cursor
- * — capped at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is
- * rejected with `InvalidCursorError` rather than run, since each page past
- * that depth is a full sort-then-discard) — documented tradeoff: a row
- * inserted mid-paging can shift results, acceptable for search at this scale.
- * `limit` is clamped to `[1, 100]` (default 20). `websearch_to_tsquery` stays
- * bound as a parameter (no injection) exactly as before.
+ * The combined rank is not unique/keyset-able, so pagination uses a bounded
+ * plain offset cursor (`{ offset }`, no tier field — the union rework
+ * removed the tier tag entirely, since there is only one query now) — capped
+ * at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is rejected
+ * with `InvalidCursorError` rather than run, since each page past that depth
+ * is a full sort-then-discard) — documented tradeoff: a row inserted
+ * mid-paging can shift results, acceptable for search at this scale. `limit`
+ * is clamped to `[1, 100]` (default 20).
  *
  * Performance note: `tagSearchVector` is a correlated subquery evaluated per
  * candidate row (once for the WHERE match, once for the rank — Postgres does
@@ -921,6 +938,12 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * tags join the GIN-indexed `search_vector` path instead — deliberately not
  * built now (adds a write-side trigger to keep in sync, out of scope for this
  * increment).
+ *
+ * 4th param `opts` (`SearchInternalOptions`, see its doc comment): internal-
+ * only, not part of the public API/MCP surface. Currently carries `ftsOnly`,
+ * used exclusively by `findRelated` (`related.ts`) to force FTS/tag-vector-
+ * only matching for its per-term topical-overlap search. Optional and
+ * defaulted, so every existing 3-arg call site is unaffected.
  */
 export type SearchFilter = {
   tag?: string;
@@ -944,32 +967,35 @@ export type SearchFilter = {
   sort?: 'relevance' | 'newest' | 'oldest';
 };
 
+/**
+ * Internal-only options for `search()` (NOT part of the public API/MCP
+ * surface): a 4th, optional parameter so `findRelated` (`related.ts`) can
+ * reach `runUnionSearch`'s `ftsOnly` option without a new positional param
+ * disturbing any existing caller. `findRelated`'s per-term topical-overlap
+ * search must match ONLY via FTS/tag-vector (topical, stopword-aware) — the
+ * trigram substring side would otherwise `ILIKE`-match a short/common title
+ * term against unrelated rows and flood the overlap aggregation with noise
+ * (see `UnionSearchOptions.ftsOnly` in `search-query.ts`). The API/MCP
+ * `search` tools call `search(query, filter, page)` and never pass this —
+ * `ftsOnly` stays an internal core concern.
+ */
+export type SearchInternalOptions = {
+  ftsOnly?: boolean;
+};
+
 export async function search(
   query: string,
   filter: SearchFilter = {},
   page: PageParams = {},
+  opts: SearchInternalOptions = {},
 ): Promise<SearchPage> {
-  const limit = effectiveLimit(page.limit);
-  const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
   const tag = filter.tag;
   const sort = filter.sort ?? 'relevance';
 
-  const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
-  const titleRank = sql`ts_rank(${links.searchVector}, ${tsQuery})`;
-  const tagRank = sql`ts_rank(${tagSearchVector}, ${tsQuery})`;
-  const combinedRank = sql<number>`${titleRank} + ${tagRank}`;
-
-  // `snippet` (agent-navigation slice U2): a query-focused `ts_headline`
-  // excerpt around the best match — see `buildSnippetHeadline`'s doc comment
-  // for the fallback order (extractedText -> description -> title) and the
-  // fixed headline options.
-  const snippetHeadline = buildSnippetHeadline(tsQuery);
-
   // The additive tag-membership scope (see doc comment above): an `EXISTS`
   // over the same `linkTags`/`tags` join `list()`'s tag-filter branch uses,
-  // correlated on THIS row's id. Kept as a bare `undefined` (not folded into
-  // the OR-match sql template) when `tag` is omitted, so the WHERE clause
-  // below is textually identical to the pre-existing query in that case.
+  // correlated on THIS row's id. `undefined` when `tag` is omitted, so the
+  // WHERE clause `runUnionSearch` builds is unaffected in that case.
   const tagScopeCondition = tag
     ? sql`exists (
         select 1 from ${linkTags}
@@ -981,66 +1007,37 @@ export async function search(
 
   // `source`/`tags[]`/`since`/`until` (agent-navigation slice U1): additional
   // ANDed predicates, all OPTIONAL — omitted, this array is empty and the
-  // WHERE clause below is unchanged from before this slice. `tags[]` reuses
-  // `requiredTagConditions` (see its doc comment); `filter.tag` above already
-  // covers the singular case via `tagScopeCondition`, so `requiredTagConditions`
-  // here is deliberately given ONLY `filter.tags` (not merged with `tag`) —
-  // merging would double-apply the singular tag's EXISTS redundantly (harmless
-  // but wasteful); the two conditions target the same rows regardless.
+  // WHERE clause `runUnionSearch` builds is unchanged from before this slice.
+  // `tags[]` reuses `requiredTagConditions` (see its doc comment); `filter.tag`
+  // above already covers the singular case via `tagScopeCondition`, so
+  // `requiredTagConditions` here is deliberately given ONLY `filter.tags` (not
+  // merged with `tag`) — merging would double-apply the singular tag's EXISTS
+  // redundantly (harmless but wasteful); the two conditions target the same
+  // rows regardless.
   const extraConditions: ReturnType<typeof sql>[] = [];
   if (filter.source) extraConditions.push(eq(links.sourceKind, filter.source));
   if (filter.since) extraConditions.push(sinceCondition(filter.since));
   if (filter.until) extraConditions.push(untilCondition(filter.until));
   extraConditions.push(...requiredTagConditions(filter.tags ?? []));
 
-  // Deterministic order + tiebreak (spec: "ensure the sort is deterministic
-  // with an id tiebreak" so the offset cursor stays stable across pages
-  // regardless of which sort is active). `id` is a random UUID with no
-  // relation to insertion order, but any FIXED tiebreak column makes ties
-  // deterministic — it need not be meaningful, only stable across the two
-  // `search()` calls (page 1, page 2) that must agree on relative order.
-  const orderBy =
-    sort === 'newest'
-      ? [desc(links.createdAt), desc(links.id)]
-      : sort === 'oldest'
-        ? [links.createdAt, links.id]
-        : [desc(combinedRank), desc(links.id)];
-
-  const rows = await db
-    .select({
-      link: links,
-      rank: combinedRank,
-      snippet: snippetHeadline,
-    })
-    .from(links)
-    .where(
-      whereLive(
-        sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`,
-        ...(tagScopeCondition ? [tagScopeCondition] : []),
-        ...extraConditions,
-      ),
-    )
-    .orderBy(...orderBy)
-    .limit(limit + 1)
-    .offset(offset);
-
-  const hasMore = rows.length > limit;
-  const page_ = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? encodeSearchCursor(offset + limit) : undefined;
-
-  const hydrated = await hydrateTags(
-    db,
-    page_.map((row) => row.link),
-  );
-  const results: SearchResultRow[] = hydrated.map((link, i) => {
-    const { extractedText, ...rest } = link;
-    return {
-      ...rest,
-      rank: page_[i]?.rank ?? 0,
-      snippet: page_[i]?.snippet ?? null,
-    };
+  // Delegates the entire query-assembly control flow to `runUnionSearch`
+  // (search-union rework) — see its doc comment for the union match
+  // predicate, ranking, and pagination contract. `sort`/`extraConditions`
+  // are grafted onto that shared helper (agent-navigation slices U1/U2)
+  // rather than reimplemented here: `runUnionSearch`'s `options.sort` swaps
+  // the ORDER BY without touching the WHERE (the union match predicate
+  // still filters under every sort), and `options.snippetFor` attaches a
+  // query-focused `ts_headline` excerpt via `buildSnippetHeadline` — see
+  // that function's doc comment for the fallback order (extractedText ->
+  // description -> title) and the fixed headline options. `runUnionSearch`
+  // now returns rows ALREADY shaped as `SearchResultRow` (extractedText
+  // stripped, snippet + rank attached), so this returns its result directly.
+  return runUnionSearch(whereLive(), tagSearchVector, query, tagScopeCondition, page, {
+    extraConditions,
+    sort,
+    snippetFor: (tsQuery) => buildSnippetHeadline(tsQuery),
+    ...(opts.ftsOnly !== undefined ? { ftsOnly: opts.ftsOnly } : {}),
   });
-  return nextCursor === undefined ? { results } : { results, nextCursor };
 }
 
 /**

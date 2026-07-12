@@ -47,7 +47,28 @@ export const links = pgTable(
     // core→db dependency the architecture enforces (and tripping no-circular).
     // `db` is a leaf: it stores JSON; `core` validates `source_data` against the
     // Zod union at the write boundary and casts reads to `SourceData`.
-    sourceData: jsonb('source_data').$type<Record<string, unknown>>(),
+    //
+    // `NOT NULL DEFAULT '{"kind":"link"}'` (search-url method, source-data
+    // NULL fix): mirrors `addedBy`/`source`/`enrichAttempts` above — this is
+    // the ONE legacy column that had shipped nullable with no default and no
+    // backfill, so pre-existing rows sit at `source_data = NULL`. `core`'s
+    // strict `sourceDataSchema` (a discriminated union in
+    // `@silo/core`'s `links/source-data.ts`) rejects `null`, so every NULL row
+    // fails validation on read and `shapeSourceData`
+    // (`@silo/api`'s `link-json.ts`) floors it to `{kind:'link'}` — harmless,
+    // but it logs a warning per row on every list/search. `{"kind":"link"}` is
+    // exactly that same link-floor shape, so the DB default now matches the
+    // read-path fallback the app already applies. The migration backfills
+    // every existing NULL row to `{"kind":"link"}` before adding the
+    // constraint (Postgres's plain `ADD COLUMN ... NOT NULL DEFAULT` backfill
+    // trick only fires for a brand-new column, not an existing nullable one —
+    // see the migration's own comment). The write path (`core`'s
+    // `createLink`) never wrote NULL to begin with; this closes the DB-level
+    // gap so the invariant `sourceDataSchema` already enforces in code is now
+    // also enforced by the schema.
+    sourceData: jsonb('source_data').$type<Record<string, unknown>>().notNull().default({
+      kind: 'link',
+    }),
 
     captureStatus: captureStatus('capture_status').notNull().default('enriching'),
 
@@ -77,11 +98,11 @@ export const links = pgTable(
     notes: text('notes'),
 
     // Generated, read-only full-text column — Postgres keeps it in sync on
-    // every insert/update of title/description/extracted_text/notes. MUST use
-    // the explicit 'english' config: the single-arg to_tsvector(text) form is
-    // not immutable and Postgres rejects it in a generated column.
-    // coalesce(...) on every input column so one NULL doesn't null the whole
-    // vector.
+    // every insert/update of title/description/extracted_text/notes/
+    // canonical_url. MUST use the explicit 'english' config: the single-arg
+    // to_tsvector(text) form is not immutable and Postgres rejects it in a
+    // generated column. coalesce(...) on every input column so one NULL
+    // doesn't null the whole vector.
     //
     // `notes` (H2, plan 006) is weight D — the lowest — since it's a personal
     // annotation, below even the extracted body text. It CAN live in this
@@ -91,6 +112,41 @@ export const links = pgTable(
     // (`link_tags`/`tags`) reached by a join. Tag-name matching is therefore
     // done at query time in `core`'s `search()`, not here — see that
     // function's doc comment for the query-time approach and its tradeoffs.
+    //
+    // `canonical_url` (search-url method) is ALSO indexed at weight C —
+    // the same tier as `extracted_text`, a real but secondary signal, below
+    // title (A) and description (B). Only `canonical_url` is indexed, never
+    // the raw `url`: `canonical_url` is NOT NULL (never null, always falls
+    // back to the raw url on canonicalization failure — see the column's own
+    // comment) and dedup-normalized, so indexing it alone avoids
+    // double-indexing near-identical raw+canonical strings.
+    //
+    // Before tokenizing, the URL is passed through `split_part(..., '#', 1)`
+    // to drop everything from the first `#` onward. This strips ordinary URL
+    // fragments AND — critically — the internal `#unsafe-<uuid>` dedup
+    // marker `core`'s `createLink` appends to `canonicalUrl` for `ok:false`
+    // URLs (see `@silo/core`'s `links.ts`, `storedCanonicalUrl`). Without
+    // this, that marker's `unsafe` stem and UUID hex chunks would become
+    // real, searchable lexemes — `search('unsafe')` would match every
+    // unsafe-flagged link, which is an internal implementation detail
+    // leaking into user-facing search, not a real signal.
+    //
+    // The `english` tsvector config treats a whole URL as one opaque
+    // host/path token, so typing part of a domain or path (e.g. `github`)
+    // would never match — we pre-split it by replacing every run of
+    // non-alphanumeric characters with a space via
+    // `regexp_replace(..., '[^[:alnum:]]+', ' ', 'g')` BEFORE handing it to
+    // to_tsvector, so each domain/path segment becomes its own lexeme. This
+    // uses Postgres's POSIX unicode-aware `[:alnum:]` character class (NOT
+    // the ASCII-only `a-zA-Z0-9`), so non-ASCII/IDN domains and paths (e.g.
+    // `bücher`, CJK path segments) are split and tokenized correctly instead
+    // of being shattered mid-word or left unsearchable. ASCII behavior is
+    // unchanged: plain ASCII words still split exactly the same way.
+    // Consequence accepted: digit-joined segments are NOT sub-split by this
+    // regex, so a path segment like `amitray007` stays one token — searching
+    // `amitray` alone will NOT match a stored `amitray007` (only the exact
+    // joined token, or a longer prefix via websearch's own tokenizing, would).
+    // This is a deliberate, documented tradeoff, not a bug.
     //
     // Each coalesce'd input is also wrapped in `left(..., N)` — a HARD Postgres
     // limit, not a style choice: a single tsvector's serialized form must stay
@@ -104,14 +160,17 @@ export const links = pgTable(
     // ='enriching'` — the SAME failure class the clamp fix closed, reintroduced
     // one layer down at the DB. The `left()` bounds below cap only the FTS
     // INPUT per field, never the stored value — `extracted_text` itself stays
-    // unbounded for display/MCP. Worst case ~830K chars of source text across
-    // all four fields keeps the serialized tsvector comfortably under the
-    // 1,048,575-byte ceiling even for pathological all-unique-tokens input;
-    // typical prose is far smaller, and nobody searches for a term that
-    // appears only past ~½MB into one document.
+    // unbounded for display/MCP. `canonical_url` is clamped to 4,000 bytes —
+    // URLs are short, so this is ample headroom, not a realistic truncation
+    // path. Worst case ~830K chars of source text across the title/
+    // description/extracted_text/notes fields plus ~4K of URL keeps the
+    // serialized tsvector comfortably under the 1,048,575-byte ceiling even
+    // for pathological all-unique-tokens input; typical prose is far smaller,
+    // and nobody searches for a term that appears only past ~½MB into one
+    // document.
     searchVector: tsvector('search_vector').generatedAlwaysAs(
       (): SQL =>
-        sql`setweight(to_tsvector('english', left(coalesce(${links.title}, ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce(${links.description}, ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce(${links.extractedText}, ''), 600000)), 'C') || setweight(to_tsvector('english', left(coalesce(${links.notes}, ''), 100000)), 'D')`,
+        sql`setweight(to_tsvector('english', left(coalesce(${links.title}, ''), 30000)), 'A') || setweight(to_tsvector('english', left(coalesce(${links.description}, ''), 100000)), 'B') || setweight(to_tsvector('english', left(coalesce(${links.extractedText}, ''), 600000)), 'C') || setweight(to_tsvector('english', regexp_replace(left(split_part(coalesce(${links.canonicalUrl}, ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g')), 'C') || setweight(to_tsvector('english', left(coalesce(${links.notes}, ''), 100000)), 'D')`,
     ),
 
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
@@ -142,6 +201,22 @@ export const links = pgTable(
     // Supports U4's `list` filtered by capture_status among live rows.
     index('links_capture_status_live_idx')
       .on(table.captureStatus)
+      .where(sql`${table.deletedAt} is null`),
+    // Trigram substring-search index (search-substring method, D1): a `pg_trgm`
+    // GIN expression index over the SAME field set `search_vector` covers
+    // (minus `extracted_text`, per the frozen method decision — see
+    // `packages/core/src/links/search-query.ts`'s `buildSubstringMatch` doc
+    // comment for why extracted_text is excluded from the trigram tier),
+    // partial `WHERE deleted_at IS NULL` mirroring `links_search_vector_live_idx`
+    // above. Backs `core`'s trigram-fallback `ILIKE '%needle%'` tier (fires
+    // only when the prefix-FTS tier above returns zero rows). Concatenation
+    // order/expression MUST stay byte-identical to `buildSubstringMatch`'s
+    // SQL, or the planner won't recognize the ILIKE predicate as index-backed.
+    index('links_trgm_live_idx')
+      .using(
+        'gin',
+        sql`(coalesce(${table.title}, '') || ' ' || coalesce(${table.description}, '') || ' ' || regexp_replace(left(split_part(coalesce(${table.canonicalUrl}, ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g') || ' ' || coalesce(${table.notes}, '')) gin_trgm_ops`,
+      )
       .where(sql`${table.deletedAt} is null`),
   ],
 );
