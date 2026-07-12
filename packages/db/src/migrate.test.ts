@@ -418,24 +418,24 @@ describeIfPg('migrate (integration)', () => {
 
   /**
    * Access-tokens migration proof (0009_warm_sugar_man.sql, access-tokens
-   * slice): the new `access_tokens` table exists with the right columns +
-   * unique `token_hash`, and — critically — the PRE-EXISTING
+   * slice; extended by 0010_late_cloak.sql, MCP OAuth slice U1): the
+   * `access_tokens` table exists with the right columns + unique
+   * `token_hash`, and — critically — the PRE-EXISTING
    * `capture_status`/`link_origin`/`capture_source` enums (and the `links`
    * columns typed against them) must survive untouched.
    *
-   * Also proves a real drizzle-kit generation gap found while building this
-   * migration (same class as 0004's/0008's): the raw `drizzle-kit generate`
-   * output for this migration emitted a spurious `DROP TYPE
-   * "public"."link_origin"` AND `DROP TYPE "public"."capture_source"` — the
-   * generated 0009 snapshot's `enums` section had silently dropped BOTH
-   * pre-existing entries (confirmed by diffing it against 0008's snapshot,
-   * which still has all three), so drizzle-kit's diff read that as "these
-   * enums were removed" and would have run DROPs against types still in
-   * active use by `links.added_by`/`links.source`. The committed 0009
-   * migration hand-drops the two incorrect `DROP TYPE` lines (snapshot JSON
-   * hand-corrected to match); this test proves the hand-fixed file applies
-   * cleanly against the full (non-truncated) migration set and that all
-   * three enums are untouched by it.
+   * Also proves a real drizzle-kit generation gap found while building both
+   * migrations (same class as 0004's/0008's): the raw `drizzle-kit generate`
+   * output emitted a spurious `DROP TYPE "public"."link_origin"` AND `DROP
+   * TYPE "public"."capture_source"` — the generated snapshot's `enums`
+   * section had silently dropped BOTH pre-existing entries (confirmed by
+   * diffing it against the prior migration's snapshot, which still has all
+   * three), so drizzle-kit's diff read that as "these enums were removed"
+   * and would have run DROPs against types still in active use by
+   * `links.added_by`/`links.source`. Both committed migrations hand-drop the
+   * two incorrect `DROP TYPE` lines (snapshot JSON hand-corrected to match);
+   * this test proves the hand-fixed files apply cleanly against the full
+   * (non-truncated) migration set and that all three enums are untouched.
    */
   it('access_tokens: table + unique token_hash exist; capture_status/link_origin/capture_source survive', async () => {
     const database = createDisposableDatabase('silo_access_tokens_migration_test');
@@ -469,6 +469,18 @@ describeIfPg('migrate (integration)', () => {
             data_type: 'timestamp with time zone',
             is_nullable: 'YES',
           },
+          // MCP OAuth slice, U1: the unified-token-store extension — all
+          // nullable (or defaulted) so existing `bearer` rows stay valid.
+          { column_name: 'kind', data_type: 'text', is_nullable: 'NO' },
+          { column_name: 'client_id', data_type: 'text', is_nullable: 'YES' },
+          {
+            column_name: 'expires_at',
+            data_type: 'timestamp with time zone',
+            is_nullable: 'YES',
+          },
+          { column_name: 'refresh_token_hash', data_type: 'text', is_nullable: 'YES' },
+          { column_name: 'scope', data_type: 'text', is_nullable: 'YES' },
+          { column_name: 'resource', data_type: 'text', is_nullable: 'YES' },
         ]);
 
         const uniqueConstraint = await check.query<{ n: number }>(

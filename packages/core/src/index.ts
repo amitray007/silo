@@ -15,6 +15,34 @@ export {
   sessionSecret,
   verifyAppPassword,
 } from './auth/app-session.js';
+// MCP OAuth (MCP OAuth slice, U1): OAuth 2.1 + PKCE (S256) + Dynamic Client
+// Registration + resource-indicator (RFC 8707) core logic, framework-free —
+// see `auth/oauth.ts`'s doc comment and
+// docs/superpowers/specs/2026-07-12-mcp-oauth-design.md for the full
+// design. `@silo/api` (authorization server) and `@silo/app`'s mcp-http
+// (resource server) both build against this one surface.
+export type {
+  ConnectedOAuthClient,
+  IssuedOAuthTokens,
+  OAuthClient,
+  OAuthCode,
+} from './auth/oauth.js';
+export {
+  authenticateOAuthToken,
+  canonicalMcpResource,
+  consumeAuthCode,
+  createAuthCode,
+  generateOpaque,
+  getOAuthClient,
+  hashToken,
+  issueOAuthTokens,
+  listOAuthClientsForOwner,
+  registerOAuthClient,
+  revokeAllOAuthClients,
+  revokeOAuthClient,
+  rotateRefreshToken,
+  verifyPkce,
+} from './auth/oauth.js';
 // Auth token primitives (MCP-HTTP slice, U1): timing-safe secret compare +
 // env-var token read, moved here from `@silo/api`'s `token-auth.ts` so
 // `@silo/app`'s HTTP MCP listener can reuse them without importing an
