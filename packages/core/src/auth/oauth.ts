@@ -12,8 +12,8 @@ type Executor = typeof db | Parameters<Parameters<(typeof db)['transaction']>[0]
 /**
  * MCP OAuth core logic (MCP OAuth slice, U1): OAuth 2.1 + PKCE (S256) +
  * Dynamic Client Registration (RFC 7591) + resource indicators (RFC 8707),
- * framework-free — ported from the reference implementation at
- * `/Users/maverick/code/projects/stash`'s `lib/auth/oauth.ts`, adapted to
+ * framework-free — ported from the reference implementation in
+ * [stash](https://github.com/amitray007/stash)'s `lib/auth/oauth.ts`, adapted to
  * silo's single-owner posture (no `userId` scoping — silo has exactly one
  * owner) and its unified `access_tokens` table (silo extends the existing
  * table with `kind`/`clientId`/`expiresAt`/... instead of a parallel
