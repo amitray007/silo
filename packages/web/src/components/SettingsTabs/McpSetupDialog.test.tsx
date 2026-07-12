@@ -90,7 +90,7 @@ describe('McpSetupDialog', () => {
     ).toBeDefined();
   });
 
-  it('a non-localhost origin with no config override derives https://mcp.<hostname>/mcp', async () => {
+  it('a non-localhost origin with no config override shows the "not configured" notice (no URL guessing)', async () => {
     stubConfig();
     const originalLocation = window.location;
     Object.defineProperty(window, 'location', {
@@ -100,7 +100,11 @@ describe('McpSetupDialog', () => {
 
     try {
       renderDialog();
-      await screen.findByText('https://mcp.silo.example.com/mcp');
+      // No guessed https://mcp.silo.example.com/mcp — instead a prompt to set
+      // SILO_PUBLIC_MCP_URL, since the MCP host can't be inferred.
+      await screen.findByText('MCP URL not configured');
+      expect(screen.getByText('SILO_PUBLIC_MCP_URL')).toBeDefined();
+      expect(screen.queryByText('https://mcp.silo.example.com/mcp')).toBeNull();
     } finally {
       Object.defineProperty(window, 'location', {
         configurable: true,

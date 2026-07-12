@@ -4,22 +4,24 @@ import { resolveMcpUrl } from './mcpUrl';
 /**
  * Tests for `resolveMcpUrl` (deployable-silo slice, Unit 4) — the pure
  * precedence function behind "Copy config"'s URL: an operator-set
- * `SILO_PUBLIC_MCP_URL` wins outright; otherwise a non-localhost origin
- * derives `mcp.<hostname>`; otherwise (localhost dev) falls back to the
- * dev-default HTTP MCP listener address.
+ * `SILO_PUBLIC_MCP_URL` wins outright; otherwise localhost dev falls back to
+ * the dev-default HTTP MCP listener address; otherwise (a real host with no
+ * override) it is `undefined` — we deliberately do NOT guess a `mcp.<hostname>`
+ * subdomain (that produced nested hosts that break single-level wildcard TLS;
+ * see the function's doc comment + docs/deploy.md).
  */
 describe('resolveMcpUrl', () => {
   it('an operator-set config URL wins verbatim, even on a non-localhost host', () => {
-    const url = resolveMcpUrl('https://mcp.override.example/mcp', {
+    const url = resolveMcpUrl('https://mcp-silo.override.example/mcp', {
       hostname: 'silo.example.com',
       protocol: 'https:',
     });
-    expect(url).toBe('https://mcp.override.example/mcp');
+    expect(url).toBe('https://mcp-silo.override.example/mcp');
   });
 
-  it('a real (non-localhost) hostname with no config override derives mcp.<hostname>', () => {
+  it('a real (non-localhost) hostname with no config override is undefined (no guessing)', () => {
     const url = resolveMcpUrl(undefined, { hostname: 'silo.example.com', protocol: 'https:' });
-    expect(url).toBe('https://mcp.silo.example.com/mcp');
+    expect(url).toBeUndefined();
   });
 
   it('localhost with no config override falls back to the dev-default 127.0.0.1:8788', () => {
@@ -42,8 +44,8 @@ describe('resolveMcpUrl', () => {
     expect(url).toBe('http://127.0.0.1:8788/mcp');
   });
 
-  it('an empty-string config value is treated as unset, not used verbatim', () => {
+  it('an empty-string config value is treated as unset (undefined on a real host)', () => {
     const url = resolveMcpUrl('', { hostname: 'silo.example.com', protocol: 'https:' });
-    expect(url).toBe('https://mcp.silo.example.com/mcp');
+    expect(url).toBeUndefined();
   });
 });
