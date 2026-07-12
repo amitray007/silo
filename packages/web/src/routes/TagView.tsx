@@ -1,4 +1,5 @@
 import { useParams } from 'react-router-dom';
+import { PasteCaptureButton } from './LibraryView';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
@@ -25,15 +26,18 @@ function TagEmptyState({ tag }: { tag: string }) {
  * The header's `ListOmnibar` (the "Paste a link to keep" bar + its `#tag ✕`
  * pill) is DELIBERATELY OMITTED here (bugfix, user report: the tag page
  * showed a search-icon input carrying the SAME `#{tag}` the page title
- * already states, reading as a redundant search box). `ContentFrame`'s
- * `headerSlot` is left `undefined` so the header renders title+count only,
- * matching `TrashView`'s/`SettingsView`'s own "no children" convention
- * (`ContentHeader`'s doc comment: an omitted slot renders nothing, not a
- * phantom placeholder box). This does NOT remove capture-from-a-tag-page:
- * `usePasteCapture` (mounted once in `AppFrame`) captures a pasted URL
- * anywhere on the page regardless of which route is active, and search is
- * now exclusively the command palette's job (⌘K / `/`) — scoped ONLY to
+ * already states, reading as a redundant search box). Search is now
+ * exclusively the command palette's job (⌘K / `/`) — scoped ONLY to
  * `TagView`; `LibraryView`/`TrashView` keep their own headers untouched.
+ *
+ * `headerSlot` (method file "tag-capture-empty-trash", decision 3) DOES
+ * carry the same `PasteCaptureButton` `LibraryView` uses, here passed
+ * `tags={[tag]}` — so the tag page's Add button (and its clipboard-paste
+ * path) applies the CURRENT tag to whatever it captures, landing the new
+ * link directly in this tag's own feed rather than only the untagged
+ * Library. `usePasteCapture` (mounted once in `AppFrame`) does the
+ * equivalent for a real Cmd+V paste on this route — see that hook's
+ * `currentTag` param.
  */
 export function TagView() {
   const { name } = useParams<{ name: string }>();
@@ -41,7 +45,12 @@ export function TagView() {
   const view = useListView(tag);
 
   return (
-    <ContentFrame title={`# ${tag}`} count={view.links.length} headerSlot={undefined} fadeKey={tag}>
+    <ContentFrame
+      title={`# ${tag}`}
+      count={view.links.length}
+      headerSlot={<PasteCaptureButton tags={[tag]} />}
+      fadeKey={tag}
+    >
       {ListBody(view, <TagEmptyState tag={tag} />)}
     </ContentFrame>
   );

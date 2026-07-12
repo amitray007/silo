@@ -10,9 +10,9 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** A tiny host component so `usePasteCapture` (an effect-only hook with no return value) can be mounted under a real `QueryClientProvider`, matching how `AppFrame` actually uses it. */
-function PasteCaptureHost() {
-  usePasteCapture();
+/** A tiny host component so `usePasteCapture` (an effect-only hook with no return value) can be mounted under a real `QueryClientProvider`, matching how `AppFrame` actually uses it. `currentTag` mirrors `AppFrame`'s own `useMatch('/tags/:name')?.params.name` derivation — passed straight through here since there's no router needed to exercise the hook itself. */
+function PasteCaptureHost({ currentTag }: { currentTag?: string }) {
+  usePasteCapture(currentTag);
   return (
     <div>
       <input placeholder="a real input" />
@@ -21,11 +21,11 @@ function PasteCaptureHost() {
   );
 }
 
-function renderHost() {
+function renderHost(currentTag?: string) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
-      <PasteCaptureHost />
+      {currentTag ? <PasteCaptureHost currentTag={currentTag} /> : <PasteCaptureHost />}
     </QueryClientProvider>,
   );
 }
@@ -67,6 +67,53 @@ describe('usePasteCapture', () => {
         expect.objectContaining({
           method: 'POST',
           body: JSON.stringify({ url: 'https://example.com/paste-test', source: 'web' }),
+        }),
+      ),
+    );
+  });
+
+  /**
+   * `currentTag` (method file "tag-capture-empty-trash", decision 5) — when
+   * `AppFrame` is on a tag route, it passes that tag through here so a paste
+   * "onto the page" applies it, mirroring the tag page's own header Add
+   * button (`PasteCaptureButton`'s `tags` prop, `LibraryView.test.tsx`).
+   */
+  it('applies currentTag to a pasted URL when set', async () => {
+    renderHost('mcp');
+    act(() => {
+      document.dispatchEvent(pasteEventWith('https://example.com/tag-paste-test'));
+    });
+
+    await vi.waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/links',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            url: 'https://example.com/tag-paste-test',
+            tags: ['mcp'],
+            source: 'web',
+          }),
+        }),
+      ),
+    );
+  });
+
+  it('captures without tags when currentTag is undefined (Library/Trash routes)', async () => {
+    renderHost(undefined);
+    act(() => {
+      document.dispatchEvent(pasteEventWith('https://example.com/no-tag-paste-test'));
+    });
+
+    await vi.waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/links',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            url: 'https://example.com/no-tag-paste-test',
+            source: 'web',
+          }),
         }),
       ),
     );

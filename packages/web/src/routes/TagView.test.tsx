@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
@@ -145,9 +145,55 @@ describe('TagView', () => {
   // request" test drove capture through the tag page's own Omnibar input
   // (`getByPlaceholderText('Paste a link to keep')`) — that input no longer
   // renders on `TagView` (this file's "no search/paste input" test above
-  // covers its removal). Capture-from-a-tag-page still works via the
+  // covers its removal). Capture-from-a-tag-page ALSO works via the
   // document-level paste-anywhere listener (`usePasteCapture`, mounted once
-  // in `AppFrame` and covered by its own `usePasteCapture.test.tsx`), which
-  // is unaffected by this component-scoped header change — there's just no
-  // `TagView`-local input left to drive that flow through in THIS file.
+  // in `AppFrame` and covered by its own `usePasteCapture.test.tsx`).
+
+  /**
+   * The header's "Add" button (`PasteCaptureButton`, reused from
+   * `LibraryView.tsx` via `headerSlot={<PasteCaptureButton tags={[tag]} />}`,
+   * method file "tag-capture-empty-trash" decision 3) — clicking it on a tag
+   * page must apply the CURRENT tag to the capture request, so the new link
+   * lands directly in this tag's own feed.
+   */
+  it('the header Add button captures with the current tag applied', async () => {
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { readText: () => Promise.resolve('https://example.com/tagged-capture') },
+      configurable: true,
+    });
+
+    const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method ?? 'GET';
+      if (url === '/api/counts') {
+        return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+      }
+      if (url === '/api/links?tag=mcp') {
+        return Promise.resolve(jsonResponse({ links: [] }));
+      }
+      if (method === 'POST' && url === '/api/links') {
+        return Promise.resolve(jsonResponse({ link: {} }, 201));
+      }
+      throw new Error(`unexpected fetch: ${method} ${url}`);
+    }) as unknown as typeof fetch;
+
+    renderTagView('mcp', fetchImpl);
+
+    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    fireEvent.click(button);
+
+    await waitFor(() =>
+      expect(fetchImpl).toHaveBeenCalledWith(
+        '/api/links',
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({
+            url: 'https://example.com/tagged-capture',
+            tags: ['mcp'],
+            source: 'web',
+          }),
+        }),
+      ),
+    );
+  });
 });

@@ -75,8 +75,14 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('An old post')).toBeDefined());
+    // The heading itself still renders exactly "Trash" (no count/meta chrome
+    // baked into the `<h1>`) — its PARENT row now also carries the header's
+    // "Empty Now" button (`TrashEmptyNowButton`, method file
+    // "tag-capture-empty-trash" decision 4) whenever trash is non-empty, so
+    // this no longer asserts the whole row's text is bare "Trash" (that's
+    // covered by the dedicated "header Empty Now button" suite below).
     const heading = screen.getByRole('heading', { name: 'Trash' });
-    expect(heading.parentElement?.textContent).toBe('Trash');
+    expect(heading.textContent).toBe('Trash');
     expect(screen.getByText('Today')).toBeDefined();
     const countdown = screen.getByText(/^(29|30)d$/);
     expect(countdown).toBeDefined();
@@ -183,6 +189,92 @@ describe('TrashView', () => {
         credentials: 'include',
       }),
     );
+  });
+
+  /**
+   * The `ContentHeader`'s "Empty Now" button (`TrashEmptyNowButton`, method
+   * file "tag-capture-empty-trash" decision 4) — a SEPARATE surface from the
+   * idle dock's "Empty all" tested above. Two-state inline confirm: only
+   * shown when trash is non-empty, first click flips it to "Confirm?" WITHOUT
+   * calling `useEmptyTrash`, and only the second click (on the "Confirm?"
+   * state) actually calls it.
+   */
+  describe('header "Empty Now" button', () => {
+    function oneLinkFetch() {
+      const item = trashLink({ id: '1', title: 'One', url: 'https://example.com/1' });
+      return vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        const method = init?.method ?? 'GET';
+        if (method === 'DELETE' && url === '/api/trash') {
+          return Promise.resolve(jsonResponse({ deleted: 1 }, 200));
+        }
+        if (url === '/api/trash') return Promise.resolve(jsonResponse({ links: [item] }));
+        if (url === '/api/counts') {
+          return Promise.resolve(jsonResponse({ live: 0, trash: 1, purgeWindowDays: 30 }));
+        }
+        throw new Error(`unexpected fetch: ${method} ${url}`);
+      }) as unknown as typeof fetch;
+    }
+
+    it('does not appear when the trash is empty', async () => {
+      const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url === '/api/trash') return Promise.resolve(jsonResponse({ links: [] }));
+        if (url === '/api/counts') {
+          return Promise.resolve(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
+        }
+        throw new Error(`unexpected fetch: ${url}`);
+      }) as unknown as typeof fetch;
+
+      renderTrashView(fetchImpl);
+
+      await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
+      expect(screen.queryByRole('button', { name: 'Empty the trash now' })).toBeNull();
+    });
+
+    it('appears when the trash is non-empty', async () => {
+      renderTrashView(oneLinkFetch());
+
+      await waitFor(() => expect(screen.getByText('One')).toBeDefined());
+      expect(screen.getByRole('button', { name: 'Empty the trash now' })).toBeDefined();
+    });
+
+    it('the first click flips to "Confirm?" without calling useEmptyTrash', async () => {
+      const fetchImpl = oneLinkFetch();
+      renderTrashView(fetchImpl);
+
+      await waitFor(() => expect(screen.getByText('One')).toBeDefined());
+      const button = screen.getByRole('button', { name: 'Empty the trash now' });
+      fireEvent.click(button);
+
+      expect(
+        await screen.findByRole('button', { name: 'Confirm emptying the trash' }),
+      ).toBeDefined();
+      expect(fetchImpl).not.toHaveBeenCalledWith(
+        '/api/trash',
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+    });
+
+    it('the second click (on "Confirm?") calls useEmptyTrash', async () => {
+      const fetchImpl = oneLinkFetch();
+      renderTrashView(fetchImpl);
+
+      await waitFor(() => expect(screen.getByText('One')).toBeDefined());
+      fireEvent.click(screen.getByRole('button', { name: 'Empty the trash now' }));
+
+      const confirmButton = await screen.findByRole('button', {
+        name: 'Confirm emptying the trash',
+      });
+      fireEvent.click(confirmButton);
+
+      await waitFor(() =>
+        expect(fetchImpl).toHaveBeenCalledWith('/api/trash', {
+          method: 'DELETE',
+          credentials: 'include',
+        }),
+      );
+    });
   });
 
   describe('multi-select', () => {

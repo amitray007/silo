@@ -1,7 +1,7 @@
 import { useCaptureLink } from '../api/hooks';
+import { HeaderActionButton, type HeaderActionResult } from '../components/HeaderActionButton';
 import { AddIcon } from '../components/NavIcons';
 import { looksLikeUrl } from '../lib/url';
-import { usePasteFlash } from '../lib/usePasteFlash';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
@@ -46,18 +46,26 @@ function LibraryEmptyState() {
  * gets the identical optimistic-insert/rollback/invalidate behavior for
  * free.
  *
+ * Renders its chrome (the pill button + flash toast) via the shared
+ * `HeaderActionButton` (method file, "tag-capture-empty-trash", decision 1) —
+ * this component now only owns the clipboard-read/validate/capture BEHAVIOR.
+ *
+ * `tags?` (decision 2): when set, the capture applies these tags — `TagView`
+ * passes `[tag]` so a tag page's Add button (and its clipboard-paste path)
+ * tags the new link with the current tag; `LibraryView` passes nothing, an
+ * untagged capture exactly as before. Every other behavior (clipboard read,
+ * `looksLikeUrl`, flash messages, `isPending`) is unchanged.
+ *
  * Never logs or surfaces the read clipboard text anywhere (including in the
  * toast) — only a fixed, pre-written message per outcome.
  */
-function PasteCaptureButton() {
+export function PasteCaptureButton({ tags }: { tags?: string[] }) {
   const captureLink = useCaptureLink();
-  const { message, ok, flash } = usePasteFlash();
 
-  async function handleClick() {
+  async function handleClick(): Promise<HeaderActionResult> {
     const canRead = typeof navigator.clipboard?.readText === 'function';
     if (!canRead) {
-      flash('Clipboard access blocked', false);
-      return;
+      return { message: 'Clipboard access blocked', ok: false };
     }
 
     let text: string;
@@ -67,75 +75,30 @@ function PasteCaptureButton() {
       // Permission denied, insecure context, or any other read failure —
       // never throw, never leak WHY into the toast (no clipboard content,
       // no raw error message).
-      flash('Clipboard access blocked', false);
-      return;
+      return { message: 'Clipboard access blocked', ok: false };
     }
 
     const trimmed = text.trim();
     if (!trimmed) {
-      flash('Clipboard is empty', false);
-      return;
+      return { message: 'Clipboard is empty', ok: false };
     }
     if (!looksLikeUrl(trimmed)) {
-      flash("That doesn't look like a link", false);
-      return;
+      return { message: "That doesn't look like a link", ok: false };
     }
 
-    captureLink.mutate({ url: trimmed });
-    flash('Saved', true);
+    captureLink.mutate(tags ? { url: trimmed, tags } : { url: trimmed });
+    return { message: 'Saved', ok: true };
   }
 
   return (
-    <div style={{ position: 'relative', flex: 'none' }}>
-      <button
-        type="button"
-        onClick={handleClick}
-        disabled={captureLink.isPending}
-        title="Paste a link from the clipboard"
-        aria-label="Add a link from the clipboard"
-        className="silo-icon-btn-sm"
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 'var(--s1-5)',
-          border: '1px solid var(--line)',
-          background: 'var(--bg2)',
-          borderRadius: 6,
-          padding: '6px 12px',
-          fontSize: 'var(--text-base)',
-          fontFamily: 'inherit',
-          color: 'var(--ink)',
-          cursor: 'pointer',
-          opacity: captureLink.isPending ? 0.6 : 1,
-        }}
-      >
-        <AddIcon />
-        Add
-      </button>
-      {message && (
-        <span
-          role={ok ? 'status' : 'alert'}
-          aria-live={ok ? 'polite' : 'assertive'}
-          style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            marginTop: 'var(--s1-5)',
-            padding: '6px 10px',
-            background: 'var(--bg2)',
-            border: '1px solid var(--line)',
-            borderRadius: 8,
-            boxShadow: 'var(--elev-2)',
-            fontSize: 'var(--text-sm)',
-            color: ok ? 'var(--ink)' : 'var(--warn)',
-            whiteSpace: 'nowrap',
-            zIndex: 1,
-          }}
-        >
-          {message}
-        </span>
-      )}
-    </div>
+    <HeaderActionButton
+      icon={<AddIcon />}
+      label="Add"
+      onClick={handleClick}
+      disabled={captureLink.isPending}
+      title="Paste a link from the clipboard"
+      ariaLabel="Add a link from the clipboard"
+    />
   );
 }
 
