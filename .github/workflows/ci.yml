@@ -46,16 +46,26 @@ jobs:
         # FILES and hard-errors on any package with fewer files than the shard
         # count (e.g. @silo/queue has 1 test file), so per-package sharding
         # across the monorepo is a non-starter. Package groups parallelize
-        # cleanly instead. `heavy` carries the two biggest suites (core, api);
-        # `rest` is everything else. Each runner gets its OWN Postgres service,
-        # so the DB suites — which mutate a shared @silo/db pool singleton and
-        # therefore keep `--no-file-parallelism` WITHIN a package — never
-        # contend across groups. Rebalance the filters if timings drift.
+        # cleanly instead. Each runner gets its OWN Postgres service, so the DB
+        # suites — which mutate a shared @silo/db pool singleton and therefore
+        # keep `--no-file-parallelism` WITHIN a package — never contend across
+        # groups.
+        #
+        # Groups are balanced by measured per-package test cost (local, roughly
+        # proportional to CI): the two heaviest suites are mcp-server + worker
+        # (~17s each), then core (~15s), api/web (~11s), app (~10s), db (~8s),
+        # queue (~4s), release/cli (~1s). Pairing a heavy DB package with a
+        # lighter one keeps all three groups near-equal (~30s local each) so no
+        # single group is the long pole. `others` uses NEGATION so any new
+        # package lands there by default rather than being silently untested —
+        # if it turns out heavy, move it into a named group and rebalance.
         group:
-          - name: core + api
-            filter: "--filter=@silo/core --filter=@silo/api"
-          - name: rest
-            filter: "--filter=!@silo/core --filter=!@silo/api"
+          - name: core + worker
+            filter: "--filter=@silo/core --filter=@silo/worker"
+          - name: api + mcp-server
+            filter: "--filter=@silo/api --filter=@silo/mcp-server"
+          - name: others
+            filter: "--filter=!@silo/core --filter=!@silo/worker --filter=!@silo/api --filter=!@silo/mcp-server"
     # pgvector/pgvector:pg18 (not plain postgres:18) because migrations run
     # `CREATE EXTENSION vector` — this image ships pgvector so it just works.
     services:
