@@ -4,6 +4,7 @@ import {
   addTagMany,
   captureMany,
   createTag,
+  deleteTag,
   editLink,
   getById,
   getByIds,
@@ -22,6 +23,7 @@ import {
   captureBodySchema,
   createTagBodySchema,
   editBodySchema,
+  tagNameParamSchema,
 } from '../query-schemas.js';
 import { performCapture, respondWithLink } from './mutate-link.js';
 
@@ -209,6 +211,21 @@ export function registerLinksWriteRoutes(app: Hono): void {
       return c.json({ error: 'validation_error', message: 'Tag name must not be blank' }, 400);
     }
     return c.json({ name }, 201);
+  });
+
+  /**
+   * `DELETE /api/tags/:name` — delete a tag from the ENTIRE library
+   * (`core.deleteTag`): removes the tag + its link associations, keeping the
+   * links. Case-insensitive. Idempotent: deleting a tag that doesn't exist
+   * returns `200 { deleted: false }` (not 404) — a DELETE asking to remove
+   * something already gone has succeeded. DISTINCT from
+   * `DELETE /api/links/:id/tags/:tag` above, which only detaches a tag from ONE
+   * link.
+   */
+  app.delete('/tags/:name', async (c) => {
+    const { name } = tagNameParamSchema.parse({ name: c.req.param('name') });
+    const deleted = await deleteTag(name);
+    return c.json({ deleted }, 200);
   });
 
   /**

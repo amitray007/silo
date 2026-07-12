@@ -464,6 +464,49 @@ describeIfPg('A3 write routes (integration)', () => {
     });
   });
 
+  describe('DELETE /api/tags/:name', () => {
+    it('deletes the tag library-wide and keeps the links (200 { deleted: true })', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-delete-tag-basic',
+        sourceKind: 'link',
+        tags: ['work'],
+      });
+
+      const res = await del(app, '/api/tags/work');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ deleted: true });
+
+      // The link still exists and no longer carries the deleted tag.
+      const stillThere = await core.getById(created.id);
+      expect(stillThere).not.toBeNull();
+      expect(stillThere?.tags ?? []).not.toContain('work');
+    });
+
+    it('is case-insensitive — deleting "ai" removes a tag stored as "AI"', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/write-delete-tag-case',
+        sourceKind: 'link',
+        tags: ['AI'],
+      });
+
+      const res = await del(app, '/api/tags/ai');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ deleted: true });
+
+      const stillThere = await core.getById(created.id);
+      expect((stillThere?.tags ?? []).map((t) => t.toLowerCase())).not.toContain('ai');
+    });
+
+    it('for a missing tag returns 200 { deleted: false } (idempotent)', async () => {
+      const { app } = harness.mod();
+      const res = await del(app, '/api/tags/nope-xyz');
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual({ deleted: false });
+    });
+  });
+
   describe('POST /api/links/batch/tags — bulk add-tag (U5)', () => {
     it('mixed good/bad id batch: good ids get tagged, bad id reported per-item, batch not sunk', async () => {
       const { core, app } = harness.mod();
