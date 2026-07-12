@@ -108,8 +108,8 @@ export function TagView() {
       count={view.links.length}
       headerSlot={
         <>
-          <DeleteTagButton tag={tag} />
           <PasteCaptureButton tags={[tag]} />
+          <DeleteTagButton tag={tag} />
         </>
       }
       fadeKey={tag}
