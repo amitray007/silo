@@ -1,5 +1,5 @@
 import { useCaptureLink } from '../api/hooks';
-import { PasteIcon } from '../components/NavIcons';
+import { AddIcon } from '../components/NavIcons';
 import { looksLikeUrl } from '../lib/url';
 import { usePasteFlash } from '../lib/usePasteFlash';
 import { ListBody } from './shared/ListBodies';
@@ -109,7 +109,7 @@ function PasteCaptureButton() {
           opacity: captureLink.isPending ? 0.6 : 1,
         }}
       >
-        <PasteIcon />
+        <AddIcon />
         Add
       </button>
       {message && (

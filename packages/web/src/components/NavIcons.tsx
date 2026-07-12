@@ -136,7 +136,12 @@ export function LogOutIcon() {
  * hardcoded hex), `strokeWidth 1.4`, round caps/joins, `aria-hidden` (the
  * button itself carries the `aria-label`).
  */
-export function PasteIcon() {
+/**
+ * A clean `+` glyph for the Library "Add" capture button. The button carries a
+ * visible "Add" label, so the icon just needs to read as "add" at a glance — a
+ * plus is crisper at 16px than the busier clipboard/paste glyph it replaced.
+ */
+export function AddIcon() {
   return (
     <svg
       width="16"
@@ -144,17 +149,12 @@ export function PasteIcon() {
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
-      strokeWidth="1.4"
+      strokeWidth="1.5"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {/* Clipboard body */}
-      <path d="M5.4 3.2h-1a.8.8 0 0 0-.8.8v9a.8.8 0 0 0 .8.8h7.2a.8.8 0 0 0 .8-.8V4a.8.8 0 0 0-.8-.8h-1" />
-      {/* Clip tab on top of the clipboard */}
-      <path d="M6.2 2.2c0-.55.45-1 1-1h1.6c.55 0 1 .45 1 1v1H6.2v-1Z" />
-      {/* Down arrow — content pasting IN */}
-      <path d="M8 6.6v4M6.1 8.9 8 10.8l1.9-1.9" />
+      <path d="M8 3.5v9M3.5 8h9" />
     </svg>
   );
 }
