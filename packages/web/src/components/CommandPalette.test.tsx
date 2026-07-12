@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -438,8 +438,16 @@ describe('CommandPalette', () => {
       pressCmdK();
       const input = await screen.findByRole('combobox');
 
+      // Scoped to the results `listbox` (not `screen` directly): the sole
+      // result becomes cmdk's active row on mount, which now (palette-
+      // keyboard-hover slice) opens the shared hover popover for it too —
+      // the popover renders the SAME title text as the row, so an
+      // unscoped `screen.getByText` would find two matches once the
+      // popover's open. Scoping to the listbox keeps this test about the
+      // list content, not the popover (covered separately below).
+      const listbox = screen.getByRole('listbox');
       fireEvent.change(input, { target: { value: 're' } });
-      await waitFor(() => expect(screen.getByText('Stale but real')).toBeDefined(), {
+      await waitFor(() => expect(within(listbox).getByText('Stale but real')).toBeDefined(), {
         timeout: 2000,
       });
 
@@ -452,15 +460,15 @@ describe('CommandPalette', () => {
       await act(async () => {
         await new Promise((r) => setTimeout(r, 250));
       });
-      expect(screen.getByText('Stale but real')).toBeDefined();
-      expect(screen.queryByText('No results')).toBeNull();
+      expect(within(listbox).getByText('Stale but real')).toBeDefined();
+      expect(within(listbox).queryByText('No results')).toBeNull();
 
       // Resolve the second query — the stale row is replaced by the real one.
       resolveSecond?.(jsonResponse({ results: [] }));
-      await waitFor(() => expect(screen.getByText('No results')).toBeDefined(), {
+      await waitFor(() => expect(within(listbox).getByText('No results')).toBeDefined(), {
         timeout: 2000,
       });
-      expect(screen.queryByText('Stale but real')).toBeNull();
+      expect(within(listbox).queryByText('Stale but real')).toBeNull();
     });
   });
 

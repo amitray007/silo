@@ -38,3 +38,23 @@ if (!window.ResizeObserver) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// jsdom does not implement `CSS.escape` (the `CSS` global itself is present,
+// but its `escape` static method is not) — `CommandPaletteInner`'s
+// keyboard-hover effect (CommandPalette.tsx) calls it to build the active
+// row's attribute selector on every cmdk `onValueChange`, which fires as
+// soon as `<Command>`'s controlled `value` mounts/changes, so any test that
+// renders the palette hits this the moment cmdk reports an active item. The
+// real (spec) implementation is simple enough to inline rather than pull in
+// a polyfill package: escape any character CSS.escape must per the spec
+// (https://drafts.csswg.org/cssom/#serialize-an-identifier) — none of this
+// repo's values (`link:<uuid>` / `tag:<name>`) need it today, but tests
+// should exercise the same code path production browsers run.
+if (!window.CSS) {
+  // @ts-expect-error -- jsdom has no global CSS at all in some environments.
+  window.CSS = {};
+}
+if (!window.CSS.escape) {
+  window.CSS.escape = (value: string): string =>
+    value.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
+}
