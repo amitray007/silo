@@ -37,6 +37,7 @@ export {
   hashToken,
   issueOAuthTokens,
   listOAuthClientsForOwner,
+  normalizeResourceParam,
   registerOAuthClient,
   revokeAllOAuthClients,
   revokeOAuthClient,

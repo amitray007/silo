@@ -113,6 +113,29 @@ describeIfPg('oauth core logic (integration)', () => {
     });
   });
 
+  describe('normalizeResourceParam (pure)', () => {
+    // Review fix SEC-2: the single shared normalizer `authorize.ts` and
+    // `token.ts` both route their client-supplied `resource` param through,
+    // replacing three independently-drifting trailing-slash regexes.
+    it('strips a single trailing slash', () => {
+      expect(ops.normalizeResourceParam('https://mcp.example.com/mcp/')).toBe(
+        'https://mcp.example.com/mcp',
+      );
+    });
+
+    it('is a no-op when already normalized', () => {
+      expect(ops.normalizeResourceParam('https://mcp.example.com/mcp')).toBe(
+        'https://mcp.example.com/mcp',
+      );
+    });
+
+    it('returns null for null, undefined, or empty input', () => {
+      expect(ops.normalizeResourceParam(null)).toBeNull();
+      expect(ops.normalizeResourceParam(undefined)).toBeNull();
+      expect(ops.normalizeResourceParam('')).toBeNull();
+    });
+  });
+
   describe('generateOpaque (pure)', () => {
     it('prefixes the given string and returns hex-encoded random bytes of the requested length', () => {
       const token = ops.generateOpaque('oat_', 32);
@@ -188,6 +211,29 @@ describeIfPg('oauth core logic (integration)', () => {
         .where(eq(oauthCodes.code, code));
 
       expect(await ops.consumeAuthCode(code)).toBeNull();
+    });
+
+    it('cannot be double-spent by two concurrent callers racing the same code (M2 regression)', async () => {
+      // Regression guard for review fix M2: consumeAuthCode used to be a
+      // separate SELECT-then-DELETE, so two concurrent requests could both
+      // observe the row via SELECT before either DELETE landed, and both
+      // would proceed to spend it. The atomic DELETE...RETURNING makes
+      // Postgres serialize the deletes — only one caller can ever get a row.
+      const client = await registerClient();
+      const code = await ops.createAuthCode({
+        clientId: client.id,
+        redirectUri: client.redirectUris[0] ?? '',
+        codeChallenge: 'challenge-value',
+        codeChallengeMethod: 'S256',
+        resource: RESOURCE,
+      });
+
+      const [first, second] = await Promise.all([
+        ops.consumeAuthCode(code),
+        ops.consumeAuthCode(code),
+      ]);
+      const winners = [first, second].filter((r) => r !== null);
+      expect(winners).toHaveLength(1);
     });
   });
 
@@ -296,6 +342,31 @@ describeIfPg('oauth core logic (integration)', () => {
       expect(await ops.authenticateOAuthToken(rotated?.accessToken ?? '', RESOURCE)).toBe(true);
     });
 
+    it('leaves exactly one access + one refresh row for the client after rotation, no partial state (M3)', async () => {
+      // Regression guard for review fix M3: the delete-old + issue-new
+      // sequence now runs inside a single db.transaction, so a successful
+      // rotation is all-or-nothing — never stuck with only the old pair
+      // deleted and no new pair issued, or duplicate rows from a partial
+      // retry.
+      const client = await registerClient();
+      const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const rotated = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(rotated).not.toBeNull();
+
+      const rows = await rawDb
+        .select()
+        .from(accessTokens)
+        .where(eq(accessTokens.clientId, client.id));
+      expect(rows).toHaveLength(2);
+      expect(rows.filter((r) => r.kind === 'oauth_access')).toHaveLength(1);
+      expect(rows.filter((r) => r.kind === 'oauth_refresh')).toHaveLength(1);
+    });
+
     it('rejects rotation for the wrong client', async () => {
       const client = await registerClient();
       const other = await registerClient('ChatGPT');
@@ -375,6 +446,34 @@ describeIfPg('oauth core logic (integration)', () => {
       expect(group?.lastUsedAt).not.toBeNull();
     });
 
+    it('grantedAt stays at the original registration time across a refresh rotation (H1 regression)', async () => {
+      // Regression guard for review fix H1: grantedAt used to be sourced from
+      // accessTokens.createdAt, which rotateRefreshToken resets to now() on
+      // every refresh — so grantedAt would march forward on each refresh
+      // instead of staying pinned to the client's actual registration time.
+      const client = await registerClient('Claude');
+      const registeredAt = (await ops.getOAuthClient(client.id))?.createdAt;
+      const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
+
+      const beforeRotate = await ops.listOAuthClientsForOwner();
+      const groupBefore = beforeRotate.find((g) => g.clientName === 'Claude');
+      expect(groupBefore?.grantedAt.getTime()).toBe(registeredAt?.getTime());
+
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      const rotated = await ops.rotateRefreshToken({
+        refreshToken: issued.refreshToken,
+        clientId: client.id,
+        resource: RESOURCE,
+      });
+      expect(rotated).not.toBeNull();
+
+      const afterRotate = await ops.listOAuthClientsForOwner();
+      const groupAfter = afterRotate.find((g) => g.clientName === 'Claude');
+      // grantedAt must NOT have moved to the refresh time — it stays pinned
+      // to the original oauth_clients.created_at.
+      expect(groupAfter?.grantedAt.getTime()).toBe(registeredAt?.getTime());
+    });
+
     it('excludes non-expired-only count correctly when a token has expired', async () => {
       const client = await registerClient('Claude');
       const issued = await ops.issueOAuthTokens({ clientId: client.id, resource: RESOURCE });
@@ -384,9 +483,30 @@ describeIfPg('oauth core logic (integration)', () => {
         .set({ expiresAt: new Date(Date.now() - 1000) })
         .where(eq(accessTokens.tokenHash, hash));
 
+      // Review fix M1: a group with zero active tokens is dropped entirely
+      // (consistent with revoke making an app disappear), so it no longer
+      // shows up in the list at all rather than appearing with a 0 count.
       const groups = await ops.listOAuthClientsForOwner();
-      const group = groups.find((g) => g.clientName === 'Claude');
-      expect(group?.activeTokenCount).toBe(0);
+      expect(groups.find((g) => g.clientName === 'Claude')).toBeUndefined();
+    });
+
+    it('hides an app whose only token has expired, but shows one with an active token (M1)', async () => {
+      const expiredOnly = await registerClient('Expired App');
+      const issuedExpired = await ops.issueOAuthTokens({
+        clientId: expiredOnly.id,
+        resource: RESOURCE,
+      });
+      const expiredHash = createHash('sha256').update(issuedExpired.accessToken).digest('hex');
+      await rawDb
+        .update(accessTokens)
+        .set({ expiresAt: new Date(Date.now() - 1000) })
+        .where(eq(accessTokens.tokenHash, expiredHash));
+
+      const active = await registerClient('Active App');
+      await ops.issueOAuthTokens({ clientId: active.id, resource: RESOURCE });
+
+      const groups = await ops.listOAuthClientsForOwner();
+      expect(groups.map((g) => g.clientName)).toEqual(['Active App']);
     });
 
     it('returns an empty list when nothing is connected', async () => {

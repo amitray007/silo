@@ -70,6 +70,44 @@ async function loginCookie(app: Hono): Promise<string> {
   return setCookie.split(';')[0] ?? '';
 }
 
+/**
+ * Fetches `GET /oauth/authorize` and extracts the CSRF double-submit pair
+ * (review fix SEC-1): the hidden `csrf` form field embedded in the returned
+ * HTML — whichever page rendered, login (no session cookie) or consent (valid
+ * session cookie), both carry the same hidden field — and the matching signed
+ * `silo_oauth_csrf` cookie set alongside it. Every POST test below must fetch
+ * this pair first (mirroring what a real browser round-trip does) and carry
+ * both — the cookie via `Cookie:` header (merged with any existing session
+ * cookie) and the token via the form body's `csrf` field — or the POST is
+ * rejected before it does anything.
+ */
+async function csrfPair(
+  app: Hono,
+  query: string,
+  opts: { sessionCookie?: string } = {},
+): Promise<{ token: string; cookie: string }> {
+  const res = await app.request(`/oauth/authorize?${query}`, {
+    headers: opts.sessionCookie ? { Cookie: opts.sessionCookie } : {},
+  });
+  const html = await res.text();
+  const match = html.match(/name="csrf" value="([^"]*)"/);
+  if (!match?.[1]) throw new Error('no csrf field found in /oauth/authorize render');
+  const setCookie = res.headers.get('set-cookie');
+  const csrfCookie = setCookie
+    ?.split(', ')
+    .find((part) => part.startsWith('silo_oauth_csrf='))
+    ?.split(';')[0];
+  if (!csrfCookie) throw new Error('no silo_oauth_csrf cookie set by /oauth/authorize render');
+  return { token: match[1], cookie: csrfCookie };
+}
+
+/** Merges a session cookie and a csrf cookie into one `Cookie:` header value
+ * — both cookies must ride together on the POST for it to pass both the
+ * session check and the CSRF check. */
+function mergeCookies(...cookies: string[]): string {
+  return cookies.join('; ');
+}
+
 describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
   const harness = setupPgHarness('silo_api_oauth_authorize_test', async () => {
     const core = (await import('@silo/core')) as typeof CoreOps;
@@ -192,11 +230,15 @@ describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
         redirect_uri: REDIRECT_URI,
         state: 'xyz',
       }).replace('/oauth/authorize?', '');
+      const csrf = await csrfPair(app, query, { sessionCookie: cookie });
 
       const res = await app.request(`/oauth/authorize?${query}`, {
         method: 'POST',
-        headers: { Cookie: cookie, 'content-type': 'application/x-www-form-urlencoded' },
-        body: 'decision=approve',
+        headers: {
+          Cookie: mergeCookies(cookie, csrf.cookie),
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: `decision=approve&csrf=${encodeURIComponent(csrf.token)}`,
         redirect: 'manual',
       });
       expect(res.status).toBe(302);
@@ -216,17 +258,49 @@ describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
         redirect_uri: REDIRECT_URI,
         state: 'xyz',
       }).replace('/oauth/authorize?', '');
+      const csrf = await csrfPair(app, query, { sessionCookie: cookie });
 
       const res = await app.request(`/oauth/authorize?${query}`, {
         method: 'POST',
-        headers: { Cookie: cookie, 'content-type': 'application/x-www-form-urlencoded' },
-        body: 'decision=deny',
+        headers: {
+          Cookie: mergeCookies(cookie, csrf.cookie),
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: `decision=deny&csrf=${encodeURIComponent(csrf.token)}`,
         redirect: 'manual',
       });
       expect(res.status).toBe(302);
       const location = new URL(res.headers.get('location') ?? '');
       expect(location.searchParams.get('error')).toBe('access_denied');
       expect(location.searchParams.get('state')).toBe('xyz');
+    });
+
+    it('POST with a valid session but missing/wrong csrf token: 403, no code minted (SEC-1)', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+      const cookie = await loginCookie(app);
+      const clientId = await registerClient(app);
+      const query = authorizeUrl({ client_id: clientId, redirect_uri: REDIRECT_URI }).replace(
+        '/oauth/authorize?',
+        '',
+      );
+      const csrf = await csrfPair(app, query, { sessionCookie: cookie });
+
+      const res = await app.request(`/oauth/authorize?${query}`, {
+        method: 'POST',
+        headers: {
+          Cookie: mergeCookies(cookie, csrf.cookie),
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: 'decision=approve&csrf=wrong-token',
+        redirect: 'manual',
+      });
+      expect(res.status).toBe(403);
+      expect(res.headers.get('location')).toBeNull();
+
+      // No consequence of the forged approval: nothing to inspect on the
+      // response other than the absence of a redirect/code, since a rejected
+      // request never reaches createAuthCode.
     });
 
     it('POST without a session cookie: renders the login prompt, does not approve', async () => {
@@ -259,11 +333,15 @@ describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
         '/oauth/authorize?',
         '',
       );
+      const csrf = await csrfPair(app, query);
 
       const res = await app.request(`/oauth/authorize/login?${query}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: 'password=wrong-password',
+        headers: {
+          Cookie: csrf.cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: `password=wrong-password&csrf=${encodeURIComponent(csrf.token)}`,
       });
       expect(res.status).toBe(401);
       const html = await res.text();
@@ -279,11 +357,15 @@ describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
         '/oauth/authorize?',
         '',
       );
+      const csrf = await csrfPair(app, query);
 
       const res = await app.request(`/oauth/authorize/login?${query}`, {
         method: 'POST',
-        headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: `password=${PASSWORD}`,
+        headers: {
+          Cookie: csrf.cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: `password=${PASSWORD}&csrf=${encodeURIComponent(csrf.token)}`,
       });
       expect(res.status).toBe(200);
 
@@ -300,7 +382,16 @@ describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
       expect(html).toContain('Deny');
     });
 
-    it('SILO_APP_PASSWORD unset: 400, login not configured', async () => {
+    it('SILO_APP_PASSWORD unset: 403 CSRF rejection (no secret to sign a csrf cookie with)', async () => {
+      // With neither SILO_APP_PASSWORD nor SILO_SESSION_SECRET set,
+      // sessionSecret() is undefined, so mintCsrfToken cannot mint a real
+      // token/cookie for the GET render below (csrfPair gets an EMPTY csrf
+      // field and no silo_oauth_csrf cookie — there's no secret to sign one
+      // with) and verifyCsrfToken fails closed on the POST for the same
+      // reason. The 403 CSRF rejection fires before the route ever reaches
+      // its own "login not configured" check — correct fail-closed behavior
+      // for an unconfigured deployment, just a different status/message than
+      // the configured-password 400 case below.
       const { app } = harness.mod();
       const clientId = await registerClient(app);
       const query = authorizeUrl({ client_id: clientId, redirect_uri: REDIRECT_URI }).replace(
@@ -311,11 +402,31 @@ describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
       const res = await app.request(`/oauth/authorize/login?${query}`, {
         method: 'POST',
         headers: { 'content-type': 'application/x-www-form-urlencoded' },
-        body: 'password=anything',
+        body: 'password=anything&csrf=anything',
       });
-      expect(res.status).toBe(400);
-      const html = await res.text();
-      expect(html).toContain('Login is not configured');
+      expect(res.status).toBe(403);
+    });
+
+    it('missing/wrong csrf token: 403, no session cookie set (SEC-1)', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+      const clientId = await registerClient(app);
+      const query = authorizeUrl({ client_id: clientId, redirect_uri: REDIRECT_URI }).replace(
+        '/oauth/authorize?',
+        '',
+      );
+      const csrf = await csrfPair(app, query);
+
+      const res = await app.request(`/oauth/authorize/login?${query}`, {
+        method: 'POST',
+        headers: {
+          Cookie: csrf.cookie,
+          'content-type': 'application/x-www-form-urlencoded',
+        },
+        body: `password=${PASSWORD}&csrf=wrong-token`,
+      });
+      expect(res.status).toBe(403);
+      expect(res.headers.get('set-cookie')).toBeNull();
     });
   });
 

@@ -1,4 +1,10 @@
-import { consumeAuthCode, issueOAuthTokens, rotateRefreshToken, verifyPkce } from '@silo/core';
+import {
+  consumeAuthCode,
+  issueOAuthTokens,
+  normalizeResourceParam,
+  rotateRefreshToken,
+  verifyPkce,
+} from '@silo/core';
 import type { Context, Hono } from 'hono';
 
 /** Same OAuth-spec error shape as `register.ts`'s `oauthError` — see that
@@ -7,15 +13,6 @@ import type { Context, Hono } from 'hono';
 function tokenError(c: Context, error: string, description: string, status: 400 = 400): Response {
   c.header('Cache-Control', 'no-store');
   return c.json({ error, error_description: description }, status);
-}
-
-/** Strips a single trailing slash — the same normalization the client-
- * supplied `resource` param needs before comparing against
- * `canonicalMcpResource`'s already-normalized output (mirrors stash's
- * `resource?.replace(/\/$/, '')`). */
-function normalizeResource(raw: string | null): string | null {
-  if (!raw) return null;
-  return raw.replace(/\/$/, '');
 }
 
 /** The `authorization_code` grant branch of `POST /oauth/token` — split out
@@ -28,7 +25,7 @@ async function handleAuthorizationCodeGrant(c: Context, form: URLSearchParams): 
   const redirectUri = form.get('redirect_uri');
   const codeVerifier = form.get('code_verifier');
   const clientId = form.get('client_id');
-  const resource = normalizeResource(form.get('resource'));
+  const resource = normalizeResourceParam(form.get('resource'));
 
   if (!code || !redirectUri || !codeVerifier || !clientId) {
     return tokenError(
@@ -84,7 +81,7 @@ async function handleAuthorizationCodeGrant(c: Context, form: URLSearchParams): 
 async function handleRefreshTokenGrant(c: Context, form: URLSearchParams): Promise<Response> {
   const refreshToken = form.get('refresh_token');
   const clientId = form.get('client_id');
-  const resource = normalizeResource(form.get('resource'));
+  const resource = normalizeResourceParam(form.get('resource'));
 
   if (!refreshToken || !clientId) {
     return tokenError(
@@ -145,7 +142,8 @@ async function handleRefreshTokenGrant(c: Context, form: URLSearchParams): Promi
  * time (which itself validated against `canonicalMcpResource(...)` — see
  * `authorize.ts`), so this route only needs to confirm the TOKEN request's
  * `resource` param agrees with what the CODE carries, after the same
- * trailing-slash normalization (`normalizeResource`) stash's route applies.
+ * trailing-slash normalization (`normalizeResourceParam`, shared with
+ * `authorize.ts` — review fix SEC-2) stash's route applies.
  */
 export function registerOAuthTokenRoutes(app: Hono): void {
   app.post('/oauth/token', async (c) => {

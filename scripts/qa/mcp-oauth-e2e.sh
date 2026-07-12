@@ -73,23 +73,44 @@ BADREG=$(curl -s -o /dev/null -w '%{http_code}' -X POST "$API/oauth/register" -H
   -d '{"client_name":"evil","redirect_uris":["javascript:alert(1)"]}')
 [ "$BADREG" = "400" ] && ok "javascript: URI rejected (400)" || bad "expected 400, got $BADREG"
 
-echo "== step 5: PKCE + login + consent -> authorization code =="
+echo "== step 5: PKCE + CSRF + login + consent -> authorization code =="
 VERIFIER=$(openssl rand -hex 32)
 CHALLENGE=$(printf '%s' "$VERIFIER" | openssl dgst -binary -sha256 | openssl base64 -A | tr '+/' '-_' | tr -d '=')
 RESOURCE="$SILO_PUBLIC_MCP_URL"
 # The authorize routes read OAuth params from the QUERY STRING (c.req.query());
-# only `password` / `decision` come from the POST body. So the query rides on
-# the POST URL for both the login and the approve calls.
+# only `password`/`decision`/`csrf` come from the POST body. So the query
+# rides on the POST URL for both the login and the approve calls.
 RES_ENC=$(printf '%s' "$RESOURCE" | jq -sRr @uri)
 AQ="response_type=code&client_id=$CLIENT_ID&redirect_uri=https%3A%2F%2Fclaude.ai%2Fcallback&code_challenge=$CHALLENGE&code_challenge_method=S256&state=xyz&resource=$RES_ENC"
-# authenticate via the inline consent login (owner password) -> capture session cookie
-LOGIN=$(curl -s -i -c /tmp/qa-cookies.txt -X POST "$API/oauth/authorize/login?$AQ" \
-  --data-urlencode "password=$SILO_APP_PASSWORD")
+
+# GET the consent/login page first (review fix SEC-1: every render mints a
+# fresh signed `silo_oauth_csrf` cookie + a matching hidden `csrf` field) ->
+# capture both the cookie jar and the token to carry on the login POST.
+curl -s -c /tmp/qa-cookies.txt "$API/oauth/authorize?$AQ" -o /tmp/qa-login-page.html
+CSRF1=$(grep -o 'name="csrf" value="[^"]*"' /tmp/qa-login-page.html | sed 's/.*value="//;s/"$//')
+[ -n "$CSRF1" ] && ok "login page carries a csrf token" || bad "no csrf field in login page"
+
+# authenticate via the inline consent login (owner password) -> capture
+# session cookie (jar accumulates it alongside the csrf cookie already there)
+LOGIN=$(curl -s -i -b /tmp/qa-cookies.txt -c /tmp/qa-cookies.txt -X POST "$API/oauth/authorize/login?$AQ" \
+  --data-urlencode "password=$SILO_APP_PASSWORD" --data-urlencode "csrf=$CSRF1")
 echo "$LOGIN" | grep -qi 'set-cookie:.*silo_session' && ok "consent login set session cookie" || bad "login did not set cookie (see /tmp/qa-api.log): $(echo "$LOGIN"|head -1)"
 echo "$LOGIN" | grep -qi 'Max-Age=2592000' && ok "session cookie has 30d Max-Age" || bad "cookie missing 30d Max-Age"
-# approve consent with the session cookie -> expect 302 to redirect_uri with ?code=
+
+echo "== step 5b: CSRF rejection on a forged approve (no/wrong token) =="
+FORGED=$(curl -s -o /dev/null -w '%{http_code}' -b /tmp/qa-cookies.txt -X POST "$API/oauth/authorize?$AQ" \
+  --data-urlencode "decision=approve" --data-urlencode "csrf=not-the-real-token")
+[ "$FORGED" = "403" ] && ok "forged csrf token on approve -> 403, no code minted" || bad "expected 403, got $FORGED"
+
+# The login re-render minted a FRESH csrf cookie/token (a new one is set on
+# every render) — extract it from the login response body before approving.
+CSRF2=$(echo "$LOGIN" | sed -n '/^\r\{0,1\}$/,$p' | grep -o 'name="csrf" value="[^"]*"' | sed 's/.*value="//;s/"$//')
+[ -n "$CSRF2" ] && ok "post-login consent screen carries a fresh csrf token" || bad "no csrf field after login"
+
+# approve consent with the session cookie + fresh csrf token -> expect 302 to
+# redirect_uri with ?code=
 APPROVE=$(curl -s -i -b /tmp/qa-cookies.txt -X POST "$API/oauth/authorize?$AQ" \
-  --data-urlencode "decision=approve")
+  --data-urlencode "decision=approve" --data-urlencode "csrf=$CSRF2")
 LOCATION=$(echo "$APPROVE" | grep -i '^location:' | tr -d '\r' | sed 's/^[Ll]ocation: //')
 CODE=$(echo "$LOCATION" | sed -n 's/.*[?&]code=\([^&]*\).*/\1/p')
 [ -n "$CODE" ] && ok "consent approve -> code issued" || bad "no code in redirect: loc=$LOCATION"

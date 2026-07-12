@@ -2,6 +2,13 @@ import { createHash, randomBytes } from 'node:crypto';
 import { accessTokens, db, oauthClients, oauthCodes } from '@silo/db';
 import { and, desc, eq, gt, inArray, isNotNull, sql } from 'drizzle-orm';
 
+/** The pooled `db` singleton or a transaction handle — lets `issueOAuthTokens`
+ * run its inserts inside a caller-supplied transaction (`rotateRefreshToken`,
+ * review fix M3) as easily as standalone. Same shape as `links/executor.ts`'s
+ * `Executor`, defined locally rather than imported since it's a different
+ * domain (auth vs. links) and the type is a two-line derivation. */
+type Executor = typeof db | Parameters<Parameters<(typeof db)['transaction']>[0]>[0];
+
 /**
  * MCP OAuth core logic (MCP OAuth slice, U1): OAuth 2.1 + PKCE (S256) +
  * Dynamic Client Registration (RFC 7591) + resource indicators (RFC 8707),
@@ -58,6 +65,24 @@ export function verifyPkce(verifier: string, challenge: string, method: string):
 export function canonicalMcpResource(publicMcpUrl: string): string {
   const trimmed = publicMcpUrl.trim().replace(/\/+$/, '');
   return trimmed.endsWith('/mcp') ? trimmed : `${trimmed}/mcp`;
+}
+
+/**
+ * Normalizes a CLIENT-SUPPLIED `resource` param (the `resource=` query/body
+ * value a client sends at `/oauth/authorize` or `/oauth/token`) before
+ * comparing it against `canonicalMcpResource`'s output — strips only a
+ * trailing slash, unlike `canonicalMcpResource` which also appends `/mcp`.
+ * Single source of truth for that comparison (review fix SEC-2): three call
+ * sites (`authorize.ts`, `token.ts`, and formerly a copy here too) each had
+ * their own slightly different trailing-slash regex, which could silently
+ * drift. Returns `null` for a missing/empty input so callers can treat
+ * "absent" and "malformed" the same way. Fail-closed: this only ever narrows
+ * what compares equal to the canonical resource, never widens it.
+ */
+export function normalizeResourceParam(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  const trimmed = raw.replace(/\/+$/, '');
+  return trimmed || null;
 }
 
 /** A registered OAuth client, as returned by `registerOAuthClient`/`getOAuthClient`. */
@@ -157,24 +182,23 @@ export async function createAuthCode(opts: {
 }
 
 /**
- * Consumes an authorization code: fetches it if non-expired, then deletes it
- * (single-use — a replayed code fails on its second lookup because the row
- * is already gone). Returns `null` if the code is missing or expired.
+ * Consumes an authorization code: single-use — a replayed code fails
+ * because the row is already gone. A single atomic `DELETE ... RETURNING`
+ * (review fix M2) rather than a separate SELECT-then-DELETE: two concurrent
+ * requests racing the same code can no longer both observe the row via
+ * SELECT and both proceed to spend it before either DELETE lands — Postgres
+ * serializes the deletes, so only one `RETURNING` yields a row and the other
+ * gets none. Returns `null` if the code is missing or expired.
  */
 export async function consumeAuthCode(code: string): Promise<OAuthCode | null> {
   const now = new Date();
 
   const [row] = await db
-    .select()
-    .from(oauthCodes)
+    .delete(oauthCodes)
     .where(and(eq(oauthCodes.code, code), gt(oauthCodes.expiresAt, now)))
-    .limit(1);
+    .returning();
 
-  if (!row) return null;
-
-  await db.delete(oauthCodes).where(eq(oauthCodes.code, code));
-
-  return row;
+  return row ?? null;
 }
 
 /** A freshly-issued OAuth access + refresh token pair. Raw values — never persisted, returned once. */
@@ -190,13 +214,19 @@ export type IssuedOAuthTokens = {
  * Issues an OAuth access token (`oat_`, 1h TTL) + refresh token (`ort_`, 30d
  * TTL) pair and stores both as `access_tokens` rows (hashes only). The
  * access row's `refreshTokenHash` links it to its paired refresh row so
- * `rotateRefreshToken` can delete both sides of a pair by one lookup.
+ * `rotateRefreshToken` can delete both sides of a pair by one lookup. Takes
+ * an optional `executor` (defaults to the pooled `db`) so `rotateRefreshToken`
+ * (review fix M3) can run these inserts inside its own transaction instead of
+ * their own implicit auto-commits.
  */
-export async function issueOAuthTokens(opts: {
-  clientId: string;
-  scope?: string;
-  resource: string;
-}): Promise<IssuedOAuthTokens> {
+export async function issueOAuthTokens(
+  opts: {
+    clientId: string;
+    scope?: string;
+    resource: string;
+  },
+  executor: Executor = db,
+): Promise<IssuedOAuthTokens> {
   const scope = opts.scope ?? OAUTH_SCOPE;
   const accessToken = generateOpaque('oat_', 32);
   const refreshToken = generateOpaque('ort_', 32);
@@ -210,7 +240,7 @@ export async function issueOAuthTokens(opts: {
 
   const label = `oauth:${opts.clientId}`;
 
-  await db.insert(accessTokens).values({
+  await executor.insert(accessTokens).values({
     name: label,
     tokenHash: accessHash,
     tokenPrefix: accessToken.slice(0, 12),
@@ -222,7 +252,7 @@ export async function issueOAuthTokens(opts: {
     resource: opts.resource,
   });
 
-  await db.insert(accessTokens).values({
+  await executor.insert(accessTokens).values({
     name: label,
     tokenHash: refreshHash,
     tokenPrefix: refreshToken.slice(0, 12),
@@ -249,6 +279,12 @@ export async function issueOAuthTokens(opts: {
  * replayed — its row is gone the moment rotation succeeds. Returns `null` on
  * any verification failure (unknown hash, wrong client, expired, resource
  * mismatch) without leaking which check failed.
+ *
+ * The delete-old + issue-new sequence runs inside a single `db.transaction`
+ * (review fix M3) — without it, a crash between the deletes and the inserts
+ * would strand the client with neither a valid old pair nor a new one. The
+ * lookup SELECT stays outside the transaction (it's read-only and the `null`
+ * short-circuits don't need one); only the mutating tail is wrapped.
  */
 export async function rotateRefreshToken(opts: {
   refreshToken: string;
@@ -274,20 +310,25 @@ export async function rotateRefreshToken(opts: {
   if (!refreshRow) return null;
   if ((refreshRow.resource ?? null) !== opts.resource) return null;
 
-  // Delete the paired access token (looked up by the refresh row's own hash,
-  // since the ACCESS row is the one carrying `refreshTokenHash`) and the
-  // refresh row itself.
-  await db
-    .delete(accessTokens)
-    .where(
-      and(eq(accessTokens.refreshTokenHash, refreshHash), eq(accessTokens.kind, 'oauth_access')),
-    );
-  await db.delete(accessTokens).where(eq(accessTokens.id, refreshRow.id));
+  return db.transaction(async (tx) => {
+    // Delete the paired access token (looked up by the refresh row's own
+    // hash, since the ACCESS row is the one carrying `refreshTokenHash`) and
+    // the refresh row itself.
+    await tx
+      .delete(accessTokens)
+      .where(
+        and(eq(accessTokens.refreshTokenHash, refreshHash), eq(accessTokens.kind, 'oauth_access')),
+      );
+    await tx.delete(accessTokens).where(eq(accessTokens.id, refreshRow.id));
 
-  return issueOAuthTokens({
-    clientId: opts.clientId,
-    scope: refreshRow.scope ?? OAUTH_SCOPE,
-    resource: opts.resource,
+    return issueOAuthTokens(
+      {
+        clientId: opts.clientId,
+        scope: refreshRow.scope ?? OAUTH_SCOPE,
+        resource: opts.resource,
+      },
+      tx,
+    );
   });
 }
 
@@ -350,10 +391,14 @@ export type ConnectedOAuthClient = {
   connectionCount: number;
 };
 
-/** One raw `oauth_access` row joined to its client, as read by `listOAuthClientsForOwner`. */
+/** One raw `oauth_access` row joined to its client, as read by `listOAuthClientsForOwner`.
+ * `clientCreatedAt` is the CLIENT's own registration time (`oauth_clients.created_at`) —
+ * the stable source for `grantedAt` (review fix H1: `accessTokens.createdAt` marches
+ * forward on every refresh, since `rotateRefreshToken` deletes+reinserts the access row;
+ * the client's registration time never changes). */
 type OwnerOAuthTokenRow = {
   clientId: string | null;
-  createdAt: Date;
+  clientCreatedAt: Date;
   lastUsedAt: Date | null;
   expiresAt: Date | null;
   clientName: string;
@@ -380,7 +425,7 @@ function mergeOAuthClientRow(
     groups.set(key, {
       clientName: row.clientName,
       clientIds: [row.clientId],
-      grantedAt: row.createdAt,
+      grantedAt: row.clientCreatedAt,
       lastUsedAt: row.lastUsedAt,
       activeTokenCount: isActive ? 1 : 0,
       connectionCount: 1,
@@ -392,7 +437,7 @@ function mergeOAuthClientRow(
     existing.clientIds.push(row.clientId);
     existing.connectionCount += 1;
   }
-  if (row.createdAt < existing.grantedAt) existing.grantedAt = row.createdAt;
+  if (row.clientCreatedAt < existing.grantedAt) existing.grantedAt = row.clientCreatedAt;
   if (row.lastUsedAt && (!existing.lastUsedAt || row.lastUsedAt > existing.lastUsedAt)) {
     existing.lastUsedAt = row.lastUsedAt;
   }
@@ -405,8 +450,13 @@ function mergeOAuthClientRow(
  * each time, so without dedup the settings UI would show dozens of rows for
  * what a human sees as one app. Grouped by `client.name.toLowerCase()`;
  * within a group: `clientIds` collects every id, `grantedAt` is the
- * earliest grant, `lastUsedAt` is the latest use, `activeTokenCount` counts
- * non-expired access tokens. Sorted most-recently-granted group first.
+ * earliest of the group's `oauth_clients.created_at` (registration time —
+ * stable across refreshes, review fix H1), `lastUsedAt` is the latest use,
+ * `activeTokenCount` counts non-expired access tokens. A group with zero
+ * active tokens (every access token expired) is dropped entirely — revoke
+ * already makes an app disappear, so a fully-expired app should read the
+ * same way rather than lingering as a dead row (review fix M1). Sorted
+ * most-recently-granted group first.
  */
 export async function listOAuthClientsForOwner(): Promise<ConnectedOAuthClient[]> {
   const now = new Date();
@@ -414,7 +464,7 @@ export async function listOAuthClientsForOwner(): Promise<ConnectedOAuthClient[]
   const rows = await db
     .select({
       clientId: accessTokens.clientId,
-      createdAt: accessTokens.createdAt,
+      clientCreatedAt: oauthClients.createdAt,
       lastUsedAt: accessTokens.lastUsedAt,
       expiresAt: accessTokens.expiresAt,
       clientName: oauthClients.name,
@@ -422,14 +472,16 @@ export async function listOAuthClientsForOwner(): Promise<ConnectedOAuthClient[]
     .from(accessTokens)
     .innerJoin(oauthClients, eq(accessTokens.clientId, oauthClients.id))
     .where(eq(accessTokens.kind, 'oauth_access'))
-    .orderBy(desc(accessTokens.createdAt));
+    .orderBy(desc(oauthClients.createdAt));
 
   const groups = new Map<string, ConnectedOAuthClient>();
   for (const row of rows) {
     mergeOAuthClientRow(groups, row, now);
   }
 
-  return [...groups.values()].sort((a, b) => b.grantedAt.getTime() - a.grantedAt.getTime());
+  return [...groups.values()]
+    .filter((group) => group.activeTokenCount > 0)
+    .sort((a, b) => b.grantedAt.getTime() - a.grantedAt.getTime());
 }
 
 /** Revokes every token (access + refresh) issued to one OAuth client. The `oauth_clients` row itself is left in place — a harmless stale client with no tokens (see design doc's revoke semantics). */
