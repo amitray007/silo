@@ -309,5 +309,103 @@ describeMcpTool(
         expect.objectContaining({ type: 'text', text: 'No links found.' }),
       ]);
     });
+
+    // --- agent-navigation slice U4: filters, snippet, count_only ---
+
+    it('composed filter (source + tags[] AND-match) narrows to the matching link only', async () => {
+      const { core, client } = getContext();
+      const match = await core.createLink({
+        url: 'https://x.com/listfilter/status/2222222222',
+        sourceKind: 'twitter',
+        tags: ['ai', 'reading'],
+      });
+      // Wrong source.
+      await seedLink(getContext, 'https://example.com/list-filter-wrong-source', {
+        tags: ['ai', 'reading'],
+      });
+      // Right source, missing one required tag.
+      await core.createLink({
+        url: 'https://x.com/listfilter/status/2222222223',
+        sourceKind: 'twitter',
+        tags: ['ai'],
+      });
+
+      const result = await client.callTool({
+        name: 'list_links',
+        arguments: { source: 'twitter', tags: ['ai', 'reading'] },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { links: Array<{ id: string }> };
+      expect(structured.links.map((l) => l.id)).toEqual([match.id]);
+    });
+
+    it('list results carry `snippet` and never `extractedText`', async () => {
+      await seedLink(getContext, 'https://example.com/list-snippet-check', {
+        title: 'List snippet check',
+        text: 'x'.repeat(500),
+      });
+
+      const { client } = getContext();
+      const result = await client.callTool({ name: 'list_links', arguments: { limit: 1 } });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as { links: Array<Record<string, unknown>> };
+      const [first] = structured.links;
+      expect(first).not.toHaveProperty('extractedText');
+      expect(typeof first?.snippet === 'string' || first?.snippet === null).toBe(true);
+    });
+
+    it('count_only: true returns total + bySource + topTags, no rows, no `status` leakage into the count', async () => {
+      const { core, client } = getContext();
+      const a = await core.createLink({
+        url: 'https://example.com/list-count-only-a',
+        sourceKind: 'link',
+        tags: ['listcountonlyterm'],
+      });
+      const b = await core.createLink({
+        url: 'https://github.com/listcountonly/repo',
+        sourceKind: 'github',
+        tags: ['listcountonlyterm'],
+      });
+      // Ensure both are counted regardless of capture status (countLinks has
+      // no status filter — see buildCountFilter's doc comment).
+      void a;
+      void b;
+
+      const result = await client.callTool({
+        name: 'list_links',
+        arguments: { tags: ['listcountonlyterm'], count_only: true },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        total?: number;
+        bySource?: Record<string, number>;
+        topTags?: Array<{ tag: string; count: number }>;
+        links?: unknown[];
+        count?: number;
+      };
+      expect(structured.links).toBeUndefined();
+      expect(structured.count).toBeUndefined();
+      expect(structured.total).toBe(2);
+      expect(structured.bySource?.link).toBe(1);
+      expect(structured.bySource?.github).toBe(1);
+      expect(structured.topTags?.some((t) => t.tag === 'listcountonlyterm' && t.count === 2)).toBe(
+        true,
+      );
+    });
+
+    it('malformed `since`/`until` -> a clean tool error, not a raw Postgres 500', async () => {
+      const { client } = getContext();
+      const sinceResult = await client.callTool({
+        name: 'list_links',
+        arguments: { since: 'not-a-date' },
+      });
+      expect(sinceResult.isError).toBe(true);
+
+      const untilResult = await client.callTool({
+        name: 'list_links',
+        arguments: { until: 'also-not-a-date' },
+      });
+      expect(untilResult.isError).toBe(true);
+    });
   },
 );

@@ -17,6 +17,70 @@ export const pageQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
+/**
+ * Shared `since`/`until` date/datetime query-param validator (agent-
+ * navigation slice U5) — mirrors `@silo/mcp-server`'s `tools/query-filters.ts`
+ * `isoDateTime` EXACTLY (union of `z.iso.date()` date-only and
+ * `z.iso.datetime({ offset: true, local: true })` full ISO datetime) so a
+ * malformed `since`/`until` (`?since=yesterday`) is rejected here with a
+ * clean `400 validation_error`, never reaching `core.list`/`core.search`'s
+ * raw SQL `::timestamptz` cast (which would otherwise throw an unfiltered
+ * Postgres error — the same carry-forward-from-U1-review concern the MCP
+ * tools' identical schema documents). Deliberately duplicated rather than
+ * imported from `@silo/mcp-server`: `@silo/api` and `@silo/mcp-server` are
+ * sibling adapters (`docs/rules/architecture.md`) that may each import
+ * `@silo/core` and nothing else in the workspace — the two-line duplication
+ * is the boundary-required outcome, not an oversight (same rationale
+ * `link-json.ts`'s doc comment gives for its own whitelist duplication).
+ */
+const isoDateTimeQuery = z.union([z.iso.date(), z.iso.datetime({ offset: true, local: true })]);
+
+/**
+ * The closed set of `source_kind` values the `source` filter accepts on
+ * `/api/links`, `/api/links/search`, and their `count_only` mode — mirrors
+ * `@silo/mcp-server`'s `tools/query-filters.ts` `SOURCE_KIND_VALUES` so the
+ * two adapters' `source` enum can never drift from each other. Duplicated for
+ * the same adapter-boundary reason `isoDateTimeQuery` is.
+ */
+export const SOURCE_KIND_VALUES = ['link', 'hacker_news', 'github', 'youtube', 'twitter'] as const;
+
+/**
+ * Shared query-param fragment for the mechanical filters `core.list`/
+ * `core.search`/`core.countLinks` all accept beyond the original `tag`/
+ * `status` (agent-navigation slice U5): `source`, `tags` (comma-separated —
+ * Hono's `c.req.query()` returns the LAST value for a repeated `?tags=a&tags=b`
+ * key, not an array, so comma-separation is the only single-value encoding
+ * that survives Hono's query parsing without a second `c.req.queries()` call
+ * per route; documented on each route's query schema too), `since`/`until`
+ * (validated via `isoDateTimeQuery`), and `count_only` (a boolean query flag).
+ * Spread into `listQuerySchema`/`searchQuerySchema` below.
+ */
+export const mechanicalFilterQuerySchema = z.object({
+  source: z.enum(SOURCE_KIND_VALUES).optional(),
+  tags: z
+    .string()
+    .min(1)
+    .optional()
+    .transform((raw) =>
+      raw === undefined ? undefined : raw.split(',').filter((t) => t.length > 0),
+    ),
+  since: isoDateTimeQuery.optional(),
+  until: isoDateTimeQuery.optional(),
+  // Deliberately NOT `z.coerce.boolean()`: that coerces ANY non-empty string
+  // (including the literal `"false"`) to `true` (`Boolean('false') === true`
+  // — a well-known Zod/JS footgun), so `?count_only=false` would silently
+  // turn count_only ON. Only the literal string `'true'` (case-insensitive,
+  // matching how a human/agent would type it) is truthy; anything else
+  // (`'false'`, `'0'`, `''`, garbage) is falsy — never a 400, since an
+  // unrecognized value degrading to "count_only off" (the default,
+  // documented-safe behavior) is better than rejecting an otherwise-valid
+  // request over one flag.
+  count_only: z
+    .string()
+    .optional()
+    .transform((raw) => raw?.toLowerCase() === 'true'),
+});
+
 /** The parsed `{ limit?, cursor? }` query shape every paginated route shares. */
 export type PageQuery = z.infer<typeof pageQuerySchema>;
 
@@ -95,4 +159,38 @@ export const addTagBodySchema = z.object({
 /** `POST /api/tags` (standalone create-tag) body schema. */
 export const createTagBodySchema = z.object({
   name: z.string().min(1),
+});
+
+/**
+ * Shared `{ ids: string[] }` batch-write body schema (agent-navigation slice
+ * U5) — the HTTP mirror of the MCP write tools' `ids[]` batch mode
+ * (`add_tag`/`remove_tag`/`trash_link`/`restore_link`/`retry_capture`). Used
+ * by every `POST /api/links/batch/*` route below. `min(1)` rejects an empty
+ * array as a clean `400 validation_error` (an empty batch has nothing to do
+ * and is almost certainly a caller bug, not a legitimate no-op request); the
+ * `MAX_BULK_IDS` ceiling itself is enforced by `core`'s bulk fns
+ * (`TooManyIdsError`, caught by each route and mapped to `400`) rather than
+ * duplicated here as a Zod `.max()` — the route's error message names the
+ * exact limit either way, and core is the single source of truth for the cap.
+ */
+export const batchIdsBodySchema = z.object({
+  ids: z.array(z.uuid()).min(1),
+});
+
+/** `POST /api/links/batch/tags` (batch add-tag) / `POST /api/links/batch/untag` (batch remove-tag) body schema — `batchIdsBodySchema` plus the one shared `tag` name applied to every id. */
+export const batchTagBodySchema = batchIdsBodySchema.extend({
+  tag: z.string().min(1),
+});
+
+/**
+ * `POST /api/links/batch/capture` body schema — the HTTP mirror of
+ * `capture_link`'s MCP `urls[]` batch mode. `tags`/`note`/`sourceKind` apply
+ * to every url in the batch (same as the MCP tool). `min(1)` on `urls` for
+ * the same "empty batch is a caller bug" reason `batchIdsBodySchema` documents.
+ */
+export const batchCaptureBodySchema = z.object({
+  urls: z.array(z.string()).min(1),
+  tags: z.array(z.string()).optional(),
+  note: z.string().optional(),
+  sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
 });

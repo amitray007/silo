@@ -1750,6 +1750,211 @@ describeIfPg('links operations (integration)', () => {
     });
   });
 
+  describe('list — richer filters (agent-navigation U1)', () => {
+    it('filters by source alone', async () => {
+      const twitterLink = await ops.createLink({
+        url: 'https://example.com/filter-source-twitter',
+        sourceKind: 'twitter',
+      });
+      const githubLink = await ops.createLink({
+        url: 'https://example.com/filter-source-github',
+        sourceKind: 'github',
+      });
+
+      const { links: onlyTwitter } = await ops.list({ source: 'twitter' });
+      const ids = onlyTwitter.map((l) => l.id);
+      expect(ids).toContain(twitterLink.id);
+      expect(ids).not.toContain(githubLink.id);
+    });
+
+    it('filters by since alone (created_at >= since)', async () => {
+      const old = await ops.createLink({
+        url: 'https://example.com/filter-since-old',
+        sourceKind: 'link',
+      });
+      const recent = await ops.createLink({
+        url: 'https://example.com/filter-since-recent',
+        sourceKind: 'link',
+      });
+      await forceCreatedAt([old.id], '2020-01-01T00:00:00.000000Z');
+      await forceCreatedAt([recent.id], '2026-06-01T00:00:00.000000Z');
+
+      const { links: sinceRecent } = await ops.list({ since: '2025-01-01T00:00:00Z' });
+      const ids = sinceRecent.map((l) => l.id);
+      expect(ids).toContain(recent.id);
+      expect(ids).not.toContain(old.id);
+    });
+
+    it('filters by until alone (created_at < until, exclusive)', async () => {
+      const before = await ops.createLink({
+        url: 'https://example.com/filter-until-before',
+        sourceKind: 'link',
+      });
+      const atBoundary = await ops.createLink({
+        url: 'https://example.com/filter-until-boundary',
+        sourceKind: 'link',
+      });
+      const after = await ops.createLink({
+        url: 'https://example.com/filter-until-after',
+        sourceKind: 'link',
+      });
+      await forceCreatedAt([before.id], '2026-01-01T00:00:00.000000Z');
+      await forceCreatedAt([atBoundary.id], '2026-06-01T00:00:00.000000Z');
+      await forceCreatedAt([after.id], '2026-12-01T00:00:00.000000Z');
+
+      const { links: untilJune } = await ops.list({ until: '2026-06-01T00:00:00Z' });
+      const ids = untilJune.map((l) => l.id);
+      expect(ids).toContain(before.id);
+      // Exclusive upper bound: a row at exactly `until` is excluded.
+      expect(ids).not.toContain(atBoundary.id);
+      expect(ids).not.toContain(after.id);
+    });
+
+    it('a since+until window returns only rows inside the range', async () => {
+      const tooOld = await ops.createLink({
+        url: 'https://example.com/filter-window-too-old',
+        sourceKind: 'link',
+      });
+      const inWindow = await ops.createLink({
+        url: 'https://example.com/filter-window-in',
+        sourceKind: 'link',
+      });
+      const tooNew = await ops.createLink({
+        url: 'https://example.com/filter-window-too-new',
+        sourceKind: 'link',
+      });
+      await forceCreatedAt([tooOld.id], '2025-01-01T00:00:00.000000Z');
+      await forceCreatedAt([inWindow.id], '2026-03-01T00:00:00.000000Z');
+      await forceCreatedAt([tooNew.id], '2026-09-01T00:00:00.000000Z');
+
+      const { links: windowed } = await ops.list({
+        since: '2026-02-01T00:00:00Z',
+        until: '2026-06-01T00:00:00Z',
+      });
+      const ids = windowed.map((l) => l.id);
+      expect(ids).toEqual([inWindow.id]);
+      expect(ids).not.toContain(tooOld.id);
+      expect(ids).not.toContain(tooNew.id);
+    });
+
+    it('tags[] AND-match: a link must carry EVERY given tag', async () => {
+      const both = await ops.createLink({
+        url: 'https://example.com/filter-tags-and-both',
+        tags: ['alpha', 'beta'],
+        sourceKind: 'link',
+      });
+      const onlyAlpha = await ops.createLink({
+        url: 'https://example.com/filter-tags-and-alpha-only',
+        tags: ['alpha'],
+        sourceKind: 'link',
+      });
+      const onlyBeta = await ops.createLink({
+        url: 'https://example.com/filter-tags-and-beta-only',
+        tags: ['beta'],
+        sourceKind: 'link',
+      });
+      const neither = await ops.createLink({
+        url: 'https://example.com/filter-tags-and-neither',
+        sourceKind: 'link',
+      });
+
+      const { links: matched } = await ops.list({ tags: ['alpha', 'beta'] });
+      const ids = matched.map((l) => l.id);
+      expect(ids).toEqual([both.id]);
+      expect(ids).not.toContain(onlyAlpha.id);
+      expect(ids).not.toContain(onlyBeta.id);
+      expect(ids).not.toContain(neither.id);
+    });
+
+    it('tags[] is case-insensitive, mirroring the singular tag filter', async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/filter-tags-and-case',
+        tags: ['Alpha', 'BETA'],
+        sourceKind: 'link',
+      });
+
+      const { links: matched } = await ops.list({ tags: ['alpha', 'beta'] });
+      expect(matched.map((l) => l.id)).toContain(link.id);
+    });
+
+    it('singular tag + tags[] are unioned as additional required tags (back-compat)', async () => {
+      const all3 = await ops.createLink({
+        url: 'https://example.com/filter-tags-union-all',
+        tags: ['gamma', 'delta', 'epsilon'],
+        sourceKind: 'link',
+      });
+      const missingOne = await ops.createLink({
+        url: 'https://example.com/filter-tags-union-missing',
+        tags: ['gamma', 'delta'],
+        sourceKind: 'link',
+      });
+
+      const { links: matched } = await ops.list({ tag: 'gamma', tags: ['delta', 'epsilon'] });
+      const ids = matched.map((l) => l.id);
+      expect(ids).toEqual([all3.id]);
+      expect(ids).not.toContain(missingOne.id);
+    });
+
+    it('combined filters: source + date window + tags[] together', async () => {
+      const matches = await ops.createLink({
+        url: 'https://example.com/filter-combined-match',
+        sourceKind: 'twitter',
+        tags: ['combo'],
+      });
+      const wrongSource = await ops.createLink({
+        url: 'https://example.com/filter-combined-wrong-source',
+        sourceKind: 'github',
+        tags: ['combo'],
+      });
+      const wrongTag = await ops.createLink({
+        url: 'https://example.com/filter-combined-wrong-tag',
+        sourceKind: 'twitter',
+        tags: ['not-combo'],
+      });
+      const outsideWindow = await ops.createLink({
+        url: 'https://example.com/filter-combined-outside-window',
+        sourceKind: 'twitter',
+        tags: ['combo'],
+      });
+      await forceCreatedAt(
+        [matches.id, wrongSource.id, wrongTag.id],
+        '2026-04-01T00:00:00.000000Z',
+      );
+      await forceCreatedAt([outsideWindow.id], '2020-01-01T00:00:00.000000Z');
+
+      const { links: result } = await ops.list({
+        source: 'twitter',
+        tags: ['combo'],
+        since: '2026-01-01T00:00:00Z',
+        until: '2026-12-01T00:00:00Z',
+      });
+      expect(result.map((l) => l.id)).toEqual([matches.id]);
+    });
+
+    it('a filter matching nothing returns [], not an error', async () => {
+      await ops.createLink({ url: 'https://example.com/filter-empty-seed', sourceKind: 'link' });
+
+      const { links: none } = await ops.list({ source: 'youtube', tags: ['nonexistent-xyz'] });
+      expect(none).toEqual([]);
+    });
+
+    it('back-compat: list({}) with no new filters behaves exactly as before', async () => {
+      const a = await ops.createLink({
+        url: 'https://example.com/backcompat-list-a',
+        sourceKind: 'link',
+      });
+      const b = await ops.createLink({
+        url: 'https://example.com/backcompat-list-b',
+        sourceKind: 'link',
+      });
+
+      const { links: all } = await ops.list();
+      const ids = all.map((l) => l.id);
+      expect(ids).toContain(a.id);
+      expect(ids).toContain(b.id);
+    });
+  });
+
   describe('editLink', () => {
     it('updates fields and advances updated_at', async () => {
       const created = await ops.createLink({
@@ -2317,6 +2522,498 @@ describeIfPg('links operations (integration)', () => {
       await expect(
         ops.search('anything', {}, { cursor: staleBogusTierCursor }),
       ).resolves.not.toThrow();
+    });
+  });
+
+  describe('search — richer filters + sort (agent-navigation U1)', () => {
+    it('filters by source alongside the text query', async () => {
+      const twitterMatch = await ops.createLink({
+        url: 'https://example.com/search-filter-source-twitter',
+        title: 'quokkaburrow search filter',
+        sourceKind: 'twitter',
+      });
+      const githubMatch = await ops.createLink({
+        url: 'https://example.com/search-filter-source-github',
+        title: 'quokkaburrow search filter',
+        sourceKind: 'github',
+      });
+
+      const { results } = await ops.search('quokkaburrow', { source: 'twitter' });
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(twitterMatch.id);
+      expect(ids).not.toContain(githubMatch.id);
+    });
+
+    it('filters by since/until alongside the text query', async () => {
+      const inWindow = await ops.createLink({
+        url: 'https://example.com/search-filter-since-in',
+        title: 'plumwhistle search date filter',
+        sourceKind: 'link',
+      });
+      const outsideWindow = await ops.createLink({
+        url: 'https://example.com/search-filter-since-out',
+        title: 'plumwhistle search date filter',
+        sourceKind: 'link',
+      });
+      await forceCreatedAt([inWindow.id], '2026-03-01T00:00:00.000000Z');
+      await forceCreatedAt([outsideWindow.id], '2020-01-01T00:00:00.000000Z');
+
+      const { results } = await ops.search('plumwhistle', {
+        since: '2026-01-01T00:00:00Z',
+        until: '2026-12-01T00:00:00Z',
+      });
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(inWindow.id);
+      expect(ids).not.toContain(outsideWindow.id);
+    });
+
+    it('filters by tags[] AND-match alongside the text query', async () => {
+      const both = await ops.createLink({
+        url: 'https://example.com/search-filter-tags-both',
+        title: 'nimbletoad search tag filter',
+        tags: ['tagx', 'tagy'],
+        sourceKind: 'link',
+      });
+      const onlyOne = await ops.createLink({
+        url: 'https://example.com/search-filter-tags-one',
+        title: 'nimbletoad search tag filter',
+        tags: ['tagx'],
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('nimbletoad', { tags: ['tagx', 'tagy'] });
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(both.id);
+      expect(ids).not.toContain(onlyOne.id);
+    });
+
+    it('combined filters (source + date window + tags) narrow search results together', async () => {
+      const matches = await ops.createLink({
+        url: 'https://example.com/search-filter-combined-match',
+        title: 'sprocketgander combined search filter',
+        sourceKind: 'twitter',
+        tags: ['combosearch'],
+      });
+      const wrongSource = await ops.createLink({
+        url: 'https://example.com/search-filter-combined-wrong-source',
+        title: 'sprocketgander combined search filter',
+        sourceKind: 'github',
+        tags: ['combosearch'],
+      });
+      await forceCreatedAt([matches.id, wrongSource.id], '2026-04-01T00:00:00.000000Z');
+
+      const { results } = await ops.search('sprocketgander', {
+        source: 'twitter',
+        tags: ['combosearch'],
+        since: '2026-01-01T00:00:00Z',
+        until: '2026-12-01T00:00:00Z',
+      });
+      expect(results.map((r) => r.id)).toEqual([matches.id]);
+    });
+
+    it('a filter combination matching nothing returns [], not an error', async () => {
+      await ops.createLink({
+        url: 'https://example.com/search-filter-empty-seed',
+        title: 'wafflemantis empty filter search',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('wafflemantis', { source: 'youtube' });
+      expect(results).toEqual([]);
+    });
+
+    it("sort:'newest' orders matching results by created_at DESC while the query still filters", async () => {
+      const oldest = await ops.createLink({
+        url: 'https://example.com/search-sort-newest-oldest',
+        title: 'brambleferret sort order test',
+        sourceKind: 'link',
+      });
+      const middle = await ops.createLink({
+        url: 'https://example.com/search-sort-newest-middle',
+        title: 'brambleferret sort order test',
+        sourceKind: 'link',
+      });
+      const newest = await ops.createLink({
+        url: 'https://example.com/search-sort-newest-newest',
+        title: 'brambleferret sort order test',
+        sourceKind: 'link',
+      });
+      const nonMatching = await ops.createLink({
+        url: 'https://example.com/search-sort-newest-nonmatch',
+        title: 'totally unrelated',
+        sourceKind: 'link',
+      });
+      await forceCreatedAt([oldest.id], '2020-01-01T00:00:00.000000Z');
+      await forceCreatedAt([middle.id], '2023-01-01T00:00:00.000000Z');
+      await forceCreatedAt([newest.id], '2026-01-01T00:00:00.000000Z');
+      await forceCreatedAt([nonMatching.id], '2027-01-01T00:00:00.000000Z');
+
+      const { results } = await ops.search('brambleferret', {}, {});
+      const sorted = await ops.search('brambleferret', { sort: 'newest' });
+      expect(sorted.results.map((r) => r.id)).toEqual([newest.id, middle.id, oldest.id]);
+      // The query still filters — the unrelated, newer link never appears.
+      expect(sorted.results.map((r) => r.id)).not.toContain(nonMatching.id);
+      // Sanity: default relevance search still finds all three matches too
+      // (order not asserted here — covered by the relevance-ranking tests above).
+      expect(results.map((r) => r.id).sort()).toEqual([oldest.id, middle.id, newest.id].sort());
+    });
+
+    it("sort:'oldest' orders matching results by created_at ASC", async () => {
+      const oldest = await ops.createLink({
+        url: 'https://example.com/search-sort-oldest-oldest',
+        title: 'copperwhistle sort order test',
+        sourceKind: 'link',
+      });
+      const middle = await ops.createLink({
+        url: 'https://example.com/search-sort-oldest-middle',
+        title: 'copperwhistle sort order test',
+        sourceKind: 'link',
+      });
+      const newest = await ops.createLink({
+        url: 'https://example.com/search-sort-oldest-newest',
+        title: 'copperwhistle sort order test',
+        sourceKind: 'link',
+      });
+      await forceCreatedAt([oldest.id], '2020-01-01T00:00:00.000000Z');
+      await forceCreatedAt([middle.id], '2023-01-01T00:00:00.000000Z');
+      await forceCreatedAt([newest.id], '2026-01-01T00:00:00.000000Z');
+
+      const { results } = await ops.search('copperwhistle', { sort: 'oldest' });
+      expect(results.map((r) => r.id)).toEqual([oldest.id, middle.id, newest.id]);
+    });
+
+    it('search cursor stays stable under sort:newest across two pages (no drop/dup)', async () => {
+      const ids: string[] = [];
+      for (let i = 0; i < 5; i++) {
+        const created = await ops.createLink({
+          url: `https://example.com/search-sort-cursor-stability-${i}`,
+          title: 'grovejasper cursor stability test',
+          sourceKind: 'link',
+        });
+        ids.push(created.id);
+        // Spread creation timestamps so `sort:'newest'` has a well-defined order.
+        await forceCreatedAt([created.id], `2026-0${i + 1}-01T00:00:00.000000Z`);
+      }
+      // Expected newest-first order is the reverse of creation order (i=4 is newest).
+      const expectedOrder = [...ids].reverse();
+
+      const seenIds: string[] = [];
+      let cursor: string | undefined;
+      let guard = 0;
+      do {
+        const { results, nextCursor } = await ops.search(
+          'grovejasper',
+          { sort: 'newest' },
+          cursor === undefined ? { limit: 2 } : { limit: 2, cursor },
+        );
+        seenIds.push(...results.map((r) => r.id));
+        cursor = nextCursor;
+        guard++;
+      } while (cursor !== undefined && guard < 10);
+
+      expect(seenIds).toHaveLength(5);
+      expect(new Set(seenIds).size).toBe(5);
+      expect(seenIds).toEqual(expectedOrder);
+    });
+
+    it('back-compat: search(query, {}) with no new filters behaves exactly as before', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/search-backcompat',
+        title: 'ferrettumbleweed backcompat search',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('ferrettumbleweed');
+      expect(results.map((r) => r.id)).toContain(created.id);
+    });
+  });
+
+  describe('countLinks (agent-navigation U1)', () => {
+    it('total + bySource + topTags are correct for a known fixture', async () => {
+      const twitterA = await ops.createLink({
+        url: 'https://example.com/count-fixture-twitter-a',
+        sourceKind: 'twitter',
+        tags: ['countme'],
+      });
+      const twitterB = await ops.createLink({
+        url: 'https://example.com/count-fixture-twitter-b',
+        sourceKind: 'twitter',
+        tags: ['countme'],
+      });
+      await ops.createLink({
+        url: 'https://example.com/count-fixture-github',
+        sourceKind: 'github',
+        tags: ['countme'],
+      });
+      await ops.createLink({
+        url: 'https://example.com/count-fixture-plain',
+        sourceKind: 'link',
+      });
+      // Reference the ids so lint doesn't flag them as unused (kept for readability).
+      expect(twitterA.id).not.toBe(twitterB.id);
+
+      const counts = await ops.countLinks();
+      expect(counts.total).toBeGreaterThanOrEqual(4);
+      expect(counts.bySource.twitter).toBeGreaterThanOrEqual(2);
+      expect(counts.bySource.github).toBeGreaterThanOrEqual(1);
+      expect(counts.bySource.link).toBeGreaterThanOrEqual(1);
+      const countMeTag = counts.topTags.find((t) => t.tag === 'countme');
+      expect(countMeTag?.count).toBeGreaterThanOrEqual(3);
+    });
+
+    it('count respects the same filters as list (source + tags + date window)', async () => {
+      const matches = await ops.createLink({
+        url: 'https://example.com/count-filter-match',
+        sourceKind: 'twitter',
+        tags: ['countfilter'],
+      });
+      const wrongSource = await ops.createLink({
+        url: 'https://example.com/count-filter-wrong-source',
+        sourceKind: 'github',
+        tags: ['countfilter'],
+      });
+      await forceCreatedAt([matches.id, wrongSource.id], '2026-04-01T00:00:00.000000Z');
+
+      const counts = await ops.countLinks({
+        source: 'twitter',
+        tags: ['countfilter'],
+        since: '2026-01-01T00:00:00Z',
+        until: '2026-12-01T00:00:00Z',
+      });
+      expect(counts.total).toBe(1);
+      expect(counts.bySource).toEqual({ twitter: 1 });
+      expect(counts.topTags.map((t) => t.tag)).toContain('countfilter');
+    });
+
+    it('count respects an optional full-text query (search-count mode)', async () => {
+      const matches = await ops.createLink({
+        url: 'https://example.com/count-query-match',
+        title: 'zephyrgrackle count query mode',
+        sourceKind: 'link',
+      });
+      await ops.createLink({
+        url: 'https://example.com/count-query-nonmatch',
+        title: 'completely unrelated title',
+        sourceKind: 'link',
+      });
+
+      const counts = await ops.countLinks({ query: 'zephyrgrackle' });
+      expect(counts.total).toBe(1);
+      expect(counts.bySource.link).toBe(1);
+      expect(matches.sourceKind).toBe('link');
+    });
+
+    it('a count filter matching nothing returns zeroed counts, not an error', async () => {
+      await ops.createLink({
+        url: 'https://example.com/count-empty-seed',
+        sourceKind: 'link',
+      });
+
+      const counts = await ops.countLinks({ source: 'youtube', tags: ['definitely-not-a-tag'] });
+      expect(counts.total).toBe(0);
+      expect(counts.bySource).toEqual({});
+      expect(counts.topTags).toEqual([]);
+    });
+
+    it('topTags is capped at 20 entries', async () => {
+      const link = await ops.createLink({
+        url: 'https://example.com/count-top-tags-cap',
+        sourceKind: 'link',
+      });
+      const tagNames = Array.from({ length: 25 }, (_, i) => `captag${i}`);
+      await ops.createLink({
+        url: 'https://example.com/count-top-tags-cap',
+        sourceKind: 'link',
+        tags: tagNames,
+      });
+
+      const counts = await ops.countLinks();
+      const capTagCount = counts.topTags.filter((t) => t.tag.startsWith('captag')).length;
+      expect(capTagCount).toBeLessThanOrEqual(20);
+      expect(link.id).toBeTruthy();
+    });
+  });
+
+  describe('search — snippet, extractedText dropped (agent-navigation U2)', () => {
+    it('snippet highlights the matched term and is shorter than the full extracted text', async () => {
+      const longBody = `${'padding word '.repeat(200)}the zorblequax appeared here in the middle ${'more padding text '.repeat(200)}`;
+      await ops.createLink({
+        url: 'https://example.com/u2-search-snippet-highlight',
+        title: 'an article',
+        extractedText: longBody,
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('zorblequax');
+      expect(results).toHaveLength(1);
+      const [result] = results;
+      expect(result?.snippet).toBeTruthy();
+      expect(result?.snippet).toContain('**zorblequax**');
+      expect(result?.snippet?.length).toBeLessThan(longBody.length);
+    });
+
+    it('extractedText is ABSENT from search result rows', async () => {
+      await ops.createLink({
+        url: 'https://example.com/u2-search-no-extracted-text',
+        title: 'quixolarbeam article',
+        extractedText: 'this body should never be returned by search',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('quixolarbeam');
+      expect(results).toHaveLength(1);
+      expect(results[0]).not.toHaveProperty('extractedText');
+    });
+
+    it('falls back to description when extractedText is null', async () => {
+      await ops.createLink({
+        url: 'https://example.com/u2-search-snippet-fallback-description',
+        title: 'unrelated title',
+        description: 'a description mentioning flumwhistler explicitly',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('flumwhistler');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.snippet).toContain('**flumwhistler**');
+    });
+
+    it('falls back to title when both extractedText and description are null', async () => {
+      await ops.createLink({
+        url: 'https://example.com/u2-search-snippet-fallback-title',
+        title: 'grimbletoad appears only in the title',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('grimbletoad');
+      expect(results).toHaveLength(1);
+      expect(results[0]?.snippet).toContain('**grimbletoad**');
+    });
+
+    it('LOW-finding regression: in a MIXED query, a row matched ONLY via the trigram substring side gets a null snippet', async () => {
+      // 'foo' prefix-matches the FTS side via `fooheader`'s leading word, and
+      // ALSO trigram-substring-matches `barfoobaz` (mid-word, no word starts
+      // with 'foo' there — FTS-blind, trigram-only). Before the per-row gate,
+      // `resolveSnippet` applied ONE ts_headline(fts.tsQuery) to every row in
+      // the page, so the trigram-only row got a non-null, un-highlighted
+      // leading excerpt — contradicting the documented "trigram-only ⇒ null
+      // snippet" invariant, which previously held only query-wide, not per row.
+      const ftsMatch = await ops.createLink({
+        url: 'https://example.com/u2-mixed-snippet-fts',
+        title: 'fooheader starts this title',
+        sourceKind: 'link',
+      });
+      const trigramOnlyMatch = await ops.createLink({
+        url: 'https://example.com/u2-mixed-snippet-trgm',
+        title: 'barfoobaz appears only mid-word here',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('foo');
+      const byId = new Map(results.map((r) => [r.id, r]));
+
+      expect(byId.has(ftsMatch.id)).toBe(true);
+      expect(byId.has(trigramOnlyMatch.id)).toBe(true);
+      expect(byId.get(trigramOnlyMatch.id)?.snippet).toBeNull();
+    });
+  });
+
+  describe('list — snippet, extractedText dropped (agent-navigation U2)', () => {
+    it('snippet is a truncated excerpt of extractedText, and extractedText is absent', async () => {
+      const longBody = 'x'.repeat(500);
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-list-snippet-truncated',
+        title: 'a long article',
+        extractedText: longBody,
+        sourceKind: 'link',
+      });
+
+      const { links: page } = await ops.list();
+      const row = page.find((l) => l.id === created.id);
+      expect(row).toBeDefined();
+      expect(row).not.toHaveProperty('extractedText');
+      expect(row?.snippet).toBeTruthy();
+      expect(row?.snippet?.length).toBeLessThanOrEqual(201); // 200 chars + ellipsis
+      expect(longBody.startsWith(row?.snippet?.replace('…', '') ?? '')).toBe(true);
+    });
+
+    it('falls back to description when extractedText is null', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-list-snippet-fallback-description',
+        title: 'unrelated',
+        description: 'a short description used as the snippet source',
+        sourceKind: 'link',
+      });
+
+      const { links: page } = await ops.list();
+      const row = page.find((l) => l.id === created.id);
+      expect(row?.snippet).toBe('a short description used as the snippet source');
+    });
+
+    it('snippet is null when there is no extractedText or description', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-list-snippet-null',
+        title: 'bare link with nothing else',
+        sourceKind: 'link',
+      });
+
+      const { links: page } = await ops.list();
+      const row = page.find((l) => l.id === created.id);
+      expect(row?.snippet).toBeNull();
+    });
+  });
+
+  describe('getById — text windowing (agent-navigation U2)', () => {
+    it('no-window call returns full extractedText exactly as before (back-compat)', async () => {
+      const fullText = 'the complete article body, in full, unwindowed';
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-no-window',
+        extractedText: fullText,
+        sourceKind: 'link',
+      });
+
+      const link = await ops.getById(created.id);
+      expect(link?.extractedText).toBe(fullText);
+      expect(link).not.toHaveProperty('extractedTextLength');
+    });
+
+    it('textWindow returns the correct character slice plus the full-length indicator', async () => {
+      const fullText = '0123456789abcdefghijklmnopqrstuvwxyz';
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-window-slice',
+        extractedText: fullText,
+        sourceKind: 'link',
+      });
+
+      const windowed = await ops.getById(created.id, { textWindow: { offset: 5, limit: 10 } });
+      expect(windowed?.extractedText).toBe(fullText.slice(5, 15));
+      expect(windowed?.extractedTextLength).toBe(fullText.length);
+    });
+
+    it('an out-of-range offset returns an empty slice, not an error', async () => {
+      const fullText = 'short text';
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-window-out-of-range',
+        extractedText: fullText,
+        sourceKind: 'link',
+      });
+
+      const windowed = await ops.getById(created.id, {
+        textWindow: { offset: 10_000, limit: 50 },
+      });
+      expect(windowed?.extractedText).toBe('');
+      expect(windowed?.extractedTextLength).toBe(fullText.length);
+    });
+
+    it('a window on a null extractedText returns an empty slice and a zero length', async () => {
+      const created = await ops.createLink({
+        url: 'https://example.com/u2-getbyid-window-null-text',
+        sourceKind: 'link',
+      });
+
+      const windowed = await ops.getById(created.id, { textWindow: { offset: 0, limit: 10 } });
+      expect(windowed?.extractedText).toBe('');
+      expect(windowed?.extractedTextLength).toBe(0);
     });
   });
 });

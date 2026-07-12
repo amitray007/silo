@@ -6,6 +6,7 @@ import {
   expect400,
   expectOk,
   expectWhitelistedLinkShape,
+  expectWhitelistedSnippetShape,
   walkAllPages,
 } from '../test-support/assertions.js';
 import { setupPgHarness } from '../test-support/pg-harness.js';
@@ -210,7 +211,7 @@ describeIfPg('A2 read routes (integration)', () => {
       expect(body.nextCursor).toBeDefined();
     });
 
-    it('each link is the whitelisted shape — no internal-field leak, addedBy present', async () => {
+    it('each link is the whitelisted snippet shape — no internal-field leak, addedBy present', async () => {
       const { core, app } = harness.mod();
       await core.createLink({
         url: 'https://example.com/list-shape-check',
@@ -226,7 +227,7 @@ describeIfPg('A2 read routes (integration)', () => {
       const link = body.links[0];
       expect(link).toBeDefined();
       if (!link) return;
-      expectWhitelistedLinkShape(link);
+      expectWhitelistedSnippetShape(link);
       expect(link.addedBy).toBe('agent');
     });
   });
@@ -340,7 +341,7 @@ describeIfPg('A2 read routes (integration)', () => {
       await expect400(app, '/api/links/search?q=whatever&cursor=garbage!!!', 'invalid_cursor');
     });
 
-    it('each result is the whitelisted shape plus rank', async () => {
+    it('each result is the whitelisted snippet shape plus rank', async () => {
       const { core, app } = harness.mod();
       await core.createLink({
         url: 'https://example.com/search-shape-check',
@@ -356,7 +357,7 @@ describeIfPg('A2 read routes (integration)', () => {
       const result = body.results[0];
       expect(result).toBeDefined();
       if (!result) return;
-      expectWhitelistedLinkShape(result);
+      expectWhitelistedSnippetShape(result);
       expect(typeof result.rank).toBe('number');
     });
 
@@ -431,6 +432,303 @@ describeIfPg('A2 read routes (integration)', () => {
       const { app } = harness.mod();
       const body = await expectOk<{ results?: unknown }>(app, '/api/links/search?q=anything');
       expect(body.results).toBeDefined();
+    });
+  });
+
+  describe('GET /api/links — agent-navigation filters (U5)', () => {
+    it('source filter narrows to that source_kind only', async () => {
+      const { core, app } = harness.mod();
+      const twitter = await core.createLink({
+        url: 'https://twitter.com/u5-source-filter-status/1',
+        sourceKind: 'twitter',
+        tags: ['u5-source-filter'],
+      });
+      const link = await core.createLink({
+        url: 'https://example.com/u5-source-filter-link',
+        sourceKind: 'link',
+        tags: ['u5-source-filter'],
+      });
+
+      const body = await expectOk<{ links: Array<{ id: string; sourceKind: string }> }>(
+        app,
+        '/api/links?tags=u5-source-filter&source=twitter',
+      );
+      const ids = body.links.map((l) => l.id);
+      expect(ids).toContain(twitter.id);
+      expect(ids).not.toContain(link.id);
+      for (const l of body.links) expect(l.sourceKind).toBe('twitter');
+    });
+
+    it('comma-separated tags filter requires ALL tags (AND-match)', async () => {
+      const { core, app } = harness.mod();
+      const both = await core.createLink({
+        url: 'https://example.com/u5-tags-and-both',
+        sourceKind: 'link',
+        tags: ['u5-and-a', 'u5-and-b'],
+      });
+      const onlyA = await core.createLink({
+        url: 'https://example.com/u5-tags-and-only-a',
+        sourceKind: 'link',
+        tags: ['u5-and-a'],
+      });
+
+      const body = await expectOk<{ links: Array<{ id: string }> }>(
+        app,
+        '/api/links?tags=u5-and-a,u5-and-b',
+      );
+      const ids = body.links.map((l) => l.id);
+      expect(ids).toContain(both.id);
+      expect(ids).not.toContain(onlyA.id);
+    });
+
+    it('since/until date-only bounds the created_at range', async () => {
+      const { core, app } = harness.mod();
+      const link = await core.createLink({
+        url: 'https://example.com/u5-since-until',
+        sourceKind: 'link',
+        tags: ['u5-since-until'],
+      });
+      const farFuture = '2099-01-01';
+      const bodyExcluded = await expectOk<{ links: Array<{ id: string }> }>(
+        app,
+        `/api/links?tags=u5-since-until&since=${farFuture}`,
+      );
+      expect(bodyExcluded.links.map((l) => l.id)).not.toContain(link.id);
+
+      const bodyIncluded = await expectOk<{ links: Array<{ id: string }> }>(
+        app,
+        '/api/links?tags=u5-since-until&since=2000-01-01',
+      );
+      expect(bodyIncluded.links.map((l) => l.id)).toContain(link.id);
+    });
+
+    it('malformed since -> 400 validation_error, not a raw DB error (carried forward from U1 review)', async () => {
+      const { app } = harness.mod();
+      await expect400(app, '/api/links?since=yesterday', 'validation_error');
+    });
+
+    it('malformed until -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      await expect400(app, '/api/links?until=not-a-date', 'validation_error');
+    });
+
+    it('list results carry snippet, not extractedText', async () => {
+      const { core, app } = harness.mod();
+      await core.createLink({
+        url: 'https://example.com/u5-list-snippet',
+        sourceKind: 'link',
+        title: 'u5 list snippet marker',
+        tags: ['u5-list-snippet'],
+      });
+      const body = await expectOk<{ links: Array<Record<string, unknown>> }>(
+        app,
+        '/api/links?tags=u5-list-snippet',
+      );
+      expect(body.links.length).toBe(1);
+      const link = body.links[0];
+      expect(link).toBeDefined();
+      if (!link) return;
+      expect(Object.hasOwn(link, 'snippet')).toBe(true);
+      expect(Object.hasOwn(link, 'extractedText')).toBe(false);
+    });
+
+    it('count_only=true returns { total, bySource, topTags } instead of links', async () => {
+      const { core, app } = harness.mod();
+      await core.createLink({
+        url: 'https://example.com/u5-count-only-1',
+        sourceKind: 'link',
+        tags: ['u5-count-only'],
+      });
+      await core.createLink({
+        url: 'https://example.com/u5-count-only-2',
+        sourceKind: 'link',
+        tags: ['u5-count-only'],
+      });
+      const body = await expectOk<{
+        total: number;
+        bySource: Record<string, number>;
+        topTags: Array<{ tag: string; count: number }>;
+        links?: unknown;
+      }>(app, '/api/links?tags=u5-count-only&count_only=true');
+      expect(body.total).toBe(2);
+      expect(body.bySource.link).toBe(2);
+      expect(body.topTags.some((t) => t.tag === 'u5-count-only' && t.count === 2)).toBe(true);
+      expect(body.links).toBeUndefined();
+    });
+
+    it('count_only=false behaves like count_only omitted (JS Boolean-coercion footgun regression)', async () => {
+      const { core, app } = harness.mod();
+      await core.createLink({
+        url: 'https://example.com/u5-count-only-false',
+        sourceKind: 'link',
+        tags: ['u5-count-only-false'],
+      });
+      const body = await expectOk<{ links?: unknown[]; total?: number }>(
+        app,
+        '/api/links?tags=u5-count-only-false&count_only=false',
+      );
+      expect(body.links).toBeDefined();
+      expect(body.total).toBeUndefined();
+    });
+  });
+
+  describe('GET /api/links/search — agent-navigation filters (U5)', () => {
+    it('source + since/until + sort=newest all compose in one call', async () => {
+      const { core, app } = harness.mod();
+      const older = await core.createLink({
+        url: 'https://twitter.com/u5-search-compose/older',
+        sourceKind: 'twitter',
+        title: 'u5searchcomposemarker older',
+      });
+      const newer = await core.createLink({
+        url: 'https://twitter.com/u5-search-compose/newer',
+        sourceKind: 'twitter',
+        title: 'u5searchcomposemarker newer',
+      });
+      const wrongSource = await core.createLink({
+        url: 'https://example.com/u5-search-compose-wrong-source',
+        sourceKind: 'link',
+        title: 'u5searchcomposemarker wrong source',
+      });
+
+      const body = await expectOk<{ results: Array<{ id: string }> }>(
+        app,
+        '/api/links/search?q=u5searchcomposemarker&source=twitter&since=2000-01-01&sort=newest',
+      );
+      const ids = body.results.map((r) => r.id);
+      expect(ids).toContain(older.id);
+      expect(ids).toContain(newer.id);
+      expect(ids).not.toContain(wrongSource.id);
+      // newest first
+      expect(ids.indexOf(newer.id)).toBeLessThan(ids.indexOf(older.id));
+    });
+
+    it('malformed since on search -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      await expect400(
+        app,
+        '/api/links/search?q=whatever&since=not-a-real-date',
+        'validation_error',
+      );
+    });
+
+    it('search results carry snippet, not extractedText', async () => {
+      const { core, app } = harness.mod();
+      await core.createLink({
+        url: 'https://example.com/u5-search-snippet',
+        sourceKind: 'link',
+        title: 'u5searchsnippetmarker',
+      });
+      const body = await expectOk<{ results: Array<Record<string, unknown>> }>(
+        app,
+        '/api/links/search?q=u5searchsnippetmarker',
+      );
+      expect(body.results.length).toBe(1);
+      const result = body.results[0];
+      expect(result).toBeDefined();
+      if (!result) return;
+      expect(Object.hasOwn(result, 'snippet')).toBe(true);
+      expect(Object.hasOwn(result, 'extractedText')).toBe(false);
+    });
+
+    it('count_only=true on search returns counts scoped to the query match', async () => {
+      const { core, app } = harness.mod();
+      await core.createLink({
+        url: 'https://example.com/u5-search-count-only',
+        sourceKind: 'link',
+        title: 'u5searchcountonlymarker',
+      });
+      const body = await expectOk<{ total: number; results?: unknown }>(
+        app,
+        '/api/links/search?q=u5searchcountonlymarker&count_only=true',
+      );
+      expect(body.total).toBe(1);
+      expect(body.results).toBeUndefined();
+    });
+  });
+
+  describe('GET /api/links/:id/related — find_related (U5)', () => {
+    it('returns other links sharing tags, ranked, seed excluded', async () => {
+      const { core, app } = harness.mod();
+      const seed = await core.createLink({
+        url: 'https://example.com/u5-related-seed',
+        sourceKind: 'link',
+        tags: ['u5-related-shared-tag'],
+      });
+      const related = await core.createLink({
+        url: 'https://example.com/u5-related-match',
+        sourceKind: 'link',
+        tags: ['u5-related-shared-tag'],
+      });
+      const unrelated = await core.createLink({
+        url: 'https://example.com/u5-related-unrelated',
+        sourceKind: 'link',
+        tags: ['some-other-unrelated-tag'],
+      });
+
+      const body = await expectOk<{ results: Array<{ id: string; snippet?: string | null }> }>(
+        app,
+        `/api/links/${seed.id}/related`,
+      );
+      const ids = body.results.map((r) => r.id);
+      expect(ids).toContain(related.id);
+      expect(ids).not.toContain(seed.id);
+      expect(ids).not.toContain(unrelated.id);
+    });
+
+    it('unknown seed id -> { results: [] }, not a 404', async () => {
+      const { app } = harness.mod();
+      const body = await expectOk<{ results: unknown[] }>(
+        app,
+        '/api/links/00000000-0000-0000-0000-000000000000/related',
+      );
+      expect(body.results).toEqual([]);
+    });
+  });
+
+  describe('GET /api/links/:id — textWindow (U5)', () => {
+    it('textOffset+textLimit returns a slice plus extractedTextLength', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/u5-textwindow',
+        sourceKind: 'link',
+      });
+      await core.recordEnrichment(created.id, {
+        status: 'full',
+        text: 'abcdefghijklmnopqrstuvwxyz',
+      });
+
+      const body = await expectOk<{
+        link: { extractedText: string | null; extractedTextLength: number };
+      }>(app, `/api/links/${created.id}?textOffset=0&textLimit=5`);
+      expect(body.link.extractedText).toBe('abcde');
+      expect(body.link.extractedTextLength).toBe(26);
+    });
+
+    it('only one of textOffset/textLimit given -> 400 validation_error', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/u5-textwindow-partial',
+        sourceKind: 'link',
+      });
+      await expect400(app, `/api/links/${created.id}?textOffset=0`, 'validation_error');
+    });
+
+    it('omitting textWindow keeps full-text default behavior unchanged', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/u5-textwindow-omitted',
+        sourceKind: 'link',
+      });
+      await core.recordEnrichment(created.id, {
+        status: 'full',
+        text: 'full text unchanged',
+      });
+      const body = await expectOk<{
+        link: { extractedText: string | null; extractedTextLength?: number };
+      }>(app, `/api/links/${created.id}`);
+      expect(body.link.extractedText).toBe('full text unchanged');
+      expect(body.link.extractedTextLength).toBeUndefined();
     });
   });
 

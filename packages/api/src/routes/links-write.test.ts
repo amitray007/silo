@@ -463,4 +463,136 @@ describeIfPg('A3 write routes (integration)', () => {
       await expect400Response(res, 'validation_error');
     });
   });
+
+  describe('POST /api/links/batch/tags — bulk add-tag (U5)', () => {
+    it('mixed good/bad id batch: good ids get tagged, bad id reported per-item, batch not sunk', async () => {
+      const { core, app } = harness.mod();
+      const a = await core.createLink({
+        url: 'https://example.com/u5-batch-tag-a',
+        sourceKind: 'link',
+      });
+      const b = await core.createLink({
+        url: 'https://example.com/u5-batch-tag-b',
+        sourceKind: 'link',
+      });
+      const bogusId = '00000000-0000-0000-0000-000000000000';
+
+      const res = await postJson(app, '/api/links/batch/tags', {
+        ids: [a.id, b.id, bogusId],
+        tag: 'u5-batch-tag',
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        results: Array<{ id: string; ok: boolean; reason?: string }>;
+      };
+      expect(body.results.find((r) => r.id === a.id)?.ok).toBe(true);
+      expect(body.results.find((r) => r.id === b.id)?.ok).toBe(true);
+      expect(body.results.find((r) => r.id === bogusId)?.ok).toBe(false);
+
+      const aAfter = await core.getById(a.id);
+      expect(aAfter?.tags).toContain('u5-batch-tag');
+      const bAfter = await core.getById(b.id);
+      expect(bAfter?.tags).toContain('u5-batch-tag');
+    });
+
+    it('empty ids array -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links/batch/tags', { ids: [], tag: 'whatever' });
+      await expect400Response(res, 'validation_error');
+    });
+
+    it('over MAX_BULK_IDS (501) -> clean 400 validation_error, not a raw core error', async () => {
+      const { app } = harness.mod();
+      const ids = Array.from({ length: 501 }, () => '00000000-0000-0000-0000-000000000000');
+      const res = await postJson(app, '/api/links/batch/tags', { ids, tag: 'too-many' });
+      const body = await expect400Response(res, 'validation_error');
+      expect(body.message).toContain('500');
+    });
+  });
+
+  describe('POST /api/links/batch/untag — bulk remove-tag (U5)', () => {
+    it('removes the tag from every id in the batch', async () => {
+      const { core, app } = harness.mod();
+      const a = await core.createLink({
+        url: 'https://example.com/u5-batch-untag-a',
+        sourceKind: 'link',
+        tags: ['u5-batch-untag'],
+      });
+      const res = await postJson(app, '/api/links/batch/untag', {
+        ids: [a.id],
+        tag: 'u5-batch-untag',
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { results: Array<{ id: string; ok: boolean }> };
+      expect(body.results[0]?.ok).toBe(true);
+      const after = await core.getById(a.id);
+      expect(after?.tags).not.toContain('u5-batch-untag');
+    });
+  });
+
+  describe('POST /api/links/batch/capture — bulk capture (U5)', () => {
+    it('captures multiple urls, per-item results keyed by url', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links/batch/capture', {
+        urls: ['https://example.com/u5-batch-capture-1', 'https://example.com/u5-batch-capture-2'],
+        tags: ['u5-batch-capture'],
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        results: Array<{ url: string; ok: boolean; id?: string; deduped?: boolean }>;
+      };
+      expect(body.results.length).toBe(2);
+      for (const r of body.results) {
+        expect(r.ok).toBe(true);
+        expect(r.id).toBeDefined();
+      }
+    });
+
+    it('bad url in the batch is reported per-item, does not sink the batch', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links/batch/capture', {
+        urls: ['https://example.com/u5-batch-capture-good', 'javascript:alert(1)'],
+      });
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as {
+        results: Array<{ url: string; ok: boolean; reason?: string }>;
+      };
+      const good = body.results.find((r) => r.url === 'https://example.com/u5-batch-capture-good');
+      expect(good?.ok).toBe(true);
+    });
+
+    it('empty urls array -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links/batch/capture', { urls: [] });
+      await expect400Response(res, 'validation_error');
+    });
+  });
+
+  describe('POST /api/links/batch-get — batch read (U5)', () => {
+    it('returns full extractedText per id, unknown id -> { id, link: null }', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/u5-batch-get',
+        sourceKind: 'link',
+      });
+      await core.recordEnrichment(created.id, { status: 'full', text: 'full body text' });
+      const bogusId = '00000000-0000-0000-0000-000000000000';
+
+      const res = await postJson(app, '/api/links/batch-get', { ids: [created.id, bogusId] });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        results: Array<{ id: string; link: Record<string, unknown> | null }>;
+      };
+      const found = body.results.find((r) => r.id === created.id);
+      expect(found?.link?.extractedText).toBe('full body text');
+      const missing = body.results.find((r) => r.id === bogusId);
+      expect(missing?.link).toBeNull();
+    });
+
+    it('empty ids array -> 400 validation_error', async () => {
+      const { app } = harness.mod();
+      const res = await postJson(app, '/api/links/batch-get', { ids: [] });
+      await expect400Response(res, 'validation_error');
+    });
+  });
 });

@@ -36,6 +36,26 @@ export {
   TOKEN_PREFIX_LEN,
   verifyAccessToken,
 } from './auth/tokens.js';
+// Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
+// of the single-id write ops above, modeled on `import.ts`'s sequential-
+// bulk-with-per-item-results pattern (see bulk.ts's module doc comment).
+// `getByIds` is the batch-read `get_link`'s `ids[]` mode will call.
+export type {
+  BulkCaptureResult,
+  BulkGetResult,
+  BulkItemResult,
+} from './links/bulk.js';
+export {
+  addTagMany,
+  captureMany,
+  getByIds,
+  MAX_BULK_IDS,
+  removeTagMany,
+  restoreMany,
+  retryCaptureMany,
+  TooManyIdsError,
+  trashMany,
+} from './links/bulk.js';
 // URL canonicalization (U3): the normalize-url wrapper + dedup key used by
 // `createLink`/`findByCanonicalUrl`.
 export type { CanonicalizeResult } from './links/canonicalize.js';
@@ -95,20 +115,28 @@ export { InvalidImportError, importLinks, MAX_IMPORT_LINKS } from './links/impor
 // tag, trash/restore. See docs/rules/architecture.md — this is the one
 // place business logic over `@silo/db` lives.
 export type {
+  CountFilter,
   CreateLinkInput,
   EditLinkInput,
+  GetByIdOptions,
   Link,
+  LinkCounts,
   LinkWithTags,
+  LinkWithTextWindow,
   ListFilter,
   ListPage,
+  ListResultRow,
   PageParams,
   RestoreResult,
   SearchFilter,
   SearchPage,
   SearchResult,
+  SearchResultRow,
+  TextWindowOptions,
 } from './links/links.js';
 export {
   addTag,
+  countLinks,
   createLink,
   editLink,
   findByCanonicalUrl,
@@ -126,6 +154,9 @@ export {
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
+// "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
+// over a link's own tags + title terms — see related.ts's doc comment.
+export { findRelated } from './links/related.js';
 // Capture-source provenance (capture-source slice): the closed value set +
 // type for `CreateLinkInput.source` / `Link.source` — the SURFACE a link was
 // captured through, orthogonal to `addedBy`. Single source of truth,

@@ -1,7 +1,7 @@
 import { db, links } from '@silo/db';
 import { and, desc, sql } from 'drizzle-orm';
 import type { SearchPage } from './links.js';
-import { tagSearchVector } from './links.js';
+import { buildSnippetHeadline, tagSearchVector } from './links.js';
 import {
   decodeTrashCursor,
   effectiveLimit,
@@ -125,7 +125,14 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
  */
 export async function searchTrash(query: string, page: PageParams = {}): Promise<SearchPage> {
   const trashedCondition = sql`${links.deletedAt} is not null`;
-  return runUnionSearch(trashedCondition, tagSearchVector, query, undefined, page);
+  // `snippet` (agent-navigation slice U2): same query-focused `ts_headline`
+  // excerpt live `search` returns — see `buildSnippetHeadline`'s doc comment.
+  // No `filter`/`sort` params here (main's agent-navigation slice only added
+  // those to live `search`, not `searchTrash`) — `runUnionSearch`'s `options`
+  // default to relevance-only ordering with no extra conditions when omitted.
+  return runUnionSearch(trashedCondition, tagSearchVector, query, undefined, page, {
+    snippetFor: (tsQuery) => buildSnippetHeadline(tsQuery),
+  });
 }
 
 /** Count of LIVE links (`deleted_at IS NULL`) — the sidebar's total count. */

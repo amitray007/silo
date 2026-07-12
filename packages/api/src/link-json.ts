@@ -1,4 +1,11 @@
-import type { CaptureSource, LinkWithTags, SourceData } from '@silo/core';
+import type {
+  CaptureSource,
+  LinkWithTags,
+  LinkWithTextWindow,
+  ListResultRow,
+  SearchResultRow,
+  SourceData,
+} from '@silo/core';
 import { sourceDataSchema } from '@silo/core';
 
 /**
@@ -147,9 +154,63 @@ export function toTrashLinkJson(link: LinkWithTags): TrashLinkJson {
   };
 }
 
+/**
+ * The whitelisted, JSON-serialized shape of a `list`/`search` RESULT ROW
+ * (agent-navigation slice U5): `LinkJson` minus `extractedText`, plus a short
+ * `snippet` — mirrors `@silo/core`'s `ListResultRow`/`SearchResultRow`
+ * (`Omit<LinkWithTags, 'extractedText'> & { snippet }`) and
+ * `packages/mcp/server/src/tools/link-shape.ts`'s `SnippetLinkContent`. The
+ * full-text `extractedText` field is dropped from list/search responses (a
+ * page of 20 hits no longer drags every article's full body over HTTP) — a
+ * client reads the full text via `GET /api/links/:id` for the one result it
+ * actually wants.
+ */
+export type SnippetLinkJson = Omit<LinkJson, 'extractedText'> & { snippet: string | null };
+
+/**
+ * `SnippetLinkJson` plus a search `rank` (`GET /api/links/search`'s /
+ * `GET /api/links/:id/related`'s per-result score).
+ */
+export type SnippetSearchResultJson = SnippetLinkJson & { rank: number };
+
+/**
+ * Builds the whitelisted `snippet` shape from a `ListResultRow`/
+ * `SearchResultRow` — an EXPLICIT field-by-field pick (via `toLinkJson`, fed
+ * a placeholder `extractedText: null` since the row doesn't carry one, then
+ * dropped from the result), never a spread of the raw row. Shared by
+ * `GET /api/links`/`GET /api/links/search`/`GET /api/links/:id/related` so
+ * the three can never drift on which fields a snippet row carries.
+ */
+export function toSnippetLinkJson(link: ListResultRow | SearchResultRow): SnippetLinkJson {
+  const { extractedText: _extractedText, ...base } = toLinkJson({ ...link, extractedText: null });
+  return { ...base, snippet: link.snippet };
+}
+
+/** `toSnippetLinkJson` plus a search `rank` — used by `GET /api/links/search` and `GET /api/links/:id/related`. */
+export function toSnippetSearchResultJson(link: SearchResultRow): SnippetSearchResultJson {
+  return { ...toSnippetLinkJson(link), rank: link.rank };
+}
+
 /** `toLinkJson` plus a search `rank` (`GET /api/links/search`'s per-result score). */
 export function toSearchResultJson(link: LinkWithTags, rank: number): SearchResultJson {
   return { ...toLinkJson(link), rank };
+}
+
+/**
+ * `toLinkJson` plus `extractedTextLength` — the windowed-detail shape
+ * `GET /api/links/:id` returns when `?textOffset=&textLimit=` was requested
+ * (agent-navigation slice U5). `extractedText` (via `toLinkJson`) already
+ * carries the requested SLICE (core's `getById(id, { textWindow })` replaces
+ * the field in place — see its doc comment); `extractedTextLength` is the
+ * FULL untruncated length, so a client knows there's more beyond the window
+ * it received. Mirrors `packages/mcp/server/src/tools/get-link.ts`'s
+ * `GetLinkStructuredContent`'s identical `extractedTextLength` field.
+ */
+export type LinkWithTextWindowJson = LinkJson & { extractedTextLength: number };
+
+/** Builds the windowed-detail shape — `toLinkJson` plus `extractedTextLength`. */
+export function toLinkWithTextWindowJson(link: LinkWithTextWindow): LinkWithTextWindowJson {
+  return { ...toLinkJson(link), extractedTextLength: link.extractedTextLength };
 }
 
 /**
@@ -165,4 +226,35 @@ export type TrashSearchResultJson = TrashLinkJson & { rank: number };
 /** Builds a `TrashSearchResultJson` — `toTrashLinkJson` (whitelist + `deletedAt`) plus the search `rank`. Used by `GET /api/trash/search`. */
 export function toTrashSearchResultJson(link: LinkWithTags, rank: number): TrashSearchResultJson {
   return { ...toTrashLinkJson(link), rank };
+}
+
+/**
+ * `SnippetLinkJson` plus `deletedAt` plus a search `rank` — the
+ * `GET /api/trash/search` result shape (agent-navigation slice U5):
+ * `core.searchTrash` returns `SearchResultRow[]` (U2's snippet-not-
+ * extractedText shape, same as live `search()`), so its HTTP result carries
+ * `snippet` like `GET /api/links/search` does, PLUS `deletedAt` (the purge-
+ * countdown field every trash response needs — see `TrashLinkJson`'s doc
+ * comment). A distinct type from `SnippetSearchResultJson` (no `deletedAt`)
+ * for the same reason `TrashSearchResultJson` is distinct from
+ * `SearchResultJson`.
+ */
+export type TrashSnippetSearchResultJson = SnippetLinkJson & { deletedAt: string; rank: number };
+
+/**
+ * Builds a `TrashSnippetSearchResultJson` from a `SearchResultRow` —
+ * `SearchResultRow` is `Omit<LinkWithTags, 'extractedText'> & {...}`, so it
+ * still carries `deletedAt` (only `extractedText` is omitted); `searchTrash`
+ * only ever returns trashed rows, so `deletedAt` is always non-null in
+ * practice here, but the fallback to `''` mirrors `toTrashLinkJson`'s
+ * identical defensive handling of `LinkWithTags`'s nullable static type.
+ */
+export function toTrashSnippetSearchResultJson(
+  link: SearchResultRow,
+): TrashSnippetSearchResultJson {
+  return {
+    ...toSnippetLinkJson(link),
+    deletedAt: link.deletedAt ? link.deletedAt.toISOString() : '',
+    rank: link.rank,
+  };
 }

@@ -190,11 +190,89 @@ export function buildSubstringMatch(
 // out of every signature above for readability.
 type SqlFragment = ReturnType<typeof sql>;
 type SqlNumberFragment = ReturnType<typeof sql<number>>;
+type SqlTextOrNullFragment = ReturnType<typeof sql<string | null>>;
 
-/** A search result page — one row per matched link, ranked, with `rank` reattached. */
+/** The FTS side's match/rank/tsQuery fragments, built only when the query has usable FTS tokens. */
+type FtsSide = {
+  tsQuery: SqlFragment;
+  match: SqlFragment;
+  combinedRank: SqlNumberFragment;
+};
+
+/** The trigram side's match/rank fragments, built only when the query has a non-empty trimmed body. */
+type SubstringSide = {
+  match: SqlFragment;
+  similarityRank: SqlNumberFragment;
+};
+
+/**
+ * A search result page — one row per matched link, ranked, with `rank`
+ * reattached and `extractedText` stripped in favor of a query-focused
+ * `snippet` (agent-navigation slice U2 — see `links.ts`'s `SearchResultRow`
+ * doc comment for why the full body is dropped). This is now the SAME shape
+ * as `links.ts`'s `SearchPage`/`SearchResultRow` by design, so both `search()`
+ * and `searchTrash()` can return `runUnionSearch(...)`'s result directly with
+ * no post-mapping.
+ */
 export type SearchRankedPage = {
-  results: (LinkWithTags & { rank: number })[];
+  results: (Omit<LinkWithTags, 'extractedText'> & { rank: number; snippet: string | null })[];
   nextCursor?: string;
+};
+
+/**
+ * Optional behavior grafted onto the union search (agent-navigation slices
+ * U1/U2, reconciled onto the search-union rework): extra filter predicates,
+ * an alternate sort, and a per-row snippet. All three default to the
+ * pre-existing union-search behavior when omitted, so every caller that
+ * predates this option object keeps its exact current behavior.
+ */
+export type UnionSearchOptions = {
+  /**
+   * Extra ANDed WHERE conditions (e.g. `filter.source`/`tags[]`/`since`/
+   * `until` — see `links.ts`'s `search()`). ANDed in alongside
+   * `basePredicate`/`unionMatch`/`scopeCondition` via the same `andAll`;
+   * omitted (or empty) leaves the WHERE clause unchanged.
+   */
+  extraConditions?: SqlFragment[];
+  /**
+   * Result ordering. `'relevance'` (default) keeps the frozen composite
+   * `ORDER BY` (FTS-match-first, combined `ts_rank`, then trigram
+   * `similarity`). `'newest'`/`'oldest'` order by `created_at` DESC/ASC
+   * instead — the union match predicate STILL filters (a row must still
+   * satisfy the FTS-or-trigram match), it just stops controlling order.
+   * Every ordering carries the same `links.id ASC` tiebreak (see this
+   * function's doc comment) so pagination stays deterministic regardless of
+   * which sort is chosen.
+   */
+  sort?: 'relevance' | 'newest' | 'oldest';
+  /**
+   * Per-row snippet builder. Receives the FTS side's `to_tsquery(...)` SQL
+   * expression and must return a `SQL<string | null>` select expression
+   * (e.g. `links.ts`'s `buildSnippetHeadline`). Called ONLY when the FTS
+   * side is present (`ftsQueryText !== undefined`) — a trigram-only query
+   * has no tsquery to build a `ts_headline` against, so the snippet column
+   * is `null` in that case regardless of whether `snippetFor` is given.
+   * Omitted entirely => every row's `snippet` is `null`. In a MIXED query
+   * (both the FTS and trigram sides present), gated PER ROW to `null` for any
+   * row that matched ONLY via the trigram side — see `resolveSnippet`'s doc
+   * comment.
+   */
+  snippetFor?: (ftsTsQuery: SqlFragment) => SqlTextOrNullFragment;
+  /**
+   * When true, suppress the trigram substring side of the union entirely —
+   * match ONLY via the FTS/prefix + tag-vector side. Used by `findRelated`
+   * (agent-navigation U3), whose per-term topical-overlap search must NOT
+   * substring-match (`ILIKE '%term%'`) non-topical fragments: a short/common
+   * term like `the` would otherwise trigram-match `weather`/`together`/almost
+   * every row and flood the overlap aggregation with noise. FTS is stopword-
+   * aware (`to_tsquery('english','the')` is empty → matches nothing), so an
+   * FTS-only search yields topical matches only. Default false (both sides run,
+   * the pre-existing union behavior). When true AND the query has no usable FTS
+   * tokens (e.g. a pure-stopword or empty term), the search matches nothing and
+   * returns an empty page — correct for `findRelated` (a no-signal term
+   * contributes no candidates), never an error.
+   */
+  ftsOnly?: boolean;
 };
 
 /**
@@ -269,6 +347,37 @@ export type SearchRankedPage = {
  * that depth is a full sort-then-discard) — documented tradeoff: a row
  * inserted mid-paging can shift results, acceptable for search at this
  * scale. `limit` is clamped to `[1, 100]` (default 20) via `effectiveLimit`.
+ *
+ * `options` (agent-navigation slices U1/U2, grafted onto the union rework —
+ * see `UnionSearchOptions`) is entirely OPTIONAL and additive:
+ *   - `extraConditions` are ANDed in alongside the union match (via the same
+ *     `andAll` the base predicate/scope condition already go through) —
+ *     they narrow which rows match, but never change WHICH of the FTS/
+ *     trigram sides is considered a "match" for ranking purposes.
+ *   - `sort` swaps the ORDER BY's leading terms for `created_at` DESC/ASC
+ *     when `'newest'`/`'oldest'` is requested. The union match predicate
+ *     (WHERE) is UNCHANGED by `sort` — a row still has to satisfy the FTS-
+ *     or-trigram match to appear at all; `sort` only stops the composite
+ *     rank terms from controlling ORDER BY. `links.id ASC` remains the
+ *     final tiebreak in every case (see below).
+ *   - `snippetFor` attaches a per-row `snippet` column, built from the FTS
+ *     side's `tsQuery` when that side exists. A trigram-only query (no FTS
+ *     tokens) has no `tsQuery` to headline against, so `snippet` is `null`
+ *     for every row in that case — this is a query-level fact and holds
+ *     regardless of whether `snippetFor` was even given. In a MIXED query
+ *     (both sides present), the snippet is ALSO gated per row to `null` for
+ *     any row that matched only via the trigram side (see `resolveSnippet`).
+ *   - `ftsOnly` suppresses the trigram substring side entirely (as if
+ *     `buildSubstringMatch` had returned `undefined`) — see
+ *     `UnionSearchOptions.ftsOnly` for why (`findRelated`'s per-term
+ *     topical-overlap search must not substring-match non-topical
+ *     fragments). The union collapses to FTS/tag-vector-only: the trigram
+ *     disjunct is dropped from the WHERE, its rank term degrades to `0` in
+ *     the ORDER BY/`rank` column, and the empty-query early-return fires
+ *     whenever the FTS side ALSO has no usable tokens.
+ *
+ * Callers that omit `options` entirely get byte-for-byte the pre-existing
+ * behavior: no extra conditions, relevance-only ordering, `snippet: null`.
  */
 export async function runUnionSearch(
   basePredicate: SqlFragment,
@@ -276,6 +385,7 @@ export async function runUnionSearch(
   query: string,
   scopeCondition: SqlFragment | undefined,
   page: PageParams,
+  options: UnionSearchOptions = {},
 ): Promise<SearchRankedPage> {
   const limit = effectiveLimit(page.limit);
   const cursor = page.cursor !== undefined ? decodeSearchCursor(page.cursor) : undefined;
@@ -283,18 +393,24 @@ export async function runUnionSearch(
 
   const sanitized = sanitizeQuery(query);
   const ftsQueryText = buildPrefixTsQuery(sanitized);
-  const substring = buildSubstringMatch(sanitized);
+  // findRelated (ftsOnly) suppresses the trigram substring side — see
+  // UnionSearchOptions.ftsOnly. Treat it as absent so the union collapses to
+  // an FTS/tag-vector-only match (topical, stopword-aware) with no ILIKE noise.
+  const substring = options.ftsOnly ? undefined : buildSubstringMatch(sanitized);
 
   if (ftsQueryText === undefined && substring === undefined) {
     return { results: [] };
   }
 
-  // `ftsMatch`/`combinedRank` are only built when the FTS side has usable
-  // tokens; `substring` is only built when the trigram side has a non-empty
-  // trimmed query. Each half of the union is independently optional so a
-  // query that strips to something usable for only ONE side never emits an
-  // invalid `... @@ undefined` disjunct — the missing side's term is simply
-  // left out of both the WHERE and the ORDER BY.
+  // `ftsMatch`/`combinedRank`/`tsQuery` are only built when the FTS side has
+  // usable tokens; `substring` is only built when the trigram side has a
+  // non-empty trimmed query. Each half of the union is independently optional
+  // so a query that strips to something usable for only ONE side never emits
+  // an invalid `... @@ undefined` disjunct — the missing side's term is
+  // simply left out of both the WHERE and the ORDER BY. `tsQuery` is exposed
+  // on the returned object (not just closed over) so `options.snippetFor`
+  // below can build a `ts_headline` against the SAME tsquery the match/rank
+  // terms use, without rebuilding it from `ftsQueryText` a second time.
   const fts =
     ftsQueryText === undefined
       ? undefined
@@ -303,6 +419,7 @@ export async function runUnionSearch(
           const titleRank = sql`ts_rank(${links.searchVector}, ${tsQuery})`;
           const tagRank = sql`ts_rank(${tagVector}, ${tsQuery})`;
           return {
+            tsQuery,
             match: sql`(${links.searchVector} @@ ${tsQuery} OR ${tagVector} @@ ${tsQuery})`,
             combinedRank: sql<number>`${titleRank} + ${tagRank}`,
           };
@@ -320,37 +437,125 @@ export async function runUnionSearch(
   // exactly the frozen composite ORDER BY. Each term degrades to a constant
   // `0` when its side is absent, rather than being omitted from the ORDER
   // BY entirely, so the clause's arity never depends on which side matched.
+  // The constant is cast `0::float8` (NOT a bare `0`) because a bare integer
+  // literal in `ORDER BY` is parsed by Postgres as an ORDINAL COLUMN
+  // POSITION reference (SQL92 `ORDER BY <int>`), not a constant value —
+  // `ORDER BY ..., 0 DESC, ...` throws `ORDER BY position 0 is not in select
+  // list` (verified on real Postgres). This was previously unreachable: until
+  // `ftsOnly` (see `UnionSearchOptions.ftsOnly`), `substring` was undefined
+  // ONLY when the whole query was empty/whitespace, which already short-
+  // circuits to `{ results: [] }` before this line runs — so `combinedRankTerm`
+  // degrading to a bare `0` while `fts` exists never actually happened until
+  // an `ftsOnly` search made `substring` undefined on a NON-empty query.
   const ftsMatchedFlag = fts ? sql`(${fts.match})` : sql`false`;
-  const combinedRankTerm = fts ? fts.combinedRank : sql`0`;
-  const similarityTerm = substring ? substring.similarityRank : sql`0`;
-  // The single `rank` column returned to callers, computed PER ROW (not a
-  // static JS-level choice of "the FTS side exists therefore every row's
-  // rank is its ts_rank") — a row that only matched via the trigram side
-  // must expose ITS similarity, not a stale `0` ts_rank from a FTS
-  // predicate it never satisfied (that bug made every trigram-only row's
-  // rank collapse to 0, losing the D3 "closer trigram match ranks higher"
-  // ordering signal on the returned `rank` field, even though the ORDER BY
-  // itself still sorted correctly against `similarityTerm`). `CASE WHEN
-  // <fts predicate> THEN combinedRank ELSE similarity END` mirrors the
-  // composite ORDER BY's own branch: an FTS-matching row reports its
-  // combined ts_rank; everything else (necessarily trigram-only, since the
-  // WHERE already requires at least one side to match) reports similarity.
-  const rank =
-    fts && substring
-      ? sql<number>`case when (${fts.match}) then (${fts.combinedRank}) else (${substring.similarityRank}) end`
-      : fts
-        ? fts.combinedRank
-        : (substring?.similarityRank ?? sql<number>`0`);
+  const combinedRankTerm = fts ? fts.combinedRank : sql`0::float8`;
+  const similarityTerm = substring ? substring.similarityRank : sql`0::float8`;
+  // The single `rank` column returned to callers, computed PER ROW — see
+  // `resolvePerRowRank`'s doc comment for why a row's rank can't be a static
+  // JS-level choice of "the FTS side exists therefore every row's rank is
+  // its ts_rank".
+  const rank = resolvePerRowRank(fts, substring);
+
+  // `snippet` (agent-navigation slice U2) — see `resolveSnippet`'s doc
+  // comment for why a trigram-only query always gets `snippet: null`, and
+  // why a mixed query additionally gates PER ROW to `null` for a row that
+  // only matched via the trigram side.
+  const snippet = resolveSnippet(fts, substring, options.snippetFor);
+
+  const orderBy = resolveOrderBy(options.sort, ftsMatchedFlag, combinedRankTerm, similarityTerm);
 
   const rows = await db
-    .select({ link: links, rank })
+    .select({ link: links, rank, snippet })
     .from(links)
-    .where(andAll(basePredicate, unionMatch, scopeCondition))
-    .orderBy(desc(ftsMatchedFlag), desc(combinedRankTerm), desc(similarityTerm), asc(links.id))
+    .where(andAll(basePredicate, unionMatch, scopeCondition, ...(options.extraConditions ?? [])))
+    .orderBy(...orderBy)
     .limit(limit + 1)
     .offset(offset);
 
   return toPage(rows, limit, offset);
+}
+
+/**
+ * Resolve the single per-row `rank` column `runUnionSearch` selects,
+ * extracted out to keep `runUnionSearch`'s cognitive complexity under the
+ * repo's lint cap. Computed PER ROW (not a static JS-level choice of "the
+ * FTS side exists therefore every row's rank is its ts_rank") — a row that
+ * only matched via the trigram side must expose ITS similarity, not a stale
+ * `0` ts_rank from a FTS predicate it never satisfied (that bug made every
+ * trigram-only row's rank collapse to 0, losing the D3 "closer trigram match
+ * ranks higher" ordering signal on the returned `rank` field, even though the
+ * ORDER BY itself still sorted correctly). `CASE WHEN <fts predicate> THEN
+ * combinedRank ELSE similarity END` mirrors the composite ORDER BY's own
+ * branch: an FTS-matching row reports its combined ts_rank; everything else
+ * (necessarily trigram-only, since the WHERE already requires at least one
+ * side to match) reports similarity.
+ */
+function resolvePerRowRank(
+  fts: FtsSide | undefined,
+  substring: SubstringSide | undefined,
+): SqlNumberFragment {
+  if (fts && substring) {
+    return sql<number>`case when (${fts.match}) then (${fts.combinedRank}) else (${substring.similarityRank}) end`;
+  }
+  if (fts) return fts.combinedRank;
+  return substring?.similarityRank ?? sql<number>`0`;
+}
+
+/**
+ * Resolve `runUnionSearch`'s per-row `snippet` column (agent-navigation
+ * slice U2), extracted out to keep `runUnionSearch`'s cognitive complexity
+ * under the repo's lint cap. Built from the FTS side's `tsQuery` when BOTH
+ * the FTS side matched some tokens AND a `snippetFor` builder was given. A
+ * trigram-only query has no tsquery to headline against, so `snippet` is a
+ * literal SQL `null` in that case — never a guess/fallback headline built
+ * from the trigram needle instead.
+ *
+ * A MIXED query (both sides live) can return rows that matched ONLY via the
+ * trigram substring side and never via FTS — `ts_headline` against the FTS
+ * tsquery yields an un-highlighted leading excerpt for those, contradicting
+ * the documented "trigram-only ⇒ null snippet" invariant (that invariant
+ * previously held only query-wide, not per row). Gate per row so a
+ * non-FTS-matching row's snippet is genuinely `null`: `CASE WHEN
+ * (fts.match) THEN (headline) ELSE null END`. When there's no substring
+ * side, every matched row necessarily matched FTS, so no gate is needed —
+ * the plain headline is returned as-is.
+ */
+function resolveSnippet(
+  fts: FtsSide | undefined,
+  substring: SubstringSide | undefined,
+  snippetFor: ((ftsTsQuery: SqlFragment) => SqlTextOrNullFragment) | undefined,
+): SqlTextOrNullFragment {
+  if (!(fts && snippetFor)) return sql<string | null>`null`;
+  const headline = snippetFor(fts.tsQuery);
+  if (!substring) return headline;
+  return sql<string | null>`case when (${fts.match}) then (${headline}) else null end`;
+}
+
+/**
+ * Resolve `runUnionSearch`'s `ORDER BY` term list for `options.sort`
+ * (agent-navigation slice U1, extracted out of `runUnionSearch` to keep its
+ * cognitive complexity under the repo's lint cap). `'newest'`/`'oldest'`
+ * order by `created_at` DESC/ASC — the union match predicate (WHERE) is
+ * UNCHANGED by `sort`, a row still has to satisfy the FTS-or-trigram match to
+ * be returned at all; `sort` only stops the relevance terms below from
+ * controlling order. `'relevance'`/`undefined` (the default) keeps the
+ * frozen composite ORDER BY: FTS-match-first, then combined `ts_rank`, then
+ * trigram `similarity()`. `links.id ASC` is ALWAYS the final term, in every
+ * sort mode — load-bearing for stable offset pagination (see
+ * `runUnionSearch`'s doc comment): a `sort` of `'newest'`/`'oldest'` can tie
+ * on `created_at` just as easily as `'relevance'` ties on rank, and without a
+ * unique final tiebreak, paging through tied rows can duplicate/skip rows
+ * across pages.
+ */
+function resolveOrderBy(
+  sort: 'relevance' | 'newest' | 'oldest' | undefined,
+  ftsMatchedFlag: SqlFragment,
+  combinedRankTerm: SqlFragment,
+  similarityTerm: SqlFragment,
+): SqlFragment[] {
+  if (sort === 'newest') return [desc(links.createdAt), asc(links.id)];
+  if (sort === 'oldest') return [asc(links.createdAt), asc(links.id)];
+  return [desc(ftsMatchedFlag), desc(combinedRankTerm), desc(similarityTerm), asc(links.id)];
 }
 
 /** AND together a base predicate with any number of optional additional conditions. */
@@ -364,7 +569,7 @@ function andAll(base: SqlFragment, ...rest: ReadonlyArray<SqlFragment | undefine
 }
 
 async function toPage(
-  rows: { link: Link; rank: number }[],
+  rows: { link: Link; rank: number; snippet: string | null }[],
   limit: number,
   offset: number,
 ): Promise<SearchRankedPage> {
@@ -376,6 +581,13 @@ async function toPage(
     db,
     page_.map((row) => row.link),
   );
-  const results = hydrated.map((link, i) => ({ ...link, rank: page_[i]?.rank ?? 0 }));
+  // Strip `extractedText` and attach `rank`/`snippet` here, ONCE, so both
+  // callers (`search`, `searchTrash`) get the final `SearchResultRow` shape
+  // directly — see `SearchRankedPage`'s doc comment for why this now equals
+  // `links.ts`'s `SearchPage`/`SearchResultRow`.
+  const results = hydrated.map((link, i) => {
+    const { extractedText, ...rest } = link;
+    return { ...rest, rank: page_[i]?.rank ?? 0, snippet: page_[i]?.snippet ?? null };
+  });
   return nextCursor === undefined ? { results } : { results, nextCursor };
 }

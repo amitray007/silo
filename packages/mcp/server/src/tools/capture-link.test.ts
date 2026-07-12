@@ -265,5 +265,80 @@ describeMcpTool(
       expect(typeof structured.updatedAt).toBe('string');
       expectNoLeakedFields(structured);
     });
+
+    // --- agent-navigation slice U4: `urls` batch (one-or-many) ---
+
+    it('`urls` batch: captures multiple, per-item results carry id/deduped', async () => {
+      const { core, client } = getContext();
+      const result = await client.callTool({
+        name: 'capture_link',
+        arguments: {
+          urls: ['https://example.com/capture-batch-a', 'https://example.com/capture-batch-b'],
+          tags: ['batchtag'],
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results: Array<{ url: string; ok: boolean; id?: string; deduped?: boolean }>;
+      };
+      expect(structured.results).toHaveLength(2);
+      for (const r of structured.results) {
+        expect(r.ok).toBe(true);
+        expect(typeof r.id).toBe('string');
+        expect(r.deduped).toBe(false);
+      }
+
+      const idA = structured.results.find((r) => r.url.endsWith('capture-batch-a'))?.id;
+      const fetchedA = await core.getById(idA as string);
+      expect(fetchedA?.tags).toEqual(['batchtag']);
+
+      const [content] = result.content as Array<{ type: 'text'; text: string }>;
+      expect(content?.text).toContain('2 of 2');
+    });
+
+    it('`urls` batch: a bad url among good ones is isolated (per-item failure)', async () => {
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'capture_link',
+        arguments: {
+          urls: ['https://example.com/capture-batch-good', 'javascript:alert(1)'],
+        },
+      });
+      // captureMany catches per-item errors and never aborts the batch — the
+      // call itself resolves without isError (this differs from the single-
+      // url path, which rejects a bad url before ever calling core).
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results: Array<{ url: string; ok: boolean; id?: string; reason?: string }>;
+      };
+      expect(structured.results).toHaveLength(2);
+      const good = structured.results.find((r) => r.url.endsWith('capture-batch-good'));
+      const bad = structured.results.find((r) => r.url === 'javascript:alert(1)');
+      expect(good?.ok).toBe(true);
+      expect(typeof good?.id).toBe('string');
+      // The bad url is either rejected (ok:false) or safely stored un-deduped
+      // by createLink's own `#unsafe-<uuid>` suffixing — either way it must
+      // not sink the batch or throw.
+      expect(bad).toBeDefined();
+    });
+
+    it('`urls` wins over `url` when both are given', async () => {
+      const { client } = getContext();
+      const result = await client.callTool({
+        name: 'capture_link',
+        arguments: {
+          url: 'https://example.com/capture-url-should-be-ignored',
+          urls: ['https://example.com/capture-urls-wins'],
+        },
+      });
+      expect(result.isError).toBeFalsy();
+      const structured = result.structuredContent as {
+        results?: Array<{ url: string }>;
+        url?: string;
+      };
+      expect(structured.results).toBeDefined();
+      expect(structured.results?.[0]?.url).toBe('https://example.com/capture-urls-wins');
+      expect(structured.url).toBeUndefined();
+    });
   },
 );
