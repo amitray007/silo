@@ -280,88 +280,95 @@ export function AppFrame() {
           above AppFrame in main.tsx, ThemeProvider likewise). */}
       <ThemeSettingsSync />
       <div className="silo-frame">
-        <div className="silo-band">
-          <div className="silo-topbar">
-            <button
-              ref={menuButtonRef}
-              type="button"
-              aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-              aria-expanded={drawerOpen}
-              aria-controls={DRAWER_ID}
-              onClick={() => (drawerOpen ? closeDrawer() : openDrawer())}
-              className="silo-icon-btn-sm"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                width: 40,
-                height: 40,
-                flex: 'none',
-                background: 'transparent',
-                border: 'none',
-                borderRadius: 8,
-                color: 'var(--ink)',
-                fontSize: 'var(--text-xl)',
-                cursor: 'pointer',
-              }}
-            >
-              <span aria-hidden="true">☰</span>
-            </button>
-            <GrainDot size={24} plate />
-            <span
-              style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}
-            >
-              silo
-            </span>
-          </div>
+        {/* `HoverPreviewProvider` (V3-8, hoisted in the palette-rich-rows
+            slice) wraps the whole frame body — `.silo-band` (which contains
+            `<main>`) AND `<CommandPalette>`, a sibling below it — so both the
+            library's rows and the command palette's rows can consume the
+            single shared hover-preview card. It's portal-based (renders into
+            `document.body`), so wrapping it around more of the tree has zero
+            visual/DOM-clipping effect — only which components can call
+            `useHoverPreview()`. See `HoverPreviewContext.tsx`'s doc comment. */}
+        <HoverPreviewProvider>
+          <div className="silo-band">
+            <div className="silo-topbar">
+              <button
+                ref={menuButtonRef}
+                type="button"
+                aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+                aria-expanded={drawerOpen}
+                aria-controls={DRAWER_ID}
+                onClick={() => (drawerOpen ? closeDrawer() : openDrawer())}
+                className="silo-icon-btn-sm"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  width: 40,
+                  height: 40,
+                  flex: 'none',
+                  background: 'transparent',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: 'var(--ink)',
+                  fontSize: 'var(--text-xl)',
+                  cursor: 'pointer',
+                }}
+              >
+                <span aria-hidden="true">☰</span>
+              </button>
+              <GrainDot size={24} plate />
+              <span
+                style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}
+              >
+                silo
+              </span>
+            </div>
 
-          {/* The scrim is a pointer-only dismiss affordance (aria-hidden — the
-              drawer itself is dismissed via Escape or the ☰ button, both
-              already keyboard-operable). */}
-          <div
-            className="silo-scrim"
-            data-open={drawerOpen}
-            aria-hidden="true"
-            onClick={closeDrawer}
-          />
+            {/* The scrim is a pointer-only dismiss affordance (aria-hidden — the
+                drawer itself is dismissed via Escape or the ☰ button, both
+                already keyboard-operable). */}
+            <div
+              className="silo-scrim"
+              data-open={drawerOpen}
+              aria-hidden="true"
+              onClick={closeDrawer}
+            />
 
-          <Sidebar
-            id={DRAWER_ID}
-            ref={sidebarRef}
-            open={drawerOpen}
-            onNavigate={closeDrawer}
-            onOpenSearch={commandPalette.openPalette}
-          />
+            <Sidebar
+              id={DRAWER_ID}
+              ref={sidebarRef}
+              open={drawerOpen}
+              onNavigate={closeDrawer}
+              onOpenSearch={commandPalette.openPalette}
+            />
 
-          {/* Content region: a flex column of two stacked children, both
-              supplied by the routed view via <Outlet/> — the header bar
-              (`ContentHeader`, full width, unscrolled) then `.silo-content-body`
-              (the scrolling region, reading-column-capped inside). Keeping the
-              header out of AppFrame lets each route own its own title/count/
-              right slot without AppFrame needing route-specific knowledge.
-              `RowMenuProvider` wraps the outlet (plan 011, V3-4) so the row `⋯`
-              menu + edit-modal state is shared by every routed view — see
-              `RowMenuContext.tsx`'s doc comment for why this lives here and not
-              per-route. `SelectionProvider` (V3-5) does the same for the two
-              multi-select scopes (library/trash) — see `SelectionContext.tsx`'s
-              doc comment. `HoverPreviewProvider` (V3-8) does the same for the
-              single shared hover-preview card — see
-              `HoverPreviewContext.tsx`'s doc comment. `RowMenuLayer` renders
-              the single shared `EditModal` instance and owns the
-              document-level close/Escape-priority listeners for both. */}
-          <main className="silo-content">
-            <RowMenuProvider>
-              <SelectionProvider>
-                <HoverPreviewProvider>
+            {/* Content region: a flex column of two stacked children, both
+                supplied by the routed view via <Outlet/> — the header bar
+                (`ContentHeader`, full width, unscrolled) then `.silo-content-body`
+                (the scrolling region, reading-column-capped inside). Keeping the
+                header out of AppFrame lets each route own its own title/count/
+                right slot without AppFrame needing route-specific knowledge.
+                `RowMenuProvider` wraps the outlet (plan 011, V3-4) so the row `⋯`
+                menu + edit-modal state is shared by every routed view — see
+                `RowMenuContext.tsx`'s doc comment for why this lives here and not
+                per-route. `SelectionProvider` (V3-5) does the same for the two
+                multi-select scopes (library/trash) — see `SelectionContext.tsx`'s
+                doc comment. `RowMenuLayer` renders the single shared `EditModal`
+                instance and owns the document-level close/Escape-priority
+                listeners for both; it stays inside `<main>` (it only serves
+                library rows, not the palette). */}
+            <main className="silo-content">
+              <RowMenuProvider>
+                <SelectionProvider>
                   <Outlet />
                   <RowMenuLayer palette={commandPalette} />
-                </HoverPreviewProvider>
-              </SelectionProvider>
-            </RowMenuProvider>
-          </main>
-        </div>
-        <SettingsLayer />
-        <CommandPalette palette={commandPalette} />
+                </SelectionProvider>
+              </RowMenuProvider>
+            </main>
+          </div>
+          <SettingsLayer />
+          <CommandPalette palette={commandPalette} />
+        </HoverPreviewProvider>
       </div>
     </SettingsProvider>
   );
