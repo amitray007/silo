@@ -1,5 +1,5 @@
 import { Command } from 'cmdk';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useInfiniteLinks,
   useLinksByTag,
@@ -653,6 +653,50 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
     scope,
   );
   const panelRef = useRef<HTMLDivElement>(null);
+  const { data: settings } = useSettings();
+  const { scheduleShow, dismissAll } = useHoverPreview();
+  const [activeValue, setActiveValue] = useState('');
+
+  // Map an active cmdk value (`link:<id>` / `tag:<name>`) back to its result.
+  // Rebuilt when `results` changes (identity of the visible set).
+  const resultByValue = useMemo(() => {
+    const m = new Map<string, CommandPaletteResult>();
+    for (const result of results) m.set(resultValue(result), result);
+    return m;
+  }, [results]);
+
+  // Keyboard-nav hover (palette-keyboard-hover slice): when the cmdk-active row
+  // changes (arrow keys — or mouse hover, which also sets the active value),
+  // open the shared hover card for the focused LINK row, gated by the same
+  // per-plugin `palette` surface as the mouse path. Tag rows and gate-suppressed
+  // links dismiss the card instead. Reads the active row's rect straight from
+  // the DOM node cmdk marked active, AFTER React committed the new value (so the
+  // row is already scrolled into view). No pointer-capability guard here: this
+  // is keyboard intent, not a stray pointer, and `scheduleShow` with no
+  // `suppress` shows unconditionally (the touch guard lives only in the mouse
+  // `handleEnter`).
+  useEffect(() => {
+    if (!activeValue) return;
+    const result = resultByValue.get(activeValue);
+    if (result?.kind !== 'link') {
+      // Tag row active (or nothing resolvable) — no preview for tags.
+      dismissAll();
+      return;
+    }
+    const link = result.link;
+    if (!palettePluginOn(link.sourceData.kind, settings?.plugins)) {
+      dismissAll();
+      return;
+    }
+    // `CSS.escape` guards ids/values containing characters that would break the
+    // attribute selector (ids are UUIDs today, but the value is `link:<id>` and
+    // this stays correct if id shape ever changes).
+    const node = panelRef.current?.querySelector<HTMLElement>(
+      `[cmdk-item][data-value="${CSS.escape(activeValue)}"]`,
+    );
+    if (!node) return; // not yet in the DOM this tick; a later change re-runs
+    scheduleShow(link, node.getBoundingClientRect());
+  }, [activeValue, resultByValue, settings?.plugins, scheduleShow, dismissAll]);
 
   const openLinkResult = (link: PaletteLinkResult) => {
     // Mirrors `LinkRow`'s own anchor semantics (`target="_blank" rel="noopener"`).
@@ -750,6 +794,8 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
           shouldFilter={false}
           label="Command palette"
           loop
+          value={activeValue}
+          onValueChange={setActiveValue}
           style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
         >
           <div
