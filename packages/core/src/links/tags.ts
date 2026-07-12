@@ -93,3 +93,26 @@ export async function createTag(name: string): Promise<string | null> {
     .limit(1);
   return row?.name ?? null;
 }
+
+/**
+ * Deletes a tag from the ENTIRE library: removes the `tags` row matched by
+ * `normalizeTagKey(name)` (case-insensitive, same key `createTag`/`addTag`/
+ * `removeTag` use). The `link_tags.tag_id` FK is `ON DELETE cascade`, so every
+ * association row for this tag is removed in the same statement — but the
+ * `links` themselves are NOT touched (the cascade flows tag -> link_tags only,
+ * never link_tags -> links). Returns `true` if a tag was found and deleted,
+ * `false` if no tag matched (idempotent: deleting an absent tag is a no-op
+ * success, not an error).
+ *
+ * DISTINCT from `removeTag(linkId, tagName)` (in `links.ts`), which detaches a
+ * tag from ONE specific link and leaves the tag itself intact for its other
+ * links. `deleteTag` destroys the tag for every link at once.
+ */
+export async function deleteTag(name: string): Promise<boolean> {
+  const normalizedKey = normalizeTagKey(name);
+  if (!normalizedKey) return false;
+  const result = await db.delete(tags).where(eq(tags.normalizedKey, normalizedKey)).returning({
+    id: tags.id,
+  });
+  return result.length > 0;
+}
