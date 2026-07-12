@@ -36,10 +36,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(await ops.getSetting('trashPurgeDays')).toBe(30);
       expect(await ops.getSetting('mcpAccess')).toBe(true);
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       });
     });
 
@@ -51,10 +51,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         plugins: {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       });
     });
@@ -82,16 +82,16 @@ describeIfPg('settings store (integration, plan 016)', () => {
 
     it('persists a partial plugins record merge — the FULL object is stored, not merged at write time', async () => {
       await ops.setSetting('plugins', {
-        hacker_news: { enabled: false, inline: false, hover: false },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: false, hover: false },
-        twitter: { enabled: false, inline: false, hover: false },
+        hacker_news: { enabled: false, inline: false, hover: false, palette: false },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: false, hover: false, palette: false },
+        twitter: { enabled: false, inline: false, hover: false, palette: false },
       });
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: { enabled: false, inline: false, hover: false },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: false, hover: false },
-        twitter: { enabled: false, inline: false, hover: false },
+        hacker_news: { enabled: false, inline: false, hover: false, palette: false },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: false, hover: false, palette: false },
+        twitter: { enabled: false, inline: false, hover: false, palette: false },
       });
     });
 
@@ -103,10 +103,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         sql`insert into settings (key, value) values ('plugins', '{"hacker_news": true, "github": false, "youtube": true}'::jsonb)`,
       );
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: false, hover: false },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true }, // filled with default — a legacy blob predates twitter entirely
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: false, hover: false, palette: false },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true }, // filled with default — a legacy blob predates twitter entirely
       });
     });
 
@@ -118,10 +118,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         sql`insert into settings (key, value) values ('plugins', '{"hacker_news": {"enabled": true, "inline": true, "hover": true}, "github": {"enabled": true, "hover": true}, "youtube": {"enabled": true, "hover": true}}'::jsonb)`,
       );
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true }, // filled with default
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true }, // pre-palette shape — filled forward
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true }, // filled with default (missing source entirely)
       });
     });
 
@@ -173,10 +173,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         twitter: { enabled: true, inline: true, hover: true },
       });
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: { enabled: true, inline: true, hover: true }, // fell back to default
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true }, // fell back to default (extra `evil` key)
+        github: { enabled: true, hover: true, palette: true }, // pre-palette shape — filled forward
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       });
     });
 
@@ -190,10 +190,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         github: { enabled: true, hover: true },
       });
       expect(await ops.getSetting('plugins')).toEqual({
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true }, // filled with default
-        twitter: { enabled: true, inline: true, hover: true }, // filled with default
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true }, // pre-palette shape — filled forward
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true }, // filled with default (missing source entirely)
+        twitter: { enabled: true, inline: true, hover: true, palette: true }, // filled with default (missing source entirely)
       });
     });
 
@@ -214,10 +214,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         plugins: {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       });
     });
@@ -247,10 +247,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         plugins: {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       });
     });
@@ -284,10 +284,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         plugins: {
-          hacker_news: { enabled: false, inline: false, hover: false },
-          github: { enabled: false, hover: false },
-          youtube: { enabled: false, hover: false },
-          twitter: { enabled: false, inline: false, hover: false },
+          hacker_news: { enabled: false, inline: false, hover: false, palette: false },
+          github: { enabled: false, hover: false, palette: false },
+          youtube: { enabled: false, hover: false, palette: false },
+          twitter: { enabled: false, inline: false, hover: false, palette: false },
         },
       });
       expect(result).toEqual({
@@ -296,10 +296,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         plugins: {
-          hacker_news: { enabled: false, inline: false, hover: false },
-          github: { enabled: false, hover: false },
-          youtube: { enabled: false, hover: false },
-          twitter: { enabled: false, inline: false, hover: false },
+          hacker_news: { enabled: false, inline: false, hover: false, palette: false },
+          github: { enabled: false, hover: false, palette: false },
+          youtube: { enabled: false, hover: false, palette: false },
+          twitter: { enabled: false, inline: false, hover: false, palette: false },
         },
       });
       // And it's actually persisted, not just returned.

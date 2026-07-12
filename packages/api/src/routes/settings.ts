@@ -34,19 +34,37 @@ const settingsPatchBodySchema = z
     // card shows the captured og:image.
     linkPreviewImages: z.boolean().optional(),
     // Plan 026: per-source objects (master `enabled` + the render features that
-    // source supports). Mirrors `core`'s `settingsSchema.plugins` exactly. The
-    // edge validates the CURRENT (new) shape strictly — well-formed writes only;
-    // legacy-boolean *reads* of pre-026 stored blobs are handled by core's
-    // migration normalizer, not here.
+    // source supports). Mirrors `core`'s `settingsSchema.plugins` exactly —
+    // including the `palette` flag (palette-rich-rows slice) that gates each
+    // source's command-palette hover + inline surface. This edge schema is a
+    // hand-maintained duplicate of core's allowlist; the drift-guard test in
+    // `settings.test.ts` fails if a key in `SETTINGS_DEFAULTS` isn't accepted
+    // here. The edge validates the CURRENT (new) shape strictly — well-formed
+    // writes only; legacy-boolean *reads* of pre-026 stored blobs are handled
+    // by core's migration normalizer, not here.
     plugins: z
       .object({
         hacker_news: z
-          .object({ enabled: z.boolean(), inline: z.boolean(), hover: z.boolean() })
+          .object({
+            enabled: z.boolean(),
+            inline: z.boolean(),
+            hover: z.boolean(),
+            palette: z.boolean(),
+          })
           .strict(),
-        github: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
-        youtube: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
+        github: z
+          .object({ enabled: z.boolean(), hover: z.boolean(), palette: z.boolean() })
+          .strict(),
+        youtube: z
+          .object({ enabled: z.boolean(), hover: z.boolean(), palette: z.boolean() })
+          .strict(),
         twitter: z
-          .object({ enabled: z.boolean(), inline: z.boolean(), hover: z.boolean() })
+          .object({
+            enabled: z.boolean(),
+            inline: z.boolean(),
+            hover: z.boolean(),
+            palette: z.boolean(),
+          })
           .strict(),
       })
       .strict()

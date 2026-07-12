@@ -266,10 +266,10 @@ describe('LinkRow', () => {
   describe('HN inline plugin gate (plan 026)', () => {
     it('inline:false hides the points/comments line (but the row/title still renders)', () => {
       renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />, {
-        hacker_news: { enabled: true, inline: false, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: false, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       });
       expect(screen.queryByText('342 points · 128 comments')).toBeNull();
       expect(screen.getByText('A post')).toBeDefined();
@@ -277,20 +277,20 @@ describe('LinkRow', () => {
 
     it('inline:true shows the points/comments line', () => {
       renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />, {
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       });
       expect(screen.getByText('342 points · 128 comments')).toBeDefined();
     });
 
     it('enabled:false (master off) hides the points/comments line', () => {
       renderRow(<LinkRow link={link({ sourceData: hackerNewsSourceData })} />, {
-        hacker_news: { enabled: false, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       });
       expect(screen.queryByText('342 points · 128 comments')).toBeNull();
     });
@@ -311,10 +311,10 @@ describe('LinkRow', () => {
   describe('Twitter inline plugin gate (command-center polish slice)', () => {
     it('inline:false hides the author/text line (but the row/title still renders)', () => {
       renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />, {
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: false, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: false, hover: true, palette: true },
       });
       expect(
         screen.queryByText('Just shipped a new feature — thrilled with how it turned out.'),
@@ -324,10 +324,10 @@ describe('LinkRow', () => {
 
     it('inline:true shows the author/text line', () => {
       renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />, {
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       });
       expect(
         screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
@@ -336,10 +336,10 @@ describe('LinkRow', () => {
 
     it('enabled:false (master off) hides the author/text line even when inline:true', () => {
       renderRow(<LinkRow link={link({ sourceData: twitterSourceData })} />, {
-        hacker_news: { enabled: true, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: false, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: false, inline: true, hover: true, palette: true },
       });
       expect(
         screen.queryByText('Just shipped a new feature — thrilled with how it turned out.'),

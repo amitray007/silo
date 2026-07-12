@@ -1,24 +1,29 @@
 import { Command } from 'cmdk';
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   useInfiniteLinks,
   useLinksByTag,
   useSearchLinks,
   useSearchTrash,
+  useSettings,
   useTags,
   useTrashList,
 } from '../api/hooks';
 import type {
   LinkJson,
   SearchResultJson,
+  SettingsMap,
   TagCount,
   TrashLinkJson,
   TrashSearchResultJson,
 } from '../api/types';
+import { isPaletteSurfaceOn } from '../lib/paletteSurface';
+import { isHoverCapable } from '../lib/pointer';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import type { useCommandPalette } from '../lib/useCommandPalette';
 import { type PaletteScope, usePaletteScope } from '../lib/usePaletteScope';
 import { Chip } from './Chip';
+import { useHoverPreview } from './HoverPreviewContext';
 
 /** Either a live link result or a trashed one — `PaletteLinkRow` only ever reads `.id`/`.url`/`.title`, and `TrashLinkJson`/its search variant are both structurally `LinkJson` plus extra fields, so one row renderer covers both scopes. */
 type PaletteLinkResult = LinkJson | SearchResultJson | TrashLinkJson;
@@ -110,57 +115,137 @@ function PaletteHint({ glyph, label }: { glyph: string; label: string }) {
   );
 }
 
-/** A single link result row (favicon + title + domain), scaled down from `LinkRow`'s look for the palette's tighter list. `Command.Item`'s own `onSelect` handles both click and Enter-while-active — no separate keydown handler needed. Renders trash-scope rows identically to library/tag ones (see `PaletteLinkResult`'s doc comment) — the palette's job is "find the thing", not editorialize by scope. */
+/**
+ * Whether this link's palette hover + inline surface should show. Plugin
+ * sources (hacker_news/github/youtube/twitter) are gated by their own
+ * `palette` flag via `isPaletteSurfaceOn`; any other kind (a plain `link`) is
+ * ungated — its `GenericVariant` hover always shows, matching the library.
+ */
+function palettePluginOn(
+  kind: PaletteLinkResult['sourceData']['kind'],
+  plugins: SettingsMap['plugins'] | undefined,
+): boolean {
+  if (kind === 'hacker_news' || kind === 'github' || kind === 'youtube' || kind === 'twitter') {
+    return isPaletteSurfaceOn(plugins?.[kind]);
+  }
+  return true; // generic link — always show hover
+}
+
+/** A single link result row (favicon + title + domain), scaled down from `LinkRow`'s look for the palette's tighter list. `Command.Item`'s own `onSelect` handles both click and Enter-while-active — no separate keydown handler needed. Renders trash-scope rows identically to library/tag ones (see `PaletteLinkResult`'s doc comment). Hover preview + inline source-line mirror the library row (`LinkRow`), gated per plugin by the palette `palette` flag; a generic link always gets its hover card. */
 function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
   const domain = deriveDomain(link.url);
   const title = link.title ?? deriveTitleFromUrl(link.url);
+  const rowRef = useRef<HTMLSpanElement>(null);
+  const { data: settings } = useSettings();
+  const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
+
+  const kind = link.sourceData.kind;
+  const surfaceOn = palettePluginOn(kind, settings?.plugins);
+  const showInline = surfaceOn && (kind === 'hacker_news' || kind === 'twitter');
+
+  // Mirror LinkRow's hover triggers: schedule the shared card on enter,
+  // hide on leave, dismiss on unmount (the row unmounts as the list
+  // re-renders while typing). Suppress when the source's palette surface is
+  // off or the pointer can't hover (touch) — `scheduleShow`'s `suppress`
+  // path cancels any pending timer without opening.
+  const handleEnter = () => {
+    const rect = rowRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    scheduleShow(link, rect, { suppress: !surfaceOn || !isHoverCapable() });
+  };
+  const handleLeave = () => scheduleHide(link.id);
+  useEffect(() => () => dismiss(link.id), [dismiss, link.id]);
+
   return (
+    // biome-ignore lint/a11y/noStaticElementInteractions: hover-only convenience (schedules the shared preview card) on a non-interactive wrapper — the actual control is the parent `Command.Item`, which already has full keyboard/click semantics; this span adds no interactive behavior of its own.
     <span
+      ref={rowRef}
+      onMouseEnter={handleEnter}
+      onMouseLeave={handleLeave}
       style={{
         display: 'flex',
-        alignItems: 'center',
-        gap: 'var(--s2-5)',
+        flexDirection: 'column',
+        gap: 'var(--s-0-5)',
         width: '100%',
         minWidth: 0,
       }}
     >
-      <Chip domain={domain} size={18} />
       <span
         style={{
-          flex: 1,
-          minWidth: 0,
           display: 'flex',
-          alignItems: 'baseline',
+          alignItems: 'center',
           gap: 'var(--s2-5)',
+          width: '100%',
+          minWidth: 0,
         }}
       >
+        <Chip domain={domain} size={18} />
         <span
           style={{
-            fontWeight: 500,
-            fontSize: 'var(--text-base)',
-            color: 'var(--ink)',
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
+            flex: 1,
+            minWidth: 0,
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 'var(--s2-5)',
           }}
         >
-          {title}
-        </span>
-        <span
-          style={{
-            flex: 'none',
-            maxWidth: '14rem',
-            fontSize: 'var(--text-base)',
-            color: 'var(--fnt)',
-            fontWeight: 400,
-            whiteSpace: 'nowrap',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-          }}
-        >
-          {domain}
+          <span
+            style={{
+              fontWeight: 500,
+              fontSize: 'var(--text-base)',
+              color: 'var(--ink)',
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {title}
+          </span>
+          <span
+            style={{
+              flex: 'none',
+              maxWidth: '14rem',
+              fontSize: 'var(--text-base)',
+              color: 'var(--fnt)',
+              fontWeight: 400,
+              whiteSpace: 'nowrap',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+            }}
+          >
+            {domain}
+          </span>
         </span>
       </span>
+      {showInline && link.sourceData.kind === 'hacker_news' && (
+        <span
+          style={{
+            // Align under the title: 18px chip + --s2-5 gap.
+            paddingLeft: 'calc(18px + var(--s2-5))',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--fnt)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {link.sourceData.points} points · {link.sourceData.comments} comments
+        </span>
+      )}
+      {showInline && link.sourceData.kind === 'twitter' && (
+        <span
+          style={{
+            paddingLeft: 'calc(18px + var(--s2-5))',
+            fontSize: 'var(--text-sm)',
+            color: 'var(--fnt)',
+            whiteSpace: 'nowrap',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+          }}
+        >
+          {link.sourceData.text}
+        </span>
+      )}
     </span>
   );
 }
@@ -512,6 +597,18 @@ function selectIsSettling(args: {
  */
 export function CommandPalette({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
   const { open, closePalette } = palette;
+  const { dismissAll } = useHoverPreview();
+
+  // Opening the palette (⌘K / `/`) is a full-screen takeover — dismiss any
+  // library-row hover card that's still showing (review: ce-julik-frontend-
+  // races). Without this, a keyboard-only open while a library row is hovered
+  // leaves that card floating under the palette's scrim until an incidental
+  // pointer move triggers the `pointermove` fallback. Mirrors the existing
+  // Settings/Edit mutual-exclusion pattern in `RowMenuLayer`. Runs on the
+  // `open` edge; a no-op when nothing is showing.
+  useEffect(() => {
+    if (open) dismissAll();
+  }, [open, dismissAll]);
 
   // Mirrors `ModalShell`'s own capture-phase Escape listener 1-to-1 (see that
   // component's doc comment for why capture-phase: it must win over
@@ -537,6 +634,75 @@ export function CommandPalette({ palette }: { palette: ReturnType<typeof useComm
 }
 
 /**
+ * Keyboard-nav hover (palette-keyboard-hover slice), extracted as a named hook
+ * to match this file's own convention (`usePaletteResults`/`useStableResults`)
+ * of keeping self-contained derived-state logic out of `CommandPaletteInner`'s
+ * body. Owns the controlled cmdk active value and drives the shared hover
+ * card off it. Returns `[activeValue, setActiveValue]` to wire onto
+ * `<Command value onValueChange>`.
+ *
+ * `onValueChange` fires for BOTH arrow-key navigation AND pointer movement
+ * (cmdk's `Item` has an `onPointerMove` that sets the active value;
+ * `disablePointerSelection` defaults false) — so this is NOT keyboard-only, and
+ * it MUST apply the same `isHoverCapable()` touch guard the mouse
+ * `handleEnter` uses (review: ce-correctness). Without it, a touch/coarse-
+ * pointer tap onto an enabled row would fire this effect and open a card the
+ * pointer path deliberately suppresses (and the two would race). With the guard,
+ * both the pointer-driven `onValueChange` here and the row's own
+ * `handleEnter`/`handleLeave` agree, and arrow-key nav on a real
+ * (hover-capable) desktop still shows the card as intended.
+ *
+ * When the active row is a tag row, a gate-suppressed link, resolves to
+ * nothing after a results swap, or cmdk collapses the value to '' (empty
+ * result set), the card is DISMISSED rather than left stranded (review:
+ * ce-julik-frontend-races — an earlier `!activeValue` early-return skipped both
+ * branches and stranded a pending/open card).
+ */
+function usePaletteKeyboardHover(
+  results: readonly CommandPaletteResult[],
+  panelRef: React.RefObject<HTMLDivElement | null>,
+  plugins: SettingsMap['plugins'] | undefined,
+): [string, (value: string) => void] {
+  const { scheduleShow, dismissAll } = useHoverPreview();
+  const [activeValue, setActiveValue] = useState('');
+
+  // Map an active cmdk value (`link:<id>` / `tag:<name>`) back to its result.
+  // Rebuilt when `results` changes (identity of the visible set).
+  const resultByValue = useMemo(() => {
+    const m = new Map<string, CommandPaletteResult>();
+    for (const result of results) m.set(resultValue(result), result);
+    return m;
+  }, [results]);
+
+  useEffect(() => {
+    const result = activeValue ? resultByValue.get(activeValue) : undefined;
+    // No enabled link row to preview → dismiss any showing/pending card.
+    if (
+      result?.kind !== 'link' ||
+      !palettePluginOn(result.link.sourceData.kind, plugins) ||
+      // Touch/coarse-pointer: no hover affordance (mirrors the mouse path's own
+      // `isHoverCapable()` suppress). See this hook's doc comment.
+      !isHoverCapable()
+    ) {
+      dismissAll();
+      return;
+    }
+    // `CSS.escape` guards ids/values containing characters that would break the
+    // attribute selector (ids are UUIDs today, but the value is `link:<id>` and
+    // this stays correct if id shape ever changes). Reads the active row's rect
+    // straight from the DOM node cmdk marked active, after React committed the
+    // new value (so the row is already scrolled into view).
+    const node = panelRef.current?.querySelector<HTMLElement>(
+      `[cmdk-item][data-value="${CSS.escape(activeValue)}"]`,
+    );
+    if (!node) return; // not yet in the DOM this tick; a later change re-runs
+    scheduleShow(result.link, node.getBoundingClientRect());
+  }, [activeValue, resultByValue, plugins, panelRef, scheduleShow, dismissAll]);
+
+  return [activeValue, setActiveValue];
+}
+
+/**
  * Everything that needs `open` to actually be true — split out of
  * `CommandPalette` (see that component's doc comment) purely so its data
  * hooks (`usePaletteScope`/`usePaletteResults`) never mount while the
@@ -556,6 +722,12 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
     scope,
   );
   const panelRef = useRef<HTMLDivElement>(null);
+  const { data: settings } = useSettings();
+  const [activeValue, setActiveValue] = usePaletteKeyboardHover(
+    results,
+    panelRef,
+    settings?.plugins,
+  );
 
   const openLinkResult = (link: PaletteLinkResult) => {
     // Mirrors `LinkRow`'s own anchor semantics (`target="_blank" rel="noopener"`).
@@ -653,6 +825,8 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
           shouldFilter={false}
           label="Command palette"
           loop
+          value={activeValue}
+          onValueChange={setActiveValue}
           style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
         >
           <div
@@ -665,6 +839,18 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               flex: 'none',
             }}
           >
+            {/* Type-to-refocus (palette-keyboard-hover slice): the requirement
+                "typing while a row is focused returns focus to the input" is
+                satisfied INHERENTLY by cmdk's focus model — its rows are
+                `role="option"` (never focusable), so DOM focus stays on this
+                input through all arrow navigation (verified in browser QA:
+                `document.activeElement` is this `[cmdk-input]` after ArrowDown,
+                and a keystroke lands in `value`). No keydown-refocus handler is
+                added because there is no reachable state where a printable key
+                lands anywhere but here — such a handler could never fire, and
+                dead code is worse than none. If a future change makes rows
+                focusable, add the bare-printable → `inputRef.current.focus()`
+                guard then (see the keyboard-hover design doc). */}
             <Command.Input
               ref={palette.inputRef}
               autoFocus

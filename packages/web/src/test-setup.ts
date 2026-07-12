@@ -38,3 +38,26 @@ if (!window.ResizeObserver) {
 if (!Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
+
+// jsdom does not implement `CSS.escape` (the `CSS` global itself is present,
+// but its `escape` static method is not) — `CommandPaletteInner`'s
+// keyboard-hover effect (CommandPalette.tsx) calls it to build the active
+// row's attribute selector on every cmdk `onValueChange`, which fires as
+// soon as `<Command>`'s controlled `value` mounts/changes, so any test that
+// renders the palette hits this the moment cmdk reports an active item. This
+// is a NARROW polyfill, not a full spec implementation — it backslash-escapes
+// every non-`[A-Za-z0-9_-]` character but omits CSSOM's leading-digit /
+// leading-hyphen-digit / NULL codepoint rules
+// (https://drafts.csswg.org/cssom/#serialize-an-identifier). That's sufficient
+// for this repo's actual values (`link:<uuid>` / `tag:<name>`, which only ever
+// need the `:` escaped) and keeps the test path close to what a production
+// browser's real CSS.escape would produce for those inputs; do not rely on it
+// for spec-general escaping.
+if (!window.CSS) {
+  // @ts-expect-error -- jsdom has no global CSS at all in some environments.
+  window.CSS = {};
+}
+if (!window.CSS.escape) {
+  window.CSS.escape = (value: string): string =>
+    value.replace(/[^a-zA-Z0-9_-]/g, (ch) => `\\${ch}`);
+}

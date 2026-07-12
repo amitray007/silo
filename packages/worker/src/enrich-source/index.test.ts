@@ -172,10 +172,10 @@ describe('enrichSource', () => {
         'https://news.ycombinator.com/item?id=1',
         { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
         {
-          hacker_news: { enabled: false, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       );
       expect(result).toBeUndefined();
@@ -187,10 +187,10 @@ describe('enrichSource', () => {
         'https://news.ycombinator.com/item?id=1',
         { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
         {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       );
       expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
@@ -202,10 +202,10 @@ describe('enrichSource', () => {
         'https://news.ycombinator.com/item?id=1',
         { fetchFn: () => Promise.resolve(okResult({ score: 10, descendants: 2, by: 'pg' })) },
         {
-          hacker_news: { enabled: true, inline: false, hover: false },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: false, hover: false, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       );
       expect(result).toEqual({ kind: 'hacker_news', points: 10, comments: 2, author: 'pg' });
@@ -222,10 +222,10 @@ describe('enrichSource', () => {
             ),
         },
         {
-          hacker_news: { enabled: false, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       );
       expect(result).toEqual({ kind: 'github', stars: 1, forks: 2, issues: 3 });
@@ -262,10 +262,10 @@ describe('enrichSource', () => {
             ),
         },
         {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       );
       expect(result).toMatchObject({ kind: 'twitter', text: 'hello' });
@@ -283,10 +283,10 @@ describe('enrichSource', () => {
           },
         },
         {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: false, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: false, inline: true, hover: true, palette: true },
         },
       );
       expect(result).toBeUndefined();
@@ -299,10 +299,10 @@ describe('enrichSource', () => {
         'https://x.com/elonmusk/status/1',
         { fetchFn: () => Promise.resolve({ ok: false, reason: 'timeout' }) },
         {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       );
       expect(result).toBeUndefined();

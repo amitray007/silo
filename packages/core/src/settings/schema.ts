@@ -71,11 +71,25 @@ const settingsSchema = {
   plugins: z
     .object({
       hacker_news: z
-        .object({ enabled: z.boolean(), inline: z.boolean(), hover: z.boolean() })
+        .object({
+          enabled: z.boolean(),
+          inline: z.boolean(),
+          hover: z.boolean(),
+          palette: z.boolean(),
+        })
         .strict(),
-      github: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
-      youtube: z.object({ enabled: z.boolean(), hover: z.boolean() }).strict(),
-      twitter: z.object({ enabled: z.boolean(), inline: z.boolean(), hover: z.boolean() }).strict(),
+      github: z.object({ enabled: z.boolean(), hover: z.boolean(), palette: z.boolean() }).strict(),
+      youtube: z
+        .object({ enabled: z.boolean(), hover: z.boolean(), palette: z.boolean() })
+        .strict(),
+      twitter: z
+        .object({
+          enabled: z.boolean(),
+          inline: z.boolean(),
+          hover: z.boolean(),
+          palette: z.boolean(),
+        })
+        .strict(),
     })
     .strict(),
 } as const;
@@ -96,10 +110,10 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
   mcpAccess: true,
   linkPreviewImages: true,
   plugins: {
-    hacker_news: { enabled: true, inline: true, hover: true },
-    github: { enabled: true, hover: true },
-    youtube: { enabled: true, hover: true },
-    twitter: { enabled: true, inline: true, hover: true },
+    hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+    github: { enabled: true, hover: true, palette: true },
+    youtube: { enabled: true, hover: true, palette: true },
+    twitter: { enabled: true, inline: true, hover: true, palette: true },
   },
 };
 
@@ -110,14 +124,27 @@ export function isSettingKey(key: string): key is SettingKey {
 
 /**
  * Upgrades one plugin source's legacy shape to the current per-feature
- * object (plan 026 migration). Pre-026, `plugins.<source>` was a bare
- * `boolean`; that boolean fanned out to every field the CURRENT schema
- * defines for that source (`true`/`false` -> every flag on/off alike), so a
- * legacy "enabled" reads back as "enabled + every feature on", matching the
- * pre-026 behavior exactly (there was no way to have been "enabled but
- * hover-off" before this migration existed). `fields` is the exact set of
- * feature keys the source's schema accepts, driving the fan-out without
- * hardcoding per-source shape here.
+ * object (plan 026 migration, extended additively in the palette-rich-rows
+ * migration). Pre-026, `plugins.<source>` was a bare `boolean`; that boolean
+ * fanned out to every field the CURRENT schema defines for that source
+ * (`true`/`false` -> every flag on/off alike), so a legacy "enabled" reads
+ * back as "enabled + every feature on", matching the pre-026 behavior
+ * exactly (there was no way to have been "enabled but hover-off" before this
+ * migration existed). `fields` is the exact set of feature keys the source's
+ * schema accepts, driving the fan-out without hardcoding per-source shape
+ * here.
+ *
+ * The object branch is ADDITIVE, not exact-arity: a stored object is
+ * accepted and fill-forwarded (rather than reset to `fallback`) when every
+ * key it carries is a known field, every present value is a boolean, and
+ * both universal fields (`enabled` + `hover`) are present. This lets an
+ * older, valid-but-shorter shape (e.g. one written before a new feature flag
+ * such as `palette` was added) upgrade by filling only the missing newer
+ * field(s) from `fallback`, preserving every choice the user already made —
+ * no data loss when a new feature flag is introduced. A stray/unknown key, a
+ * non-boolean value, or a too-partial blob (missing `enabled` or `hover`) is
+ * still treated as garbage and falls back to `fallback` entirely, preserving
+ * this module's "reject, don't silently keep a malformed source" posture.
  */
 function coerceLegacyPluginSource<F extends string>(
   raw: unknown,
@@ -127,18 +154,31 @@ function coerceLegacyPluginSource<F extends string>(
   if (typeof raw === 'boolean') {
     return Object.fromEntries(fields.map((field) => [field, raw])) as Record<F, boolean>;
   }
-  if (
-    raw !== null &&
-    typeof raw === 'object' &&
-    fields.every((field) => typeof (raw as Record<string, unknown>)[field] === 'boolean') &&
-    Object.keys(raw).length === fields.length
-  ) {
-    // Already the current per-feature shape — pass through untouched.
-    return raw as Record<F, boolean>;
+  if (raw !== null && typeof raw === 'object') {
+    const obj = raw as Record<string, unknown>;
+    const keys = Object.keys(obj);
+    const fieldSet = new Set<string>(fields);
+    // Accept + fill-forward an object whose keys are all known fields, whose
+    // present values are all booleans, and which carries at least the two
+    // universal fields (`enabled` + `hover`). This upgrades an older, SHORTER
+    // valid shape (e.g. one written before `palette` was added) by filling
+    // the missing newer field(s) from `fallback` while preserving the stored
+    // choices — no data loss when a new feature flag is introduced. A stray/
+    // unknown key, a non-boolean value, or a too-partial blob (missing
+    // `enabled` or `hover`) is still treated as garbage and falls back to
+    // `fallback`, preserving the module's "reject, don't silently keep a
+    // malformed source" posture.
+    const allKnown = keys.every((k) => fieldSet.has(k));
+    const allBool = keys.every((k) => typeof obj[k] === 'boolean');
+    const hasUniversal = typeof obj.enabled === 'boolean' && typeof obj.hover === 'boolean';
+    if (allKnown && allBool && hasUniversal) {
+      const filled: Record<string, boolean> = { ...fallback };
+      for (const k of keys) filled[k] = obj[k] as boolean;
+      return filled as Record<F, boolean>;
+    }
   }
-  // Legacy-boolean and current-shape are the only recognized forms; a
-  // partial/garbage object, an extra/missing key, or a missing source
-  // entirely all fall back to that source's default independently — one
+  // A missing source entirely, or an object that fails the fill-forward
+  // rule above, falls back to that source's default independently — one
   // malformed source in a mixed blob never drags down its siblings.
   return fallback;
 }
@@ -170,28 +210,34 @@ export function normalizePluginsValue(raw: unknown): unknown {
     ...value,
     hacker_news: coerceLegacyPluginSource(
       value.hacker_news,
-      ['enabled', 'inline', 'hover'] as const,
+      ['enabled', 'inline', 'hover', 'palette'] as const,
       defaults.hacker_news,
     ),
-    github: coerceLegacyPluginSource(value.github, ['enabled', 'hover'] as const, defaults.github),
+    github: coerceLegacyPluginSource(
+      value.github,
+      ['enabled', 'hover', 'palette'] as const,
+      defaults.github,
+    ),
     youtube: coerceLegacyPluginSource(
       value.youtube,
-      ['enabled', 'hover'] as const,
+      ['enabled', 'hover', 'palette'] as const,
       defaults.youtube,
     ),
     // A pre-twitter stored blob has no `twitter` key — `coerceLegacyPluginSource`
     // returns the default for a missing source, so it fills in
-    // `{enabled,inline,hover}` and `.strict()` validation passes on the
-    // upgraded object. A pre-INLINE stored twitter blob (`{enabled,hover}`,
-    // written before this field existed) has the WRONG arity for the
-    // fields list below (2 keys vs. 3 expected), so `coerceLegacyPluginSource`
-    // treats it as unrecognized and falls back to the twitter default
-    // (all-on) rather than partially upgrading it — correct for a feature
-    // addition: there's no legacy value to preserve for a flag that didn't
-    // exist yet.
+    // `{enabled,inline,hover,palette}` and `.strict()` validation passes on
+    // the upgraded object. A pre-INLINE stored twitter blob (`{enabled,hover}`,
+    // written before `inline` existed) is now additively fill-forwarded
+    // instead of reset: `coerceLegacyPluginSource`'s object branch accepts
+    // any stored shape whose keys are all known fields, whose values are all
+    // booleans, and which carries both `enabled` and `hover` — so the stored
+    // `enabled`/`hover` choice is preserved and the missing `inline` +
+    // `palette` fields are filled from the twitter default. Only a
+    // TOO-partial blob (missing `enabled` or `hover`), an unknown/extra key,
+    // or a non-boolean value still falls back to the twitter default wholesale.
     twitter: coerceLegacyPluginSource(
       value.twitter,
-      ['enabled', 'inline', 'hover'] as const,
+      ['enabled', 'inline', 'hover', 'palette'] as const,
       defaults.twitter,
     ),
   };

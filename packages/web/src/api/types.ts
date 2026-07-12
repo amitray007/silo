@@ -189,7 +189,9 @@ export type TagsResponse = { tags: TagCount[] };
  * the render-surface flags that source supports. `hacker_news` and `twitter`
  * render both an inline row line and a hover preview (`inline`/`hover`);
  * `github`/`youtube` are hover-only (no `inline`). Mirror core's shape
- * EXACTLY — do not add fields a source doesn't have.
+ * EXACTLY — do not add fields a source doesn't have. Each source also has a
+ * `palette` flag gating its command-palette hover + inline surfaces
+ * (independent of `inline`/`hover`, which gate the library surfaces).
  *
  * `mcpAccess` (Access-tab MCP-toggle unit): a scalar boolean, default `true`
  * — mirrors core's `settingsSchema.mcpAccess` (`packages/core/src/settings/
@@ -206,14 +208,14 @@ export type SettingsMap = {
   // cards omit the captured og:image. Default true.
   linkPreviewImages: boolean;
   plugins: {
-    hacker_news: { enabled: boolean; inline: boolean; hover: boolean };
-    github: { enabled: boolean; hover: boolean };
-    youtube: { enabled: boolean; hover: boolean };
+    hacker_news: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
+    github: { enabled: boolean; hover: boolean; palette: boolean };
+    youtube: { enabled: boolean; hover: boolean; palette: boolean };
     // twitter has a live worker enricher (api.fxtwitter.com) AND can arrive
     // pre-extracted via the `silo ingest x` CLI; `enabled` gates the worker
     // fetch, `inline`/`hover` gate its two render surfaces. See
     // `packages/core/src/settings/schema.ts`'s doc comment.
-    twitter: { enabled: boolean; inline: boolean; hover: boolean };
+    twitter: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
   };
 };
 
