@@ -152,13 +152,15 @@ function CopyField({ label, value, loading }: { label: string; value: string; lo
  * has to own the open/close boolean, not a piece of derived state that
  * duplicates what this dialog needs anyway.
  *
- * While `useAppConfig` is loading, `url` is derived from `appConfig?.mcpUrl`
- * being `undefined` — `resolveMcpUrl` falls back to the localhost dev
- * default, which may not be the real host once the config lands. The URL,
- * CLI, and JSON rows all embed `url`, so all three show a `Skeleton` for
- * that window (`CopyField`'s `loading` prop) rather than flashing the
- * fallback then popping to the real value. Transport and Auth header don't
- * depend on `url`, so they render immediately.
+ * `url` comes from `resolveMcpUrl(appConfig?.mcpUrl, …)`: the operator-set
+ * `SILO_PUBLIC_MCP_URL` verbatim, else the localhost dev default, else
+ * `undefined` on a real host with no override (we don't guess a subdomain —
+ * see `resolveMcpUrl`). While `useAppConfig` is loading, `mcpUrl` is undefined
+ * so the URL/CLI/JSON rows show a `Skeleton` (`CopyField`'s `loading` prop)
+ * rather than flashing a value that then changes. When `url` resolves to
+ * `undefined` (real host, unset config), the connection rows are replaced by a
+ * "set `SILO_PUBLIC_MCP_URL`" notice. Transport and Auth header don't depend
+ * on `url`, so they render immediately.
  */
 export function McpSetupDialog({ onClose }: { onClose: () => void }) {
   const { data: appConfig, isLoading } = useAppConfig();
@@ -177,32 +179,55 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
         MCP client without OAuth support.
       </div>
 
-      {/* The connection, grouped: URL + Transport + Auth are used TOGETHER for a
-          manual / Cursor / raw-HTTP setup — the inset panel makes that "one
-          unit, not three options" reading explicit. */}
-      <div style={groupHeading}>Connection</div>
-      <div style={groupNote}>Use these three together to add silo manually.</div>
-      <div style={connectionGroup}>
-        <CopyField label="URL" value={url} loading={isLoading} />
-        <div style={fieldBlock}>
-          <div style={fieldLabel}>Transport</div>
-          <div style={copyRow}>
-            <code style={copyRowCode}>Streamable HTTP</code>
+      {/* On a real (non-localhost) host with no SILO_PUBLIC_MCP_URL set, `url`
+          is undefined — we can't guess it (see resolveMcpUrl). Show the operator
+          how to fix it rather than a wrong or missing URL. While the config is
+          still loading, `url` may momentarily be undefined too, so gate this on
+          !isLoading to avoid flashing the notice before the real value lands. */}
+      {url === undefined && !isLoading ? (
+        <div style={connectionGroup}>
+          <div style={fieldLabel}>MCP URL not configured</div>
+          <div style={{ ...groupNote, marginTop: 6 }}>
+            Set <code style={copyRowCode}>SILO_PUBLIC_MCP_URL</code> on the api and mcp containers
+            to your MCP endpoint (a single-level host, e.g.{' '}
+            <code style={copyRowCode}>https://mcp-silo.your-domain/mcp</code>) and redeploy. See{' '}
+            <code style={copyRowCode}>docs/deploy.md</code>.
           </div>
         </div>
-        <div style={{ marginBottom: 14 }}>
-          <CopyField label="Auth header" value="Authorization: Bearer <YOUR_SILO_API_TOKEN>" />
-        </div>
-      </div>
+      ) : (
+        <>
+          {/* The connection, grouped: URL + Transport + Auth are used TOGETHER for a
+              manual / Cursor / raw-HTTP setup — the inset panel makes that "one
+              unit, not three options" reading explicit. */}
+          <div style={groupHeading}>Connection</div>
+          <div style={groupNote}>Use these three together to add silo manually.</div>
+          <div style={connectionGroup}>
+            <CopyField label="URL" value={url ?? ''} loading={isLoading} />
+            <div style={fieldBlock}>
+              <div style={fieldLabel}>Transport</div>
+              <div style={copyRow}>
+                <code style={copyRowCode}>Streamable HTTP</code>
+              </div>
+            </div>
+            <div style={{ marginBottom: 14 }}>
+              <CopyField label="Auth header" value="Authorization: Bearer <YOUR_SILO_API_TOKEN>" />
+            </div>
+          </div>
 
-      {/* Each of these is a COMPLETE config on its own — an alternative to
-          assembling the group above, not part of it. */}
-      <div style={groupHeading}>Or paste a ready-made config</div>
-      <div style={groupNote}>Each of these is complete on its own.</div>
-      <CopyField label="Claude Code CLI" value={claudeCodeCliCommand(url)} loading={isLoading} />
-      <div style={{ marginBottom: 0 }}>
-        <CopyField label="JSON config" value={mcpClientConfig(url)} loading={isLoading} />
-      </div>
+          {/* Each of these is a COMPLETE config on its own — an alternative to
+              assembling the group above, not part of it. */}
+          <div style={groupHeading}>Or paste a ready-made config</div>
+          <div style={groupNote}>Each of these is complete on its own.</div>
+          <CopyField
+            label="Claude Code CLI"
+            value={claudeCodeCliCommand(url ?? '')}
+            loading={isLoading}
+          />
+          <div style={{ marginBottom: 0 }}>
+            <CopyField label="JSON config" value={mcpClientConfig(url ?? '')} loading={isLoading} />
+          </div>
+        </>
+      )}
     </ModalShell>
   );
 }
