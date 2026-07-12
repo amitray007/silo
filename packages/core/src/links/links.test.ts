@@ -994,6 +994,50 @@ describeIfPg('links operations (integration)', () => {
       expect(new Set(seenIds).size).toBe(3);
     });
 
+    it('pagination over EQUAL-rank rows never duplicates or skips: the links.id tiebreaker makes offset paging deterministic', async () => {
+      // All 7 links share the EXACT same title token, so they get IDENTICAL
+      // ts_rank on the FTS side (same lexeme, same weight, same document
+      // shape) — a real tie on every ORDER BY term ahead of the id
+      // tiebreaker (ftsMatchedFlag, combinedRankTerm, similarityTerm all
+      // equal across all 7 rows). Without `links.id ASC` as a final,
+      // deterministic tiebreaker, Postgres is free to return these tied rows
+      // in different relative orders across separate OFFSET-paged queries —
+      // which duplicates some rows across pages and skips others entirely.
+      const total = 7;
+      const created = [];
+      for (let i = 0; i < total; i++) {
+        created.push(
+          await ops.createLink({
+            url: `https://example.com/equal-rank-page-${i}`,
+            title: 'equalranktiebreaker shared token',
+            sourceKind: 'link',
+          }),
+        );
+      }
+      const expectedIds = new Set(created.map((link) => link.id));
+
+      const seenIds: string[] = [];
+      let cursor: string | undefined;
+      let pages = 0;
+      do {
+        const page = await ops.search(
+          'equalranktiebreaker',
+          {},
+          cursor === undefined ? { limit: 2 } : { limit: 2, cursor },
+        );
+        seenIds.push(...page.results.map((r) => r.id));
+        cursor = page.nextCursor;
+        pages++;
+      } while (cursor !== undefined && pages < total + 1); // hard stop: never loop forever on a bug
+
+      const relevantSeen = seenIds.filter((id) => expectedIds.has(id));
+      // No duplicates: every id appears AT MOST once across all pages.
+      expect(new Set(relevantSeen).size).toBe(relevantSeen.length);
+      // No skips: every inserted id was seen EXACTLY once.
+      expect(new Set(relevantSeen)).toEqual(expectedIds);
+      expect(relevantSeen).toHaveLength(total);
+    });
+
     it('adversarial: buildPrefixTsQuery / search() never throws on operator-laden or malformed input', async () => {
       const adversarialQueries = [
         "'",

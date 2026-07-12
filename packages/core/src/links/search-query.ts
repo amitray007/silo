@@ -1,5 +1,5 @@
 import { db, links } from '@silo/db';
-import { desc, sql } from 'drizzle-orm';
+import { asc, desc, sql } from 'drizzle-orm';
 import type { Link } from './executor.js';
 import {
   decodeSearchCursor,
@@ -153,8 +153,22 @@ function escapeIlikeNeedle(query: string): string {
  * query (mirrors `buildPrefixTsQuery`'s empty-input contract) — callers must
  * not run the trigram side on empty input.
  *
- * `match`: `trigramText ILIKE needle ESCAPE '\'`, index-backed by
- * `links_trgm_live_idx` (a bitmap index scan, see the db-level test).
+ * `match`: `trigramText ILIKE needle ESCAPE '\'`. The `links_trgm_live_idx`
+ * GIN trigram index (migration 0012) exists over this same expression and IS
+ * used (a bitmap index scan) when this ILIKE predicate runs standalone. But
+ * `runUnionSearch` never runs it standalone — it OR's this predicate together
+ * with the FTS side in one WHERE clause (`(searchVector @@ ftsQuery OR
+ * tagVector @@ ftsQuery) OR trigramText ILIKE needle`), and verified via
+ * `EXPLAIN` on real Postgres (5k and 50k rows), the planner does NOT use
+ * `links_trgm_live_idx` for that OR'd form — it seq-scans instead. Results
+ * are still correct either way; a seq scan is an accepted tradeoff at
+ * personal-store scale, not a bug, and the query is deliberately NOT
+ * restructured to force index use (see `runUnionSearch`'s doc comment for why
+ * the two sides stay a single unioned WHERE). The index is kept in the schema
+ * regardless — it costs only insert/update-time maintenance, and remains
+ * available if a future standalone trigram-only query path is added; no
+ * union-level EXPLAIN test currently asserts an index scan here, so don't
+ * assume one from this comment alone.
  * `similarityRank`: `similarity(trigramText, rawTrimmedQuery)` — used in the
  * composite ORDER BY's tie-break for trigram-only rows (D3: best trigram
  * match on top among rows that don't ALSO match FTS); kept clearly separate
@@ -225,11 +239,23 @@ export type SearchRankedPage = {
  * Ranking: a single composite `ORDER BY`, so FTS-matching rows (via title,
  * body, or tag) sort ABOVE trigram-only rows, are then ordered by their
  * combined `ts_rank` (title/body-vector rank + tag-vector rank), and
- * trigram-only rows are ordered among themselves by `similarity()` desc:
+ * trigram-only rows are ordered among themselves by `similarity()` desc,
+ * with `links.id` ASC appended as a FINAL tiebreaker:
  *
  *   ORDER BY (searchVector @@ ftsQuery OR tagVector @@ ftsQuery) DESC,
  *            (ts_rank(searchVector, ftsQuery) + ts_rank(tagVector, ftsQuery)) DESC,
- *            similarity(trigramText, rawTrimmedQuery) DESC
+ *            similarity(trigramText, rawTrimmedQuery) DESC,
+ *            links.id ASC
+ *
+ * The `links.id ASC` term is load-bearing for pagination, not cosmetic: the
+ * three rank terms above it are frequently EQUAL across multiple rows (e.g.
+ * several links sharing the same matched tag/title token all get identical
+ * `ts_rank`), and without a unique final term Postgres is free to return
+ * those tied rows in ANY order across separate `OFFSET`-paged queries — so
+ * paging through equal-rank rows could duplicate some and skip others
+ * (verified on real Postgres: page 1 and page 2 overlapped before this fix).
+ * `links.id` is unique and stable, so appending it makes the total order
+ * deterministic and guarantees stable offset pagination over equal-rank ties.
  *
  * `rank` returned to callers stays a single `number` column: the combined
  * ts_rank for an FTS-matching row, or `similarity()` for a trigram-only row
@@ -320,7 +346,7 @@ export async function runUnionSearch(
     .select({ link: links, rank })
     .from(links)
     .where(andAll(basePredicate, unionMatch, scopeCondition))
-    .orderBy(desc(ftsMatchedFlag), desc(combinedRankTerm), desc(similarityTerm))
+    .orderBy(desc(ftsMatchedFlag), desc(combinedRankTerm), desc(similarityTerm), asc(links.id))
     .limit(limit + 1)
     .offset(offset);
 

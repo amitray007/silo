@@ -447,12 +447,20 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
       });
       await ops.softDelete(match.id);
 
-      await expect(ops.searchTrash('a b')).resolves.not.toThrow();
-      const spaced = await ops.searchTrash('trashnullbytemarker ');
+      // A bare NUL byte (0x00, via `String.fromCharCode(0)` — never a literal
+      // NUL in source) among otherwise-real tokens ('trashnullbytemarker\0' ->
+      // sanitizes to 'trashnullbytemarker') and a LONE NUL byte (-> sanitizes
+      // to empty) must both resolve normally, never throw a raw Postgres
+      // encoding error. Mirrors links.test.ts's live-search NUL-byte
+      // regression (~line 1035) — a plain space (0x20) here would NOT
+      // exercise `sanitizeQuery`'s C0-control-stripping path at all.
+      const nul = String.fromCharCode(0);
+      await expect(ops.searchTrash(`trashnullbytemarker${nul}`)).resolves.not.toThrow();
+      const spaced = await ops.searchTrash(`trashnullbytemarker${nul}`);
       expect(spaced.results.map((r) => r.id)).toContain(match.id);
 
-      await expect(ops.searchTrash(' ')).resolves.not.toThrow();
-      const lone = await ops.searchTrash(' ');
+      await expect(ops.searchTrash(nul)).resolves.not.toThrow();
+      const lone = await ops.searchTrash(nul);
       expect(lone.results).toEqual([]);
     });
   });
