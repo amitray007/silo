@@ -47,7 +47,28 @@ export const links = pgTable(
     // core→db dependency the architecture enforces (and tripping no-circular).
     // `db` is a leaf: it stores JSON; `core` validates `source_data` against the
     // Zod union at the write boundary and casts reads to `SourceData`.
-    sourceData: jsonb('source_data').$type<Record<string, unknown>>(),
+    //
+    // `NOT NULL DEFAULT '{"kind":"link"}'` (search-url method, source-data
+    // NULL fix): mirrors `addedBy`/`source`/`enrichAttempts` above — this is
+    // the ONE legacy column that had shipped nullable with no default and no
+    // backfill, so pre-existing rows sit at `source_data = NULL`. `core`'s
+    // strict `sourceDataSchema` (a discriminated union in
+    // `@silo/core`'s `links/source-data.ts`) rejects `null`, so every NULL row
+    // fails validation on read and `shapeSourceData`
+    // (`@silo/api`'s `link-json.ts`) floors it to `{kind:'link'}` — harmless,
+    // but it logs a warning per row on every list/search. `{"kind":"link"}` is
+    // exactly that same link-floor shape, so the DB default now matches the
+    // read-path fallback the app already applies. The migration backfills
+    // every existing NULL row to `{"kind":"link"}` before adding the
+    // constraint (Postgres's plain `ADD COLUMN ... NOT NULL DEFAULT` backfill
+    // trick only fires for a brand-new column, not an existing nullable one —
+    // see the migration's own comment). The write path (`core`'s
+    // `createLink`) never wrote NULL to begin with; this closes the DB-level
+    // gap so the invariant `sourceDataSchema` already enforces in code is now
+    // also enforced by the schema.
+    sourceData: jsonb('source_data').$type<Record<string, unknown>>().notNull().default({
+      kind: 'link',
+    }),
 
     captureStatus: captureStatus('capture_status').notNull().default('enriching'),
 

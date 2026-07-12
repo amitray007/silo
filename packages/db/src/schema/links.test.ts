@@ -406,6 +406,39 @@ describeIfPg('links schema (integration)', () => {
     expect(liveFull.rows[0]).toEqual({ n: 1 });
   });
 
+  describe('source_data NOT NULL DEFAULT (migration 0013)', () => {
+    it('defaults source_data to the link floor when omitted on insert', async () => {
+      const [row] = await db
+        .insert(links)
+        .values({
+          url: 'https://example.com/source-data-default',
+          canonicalUrl: 'https://example.com/source-data-default',
+          sourceKind: 'link',
+        })
+        .returning({ sourceData: links.sourceData });
+
+      expect(row).toBeDefined();
+      expect(row?.sourceData).toEqual({ kind: 'link' });
+    });
+
+    it('rejects an explicit NULL source_data insert (column is NOT NULL)', async () => {
+      // Drizzle wraps the pg driver error; the real Postgres error (code
+      // 23502, "null value in column ... violates not-null constraint") is
+      // on `.cause` — same pattern the dedup test above uses.
+      const error = await db
+        .execute(
+          sql`insert into links (url, canonical_url, source_kind, source_data)
+              values ('https://example.com/source-data-null', 'https://example.com/source-data-null', 'link', null)`,
+        )
+        .catch((caught: unknown) => caught);
+
+      expect(error).toBeInstanceOf(Error);
+      const cause = (error as Error).cause;
+      expect((cause as { code?: string } | undefined)?.code).toBe('23502');
+      expect((cause as { message?: string } | undefined)?.message).toMatch(/source_data/);
+    });
+  });
+
   describe('pg_trgm substring index (search-substring method, migration 0012)', () => {
     it('the pg_trgm extension is enabled', async () => {
       const rows = await db.execute<{ n: number }>(
