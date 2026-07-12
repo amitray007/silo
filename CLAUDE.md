@@ -41,7 +41,7 @@ After **every major code change / implementation unit**, before moving to the ne
 
 1. **Guardrails before code.** A `docs/rules/` directory — one file per language/stack — encoding how code here must be written (conventions, idioms, forbidden patterns), plus the Claude agents/skills/hooks that enforce it (lint, type-check, test, format). The point: bad code cannot land unnoticed. `docs/rules/` is the source of truth for "good code here"; reference it in every build brief.
    - Rules live in [`docs/rules/`](docs/rules/README.md): [typescript](docs/rules/typescript.md) · [architecture](docs/rules/architecture.md) (core/adapter boundary) · [api-hono](docs/rules/api-hono.md) · [mcp](docs/rules/mcp.md) · [web-react](docs/rules/web-react.md) · [db-drizzle](docs/rules/db-drizzle.md) · [testing](docs/rules/testing.md).
-   - Enforcement: `pnpm quality` (Biome + import boundaries + jscpd + knip) and `pnpm turbo run check-types test`. Gated locally by lefthook (pre-commit: Biome on staged; pre-push: types + test + quality) and by Claude Code hooks in `.claude/` (per-edit feedback + a done-gate). CI (increment 1, U5) mirrors these so `--no-verify` can't bypass them.
+   - Enforcement: `pnpm quality` (Biome + import boundaries + jscpd + knip) and `pnpm turbo run check-types test`. Gated locally by lefthook (pre-commit: Biome on staged; pre-push: types + test + quality). CI (increment 1, U5) mirrors these so `--no-verify` can't bypass them. (Earlier a Claude Code Stop/PostToolUse hook in `.claude/` re-ran the gate automatically; it was removed — run the gate yourself before declaring a unit done, per "The done-gate" section below.)
 2. **Data architecture up front.** Model, ownership, migrations, versioning/rollout. Design it MCP-answerable (rich metadata + full text queryable) and so a mechanical semantic index can bolt on later — without an AI ever living inside silo.
 3. **Tooling chosen + recorded.** Production libs, linter + type-checker + formatter, a bug-finding/code-quality tool. Record choices in `docs/foundation.md` / `docs/rules/`.
 
@@ -69,9 +69,12 @@ After **every major code change / implementation unit**, before moving to the ne
 
 ## The done-gate & pre-existing RED (binding)
 
-The Claude Code Stop hook (`.claude/hooks/gate.sh`) runs the quality gate over the
-**whole tree** — every workspace package, plus any sibling **git worktrees** under
-`.claude/worktrees/`. So the gate can go **RED on work that has nothing to do with the
+Before declaring a unit done, run the quality gate yourself (`pnpm turbo run
+check-types test` + `pnpm quality`) — it covers the **whole tree**, every workspace
+package plus any sibling **git worktrees** under `.claude/worktrees/`. (This used to be
+re-run automatically by a Claude Code Stop hook, `.claude/hooks/gate.sh`; that hook was
+removed, so the discipline is now manual — but the whole-tree scope, and everything
+below, still applies.) So the gate can go **RED on work that has nothing to do with the
 unit you just finished**: another agent's in-progress worktree, or **uncommitted
 work-in-progress already in the tree** (e.g. a red test-first TDD draft whose
 implementation doesn't exist yet). Treat a RED gate as a **diagnosis step, not an
