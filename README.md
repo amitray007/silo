@@ -65,69 +65,61 @@ The web UI (`@silo/web`, React + Vite in the "Oat" design system) in light and d
 
 ## How it works
 
-silo runs as one turnkey process (`silo`) that serves the store over MCP and enriches captures
-in the background. An agent can fully operate it through **12 MCP tools**:
+One core holds every operation; thin adapters expose it. **Anything an agent can do over MCP, a
+human can do in the web UI — they call the same core, so the two views never drift.**
+
+```
+          agent  ──MCP──┐                 ┌── stdio  (local subprocess)
+                        ├──▶  core  ◀──────┤── HTTP + token
+          human  ──HTTP─┘   (the brain)    └── HTTP + OAuth  (Claude / ChatGPT connectors)
+                                │
+                        background worker  ── enrich · purge · sweep · retry
+```
+
+An agent operates silo through **12 MCP tools**:
 
 `capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` · `create_tag` ·
-`add_link_tag` · `remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` ·
-`retry_capture`
+`add_link_tag` · `remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` · `retry_capture`
 
-The same operations are exposed over an **HTTP API** (`@silo/api`) that the human web UI uses.
-Both adapters call one core, so the agent's view and the human's view are always the same data.
+A background worker runs alongside: it enriches new captures, purges old trash on a cycle
+(7 / 30 / 90 days), re-enqueues anything stranded mid-enrichment, and watches the dead-letter
+queue. Theme, purge cycle, and per-source plugin toggles are stored server-side.
 
-Theme, trash-purge cycle (7 / 30 / 90 days), and the per-source plugin toggles are stored
-server-side. See [`docs/product/scope.html`](docs/product/scope.html) for the full scope map and
-the anti-scope.
+Full scope map and anti-scope: [`docs/product/scope.html`](docs/product/scope.html).
 
 ## Getting started
 
-Requires **Node 24+** and **pnpm 10+**. Docker is the easy path to Postgres (a plain Postgres
-with the `vector` extension also works — see the note below).
+You need **Node 24+**, **pnpm 10+**, and Postgres with the `pgvector` extension (Docker gives you
+that in one command).
 
 ```bash
-pnpm install                 # deps + git hooks (lefthook)
-pnpm db:up                   # start Postgres (pgvector image) and wait for health
-cp .env.example .env         # DATABASE_URL — defaults match db:up
-pnpm db:migrate              # apply the schema
-pnpm start                   # run the turnkey `silo` process (MCP server + worker)
-```
-
-`pnpm start` speaks the Model Context Protocol over stdio and enriches captures in-process — no
-separate worker to run. Point an MCP client at it (below), or stop it with Ctrl-C.
-
-> **No Docker?** Any Postgres works, as long as the `vector` extension is available (the first
-> migration runs `CREATE EXTENSION vector`). Set `DATABASE_URL` in `.env` to your instance and
-> skip `pnpm db:up`.
-
-## Run the web UI
-
-The human web UI is a React SPA (`@silo/web`) served by Vite, talking to the HTTP API
-(`@silo/api`, Hono) over the same core. `pnpm dev` runs **all three** — the API, the SPA, **and**
-the enrichment worker — together, so a pasted link enriches end-to-end with nothing else to
-start:
-
-```bash
-pnpm db:up            # Postgres (if not already up)
+pnpm install          # deps + git hooks
+pnpm db:up            # Postgres (pgvector) via Docker, waits for health
+cp .env.example .env  # DATABASE_URL — defaults already match db:up
 pnpm db:migrate       # apply the schema
-pnpm dev              # @silo/api (:8787) + @silo/web (Vite :5173) + worker
 ```
 
-Then open **http://localhost:5173**. Vite proxies `/api/*` to the API, so the SPA is same-origin
-in dev (no CORS). The API binds to **loopback** (`127.0.0.1`) and has **no auth** — it's a
-single-user localhost surface (set `HOST` to bind wider, which prints a warning). It renders in
-light or dark.
+Now run **one** of two ways, depending on who's using it:
 
-Two ways to run silo, for two audiences:
+```bash
+pnpm dev     # for a human: API + web UI + worker → open http://localhost:5173
+pnpm start   # for an agent: the MCP server (stdio) + worker, no web UI
+```
 
-| Command | Runs | For |
-|---|---|---|
-| `pnpm start` | turnkey `silo` (MCP server + worker) | an **agent**, over MCP — no web server |
-| `pnpm dev` | API + web UI + worker | a **human** — everything, one command |
+- **`pnpm dev`** serves the React web UI (Vite proxies `/api/*` to the API, so it's same-origin —
+  no CORS). The API binds to loopback with no auth; it's a single-user localhost surface. Renders
+  light or dark.
+- **`pnpm start`** speaks MCP over stdio and enriches in-process. Point an MCP client at it (below).
 
-## Connect an MCP client
+> Not using Docker? Any Postgres works if the `vector` extension is available (the first migration
+> runs `CREATE EXTENSION vector`). Set `DATABASE_URL` to your instance and skip `pnpm db:up`.
 
-silo is a stdio MCP server. To use it from Claude Desktop / Claude Code, add an entry pointing at
-the `silo` process (adjust the repo path and `DATABASE_URL`):
+## Connect an agent (MCP)
+
+silo speaks MCP over three transports. Pick the one that matches where your agent runs.
+
+**Local subprocess (stdio)** — for Claude Desktop / Claude Code on the same machine. No network,
+no auth: the process boundary is the trust boundary. Add to your MCP config:
 
 ```json
 {
@@ -141,74 +133,83 @@ the `silo` process (adjust the repo path and `DATABASE_URL`):
 }
 ```
 
-The client launches `silo` as a subprocess and speaks JSON-RPC over stdio — the process boundary
-is the trust boundary, so there's no network surface and no auth to configure. The client then
-sees the 10 tools above.
+**Remote, with a token (HTTP)** — for a self-hosted silo an agent reaches over the network. Set
+`SILO_MCP_HTTP_PORT` and `SILO_API_TOKEN`; the agent connects to `https://<host>/mcp` with an
+`Authorization: Bearer <token>` header. The MCP settings tab's **Copy config** button generates
+this for you.
+
+**URL-only connector (OAuth)** — for **Claude** and **ChatGPT** hosted connectors. Paste
+`https://mcp.<domain>/mcp` into "Add custom connector" and sign in — no token to copy. silo
+implements OAuth 2.1 + PKCE, Dynamic Client Registration, and discovery, so the whole flow is
+URL-only. See [`docs/methods/mcp-oauth.md`](docs/methods/mcp-oauth.md).
+
+## Deploy
+
+silo ships as **one Docker image** run as two roles — `api` (web UI + REST + worker) and `mcp`
+(the HTTP MCP endpoint) — over a pgvector Postgres. Run the whole stack locally:
+
+```bash
+docker compose -f docker-compose.prod.yml up --build
+```
+
+The env vars that matter for a real deployment:
+
+| Var | Role | What |
+|---|---|---|
+| `DATABASE_URL` | both | `postgres://silo:<pw>@postgres:5432/silo` (service name, not localhost) |
+| `SILO_API_TOKEN` | both | bearer the HTTP MCP requires — `openssl rand -hex 32` |
+| `SILO_APP_PASSWORD` | api | web-UI login password (≥16 chars) — set it, or the UI is open |
+| `SILO_SESSION_SECRET` | api | cookie-signing secret (falls back to `SILO_APP_PASSWORD`) |
+| `SILO_PUBLIC_MCP_URL` | api | the exact MCP URL the "Copy config" button hands out |
+| `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated — **required behind a proxy** |
+
+Behind a reverse proxy, `SILO_MCP_ALLOWED_HOSTS` is the one that bites: the MCP SDK's
+DNS-rebinding guard rejects any `Host` it wasn't told to trust. Full walkthrough (Dokploy +
+Traefik, TLS, the MCP-URL resolution order): **[`docs/deploy.md`](docs/deploy.md)**.
 
 ## Clients
 
-Three ways to reach silo from outside the app — each released independently (see
-[`docs/releasing.md`](docs/releasing.md)):
+Reach silo from outside the app — each released independently
+([`docs/releasing.md`](docs/releasing.md)). Point any client at your silo's base URL + an API token
+(mint one in **Settings → API / MCP**).
 
-- **CLI** (`silo` — capture / search / list / open from the terminal):
-  ```sh
-  brew install amitray007/tap/silo
-  ```
-  Or grab the tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases).
-- **Chrome extension** — download `silo-capture-*.zip` from the latest
-  [`chrome-v*` release](https://github.com/amitray007/silo/releases) and load it unpacked, or
-  install from the Chrome Web Store (once listed).
-- **Raycast extension** — install from the Raycast Store (search "silo"), once listed.
-
-Point any of them at your silo with its base URL + an API token (create tokens in
-**Settings → API / MCP**).
-
-## Deploying
-
-To host silo (Docker, behind a domain), see **[docs/deploy.md](docs/deploy.md)**. It ships as one
-image run as two containers — `api` (web UI + REST + the worker, at `silo.<domain>`) and `mcp`
-(the HTTP MCP endpoint, at `mcp.silo.<domain>`) — plus a pgvector Postgres.
-`docker compose -f docker-compose.prod.yml up --build` runs the whole stack locally; the doc also
-covers the Dokploy/Traefik path and the env surface.
+- **CLI** — capture / search / list / open from the terminal: `brew install amitray007/tap/silo`
+  (or a tarball from the latest [`cli-v*` release](https://github.com/amitray007/silo/releases)).
+- **Chrome extension** — `silo-capture-*.zip` from the latest
+  [`chrome-v*` release](https://github.com/amitray007/silo/releases), loaded unpacked.
+- **Raycast extension** — from the Raycast Store (search "silo").
 
 ## Architecture
 
-A TypeScript monorepo. Every human- or agent-facing operation goes through **one core**, so the
-web UI and the agent can never drift.
+A TypeScript monorepo. Every operation goes through one core; adapters only translate to core
+calls, so the web UI and the agent can never drift.
 
 ```
 packages/
   core/        the brain — all operations + data access
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
-  queue/       pg-boss setup shared by the worker and API (enqueue seam)   ─▶ core
-  mcp/server/  MCP adapter (stdio) — 10 tools                              ─▶ core
-  api/         HTTP adapter (Hono) — the full read/write surface           ─▶ core
+  queue/       pg-boss setup shared by the worker and API                   ─▶ core
+  mcp/server/  MCP adapter — 12 tools                                       ─▶ core
+  api/         HTTP adapter (Hono) — REST + OAuth server                    ─▶ core
   web/         React SPA (Vite, "Oat" design) — talks to the API over HTTP
   app/         composition root — runs the MCP server + worker as `silo`
-  tsconfig/    shared strict TypeScript config
 ```
 
-Adapters are thin: they translate to core calls and nothing more. `@silo/app` is the only package
-that composes several — it wires the MCP server and worker into one runnable process. The
-core/adapter boundary is mechanically enforced (see
-[`docs/rules/architecture.md`](docs/rules/architecture.md)).
+The core/adapter boundary is mechanically enforced
+([`docs/rules/architecture.md`](docs/rules/architecture.md)).
 
 ## Development
 
 ```bash
 pnpm turbo run check-types test
-pnpm quality          # Biome + import boundaries + jscpd + knip
+pnpm quality      # Biome + import boundaries + jscpd + knip
 ```
 
-The gate (`check-types` + `test` + `quality`) runs locally on pre-push and in CI; `main` always
-passes it. Tests exercise real Postgres (via disposable databases), not mocks. Coding conventions
-live in [`docs/rules/`](docs/rules/README.md).
+This gate runs on pre-push and in CI; `main` always passes it. Tests hit a real Postgres (via
+disposable databases), not mocks. Conventions live in [`docs/rules/`](docs/rules/README.md).
 
-## Contributing
+## Contributing & license
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md). Security reports: [`SECURITY.md`](SECURITY.md).
-
-## License
-
-[MIT](LICENSE) © 2026 Amit Ray
+Contributions welcome — see [`CONTRIBUTING.md`](CONTRIBUTING.md). Report vulnerabilities via
+[`SECURITY.md`](SECURITY.md). Licensed [MIT](LICENSE) © 2026 Amit Ray.
