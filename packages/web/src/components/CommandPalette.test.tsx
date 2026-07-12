@@ -3,7 +3,15 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeLink, makeTrashLink } from '../test/fixtures';
+import type { SettingsMap } from '../api/types';
+import {
+  githubSourceData,
+  hackerNewsSourceData,
+  makeLink,
+  makeTrashLink,
+  twitterSourceData,
+  youtubeSourceData,
+} from '../test/fixtures';
 import { CommandPalette } from './CommandPalette';
 import { HoverPreviewProvider } from './HoverPreviewContext';
 
@@ -68,6 +76,29 @@ function wrapper({ children, route = '/' }: { children: ReactNode; route?: strin
 
 function pressCmdK() {
   fireEvent.keyDown(document, { key: 'k', metaKey: true });
+}
+
+/**
+ * A full `SettingsMap` fixture for `GET /api/settings` mocks, with every
+ * plugin's `palette` flag defaulted `true` (so `mockFetchByPath`'s
+ * `/api/settings` route reflects the app's real optimistic-default shape,
+ * not an empty stub) — tests override just the one plugin's `palette`
+ * field under test via `plugins` deep-merge-by-key.
+ */
+function settingsWithPlugins(overrides: Partial<SettingsMap['plugins']> = {}): SettingsMap {
+  return {
+    theme: 'system',
+    trashPurgeDays: 30,
+    mcpAccess: true,
+    linkPreviewImages: true,
+    plugins: {
+      hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+      github: { enabled: true, hover: true, palette: true },
+      youtube: { enabled: true, hover: true, palette: true },
+      twitter: { enabled: true, inline: true, hover: true, palette: true },
+      ...overrides,
+    },
+  };
 }
 
 /** cmdk assigns its own opaque `id`s to each `Command.Item`/`Command.Input` (a `useId()` value, not one containing the underlying link id/tag name) — result rows are found by their VISIBLE text instead of a `link:<id>` DOM id, mirroring how a real user (or a screen reader) would locate them. `closest('[role="option"]')` recovers the row element itself for `aria-selected`/click assertions. */
@@ -676,6 +707,304 @@ describe('CommandPalette', () => {
       // explicit tag fully replaced the route's implicit one, not merged
       // with or appended to it.
       expect(screen.queryByText('Frontend recent')).toBeNull();
+    });
+  });
+
+  /**
+   * `PaletteLinkRow`'s inline source-line (`CommandPalette.tsx`) — the HN
+   * "N points · N comments" and Twitter tweet-text lines, gated per plugin by
+   * `palettePluginOn`/`isPaletteSurfaceOn` off the SAME `palette` flag
+   * (`SettingsMap['plugins'].<source>.palette`) `paletteSurface.test.ts`
+   * already unit-tests in isolation — these tests exercise the gate wired
+   * into the real row via `useSettings()` + a mocked `GET /api/settings`,
+   * mirroring `LinkRow.test.tsx`'s "HN/Twitter inline plugin gate" blocks for
+   * the library row. `mockFetchByPath` needs an explicit `/api/settings`
+   * route here (the other describe blocks in this file never seed one,
+   * relying on `useSettings()`'s loading-state `?? true` optimistic default).
+   */
+  describe('PaletteLinkRow inline source-line gating (palette flag)', () => {
+    it('shows the HN "points · comments" inline line when plugins.hacker_news.palette is true', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'hn1', title: 'HN story', sourceData: hackerNewsSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'hn' } });
+      await waitFor(() => expect(screen.getByText('HN story')).toBeDefined(), { timeout: 2000 });
+      await waitFor(() => expect(screen.getByText('342 points · 128 comments')).toBeDefined(), {
+        timeout: 2000,
+      });
+    });
+
+    it('hides the HN inline line when plugins.hacker_news.palette is false (row still renders)', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          hacker_news: { enabled: true, inline: true, hover: true, palette: false },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'hn2', title: 'HN story off', sourceData: hackerNewsSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'hn' } });
+      await waitFor(() => expect(screen.getByText('HN story off')).toBeDefined(), {
+        timeout: 2000,
+      });
+      // Give the settings query room to resolve before asserting an absence
+      // (a false negative here would just mean "hasn't loaded yet").
+      await waitFor(() => expect(fetch).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 0));
+      expect(screen.queryByText('342 points · 128 comments')).toBeNull();
+    });
+
+    it('shows the tweet-text inline line when plugins.twitter.palette is true', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'tw1', title: 'A tweet', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'tw' } });
+      await waitFor(() => expect(screen.getByText('A tweet')).toBeDefined(), { timeout: 2000 });
+      await waitFor(
+        () =>
+          expect(
+            screen.getByText('Just shipped a new feature — thrilled with how it turned out.'),
+          ).toBeDefined(),
+        { timeout: 2000 },
+      );
+    });
+
+    it('hides the tweet-text inline line when plugins.twitter.palette is false (row still renders)', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: false },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'tw2', title: 'A tweet off', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'tw' } });
+      await waitFor(() => expect(screen.getByText('A tweet off')).toBeDefined(), {
+        timeout: 2000,
+      });
+      await waitFor(() => expect(fetch).toHaveBeenCalled());
+      await new Promise((r) => setTimeout(r, 0));
+      expect(
+        screen.queryByText('Just shipped a new feature — thrilled with how it turned out.'),
+      ).toBeNull();
+    });
+
+    it('a YouTube result (hover-only source) renders no inline line at all — title/domain only', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins(),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({
+                id: 'yt1',
+                title: 'A video',
+                url: 'https://youtube.com/watch?v=abc',
+                sourceData: youtubeSourceData,
+              }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'vid' } });
+      await waitFor(() => expect(screen.getByText('A video')).toBeDefined(), { timeout: 2000 });
+      expect(screen.getByText('youtube.com')).toBeDefined();
+      // No HN/Twitter inline text, and no plain URL-ish inline artifact — the
+      // row is exactly title + domain, hover-only.
+      expect(screen.queryByText(/points ·/)).toBeNull();
+      expect(screen.queryByText(youtubeSourceData.channel)).toBeNull();
+    });
+
+    it('a GitHub result (hover-only source) renders no inline line at all — title/domain only', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins(),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({
+                id: 'gh1',
+                title: 'A repo',
+                url: 'https://github.com/owner/repo',
+                sourceData: githubSourceData,
+              }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'repo' } });
+      await waitFor(() => expect(screen.getByText('A repo')).toBeDefined(), { timeout: 2000 });
+      expect(screen.getByText('github.com')).toBeDefined();
+      expect(screen.queryByText(/points ·/)).toBeNull();
+      expect(
+        screen.queryByText('Reference implementations for the Model Context Protocol'),
+      ).toBeNull();
+    });
+  });
+
+  /**
+   * The hover-preview trigger wired into `PaletteLinkRow` (`handleEnter`,
+   * `CommandPalette.tsx`) — mirrors `LinkRow.test.tsx`'s "LinkRow hover
+   * preview" describe block's `matchMedia` handling exactly: jsdom's
+   * `matchMedia` stub (`test-setup.ts`) defaults every query's `matches` to
+   * `false`, which makes `isHoverCapable()` read `false` and forces
+   * `scheduleShow`'s `suppress: true` path (`handleEnter`'s
+   * `!isHoverCapable()` OR-branch) regardless of the `palette` flag — these
+   * tests stub `window.matchMedia` so `(hover: hover)` reads `true`, matching
+   * a real desktop mouse, so `suppress` is driven ONLY by the `palette` gate
+   * under test.
+   */
+  describe('PaletteLinkRow hover-preview gating (palette flag)', () => {
+    const originalMatchMedia = window.matchMedia;
+
+    beforeEach(() => {
+      vi.useFakeTimers({ shouldAdvanceTime: true });
+      window.matchMedia = vi.fn().mockImplementation((query: string) => ({
+        matches: query === '(hover: hover)',
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      })) as unknown as typeof matchMedia;
+    });
+
+    afterEach(() => {
+      vi.useRealTimers();
+      window.matchMedia = originalMatchMedia;
+    });
+
+    it('hovering a twitter row with palette:true opens the hover card after the show delay', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'hov1', title: 'Hover me', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'hover' } });
+      await waitFor(() => expect(screen.getByText('Hover me')).toBeDefined(), { timeout: 2000 });
+      // Let the settings fetch resolve so `surfaceOn` reflects the real
+      // (not still-loading-optimistic) value before hovering.
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      // `PaletteLinkRow`'s hover handlers live on its own outer `<span
+      // ref={rowRef}>` — the SOLE child of the `[role="option"]`
+      // `Command.Item` — not on the option element itself; React's
+      // `onMouseEnter` doesn't bubble the way a native `mouseover` would, so
+      // the event must be fired on that inner span directly, mirroring
+      // `LinkRow.test.tsx`'s `fireEvent.mouseEnter(anchor)` (its own
+      // handler-bearing element).
+      const row = screen.getByText('Hover me').closest('[role="option"]') as HTMLElement;
+      fireEvent.mouseEnter(row.firstElementChild as HTMLElement);
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+
+      expect(document.querySelector('.silo-popover')).not.toBeNull();
+    });
+
+    it('hovering a twitter row with palette:false never opens the hover card', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({
+          twitter: { enabled: true, inline: true, hover: true, palette: false },
+        }),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'hov2', title: 'No hover here', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'hover' } });
+      await waitFor(() => expect(screen.getByText('No hover here')).toBeDefined(), {
+        timeout: 2000,
+      });
+      await act(async () => {
+        await Promise.resolve();
+      });
+
+      const row = screen.getByText('No hover here').closest('[role="option"]') as HTMLElement;
+      fireEvent.mouseEnter(row.firstElementChild as HTMLElement);
+      await act(async () => {
+        vi.advanceTimersByTime(1000);
+      });
+
+      expect(document.querySelector('.silo-popover')).toBeNull();
     });
   });
 });
