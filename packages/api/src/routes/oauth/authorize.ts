@@ -14,6 +14,7 @@ import {
 import type { Context, Hono } from 'hono';
 import { getSignedCookie, setSignedCookie } from 'hono/cookie';
 import { z } from 'zod';
+import { hasValidSessionCookie } from '../../session-cookie.js';
 
 /** The signed cookie name for the double-submit CSRF token (review fix
  * SEC-1) — separate from `silo_session`: the CSRF cookie is minted fresh on
@@ -70,6 +71,20 @@ async function verifyCsrfToken(c: Context, formToken: string): Promise<boolean> 
   const cookieValue = await getSignedCookie(c, secret, CSRF_COOKIE_NAME);
   if (!cookieValue || !formToken) return false;
   return cookieValue === formToken;
+}
+
+/**
+ * The shared CSRF prologue for both authorizing POSTs (`/oauth/authorize` and
+ * `/oauth/authorize/login`): double-submit-verify the `csrf` hidden field
+ * (already pulled off the parsed body by the caller) against the signed cookie
+ * BEFORE any side-effecting work (minting a code, setting a session). Returns a
+ * 403 error response to short-circuit on failure, or `null` to proceed (SEC-1).
+ */
+async function requireCsrf(c: Context, csrfField: string): Promise<Response | null> {
+  if (!(await verifyCsrfToken(c, csrfField))) {
+    return c.html(renderError('Invalid or missing CSRF token. Please reload and try again.'), 403);
+  }
+  return null;
 }
 
 /**
@@ -326,21 +341,6 @@ async function validateAuthorizeParams(
   };
 }
 
-/** Whether the request carries a valid `silo_session` cookie — identical
- * check to `general-auth.ts`'s `hasValidSessionCookie`/`/api/auth/check`
- * (see `authorize.ts`'s module doc comment: this MUST match exactly, since a
- * user who is already logged into the silo web app should not be re-prompted
- * here). Kept local rather than imported: it's four lines over Hono's own
- * `getSignedCookie`, and importing a `@silo/api`-internal helper across
- * route files isn't this codebase's pattern (each route module composes
- * directly over `@silo/core`'s primitives — see `login.ts`/`auth.ts`). */
-async function hasValidSessionCookie(c: Context): Promise<boolean> {
-  const secret = sessionSecret();
-  if (!secret) return false;
-  const value = await getSignedCookie(c, secret, SESSION_COOKIE_NAME);
-  return value === SESSION_COOKIE_VALUE;
-}
-
 /** Re-serializes the validated params back into a query string, for the
  * login form's `action` and for re-rendering consent after a successful
  * login — carries the FULL original request through the login round-trip
@@ -413,14 +413,12 @@ async function handleAuthorizeLogin(c: Context): Promise<Response> {
 
   const query = validated.query;
   const form = await c.req.parseBody();
-  const csrfField = typeof form.csrf === 'string' ? form.csrf : '';
 
   // CSRF check FIRST — before touching the password or minting a session,
   // per SEC-1: a forged cross-site POST must be rejected before any
   // side-effecting work happens, not just before the final redirect.
-  if (!(await verifyCsrfToken(c, csrfField))) {
-    return c.html(renderError('Invalid or missing CSRF token. Please reload and try again.'), 403);
-  }
+  const csrfFail = await requireCsrf(c, typeof form.csrf === 'string' ? form.csrf : '');
+  if (csrfFail) return csrfFail;
 
   if (!readAppPassword()) {
     const csrfToken = (await mintCsrfToken(c)) ?? '';
@@ -517,17 +515,12 @@ export function registerOAuthAuthorizeRoutes(app: Hono): void {
     if (!session.ok) return session.response;
 
     const form = await c.req.parseBody();
-    const csrfField = typeof form.csrf === 'string' ? form.csrf : '';
 
     // CSRF check BEFORE minting a code or acting on the decision (SEC-1) —
     // an attacker who lures a logged-in owner into submitting this form
     // cross-site must not be able to mint a real authorization code.
-    if (!(await verifyCsrfToken(c, csrfField))) {
-      return c.html(
-        renderError('Invalid or missing CSRF token. Please reload and try again.'),
-        403,
-      );
-    }
+    const csrfFail = await requireCsrf(c, typeof form.csrf === 'string' ? form.csrf : '');
+    if (csrfFail) return csrfFail;
 
     const decision = typeof form.decision === 'string' ? form.decision : '';
     const { redirectUri, state } = session.value;

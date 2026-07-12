@@ -41,14 +41,44 @@ const tokenMetaStyle: CSSProperties = {
 };
 
 /**
- * One row in the token list — name/prefix/dates on the left, a two-step
- * Revoke affordance on the right. The two-step confirm (button flips to
- * "Confirm revoke?" / "Cancel" in place) is a deliberate substitute for a
- * browser `window.confirm` dialog (no-dialogs guidance) — it stays inline,
- * on-tone, and dismissible without a modal. `pending` disables the row's
- * button while the mutation is in flight so a slow network can't be
- * double-clicked into firing the DELETE twice.
+ * The two-step Revoke control shared by `TokenRow` and `OAuthClientRow`. The
+ * inline confirm (button flips to "Confirm revoke?" / "Cancel" in place) is a
+ * deliberate substitute for a browser `window.confirm` dialog (no-dialogs
+ * guidance) — it stays inline, on-tone, and dismissible without a modal.
+ * a single "Revoke" button that, once clicked, swaps to Cancel / "Confirm
+ * revoke?" so a stray double-click can't fire the DELETE twice. Owns its own
+ * `confirming` state; `pending` disables the confirm buttons while the mutation
+ * is in flight and flips the label to "Revoking…". `onRevoke` fires only on the
+ * confirmed second click.
  */
+function TwoStepRevoke({ onRevoke, pending }: { onRevoke: () => void; pending: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <button type="button" className="silo-settings-btn" onClick={() => setConfirming(true)}>
+        Revoke
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      <button
+        type="button"
+        className="silo-settings-btn"
+        disabled={pending}
+        onClick={() => setConfirming(false)}
+      >
+        Cancel
+      </button>
+      <button type="button" className="silo-settings-btn" disabled={pending} onClick={onRevoke}>
+        {pending ? 'Revoking…' : 'Confirm revoke?'}
+      </button>
+    </div>
+  );
+}
+
 function TokenRow({
   token,
   onRevoke,
@@ -58,8 +88,6 @@ function TokenRow({
   onRevoke: (id: string) => void;
   pending: boolean;
 }) {
-  const [confirming, setConfirming] = useState(false);
-
   return (
     <div style={settingsRow}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -69,32 +97,7 @@ function TokenRow({
           {token.lastUsedAt ? `last used ${formatDate(token.lastUsedAt)}` : 'never used'}
         </div>
       </div>
-      {confirming ? (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className="silo-settings-btn"
-            disabled={pending}
-            onClick={() => {
-              setConfirming(false);
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="silo-settings-btn"
-            disabled={pending}
-            onClick={() => onRevoke(token.id)}
-          >
-            {pending ? 'Revoking…' : 'Confirm revoke?'}
-          </button>
-        </div>
-      ) : (
-        <button type="button" className="silo-settings-btn" onClick={() => setConfirming(true)}>
-          Revoke
-        </button>
-      )}
+      <TwoStepRevoke onRevoke={() => onRevoke(token.id)} pending={pending} />
     </div>
   );
 }
@@ -306,8 +309,6 @@ function OAuthClientRow({
   onRevoke: (client: ConnectedOAuthClient) => void;
   pending: boolean;
 }) {
-  const [confirming, setConfirming] = useState(false);
-
   return (
     <div style={settingsRow}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -319,32 +320,7 @@ function OAuthClientRow({
           {client.connectionCount > 1 ? ` · (${client.connectionCount} connections)` : ''}
         </div>
       </div>
-      {confirming ? (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className="silo-settings-btn"
-            disabled={pending}
-            onClick={() => {
-              setConfirming(false);
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="silo-settings-btn"
-            disabled={pending}
-            onClick={() => onRevoke(client)}
-          >
-            {pending ? 'Revoking…' : 'Confirm revoke?'}
-          </button>
-        </div>
-      ) : (
-        <button type="button" className="silo-settings-btn" onClick={() => setConfirming(true)}>
-          Revoke
-        </button>
-      )}
+      <TwoStepRevoke onRevoke={() => onRevoke(client)} pending={pending} />
     </div>
   );
 }
