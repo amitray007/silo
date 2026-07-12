@@ -109,6 +109,36 @@ describeIfPg('POST /oauth/register (DCR, MCP OAuth slice U2)', () => {
     expect(body.error).toBe('invalid_redirect_uri');
   });
 
+  it('a redirect_uri with a non-http(s) scheme (javascript:): 400 invalid_redirect_uri', async () => {
+    const res = await register({
+      client_name: 'Bad Client',
+      redirect_uris: ['javascript:alert(1)'],
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as OAuthErrorBody;
+    expect(body.error).toBe('invalid_redirect_uri');
+  });
+
+  it('client_name over the length cap: 400 invalid_client_metadata', async () => {
+    const res = await register({
+      client_name: 'x'.repeat(257),
+      redirect_uris: ['https://example.com/cb'],
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as OAuthErrorBody;
+    expect(body.error).toBe('invalid_client_metadata');
+  });
+
+  it('redirect_uris over the count cap: 400 invalid_client_metadata', async () => {
+    const res = await register({
+      client_name: 'Bad Client',
+      redirect_uris: Array.from({ length: 21 }, (_, i) => `https://example.com/cb${i}`),
+    });
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as OAuthErrorBody;
+    expect(body.error).toBe('invalid_client_metadata');
+  });
+
   it('token_endpoint_auth_method other than none: 400 invalid_client_metadata', async () => {
     const res = await register({
       client_name: 'Confidential Client',

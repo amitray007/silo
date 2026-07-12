@@ -5,6 +5,7 @@ import {
   readAppPassword,
   SESSION_COOKIE_NAME,
   SESSION_COOKIE_VALUE,
+  SESSION_MAX_AGE_SECONDS,
   sessionSecret,
   verifyAppPassword,
 } from '@silo/core';
@@ -403,6 +404,10 @@ export function registerOAuthAuthorizeRoutes(app: Hono): void {
       sameSite: 'Lax',
       path: '/',
       secure: isHttps,
+      // Match `login.ts` exactly — without maxAge the browser treats this as a
+      // session-only cookie (cleared on close), giving the OAuth-consent login
+      // path a shorter-lived, inconsistent session than the normal web login.
+      maxAge: SESSION_MAX_AGE_SECONDS,
     });
 
     return c.html(renderConsent(validated.value.clientName, query));

@@ -250,6 +250,75 @@ describeIfPg('GET/POST /oauth/authorize (MCP OAuth slice U2)', () => {
     });
   });
 
+  describe('POST /oauth/authorize/login (inline consent-screen login)', () => {
+    it('wrong password: 401, re-renders the login page with an error', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+      const clientId = await registerClient(app);
+      const query = authorizeUrl({ client_id: clientId, redirect_uri: REDIRECT_URI }).replace(
+        '/oauth/authorize?',
+        '',
+      );
+
+      const res = await app.request(`/oauth/authorize/login?${query}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: 'password=wrong-password',
+      });
+      expect(res.status).toBe(401);
+      const html = await res.text();
+      expect(html).toContain('Sign in');
+      expect(html).toContain('Incorrect password');
+    });
+
+    it('correct password: sets the session cookie (30-day Max-Age) and re-renders the consent screen', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+      const clientId = await registerClient(app);
+      const query = authorizeUrl({ client_id: clientId, redirect_uri: REDIRECT_URI }).replace(
+        '/oauth/authorize?',
+        '',
+      );
+
+      const res = await app.request(`/oauth/authorize/login?${query}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: `password=${PASSWORD}`,
+      });
+      expect(res.status).toBe(200);
+
+      const setCookie = res.headers.get('set-cookie');
+      expect(setCookie).toBeTruthy();
+      expect(setCookie).toContain('silo_session=');
+      // Guards the maxAge fix: without it this cookie would be session-only
+      // (no Max-Age at all), a shorter-lived session than `/api/login` mints.
+      expect(setCookie).toContain('Max-Age=2592000');
+
+      const html = await res.text();
+      expect(html).toContain('Test Client');
+      expect(html).toContain('Approve');
+      expect(html).toContain('Deny');
+    });
+
+    it('SILO_APP_PASSWORD unset: 400, login not configured', async () => {
+      const { app } = harness.mod();
+      const clientId = await registerClient(app);
+      const query = authorizeUrl({ client_id: clientId, redirect_uri: REDIRECT_URI }).replace(
+        '/oauth/authorize?',
+        '',
+      );
+
+      const res = await app.request(`/oauth/authorize/login?${query}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body: 'password=anything',
+      });
+      expect(res.status).toBe(400);
+      const html = await res.text();
+      expect(html).toContain('Login is not configured');
+    });
+  });
+
   it('carries wildcard CORS headers', async () => {
     const { app } = harness.mod();
     const res = await app.request(
