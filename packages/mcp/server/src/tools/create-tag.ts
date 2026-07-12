@@ -39,7 +39,8 @@ export function registerCreateTag(server: McpServer): void {
         'no-op — returns `created: false, name: null`, not an error. Note ' +
         '`add_link_tag` ALSO creates a tag automatically when it does not yet ' +
         'exist (as a side effect of tagging a link) — use `create_tag` instead ' +
-        'when you want the tag to exist BEFORE any link uses it.',
+        'when you want the tag to exist BEFORE any link uses it. The inverse ' +
+        'is `delete_tag`, which removes a tag from the entire library.',
       inputSchema: {
         name: z
           .string()
