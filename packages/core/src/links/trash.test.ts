@@ -336,15 +336,15 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
     });
   });
 
-  describe('searchTrash — prefix + trigram substring (search-substring method, shared helpers)', () => {
+  describe('searchTrash — union of FTS + trigram (search-union rework, shared helpers)', () => {
     // Mirrors links.test.ts's equivalent live-search tests EXACTLY (same
     // fixtures/assertions, `searchTrash` instead of `search`, every fixture
     // soft-deleted) — proves `searchTrash` shares `search-query.ts`'s
-    // `runTieredSearch`/`buildPrefixTsQuery`/`buildSubstringMatch` with
+    // `runUnionSearch`/`buildPrefixTsQuery`/`buildSubstringMatch` with
     // `search` rather than a hand-copied implementation that could silently
     // drift.
 
-    it('a word PREFIX matches via the FTS tier (zorb -> zorblatt), trashed only', async () => {
+    it('a word PREFIX matches via the FTS side (zorb -> zorblatt), trashed only', async () => {
       const match = await ops.createLink({
         url: 'https://example.com/trash-prefix-tier-a',
         title: 'zorblatt the personal link store',
@@ -364,7 +364,7 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
       expect(ids).not.toContain(unrelated.id);
     });
 
-    it('a bare SUBSTRING (not a prefix) falls back to the trigram tier (orbla -> zorblatt), trashed only', async () => {
+    it('a bare SUBSTRING (not a prefix) matches via the trigram side (orbla -> zorblatt), trashed only', async () => {
       const match = await ops.createLink({
         url: 'https://example.com/trash-substring-tier-a',
         title: 'zorblatt the personal link store',
@@ -384,7 +384,12 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
       expect(ids).not.toContain(unrelated.id);
     });
 
-    it('the trigram fallback does NOT fire when the prefix tier already found trashed rows', async () => {
+    it('both sides run together, trashed only: a prefix match and a substring-only match on DIFFERENT rows both appear', async () => {
+      // Regresses the old "trigram fallback does NOT fire when the prefix
+      // tier already found rows" gate for the trash-scoped path too — the
+      // union rework runs both matchers unconditionally, so a trashed row
+      // matchable ONLY by substring must not be suppressed by a different
+      // trashed row's prefix hit.
       const prefixMatch = await ops.createLink({
         url: 'https://example.com/trash-no-mixed-tier-a',
         title: 'quixolate unique prefix term',
@@ -402,7 +407,29 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
       const { results } = await ops.searchTrash('quix');
       const ids = results.map((r) => r.id);
       expect(ids).toContain(prefixMatch.id);
-      expect(ids).not.toContain(substringOnlyMatch.id);
+      expect(ids).toContain(substringOnlyMatch.id);
+    });
+
+    it('live/trash isolation: a live row never appears in a searchTrash union result, and a trashed row never appears in a live search union result', async () => {
+      const liveOnly = await ops.createLink({
+        url: 'https://example.com/union-isolation-live',
+        title: 'isolationunionmarker still live',
+        sourceKind: 'link',
+      });
+      const trashedOnly = await ops.createLink({
+        url: 'https://example.com/union-isolation-trash',
+        title: 'isolationunionmarker now trashed',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(trashedOnly.id);
+
+      const liveResults = await ops.search('isolationunionmarker');
+      expect(liveResults.results.map((r) => r.id)).toContain(liveOnly.id);
+      expect(liveResults.results.map((r) => r.id)).not.toContain(trashedOnly.id);
+
+      const trashResults = await ops.searchTrash('isolationunionmarker');
+      expect(trashResults.results.map((r) => r.id)).toContain(trashedOnly.id);
+      expect(trashResults.results.map((r) => r.id)).not.toContain(liveOnly.id);
     });
 
     it('adversarial: searchTrash never throws on operator-laden or malformed input', async () => {
@@ -410,6 +437,23 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
       for (const query of adversarialQueries) {
         await expect(ops.searchTrash(query)).resolves.not.toThrow();
       }
+    });
+
+    it('SECURITY regression: a null byte in the query never throws a DatabaseError through searchTrash, and returns a normal result', async () => {
+      const match = await ops.createLink({
+        url: 'https://example.com/trash-null-byte',
+        title: 'trashnullbytemarker present here',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(match.id);
+
+      await expect(ops.searchTrash('a b')).resolves.not.toThrow();
+      const spaced = await ops.searchTrash('trashnullbytemarker ');
+      expect(spaced.results.map((r) => r.id)).toContain(match.id);
+
+      await expect(ops.searchTrash(' ')).resolves.not.toThrow();
+      const lone = await ops.searchTrash(' ');
+      expect(lone.results).toEqual([]);
     });
   });
 

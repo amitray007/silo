@@ -14,7 +14,7 @@ import {
   type LinkWithTags,
   type PageParams,
 } from './pagination.js';
-import { runTieredSearch } from './search-query.js';
+import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
 import { sourceDataSchema } from './source-data.js';
@@ -621,44 +621,45 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
 ), ''))`;
 
 /**
- * Two-tier search over live links (search-substring method), tag-hydrated
- * and offset-paginated. Delegates to `search-query.ts`'s `runTieredSearch`
- * (shared with `trash.ts`'s `searchTrash`):
+ * Union search over live links (search-union rework), tag-hydrated and
+ * offset-paginated. Delegates to `search-query.ts`'s `runUnionSearch`
+ * (shared with `trash.ts`'s `searchTrash`): a SINGLE query matches a row
+ * when EITHER of two independent predicates is true, never gated on the
+ * other's result count —
  *
- *   1. PREFIX full-text tier (tried first): the query's LAST token is
- *      upgraded to a prefix match (`sil:*` matches `silo`) via
- *      `buildPrefixTsQuery`, ANDed with every earlier token as an exact
- *      lexeme — see that function's doc comment for the app-side escaping
- *      that keeps this injection-safe. Matches a row when EITHER the stored
- *      `search_vector` (title/description/extracted_text/notes, per the
- *      schema's generated column) OR the link's tag names (`tagSearchVector`,
- *      computed at query time — see its doc comment for why tags can't live
- *      in the generated column) satisfy the tsquery. Rank combines both
- *      signals by SUMMING their `ts_rank`s: a tag hit is a real relevance
- *      signal (an exact, deliberately user-applied label), so it should be
- *      able to lift a link's rank rather than being ignored whenever the
- *      stored vector alone would rank it lower — while a link matching on
- *      both signals ranks above one matching on only one, which a
- *      `GREATEST`/max-of-two would not distinguish.
- *   2. TRIGRAM substring tier (fallback, ONLY on a page-1 zero-row prefix
- *      result): `buildSubstringMatch` runs an `ILIKE '%needle%'` over the
- *      SAME title/description/canonical-url/notes field set (see that
- *      function's doc comment for why `extracted_text` is excluded and the
- *      needle-escaping that keeps `%`/`_`/`\` from becoming wildcards),
- *      ordered by `similarity()` desc — a completely different, non-
- *      comparable ranking scale from `ts_rank`, which is why the two tiers
- *      are never unioned into one query. Finds `ilo` matching `silo`
- *      anywhere in a word, not just as a prefix.
+ *   1. PREFIX full-text side: the query's LAST token is upgraded to a
+ *      prefix match (`sil:*` matches `silo`) via `buildPrefixTsQuery`,
+ *      ANDed with every earlier token as an exact lexeme — see that
+ *      function's doc comment for the app-side escaping that keeps this
+ *      injection-safe. Matches a row when EITHER the stored `search_vector`
+ *      (title/description/extracted_text/notes, per the schema's generated
+ *      column) OR the link's tag names (`tagSearchVector`, computed at
+ *      query time — see its doc comment for why tags can't live in the
+ *      generated column) satisfy the tsquery.
+ *   2. TRIGRAM substring side (runs ALWAYS, not as a fallback):
+ *      `buildSubstringMatch` runs an `ILIKE '%needle%'` over the SAME
+ *      title/description/canonical-url/notes field set (see that function's
+ *      doc comment for why `extracted_text` is excluded and the
+ *      needle-escaping that keeps `%`/`_`/`\` from becoming wildcards).
+ *      Finds `ilo` matching `silo` anywhere in a word, not just as a prefix.
+ *
+ * Both sides run in every query — a tag-prefix match on one row can no
+ * longer suppress a trigram substring match on a different row (the HIGH
+ * finding the union rework fixes; see `docs/methods/search-union-rework.md`).
+ * Ranking is a single composite `ORDER BY` that sorts FTS-matching rows
+ * (title/body/tag) above trigram-only rows, by combined `ts_rank` within the
+ * FTS group, then by `similarity()` within the trigram-only group — see
+ * `runUnionSearch`'s doc comment for the exact clause.
  *
  * `filter.tag` (optional, command-center search plan 024): an ADDITIONAL
  * scope on top of the text match above — when given, a result must also
  * carry that exact tag (`tags.normalizedKey = normalizeTagKey(tag)`, joined
  * through `linkTags`/`tags`, mirroring `list()`'s tag-filter branch). This is
  * an `EXISTS` membership check, layered on top of (ANDed with) the existing
- * text/tag-name match at EITHER tier — it does NOT replace or widen that
- * match, so a `tag` scope never surfaces a link that fails the text query.
- * Omitting `filter` (or `filter.tag`) leaves every existing caller's
- * behavior byte-for-byte unchanged.
+ * text/tag-name match — it does NOT replace or widen that match, so a `tag`
+ * scope never surfaces a link that fails the text query. Omitting `filter`
+ * (or `filter.tag`) leaves every existing caller's behavior byte-for-byte
+ * unchanged.
  *
  * `filter` is an OPTIONS OBJECT (`SearchFilter`, mirroring `list()`'s own
  * `ListFilter` third… second parameter shape) rather than a positional
@@ -667,15 +668,14 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * an extra positional `undefined` through — a review flagged the original
  * positional `tag?: string` design (plan 024) for exactly this churn risk.
  *
- * Neither tier's rank is unique/keyset-able, so pagination uses a bounded
- * offset cursor tagged with WHICH tier produced it (`SearchTier`, D2) —
- * capped at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is
- * rejected with `InvalidCursorError` rather than run, since each page past
- * that depth is a full sort-then-discard) — documented tradeoff: a row
- * inserted mid-paging can shift results, acceptable for search at this
- * scale. The tier is chosen once for page 1 and every later page of the
- * SAME paged session stays on it — see `runTieredSearch`'s doc comment.
- * `limit` is clamped to `[1, 100]` (default 20).
+ * The combined rank is not unique/keyset-able, so pagination uses a bounded
+ * plain offset cursor (`{ offset }`, no tier field — the union rework
+ * removed the tier tag entirely, since there is only one query now) — capped
+ * at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is rejected
+ * with `InvalidCursorError` rather than run, since each page past that depth
+ * is a full sort-then-discard) — documented tradeoff: a row inserted
+ * mid-paging can shift results, acceptable for search at this scale. `limit`
+ * is clamped to `[1, 100]` (default 20).
  *
  * Performance note: `tagSearchVector` is a correlated subquery evaluated per
  * candidate row (once for the WHERE match, once for the rank — Postgres does
@@ -701,7 +701,7 @@ export async function search(
   // The additive tag-membership scope (see doc comment above): an `EXISTS`
   // over the same `linkTags`/`tags` join `list()`'s tag-filter branch uses,
   // correlated on THIS row's id. `undefined` when `tag` is omitted, so the
-  // WHERE clause `runTieredSearch` builds is unaffected in that case.
+  // WHERE clause `runUnionSearch` builds is unaffected in that case.
   const tagScopeCondition = tag
     ? sql`exists (
         select 1 from ${linkTags}
@@ -711,7 +711,7 @@ export async function search(
       )`
     : undefined;
 
-  return runTieredSearch(whereLive(), tagSearchVector, query, tagScopeCondition, page);
+  return runUnionSearch(whereLive(), tagSearchVector, query, tagScopeCondition, page);
 }
 
 export type EditLinkInput = {
