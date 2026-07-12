@@ -171,6 +171,11 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
         Connect an agent to silo over MCP. Fill in your API token (create one below in Access
         tokens).
       </div>
+      <div style={{ ...groupNote, marginBottom: 20 }}>
+        Claude and ChatGPT connect via OAuth instead — add silo as a custom connector and paste just
+        the URL above; no header needed. The manual bearer setup below is for a script, curl, or an
+        MCP client without OAuth support.
+      </div>
 
       {/* The connection, grouped: URL + Transport + Auth are used TOGETHER for a
           manual / Cursor / raw-HTTP setup — the inset panel makes that "one

@@ -34,24 +34,42 @@ type AccessTokenFixture = {
   lastUsedAt: string | null;
 };
 
+type OAuthClientFixture = {
+  clientName: string;
+  clientIds: string[];
+  grantedAt: string;
+  lastUsedAt: string | null;
+  activeTokenCount: number;
+  connectionCount: number;
+};
+
 /**
  * Stateful fetch stub (mirrors `PluginsTab.test.tsx`'s `mockFetchRouter`) —
- * routes `/api/settings` (GET/PATCH) same as before, plus `/api/access-tokens`
- * (GET list / POST create / DELETE :id). `useCreateAccessToken`/
- * `useRevokeAccessToken`'s `onSuccess` re-invalidates the list, firing a
- * follow-up GET — a stateless mock would hand that GET stale data back,
- * silently reverting whatever the mutation just "persisted."
+ * routes `/api/settings` (GET/PATCH), `/api/access-tokens` (GET list / POST
+ * create / DELETE :id), and `/api/access-tokens/oauth-clients` (GET list /
+ * DELETE :clientId / DELETE collection). `useCreateAccessToken`/
+ * `useRevokeAccessToken`/`useRevokeOAuthClient`/`useRevokeAllOAuthClients`'s
+ * `onSuccess` re-invalidates their lists, firing a follow-up GET — a
+ * stateless mock would hand that GET stale data back, silently reverting
+ * whatever the mutation just "persisted."
+ *
+ * The oauth-clients route is checked BEFORE the plain access-tokens route
+ * below (both URLs contain `/api/access-tokens`) — `/api/access-tokens/
+ * oauth-clients` must not fall through to `handleAccessTokens`, which would
+ * misread it as a `DELETE /api/access-tokens/:id` call.
  */
 function mockFetchRouter(opts?: {
   settings?: ReturnType<typeof defaultSettings>;
   tokens?: AccessTokenFixture[];
   createdToken?: string;
+  oauthClients?: OAuthClientFixture[];
   /** `GET /api/config`'s `mcpUrl` — mirrors the API returning it only when
    * `SILO_PUBLIC_MCP_URL` is set server-side. Omitted -> `{}` (the unset shape). */
   configMcpUrl?: string;
 }) {
   let settingsStore = opts?.settings ?? defaultSettings();
   let tokensStore = opts?.tokens ?? [];
+  let oauthClientsStore = opts?.oauthClients ?? [];
   const rawToken = opts?.createdToken ?? 'silo_rawtoken1234567890abcdef';
   const config = opts?.configMcpUrl ? { mcpUrl: opts.configMcpUrl } : {};
 
@@ -84,21 +102,41 @@ function mockFetchRouter(opts?: {
     return Promise.resolve(jsonResponse({ tokens: tokensStore }));
   }
 
+  function handleOAuthClients(url: string, method: string) {
+    if (method === 'DELETE') {
+      const clientId = url.split('/api/access-tokens/oauth-clients/')[1];
+      if (clientId) {
+        // Revoke one client id: drop it from whichever group holds it, and
+        // drop the whole group once its last id is gone (mirrors the real
+        // "revoke deletes tokens, group disappears from the list" semantics).
+        oauthClientsStore = oauthClientsStore
+          .map((c) => ({ ...c, clientIds: c.clientIds.filter((id) => id !== clientId) }))
+          .filter((c) => c.clientIds.length > 0);
+      } else {
+        // Collection delete — revoke all.
+        oauthClientsStore = [];
+      }
+      return Promise.resolve(jsonResponse(undefined, 204));
+    }
+    return Promise.resolve(jsonResponse({ clients: oauthClientsStore }));
+  }
+
   const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
     const method = init?.method ?? 'GET';
 
     if (url.includes('/api/settings')) return handleSettings(method, init);
+    if (url.includes('/api/access-tokens/oauth-clients')) return handleOAuthClients(url, method);
     if (url.includes('/api/access-tokens')) return handleAccessTokens(url, method, init);
     if (url.includes('/api/config')) return Promise.resolve(jsonResponse(config));
     return Promise.resolve(jsonResponse({}));
   });
 
-  return { fetchMock, getTokens: () => tokensStore };
+  return { fetchMock, getTokens: () => tokensStore, getOAuthClients: () => oauthClientsStore };
 }
 
 function renderTab(opts?: Parameters<typeof mockFetchRouter>[0]) {
-  const { fetchMock, getTokens } = mockFetchRouter(opts);
+  const { fetchMock, getTokens, getOAuthClients } = mockFetchRouter(opts);
   vi.stubGlobal('fetch', fetchMock);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const utils = render(
@@ -106,7 +144,7 @@ function renderTab(opts?: Parameters<typeof mockFetchRouter>[0]) {
       <AccessTab />
     </QueryClientProvider>,
   );
-  return { ...utils, fetchMock, getTokens };
+  return { ...utils, fetchMock, getTokens, getOAuthClients };
 }
 
 describe('AccessTab (HTTP MCP + named access tokens)', () => {
@@ -250,8 +288,11 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       // Settings resolves normally (unrelated to this list's loading state);
-      // only `/api/access-tokens` hangs, so `useAccessTokens().isLoading`
-      // stays true for the assertion below.
+      // `/api/access-tokens` and `/api/access-tokens/oauth-clients` both hang
+      // here — this assertion runs synchronously right after `render`,
+      // before EITHER list's fetch has had a chance to resolve, so both
+      // sections are legitimately still in their initial loading state at
+      // this instant (asserted below as "at least one", not "exactly one").
       if (url.includes('/api/settings')) return Promise.resolve(jsonResponse(defaultSettings()));
       if (url.includes('/api/access-tokens')) return neverResolves;
       return Promise.resolve(jsonResponse({}));
@@ -265,8 +306,8 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     );
 
     // Neither the empty state nor any real token row has rendered — only the
-    // loading container, carrying the a11y contract.
-    expect(screen.getByRole('status', { name: 'Loading…' })).toBeDefined();
+    // loading container(s), carrying the a11y contract.
+    expect(screen.getAllByRole('status', { name: 'Loading…' }).length).toBeGreaterThan(0);
     expect(screen.queryByText('No tokens yet — create one to let an agent connect.')).toBeNull();
   });
 
@@ -395,5 +436,193 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     );
     expect(screen.getByText('laptop cli')).toBeDefined();
     expect(screen.getByRole('button', { name: 'Revoke' })).toBeDefined();
+  });
+
+  describe('Connected apps (MCP OAuth)', () => {
+    it('renders the "Connected apps" section heading with its description', async () => {
+      renderTab();
+
+      expect(await screen.findByText('Connected apps')).toBeDefined();
+      expect(screen.getByText(/Apps that connected over OAuth/i)).toBeDefined();
+    });
+
+    it('shows the empty state when no apps are connected', async () => {
+      renderTab({ oauthClients: [] });
+
+      expect(await screen.findByText('No apps connected yet.')).toBeDefined();
+      // "Revoke all" only makes sense once something is connected.
+      expect(screen.queryByRole('button', { name: 'Revoke all' })).toBeNull();
+    });
+
+    it('renders a deduped group: name, granted date, last-used, active token count', async () => {
+      renderTab({
+        oauthClients: [
+          {
+            clientName: 'Claude',
+            clientIds: ['cli-1'],
+            grantedAt: '2026-01-01T00:00:00.000Z',
+            lastUsedAt: '2026-03-01T00:00:00.000Z',
+            activeTokenCount: 1,
+            connectionCount: 1,
+          },
+        ],
+      });
+
+      expect(await screen.findByText('Claude')).toBeDefined();
+      expect(screen.getByText(/granted/i)).toBeDefined();
+      expect(screen.getByText(/last used/i)).toBeDefined();
+      expect(screen.getByText(/1 active token/i)).toBeDefined();
+      // Single connection — the "(N connections)" note stays quiet.
+      expect(screen.queryByText(/connections\)/)).toBeNull();
+    });
+
+    it('shows "never used" and the "(N connections)" note when connectionCount > 1', async () => {
+      renderTab({
+        oauthClients: [
+          {
+            clientName: 'ChatGPT',
+            clientIds: ['cli-1', 'cli-2', 'cli-3'],
+            grantedAt: '2026-01-01T00:00:00.000Z',
+            lastUsedAt: null,
+            activeTokenCount: 2,
+            connectionCount: 3,
+          },
+        ],
+      });
+
+      expect(await screen.findByText('ChatGPT')).toBeDefined();
+      expect(screen.getByText(/never used/i)).toBeDefined();
+      expect(screen.getByText(/\(3 connections\)/)).toBeDefined();
+    });
+
+    it('shows skeleton rows while the connected-apps list is loading', () => {
+      const neverResolves = new Promise<Response>(() => {});
+      // Settings and the plain token list resolve normally (unrelated to
+      // this list's loading state); only `/api/access-tokens/oauth-clients`
+      // hangs, so `useOAuthClients().isLoading` stays true for the assertion
+      // below. A small route table (rather than an if-chain inline in the
+      // mock) keeps this test under Biome's cognitive-complexity gate.
+      const routes: [match: string, respond: () => Promise<Response>][] = [
+        ['/api/access-tokens/oauth-clients', () => neverResolves],
+        ['/api/access-tokens', () => Promise.resolve(jsonResponse({ tokens: [] }))],
+        ['/api/settings', () => Promise.resolve(jsonResponse(defaultSettings()))],
+      ];
+      const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString();
+        const route = routes.find(([match]) => url.includes(match));
+        return route ? route[1]() : Promise.resolve(jsonResponse({}));
+      });
+      vi.stubGlobal('fetch', fetchMock);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      render(
+        <QueryClientProvider client={queryClient}>
+          <AccessTab />
+        </QueryClientProvider>,
+      );
+
+      expect(screen.getAllByRole('status', { name: 'Loading…' }).length).toBeGreaterThan(0);
+      expect(screen.queryByText('No apps connected yet.')).toBeNull();
+    });
+
+    it('revoking a group requires a confirm step, then DELETEs every id in clientIds (fan-out)', async () => {
+      const { fetchMock } = renderTab({
+        oauthClients: [
+          {
+            clientName: 'ChatGPT',
+            clientIds: ['cli-1', 'cli-2'],
+            grantedAt: '2026-01-01T00:00:00.000Z',
+            lastUsedAt: null,
+            activeTokenCount: 2,
+            connectionCount: 2,
+          },
+        ],
+      });
+
+      await screen.findByText('ChatGPT');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+      const confirmBtn = await screen.findByRole('button', { name: 'Confirm revoke?' });
+      fireEvent.click(confirmBtn);
+
+      await waitFor(() => {
+        const deleteCalls = fetchMock.mock.calls.filter(
+          (call) => (call[1] as RequestInit | undefined)?.method === 'DELETE',
+        );
+        const deletedIds = deleteCalls.map(
+          (call) => (call[0] as string).split('/api/access-tokens/oauth-clients/')[1],
+        );
+        expect(deletedIds).toContain('cli-1');
+        expect(deletedIds).toContain('cli-2');
+      });
+
+      await waitFor(() => expect(screen.queryByText('ChatGPT')).toBeNull());
+    });
+
+    it('canceling a group revoke confirm step leaves the group in place', async () => {
+      renderTab({
+        oauthClients: [
+          {
+            clientName: 'Claude',
+            clientIds: ['cli-1'],
+            grantedAt: '2026-01-01T00:00:00.000Z',
+            lastUsedAt: null,
+            activeTokenCount: 1,
+            connectionCount: 1,
+          },
+        ],
+      });
+
+      await screen.findByText('Claude');
+      fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+      await screen.findByRole('button', { name: 'Confirm revoke?' });
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Confirm revoke?' })).toBeNull(),
+      );
+      expect(screen.getByText('Claude')).toBeDefined();
+    });
+
+    it('"Revoke all" requires a confirm step, then DELETEs the collection endpoint', async () => {
+      const { fetchMock } = renderTab({
+        oauthClients: [
+          {
+            clientName: 'Claude',
+            clientIds: ['cli-1'],
+            grantedAt: '2026-01-01T00:00:00.000Z',
+            lastUsedAt: null,
+            activeTokenCount: 1,
+            connectionCount: 1,
+          },
+          {
+            clientName: 'ChatGPT',
+            clientIds: ['cli-2'],
+            grantedAt: '2026-01-02T00:00:00.000Z',
+            lastUsedAt: null,
+            activeTokenCount: 1,
+            connectionCount: 1,
+          },
+        ],
+      });
+
+      await screen.findByText('Claude');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Revoke all' }));
+      const confirmBtn = await screen.findByRole('button', { name: 'Confirm revoke all?' });
+      fireEvent.click(confirmBtn);
+
+      await waitFor(() => {
+        const deleteCall = fetchMock.mock.calls.find(
+          (call) =>
+            (call[1] as RequestInit | undefined)?.method === 'DELETE' &&
+            (call[0] as string).endsWith('/api/access-tokens/oauth-clients'),
+        );
+        expect(deleteCall).toBeDefined();
+      });
+
+      await waitFor(() => expect(screen.queryByText('Claude')).toBeNull());
+      expect(screen.queryByText('ChatGPT')).toBeNull();
+    });
   });
 });
