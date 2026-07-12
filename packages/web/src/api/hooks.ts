@@ -18,6 +18,7 @@ import type {
   LinkJson,
   LinkResponse,
   LinksResponse,
+  OAuthClientsResponse,
   RestoreResponse,
   SearchResponse,
   SettingsMap,
@@ -85,6 +86,7 @@ export const queryKeys = {
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
   accessTokens: () => ['access-tokens'] as const,
+  oauthClients: () => ['oauth-clients'] as const,
   appConfig: () => ['app-config'] as const,
 };
 
@@ -867,6 +869,62 @@ export function useRevokeAccessToken() {
     mutationFn: (id: string) => apiDelete<void>(`/api/access-tokens/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.accessTokens() });
+    },
+  });
+}
+
+/**
+ * The Access tab's connected-apps list (`GET /api/access-tokens/
+ * oauth-clients`, MCP OAuth Unit 4) — unwraps the `{ clients }` envelope the
+ * same way `useAccessTokens` unwraps `{ tokens }`, so
+ * `useOAuthClients().data` is `ConnectedOAuthClient[] | undefined` directly.
+ * Each entry is already deduped-by-name server-side (`listOAuthClientsForOwner`,
+ * `@silo/core`); this hook does no client-side grouping of its own.
+ */
+export function useOAuthClients() {
+  return useQuery({
+    queryKey: queryKeys.oauthClients(),
+    queryFn: async () =>
+      (await apiGet<OAuthClientsResponse>('/api/access-tokens/oauth-clients')).clients,
+  });
+}
+
+/**
+ * The connected-apps list's "Revoke" mutation for ONE `cli_` client id
+ * (`DELETE /api/access-tokens/oauth-clients/:clientId`, MCP OAuth Unit 4).
+ * Revoking a deduped GROUP means calling this once per id in the group's
+ * `clientIds[]` — callers fan out via `Promise.all`/`runBulk` rather than
+ * this hook looping internally, mirroring how `useBulkTrash` et al. reuse a
+ * single-item mutation for a multi-id action. Plain invalidate-on-success,
+ * same posture as `useRevokeAccessToken` (a deliberate, confirmed action off
+ * a short list — not a hot path worth optimistic rollback complexity).
+ */
+export function useRevokeOAuthClient() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (clientId: string) =>
+      apiDelete<void>(`/api/access-tokens/oauth-clients/${clientId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.oauthClients() });
+    },
+  });
+}
+
+/**
+ * The connected-apps section's "Revoke all" mutation (`DELETE
+ * /api/access-tokens/oauth-clients`, MCP OAuth Unit 4) — the collection-level
+ * revoke, distinct from fanning out `useRevokeOAuthClient` over every group's
+ * `clientIds` (this hits one endpoint that clears every OAuth client in a
+ * single request, matching `useEmptyTrash`'s collection-delete shape).
+ */
+export function useRevokeAllOAuthClients() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: () => apiDelete<void>('/api/access-tokens/oauth-clients'),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.oauthClients() });
     },
   });
 }

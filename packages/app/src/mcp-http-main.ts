@@ -35,6 +35,8 @@ export type McpHttpConfig = {
   token: string;
   host: string;
   extraAllowedHosts: string[];
+  publicMcpUrl: string | undefined;
+  publicApiUrl: string | undefined;
 };
 
 /** Discriminated result so the caller (both `main()` below and tests) can
@@ -65,6 +67,17 @@ export type McpHttpConfigResult =
  * port is appended) — split on commas, trimmed, empty entries dropped, so a
  * trailing comma or accidental whitespace in the env value doesn't produce a
  * bogus empty-string allowed-host entry.
+ *
+ * `SILO_PUBLIC_MCP_URL` (MCP OAuth slice, Unit 3) and `SILO_PUBLIC_API_URL`
+ * (new) are BOTH optional — `undefined` when unset/blank. `publicMcpUrl` is
+ * the canonical resource base (`@silo/core`'s `canonicalMcpResource` is
+ * applied to it in `mcp-http.ts`, not here); it must be the IDENTICAL value
+ * the api container reads for the same env var, or every OAuth token
+ * audience-mismatches (see the design doc's "cross-origin agreement seams").
+ * `publicApiUrl` is the issuer origin advertised in protected-resource
+ * metadata's `authorization_servers`. When either is unset (local dev),
+ * `mcp-http.ts` derives a same-process fallback from the bind host/port so
+ * local stdio/dev and this suite's tests keep working without prod env.
  */
 export function readMcpHttpConfig(
   env: Record<string, string | undefined> = process.env,
@@ -113,7 +126,21 @@ export function readMcpHttpConfig(
     .map((entry) => entry.trim())
     .filter((entry) => entry.length > 0);
 
-  return { ok: true, config: { port, token, host, extraAllowedHosts } };
+  // MCP OAuth resource-server config (Unit 3): both new env vars are OPTIONAL
+  // — `undefined` when unset/blank, never `''`, so `mcp-http.ts` can tell
+  // "not configured" apart from "configured to the empty string" and fall
+  // back to a derived local-dev default (see its own doc comment). Same
+  // trim-to-undefined idiom `config.ts` already uses for
+  // `SILO_PUBLIC_MCP_URL` on the api side — kept independent rather than
+  // imported, since that helper lives in `@silo/api` and adapters may not
+  // import each other (docs/rules/architecture.md).
+  const publicMcpUrl = env.SILO_PUBLIC_MCP_URL?.trim() || undefined;
+  const publicApiUrl = env.SILO_PUBLIC_API_URL?.trim() || undefined;
+
+  return {
+    ok: true,
+    config: { port, token, host, extraAllowedHosts, publicMcpUrl, publicApiUrl },
+  };
 }
 
 async function main(): Promise<void> {
@@ -123,9 +150,16 @@ async function main(): Promise<void> {
     process.exit(1);
     return;
   }
-  const { port, token, host, extraAllowedHosts } = result.config;
+  const { port, token, host, extraAllowedHosts, publicMcpUrl, publicApiUrl } = result.config;
 
-  const httpServer = startMcpHttpServer({ port, token, host, extraAllowedHosts });
+  const httpServer = startMcpHttpServer({
+    port,
+    token,
+    host,
+    extraAllowedHosts,
+    publicMcpUrl,
+    publicApiUrl,
+  });
   httpServer.once('error', (error: unknown) => {
     // A late async listen error (EADDRINUSE, EACCES on a privileged port,
     // etc.) — this process has no fallback surface, so treat it the same as

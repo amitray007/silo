@@ -82,7 +82,14 @@ services:
       SILO_ALLOWED_ORIGINS: ${SILO_ALLOWED_ORIGINS:-}
       # The public MCP endpoint the "Copy config" button hands out. Set this to
       # your mcp subdomain; if unset, the web derives https://mcp.<host>/mcp.
+      # Also the RFC 8707 OAuth resource identifier — MUST match the mcp
+      # service's own SILO_PUBLIC_MCP_URL below (both derive the same
+      # canonical resource string from it).
       SILO_PUBLIC_MCP_URL: ${SILO_PUBLIC_MCP_URL:-}
+      # The public origin of THIS container (e.g. https://silo.<domain>) —
+      # the OAuth issuer. Optional here: unset falls back to deriving the
+      # issuer from the request's Host header.
+      SILO_PUBLIC_API_URL: ${SILO_PUBLIC_API_URL:-}
       SILO_TRASH_PURGE_DAYS: ${SILO_TRASH_PURGE_DAYS:-}
       SILO_ENRICHING_STALE_MINUTES: ${SILO_ENRICHING_STALE_MINUTES:-}
     # Migrate (idempotent) then serve via the @silo/app composition-root
@@ -136,6 +143,15 @@ services:
       SILO_MCP_ALLOWED_HOSTS: ${SILO_MCP_ALLOWED_HOSTS:-}
       # REQUIRED for the listener to start at all (the machine bearer agents send).
       SILO_API_TOKEN: ${SILO_API_TOKEN:?set SILO_API_TOKEN (the mcp listener refuses to start without it)}
+      # The RFC 8707 OAuth resource identifier this listener checks incoming
+      # oat_ tokens against. MUST be the identical value set on the api
+      # service above — both containers derive the same canonical resource
+      # string (https://mcp.<domain>/mcp) from it.
+      SILO_PUBLIC_MCP_URL: ${SILO_PUBLIC_MCP_URL:-}
+      # The public origin of the api container (e.g. https://silo.<domain>) —
+      # advertised as the OAuth authorization_servers entry in this
+      # container's /.well-known/oauth-protected-resource response.
+      SILO_PUBLIC_API_URL: ${SILO_PUBLIC_API_URL:-}
     # A package script (tsx resolves in packages/app's context), not
     # `pnpm exec tsx …` from root — see the api command / Dockerfile comment.
     command: ['pnpm', '--filter', '@silo/app', 'run', 'start:mcp-http']

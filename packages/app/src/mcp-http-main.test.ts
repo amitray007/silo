@@ -1,5 +1,4 @@
-import { describe, expect, it } from 'vitest';
-import { readMcpHttpConfig } from './mcp-http-main.js';
+import { beforeAll, describe, expect, it } from 'vitest';
 
 /**
  * Tests for `readMcpHttpConfig`, the mcp-http-only entrypoint's pure
@@ -8,7 +7,21 @@ import { readMcpHttpConfig } from './mcp-http-main.js';
  * `process.exit` — `main()` itself is process wiring around this function,
  * not independently testable without spinning up a whole process; see
  * `mcp-http-main.ts`'s doc comment.
+ *
+ * `mcp-http-main.ts` transitively imports `@silo/mcp-server` -> `@silo/core`
+ * -> `@silo/db`, whose client throws at MODULE-LOAD time if `DATABASE_URL` is
+ * unset. `readMcpHttpConfig` itself never connects, so we point `DATABASE_URL`
+ * at a syntactically valid placeholder and dynamically import the module AFTER
+ * — same load-order discipline as `mcp-http.test.ts`, minus the real DB (this
+ * suite makes no queries).
  */
+let readMcpHttpConfig: typeof import('./mcp-http-main.js').readMcpHttpConfig;
+
+beforeAll(async () => {
+  process.env.DATABASE_URL ??= 'postgres://placeholder:placeholder@127.0.0.1:5432/placeholder';
+  ({ readMcpHttpConfig } = await import('./mcp-http-main.js'));
+});
+
 describe('readMcpHttpConfig', () => {
   it('is invalid when SILO_MCP_HTTP_PORT is unset', () => {
     const result = readMcpHttpConfig({ SILO_API_TOKEN: 'tok' });

@@ -263,6 +263,33 @@ export type CreatedAccessTokenJson = AccessTokenJson & { token: string };
 export type AccessTokensResponse = { tokens: AccessTokenJson[] };
 
 /**
+ * Web's OWN copy of `@silo/core`'s `ConnectedOAuthClient` (`packages/core/
+ * src/auth/oauth.ts`, mirrored in `docs/superpowers/specs/
+ * OAUTH-INTERFACES.md`) — the MCP OAuth connected-apps list's per-group
+ * shape. Same not-imported-from-core rule as the rest of this file (see the
+ * file's top doc comment). Dedup already happened server-side (by
+ * `clientName.toLowerCase()`); web just renders the group.
+ *
+ * `clientIds` carries EVERY `cli_` id folded into this group — a group
+ * revoke fans out `DELETE /api/access-tokens/oauth-clients/:clientId` over
+ * every id here (mirrors stash's group-revoke fan-out). `connectionCount`
+ * (`clientIds.length`) is shown as "(N connections)" only when > 1 —
+ * re-registration noise from repeated DCR on each connect is otherwise
+ * invisible chrome for the common single-connection case.
+ */
+export type ConnectedOAuthClient = {
+  clientName: string;
+  clientIds: string[];
+  grantedAt: string;
+  lastUsedAt: string | null;
+  activeTokenCount: number;
+  connectionCount: number;
+};
+
+/** `GET /api/access-tokens/oauth-clients` response envelope. */
+export type OAuthClientsResponse = { clients: ConnectedOAuthClient[] };
+
+/**
  * `GET /api/config` response envelope (deployable-silo slice, Unit 4) —
  * mirrors `packages/api/src/routes/config.ts`'s `c.json(...)` shape exactly.
  * `mcpUrl` is present ONLY when the operator has set `SILO_PUBLIC_MCP_URL`

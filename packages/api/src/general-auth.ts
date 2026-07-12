@@ -49,15 +49,9 @@
  * it at all.
  */
 
-import {
-  readAppPassword,
-  SESSION_COOKIE_NAME,
-  SESSION_COOKIE_VALUE,
-  sessionSecret,
-  verifyAccessToken,
-} from '@silo/core';
+import { readAppPassword, verifyAccessToken } from '@silo/core';
 import type { Context, Next } from 'hono';
-import { getSignedCookie } from 'hono/cookie';
+import { hasValidSessionCookie } from './session-cookie.js';
 import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
 
 /** Reads `SILO_API_TOKEN` fresh from the environment on every call — mirrors
@@ -66,21 +60,6 @@ import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
  * change to which env var the general gate reads touches one line. */
 function configuredToken(): string | undefined {
   return readTokenEnv('SILO_API_TOKEN');
-}
-
-/** Whether a valid, signed `silo_session` cookie is present on this request.
- * Returns `false` (never throws) both when the cookie is absent/tampered
- * (`getSignedCookie` itself returns `false` in either case) AND when
- * `sessionSecret()` is undefined — the latter only happens when NEITHER
- * `SILO_SESSION_SECRET` nor `SILO_APP_PASSWORD` is set, in which case there
- * is no cookie session to check at all (a deployment gated purely by
- * `SILO_API_TOKEN` never reaches Hono's signing call with an undefined
- * secret). */
-async function hasValidSessionCookie(c: Context): Promise<boolean> {
-  const secret = sessionSecret();
-  if (!secret) return false;
-  const value = await getSignedCookie(c, secret, SESSION_COOKIE_NAME);
-  return value === SESSION_COOKIE_VALUE;
 }
 
 /**

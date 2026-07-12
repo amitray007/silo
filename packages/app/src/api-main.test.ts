@@ -1,6 +1,25 @@
-import { createApp } from '@silo/api';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { readHost, readPort } from './api-main.js';
+import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+/**
+ * `./api-main.js` statically imports `@silo/api` (for `createApp`), whose
+ * barrel now transitively pulls the OAuth routes -> `@silo/core` -> `@silo/db`,
+ * whose client throws at MODULE-LOAD time if `DATABASE_URL` is unset. That load
+ * chain fires the moment this file imports ANYTHING from `./api-main.js` — so
+ * even the pure `readHost`/`readPort` helpers must be loaded AFTER the env is
+ * set. `createApp()`/`readHost`/`readPort` never connect, so we point
+ * `DATABASE_URL` at a syntactically valid placeholder and dynamically import
+ * both modules AFTER — same load-order discipline as `mcp-http.test.ts`, minus
+ * the real DB (this suite makes no queries).
+ */
+let createApp: typeof import('@silo/api').createApp;
+let readHost: typeof import('./api-main.js').readHost;
+let readPort: typeof import('./api-main.js').readPort;
+
+beforeAll(async () => {
+  process.env.DATABASE_URL ??= 'postgres://placeholder:placeholder@127.0.0.1:5432/placeholder';
+  ({ createApp } = await import('@silo/api'));
+  ({ readHost, readPort } = await import('./api-main.js'));
+});
 
 /**
  * Tests for `api-main.ts`'s pure env-parsing helpers (deployable-silo design,

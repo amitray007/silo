@@ -1,9 +1,28 @@
 import * as http from 'node:http';
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js';
-import { getSetting, timingSafeEqual, verifyAccessToken } from '@silo/core';
+import {
+  authenticateOAuthToken,
+  canonicalMcpResource,
+  getSetting,
+  timingSafeEqual,
+  verifyAccessToken,
+} from '@silo/core';
 import { createSiloMcpServer } from '@silo/mcp-server';
 
 const MCP_PATH = '/mcp';
+const PROTECTED_RESOURCE_PATH = '/.well-known/oauth-protected-resource';
+
+/** Wildcard CORS headers for the OAuth discovery surface only (protected-
+ * resource metadata + its preflight). ChatGPT/Claude connector UIs fetch this
+ * from a browser origin, so it must be reachable cross-origin — unlike
+ * `POST /mcp` itself, which stays same-origin-only (no CORS headers added
+ * there; the SDK transport doesn't need them for a server-to-server bearer
+ * call). Mirrors the reference implementation's `CORS_HEADERS` shape. */
+const DISCOVERY_CORS_HEADERS: http.OutgoingHttpHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'GET, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+};
 
 /** Cap on the buffered request body (matches the SDK's own Express body-parser
  * default of 4mb — see `StreamableHTTPServerTransport`'s docs). An
@@ -21,19 +40,49 @@ const UNAUTHORIZED_BODY = JSON.stringify({
   id: null,
 });
 
-function sendJson(res: http.ServerResponse, status: number, body: string): void {
+function sendJson(
+  res: http.ServerResponse,
+  status: number,
+  body: string,
+  extraHeaders?: http.OutgoingHttpHeaders,
+): void {
   if (res.headersSent) return;
-  res.writeHead(status, { 'content-type': 'application/json' });
+  res.writeHead(status, { 'content-type': 'application/json', ...extraHeaders });
   res.end(body);
 }
 
-function sendUnauthorized(res: http.ServerResponse): void {
+/**
+ * `WWW-Authenticate` now carries a `resource_metadata` pointer (RFC 9728) at
+ * the mcp origin, so an OAuth-aware client (Claude/ChatGPT connector UI) that
+ * gets a bare 401 can discover where to start the authorization flow — see
+ * `resourceMetadataUrl`. The response BODY stays the unchanged,
+ * uninformative `UNAUTHORIZED_BODY`: the header carries a public,
+ * non-secret URL (fine to leak to a prober), but the body must never
+ * distinguish failure reasons (no auth oracle).
+ */
+function sendUnauthorized(res: http.ServerResponse, resourceMetadataUrl: string): void {
   if (res.headersSent) return;
   res.writeHead(401, {
     'content-type': 'application/json',
-    'WWW-Authenticate': 'Bearer',
+    'WWW-Authenticate': `Bearer resource_metadata="${resourceMetadataUrl}"`,
   });
   res.end(UNAUTHORIZED_BODY);
+}
+
+/**
+ * Derives the mcp origin (scheme + host, no path) that
+ * `/.well-known/oauth-protected-resource` is hosted at, from whatever
+ * `publicMcpUrl` resolves to (either the operator's `SILO_PUBLIC_MCP_URL` or
+ * the local-dev fallback — see `resolvePublicUrls`). `canonicalMcpResource`
+ * normalizes to a `/mcp`-suffixed URL; stripping that known suffix (rather
+ * than a generic `new URL(...).origin`) preserves a non-root path prefix if
+ * an operator ever puts the listener behind one, and avoids constructing a
+ * second URL-parsing path for what's already a well-known shape.
+ */
+function mcpOrigin(canonicalResource: string): string {
+  return canonicalResource.endsWith('/mcp')
+    ? canonicalResource.slice(0, -'/mcp'.length)
+    : canonicalResource;
 }
 
 /** Parses `Authorization: Bearer <token>`, returning the token or `undefined`
@@ -136,12 +185,22 @@ function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
  * derives would never match a proxied request's Host header. Undefined/empty
  * is a no-op, so existing callers (and `main.ts`'s stdio-first entrypoint)
  * are unaffected.
+ *
+ * `opts.publicMcpUrl`/`opts.publicApiUrl` (MCP OAuth slice, Unit 3) feed the
+ * RFC 8707 canonical resource + RFC 9728 protected-resource metadata. Both
+ * are optional: when unset (local dev, or a test that doesn't care about
+ * OAuth), `resolvePublicUrls` derives a same-process fallback from
+ * `host`/`port` so `/.well-known/oauth-protected-resource` and the
+ * `WWW-Authenticate` header are always well-formed, and `oat_` tokens can
+ * still be exercised in tests without prod env.
  */
 export function startMcpHttpServer(opts: {
   port: number;
   token: string;
   host?: string;
   extraAllowedHosts?: string[];
+  publicMcpUrl?: string | undefined;
+  publicApiUrl?: string | undefined;
 }): http.Server {
   const host = opts.host ?? '127.0.0.1';
 
@@ -171,15 +230,66 @@ export function startMcpHttpServer(opts: {
     return [...hosts];
   }
 
+  // Same lazy-`server.address()` reasoning as `allowedHosts()`: `opts.port`
+  // may be `0` (ephemeral, e.g. tests), so the local-dev fallback must read
+  // the REAL bound port, not the requested one. `publicMcpUrl`/`publicApiUrl`
+  // are resolved once per request (cheap string ops, no I/O) rather than
+  // cached at server-start, so an ephemeral port that isn't bound yet at
+  // `startMcpHttpServer`-call-time is still correct once `listen()` completes.
+  function resolvePublicUrls(): { canonicalResource: string; authorizationServer: string } {
+    const address = server.address();
+    const boundPort = typeof address === 'object' && address !== null ? address.port : opts.port;
+    const fallbackOrigin = `http://127.0.0.1:${boundPort}`;
+    const canonicalResource = canonicalMcpResource(opts.publicMcpUrl ?? `${fallbackOrigin}/mcp`);
+    const authorizationServer = opts.publicApiUrl ?? fallbackOrigin;
+    return { canonicalResource, authorizationServer };
+  }
+
   const server = http.createServer((req, res) => {
-    routeMcpRequest(req, res, opts.token, allowedHosts).catch((error: unknown) => {
-      console.error('[silo] mcp-http request handler error:', error);
-      sendJson(res, 500, JSON.stringify({ error: 'internal_error' }));
-    });
+    routeMcpRequest(req, res, opts.token, allowedHosts, resolvePublicUrls).catch(
+      (error: unknown) => {
+        console.error('[silo] mcp-http request handler error:', error);
+        sendJson(res, 500, JSON.stringify({ error: 'internal_error' }));
+      },
+    );
   });
 
   server.listen(opts.port, host);
   return server;
+}
+
+/** `GET /.well-known/oauth-protected-resource` (RFC 9728) + its OPTIONS
+ * preflight — split out of `routeMcpRequest` purely to keep that function's
+ * own branching under the complexity ceiling, same rationale as
+ * `handleMcpRequest`. Always wildcard-CORS'd (see `DISCOVERY_CORS_HEADERS`'s
+ * doc comment); GET returns the metadata JSON, OPTIONS a bare 204. */
+function handleProtectedResourceMetadata(
+  req: http.IncomingMessage,
+  res: http.ServerResponse,
+  resolvePublicUrls: () => { canonicalResource: string; authorizationServer: string },
+): void {
+  if (req.method === 'OPTIONS') {
+    if (res.headersSent) return;
+    res.writeHead(204, DISCOVERY_CORS_HEADERS);
+    res.end();
+    return;
+  }
+  if (req.method !== 'GET') {
+    sendJson(res, 404, JSON.stringify({ error: 'not_found' }));
+    return;
+  }
+  const { canonicalResource, authorizationServer } = resolvePublicUrls();
+  sendJson(
+    res,
+    200,
+    JSON.stringify({
+      resource: canonicalResource,
+      authorization_servers: [authorizationServer],
+      scopes_supported: ['silo'],
+      bearer_methods_supported: ['header'],
+    }),
+    DISCOVERY_CORS_HEADERS,
+  );
 }
 
 /** Method/path/auth/body gating for a single request, split out of
@@ -192,30 +302,49 @@ async function routeMcpRequest(
   res: http.ServerResponse,
   token: string,
   computeAllowedHosts: () => string[],
+  resolvePublicUrls: () => { canonicalResource: string; authorizationServer: string },
 ): Promise<void> {
   const url = req.url ? new URL(req.url, 'http://localhost').pathname : undefined;
+
+  if (url === PROTECTED_RESOURCE_PATH) {
+    handleProtectedResourceMetadata(req, res, resolvePublicUrls);
+    return;
+  }
 
   if (req.method !== 'POST' || url !== MCP_PATH) {
     sendJson(res, 404, JSON.stringify({ error: 'not_found' }));
     return;
   }
 
+  const { canonicalResource } = resolvePublicUrls();
+  const resourceMetadataUrl = `${mcpOrigin(canonicalResource)}${PROTECTED_RESOURCE_PATH}`;
+
   // Auth FIRST — before touching the body — so an unauthenticated caller
   // never causes the (more expensive) body-read/MCP-wiring path to run.
   //
-  // DB TOKENS (access-tokens slice, U2): accepts the configured `token` (the
-  // env `SILO_API_TOKEN` this listener was started with — see
-  // `startMcpHttpServer`'s `opts.token`) OR any non-revoked DB-backed access
-  // token (`@silo/core`'s `verifyAccessToken`), mirroring `general-auth.ts`'s
-  // env-first-then-DB-fallback ordering. The env compare runs first and is
-  // synchronous/timing-safe (`envOk`); the DB lookup only runs when it fails
-  // (`dbOk`'s `!envOk &&` short-circuit), so the common case (correct env
-  // token) never pays for the extra async DB round-trip.
+  // Three ways to authenticate, tried cheapest/most-common first — ANY one
+  // passing is sufficient:
+  //   1. env token (`SILO_API_TOKEN`, timing-safe compare, synchronous).
+  //   2. legacy DB-backed access token (`kind='bearer'`, `verifyAccessToken`
+  //      — access-tokens slice, U2), mirroring `general-auth.ts`'s
+  //      env-first-then-DB-fallback ordering.
+  //   3. an `oat_` OAuth access token (MCP OAuth slice, Unit 3),
+  //      audience-checked against THIS listener's own canonical resource via
+  //      `authenticateOAuthToken` — a token minted for a different resource
+  //      fails here even if otherwise valid (RFC 8707).
+  // Each check only runs if the previous ones failed (`!envOk &&` / `!envOk
+  // && !dbOk &&` short-circuits), so the common case (correct env token)
+  // never pays for either async DB round-trip.
   const requestToken = bearerToken(req);
   const envOk = requestToken !== undefined && timingSafeEqual(requestToken, token);
   const dbOk = !envOk && requestToken !== undefined && (await verifyAccessToken(requestToken));
-  if (!envOk && !dbOk) {
-    sendUnauthorized(res);
+  const oauthOk =
+    !envOk &&
+    !dbOk &&
+    requestToken !== undefined &&
+    (await authenticateOAuthToken(requestToken, canonicalResource));
+  if (!envOk && !dbOk && !oauthOk) {
+    sendUnauthorized(res, resourceMetadataUrl);
     return;
   }
 

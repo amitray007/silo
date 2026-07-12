@@ -2,11 +2,14 @@ import { type CSSProperties, useState } from 'react';
 import {
   useAccessTokens,
   useCreateAccessToken,
+  useOAuthClients,
   useRevokeAccessToken,
+  useRevokeAllOAuthClients,
+  useRevokeOAuthClient,
   useSettings,
   useUpdateSettings,
 } from '../../api/hooks';
-import type { AccessTokenJson } from '../../api/types';
+import type { AccessTokenJson, ConnectedOAuthClient } from '../../api/types';
 import { Skeleton } from '../Skeleton';
 import { copyLabel, useCopyFlash } from './copyFlash';
 import { McpSetupDialog } from './McpSetupDialog';
@@ -38,14 +41,44 @@ const tokenMetaStyle: CSSProperties = {
 };
 
 /**
- * One row in the token list — name/prefix/dates on the left, a two-step
- * Revoke affordance on the right. The two-step confirm (button flips to
- * "Confirm revoke?" / "Cancel" in place) is a deliberate substitute for a
- * browser `window.confirm` dialog (no-dialogs guidance) — it stays inline,
- * on-tone, and dismissible without a modal. `pending` disables the row's
- * button while the mutation is in flight so a slow network can't be
- * double-clicked into firing the DELETE twice.
+ * The two-step Revoke control shared by `TokenRow` and `OAuthClientRow`. The
+ * inline confirm (button flips to "Confirm revoke?" / "Cancel" in place) is a
+ * deliberate substitute for a browser `window.confirm` dialog (no-dialogs
+ * guidance) — it stays inline, on-tone, and dismissible without a modal.
+ * a single "Revoke" button that, once clicked, swaps to Cancel / "Confirm
+ * revoke?" so a stray double-click can't fire the DELETE twice. Owns its own
+ * `confirming` state; `pending` disables the confirm buttons while the mutation
+ * is in flight and flips the label to "Revoking…". `onRevoke` fires only on the
+ * confirmed second click.
  */
+function TwoStepRevoke({ onRevoke, pending }: { onRevoke: () => void; pending: boolean }) {
+  const [confirming, setConfirming] = useState(false);
+
+  if (!confirming) {
+    return (
+      <button type="button" className="silo-settings-btn" onClick={() => setConfirming(true)}>
+        Revoke
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: 'flex', gap: 8 }}>
+      <button
+        type="button"
+        className="silo-settings-btn"
+        disabled={pending}
+        onClick={() => setConfirming(false)}
+      >
+        Cancel
+      </button>
+      <button type="button" className="silo-settings-btn" disabled={pending} onClick={onRevoke}>
+        {pending ? 'Revoking…' : 'Confirm revoke?'}
+      </button>
+    </div>
+  );
+}
+
 function TokenRow({
   token,
   onRevoke,
@@ -55,8 +88,6 @@ function TokenRow({
   onRevoke: (id: string) => void;
   pending: boolean;
 }) {
-  const [confirming, setConfirming] = useState(false);
-
   return (
     <div style={settingsRow}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -66,32 +97,7 @@ function TokenRow({
           {token.lastUsedAt ? `last used ${formatDate(token.lastUsedAt)}` : 'never used'}
         </div>
       </div>
-      {confirming ? (
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            type="button"
-            className="silo-settings-btn"
-            disabled={pending}
-            onClick={() => {
-              setConfirming(false);
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="silo-settings-btn"
-            disabled={pending}
-            onClick={() => onRevoke(token.id)}
-          >
-            {pending ? 'Revoking…' : 'Confirm revoke?'}
-          </button>
-        </div>
-      ) : (
-        <button type="button" className="silo-settings-btn" onClick={() => setConfirming(true)}>
-          Revoke
-        </button>
-      )}
+      <TwoStepRevoke onRevoke={() => onRevoke(token.id)} pending={pending} />
     </div>
   );
 }
@@ -286,6 +292,156 @@ function AccessTokensSection() {
 }
 
 /**
+ * One deduped connected-app row — name/granted/last-used/active-token-count
+ * on the left (mirroring `TokenRow`'s layout), a `(N connections)` note
+ * appended to the meta line only when `connectionCount > 1` (re-registration
+ * noise from repeated DCR — the common single-connection case stays quiet,
+ * "silence means complete"), and the same two-step Revoke confirm as
+ * `TokenRow` on the right. `onRevoke` is handed the whole group (not just an
+ * id) since revoking fans out over every id in `clientIds`.
+ */
+function OAuthClientRow({
+  client,
+  onRevoke,
+  pending,
+}: {
+  client: ConnectedOAuthClient;
+  onRevoke: (client: ConnectedOAuthClient) => void;
+  pending: boolean;
+}) {
+  return (
+    <div style={settingsRow}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={tokenNameStyle}>{client.clientName}</div>
+        <div style={tokenMetaStyle}>
+          granted {formatDate(client.grantedAt)} ·{' '}
+          {client.lastUsedAt ? `last used ${formatDate(client.lastUsedAt)}` : 'never used'} ·{' '}
+          {client.activeTokenCount} active token{client.activeTokenCount === 1 ? '' : 's'}
+          {client.connectionCount > 1 ? ` · (${client.connectionCount} connections)` : ''}
+        </div>
+      </div>
+      <TwoStepRevoke onRevoke={() => onRevoke(client)} pending={pending} />
+    </div>
+  );
+}
+
+/** One skeleton row shaped like `OAuthClientRow` — reuses `TokenRowSkeleton`'s exact shell (same sizes), since the two lists share row rhythm. */
+function OAuthClientRowSkeleton() {
+  return (
+    <div style={settingsRow}>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Skeleton height={14} width="40%" />
+        <Skeleton height={11} width="65%" style={{ marginTop: 6 }} />
+      </div>
+      <Skeleton height={30} width={64} />
+    </div>
+  );
+}
+
+/**
+ * The connected-apps section (MCP OAuth Unit 4): lists every deduped OAuth
+ * client group (`useOAuthClients`, `GET /api/access-tokens/oauth-clients`)
+ * below the manual access-token management above. Distinct from
+ * `AccessTokensSection`'s tokens — these are apps that connected via the
+ * OAuth "Add custom connector" flow (Claude, ChatGPT), not manually-pasted
+ * bearer tokens.
+ *
+ * A per-row Revoke fans `useRevokeOAuthClient` out over every id in the
+ * group's `clientIds` (`Promise.all` — a group is usually one id, but
+ * re-registration noise can leave several under one name; all must be
+ * revoked for the app to actually disappear from the list, since the list
+ * is token-driven). "Revoke all" hits the single collection-delete endpoint
+ * instead of fanning out itself. Both share one `pendingName` bit of local
+ * state so only the row/section actually in flight shows "Revoking…" — a
+ * second click elsewhere is still live while the first is still confirming.
+ */
+function ConnectedAppsSection() {
+  const { data: clients, isLoading } = useOAuthClients();
+  const revokeClient = useRevokeOAuthClient();
+  const revokeAll = useRevokeAllOAuthClients();
+  const [pendingName, setPendingName] = useState<string | null>(null);
+  const [confirmingAll, setConfirmingAll] = useState(false);
+
+  const handleRevokeGroup = async (client: ConnectedOAuthClient) => {
+    setPendingName(client.clientName);
+    try {
+      await Promise.all(client.clientIds.map((id) => revokeClient.mutateAsync(id)));
+    } finally {
+      setPendingName(null);
+    }
+  };
+
+  const handleRevokeAll = () => {
+    revokeAll.mutate(undefined, { onSettled: () => setConfirmingAll(false) });
+  };
+
+  return (
+    <>
+      <div style={settingsRow}>
+        <div style={{ flex: 1 }}>
+          <div style={rowLabel}>Connected apps</div>
+          <div style={rowDesc}>
+            Apps that connected over OAuth (Claude, ChatGPT) — one row per app, even if it
+            reconnected more than once.
+          </div>
+        </div>
+        {clients && clients.length > 0 && (
+          <div style={{ display: 'flex', gap: 8 }}>
+            {confirmingAll ? (
+              <>
+                <button
+                  type="button"
+                  className="silo-settings-btn"
+                  disabled={revokeAll.isPending}
+                  onClick={() => setConfirmingAll(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="silo-settings-btn"
+                  disabled={revokeAll.isPending}
+                  onClick={handleRevokeAll}
+                >
+                  {revokeAll.isPending ? 'Revoking…' : 'Confirm revoke all?'}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                className="silo-settings-btn"
+                onClick={() => setConfirmingAll(true)}
+              >
+                Revoke all
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {isLoading && (
+        <div role="status" aria-label="Loading…">
+          <OAuthClientRowSkeleton />
+          <OAuthClientRowSkeleton />
+        </div>
+      )}
+      {!isLoading && clients && clients.length === 0 && (
+        <div style={settingsRow}>
+          <div style={rowDesc}>No apps connected yet.</div>
+        </div>
+      )}
+      {clients?.map((client) => (
+        <OAuthClientRow
+          key={client.clientName}
+          client={client}
+          onRevoke={handleRevokeGroup}
+          pending={pendingName === client.clientName}
+        />
+      ))}
+    </>
+  );
+}
+
+/**
  * Settings → Access (v3's `tabAccess`): a hero card explaining MCP access
  * (silo's whole point — "let an agent add, search, and read your links"),
  * with "Set up" as the hero's primary action; below it, a LIVE MCP-access
@@ -293,7 +449,10 @@ function AccessTokensSection() {
  * MCP listener enforces it per-request server-side, `403` when off, see
  * `packages/app/src/mcp-http.ts`); below that, the named access-token
  * management section (U4) — create/list/revoke real DB-backed tokens rather
- * than the old single inert env-token row.
+ * than the old single inert env-token row; below THAT, the connected-apps
+ * section (MCP OAuth Unit 4) — apps that connected via the OAuth handshake
+ * (Claude, ChatGPT's "Add custom connector" flow) rather than a
+ * manually-pasted bearer token, deduped by client name with revoke/revoke-all.
  *
  * "Set up" (formerly "Copy config", which copied a single JSON blob) opens
  * `McpSetupDialog` — a SECOND `ModalShell` stacked on top of this Settings
@@ -343,6 +502,7 @@ export function AccessTab() {
         />
       </div>
       <AccessTokensSection />
+      <ConnectedAppsSection />
     </>
   );
 }
