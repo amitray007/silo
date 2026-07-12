@@ -6,20 +6,20 @@ import { baseLinkShape, toBaseLinkContent } from './link-shape.js';
 
 /**
  * Shared `outputSchema` raw shape for every `found`-discriminated write tool
- * (`edit_link`, `add_tag`, `remove_tag` — same discriminator `get_link`
- * uses): the shared whitelist (`./link-shape.js`) with every field
+ * (`edit_link`, `add_link_tag`, `remove_link_tag` — same discriminator
+ * `get_link` uses): the shared whitelist (`./link-shape.js`) with every field
  * `.optional()`, so a `found: false` result (unknown id, or a live-scoped
  * guard rejecting a trashed link) still validates against the declared
  * schema with no link fields present — same rationale as `get_link`'s
  * `getLinkOutputShape` (see `get-link.ts`'s doc comment). Factored out once
- * `edit_link`/`add_tag`/`remove_tag` started duplicating this 13-field shape
- * verbatim (jscpd flagged the clone — three tools declaring the identical
- * object literal, not just their handler logic).
+ * `edit_link`/`add_link_tag`/`remove_link_tag` started duplicating this
+ * 13-field shape verbatim (jscpd flagged the clone — three tools declaring
+ * the identical object literal, not just their handler logic).
  *
  * `batch` (F4, U4 adversarial review): an optional discriminator a bulk
  * (`ids`) write result sets `true` alongside `found: false` — without it, a
  * successful batch call's `structuredContent` was indistinguishable from a
- * genuine single-id not-found (`add_tag`/`remove_tag`/`trash_link`/
+ * genuine single-id not-found (`add_link_tag`/`remove_link_tag`/`trash_link`/
  * `retry_capture` all returned bare `{ found: false, results }`, which reads
  * as "nothing found" on what may be a fully successful batch). `restore_link`
  * already solved this with its own `outcome: 'batch'` value; `batch: true` is
@@ -83,8 +83,8 @@ export function notFoundResult(text: string): CallToolResult {
  * `outputSchema` raw-shape convention is a flat object of Zod types, and a
  * `reason` that's simply absent on the `ok: true` case round-trips the same
  * information losslessly. Spread into each one-or-many write tool's own
- * `results` field (`add_tag`/`remove_tag`/`trash_link`/`restore_link`/
- * `retry_capture`) — factored out once those five started duplicating this
+ * `results` field (`add_link_tag`/`remove_link_tag`/`trash_link`/
+ * `restore_link`/`retry_capture`) — factored out once those five started duplicating this
  * identical two-field shape verbatim (jscpd risk, same rationale as
  * `foundLinkOutputShape`'s own doc comment above).
  */

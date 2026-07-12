@@ -139,8 +139,8 @@ function toBatchSuccessText(results: CaptureLinkBatchResult[]): string {
  * Registers `capture_link` on `server`: parse (Zod) -> guard the URL ->
  * detect dedup -> one `core.createLink` call -> re-fetch (hydrate tags) ->
  * shape the MCP result. Per docs/rules/mcp.md, this is the FIRST write tool
- * and establishes the write pattern later tools (`edit_link`, `add_tag`,
- * `remove_tag`, `trash_link`, `restore_link`) follow: `core.createLink`
+ * and establishes the write pattern later tools (`edit_link`, `add_link_tag`,
+ * `remove_link_tag`, `trash_link`, `restore_link`) follow: `core.createLink`
  * returns a bare `Link` (no `tags`), so every mutation here re-fetches via
  * `getById` before shaping — same rationale as the read tools' `getById`
  * hydration, just after a write instead of before a read.

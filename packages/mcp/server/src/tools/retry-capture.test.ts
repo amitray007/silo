@@ -26,8 +26,8 @@ describeMcpTool(
           'list_links',
           'capture_link',
           'edit_link',
-          'add_tag',
-          'remove_tag',
+          'add_link_tag',
+          'remove_link_tag',
           'export_links',
           // agent-navigation slice U4: the one genuinely new tool this slice
           // adds (see docs/superpowers/specs/2026-07-12-richer-query-
@@ -35,7 +35,7 @@ describeMcpTool(
           // enriches an existing tool's input/output instead.
           'find_related',
           // delete-tag slice: delete a tag from the ENTIRE library (distinct
-          // from remove_tag, which only detaches a tag from one link).
+          // from remove_link_tag, which only detaches a tag from one link).
           'delete_tag',
         ]),
       );

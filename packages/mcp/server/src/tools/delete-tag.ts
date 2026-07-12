@@ -10,9 +10,9 @@ const deleteTagOutputSchema = {
 
 /**
  * Registers `delete_tag`: delete a tag from the ENTIRE library via
- * `core.deleteTag`. No link to guard/re-fetch (unlike `remove_tag`) — one core
- * call, shape the result. Case-insensitive; idempotent (`deleted: false` if the
- * tag didn't exist, never an error).
+ * `core.deleteTag`. No link to guard/re-fetch (unlike `remove_link_tag`) —
+ * one core call, shape the result. Case-insensitive; idempotent
+ * (`deleted: false` if the tag didn't exist, never an error).
  */
 export function registerDeleteTag(server: McpServer): void {
   server.registerTool(
@@ -25,17 +25,19 @@ export function registerDeleteTag(server: McpServer): void {
         'their association with this tag. Matching is case-insensitive ' +
         "(deleting 'ai' also deletes a tag stored as 'AI'). Idempotent: " +
         'deleting a tag that does not exist returns `deleted: false` (not an ' +
-        'error). This is DIFFERENT from `remove_tag`, which only detaches a tag ' +
-        'from ONE specific link and leaves the tag intact for its other links — ' +
-        'use `remove_tag` for that, and `delete_tag` to get rid of a tag everywhere.',
+        'error). This is DIFFERENT from `remove_link_tag`, which only detaches ' +
+        'a tag from ONE specific link and leaves the tag intact for its other ' +
+        'links — use `remove_link_tag` for that, and `delete_tag` to get rid ' +
+        'of a tag everywhere. Also different from `create_tag`: this deletes, ' +
+        'that creates a new standalone tag.',
       inputSchema: {
         tag: z
           .string()
           .min(1)
           .describe(
             'The tag to delete from the ENTIRE library (case-insensitive) — EVERY link loses ' +
-              'it, though the links themselves are kept. Use remove_tag instead if you only ' +
-              'want to detach a tag from ONE specific link.',
+              'it, though the links themselves are kept. Use remove_link_tag instead if you ' +
+              'only want to detach a tag from ONE specific link.',
           ),
       },
       outputSchema: deleteTagOutputSchema,

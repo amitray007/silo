@@ -18,26 +18,26 @@ const removeTagOutputSchema = {
 };
 
 /**
- * Registers `remove_tag` on `server`: parse (Zod) -> GUARD with `getById`
+ * Registers `remove_link_tag` on `server`: parse (Zod) -> GUARD with `getById`
  * (single) or one `core.removeTagMany` call (batch) -> shape the MCP result.
  *
  * One-or-many (agent-navigation slice U4): `id`/`ids` precedence mirrors
- * `add_tag`'s (see `add-tag.ts`'s doc comment) — `ids` wins if both given.
- * The SINGLE path is UNCHANGED behavior: the `getById` guard mirrors
- * `add_tag`'s — an unknown or trashed id resolves to a clean `found: false`
- * result rather than reaching `core.removeTag` at all — consistent
- * write-tool behavior for a live-scoping guard, even though `core.removeTag`
- * itself is a harmless no-op on a bogus id (unlike `addTag`, it doesn't
- * FK-throw), for the same reason `add_tag` refuses to operate on a trashed
- * link. The BATCH path delegates to `core.removeTagMany`, which reports
- * every item `ok: true` unless the underlying call throws (see its doc
- * comment).
+ * `add_link_tag`'s (see `add-link-tag.ts`'s doc comment) — `ids` wins if both
+ * given. The SINGLE path is UNCHANGED behavior: the `getById` guard mirrors
+ * `add_link_tag`'s — an unknown or trashed id resolves to a clean
+ * `found: false` result rather than reaching `core.removeTag` at all —
+ * consistent write-tool behavior for a live-scoping guard, even though
+ * `core.removeTag` itself is a harmless no-op on a bogus id (unlike
+ * `addTag`, it doesn't FK-throw), for the same reason `add_link_tag` refuses
+ * to operate on a trashed link. The BATCH path delegates to
+ * `core.removeTagMany`, which reports every item `ok: true` unless the
+ * underlying call throws (see its doc comment).
  */
-export function registerRemoveTag(server: McpServer): void {
+export function registerRemoveLinkTag(server: McpServer): void {
   server.registerTool(
-    'remove_tag',
+    'remove_link_tag',
     {
-      title: 'Remove tag',
+      title: 'Remove tag from link',
       description:
         'Detach a tag from one or more saved links. Pass `id` for ONE link, ' +
         'or `ids` for MANY in one call (if both are given, `ids` wins) — the ' +
@@ -76,7 +76,10 @@ export function registerRemoveTag(server: McpServer): void {
         return {
           isError: true,
           content: [
-            { type: 'text', text: 'Pass either `id` (single) or `ids` (batch) to remove_tag.' },
+            {
+              type: 'text',
+              text: 'Pass either `id` (single) or `ids` (batch) to remove_link_tag.',
+            },
           ],
         };
       }
@@ -93,7 +96,7 @@ export function registerRemoveTag(server: McpServer): void {
 
       // `removeTag` returns void — re-fetch via `getById` to get the updated
       // tag set before shaping, same re-fetch-after-write pattern
-      // `capture_link`/`edit_link`/`add_tag` use.
+      // `capture_link`/`edit_link`/`add_link_tag` use.
       const link = await getById(id);
       if (!link) {
         // Shouldn't happen immediately after untagging a link just confirmed
