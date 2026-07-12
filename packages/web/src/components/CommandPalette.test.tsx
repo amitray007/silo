@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink, makeTrashLink } from '../test/fixtures';
 import { CommandPalette } from './CommandPalette';
+import { HoverPreviewProvider } from './HoverPreviewContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -47,11 +48,20 @@ async function renderPalette(route = '/') {
   return render(<Harness />, { wrapper: (props) => wrapper({ ...props, route }) });
 }
 
+/**
+ * `HoverPreviewProvider` wraps the router content — `PaletteLinkRow` (palette-
+ * rich-rows slice) now calls `useHoverPreview()` on hover, mirroring
+ * `AppFrame.tsx`'s real hoisted provider (see that component's doc comment:
+ * the provider now wraps both `<main>` and `<CommandPalette>`), so every test
+ * in this file needs the same context ancestor or that hook throws.
+ */
 function wrapper({ children, route = '/' }: { children: ReactNode; route?: string }) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return (
     <QueryClientProvider client={queryClient}>
-      <MemoryRouter initialEntries={[route]}>{children}</MemoryRouter>
+      <MemoryRouter initialEntries={[route]}>
+        <HoverPreviewProvider>{children}</HoverPreviewProvider>
+      </MemoryRouter>
     </QueryClientProvider>
   );
 }
@@ -309,7 +319,9 @@ describe('CommandPalette', () => {
       render(
         <QueryClientProvider client={queryClient}>
           <MemoryRouter initialEntries={['/']}>
-            <Harness />
+            <HoverPreviewProvider>
+              <Harness />
+            </HoverPreviewProvider>
           </MemoryRouter>
         </QueryClientProvider>,
       );
