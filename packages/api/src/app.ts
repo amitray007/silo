@@ -18,6 +18,11 @@ import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
 import { registerLoginRoutes } from './routes/login.js';
+import { registerOAuthAuthorizeRoutes } from './routes/oauth/authorize.js';
+import { oauthCorsMiddleware } from './routes/oauth/oauth-cors.js';
+import { registerOAuthRegisterRoutes } from './routes/oauth/register.js';
+import { registerOAuthTokenRoutes } from './routes/oauth/token.js';
+import { registerOAuthWellKnownRoutes } from './routes/oauth/well-known.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTagsRoutes } from './routes/tags.js';
@@ -183,6 +188,27 @@ export function createApp(): Hono {
   app.use('/api/config', corsMiddleware());
   registerConfigRoutes(app);
 
+  // MCP OAuth authorization-server surface (MCP OAuth slice, U2) —
+  // `.well-known/oauth-authorization-server` + `/oauth/register` +
+  // `/oauth/authorize` (GET consent/login, POST approve/deny) + `/oauth/
+  // token`. Registered on the ROOT app, BEFORE the `/api` sub-app mount AND
+  // before the SPA catch-all below, for the same reason as `/api/config`:
+  // these routes must be reachable unauthenticated (the OAuth handshake IS
+  // how a client first obtains a credential — see `docs/superpowers/specs/
+  // 2026-07-12-mcp-oauth-design.md`). Wrapped in `oauthCorsMiddleware()`
+  // (wildcard `*`), NOT `corsMiddleware()` — see `routes/oauth/oauth-cors.ts`'s
+  // doc comment for why this handshake surface needs its own, separate CORS
+  // policy rather than reusing the `/api/*` origin allowlist. `GET /oauth/
+  // authorize` in particular MUST be registered here (not left to fall
+  // through to the SPA catch-all) or a built deployment would serve
+  // `index.html` for it instead of the consent page.
+  app.use('/.well-known/oauth-authorization-server', oauthCorsMiddleware());
+  app.use('/oauth/*', oauthCorsMiddleware());
+  registerOAuthWellKnownRoutes(app);
+  registerOAuthRegisterRoutes(app);
+  registerOAuthAuthorizeRoutes(app);
+  registerOAuthTokenRoutes(app);
+
   const api = new Hono();
   // CORS first (the browser-facing gate — an allowlist-rejected origin gets
   // no CORS headers, so the browser refuses to expose the response, before
@@ -239,7 +265,13 @@ export function createApp(): Hono {
     // returns HTML" would be a silent, easy-to-miss regression.
     app.get('*', (c, next) => {
       const path = c.req.path;
-      if (path.startsWith('/api/') || path === '/api' || path === '/health') {
+      if (
+        path.startsWith('/api/') ||
+        path === '/api' ||
+        path === '/health' ||
+        path.startsWith('/oauth/') ||
+        path.startsWith('/.well-known/')
+      ) {
         return next();
       }
       return c.html(readIndexHtml(webIndexPath));

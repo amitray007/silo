@@ -192,4 +192,102 @@ describeIfPg('access-token management routes (integration, access-tokens slice U
       expect(body.error).toBe('validation_error');
     });
   });
+
+  describe('OAuth connected-clients management (MCP OAuth slice, U2)', () => {
+    /** Registers a client + issues a live OAuth token pair for it via
+     * `core` directly (bypassing the HTML consent flow — `authorize.test.ts`
+     * covers that separately) so these tests have a real connected app to
+     * list/revoke. */
+    async function connectOAuthClient(
+      core: typeof CoreOps,
+      clientName: string,
+    ): Promise<{ clientId: string }> {
+      const client = await core.registerOAuthClient({
+        clientName,
+        redirectUris: ['https://claude.ai/api/mcp/auth_callback'],
+      });
+      await core.issueOAuthTokens({ clientId: client.id, resource: 'https://mcp.example.com/mcp' });
+      return { clientId: client.id };
+    }
+
+    it('GET /api/access-tokens/oauth-clients without a bearer is 401', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app } = harness.mod();
+      const res = await app.request('/api/access-tokens/oauth-clients');
+      expect(res.status).toBe(401);
+    });
+
+    it('GET lists a connected client, deduped and shaped per ConnectedOAuthClient', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app, core } = harness.mod();
+      const { clientId } = await connectOAuthClient(core, 'list-test-app');
+
+      const res = await app.request('/api/access-tokens/oauth-clients', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { clients: Array<Record<string, unknown>> };
+      const entry = body.clients.find((c) => (c.clientIds as string[]).includes(clientId));
+      expect(entry).toBeDefined();
+      expect(entry?.clientName).toBe('list-test-app');
+      expect(entry?.activeTokenCount).toBe(1);
+      expect(entry?.connectionCount).toBe(1);
+      expect(typeof entry?.grantedAt).toBe('string');
+    });
+
+    it('DELETE /api/access-tokens/oauth-clients/:clientId revokes that client: 204, then it no longer lists', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app, core } = harness.mod();
+      const { clientId } = await connectOAuthClient(core, 'revoke-one-app');
+
+      const delRes = await app.request(`/api/access-tokens/oauth-clients/${clientId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(delRes.status).toBe(204);
+
+      const listRes = await app.request('/api/access-tokens/oauth-clients', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      const body = (await listRes.json()) as { clients: Array<{ clientIds: string[] }> };
+      expect(body.clients.some((c) => c.clientIds.includes(clientId))).toBe(false);
+    });
+
+    it('DELETE /api/access-tokens/oauth-clients/:clientId for an unknown id is still 204 (no-op)', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app } = harness.mod();
+      const res = await app.request('/api/access-tokens/oauth-clients/cli_does_not_exist', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.status).toBe(204);
+    });
+
+    it('DELETE /api/access-tokens/oauth-clients (revoke all) clears every connected client but leaves bearer tokens untouched', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      const { app, core } = harness.mod();
+      await connectOAuthClient(core, 'revoke-all-app-1');
+      await connectOAuthClient(core, 'revoke-all-app-2');
+      const bearerToken = await createToken(app, 'survives-revoke-all');
+      const bearer = (await bearerToken.json()) as CreatedTokenResponse;
+
+      const res = await app.request('/api/access-tokens/oauth-clients', {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      expect(res.status).toBe(204);
+
+      const listRes = await app.request('/api/access-tokens/oauth-clients', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      const listBody = (await listRes.json()) as { clients: unknown[] };
+      expect(listBody.clients).toEqual([]);
+
+      const bearerListRes = await app.request('/api/access-tokens', {
+        headers: { Authorization: `Bearer ${TOKEN}` },
+      });
+      const bearerListBody = (await bearerListRes.json()) as ListResponse;
+      expect(bearerListBody.tokens.some((t) => t.id === bearer.id)).toBe(true);
+    });
+  });
 });
