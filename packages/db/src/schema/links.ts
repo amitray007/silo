@@ -181,5 +181,21 @@ export const links = pgTable(
     index('links_capture_status_live_idx')
       .on(table.captureStatus)
       .where(sql`${table.deletedAt} is null`),
+    // Trigram substring-search index (search-substring method, D1): a `pg_trgm`
+    // GIN expression index over the SAME field set `search_vector` covers
+    // (minus `extracted_text`, per the frozen method decision — see
+    // `packages/core/src/links/search-query.ts`'s `buildSubstringMatch` doc
+    // comment for why extracted_text is excluded from the trigram tier),
+    // partial `WHERE deleted_at IS NULL` mirroring `links_search_vector_live_idx`
+    // above. Backs `core`'s trigram-fallback `ILIKE '%needle%'` tier (fires
+    // only when the prefix-FTS tier above returns zero rows). Concatenation
+    // order/expression MUST stay byte-identical to `buildSubstringMatch`'s
+    // SQL, or the planner won't recognize the ILIKE predicate as index-backed.
+    index('links_trgm_live_idx')
+      .using(
+        'gin',
+        sql`(coalesce(${table.title}, '') || ' ' || coalesce(${table.description}, '') || ' ' || regexp_replace(left(split_part(coalesce(${table.canonicalUrl}, ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g') || ' ' || coalesce(${table.notes}, '')) gin_trgm_ops`,
+      )
+      .where(sql`${table.deletedAt} is null`),
   ],
 );

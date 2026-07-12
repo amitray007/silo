@@ -8,14 +8,13 @@ import type { Executor, Link } from './executor.js';
 import { whereLive } from './live.js';
 import {
   decodeListCursor,
-  decodeSearchCursor,
   effectiveLimit,
   encodeListCursor,
-  encodeSearchCursor,
   hydrateTags,
   type LinkWithTags,
   type PageParams,
 } from './pagination.js';
+import { runTieredSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
 import { sourceDataSchema } from './source-data.js';
@@ -622,28 +621,44 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
 ), ''))`;
 
 /**
- * Full-text search over live links, ranked by `ts_rank` (highest first),
- * tag-hydrated and offset-paginated. Matches a row when EITHER the stored
- * `search_vector` (title/description/extracted_text/notes, per the schema's
- * generated column) OR the link's tag names (`tagSearchVector`, computed at
- * query time — see its doc comment for why tags can't live in the generated
- * column) satisfy the query. Rank combines both signals by SUMMING their
- * `ts_rank`s: a tag hit is a real relevance signal (an exact, deliberately
- * user-applied label), so it should be able to lift a link's rank rather than
- * being ignored whenever the stored vector alone would rank it lower — while
- * a link matching on both signals ranks above one matching on only one,
- * which a `GREATEST`/max-of-two would not distinguish.
+ * Two-tier search over live links (search-substring method), tag-hydrated
+ * and offset-paginated. Delegates to `search-query.ts`'s `runTieredSearch`
+ * (shared with `trash.ts`'s `searchTrash`):
+ *
+ *   1. PREFIX full-text tier (tried first): the query's LAST token is
+ *      upgraded to a prefix match (`sil:*` matches `silo`) via
+ *      `buildPrefixTsQuery`, ANDed with every earlier token as an exact
+ *      lexeme — see that function's doc comment for the app-side escaping
+ *      that keeps this injection-safe. Matches a row when EITHER the stored
+ *      `search_vector` (title/description/extracted_text/notes, per the
+ *      schema's generated column) OR the link's tag names (`tagSearchVector`,
+ *      computed at query time — see its doc comment for why tags can't live
+ *      in the generated column) satisfy the tsquery. Rank combines both
+ *      signals by SUMMING their `ts_rank`s: a tag hit is a real relevance
+ *      signal (an exact, deliberately user-applied label), so it should be
+ *      able to lift a link's rank rather than being ignored whenever the
+ *      stored vector alone would rank it lower — while a link matching on
+ *      both signals ranks above one matching on only one, which a
+ *      `GREATEST`/max-of-two would not distinguish.
+ *   2. TRIGRAM substring tier (fallback, ONLY on a page-1 zero-row prefix
+ *      result): `buildSubstringMatch` runs an `ILIKE '%needle%'` over the
+ *      SAME title/description/canonical-url/notes field set (see that
+ *      function's doc comment for why `extracted_text` is excluded and the
+ *      needle-escaping that keeps `%`/`_`/`\` from becoming wildcards),
+ *      ordered by `similarity()` desc — a completely different, non-
+ *      comparable ranking scale from `ts_rank`, which is why the two tiers
+ *      are never unioned into one query. Finds `ilo` matching `silo`
+ *      anywhere in a word, not just as a prefix.
  *
  * `filter.tag` (optional, command-center search plan 024): an ADDITIONAL
  * scope on top of the text match above — when given, a result must also
  * carry that exact tag (`tags.normalizedKey = normalizeTagKey(tag)`, joined
  * through `linkTags`/`tags`, mirroring `list()`'s tag-filter branch). This is
  * an `EXISTS` membership check, layered on top of (ANDed with) the existing
- * OR-based text/tag-name match — it does NOT replace or widen that match, so
- * a `tag` scope never surfaces a link that fails the text query. Omitting
- * `filter` (or `filter.tag`) leaves every existing caller's behavior
- * byte-for-byte unchanged (the predicate below degrades to exactly the prior
- * query — see the regression test).
+ * text/tag-name match at EITHER tier — it does NOT replace or widen that
+ * match, so a `tag` scope never surfaces a link that fails the text query.
+ * Omitting `filter` (or `filter.tag`) leaves every existing caller's
+ * behavior byte-for-byte unchanged.
  *
  * `filter` is an OPTIONS OBJECT (`SearchFilter`, mirroring `list()`'s own
  * `ListFilter` third… second parameter shape) rather than a positional
@@ -652,13 +667,15 @@ export const tagSearchVector = sql`to_tsvector('english', coalesce((
  * an extra positional `undefined` through — a review flagged the original
  * positional `tag?: string` design (plan 024) for exactly this churn risk.
  *
- * Rank is not unique/keyset-able, so pagination uses a bounded offset cursor
- * — capped at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is
+ * Neither tier's rank is unique/keyset-able, so pagination uses a bounded
+ * offset cursor tagged with WHICH tier produced it (`SearchTier`, D2) —
+ * capped at `MAX_OFFSET` in `decodeSearchCursor` (a forged/deep offset is
  * rejected with `InvalidCursorError` rather than run, since each page past
  * that depth is a full sort-then-discard) — documented tradeoff: a row
- * inserted mid-paging can shift results, acceptable for search at this scale.
- * `limit` is clamped to `[1, 100]` (default 20). `websearch_to_tsquery` stays
- * bound as a parameter (no injection) exactly as before.
+ * inserted mid-paging can shift results, acceptable for search at this
+ * scale. The tier is chosen once for page 1 and every later page of the
+ * SAME paged session stays on it — see `runTieredSearch`'s doc comment.
+ * `limit` is clamped to `[1, 100]` (default 20).
  *
  * Performance note: `tagSearchVector` is a correlated subquery evaluated per
  * candidate row (once for the WHERE match, once for the rank — Postgres does
@@ -679,20 +696,12 @@ export async function search(
   filter: SearchFilter = {},
   page: PageParams = {},
 ): Promise<SearchPage> {
-  const limit = effectiveLimit(page.limit);
-  const offset = page.cursor !== undefined ? decodeSearchCursor(page.cursor).offset : 0;
   const tag = filter.tag;
-
-  const tsQuery = sql`websearch_to_tsquery('english', ${query})`;
-  const titleRank = sql`ts_rank(${links.searchVector}, ${tsQuery})`;
-  const tagRank = sql`ts_rank(${tagSearchVector}, ${tsQuery})`;
-  const combinedRank = sql<number>`${titleRank} + ${tagRank}`;
 
   // The additive tag-membership scope (see doc comment above): an `EXISTS`
   // over the same `linkTags`/`tags` join `list()`'s tag-filter branch uses,
-  // correlated on THIS row's id. Kept as a bare `undefined` (not folded into
-  // the OR-match sql template) when `tag` is omitted, so the WHERE clause
-  // below is textually identical to the pre-existing query in that case.
+  // correlated on THIS row's id. `undefined` when `tag` is omitted, so the
+  // WHERE clause `runTieredSearch` builds is unaffected in that case.
   const tagScopeCondition = tag
     ? sql`exists (
         select 1 from ${linkTags}
@@ -702,32 +711,7 @@ export async function search(
       )`
     : undefined;
 
-  const rows = await db
-    .select({
-      link: links,
-      rank: combinedRank,
-    })
-    .from(links)
-    .where(
-      whereLive(
-        sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`,
-        ...(tagScopeCondition ? [tagScopeCondition] : []),
-      ),
-    )
-    .orderBy(desc(combinedRank))
-    .limit(limit + 1)
-    .offset(offset);
-
-  const hasMore = rows.length > limit;
-  const page_ = hasMore ? rows.slice(0, limit) : rows;
-  const nextCursor = hasMore ? encodeSearchCursor(offset + limit) : undefined;
-
-  const hydrated = await hydrateTags(
-    db,
-    page_.map((row) => row.link),
-  );
-  const results = hydrated.map((link, i) => ({ ...link, rank: page_[i]?.rank ?? 0 }));
-  return nextCursor === undefined ? { results } : { results, nextCursor };
+  return runTieredSearch(whereLive(), tagSearchVector, query, tagScopeCondition, page);
 }
 
 export type EditLinkInput = {

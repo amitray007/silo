@@ -63,10 +63,24 @@ type ListCursorPayload = {
   id: string;
 };
 
-/** The opaque offset cursor payload for `search` — position is a row offset. */
+/**
+ * Which tier of the two-tier search (search-substring method) a `search`
+ * cursor's offset was computed against: `'fts'` for the prefix full-text
+ * tier, `'trgm'` for the pg_trgm substring-fallback tier. The tier is chosen
+ * ONCE, for page 1 (prefix FTS first; trigram only if that returns zero
+ * rows — see `links.ts`'s `search()`), and carried in every subsequent
+ * page's cursor so paging never silently flips tiers mid-scroll: an offset
+ * is only meaningful relative to the query that produced it, and the two
+ * tiers order rows completely differently (`ts_rank` desc vs `similarity()`
+ * desc).
+ */
+export type SearchTier = 'fts' | 'trgm';
+
+/** The opaque offset cursor payload for `search` — position is a row offset within a tier. */
 type SearchCursorPayload = {
   kind: 'search';
   offset: number;
+  tier: SearchTier;
 };
 
 /**
@@ -181,21 +195,38 @@ export function decodeTrashCursor(cursor: string): { deletedAt: string; id: stri
   return { deletedAt: payload.deletedAt, id: payload.id };
 }
 
-/** Encode a `search` offset cursor pointing at the next unread row. */
-export function encodeSearchCursor(offset: number): string {
-  return encode({ kind: 'search', offset });
+/**
+ * Encode a `search` offset cursor pointing at the next unread row, tagged
+ * with WHICH tier (`'fts'` or `'trgm'`, search-substring method D2) produced
+ * it — chosen once for page 1 and carried through every subsequent page so
+ * paging can never silently flip from the prefix-FTS tier to the trigram
+ * tier (or vice versa) mid-scroll.
+ */
+export function encodeSearchCursor(offset: number, tier: SearchTier): string {
+  return encode({ kind: 'search', offset, tier });
 }
 
-/** Decode + validate a `search` offset cursor. Throws `InvalidCursorError` on any mismatch. */
-export function decodeSearchCursor(cursor: string): { offset: number } {
+/**
+ * Decode + validate a `search` offset cursor. Throws `InvalidCursorError` on
+ * any mismatch. A cursor encoded before the tier field existed (no `tier`
+ * key at all) decodes as `'fts'` — back-compat, search-substring method D2:
+ * every pre-existing cursor was always an FTS-tier offset, so defaulting a
+ * missing tier to `'fts'` reproduces the old (single-tier) behavior exactly
+ * rather than rejecting an otherwise-valid old cursor. A PRESENT but invalid
+ * `tier` value (anything other than `'fts'`/`'trgm'`/`undefined`) is treated
+ * as a malformed cursor, same as any other shape mismatch here.
+ */
+export function decodeSearchCursor(cursor: string): { offset: number; tier: SearchTier } {
   const parsed = decode(cursor);
+  const tierValue = (parsed as { tier?: unknown } | null)?.tier;
   if (
     typeof parsed !== 'object' ||
     parsed === null ||
     (parsed as { kind?: unknown }).kind !== 'search' ||
     typeof (parsed as { offset?: unknown }).offset !== 'number' ||
     !Number.isSafeInteger((parsed as { offset: number }).offset) ||
-    (parsed as { offset: number }).offset < 0
+    (parsed as { offset: number }).offset < 0 ||
+    (tierValue !== undefined && tierValue !== 'fts' && tierValue !== 'trgm')
   ) {
     throw new InvalidCursorError('cursor is not a valid search cursor');
   }
@@ -203,7 +234,8 @@ export function decodeSearchCursor(cursor: string): { offset: number } {
   if (offset > MAX_OFFSET) {
     throw new InvalidCursorError('cursor offset exceeds maximum');
   }
-  return { offset };
+  const tier: SearchTier = tierValue === 'trgm' ? 'trgm' : 'fts';
+  return { offset, tier };
 }
 
 /**

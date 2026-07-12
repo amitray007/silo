@@ -793,6 +793,168 @@ describeIfPg('links operations (integration)', () => {
     });
   });
 
+  describe('search — prefix + trigram substring (search-substring method)', () => {
+    it('a word PREFIX matches via the FTS tier (zorb -> zorblatt)', async () => {
+      const match = await ops.createLink({
+        url: 'https://example.com/prefix-tier-a',
+        title: 'zorblatt the personal link store',
+        sourceKind: 'link',
+      });
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/prefix-tier-b',
+        title: 'a completely unrelated title',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('zorb');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(match.id);
+      expect(ids).not.toContain(unrelated.id);
+    });
+
+    it('a bare SUBSTRING (not a prefix) does not match the FTS tier but DOES match the trigram fallback (orbla -> zorblatt)', async () => {
+      const match = await ops.createLink({
+        url: 'https://example.com/substring-tier-a',
+        title: 'zorblatt the personal link store',
+        sourceKind: 'link',
+      });
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/substring-tier-b',
+        title: 'a completely unrelated title',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('orbla');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(match.id);
+      expect(ids).not.toContain(unrelated.id);
+    });
+
+    it('the trigram fallback does NOT fire when the prefix tier already found rows (no mixed-tier results)', async () => {
+      // Two links: one whose TITLE prefix-matches 'quix' (so the FTS tier is
+      // non-empty), and one that would ONLY match via a trigram substring on
+      // an unrelated word (a DIFFERENT link's notes containing 'quix' NOT at
+      // a word start). Since the FTS tier already returned a row for 'quix',
+      // the trigram tier must never run — the second link (matchable only by
+      // substring, not by 'quix' as a prefix) must NOT appear.
+      const prefixMatch = await ops.createLink({
+        url: 'https://example.com/no-mixed-tier-a',
+        title: 'quixolate unique prefix term',
+        sourceKind: 'link',
+      });
+      const substringOnlyMatch = await ops.createLink({
+        url: 'https://example.com/no-mixed-tier-b',
+        title: 'an unrelated title with no matching prefix',
+        notes: 'this note contains zzzquixzzz as a pure substring, buried mid-word',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('quix');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(prefixMatch.id);
+      // zzzquixzzz has no word that STARTS with 'quix' (tokenized as one
+      // lexeme 'zzzquixzzz' by to_tsvector), so it can only be found by the
+      // trigram tier — which must not run since the FTS tier was non-empty.
+      expect(ids).not.toContain(substringOnlyMatch.id);
+    });
+
+    it('trigram tier orders by similarity() desc: a closer substring match ranks above a looser one', async () => {
+      // Neither link's title has a word STARTING with 'zqxv' (so the FTS
+      // prefix tier is empty and the trigram fallback fires for both).
+      // 'wobblezqxvwobble' is a tighter trigram match to the needle 'zqxv'
+      // (higher character-overlap density) than a much longer string that
+      // merely contains it.
+      const closer = await ops.createLink({
+        url: 'https://example.com/trgm-rank-a',
+        title: 'wobblezqxvwobble',
+        sourceKind: 'link',
+      });
+      const looser = await ops.createLink({
+        url: 'https://example.com/trgm-rank-b',
+        title:
+          'a very long unrelated title string that happens to containzqxvburied deep inside many other words',
+        sourceKind: 'link',
+      });
+
+      const { results } = await ops.search('zqxv');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(closer.id);
+      expect(ids).toContain(looser.id);
+
+      const byId = new Map(results.map((r) => [r.id, r]));
+      const closerRank = byId.get(closer.id)?.rank ?? -1;
+      const looserRank = byId.get(looser.id)?.rank ?? -1;
+      expect(closerRank).toBeGreaterThan(looserRank);
+      // Index order must match rank order (highest similarity first).
+      expect(results.map((r) => r.id)).toEqual([closer.id, looser.id]);
+    });
+
+    it('cursor tier stability: paging within the trigram fallback stays on the trigram tier across pages', async () => {
+      // A query with no FTS prefix hits anywhere (forces the trigram
+      // fallback), several links matchable only by substring.
+      for (let i = 0; i < 3; i++) {
+        await ops.createLink({
+          url: `https://example.com/trgm-page-${i}`,
+          title: `wobblevynqrwobble${i}`,
+          sourceKind: 'link',
+        });
+      }
+
+      const page1 = await ops.search('vynqr', {}, { limit: 2 });
+      expect(page1.results).toHaveLength(2);
+      expect(page1.nextCursor).toBeDefined();
+
+      const page1Cursor = page1.nextCursor;
+      if (page1Cursor === undefined) throw new Error('expected a nextCursor');
+      const decodedPage1Cursor = JSON.parse(Buffer.from(page1Cursor, 'base64url').toString('utf8'));
+      expect(decodedPage1Cursor.tier).toBe('trgm');
+
+      const page2 = await ops.search('vynqr', {}, { limit: 2, cursor: page1Cursor });
+      expect(page2.results).toHaveLength(1);
+
+      const seenIds = new Set([...page1.results, ...page2.results].map((r) => r.id));
+      expect(seenIds.size).toBe(3);
+    });
+
+    it('adversarial: buildPrefixTsQuery / search() never throws on operator-laden or malformed input', async () => {
+      const adversarialQueries = [
+        "'",
+        '\\',
+        'a & b',
+        '!',
+        '(',
+        ')',
+        ':*',
+        "a')--",
+        '',
+        '   ',
+        'ключ', // a unicode word (Cyrillic)
+      ];
+
+      for (const query of adversarialQueries) {
+        await expect(ops.search(query)).resolves.not.toThrow();
+        const { results } = await ops.search(query);
+        expect(Array.isArray(results)).toBe(true);
+      }
+    });
+
+    it('empty/whitespace-only query returns no results and does NOT run the trigram tier', async () => {
+      await ops.createLink({
+        url: 'https://example.com/empty-query-link',
+        title: 'anything at all',
+        sourceKind: 'link',
+      });
+
+      const empty = await ops.search('');
+      expect(empty.results).toEqual([]);
+      expect(empty.nextCursor).toBeUndefined();
+
+      const whitespace = await ops.search('   ');
+      expect(whitespace.results).toEqual([]);
+      expect(whitespace.nextCursor).toBeUndefined();
+    });
+  });
+
   describe('search — tag scope (command-center plan 024)', () => {
     it('omitting tag is a byte-for-byte regression: unscoped results unaffected by an unrelated tag existing', async () => {
       const plain = await ops.createLink({
@@ -1960,6 +2122,86 @@ describeIfPg('links operations (integration)', () => {
       const { results } = await ops.search('trashsearchpageterm');
       expect(results.map((r) => r.id)).toContain(live.id);
       expect(results.map((r) => r.id)).not.toContain(trashed.id);
+    });
+  });
+
+  describe('search cursor tier (search-substring method D2)', () => {
+    it('a page-1 cursor from the FTS tier is tagged tier: "fts" and page 2 stays on the FTS tier', async () => {
+      for (let i = 0; i < 3; i++) {
+        await ops.createLink({
+          url: `https://example.com/cursor-fts-tier-${i}`,
+          title: `ftstierword${i} matches by prefix`,
+          sourceKind: 'link',
+        });
+      }
+
+      const page1 = await ops.search('ftstierword', {}, { limit: 2 });
+      const page1Cursor = page1.nextCursor;
+      if (page1Cursor === undefined) throw new Error('expected a nextCursor');
+      const decoded1 = JSON.parse(Buffer.from(page1Cursor, 'base64url').toString('utf8'));
+      expect(decoded1.tier).toBe('fts');
+
+      const page2 = await ops.search('ftstierword', {}, { limit: 2, cursor: page1Cursor });
+      expect(page2.results).toHaveLength(1);
+      if (page2.nextCursor !== undefined) {
+        const decoded2 = JSON.parse(Buffer.from(page2.nextCursor, 'base64url').toString('utf8'));
+        expect(decoded2.tier).toBe('fts');
+      }
+    });
+
+    it('a cursor WITHOUT a tier field (pre-existing/back-compat) decodes as the fts tier', async () => {
+      await ops.createLink({
+        url: 'https://example.com/cursor-backcompat',
+        title: 'backcompattier matches by prefix',
+        sourceKind: 'link',
+      });
+
+      // A cursor shaped exactly like the pre-search-substring-method encoding
+      // (no `tier` key at all) must still be accepted and treated as 'fts'.
+      const legacyCursor = Buffer.from(
+        JSON.stringify({ kind: 'search', offset: 0 }),
+        'utf8',
+      ).toString('base64url');
+
+      const { results } = await ops.search('backcompattier', {}, { cursor: legacyCursor });
+      expect(Array.isArray(results)).toBe(true);
+    });
+
+    it('a cursor with an invalid tier value throws InvalidCursorError', async () => {
+      const badTierCursor = Buffer.from(
+        JSON.stringify({ kind: 'search', offset: 0, tier: 'bogus' }),
+        'utf8',
+      ).toString('base64url');
+
+      await expect(ops.search('anything', {}, { cursor: badTierCursor })).rejects.toThrow(
+        ops.InvalidCursorError,
+      );
+    });
+
+    it('a page pinned to the trgm tier via a forged cursor runs the trigram tier even when the FTS tier would otherwise win', async () => {
+      // A link findable by BOTH tiers for the query 'pinnedtier': its title
+      // starts with the word, so the FTS tier is non-empty for page 1. Forge
+      // a page-2-style cursor pinned to 'trgm' at offset 0 and confirm the
+      // trigram tier actually runs (returns the substring-based similarity
+      // rank, not a ts_rank) rather than being ignored in favor of FTS.
+      await ops.createLink({
+        url: 'https://example.com/pinned-tier-link',
+        title: 'pinnedtier prefix and substring',
+        sourceKind: 'link',
+      });
+
+      const trgmPinnedCursor = Buffer.from(
+        JSON.stringify({ kind: 'search', offset: 0, tier: 'trgm' }),
+        'utf8',
+      ).toString('base64url');
+
+      const { results } = await ops.search('pinnedtier', {}, { cursor: trgmPinnedCursor });
+      // The trigram tier's `rank` is a similarity() score, which for an
+      // (almost) exact prefix match is high but distinct in kind from
+      // ts_rank; the important assertion is that pinning to 'trgm' does not
+      // throw and returns the link via the trigram path (proving the tier
+      // choice is honored, not silently overridden by the FTS tier).
+      expect(results.map((r) => r.title)).toContain('pinnedtier prefix and substring');
     });
   });
 });

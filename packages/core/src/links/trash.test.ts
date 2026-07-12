@@ -336,6 +336,83 @@ describeIfPg('trash reads + counts (integration, C2)', () => {
     });
   });
 
+  describe('searchTrash — prefix + trigram substring (search-substring method, shared helpers)', () => {
+    // Mirrors links.test.ts's equivalent live-search tests EXACTLY (same
+    // fixtures/assertions, `searchTrash` instead of `search`, every fixture
+    // soft-deleted) — proves `searchTrash` shares `search-query.ts`'s
+    // `runTieredSearch`/`buildPrefixTsQuery`/`buildSubstringMatch` with
+    // `search` rather than a hand-copied implementation that could silently
+    // drift.
+
+    it('a word PREFIX matches via the FTS tier (zorb -> zorblatt), trashed only', async () => {
+      const match = await ops.createLink({
+        url: 'https://example.com/trash-prefix-tier-a',
+        title: 'zorblatt the personal link store',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(match.id);
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/trash-prefix-tier-b',
+        title: 'a completely unrelated title',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(unrelated.id);
+
+      const { results } = await ops.searchTrash('zorb');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(match.id);
+      expect(ids).not.toContain(unrelated.id);
+    });
+
+    it('a bare SUBSTRING (not a prefix) falls back to the trigram tier (orbla -> zorblatt), trashed only', async () => {
+      const match = await ops.createLink({
+        url: 'https://example.com/trash-substring-tier-a',
+        title: 'zorblatt the personal link store',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(match.id);
+      const unrelated = await ops.createLink({
+        url: 'https://example.com/trash-substring-tier-b',
+        title: 'a completely unrelated title',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(unrelated.id);
+
+      const { results } = await ops.searchTrash('orbla');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(match.id);
+      expect(ids).not.toContain(unrelated.id);
+    });
+
+    it('the trigram fallback does NOT fire when the prefix tier already found trashed rows', async () => {
+      const prefixMatch = await ops.createLink({
+        url: 'https://example.com/trash-no-mixed-tier-a',
+        title: 'quixolate unique prefix term',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(prefixMatch.id);
+      const substringOnlyMatch = await ops.createLink({
+        url: 'https://example.com/trash-no-mixed-tier-b',
+        title: 'an unrelated title with no matching prefix',
+        notes: 'this note contains zzzquixzzz as a pure substring, buried mid-word',
+        sourceKind: 'link',
+      });
+      await ops.softDelete(substringOnlyMatch.id);
+
+      const { results } = await ops.searchTrash('quix');
+      const ids = results.map((r) => r.id);
+      expect(ids).toContain(prefixMatch.id);
+      expect(ids).not.toContain(substringOnlyMatch.id);
+    });
+
+    it('adversarial: searchTrash never throws on operator-laden or malformed input', async () => {
+      const adversarialQueries = ["'", '\\', 'a & b', '!', '(', ')', ':*', "a')--", '', '   '];
+      for (const query of adversarialQueries) {
+        await expect(ops.searchTrash(query)).resolves.not.toThrow();
+      }
+    });
+  });
+
   describe('counts', () => {
     it('countLive/countTrash/getCounts are correct as links are created', async () => {
       const before = await ops.getCounts();

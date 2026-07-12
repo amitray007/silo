@@ -405,4 +405,66 @@ describeIfPg('links schema (integration)', () => {
     // Only the one live 'full' row — the trashed 'full' row is excluded.
     expect(liveFull.rows[0]).toEqual({ n: 1 });
   });
+
+  describe('pg_trgm substring index (search-substring method, migration 0012)', () => {
+    it('the pg_trgm extension is enabled', async () => {
+      const rows = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_extension where extname = 'pg_trgm'`,
+      );
+      expect(rows.rows[0]?.n).toBe(1);
+    });
+
+    it('the links_trgm_live_idx GIN trigram index exists', async () => {
+      const rows = await db.execute<{ n: number }>(
+        sql`select count(*)::int as n from pg_indexes where indexname = 'links_trgm_live_idx'`,
+      );
+      expect(rows.rows[0]?.n).toBe(1);
+    });
+
+    it('an ILIKE substring query over the trigram expression is index-backed (bitmap index scan)', async () => {
+      // Enough live rows that the planner actually prefers the trgm index
+      // over a sequential scan — verified empirically against this exact
+      // migrated schema: Postgres's default cost model favors a seq scan
+      // (or an unrelated cheap partial index that happens to also satisfy
+      // `deleted_at IS NULL`) up to several thousand rows; the trgm index
+      // only wins on its own merits once the table is large enough that
+      // scanning it in full is genuinely more expensive than probing the
+      // GIN index. 40,000 rows (inserted server-side via `generate_series`
+      // for speed — a plain multi-row `INSERT ... VALUES` round-trip per
+      // batch would make this test slow) reproduces that threshold
+      // reliably; a smaller table would make this test flaky (may or may
+      // not pick the index depending on the planner's row estimates) rather
+      // than deterministically proving the index is USABLE.
+      await db.execute(sql`
+        insert into links (url, canonical_url, title, source_kind, capture_status)
+        select
+          'https://example.com/trgm-explain-' || i,
+          'https://example.com/trgm-explain-' || i,
+          case when i = 20000 then 'a distinctivezqxvneedle inside a title'
+               else 'filler title number ' || i end,
+          'link',
+          (array['full','partial','bare']::capture_status[])[1 + (i % 3)]
+        from generate_series(1, 40000) i
+      `);
+      await db.execute(sql`analyze links`);
+
+      // The concatenation expression MUST stay byte-identical to
+      // `links.ts`'s `table` index definition and `core`'s
+      // `search-query.ts` `trigramText` — see both doc comments for why a
+      // mismatched expression means the planner won't recognize this ILIKE
+      // as index-backed.
+      const explain = await db.execute<{ 'QUERY PLAN': string }>(sql`
+        explain
+        select id from links
+        where (coalesce(title, '') || ' ' || coalesce(description, '') || ' ' ||
+               regexp_replace(left(split_part(coalesce(canonical_url, ''), '#', 1), 4000), '[^[:alnum:]]+', ' ', 'g')
+               || ' ' || coalesce(notes, ''))
+              ilike '%zqxvneedle%' escape '\\'
+          and deleted_at is null
+      `);
+      const plan = explain.rows.map((r) => r['QUERY PLAN']).join('\n');
+      expect(plan).toContain('links_trgm_live_idx');
+      expect(plan.toLowerCase()).toContain('bitmap index scan');
+    });
+  });
 });
