@@ -648,7 +648,8 @@ function SourceVariant({
  * exact phrasing isn't reproducible field-for-field).
  *
  * Rendered via a PORTAL to `document.body` (not inline in the row) so
- * `position:fixed` at `z-index:36` is never clipped by a scrolling list's
+ * `position:fixed` at `z-index:41` (above the command-palette scrim; see the
+ * inline note on the `zIndex` style) is never clipped by a scrolling list's
  * `overflow`/stacking context — `useHoverPreview` owns the single shared
  * instance (mounted once in `AppFrame`, mirroring `RowMenuProvider`'s "one
  * provider, not one per row" shape) so at most one preview is ever open.
@@ -693,7 +694,14 @@ export function HoverPreview({
         top: position.top,
         left: position.left,
         width: 288,
-        zIndex: 36,
+        // Above the command-palette scrim (`zIndex: 40`, CommandPalette.tsx):
+        // the palette now also opens this shared card, and at the old z-index
+        // 36 it rendered BEHIND the palette's frosted scrim — visible only as a
+        // dimmed ghost, unusable (browser QA regression). Library rows have no
+        // overlay above them so this never mattered there. 41 clears the scrim
+        // (40) while staying below the settings-modal select menu (45, which
+        // only appears inside the Settings modal, where no hover card shows).
+        zIndex: 41,
         background: 'var(--bg)',
         border: '1px solid var(--line)',
         borderRadius: 12,
