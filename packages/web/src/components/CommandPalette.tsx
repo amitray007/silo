@@ -808,6 +808,18 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               flex: 'none',
             }}
           >
+            {/* Type-to-refocus (palette-keyboard-hover slice): the requirement
+                "typing while a row is focused returns focus to the input" is
+                satisfied INHERENTLY by cmdk's focus model — its rows are
+                `role="option"` (never focusable), so DOM focus stays on this
+                input through all arrow navigation (verified in browser QA:
+                `document.activeElement` is this `[cmdk-input]` after ArrowDown,
+                and a keystroke lands in `value`). No keydown-refocus handler is
+                added because there is no reachable state where a printable key
+                lands anywhere but here — such a handler could never fire, and
+                dead code is worse than none. If a future change makes rows
+                focusable, add the bare-printable → `inputRef.current.focus()`
+                guard then (see the keyboard-hover design doc). */}
             <Command.Input
               ref={palette.inputRef}
               autoFocus
