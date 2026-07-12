@@ -36,17 +36,28 @@ jobs:
       - run: pnpm turbo run check-types
 
   test:
-    name: test (shard ${{ matrix.shard }}/3)
+    name: test (${{ matrix.group.name }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3]
+        # Split the test work across parallel runners by PACKAGE (turbo
+        # --filter), NOT by vitest --shard: --shard splits a package's test
+        # FILES and hard-errors on any package with fewer files than the shard
+        # count (e.g. @silo/queue has 1 test file), so per-package sharding
+        # across the monorepo is a non-starter. Package groups parallelize
+        # cleanly instead. `heavy` carries the two biggest suites (core, api);
+        # `rest` is everything else. Each runner gets its OWN Postgres service,
+        # so the DB suites — which mutate a shared @silo/db pool singleton and
+        # therefore keep `--no-file-parallelism` WITHIN a package — never
+        # contend across groups. Rebalance the filters if timings drift.
+        group:
+          - name: core + api
+            filter: "--filter=@silo/core --filter=@silo/api"
+          - name: rest
+            filter: "--filter=!@silo/core --filter=!@silo/api"
     # pgvector/pgvector:pg18 (not plain postgres:18) because migrations run
     # `CREATE EXTENSION vector` — this image ships pgvector so it just works.
-    # Each shard runs on its OWN runner with its OWN Postgres service, so the
-    # DB-backed suites (which mutate a shared @silo/db pool singleton and thus
-    # keep `--no-file-parallelism` WITHIN a package) never contend across shards.
     services:
       postgres:
         image: pgvector/pgvector:pg18
@@ -76,12 +87,11 @@ jobs:
           node-version: 24
           cache: pnpm
       - run: pnpm install --frozen-lockfile
-      # `--shard=${matrix.shard}/3` splits each package's test FILES across the
-      # three shards (turbo forwards the flag to vitest). `--test-timeout=20000`
-      # (CI only) gives slow shared runners headroom over vitest's 5s default —
-      # a normally-sub-second test (e.g. the mcp-http 401 check) was flaking on
-      # an overloaded single-job runner; it never needs 20s locally.
-      - run: pnpm turbo run test -- --shard=${{ matrix.shard }}/3 --test-timeout=20000
+      # `--test-timeout=20000` (CI only) gives slow shared runners headroom over
+      # vitest's 5s default — a normally-sub-second test (e.g. the mcp-http 401
+      # check) was flaking on the overloaded single-job runner; it never needs
+      # 20s locally. The package filter selects this group's slice of the suite.
+      - run: pnpm turbo run test ${{ matrix.group.filter }} -- --test-timeout=20000
 
   build-quality:
     name: build · quality
