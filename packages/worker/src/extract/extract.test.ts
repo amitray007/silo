@@ -239,6 +239,31 @@ describe('extract — JS-wall field preservation (regression)', () => {
   });
 });
 
+describe('extract — multi-noscript JS-wall (GTM-first regression)', () => {
+  it('detects the SPA wall when a non-enable-JS <noscript> (GTM) precedes the enable-JS one', async () => {
+    // Regression guard (ReDoS-rewrite fix): the standard Google Tag Manager
+    // install emits a `<noscript><iframe .../></noscript>` BEFORE the app
+    // shell's enable-JS `<noscript>`. The mount div is NON-EMPTY (a loading
+    // spinner), so the empty-root SPA marker does not fire — detection must
+    // come from scanning EVERY noscript block, not just the first. An earlier
+    // form inspected only the first block and mis-classified this real SPA
+    // shell as `bare`.
+    const html = `<html><head>
+      <meta property="og:site_name" content="Acme" />
+      </head><body>
+      <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-XXXX"></iframe></noscript>
+      <div id="root"><div class="spinner">Loading…</div></div>
+      <noscript>You need to enable JavaScript to run this app.</noscript>
+      </body></html>`;
+    const result = await extract({
+      url: 'https://app.example.com/',
+      html,
+      contentType: 'text/html',
+    });
+    expect(result.status).toBe('partial');
+  });
+});
+
 describe('extract — jsdom CSS-parse noise is suppressed', () => {
   it('does not log "Could not parse CSS stylesheet" for a page whose CSS jsdom cannot parse', async () => {
     // `unparseable-css.html` uses native CSS nesting, which jsdom's CSS

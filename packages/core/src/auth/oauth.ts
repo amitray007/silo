@@ -73,7 +73,7 @@ export function verifyPkce(verifier: string, challenge: string, method: string):
  * seams").
  */
 export function canonicalMcpResource(publicMcpUrl: string): string {
-  const trimmed = publicMcpUrl.trim().replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(publicMcpUrl.trim());
   return trimmed.endsWith('/mcp') ? trimmed : `${trimmed}/mcp`;
 }
 
@@ -91,8 +91,19 @@ export function canonicalMcpResource(publicMcpUrl: string): string {
  */
 export function normalizeResourceParam(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  const trimmed = raw.replace(/\/+$/, '');
+  const trimmed = stripTrailingSlashes(raw);
   return trimmed || null;
+}
+
+/**
+ * Strips all trailing `/` characters (non-regex — CodeQL js/polynomial-redos
+ * flagged `/\/+$/` as backtrack-prone on attacker-controlled `resource`
+ * input; a plain loop is linear and has the identical observable behavior).
+ */
+function stripTrailingSlashes(value: string): string {
+  let end = value.length;
+  while (end > 0 && value[end - 1] === '/') end--;
+  return value.slice(0, end);
 }
 
 /** A registered OAuth client, as returned by `registerOAuthClient`/`getOAuthClient`. */

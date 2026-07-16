@@ -1,0 +1,22 @@
+name: "silo CodeQL config"
+
+# Scope what CodeQL analyzes. The default `security-and-quality` suite scans
+# every .js/.ts/.html in the tree, which floods code-scanning with warnings
+# from files that are not shipped product code.
+#
+# paths-ignore excludes:
+#   - docs/**        — captured UI prototypes (docs/design/app/Silo-v*.html,
+#                      support.js). Static design mockups with inline <script>,
+#                      not shipped code. Source of ~150 `js/useless-expression`
+#                      and the `js/missing-origin-check` noise.
+#   - **/*.test.ts   — test fixtures deliberately use weak/fast hashing and
+#                      canned secrets (e.g. oauth.test.ts's `js/insufficient-
+#                      password-hash`). Scanning them flags the fixtures, not
+#                      real vulnerabilities.
+#   - **/dist/**, **/node_modules/** — build output / vendored deps.
+paths-ignore:
+  - "docs/**"
+  - "**/*.test.ts"
+  - "**/*.test.tsx"
+  - "**/dist/**"
+  - "**/node_modules/**"
