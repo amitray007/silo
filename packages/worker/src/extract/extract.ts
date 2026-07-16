@@ -62,8 +62,26 @@ const HTML_CONTENT_TYPES = ['text/html', 'application/xhtml+xml'];
  * after client-side rendering — exactly the case static extraction cannot
  * recover text for (short of embedded-JSON, tier 3).
  */
-const SPA_ROOT_MARKER = /<div[^>]*\bid=["'](root|app)["'][^>]*>\s*<\/div>/i;
-const NOSCRIPT_ENABLE_JS_MARKER = /<noscript>[\s\S]*?enable\s+javascript[\s\S]*?<\/noscript>/i;
+// Linear-time by construction (CodeQL js/polynomial-redos): the prefix before
+// `id=` matches either one non-quote/non-`>` char OR a fully-quoted "..."/'...'
+// string as a single alternative, so any given stretch of input can only be
+// consumed one way — no ambiguity for the backtracker to explore, unlike the
+// original `[^>]*...[^>]*` (which let both sides claim the same characters).
+const SPA_ROOT_MARKER =
+  /<div\b(?:[^>"']|"[^"]*"|'[^']*')*?\bid=["'](?:root|app)["'][^>]*>\s*<\/div>/i;
+// `<noscript>` blocks are short and never nested, so instead of one regex
+// spanning the whole tag with two lazy `[\s\S]*?` gaps (the ReDoS-prone
+// shape), split the check: enumerate every `<noscript ...>...</noscript>`
+// block with a bounded, single-purpose regex, then test each block's
+// (typically tiny) contents separately for the "enable javascript" phrase.
+// The `g` flag + matchAll is load-bearing: a page can carry multiple
+// noscript blocks (the standard Google-Tag-Manager install puts a GTM
+// `<noscript><iframe .../></noscript>` BEFORE the app-shell's enable-JS one),
+// and the original `[\s\S]*?` regex scanned across block boundaries, so it
+// matched the phrase in ANY block. Inspecting only the first block would
+// miss the GTM-first ordering (a real SPA wall) — so we scan them all.
+const NOSCRIPT_BLOCK = /<noscript\b[^>]*>([^<]*(?:<(?!\/noscript>)[^<]*)*)<\/noscript>/gi;
+const ENABLE_JS_PHRASE = /enable\s+javascript/i;
 
 export type CaptureStatus = 'full' | 'partial' | 'bare';
 
@@ -189,7 +207,12 @@ function extractReadableText(url: string, html: string): { dom: JSDOM; text: str
 
 /** SPA/JS-wall heuristic over the raw HTML string (cheap, no DOM needed). */
 function hasSpaWallMarkers(html: string): boolean {
-  return SPA_ROOT_MARKER.test(html) || NOSCRIPT_ENABLE_JS_MARKER.test(html);
+  if (SPA_ROOT_MARKER.test(html)) return true;
+  // Test every `<noscript>` block, not just the first — see NOSCRIPT_BLOCK.
+  for (const match of html.matchAll(NOSCRIPT_BLOCK)) {
+    if (ENABLE_JS_PHRASE.test(match[1] ?? '')) return true;
+  }
+  return false;
 }
 
 function hasUsableMetadata(fields: MetascraperFields): boolean {

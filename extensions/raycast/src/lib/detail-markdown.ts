@@ -49,7 +49,7 @@ function buildStatRow(link: CapturedLink): string | undefined {
 }
 
 function escapeMd(value: string): string {
-  return value.replace(/([_*`[\]])/g, '\\$1');
+  return value.replace(/([\\_*`[\]])/g, '\\$1');
 }
 
 /** Human-readable capture status, for the Information table. */

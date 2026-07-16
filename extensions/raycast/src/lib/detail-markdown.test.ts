@@ -62,6 +62,13 @@ describe('buildDetailMarkdown', () => {
     );
     expect(md).toContain('\\[hack\\] \\*the\\* planet');
   });
+
+  it('escapes a literal backslash (and does not double-escape the char after it)', () => {
+    const md = buildDetailMarkdown(
+      link({ title: 'a\\b_c', description: undefined as unknown as string | null }),
+    );
+    expect(md).toContain('a\\\\b\\_c');
+  });
 });
 
 describe('statusLabel', () => {

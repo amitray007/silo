@@ -11,18 +11,29 @@ permissions:
 
 jobs:
   audit:
-    name: pnpm audit
+    name: dependency audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
-      - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # Fail on moderate+ advisories; adjust the level as the project matures.
-      - run: pnpm audit --audit-level moderate
+      # `pnpm audit` was retired: it calls npm's legacy quick/bulk audit
+      # endpoints (`/-/npm/v1/security/audits{,/quick}`), which npm shut off —
+      # they now return HTTP 410 ("This endpoint is being retired"), so
+      # `pnpm audit` errors out on every run regardless of the tree. We scan
+      # the lockfile with osv-scanner instead: it reads `pnpm-lock.yaml`
+      # natively and queries OSV.dev (an independent, live database), and
+      # exits non-zero when a vulnerability is found — which fails this job.
+      # Installed as a pinned CLI binary (mirroring the gitleaks job below)
+      # rather than via the action wrapper, to keep the step transparent and
+      # free of a shifting action-input schema.
+      - name: Install osv-scanner
+        run: |
+          OSV_VERSION=2.3.8
+          curl -sSfL "https://github.com/google/osv-scanner/releases/download/v${OSV_VERSION}/osv-scanner_linux_amd64" \
+            -o /usr/local/bin/osv-scanner
+          chmod +x /usr/local/bin/osv-scanner
+          osv-scanner --version
+      - name: Scan dependencies
+        run: osv-scanner scan --lockfile=pnpm-lock.yaml
 
   secrets:
     name: gitleaks
