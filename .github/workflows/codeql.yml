@@ -26,10 +26,10 @@ jobs:
     steps:
       - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v3
+        uses: github/codeql-action/init@7188fc363630916deb702c7fdcf4e481b751f97a # v3
         with:
           languages: javascript-typescript
           queries: security-and-quality
           config-file: ./.github/codeql/codeql-config.yml
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@99df26d4f13ea111d4ec1a7dddef6063f76b97e9 # v3
+        uses: github/codeql-action/analyze@7188fc363630916deb702c7fdcf4e481b751f97a # v3

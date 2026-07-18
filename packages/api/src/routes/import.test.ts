@@ -164,16 +164,19 @@ describeIfPg('POST /api/import (integration)', () => {
       ['number', '42'],
       ['string', '"hello"'],
       ['null', 'null'],
-    ])('correct token, valid JSON but not an object (%s) -> 400 validation_error, not 500 or 200', async (_label, jsonBody) => {
-      const { app, pool } = harness.mod();
-      const before = (await pool.query('select count(*) from links')).rows[0]?.count;
-      const res = await postRaw(app, '/api/import', jsonBody, `Bearer ${TEST_TOKEN}`);
-      expect(res.status).toBe(400);
-      const body = (await res.json()) as ErrorEnvelope;
-      expect(body.error).toBe('validation_error');
-      const after = (await pool.query('select count(*) from links')).rows[0]?.count;
-      expect(after).toBe(before);
-    });
+    ])(
+      'correct token, valid JSON but not an object (%s) -> 400 validation_error, not 500 or 200',
+      async (_label, jsonBody) => {
+        const { app, pool } = harness.mod();
+        const before = (await pool.query('select count(*) from links')).rows[0]?.count;
+        const res = await postRaw(app, '/api/import', jsonBody, `Bearer ${TEST_TOKEN}`);
+        expect(res.status).toBe(400);
+        const body = (await res.json()) as ErrorEnvelope;
+        expect(body.error).toBe('validation_error');
+        const after = (await pool.query('select count(*) from links')).rows[0]?.count;
+        expect(after).toBe(before);
+      },
+    );
 
     it('correct token, content-length over the size cap -> 413, nothing imported (auth still ran first)', async () => {
       const { app, pool } = harness.mod();

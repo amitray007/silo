@@ -233,25 +233,20 @@ describeIfPg('links operations (integration)', () => {
       expect(fetched?.source).toBe('unknown');
     });
 
-    it.each([
-      'web',
-      'mcp',
-      'cli',
-      'raycast',
-      'chrome',
-      'ingest',
-      'unknown',
-    ] as const)("createLink with source:'%s' round-trips", async (source) => {
-      const created = await ops.createLink({
-        url: `https://example.com/source-roundtrip-${source}`,
-        sourceKind: 'link',
-        source,
-      });
-      expect(created.source).toBe(source);
+    it.each(['web', 'mcp', 'cli', 'raycast', 'chrome', 'ingest', 'unknown'] as const)(
+      "createLink with source:'%s' round-trips",
+      async (source) => {
+        const created = await ops.createLink({
+          url: `https://example.com/source-roundtrip-${source}`,
+          sourceKind: 'link',
+          source,
+        });
+        expect(created.source).toBe(source);
 
-      const fetched = await ops.getById(created.id);
-      expect(fetched?.source).toBe(source);
-    });
+        const fetched = await ops.getById(created.id);
+        expect(fetched?.source).toBe(source);
+      },
+    );
 
     it('dedup-merge PRESERVES the existing row source — first-capture-source wins', async () => {
       const url = 'https://example.com/source-merge-first-write-wins';

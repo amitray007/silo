@@ -54,7 +54,7 @@ jobs:
           # admin bypass. Falls back to GITHUB_TOKEN so non-pushing runs still work.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
@@ -164,7 +164,7 @@ jobs:
           # Use RELEASE_TOKEN so tag creation isn't blocked by the ruleset.
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
       - uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
           node-version: 24
           cache: pnpm
@@ -220,7 +220,7 @@ jobs:
 
       # --- Create the tag + GitHub Release -------------------------------------
       - name: create GitHub Release
-        uses: softprops/action-gh-release@c95fe1489396fe8a9eb87c0abf8aa5b2ef267fda # v2
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v2
         with:
           token: ${{ secrets.RELEASE_TOKEN || secrets.GITHUB_TOKEN }}
           tag_name: ${{ matrix.entry.tag }}
