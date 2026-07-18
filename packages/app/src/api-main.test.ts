@@ -63,14 +63,13 @@ describe('readPort', () => {
     expect(readPort()).toBe(3000);
   });
 
-  it.each([
-    '0',
-    '-1',
-    'not-a-number',
-  ])('falls back to the default for an invalid PORT (%s)', (raw) => {
-    process.env.PORT = raw;
-    expect(readPort()).toBe(8787);
-  });
+  it.each(['0', '-1', 'not-a-number'])(
+    'falls back to the default for an invalid PORT (%s)',
+    (raw) => {
+      process.env.PORT = raw;
+      expect(readPort()).toBe(8787);
+    },
+  );
 });
 
 describe('readHost', () => {

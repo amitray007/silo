@@ -33,17 +33,13 @@ describe('readMcpHttpConfig', () => {
     expect(result.ok).toBe(false);
   });
 
-  it.each([
-    '0',
-    '-1',
-    '70000',
-    '3.14',
-    'not-a-number',
-    ' ',
-  ])('is invalid for out-of-range/non-integer port %s', (rawPort) => {
-    const result = readMcpHttpConfig({ SILO_MCP_HTTP_PORT: rawPort, SILO_API_TOKEN: 'tok' });
-    expect(result.ok).toBe(false);
-  });
+  it.each(['0', '-1', '70000', '3.14', 'not-a-number', ' '])(
+    'is invalid for out-of-range/non-integer port %s',
+    (rawPort) => {
+      const result = readMcpHttpConfig({ SILO_MCP_HTTP_PORT: rawPort, SILO_API_TOKEN: 'tok' });
+      expect(result.ok).toBe(false);
+    },
+  );
 
   it('is invalid when SILO_API_TOKEN is unset, even with a valid port', () => {
     const result = readMcpHttpConfig({ SILO_MCP_HTTP_PORT: '8788' });
