@@ -1,4 +1,4 @@
-import { useMatch } from 'react-router-dom';
+import { useMatch } from 'react-router';
 
 /**
  * The command palette's page-scoping (direct user decision, post-cmdk-

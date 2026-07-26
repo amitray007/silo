@@ -16,7 +16,7 @@
     "cmdk": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-router-dom": "catalog:"
+    "react-router": "catalog:"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
