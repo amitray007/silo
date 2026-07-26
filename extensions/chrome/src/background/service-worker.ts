@@ -1,6 +1,7 @@
+import { CaptureError, listTags } from '../lib/capture-client.js';
 import type { EditDiff } from '../lib/types.js';
 import { applyEdit } from './apply-edit.js';
-import { captureActiveTab } from './capture-flow.js';
+import { captureActiveTab, captureTab } from './capture-flow.js';
 import { handleContextMenuClick, registerContextMenus } from './context-menu.js';
 
 /**
@@ -22,9 +23,10 @@ chrome.runtime.onInstalled.addListener(() => {
 // but the `.catch` is explicit (ce-correctness finding) so a capture
 // failure is a documented no-op here, not an unhandled promise rejection
 // logged to the service worker's console.
-chrome.commands.onCommand.addListener((command) => {
+chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'capture-page') {
-    captureActiveTab().catch(() => {
+    const capture = tab ? captureTab(tab) : captureActiveTab();
+    capture.catch(() => {
       // Already reported via the toast inside runQuietCapture.
     });
   }
@@ -40,22 +42,34 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 // fires action.onClicked here — the instant-save path. Same shared
 // runQuietCapture funnel as the keyboard command; failures are reported by
 // the toast inside it, so the .catch is a documented no-op.
-chrome.action.onClicked.addListener(() => {
-  captureActiveTab().catch(() => {
+chrome.action.onClicked.addListener((tab) => {
+  captureTab(tab).catch(() => {
     // Already reported via the toast inside runQuietCapture.
   });
 });
 
 type ApplyEditMessage = { type: 'silo-apply-edit'; id: string; diff: EditDiff };
+type ListTagsMessage = { type: 'silo-list-tags' };
+type WorkerMessage = ApplyEditMessage | ListTagsMessage;
 
 // The injected edit card (lib/toast.ts) runs in the page's isolated world and
 // can't call the API client directly (it owns the token) — it posts its diff
 // here instead. `return true` keeps the message channel open so the async
 // `sendResponse` below is honored (per the MV3 onMessage contract).
-chrome.runtime.onMessage.addListener(
-  (message: ApplyEditMessage, _sender, sendResponse): boolean => {
-    if (message?.type !== 'silo-apply-edit') return false;
+chrome.runtime.onMessage.addListener((message: WorkerMessage, _sender, sendResponse): boolean => {
+  if (message?.type === 'silo-apply-edit') {
     applyEdit(message.id, message.diff).then(sendResponse);
     return true; // keep the message channel open for the async sendResponse
-  },
-);
+  }
+  if (message?.type === 'silo-list-tags') {
+    listTags()
+      .then((tags) => sendResponse({ ok: true, tags }))
+      .catch((error: unknown) => {
+        const message =
+          error instanceof CaptureError ? error.message : 'Could not load tag suggestions';
+        sendResponse({ ok: false, message });
+      });
+    return true;
+  }
+  return false;
+});

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import { useDeleteTag } from '../api/hooks';
 import { HeaderActionButton } from '../components/HeaderActionButton';
 import { CheckIcon, TrashIcon } from '../components/NavIcons';

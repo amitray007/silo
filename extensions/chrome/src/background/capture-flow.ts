@@ -1,4 +1,4 @@
-import { CaptureError, captureLink, listTags } from '../lib/capture-client.js';
+import { CaptureError, captureLink } from '../lib/capture-client.js';
 import { isCapturableUrl, tabDisplayTitle } from '../lib/tab-payload.js';
 import { showToast } from '../lib/toast.js';
 import type { CaptureRequest } from '../lib/types.js';
@@ -20,13 +20,14 @@ export async function runQuietCapture(
   try {
     const { link, deduped } = await captureLink(request);
     if (tabId !== undefined) {
-      const tags = await listTags().catch(() => []);
       await showToast(tabId, {
         kind: deduped ? 'deduped' : 'saved',
         title: displayTitle,
         url: request.url,
         linkId: link.id,
-        tags,
+        // Suggestions are loaded lazily if the user opens the edit card. A
+        // second API round-trip must not delay the normal save confirmation.
+        tags: [],
       });
     }
   } catch (error) {
@@ -44,9 +45,22 @@ export async function runQuietCapture(
   }
 }
 
-/** Captures the active tab of the given window (toolbar action + keyboard command share this path). Silently no-ops on a non-http(s) tab — mirrors the brief's "non-http tabs disabled". */
+/**
+ * Captures a tab snapshot supplied by the event that triggered the save.
+ * Keeping the URL from click time means closing or switching tabs immediately
+ * cannot make the asynchronous background flow capture a different page.
+ */
+export async function captureTab(tab: chrome.tabs.Tab): Promise<void> {
+  if (!isCapturableUrl(tab.url)) return;
+  await runQuietCapture({ url: tab.url }, tabDisplayTitle(tab), tab.id);
+}
+
+/**
+ * Captures whichever tab is active when queried. This is only a fallback for
+ * callers that do not receive a tab snapshot from Chrome.
+ */
 export async function captureActiveTab(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !isCapturableUrl(tab.url)) return;
-  await runQuietCapture({ url: tab.url }, tabDisplayTitle(tab), tab.id);
+  if (!tab) return;
+  await captureTab(tab);
 }

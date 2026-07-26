@@ -7,9 +7,10 @@ landed."
 
 ## Features
 
-- **Toolbar action** — click the icon to open the popup (title + optional
-  note + tag autocomplete, plus a "recently saved" list of your last 5
-  captures).
+- **Toolbar action** — click the icon to save the current page immediately.
+  The request runs in the extension's background service worker, so you can
+  close or switch tabs as soon as you click. A small in-page toast confirms
+  the result when the original tab is still open.
 - **Keyboard command** — `Cmd/Ctrl+Shift+S` captures the active tab instantly,
   with no popup. Feedback is a small toast injected into the page: "Link
   saved in silo", "Already in silo (updated)" on dedup, or a clear error if

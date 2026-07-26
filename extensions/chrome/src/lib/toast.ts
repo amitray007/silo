@@ -329,6 +329,8 @@ function renderToast(payload: ToastPayload): void {
     // only (can't import edit-diff.ts into the page world). A future
     // non-empty-original edit path is governed by edit-diff.ts server-side.
     const selectedTags = new Set<string>();
+    let availableTags = payload.tags;
+    let tagsLoading = true;
     let query = '';
     let statusMessage = '';
     let saving = false;
@@ -441,7 +443,18 @@ function renderToast(payload: ToastPayload): void {
     function renderMenu(): void {
       tagMenu.innerHTML = '';
       const q = query.trim().toLowerCase();
-      const matches = payload.tags.filter((t) => t.name.toLowerCase().includes(q));
+      const matches = availableTags.filter((t) => t.name.toLowerCase().includes(q));
+
+      if (tagsLoading) {
+        const loading = document.createElement('div');
+        loading.textContent = 'Loading tags…';
+        loading.style.cssText = `
+          padding: 7px 10px;
+          font-size: 11px;
+          color: ${tokens.faint};
+        `;
+        tagMenu.appendChild(loading);
+      }
 
       for (const tag of matches) {
         const row = document.createElement('label');
@@ -473,7 +486,7 @@ function renderToast(payload: ToastPayload): void {
       }
 
       const trimmed = query.trim();
-      const existsAlready = payload.tags.some(
+      const existsAlready = availableTags.some(
         (t) => t.name.toLowerCase() === trimmed.toLowerCase(),
       );
       if (trimmed && !existsAlready) {
@@ -508,6 +521,18 @@ function renderToast(payload: ToastPayload): void {
     tagSection.append(tagInput, tagMenu, pillRow);
     renderPills();
     renderMenu();
+    void chrome.runtime
+      .sendMessage({ type: 'silo-list-tags' })
+      .then((response: { ok: true; tags: ToastTag[] } | { ok: false }) => {
+        if (response?.ok) availableTags = response.tags;
+      })
+      .catch(() => {
+        // Tag suggestions are optional; creating a new tag still works.
+      })
+      .finally(() => {
+        tagsLoading = false;
+        renderMenu();
+      });
 
     const statusEl = document.createElement('div');
     statusEl.style.cssText = `font-size: 11px; color: ${tokens.mark};`;

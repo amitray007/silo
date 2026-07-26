@@ -1,5 +1,5 @@
 import { forwardRef, type MouseEvent, type ReactNode } from 'react';
-import { useMatch, useNavigate } from 'react-router-dom';
+import { useMatch, useNavigate } from 'react-router';
 import { useCounts, useTags } from '../api/hooks';
 import type { TagCount } from '../api/types';
 import { useAuth } from '../auth/AuthContext';

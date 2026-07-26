@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as captureClient from '../lib/capture-client.js';
 import * as toast from '../lib/toast.js';
-import { captureActiveTab, runQuietCapture } from './capture-flow.js';
+import { captureActiveTab, captureTab, runQuietCapture } from './capture-flow.js';
 
 /** `chrome.tabs.query` is overloaded (callback vs. Promise); `vi.mocked` on the raw property
  * infers the callback signature and rejects a Promise-returning mock impl. Casting through
@@ -33,6 +33,7 @@ describe('runQuietCapture', () => {
 
     await runQuietCapture({ url: 'https://example.com' }, 'Example', 7);
 
+    expect(captureClient.listTags).not.toHaveBeenCalled();
     expect(showToastSpy).toHaveBeenCalledWith(7, {
       kind: 'saved',
       title: 'Example',
@@ -141,6 +142,45 @@ describe('captureActiveTab', () => {
 
     await captureActiveTab();
 
+    expect(captureSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('captureTab', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('captures the supplied click-time tab without querying the current active tab', async () => {
+    vi.spyOn(captureClient, 'captureLink').mockResolvedValue({
+      link: {
+        id: 'id-1',
+        url: 'https://clicked.example',
+        title: null,
+        notes: null,
+        tags: [],
+      },
+      deduped: false,
+    });
+    vi.spyOn(captureClient, 'listTags').mockResolvedValue([]);
+    vi.spyOn(toast, 'showToast').mockResolvedValue(undefined);
+
+    await captureTab({
+      id: 3,
+      url: 'https://clicked.example',
+      title: 'Clicked page',
+    } as chrome.tabs.Tab);
+
+    expect(chrome.tabs.query).not.toHaveBeenCalled();
+    expect(captureClient.captureLink).toHaveBeenCalledWith({ url: 'https://clicked.example' });
+  });
+
+  it('no-ops when the supplied tab is not capturable', async () => {
+    const captureSpy = vi.spyOn(captureClient, 'captureLink');
+
+    await captureTab({ id: 3, url: 'chrome://extensions' } as chrome.tabs.Tab);
+
+    expect(chrome.tabs.query).not.toHaveBeenCalled();
     expect(captureSpy).not.toHaveBeenCalled();
   });
 });
