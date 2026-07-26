@@ -55,8 +55,8 @@ Neither extension sends `title`/`sourceData` on capture — that's
 enrichment's job, run entirely by silo's backend after the row is created.
 **Binding UX rule for both extensions: never block the capture
 confirmation on enrichment.** The response's `link.captureStatus` may be
-`'enriching'` — that's expected and fine to show as-is (Chrome's recent-5
-list shows a `◌ capturing` pulse; nothing waits for it to settle).
+`'enriching'`; the Chrome extension deliberately does not surface that
+backend state.
 
 ## The search contract (`GET /api/links/search?q=`)
 
@@ -83,4 +83,4 @@ silent failure.
 ## Icons / GET /api/tags
 
 `GET /api/tags -> { tags: { name: string; count: number }[] }` — used by the
-Chrome popup's tag autocomplete only. Not used by Raycast.
+Chrome toast's optional edit card. Not used by Raycast.

@@ -1,6 +1,6 @@
 import type { EditDiff } from '../lib/types.js';
 import { applyEdit } from './apply-edit.js';
-import { captureActiveTab } from './capture-flow.js';
+import { captureActiveTab, captureTab } from './capture-flow.js';
 import { handleContextMenuClick, registerContextMenus } from './context-menu.js';
 
 /**
@@ -22,9 +22,10 @@ chrome.runtime.onInstalled.addListener(() => {
 // but the `.catch` is explicit (ce-correctness finding) so a capture
 // failure is a documented no-op here, not an unhandled promise rejection
 // logged to the service worker's console.
-chrome.commands.onCommand.addListener((command) => {
+chrome.commands.onCommand.addListener((command, tab) => {
   if (command === 'capture-page') {
-    captureActiveTab().catch(() => {
+    const capture = tab ? captureTab(tab) : captureActiveTab();
+    capture.catch(() => {
       // Already reported via the toast inside runQuietCapture.
     });
   }
@@ -40,8 +41,8 @@ chrome.contextMenus.onClicked.addListener((info, tab) => {
 // fires action.onClicked here — the instant-save path. Same shared
 // runQuietCapture funnel as the keyboard command; failures are reported by
 // the toast inside it, so the .catch is a documented no-op.
-chrome.action.onClicked.addListener(() => {
-  captureActiveTab().catch(() => {
+chrome.action.onClicked.addListener((tab) => {
+  captureTab(tab).catch(() => {
     // Already reported via the toast inside runQuietCapture.
   });
 });

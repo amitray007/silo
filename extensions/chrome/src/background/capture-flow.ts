@@ -44,9 +44,22 @@ export async function runQuietCapture(
   }
 }
 
-/** Captures the active tab of the given window (toolbar action + keyboard command share this path). Silently no-ops on a non-http(s) tab — mirrors the brief's "non-http tabs disabled". */
+/**
+ * Captures a tab snapshot supplied by the event that triggered the save.
+ * Keeping the URL from click time means closing or switching tabs immediately
+ * cannot make the asynchronous background flow capture a different page.
+ */
+export async function captureTab(tab: chrome.tabs.Tab): Promise<void> {
+  if (!isCapturableUrl(tab.url)) return;
+  await runQuietCapture({ url: tab.url }, tabDisplayTitle(tab), tab.id);
+}
+
+/**
+ * Captures whichever tab is active when queried. This is only a fallback for
+ * callers that do not receive a tab snapshot from Chrome.
+ */
 export async function captureActiveTab(): Promise<void> {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !isCapturableUrl(tab.url)) return;
-  await runQuietCapture({ url: tab.url }, tabDisplayTitle(tab), tab.id);
+  if (!tab) return;
+  await captureTab(tab);
 }
