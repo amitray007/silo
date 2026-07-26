@@ -1,3 +1,4 @@
+import { CaptureError, listTags } from '../lib/capture-client.js';
 import type { EditDiff } from '../lib/types.js';
 import { applyEdit } from './apply-edit.js';
 import { captureActiveTab, captureTab } from './capture-flow.js';
@@ -48,15 +49,27 @@ chrome.action.onClicked.addListener((tab) => {
 });
 
 type ApplyEditMessage = { type: 'silo-apply-edit'; id: string; diff: EditDiff };
+type ListTagsMessage = { type: 'silo-list-tags' };
+type WorkerMessage = ApplyEditMessage | ListTagsMessage;
 
 // The injected edit card (lib/toast.ts) runs in the page's isolated world and
 // can't call the API client directly (it owns the token) — it posts its diff
 // here instead. `return true` keeps the message channel open so the async
 // `sendResponse` below is honored (per the MV3 onMessage contract).
-chrome.runtime.onMessage.addListener(
-  (message: ApplyEditMessage, _sender, sendResponse): boolean => {
-    if (message?.type !== 'silo-apply-edit') return false;
+chrome.runtime.onMessage.addListener((message: WorkerMessage, _sender, sendResponse): boolean => {
+  if (message?.type === 'silo-apply-edit') {
     applyEdit(message.id, message.diff).then(sendResponse);
     return true; // keep the message channel open for the async sendResponse
-  },
-);
+  }
+  if (message?.type === 'silo-list-tags') {
+    listTags()
+      .then((tags) => sendResponse({ ok: true, tags }))
+      .catch((error: unknown) => {
+        const message =
+          error instanceof CaptureError ? error.message : 'Could not load tag suggestions';
+        sendResponse({ ok: false, message });
+      });
+    return true;
+  }
+  return false;
+});

@@ -82,5 +82,6 @@ silent failure.
 
 ## Icons / GET /api/tags
 
-`GET /api/tags -> { tags: { name: string; count: number }[] }` — used by the
-Chrome toast's optional edit card. Not used by Raycast.
+`GET /api/tags -> { tags: { name: string; count: number }[] }` — loaded lazily
+when the Chrome toast's optional edit card opens, so tag suggestions never
+delay capture confirmation. Not used by Raycast.

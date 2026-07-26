@@ -33,6 +33,7 @@ describe('runQuietCapture', () => {
 
     await runQuietCapture({ url: 'https://example.com' }, 'Example', 7);
 
+    expect(captureClient.listTags).not.toHaveBeenCalled();
     expect(showToastSpy).toHaveBeenCalledWith(7, {
       kind: 'saved',
       title: 'Example',

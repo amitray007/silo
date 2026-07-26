@@ -71,4 +71,40 @@ describe('service worker registration', () => {
     expect(captureFlow.captureTab).toHaveBeenCalledWith(commandTab);
     expect(captureFlow.captureActiveTab).not.toHaveBeenCalled();
   });
+
+  it('loads tag suggestions only when the edit card requests them', async () => {
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ tags: [{ name: 'reading', count: 2 }] }), {
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    );
+    await import('./service-worker.js');
+    const addListener = (
+      globalThis.chrome as unknown as {
+        runtime: { onMessage: { addListener: ReturnType<typeof vi.fn> } };
+      }
+    ).runtime.onMessage.addListener;
+    const listener = addListener.mock.calls[0]?.[0] as
+      | ((
+          message: { type: string },
+          sender: chrome.runtime.MessageSender,
+          sendResponse: (response: unknown) => void,
+        ) => boolean)
+      | undefined;
+    const sendResponse = vi.fn();
+
+    const keepsChannelOpen = listener?.(
+      { type: 'silo-list-tags' },
+      {} as chrome.runtime.MessageSender,
+      sendResponse,
+    );
+
+    expect(keepsChannelOpen).toBe(true);
+    await vi.waitFor(() => {
+      expect(sendResponse).toHaveBeenCalledWith({
+        ok: true,
+        tags: [{ name: 'reading', count: 2 }],
+      });
+    });
+  });
 });
