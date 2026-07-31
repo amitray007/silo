@@ -44,7 +44,7 @@ jobs:
     outputs:
       releases: ${{ steps.plan.outputs.releases }}
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
         with:
           fetch-depth: 0 # need history to diff the pushed range + push the bump commit
           # RELEASE_TOKEN (a fine-grained PAT scoped to this repo with Contents:
@@ -157,7 +157,7 @@ jobs:
       matrix:
         entry: ${{ fromJson(needs.plan.outputs.releases) }}
     steps:
-      - uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
         with:
           # Check out the bump commit the plan job just pushed.
           ref: main
@@ -249,7 +249,7 @@ jobs:
 
       - name: checkout homebrew-tap
         if: matrix.entry.distributable == 'cli' && vars.HOMEBREW_TAP_ENABLED == 'true'
-        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v5
         with:
           repository: amitray007/homebrew-tap
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
