@@ -7,43 +7,43 @@ catalog:
   lefthook: 2.1.10
   typescript: 7.0.2
   vitest: 4.1.10
-  react: 19.2.7
-  react-dom: 19.2.7
-  vite: 8.1.5
-  "@vitejs/plugin-react": 6.0.3
-  "@tanstack/react-query": 5.101.2
+  react: 19.2.8
+  react-dom: 19.2.8
+  vite: 8.2.0
+  "@vitejs/plugin-react": 6.0.5
+  "@tanstack/react-query": 5.101.4
   react-router: 8.3.0
-  "@types/react": 19.2.17
-  "@types/react-dom": 19.2.3
+  "@types/react": 19.2.18
+  "@types/react-dom": 19.2.4
   "@testing-library/react": 16.3.2
   agentation: 3.0.2
-  "@biomejs/biome": 2.5.4
-  "@types/node": 26.1.1
-  "dependency-cruiser": 18.1.0
-  jscpd: 5.0.12
-  knip: 6.27.0
+  "@biomejs/biome": 2.5.7
+  "@types/node": 26.1.2
+  "dependency-cruiser": 18.1.1
+  jscpd: 5.0.14
+  knip: 6.31.0
   drizzle-orm: 0.45.2
   drizzle-kit: 0.31.10
   pg: 8.22.0
-  "@types/pg": 8.20.0
-  tsx: 4.23.1
+  "@types/pg": 8.20.4
+  tsx: 4.23.5
   zod: 4.4.3
   normalize-url: 9.0.1
-  undici: 8.7.0
-  "ipaddr.js": 2.4.0
-  metascraper: 5.51.1
-  metascraper-title: 5.51.1
-  metascraper-description: 5.51.1
-  metascraper-image: 5.51.1
-  metascraper-logo: 5.51.1
-  metascraper-publisher: 5.51.1
-  metascraper-url: 5.51.1
+  undici: 8.10.0
+  "ipaddr.js": 2.5.0
+  metascraper: 5.53.0
+  metascraper-title: 5.53.0
+  metascraper-description: 5.53.0
+  metascraper-image: 5.53.0
+  metascraper-logo: 5.53.0
+  metascraper-publisher: 5.53.0
+  metascraper-url: 5.53.0
   "@mozilla/readability": 0.6.0
-  jsdom: 29.1.1
+  jsdom: 30.0.1
   "@types/jsdom": 28.0.3
-  pg-boss: 12.26.1
-  "@modelcontextprotocol/sdk": 1.29.0
-  hono: 4.12.30
-  "@hono/node-server": 2.0.11
+  pg-boss: 12.27.0
+  "@modelcontextprotocol/sdk": 1.30.0
+  hono: 4.13.0
+  "@hono/node-server": 2.1.0
   cmdk: 1.1.1
   yaml: 2.9.0
