@@ -757,12 +757,13 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
     // already refuse to navigate `window.open` to a `javascript:`/`data:`
     // scheme from a cross-origin-ish call, but that's a browser mitigation,
     // not a guarantee this codebase should lean on — only ever actually
-    // OPEN an http(s) url; anything else is silently ignored (still closes
-    // the palette, matching the "Enter acted" feel, but navigates nowhere).
+    // OPEN an http(s) url; anything else is silently ignored. Selecting a
+    // result deliberately leaves the palette and query intact so the user can
+    // return from the new tab and continue the same search. Escape or the
+    // scrim remains the explicit discard path.
     if (/^https?:\/\//i.test(link.url)) {
       window.open(link.url, '_blank', 'noopener');
     }
-    closePalette();
   };
 
   const applyTagSuggestion = (tag: TagCount) => {

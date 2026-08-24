@@ -196,7 +196,7 @@ describe('CommandPalette', () => {
     });
   });
 
-  it('Enter on a link result opens it in a new tab (http url) and closes the palette', async () => {
+  it('clicking a link result opens it in a new tab and keeps the palette query until manually closed', async () => {
     mockFetchByPath({
       '/api/tags': { tags: [] },
       '/api/links/search': {
@@ -210,8 +210,13 @@ describe('CommandPalette', () => {
     const input = await screen.findByRole('combobox');
     fireEvent.change(input, { target: { value: 'x' } });
     await waitFor(() => expect(screen.getByText('Open me')).toBeDefined(), { timeout: 2000 });
-    fireEvent.keyDown(input, { key: 'Enter' });
+    fireEvent.click(optionRowFor('Open me'));
     expect(window.open).toHaveBeenCalledWith('https://example.com/x', '_blank', 'noopener');
+
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeDefined();
+    expect(screen.getByRole<HTMLInputElement>('combobox').value).toBe('x');
+
+    fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
   });
 
@@ -234,8 +239,8 @@ describe('CommandPalette', () => {
     await waitFor(() => expect(screen.getByText('Malicious')).toBeDefined(), { timeout: 2000 });
     fireEvent.keyDown(input, { key: 'Enter' });
     expect(window.open).not.toHaveBeenCalled();
-    // Still closes (Enter "acted"), it just never navigated anywhere.
-    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeDefined();
+    expect(screen.getByRole<HTMLInputElement>('combobox').value).toBe('mal');
   });
 
   it('#tag matching a known tag with no other text -> tag-list mode (GET /api/links?tag=)', async () => {
