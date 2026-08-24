@@ -61,8 +61,8 @@
     "develop": "ray develop"
   },
   "dependencies": {
-    "@raycast/api": "^1.104.22",
-    "@raycast/utils": "^2.2.7"
+    "@raycast/api": "^2.0.4",
+    "@raycast/utils": "^2.3.0"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
