@@ -5,10 +5,18 @@ updates:
     schedule:
       interval: weekly
     groups:
-      npm-dependencies:
+      npm-non-major:
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
-    open-pull-requests-limit: 1
+      npm-major:
+        update-types:
+          - "major"
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
     commit-message:
       prefix: chore
       include: scope
@@ -18,9 +26,17 @@ updates:
     schedule:
       interval: weekly
     groups:
-      github-actions:
+      github-actions-non-major:
+        update-types:
+          - "minor"
+          - "patch"
         patterns:
           - "*"
-    open-pull-requests-limit: 1
+      github-actions-major:
+        update-types:
+          - "major"
+        patterns:
+          - "*"
+    open-pull-requests-limit: 5
     commit-message:
       prefix: ci
