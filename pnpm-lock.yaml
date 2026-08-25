@@ -6,6 +6,9 @@ settings:
 
 catalogs:
   default:
+    '@biomejs/biome':
+      specifier: 2.5.10
+      version: 2.5.10
     '@hono/node-server':
       specifier: 2.1.1
       version: 2.1.1
@@ -153,7 +156,7 @@ importers:
   .:
     devDependencies:
       '@biomejs/biome':
-        specifier: 2.5.10
+        specifier: 'catalog:'
         version: 2.5.10
       dependency-cruiser:
         specifier: 'catalog:'
