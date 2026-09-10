@@ -58,8 +58,8 @@ catalogs:
       specifier: 0.45.2
       version: 0.45.2
     hono:
-      specifier: 4.13.4
-      version: 4.13.4
+      specifier: 4.13.5
+      version: 4.13.5
     ipaddr.js:
       specifier: 2.5.0
       version: 2.5.0
@@ -236,7 +236,7 @@ importers:
     dependencies:
       '@hono/node-server':
         specifier: 'catalog:'
-        version: 2.1.1(hono@4.13.4)
+        version: 2.1.1(hono@4.13.5)
       '@silo/core':
         specifier: workspace:*
         version: link:../core
@@ -245,7 +245,7 @@ importers:
         version: link:../queue
       hono:
         specifier: 'catalog:'
-        version: 4.13.4
+        version: 4.13.5
       ipaddr.js:
         specifier: 'catalog:'
         version: 2.5.0
@@ -2879,8 +2879,8 @@ packages:
     resolution: {integrity: sha512-GqXJqY/xJkJmuloTrnV1ZEXG3fqte+VjkUqoRNZXcrUidiUOP4fMSIHHY4tsqZBK++kVyWmt/AAfSUuy57/eSA==}
     engines: {node: '>=16.9.0'}
 
-  hono@4.13.4:
-    resolution: {integrity: sha512-AGEwKIyRMHRv1t8Wjwa3LHxQ61X5CqrdFT+4BRNTpqS5aJNnpl5WLjADb7vFlJzI/8uK7T5QLVApCMQKNa3LgQ==}
+  hono@4.13.5:
+    resolution: {integrity: sha512-O6+/eCYRkzzzy0rPWwKLiGBR1nFuUPZynnwjxN1MBA62NNqbT0wQEzQyK2gSO5yDIDB336sXQleAhOHrzlYyKw==}
     engines: {node: '>=16.9.0'}
 
   html-encoding-sniffer@6.0.0:
@@ -4428,9 +4428,9 @@ snapshots:
     dependencies:
       hono: 4.12.34
 
-  '@hono/node-server@2.1.1(hono@4.13.4)':
+  '@hono/node-server@2.1.1(hono@4.13.5)':
     dependencies:
-      hono: 4.13.4
+      hono: 4.13.5
 
   '@img/colour@1.1.0': {}
 
@@ -5888,7 +5888,7 @@ snapshots:
 
   hono@4.12.34: {}
 
-  hono@4.13.4: {}
+  hono@4.13.5: {}
 
   html-encoding-sniffer@6.0.0:
     dependencies:
