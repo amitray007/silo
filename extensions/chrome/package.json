@@ -12,11 +12,11 @@
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",
-    "@types/chrome": "0.2.7",
+    "@types/chrome": "0.2.9",
     "@types/jsdom": "catalog:",
     "@types/node": "catalog:",
     "jsdom": "catalog:",
-    "sharp": "^0.35.3",
+    "sharp": "^0.35.4",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vitest": "catalog:"
