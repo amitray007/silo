@@ -100,6 +100,26 @@ describe('LoginGate', () => {
     expect(screen.queryByText('App content')).toBeNull();
   });
 
+  it('explains a session-blocked login and links to Silo in a safe new tab', async () => {
+    vi.mocked(fetch)
+      .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false }))
+      .mockResolvedValueOnce(jsonResponse({ ok: true }))
+      .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false }));
+    renderHarness();
+
+    const input = await screen.findByLabelText('Password');
+    fireEvent.change(input, { target: { value: 'correct-password' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Continue' }));
+
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(
+      'password was accepted, but this browser did not retain the session',
+    );
+    const link = screen.getByRole('link', { name: 'Open Silo directly.' });
+    expect(link.getAttribute('target')).toBe('_blank');
+    expect(link.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+
   it('disables the submit button while the login request is pending', async () => {
     vi.mocked(fetch).mockResolvedValueOnce(
       jsonResponse({ authRequired: true, authenticated: false }),

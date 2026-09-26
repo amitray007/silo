@@ -1,6 +1,8 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
 import { GrainDot } from '../components/GrainDot';
-import { useAuth } from './AuthContext';
+import { type LoginResult, useAuth } from './AuthContext';
+
+type LoginFailure = Exclude<LoginResult, { kind: 'success' }>;
 
 /**
  * The full-viewport login screen shown when `AuthContext` resolves to
@@ -21,7 +23,7 @@ export function LoginGate() {
   const { login, checkUnreachable } = useAuth();
   const [value, setValue] = useState('');
   const [pending, setPending] = useState(false);
-  const [failed, setFailed] = useState(false);
+  const [failure, setFailure] = useState<LoginFailure | null>(null);
   const inputId = useId();
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -36,23 +38,23 @@ export function LoginGate() {
   // `disabled` while the submit is `pending` (which blurs it), so once the
   // attempt resolves to a failure the field is re-enabled but unfocused —
   // without this the user has to click back in before retyping. Keyed on
-  // `failed` so it runs after the re-enable render commits (not inline in the
+  // `failure` so it runs after the re-enable render commits (not inline in the
   // submit handler, where the element is still disabled — see `handleSubmit`).
   useEffect(() => {
-    if (failed) inputRef.current?.focus();
-  }, [failed]);
+    if (failure) inputRef.current?.focus();
+  }, [failure]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (pending || value === '') return;
 
     setPending(true);
-    setFailed(false);
-    const ok = await login(value);
+    setFailure(null);
+    const result = await login(value);
     setPending(false);
-    if (!ok) {
-      setFailed(true);
-      // Focus is restored by the `failed`-keyed effect below, NOT inline here:
+    if (result.kind !== 'success') {
+      setFailure(result);
+      // Focus is restored by the `failure`-keyed effect below, NOT inline here:
       // the input is `disabled` while `pending`, and this same synchronous
       // block just called `setPending(false)`, so the DOM hasn't re-enabled the
       // element yet — a `.focus()` now would no-op on a still-disabled input.
@@ -122,7 +124,7 @@ export function LoginGate() {
             disabled={pending}
             onChange={(event) => {
               setValue(event.target.value);
-              if (failed) setFailed(false);
+              if (failure) setFailure(null);
             }}
             style={{
               width: '100%',
@@ -138,7 +140,7 @@ export function LoginGate() {
             }}
           />
 
-          {failed && (
+          {failure && (
             <p
               role="alert"
               style={{
@@ -147,7 +149,16 @@ export function LoginGate() {
                 color: 'var(--mut)',
               }}
             >
-              That password didn't work.
+              {failure.kind === 'session-blocked' ? (
+                <>
+                  {failure.message}{' '}
+                  <a href="/" target="_blank" rel="noopener noreferrer">
+                    Open Silo directly.
+                  </a>
+                </>
+              ) : (
+                failure.message
+              )}
             </p>
           )}
 

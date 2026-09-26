@@ -135,7 +135,7 @@ describeIfPg('general-API bearer token gate', () => {
       const { app } = harness.mod();
       const res = await app.request('/api/ingest', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
         body: JSON.stringify({ url: 'https://example.com' }),
       });
       expect(res.status).toBe(401);
@@ -227,7 +227,7 @@ describeIfPg('general-API bearer token gate', () => {
 
       const loginRes = await app.request('/api/login', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
         body: JSON.stringify({ password: PASSWORD }),
       });
       expect(loginRes.status).toBe(200);
@@ -257,7 +257,7 @@ describeIfPg('general-API bearer token gate', () => {
 
       const loginRes = await app.request('/api/login', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
         body: JSON.stringify({ password: PASSWORD }),
       });
       const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
@@ -278,6 +278,19 @@ describeIfPg('general-API bearer token gate', () => {
         headers: { Authorization: `Bearer ${TOKEN}` },
       });
       expect(res.status).not.toBe(401);
+    });
+
+    it('a valid bearer can make an unsafe request without the cookie CSRF header', async () => {
+      process.env.SILO_API_TOKEN = TOKEN;
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+
+      const res = await app.request('/api/tags', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${TOKEN}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: 'bearer-write-without-cookie-csrf' }),
+      });
+      expect(res.status).toBe(201);
     });
 
     it('only SILO_API_TOKEN set (no password): behavior is unchanged — no credential is 401, and a cookie header is simply ignored', async () => {
@@ -310,7 +323,7 @@ describeIfPg('general-API bearer token gate', () => {
 
       const loginRes = await app.request('/api/login', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
         body: JSON.stringify({ password: PASSWORD }),
       });
       expect(loginRes.status).toBe(200);
@@ -328,22 +341,13 @@ describeIfPg('general-API bearer token gate', () => {
       expect(afterRotate.status).toBe(401);
     });
 
-    it('CSRF: a cross-site form-encoded POST to a write route is rejected (400, not a mutation) even if it carried a valid session cookie', async () => {
-      // ce-security testing-gap: the CSRF defense rests on write routes
-      // requiring a JSON body (c.req.json() + Zod). SameSite=Lax already blocks
-      // cross-site subresource POSTs from carrying the cookie; the only
-      // credentialed cross-site request Lax permits is a top-level-navigation
-      // <form> POST, which can only send form-encoded/multipart/text bodies —
-      // never application/json. Lock in that such a body fails to parse into a
-      // valid write BEFORE any mutation, so a forged top-level POST can't
-      // mutate. We attach a genuinely-valid session cookie to prove the
-      // rejection is the body contract, not the auth gate.
+    it('CSRF: a cookie-authenticated form POST is rejected before the route can mutate', async () => {
       process.env.SILO_APP_PASSWORD = PASSWORD;
       const { app } = harness.mod();
 
       const loginRes = await app.request('/api/login', {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
         body: JSON.stringify({ password: PASSWORD }),
       });
       const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
@@ -357,12 +361,30 @@ describeIfPg('general-API bearer token gate', () => {
         },
         body: 'url=https://evil.example.com/forged',
       });
-      // The gate passes (valid cookie), but the body isn't JSON -> the capture
-      // route's c.req.json()/Zod validation rejects it: a 4xx, never a 2xx
-      // create. The forged navigation cannot mutate the store.
-      expect(res.status).not.toBe(401);
-      expect(res.ok).toBe(false);
-      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(res.status).toBe(403);
+      expect((await res.json()) as ErrorEnvelope).toMatchObject({ error: 'csrf_required' });
+    });
+
+    it('an embedded cookie authenticates reads, but an invalid bearer cannot bypass its CSRF guard', async () => {
+      process.env.SILO_APP_PASSWORD = PASSWORD;
+      const { app } = harness.mod();
+      const loginRes = await app.request('https://silo.example.com/api/login', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
+        body: JSON.stringify({ password: PASSWORD, embedded: true }),
+      });
+      const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
+
+      const read = await app.request('/api/tags', { headers: { Cookie: cookieHeader ?? '' } });
+      expect(read.status).not.toBe(401);
+
+      const write = await app.request('/api/tags', {
+        method: 'POST',
+        headers: { Cookie: cookieHeader ?? '', Authorization: 'Bearer invalid-token' },
+        body: JSON.stringify({ name: 'must-not-create' }),
+      });
+      expect(write.status).toBe(403);
+      expect((await write.json()) as ErrorEnvelope).toMatchObject({ error: 'csrf_required' });
     });
   });
 });

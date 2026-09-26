@@ -1,11 +1,6 @@
-import {
-  readAppPassword,
-  SESSION_COOKIE_NAME,
-  SESSION_COOKIE_VALUE,
-  sessionSecret,
-} from '@silo/core';
+import { readAppPassword } from '@silo/core';
 import type { Hono } from 'hono';
-import { getSignedCookie } from 'hono/cookie';
+import { hasValidSessionCookie } from '../session-cookie.js';
 import { bearerToken, readTokenEnv, timingSafeEqual } from '../token-auth.js';
 
 /**
@@ -32,6 +27,7 @@ import { bearerToken, readTokenEnv, timingSafeEqual } from '../token-auth.js';
  */
 export function registerAuthRoutes(app: Hono): void {
   app.get('/api/auth/check', async (c) => {
+    c.header('Cache-Control', 'no-store');
     const expectedToken = readTokenEnv('SILO_API_TOKEN');
     const passwordConfigured = readAppPassword() !== undefined;
     const authRequired = expectedToken !== undefined || passwordConfigured;
@@ -43,12 +39,7 @@ export function registerAuthRoutes(app: Hono): void {
       presented !== undefined &&
       timingSafeEqual(presented, expectedToken);
 
-    let validCookie = false;
-    const secret = sessionSecret();
-    if (!validBearer && secret) {
-      const value = await getSignedCookie(c, secret, SESSION_COOKIE_NAME);
-      validCookie = value === SESSION_COOKIE_VALUE;
-    }
+    const validCookie = !validBearer && (await hasValidSessionCookie(c));
 
     return c.json({ authRequired: true, authenticated: validBearer || validCookie });
   });

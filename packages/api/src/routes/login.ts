@@ -9,30 +9,37 @@ import {
 import type { Context, Hono } from 'hono';
 import { deleteCookie, setSignedCookie } from 'hono/cookie';
 import { z } from 'zod';
+import { csrfFailure } from '../csrf.js';
+import { EMBEDDED_SESSION_COOKIE_NAME, isHttpsRequest } from '../session-cookie.js';
 
 /** `POST /api/login` body schema — a password only. */
 const loginBodySchema = z.object({
   password: z.string(),
+  embedded: z.boolean().optional(),
 });
 
-/** Whether THIS request arrived over HTTPS — decides the cookie's `Secure`
- * attribute. Checked from the request URL's own protocol first (works when
- * Hono is served directly over TLS); falls back to `x-forwarded-proto:
- * https` (the standard signal a reverse proxy/load balancer sets when IT
- * terminates TLS and forwards plain HTTP to this process — the common prod
- * shape). Deliberately NOT hardcoded: a plain-http localhost dev server must
- * get a non-Secure cookie, or the browser would silently refuse to ever send
- * it back (a Secure cookie is never sent over an insecure connection),
- * breaking login in dev. */
-function isHttpsRequest(c: Context): boolean {
-  if (new URL(c.req.url).protocol === 'https:') return true;
-  return c.req.header('x-forwarded-proto') === 'https';
+async function setLoginSession(c: Context, secret: string, embedded: boolean): Promise<void> {
+  await setSignedCookie(
+    c,
+    embedded ? EMBEDDED_SESSION_COOKIE_NAME : SESSION_COOKIE_NAME,
+    SESSION_COOKIE_VALUE,
+    secret,
+    {
+      httpOnly: true,
+      sameSite: embedded ? 'None' : 'Lax',
+      path: '/',
+      maxAge: SESSION_MAX_AGE_SECONDS,
+      secure: embedded || isHttpsRequest(c),
+      ...(embedded ? { partitioned: true } : {}),
+    },
+  );
 }
 
 /**
  * Registers the human web-login routes (web-auth cookie upgrade, Unit 2):
  * `POST /api/login` exchanges the shared `SILO_APP_PASSWORD` for a signed,
- * HTTP-only `silo_session` cookie; `POST /api/logout` clears it. Mounted on
+ * HTTP-only first-party or embedded session cookie; `POST /api/logout` clears
+ * both. Mounted on
  * the ROOT app in `app.ts`, next to `registerAuthRoutes` — NOT the `/api`
  * sub-app that carries `generalTokenAuth` (`app.ts`) — because login itself
  * must be reachable with no existing credential (that's the whole point:
@@ -49,7 +56,10 @@ function isHttpsRequest(c: Context): boolean {
  */
 export function registerLoginRoutes(app: Hono): void {
   /**
-   * `POST /api/login` — body `{ password }`. Three outcomes:
+   * `POST /api/login` — body `{ password, embedded?: boolean }`. It requires
+   * `X-Silo-CSRF: 1`; regular login mints `silo_session` with `SameSite=Lax`,
+   * while HTTPS embedded login mints the partitioned `__Host-silo_embed_session`.
+   * Three outcomes:
    * - No `SILO_APP_PASSWORD` configured at all: `400` (login is simply not
    *   applicable on this deployment — the web UI never shows a login screen
    *   or calls this route in that state; a request here anyway is a
@@ -62,7 +72,21 @@ export function registerLoginRoutes(app: Hono): void {
    *   `Max-Age`) and return `200 { ok: true }`.
    */
   app.post('/api/login', async (c) => {
-    const { password } = loginBodySchema.parse(await c.req.json());
+    c.header('Cache-Control', 'no-store');
+    const csrf = csrfFailure(c);
+    if (csrf) return csrf;
+    const { password, embedded = false } = loginBodySchema.parse(await c.req.json());
+
+    if (embedded && !isHttpsRequest(c)) {
+      return c.json(
+        {
+          error: 'embedded_login_requires_https',
+          message:
+            'Embedded login requires HTTPS. Open Silo directly or use HTTPS through the proxy.',
+        },
+        400,
+      );
+    }
 
     if (!readAppPassword()) {
       return c.json(
@@ -85,24 +109,31 @@ export function registerLoginRoutes(app: Hono): void {
       throw new Error('sessionSecret() unexpectedly undefined with SILO_APP_PASSWORD set');
     }
 
-    await setSignedCookie(c, SESSION_COOKIE_NAME, SESSION_COOKIE_VALUE, secret, {
-      httpOnly: true,
-      sameSite: 'Lax',
-      path: '/',
-      maxAge: SESSION_MAX_AGE_SECONDS,
-      secure: isHttpsRequest(c),
-    });
+    await setLoginSession(c, secret, embedded);
     return c.json({ ok: true });
   });
 
   /**
-   * `POST /api/logout` — clears the `silo_session` cookie and always
-   * returns `200 { ok: true }`, even if no session cookie was present (a
-   * double logout, or logging out on a deployment with no password
-   * configured, is a harmless no-op rather than an error).
+   * `POST /api/logout` requires `X-Silo-CSRF: 1`, clears both session cookies,
+   * and returns `200 { ok: true }` even if neither cookie was present.
    */
   app.post('/api/logout', (c) => {
-    deleteCookie(c, SESSION_COOKIE_NAME, { path: '/' });
+    c.header('Cache-Control', 'no-store');
+    const csrf = csrfFailure(c);
+    if (csrf) return csrf;
+    deleteCookie(c, SESSION_COOKIE_NAME, {
+      path: '/',
+      sameSite: 'Lax',
+      secure: isHttpsRequest(c),
+    });
+    if (isHttpsRequest(c)) {
+      deleteCookie(c, EMBEDDED_SESSION_COOKIE_NAME, {
+        path: '/',
+        secure: true,
+        sameSite: 'None',
+        partitioned: true,
+      });
+    }
     return c.json({ ok: true });
   });
 }

@@ -194,6 +194,22 @@ Behind a reverse proxy, `SILO_MCP_ALLOWED_HOSTS` is the one that bites: the MCP 
 DNS-rebinding guard rejects any `Host` it wasn't told to trust. Full walkthrough (Dokploy +
 Traefik, TLS, the MCP-URL resolution order): **[`docs/deploy.md`](docs/deploy.md)**.
 
+### Embed the web UI
+
+Serve Silo over HTTPS to sign in inside another site's iframe. Embedded login uses an
+HTTP-only partitioned cookie (`SameSite=None; Secure; Partitioned`). Modern browsers keep
+that session separate for each top-level site. Sign in separately in the embed and in a
+normal Silo tab. Signing out clears the sessions available in the current browser context;
+it cannot clear a session stored under another top-level site. Normal tabs keep the existing
+`SameSite=Lax` cookie. Browsers that cannot retain the embedded session show an explanation
+and an **Open Silo directly** link.
+
+Login, logout, and cookie-authenticated API writes require `X-Silo-CSRF: 1`; the web UI adds
+it automatically. Bearer-token clients keep their existing request format. A separate web
+frontend must be listed in `SILO_ALLOWED_ORIGINS` to pass the CORS preflight. The iframe's
+parent does not need that access when Silo's UI and API share an origin. Deploy the API and
+web bundle together, then reload existing tabs so they send the new header.
+
 ## Clients
 
 Reach silo from outside the app — each released independently

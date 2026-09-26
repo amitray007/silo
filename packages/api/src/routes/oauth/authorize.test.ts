@@ -37,7 +37,7 @@ afterEach(() => {
 async function registerClient(app: Hono, redirectUri = REDIRECT_URI): Promise<string> {
   const res = await app.request('/oauth/register', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
     body: JSON.stringify({ client_name: 'Test Client', redirect_uris: [redirectUri] }),
   });
   const body = (await res.json()) as { client_id: string };
@@ -57,12 +57,12 @@ function authorizeUrl(params: Record<string, string>): string {
 
 /** Logs in via `POST /api/login` and returns the `Set-Cookie` value to
  * replay on subsequent requests — the same session cookie
- * `/oauth/authorize` itself checks (`silo_session`, `hasValidSessionCookie`
- * mirrors `general-auth.ts`'s check exactly). */
+ * `/oauth/authorize` itself checks (`silo_session` only, preserving OAuth's
+ * regular-session behavior). */
 async function loginCookie(app: Hono): Promise<string> {
   const res = await app.request('/api/login', {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
     body: JSON.stringify({ password: PASSWORD }),
   });
   const setCookie = res.headers.get('set-cookie');

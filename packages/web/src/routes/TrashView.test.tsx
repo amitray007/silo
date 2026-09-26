@@ -139,6 +139,7 @@ describe('TrashView', () => {
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith('/api/trash/1', {
         method: 'DELETE',
+        headers: { 'X-Silo-CSRF': '1' },
         credentials: 'include',
       }),
     );
@@ -186,6 +187,7 @@ describe('TrashView', () => {
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith('/api/trash', {
         method: 'DELETE',
+        headers: { 'X-Silo-CSRF': '1' },
         credentials: 'include',
       }),
     );
@@ -271,6 +273,7 @@ describe('TrashView', () => {
       await waitFor(() =>
         expect(fetchImpl).toHaveBeenCalledWith('/api/trash', {
           method: 'DELETE',
+          headers: { 'X-Silo-CSRF': '1' },
           credentials: 'include',
         }),
       );
@@ -354,12 +357,14 @@ describe('TrashView', () => {
       await waitFor(() =>
         expect(fetchImpl).toHaveBeenCalledWith('/api/trash/a', {
           method: 'DELETE',
+          headers: { 'X-Silo-CSRF': '1' },
           credentials: 'include',
         }),
       );
       await waitFor(() =>
         expect(fetchImpl).toHaveBeenCalledWith('/api/trash/b', {
           method: 'DELETE',
+          headers: { 'X-Silo-CSRF': '1' },
           credentials: 'include',
         }),
       );

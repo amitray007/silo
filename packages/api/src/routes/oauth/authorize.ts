@@ -14,7 +14,7 @@ import {
 import type { Context, Hono } from 'hono';
 import { getSignedCookie, setSignedCookie } from 'hono/cookie';
 import { z } from 'zod';
-import { hasValidSessionCookie } from '../../session-cookie.js';
+import { hasValidRegularSessionCookie } from '../../session-cookie.js';
 
 /** The signed cookie name for the double-submit CSRF token (review fix
  * SEC-1) — separate from `silo_session`: the CSRF cookie is minted fresh on
@@ -393,7 +393,7 @@ async function requireSession(
   const validated = await parseAndValidate(c);
   if (!validated.ok) return validated;
 
-  if (!(await hasValidSessionCookie(c))) {
+  if (!(await hasValidRegularSessionCookie(c))) {
     const csrfToken = (await mintCsrfToken(c)) ?? '';
     return { ok: false, response: c.html(renderLogin(validated.query, csrfToken)) };
   }

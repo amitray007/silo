@@ -51,6 +51,7 @@
 
 import { readAppPassword, verifyAccessToken } from '@silo/core';
 import type { Context, Next } from 'hono';
+import { csrfFailure, isUnsafeRequest } from './csrf.js';
 import { hasValidSessionCookie } from './session-cookie.js';
 import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
 
@@ -92,6 +93,10 @@ export async function generalTokenAuth(c: Context, next: Next): Promise<Response
     return undefined;
   }
   if (await hasValidSessionCookie(c)) {
+    if (isUnsafeRequest(c)) {
+      const csrf = csrfFailure(c);
+      if (csrf) return csrf;
+    }
     await next();
     return undefined;
   }

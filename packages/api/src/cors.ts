@@ -88,6 +88,7 @@ export function corsMiddleware(): MiddlewareHandler {
       return allowed.includes(origin) ? origin : undefined;
     },
     allowMethods: ['GET', 'POST', 'PATCH', 'DELETE'],
-    allowHeaders: ['Content-Type', 'Authorization'],
+    allowHeaders: ['Content-Type', 'Authorization', 'X-Silo-CSRF'],
+    credentials: true,
   });
 }

@@ -465,7 +465,7 @@ describe('useCaptureLink', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ url: 'https://example.com', tags: ['mcp'], source: 'web' }),
       credentials: 'include',
     });
@@ -672,7 +672,7 @@ describe('useEditLink', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1', {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'New title' }),
       credentials: 'include',
     });
@@ -746,7 +746,7 @@ describe('useTrashLink', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/trash', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({}),
       credentials: 'include',
     });
@@ -890,7 +890,7 @@ describe('useAddTag / useRemoveTag', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/tags', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ tag: 'mcp' }),
       credentials: 'include',
     });
@@ -907,6 +907,7 @@ describe('useAddTag / useRemoveTag', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/tags/a%20tag', {
       method: 'DELETE',
+      headers: { 'X-Silo-CSRF': '1' },
       credentials: 'include',
     });
   });
@@ -975,7 +976,7 @@ describe('useCreateTag', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/tags', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ name: 'design' }),
       credentials: 'include',
     });
@@ -1066,7 +1067,7 @@ describe('useRestoreLink', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/restore', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({}),
       credentials: 'include',
     });
@@ -1163,6 +1164,7 @@ describe('useDeleteNow', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/trash/1', {
       method: 'DELETE',
+      headers: { 'X-Silo-CSRF': '1' },
       credentials: 'include',
     });
   });
@@ -1246,7 +1248,11 @@ describe('useEmptyTrash', () => {
       await result.current.mutateAsync();
     });
 
-    expect(fetch).toHaveBeenCalledWith('/api/trash', { method: 'DELETE', credentials: 'include' });
+    expect(fetch).toHaveBeenCalledWith('/api/trash', {
+      method: 'DELETE',
+      headers: { 'X-Silo-CSRF': '1' },
+      credentials: 'include',
+    });
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
     expect(invalidatedKeys).toContainEqual(queryKeys.trash());
     expect(invalidatedKeys).toContainEqual(queryKeys.counts());
@@ -1294,7 +1300,7 @@ describe('useRetryCapture', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/retry', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({}),
       credentials: 'include',
     });
@@ -1473,10 +1479,12 @@ describe('useBulkRestore / useBulkDeleteNow', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/trash/a', {
       method: 'DELETE',
+      headers: { 'X-Silo-CSRF': '1' },
       credentials: 'include',
     });
     expect(fetch).toHaveBeenCalledWith('/api/trash/b', {
       method: 'DELETE',
+      headers: { 'X-Silo-CSRF': '1' },
       credentials: 'include',
     });
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);

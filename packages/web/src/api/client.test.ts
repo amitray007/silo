@@ -193,7 +193,7 @@ describe('cookie credentials + auth-cleared signal', () => {
 
     expect(fetch).toHaveBeenCalledWith('/api/links', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ url: 'https://example.com' }),
       credentials: 'include',
     });
@@ -254,7 +254,7 @@ describe('apiPost', () => {
     expect(result).toEqual(captureResponse);
     expect(fetch).toHaveBeenCalledWith('/api/links', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ url: 'https://example.com' }),
       credentials: 'include',
     });
@@ -319,7 +319,7 @@ describe('apiPatch / apiDelete', () => {
     expect(result).toEqual(linkResponse);
     expect(fetch).toHaveBeenCalledWith(`/api/links/${linkFixture.id}`, {
       method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'New title' }),
       credentials: 'include',
     });
@@ -332,6 +332,7 @@ describe('apiPatch / apiDelete', () => {
 
     expect(fetch).toHaveBeenCalledWith(`/api/links/${linkFixture.id}`, {
       method: 'DELETE',
+      headers: { 'X-Silo-CSRF': '1' },
       credentials: 'include',
     });
   });

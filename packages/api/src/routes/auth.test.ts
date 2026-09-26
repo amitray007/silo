@@ -91,7 +91,7 @@ describe('GET /api/auth/check', () => {
 
     const loginRes = await app.request('/api/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
       body: JSON.stringify({ password: PASSWORD }),
     });
     const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
@@ -102,6 +102,33 @@ describe('GET /api/auth/check', () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as AuthCheckBody;
     expect(body).toEqual({ authRequired: true, authenticated: true });
+  });
+
+  it('accepts a valid embedded session cookie', async () => {
+    process.env.SILO_APP_PASSWORD = PASSWORD;
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const loginRes = await app.request('https://silo.example.com/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'X-Silo-CSRF': '1' },
+      body: JSON.stringify({ password: PASSWORD, embedded: true }),
+    });
+    const cookieHeader = loginRes.headers.get('set-cookie')?.split(';')[0];
+
+    const res = await app.request('/api/auth/check', { headers: { Cookie: cookieHeader ?? '' } });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ authRequired: true, authenticated: true });
+  });
+
+  it('rejects a tampered embedded session cookie', async () => {
+    process.env.SILO_APP_PASSWORD = PASSWORD;
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const res = await app.request('/api/auth/check', {
+      headers: { Cookie: '__Host-silo_embed_session=not-a-real-signed-value' },
+    });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ authRequired: true, authenticated: false });
   });
 
   it('SILO_APP_PASSWORD set, forged/tampered session cookie: 200 { authRequired: true, authenticated: false }', async () => {

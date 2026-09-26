@@ -15,6 +15,7 @@ afterEach(() => {
 });
 
 const PASSWORD = 'correct-horse-battery-staple';
+const CSRF_HEADERS = { 'X-Silo-CSRF': '1', 'content-type': 'application/json' };
 
 /**
  * Tests for `POST /api/login`/`POST /api/logout` (web-auth cookie upgrade,
@@ -28,7 +29,7 @@ describe('POST /api/login', () => {
     const app = createApp();
     const res = await app.request('/api/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: CSRF_HEADERS,
       body: JSON.stringify({ password: 'anything' }),
     });
     expect(res.status).toBe(400);
@@ -40,7 +41,7 @@ describe('POST /api/login', () => {
     const app = createApp();
     const res = await app.request('/api/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: CSRF_HEADERS,
       body: JSON.stringify({ password: PASSWORD }),
     });
     expect(res.status).toBe(200);
@@ -63,7 +64,7 @@ describe('POST /api/login', () => {
     const app = createApp();
     const res = await app.request('http://localhost/api/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: CSRF_HEADERS,
       body: JSON.stringify({ password: PASSWORD }),
     });
     const setCookie = res.headers.get('set-cookie');
@@ -76,7 +77,7 @@ describe('POST /api/login', () => {
     const app = createApp();
     const res = await app.request('https://silo.example.com/api/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: CSRF_HEADERS,
       body: JSON.stringify({ password: PASSWORD }),
     });
     const setCookie = res.headers.get('set-cookie');
@@ -89,7 +90,7 @@ describe('POST /api/login', () => {
     const app = createApp();
     const res = await app.request('http://localhost/api/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json', 'x-forwarded-proto': 'https' },
+      headers: { ...CSRF_HEADERS, 'x-forwarded-proto': 'https' },
       body: JSON.stringify({ password: PASSWORD }),
     });
     const setCookie = res.headers.get('set-cookie');
@@ -102,7 +103,7 @@ describe('POST /api/login', () => {
     const app = createApp();
     const res = await app.request('/api/login', {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: CSRF_HEADERS,
       body: JSON.stringify({ password: 'wrong-password' }),
     });
     expect(res.status).toBe(401);
@@ -114,7 +115,10 @@ describe('POST /api/logout', () => {
   it('always returns 200, and clears silo_session (Max-Age=0 / an expired Expires)', async () => {
     const { createApp } = await import('../app.js');
     const app = createApp();
-    const res = await app.request('/api/logout', { method: 'POST' });
+    const res = await app.request('/api/logout', {
+      method: 'POST',
+      headers: { 'X-Silo-CSRF': '1' },
+    });
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({ ok: true });
 
@@ -127,7 +131,105 @@ describe('POST /api/logout', () => {
   it('is a no-op 200 even when no password is configured', async () => {
     const { createApp } = await import('../app.js');
     const app = createApp();
-    const res = await app.request('/api/logout', { method: 'POST' });
+    const res = await app.request('/api/logout', {
+      method: 'POST',
+      headers: { 'X-Silo-CSRF': '1' },
+    });
     expect(res.status).toBe(200);
+  });
+
+  it('rejects logout without the custom CSRF header', async () => {
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const res = await app.request('/api/logout', { method: 'POST' });
+    expect(res.status).toBe(403);
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+});
+
+describe('embedded login and CSRF', () => {
+  it('rejects login without the custom CSRF header before checking the password', async () => {
+    process.env.SILO_APP_PASSWORD = PASSWORD;
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const res = await app.request('https://silo.example.com/api/login', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ password: PASSWORD, embedded: true }),
+    });
+    expect(res.status).toBe(403);
+    expect(res.headers.get('set-cookie')).toBeNull();
+  });
+
+  it('sets a partitioned HTTPS-only embedded session cookie', async () => {
+    process.env.SILO_APP_PASSWORD = PASSWORD;
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const res = await app.request('https://silo.example.com/api/login', {
+      method: 'POST',
+      headers: CSRF_HEADERS,
+      body: JSON.stringify({ password: PASSWORD, embedded: true }),
+    });
+    const setCookie = res.headers.get('set-cookie') ?? '';
+    expect(res.status).toBe(200);
+    expect(setCookie).toContain('__Host-silo_embed_session=');
+    expect(setCookie).toContain('HttpOnly');
+    expect(setCookie).toContain('Secure');
+    expect(setCookie).toContain('SameSite=None');
+    expect(setCookie).toContain('Partitioned');
+    expect(setCookie).toContain('Path=/');
+    expect(setCookie).toContain('Max-Age=2592000');
+  });
+
+  it('accepts the TLS proxy signal for embedded login', async () => {
+    process.env.SILO_APP_PASSWORD = PASSWORD;
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const res = await app.request('http://localhost/api/login', {
+      method: 'POST',
+      headers: { ...CSRF_HEADERS, 'x-forwarded-proto': 'https' },
+      body: JSON.stringify({ password: PASSWORD, embedded: true }),
+    });
+    expect(res.status).toBe(200);
+    expect(res.headers.get('set-cookie')).toContain('Partitioned');
+  });
+
+  it('rejects embedded login over insecure HTTP with an actionable error', async () => {
+    process.env.SILO_APP_PASSWORD = PASSWORD;
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const res = await app.request('http://localhost/api/login', {
+      method: 'POST',
+      headers: CSRF_HEADERS,
+      body: JSON.stringify({ password: PASSWORD, embedded: true }),
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({
+      error: 'embedded_login_requires_https',
+      message: 'Embedded login requires HTTPS. Open Silo directly or use HTTPS through the proxy.',
+    });
+  });
+
+  it('expires both regular and embedded sessions on HTTPS logout', async () => {
+    const { createApp } = await import('../app.js');
+    const app = createApp();
+    const res = await app.request('https://silo.example.com/api/logout', {
+      method: 'POST',
+      headers: { 'X-Silo-CSRF': '1' },
+    });
+    const setCookies = res.headers.getSetCookie();
+    const regular = setCookies.find((cookie) => cookie.startsWith('silo_session='));
+    const embedded = setCookies.find((cookie) => cookie.startsWith('__Host-silo_embed_session='));
+    expect(regular).toBeTruthy();
+    expect(regular).toContain('Path=/');
+    expect(regular).toContain('SameSite=Lax');
+    expect(regular).toContain('Secure');
+    expect(regular).toContain('Max-Age=0');
+    expect(embedded).toBeTruthy();
+    expect(embedded).toContain('Path=/');
+    expect(embedded).toContain('SameSite=None');
+    expect(embedded).toContain('Secure');
+    expect(embedded).toContain('Partitioned');
+    expect(embedded).toContain('Max-Age=0');
   });
 });

@@ -1,6 +1,6 @@
 import { createContext, type ReactNode, useCallback, useContext, useEffect, useState } from 'react';
 import { onAuthCleared } from '../api/auth';
-import { apiGet, apiPost } from '../api/client';
+import { ApiError, apiGet, apiPost } from '../api/client';
 
 /**
  * Hand-typed mirror of `@silo/api`'s `GET /api/auth/check` response
@@ -35,6 +35,12 @@ interface AuthCheckResponse {
  */
 export type AuthState = 'loading' | 'open' | 'authed' | 'needs-login';
 
+export type LoginResult =
+  | { kind: 'success' }
+  | { kind: 'wrong-password'; message: string }
+  | { kind: 'session-blocked'; message: string }
+  | { kind: 'request-failed'; message: string };
+
 interface AuthContextValue {
   state: AuthState;
   /** True only for the specific case where the initial check failed to reach the server at all (distinct from "reached it and got a 401/invalid session"), so `LoginGate` can show a "couldn't reach the server" note instead of the generic "wrong password" copy. */
@@ -43,11 +49,11 @@ interface AuthContextValue {
    * Submits `password` to `POST /api/login`. On success the server sets the
    * `silo_session` cookie, so the check is re-run (now cookie-bearing) to
    * confirm it landed and flip state to `'authed'`. On a wrong password
-   * (`/api/login` responds 401) resolves to `false` and the gate stays up —
-   * there is no local credential to clean up either way, since the web never
-   * held one to begin with.
+   * (`/api/login` responds 401), session retention failure, or request
+   * failure, the matching result keeps the gate up. There is no local
+   * credential to clean up because the web never held one.
    */
-  login: (password: string) => Promise<boolean>;
+  login: (password: string) => Promise<LoginResult>;
   /**
    * Submits `POST /api/logout` (clears the `silo_session` cookie
    * server-side, always 200) and drops straight to `'needs-login'` — the
@@ -62,6 +68,15 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 function classify(response: AuthCheckResponse): AuthState {
   if (!response.authRequired) return 'open';
   return response.authenticated ? 'authed' : 'needs-login';
+}
+
+function isEmbedded(): boolean {
+  return window.self !== window.top;
+}
+
+function requestFailureMessage(error: unknown): string {
+  if (error instanceof ApiError && error.status !== 0) return error.message;
+  return 'Could not reach Silo. Check the connection and try again.';
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -116,15 +131,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [],
   );
 
-  const login = useCallback(async (password: string): Promise<boolean> => {
+  const login = useCallback(async (password: string): Promise<LoginResult> => {
     try {
-      await apiPost('/api/login', { password });
-    } catch {
-      // A wrong password is a 401 ApiError from apiPost — the gate stays up,
-      // no cookie was set. Any other failure (network down, unreachable
-      // server) is treated the same way: neither confirmed nor refuted, so
-      // stay on the gate rather than guessing "authed".
-      return false;
+      await apiPost('/api/login', { password, ...(isEmbedded() ? { embedded: true } : {}) });
+    } catch (error) {
+      if (error instanceof ApiError && error.status === 401) {
+        return { kind: 'wrong-password', message: "That password didn't work." };
+      }
+      return { kind: 'request-failed', message: requestFailureMessage(error) };
     }
 
     // The server just set the silo_session cookie — re-run the check
@@ -133,14 +147,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // assume success from a 200 alone.
     try {
       const response = await apiGet<AuthCheckResponse>('/api/auth/check');
-      if (response.authRequired && response.authenticated) {
+      if (!response.authRequired || response.authenticated) {
         setCheckUnreachable(false);
-        setState('authed');
-        return true;
+        setState(classify(response));
+        return { kind: 'success' };
       }
-      return false;
-    } catch {
-      return false;
+      return {
+        kind: 'session-blocked',
+        message: 'Your password was accepted, but this browser did not retain the session.',
+      };
+    } catch (error) {
+      return { kind: 'request-failed', message: requestFailureMessage(error) };
     }
   }, []);
 

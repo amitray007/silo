@@ -56,7 +56,7 @@ describe('CORS on /api/*', () => {
       headers: {
         Origin: 'http://localhost:5173',
         'Access-Control-Request-Method': 'POST',
-        'Access-Control-Request-Headers': 'Content-Type, Authorization',
+        'Access-Control-Request-Headers': 'Content-Type, Authorization, X-Silo-CSRF',
       },
     });
     expect(res.status).toBe(204);
@@ -65,6 +65,8 @@ describe('CORS on /api/*', () => {
     const allowHeaders = res.headers.get('access-control-allow-headers') ?? '';
     expect(allowHeaders.toLowerCase()).toContain('authorization');
     expect(allowHeaders.toLowerCase()).toContain('content-type');
+    expect(allowHeaders.toLowerCase()).toContain('x-silo-csrf');
+    expect(res.headers.get('access-control-allow-credentials')).toBe('true');
   });
 
   it('preflight OPTIONS from a disallowed origin gets no CORS allow headers', async () => {

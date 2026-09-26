@@ -188,9 +188,11 @@ export async function apiGet<T>(path: string): Promise<T> {
 async function apiRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
   const response = await apiFetch(path, {
     method,
-    ...(body !== undefined
-      ? { headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }
-      : {}),
+    headers: {
+      'X-Silo-CSRF': '1',
+      ...(body !== undefined ? { 'content-type': 'application/json' } : {}),
+    },
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   return readJson<T>(response);
 }

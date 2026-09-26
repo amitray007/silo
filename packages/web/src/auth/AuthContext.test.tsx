@@ -1,7 +1,8 @@
 import { act, render, screen, waitFor } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { emitAuthCleared } from '../api/auth';
-import { AuthProvider, useAuth } from './AuthContext';
+import { AuthProvider, type LoginResult, useAuth } from './AuthContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -121,10 +122,12 @@ describe('AuthContext', () => {
   describe('login', () => {
     function LoginProbe() {
       const { state, login } = useAuth();
+      const [result, setResult] = useState<LoginResult | null>(null);
       return (
         <div>
           <span data-testid="state">{state}</span>
-          <button type="button" onClick={() => login('candidate-password')}>
+          <span data-testid="login-result">{result?.kind}</span>
+          <button type="button" onClick={() => void login('candidate-password').then(setResult)}>
             submit
           </button>
         </div>
@@ -147,6 +150,7 @@ describe('AuthContext', () => {
       screen.getByRole('button', { name: 'submit' }).click();
 
       await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('authed'));
+      expect(screen.getByTestId('login-result').textContent).toBe('success');
 
       const loginCall = vi
         .mocked(fetch)
@@ -156,6 +160,10 @@ describe('AuthContext', () => {
       expect((init as RequestInit | undefined)?.method).toBe('POST');
       expect(JSON.parse((init as RequestInit).body as string)).toEqual({
         password: 'candidate-password',
+      });
+      expect((init as RequestInit).headers).toEqual({
+        'X-Silo-CSRF': '1',
+        'content-type': 'application/json',
       });
     });
 
@@ -179,6 +187,7 @@ describe('AuthContext', () => {
       // on a failed login (no cookie was set to confirm).
       await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2));
       expect(screen.getByTestId('state').textContent).toBe('needs-login');
+      expect(screen.getByTestId('login-result').textContent).toBe('wrong-password');
     });
 
     it('stays on "needs-login" when the post-login re-check reports unauthenticated', async () => {
@@ -198,6 +207,60 @@ describe('AuthContext', () => {
 
       await waitFor(() => expect(fetch).toHaveBeenCalledTimes(3));
       expect(screen.getByTestId('state').textContent).toBe('needs-login');
+      expect(screen.getByTestId('login-result').textContent).toBe('session-blocked');
+    });
+
+    it('returns request-failed when login or its confirmation request fails', async () => {
+      vi.mocked(fetch)
+        .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false }))
+        .mockResolvedValueOnce(
+          jsonResponse({ error: 'csrf', message: 'CSRF header required' }, 400),
+        );
+
+      render(
+        <AuthProvider>
+          <LoginProbe />
+        </AuthProvider>,
+      );
+      await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('needs-login'));
+
+      screen.getByRole('button', { name: 'submit' }).click();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('login-result').textContent).toBe('request-failed'),
+      );
+      expect(screen.getByTestId('state').textContent).toBe('needs-login');
+    });
+
+    it('sends the embedded signal only from a frame', async () => {
+      const topDescriptor = Object.getOwnPropertyDescriptor(window, 'top');
+      Object.defineProperty(window, 'top', { configurable: true, value: {} });
+      try {
+        vi.mocked(fetch)
+          .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: false }))
+          .mockResolvedValueOnce(jsonResponse({ ok: true }))
+          .mockResolvedValueOnce(jsonResponse({ authRequired: true, authenticated: true }));
+
+        render(
+          <AuthProvider>
+            <LoginProbe />
+          </AuthProvider>,
+        );
+        await waitFor(() => expect(screen.getByTestId('state').textContent).toBe('needs-login'));
+
+        screen.getByRole('button', { name: 'submit' }).click();
+
+        await waitFor(() => expect(screen.getByTestId('login-result').textContent).toBe('success'));
+        const loginCall = vi
+          .mocked(fetch)
+          .mock.calls.find(([input]) => String(input).includes('/api/login'));
+        expect(JSON.parse((loginCall?.[1] as RequestInit).body as string)).toEqual({
+          password: 'candidate-password',
+          embedded: true,
+        });
+      } finally {
+        if (topDescriptor) Object.defineProperty(window, 'top', topDescriptor);
+      }
     });
   });
 
