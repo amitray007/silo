@@ -30,7 +30,7 @@
     "jscpd": "catalog:",
     "knip": "catalog:",
     "lefthook": "catalog:",
-    "turbo": "2.10.13"
+    "turbo": "2.11.3"
   },
   "pnpm": {
     "overrides": {
