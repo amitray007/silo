@@ -35,6 +35,17 @@ jobs:
       - name: Scan dependencies
         run: osv-scanner scan --lockfile=pnpm-lock.yaml
 
+  # Branch protection still requires this legacy name. Report the OSV result
+  # under it without changing the scanner or weakening the required check.
+  audit-required:
+    name: pnpm audit
+    runs-on: ubuntu-latest
+    needs: [audit]
+    if: always()
+    steps:
+      - name: Dependency audit passed
+        run: test "${{ needs.audit.result }}" = "success"
+
   secrets:
     name: gitleaks
     runs-on: ubuntu-latest
