@@ -13,8 +13,8 @@ catalogs:
       specifier: 2.1.1
       version: 2.1.1
     '@modelcontextprotocol/sdk':
-      specifier: 1.30.1
-      version: 1.30.1
+      specifier: 1.31.0
+      version: 1.31.0
     '@mozilla/readability':
       specifier: 0.6.0
       version: 0.6.0
@@ -292,7 +292,7 @@ importers:
         version: 2.1.1(hono@4.13.8)
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
-        version: 1.30.1(zod@4.6.5)
+        version: 1.31.0(zod@4.6.5)
       '@silo/api':
         specifier: workspace:*
         version: link:../api
@@ -424,7 +424,7 @@ importers:
     dependencies:
       '@modelcontextprotocol/sdk':
         specifier: 'catalog:'
-        version: 1.30.1(zod@4.6.5)
+        version: 1.31.0(zod@4.6.5)
       '@silo/core':
         specifier: workspace:*
         version: link:../../core
@@ -1449,8 +1449,8 @@ packages:
     resolution: {integrity: sha512-a5D654n7GrWJk8nXtPA4N0g7ZpuGi8KzR/0HAe3NR7BZ6eyV8vW+e93uYyyZyk1pfnh0XCdvPbo1u/KyqV7V3Q==}
     engines: {node: '>= 22.13'}
 
-  '@modelcontextprotocol/sdk@1.30.1':
-    resolution: {integrity: sha512-H2HxLvC3HDNybePJaLdSrU1hhUK5iQw+WvV1b01myFyI7sdVGe1u/IPTE5D9fGCiJDVtgMV/lmFkQXLmQyIFYA==}
+  '@modelcontextprotocol/sdk@1.31.0':
+    resolution: {integrity: sha512-UvTMgnNlnIBO/22ob2RcVGDlcvOslQs8T59+FTGdA0L27a39fdGF/EDETNtDVK4DZGpwomlsYpRdA8UXcVL/pw==}
     engines: {node: '>=18'}
     peerDependencies:
       '@cfworker/json-schema': ^4.1.1
@@ -4763,7 +4763,7 @@ snapshots:
       - canvas
       - debug
 
-  '@modelcontextprotocol/sdk@1.30.1(zod@4.6.5)':
+  '@modelcontextprotocol/sdk@1.31.0(zod@4.6.5)':
     dependencies:
       '@hono/node-server': 2.0.11(hono@4.13.8)
       ajv: 8.20.0
