@@ -10,7 +10,7 @@ function PageFrame({ src, silo, url }: { src: string; silo: boolean; url: string
   return (
     <div className="silo-original-surface" aria-busy={loading}>
       <iframe
-        title={silo ? 'Silo view' : 'Original page'}
+        title={silo ? 'Silo view' : 'Live page'}
         sandbox={silo ? 'allow-popups allow-popups-to-escape-sandbox' : undefined}
         className="silo-original-frame"
         src={src}

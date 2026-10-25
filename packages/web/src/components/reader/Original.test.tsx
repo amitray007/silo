@@ -15,7 +15,7 @@ function Standalone({ link }: { link: LinkJson }) {
   return (
     <>
       <button type="button" onClick={() => state.refresh.mutate()}>
-        Refresh Original
+        Refresh Live
       </button>
       <Original link={link} state={state} />
     </>
@@ -152,7 +152,7 @@ describe('Original mode order', () => {
   });
   it('keeps a frameable PDF in direct mode without offering silo view', async () => {
     const { container } = show('direct', 'https://arxiv.org/pdf/1706.03762', 'application/pdf');
-    await screen.findByTitle('Original page');
+    await screen.findByTitle('Live page');
     expect(screen.queryByRole('button', { name: 'Show silo view' })).toBeNull();
     expect(container.querySelector('iframe')?.getAttribute('src')).toBe(
       'https://arxiv.org/pdf/1706.03762',
@@ -161,9 +161,9 @@ describe('Original mode order', () => {
 
   it('refreshes via /frame?fresh=1 and remounts the iframe after it resolves', async () => {
     const { container, fetch } = show();
-    await screen.findByTitle('Original page');
+    await screen.findByTitle('Live page');
     const previous = container.querySelector('iframe');
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Original' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Live' }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith('/api/links/link-id/frame?fresh=1', expect.anything()),
     );
@@ -193,11 +193,11 @@ describe('Original mode order', () => {
   });
   it('follows a Refresh result that now requires silo view', async () => {
     const { container, fetch } = show('direct', link.url, 'text/html');
-    await screen.findByTitle('Original page');
+    await screen.findByTitle('Live page');
     fetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ mode: 'view', contentType: 'text/html' })),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Original' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Live' }));
     await screen.findByTitle('Silo view');
     expect(container.querySelector('iframe')?.getAttribute('src')).toContain(
       '/api/links/link-id/view',

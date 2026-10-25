@@ -50,7 +50,7 @@ function RefreshButton({ original }: { original: OriginalState | undefined }) {
   return (
     <IconButton
       name="refresh"
-      label="Refresh Original"
+      label="Refresh Live"
       onClick={() => original.refresh.mutate()}
       disabled={original.preparing}
     />
@@ -316,7 +316,7 @@ export function ReaderPane({
         </button>
         <div className="silo-reader-viewtools">
           <div className="silo-reader-segment" role="tablist" aria-label="Link view">
-            {(['reader', 'original'] as const).map((value) => (
+            {(['original', 'reader'] as const).map((value) => (
               <button
                 type="button"
                 role="tab"
@@ -335,7 +335,7 @@ export function ReaderPane({
                   }
                 }}
               >
-                {value === 'reader' ? 'Reader' : 'Original'}
+                {value === 'reader' ? 'Reader' : 'Live'}
               </button>
             ))}
           </div>

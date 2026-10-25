@@ -159,8 +159,11 @@ function mutate(path: string, state: { live: LinkJson[]; trash: TrashLinkJson[] 
 }
 
 const reader = () => within(screen.getByRole('region', { name: 'Link reader' }));
+/** Live is the default tab; content assertions switch to Reader first. */
 const selected = async (title = 'First link') =>
   waitFor(() => {
+    const tab = reader().getByRole<HTMLButtonElement>('tab', { name: 'Reader' });
+    if (!tab.disabled && tab.getAttribute('aria-selected') !== 'true') fireEvent.click(tab);
     expect(reader().getByRole('heading', { level: 2, name: title })).toBeDefined();
     expect(reader().queryByLabelText('Loading article')).toBeNull();
   });
@@ -305,7 +308,7 @@ describe('reader content', () => {
   it('renders the Original iframe with the required sandbox and an escape link', async () => {
     const { container } = renderReader({ route: '/?link=a' });
     await selected();
-    fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     await waitFor(() => expect(container.querySelector('iframe')?.getAttribute('src')).toBe(a.url));
     const frame = container.querySelector('iframe');
     expect(frame?.getAttribute('sandbox')).toBeNull();
@@ -318,7 +321,7 @@ describe('reader content', () => {
     const attributes = vi.spyOn(HTMLIFrameElement.prototype, 'setAttribute');
     const { container } = renderReader({ route: '/?link=a' });
     await selected();
-    fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     fireEvent.click(within(reader().getByRole('toolbar')).getByRole('button', { name: 'Next' }));
     await selected('Second link');
     expect(container.querySelector('iframe')).toBeNull();
@@ -351,9 +354,7 @@ describe('reader keyboard and phone toolbar', () => {
     fireEvent.keyDown(document, { key: 'k' });
     await selected();
     fireEvent.keyDown(document, { key: 'r' });
-    expect(reader().getByRole('tab', { name: 'Original' }).getAttribute('aria-selected')).toBe(
-      'true',
-    );
+    expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.keyDown(document, { key: 'c' });
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(a.url));
     fireEvent.keyDown(document, { key: 'o' });
@@ -808,7 +809,7 @@ describe('review regressions', () => {
     const tab = reader().getByRole('tab', { name: 'Reader' });
     tab.focus();
     fireEvent.keyDown(tab, { key: 'ArrowRight' });
-    const original = reader().getByRole('tab', { name: 'Original' });
+    const original = reader().getByRole('tab', { name: 'Live' });
     expect(document.activeElement).toBe(original);
     fireEvent.keyDown(original, { key: 'ArrowLeft' });
     expect(document.activeElement).toBe(tab);
@@ -824,6 +825,7 @@ describe('review regressions', () => {
         },
       },
     });
+    await selected();
     await waitFor(() => expect(screen.getByText('Article heading')).toBeDefined());
     expect(fetchMock).toHaveBeenCalledWith('/api/links/a', expect.any(Object));
     const prose = container.querySelector('.silo-reader-prose');
@@ -863,6 +865,27 @@ describe('review regressions', () => {
     expect(container.querySelector('.silo-reader-prose')).toBeNull();
   });
 
+  it('opens every newly selected link on the Live tab, listed before Reader', async () => {
+    renderReader({ route: '/?link=a' });
+    await waitFor(() =>
+      expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe(
+        'true',
+      ),
+    );
+    expect(
+      reader()
+        .getAllByRole('tab')
+        .map((tab) => tab.textContent),
+    ).toEqual(['Live', 'Reader']);
+    await selected();
+    fireEvent.click(screen.getByText('Second link'));
+    await waitFor(() =>
+      expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe(
+        'true',
+      ),
+    );
+  });
+
   it.each([
     ['https://youtube.com/watch?v=jNQXAC9IVRw', 'player'],
     ['https://paulgraham.com/greatwork.html', 'direct'],
@@ -871,7 +894,7 @@ describe('review regressions', () => {
   ])('selects Original mode for %s', async (url, mode) => {
     const { container } = renderReader({ live: [makeLink({ ...a, url })], route: '/?link=a' });
     await selected();
-    fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     await waitFor(() =>
       expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(mode),
     );
@@ -880,12 +903,12 @@ describe('review regressions', () => {
     const groups = container.querySelectorAll('.silo-reader-desktop .silo-reader-tools');
     const tools = [...(groups[groups.length - 1]?.children ?? [])];
     expect(tools.map((tool) => tool.getAttribute('aria-label')).slice(0, 2)).toEqual(
-      mode === 'player' ? ['Copy link', 'Edit'] : ['Copy link', 'Refresh Original'],
+      mode === 'player' ? ['Copy link', 'Edit'] : ['Copy link', 'Refresh Live'],
     );
     if (mode === 'direct') {
       expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
       if (url.includes('/pdf/'))
-        expect(screen.getByTitle('Original page').hasAttribute('sandbox')).toBe(false);
+        expect((await screen.findByTitle('Live page')).hasAttribute('sandbox')).toBe(false);
     }
   });
 
@@ -904,7 +927,7 @@ describe('review regressions', () => {
     await selected();
     expect(reader().getAllByText(twitterSourceData.text)).toHaveLength(1);
     expect(container.querySelector('.silo-reader-body')).toBeNull();
-    fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=light');
     expect(container.querySelector('.silo-reader-tweet')).toBeNull();
     expect(reader().queryByText(twitterSourceData.text)).toBeNull();
