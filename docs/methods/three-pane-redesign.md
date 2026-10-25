@@ -16,13 +16,13 @@ before the first edit). `exactOptionalPropertyTypes` is on.
   icons, copy, and behavior. Do not copy its string-template architecture.
 - `docs/design/prototypes/silo-redesign.html` - the same prototype with fonts
   inlined. Open it in a browser to compare.
-- Where the prototype and the current app disagree on **features**, the current
+- Where the prototype and the current app disagree on features, the current
   app wins: keep every feature that ships today. Where they disagree on
-  **look and layout**, the prototype wins.
+  look and layout, the prototype wins.
 
 ## Frozen decisions
 
-1. **Design system change (replaces "Oat").** Crisp neutral tokens from the
+1. **Design system change (replaces "Oat").** Neutral tokens from the
    prototype `:root` and `[data-theme="dark"]` blocks (`--bg #f6f6f5`,
    `--panel #fff`, `--line #e6e6e4`, `--ink #0c0c0b`, `--mut #5c5c59`,
    `--fnt #8a8a86`, `--btn #111110`, accent `#ffb23f -> #ff6a13`, dark
@@ -39,10 +39,10 @@ before the first edit). `exactOptionalPropertyTypes` is on.
 3. **Layout: three panes.** `sidebar | list | reader`, full-bleed (drop the
    centered 60rem band). Width modes by CSS container width, with CSS media
    queries for layout (no JS layout branch for first paint):
-   - **wide >= 1100px:** sidebar docked, list (~380px) and reader side by side.
-   - **mid 720-1099px:** sidebar is an off-canvas drawer opened from the list
+   - wide >= 1100px: sidebar docked, list (~380px) and reader side by side.
+   - mid 720-1099px: sidebar is an off-canvas drawer opened from the list
      header; list and reader side by side.
-   - **narrow < 720px:** list fills the screen; selecting a link shows the
+   - narrow < 720px: list fills the screen; selecting a link shows the
      reader full screen with a back button and the bottom toolbar
      (prev, next, copy, edit, trash or restore). The sidebar is a drawer.
    - `[` collapses or shows the docked sidebar at wide; persist in
