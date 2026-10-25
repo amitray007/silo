@@ -10,6 +10,7 @@ import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
 import { SettingsProvider, useSettings } from './SettingsContext';
+import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
 
 const DRAWER_ID = 'silo-drawer';
@@ -71,6 +72,24 @@ function RowMenuLayer({
   return editingLink ? (
     <EditModal key={editingLink.id} link={editingLink} focus={editingFocus} />
   ) : null;
+}
+
+function SettingsLayer({
+  palette,
+  closeDrawer,
+}: {
+  palette: ReturnType<typeof useCommandPalette>;
+  closeDrawer: () => void;
+}) {
+  const { open } = useSettings();
+  const { closeMenu } = useRowMenu();
+  useEffect(() => {
+    if (!open) return;
+    palette.closePalette();
+    closeMenu();
+    closeDrawer();
+  }, [open, palette.closePalette, closeMenu, closeDrawer]);
+  return open ? <SettingsModal /> : null;
 }
 
 function initialCollapsed() {
@@ -234,6 +253,7 @@ export function AppFrame() {
                 <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
               </div>
               <CommandPalette palette={commandPalette} />
+              <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
             </div>
           </SelectionProvider>
         </RowMenuProvider>

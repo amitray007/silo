@@ -58,7 +58,7 @@ export function EditModal({
   };
   return (
     <ModalShell
-      width={520}
+      width={448}
       ariaLabel="Edit link"
       onClose={close}
       maxHeight="calc(100dvh - 32px)"
@@ -124,7 +124,7 @@ export function EditModal({
             className="silo-field"
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            rows={2}
+            rows={4}
             placeholder="Why you kept it"
           />
         </div>
@@ -137,7 +137,7 @@ export function EditModal({
             className="silo-field"
             value={description}
             onChange={(event) => setDescription(event.target.value)}
-            rows={2}
+            rows={4}
             placeholder="What this is, in your words"
           />
         </div>

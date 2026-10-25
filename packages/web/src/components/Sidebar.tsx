@@ -64,23 +64,7 @@ function NavItemLink({
 
 function SearchShortcutChip() {
   return (
-    <span
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        gap: 1,
-        lineHeight: 1,
-        fontSize: 11,
-        fontWeight: 500,
-        color: 'var(--ghost)',
-        border: '0.5px solid var(--line)',
-        borderRadius: 4,
-        padding: 4,
-        margin: '-3px 0',
-        background: 'color-mix(in oklch, var(--hov) 50%, transparent)',
-      }}
-    >
+    <span className="silo-search-kbd">
       <span aria-hidden="true">⌘</span>
       <span>K</span>
     </span>
@@ -91,7 +75,7 @@ function SidebarSearchItem({ onOpenSearch }: { onOpenSearch: () => void }) {
   return (
     <NavItem
       label="Search"
-      icon={<SearchIcon size={16} stroke="currentColor" />}
+      icon={<SearchIcon size={20} stroke="currentColor" />}
       meta={<SearchShortcutChip />}
       onClick={onOpenSearch}
     />
@@ -120,7 +104,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
   const dark = theme === 'dark';
   const { data: counts } = useCounts();
   const { data: tagsData, isError: tagsErrored, isLoading: tagsLoading } = useTags();
-  const { openSettings } = useSettings();
+  const { openSettings, closeSettings } = useSettings();
   const { state: authState, logout } = useAuth();
 
   // The brand row (grain dot + "silo") acts as a home link — clicking it
@@ -134,6 +118,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       return;
     }
     event.preventDefault();
+    closeSettings();
     navigate('/');
     onNavigate();
   };
@@ -153,20 +138,8 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       className="silo-sidebar"
     >
       <div className="silo-sidebar-brandrow">
-        <a
-          href="/"
-          onClick={onBrandClick}
-          aria-label="silo home"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 9,
-            padding: 0,
-            textDecoration: 'none',
-            color: 'inherit',
-          }}
-        >
-          <BrandMark size={24} />
+        <a href="/" onClick={onBrandClick} aria-label="silo home" className="silo-logo-link">
+          <BrandMark size={20} />
           <span className="silo-sidebar-wordmark">silo</span>
         </a>
         <button
@@ -179,16 +152,18 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         </button>
       </div>
 
-      <SidebarSearchItem onOpenSearch={onOpenSearch} />
+      <div className="silo-sidebar-primary">
+        <SidebarSearchItem onOpenSearch={onOpenSearch} />
 
-      <NavItemLink
-        to="/"
-        end
-        label="Library"
-        meta={counts ? formatCount(counts.live) : undefined}
-        icon={<LibraryIcon />}
-        onNavigate={onNavigate}
-      />
+        <NavItemLink
+          to="/"
+          end
+          label="Library"
+          meta={counts ? formatCount(counts.live) : undefined}
+          icon={<LibraryIcon />}
+          onNavigate={onNavigate}
+        />
+      </div>
       <SidebarTags
         tags={tags}
         loading={tagsLoading}
@@ -201,7 +176,12 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
             // Library/Trash nav icons above and the `+ New tag` glyph below —
             // one clean column, matching shiori's Tags spacing. Dim (--ghost)
             // glyph, bright (--ink) label.
-            icon={<span style={{ color: 'var(--fnt)', fontSize: 'var(--text-md)' }}>#</span>}
+            icon={
+              <>
+                <ReaderIcon name="hash" />
+                <span className="silo-sr-only">#</span>
+              </>
+            }
             label={tag.name}
             meta={tag.count > 0 ? formatCount(tag.count) : undefined}
             variant="tag"
@@ -211,43 +191,45 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       />
 
       <div className="silo-sidebar-grow" />
-      <NavItemLink
-        to="/settings"
-        label="Settings"
-        icon={<SettingsIcon />}
-        variant="settings"
-        onNavigate={onNavigate}
-        onBeforeNavigate={() => openSettings()}
-        skipNavigate
-      />
-
-      <NavItem
-        label={dark ? 'Light mode' : 'Dark mode'}
-        icon={<ReaderIcon name={dark ? 'sun' : 'moon'} />}
-        onClick={() => {
-          const next = dark ? 'light' : 'dark';
-          setTheme(next);
-          updateSettings.mutate({ theme: next });
-        }}
-      />
-      {authState === 'authed' && (
-        // Only rendered when a session is actually active — an 'open'
-        // (no-password) deployment or localhost dev never had anything to
-        // log out of, so no button shows there at all. Button mode (no
-        // `href`, like the Search row above) since there's no `/logout`
-        // route to link to; goes through the SAME shared `NavItem` the
-        // Settings row uses (`variant="settings"`, matching its dimmer
-        // secondary-row look) rather than hand-rolling inline styles — the
-        // established no-drift rule (see `SidebarSearchItem`'s own comment).
-        <NavItem
-          label="Log out"
-          icon={<LogOutIcon />}
+      <div className="silo-sidebar-bottom">
+        <NavItemLink
+          to="/settings"
+          label="Settings"
+          icon={<SettingsIcon />}
           variant="settings"
+          onNavigate={onNavigate}
+          onBeforeNavigate={() => openSettings()}
+          skipNavigate
+        />
+
+        <NavItem
+          label={dark ? 'Light mode' : 'Dark mode'}
+          icon={<ReaderIcon name={dark ? 'sun' : 'moon'} />}
           onClick={() => {
-            logout();
+            const next = dark ? 'light' : 'dark';
+            setTheme(next);
+            updateSettings.mutate({ theme: next });
           }}
         />
-      )}
+        {authState === 'authed' && (
+          // Only rendered when a session is actually active — an 'open'
+          // (no-password) deployment or localhost dev never had anything to
+          // log out of, so no button shows there at all. Button mode (no
+          // `href`, like the Search row above) since there's no `/logout`
+          // route to link to; goes through the SAME shared `NavItem` the
+          // Settings row uses (`variant="settings"`, matching its dimmer
+          // secondary-row look) rather than hand-rolling inline styles — the
+          // established no-drift rule (see `SidebarSearchItem`'s own comment).
+          <NavItem
+            label="Log out"
+            icon={<LogOutIcon />}
+            variant="settings"
+            onClick={() => {
+              logout();
+            }}
+          />
+        )}
+      </div>
     </nav>
   );
 });

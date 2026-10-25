@@ -82,7 +82,7 @@ describe('App routing', () => {
     renderApp(['/settings']);
     // v3's Settings is a MODAL — landing on /settings opens it over an empty
     // route backdrop (the modal IS the settings surface).
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined());
     // The modal's own content is present (a tab), not a stale "coming soon".
     expect(screen.getByRole('tab', { name: /preferences/i })).toBeDefined();
   });
@@ -92,9 +92,10 @@ describe('App routing', () => {
     ['/settings/prefs', 'Preferences'],
     ['/settings/import-export', 'Import & export'],
     ['/settings/unknown', 'Plugins'],
+    ['/settings/preferences/legacy', 'Preferences'],
   ])('resolves the Settings deep link %s', async (route, selectedTab) => {
     renderApp([route]);
-    await screen.findByRole('region', { name: 'Settings' });
+    await screen.findByRole('dialog', { name: 'Settings' });
     expect(screen.getByRole('tab', { name: selectedTab }).getAttribute('aria-selected')).toBe(
       'true',
     );
@@ -102,13 +103,13 @@ describe('App routing', () => {
 
   it('closes the Settings modal when navigating away from /settings (no floating modal over the new route)', async () => {
     renderApp(['/settings']);
-    await waitFor(() => expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined());
 
     // Click the Library nav item — leaving /settings unmounts SettingsView,
     // whose cleanup closes the modal.
-    fireEvent.click(screen.getByRole('link', { name: /library/i }));
+    fireEvent.click(screen.getByRole('link', { name: /silo home/i }));
 
-    await waitFor(() => expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
   });
 
   it('renders a calm not-found view for an unknown path', async () => {

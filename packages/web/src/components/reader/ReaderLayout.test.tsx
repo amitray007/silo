@@ -200,10 +200,10 @@ describe('reader selection and history', () => {
       renderReader({ route, trash: [makeTrashLink(a)] });
       await selected();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
-      expect(screen.getByTestId('url').textContent).toBe('/settings/plugins');
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByTestId('url').textContent).toBe(route);
       fireEvent.keyDown(document, { key: 'Escape' });
-      expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull();
+      expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
       expect(screen.getByTestId('url').textContent).toBe(route);
       await selected();
     },
@@ -535,8 +535,8 @@ describe('reader keyboard and phone toolbar', () => {
       'Open originalo',
       'Copy linkc',
       'Edite',
-      '#Tags›',
-      '✓Select',
+      'Tags',
+      'Select',
       'Move to trash⌫',
     ]);
     expect(document.activeElement).toBe(items[0]);

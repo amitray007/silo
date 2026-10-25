@@ -149,6 +149,7 @@ function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
       }}
     >
       <span
+        className="silo-palette-link"
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -169,7 +170,8 @@ function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
         >
           <span
             style={{
-              fontWeight: 500,
+              flex: 1,
+              fontWeight: 400,
               fontSize: 'var(--text-base)',
               color: 'var(--ink)',
               whiteSpace: 'nowrap',
@@ -794,7 +796,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
-              strokeWidth="1.6"
+              strokeWidth="1.5"
               aria-hidden="true"
             >
               <circle cx="10.5" cy="10.5" r="6.5" />

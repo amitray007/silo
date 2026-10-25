@@ -6,6 +6,7 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  font-family: "Inter Variable", Inter, sans-serif;
 }
 
 html,
@@ -15,15 +16,13 @@ body {
 }
 
 body {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial,
-    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+  font-family: "Inter Variable", Inter, sans-serif;
   font-size: 16px;
-  line-height: 1.55;
+  line-height: 1.5;
   background: var(--bg);
   color: var(--ink);
-  font-variant-numeric: tabular-nums;
-  -webkit-font-smoothing: subpixel-antialiased;
+  font-variant-numeric: normal;
+  -webkit-font-smoothing: auto;
   -moz-osx-font-smoothing: auto;
   transition:
     background 0.16s ease,
@@ -49,7 +48,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--ghost);
+  outline: 2px solid var(--fnt);
   outline-offset: 2px;
 }
 
@@ -593,7 +592,7 @@ select {
      `inherit` here makes both element types size their row exactly the
      same for the same padding, closing that gap structurally rather than
      leaving it to whichever element type a given row happens to render as. */
-  line-height: inherit;
+  line-height: 20px;
 }
 
 @media (hover: hover) and (pointer: fine) {

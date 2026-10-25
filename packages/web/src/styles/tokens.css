@@ -7,22 +7,22 @@
 :root {
   --bg: oklch(99.11% 0 0);
   --bg2: color-mix(in oklch, oklch(99.11% 0 0) 50%, white);
-  --line: oklch(90.6% 0 0);
+  --line: color-mix(in oklch, oklch(92.2% 0 0), oklch(14.5% 0 0) 2%);
   --line-2: oklch(87% 0 0);
   --hov: oklch(97% 0 0);
-  --sel: oklch(93.7% 0 0);
+  --sel: color-mix(in oklch, oklch(97% 0 0), oklch(14.5% 0 0) 4%);
   --ink: oklch(14.5% 0 0);
   --mut: oklch(43.9% 0 0);
   --fnt: oklch(55.6% 0 0);
   --ghost: oklch(70.8% 0 0);
-  --btn: oklch(14.5% 0 0);
+  --btn: oklch(26.9% 0 0);
   --btn-ink: oklch(99.11% 0 0);
   --accent-a: #ffb23f;
   --accent-b: #ff6a13;
   --mark: #f26b1d;
   --markt: #b8480a;
   --accent-soft: #fff1e6;
-  --warn: #d63a2f;
+  --warn: oklch(63.7% 0.237 25.331);
   --danger-soft: #fdecea;
   --solid-ink: #ffffff;
   --logo-tile: #f6f6f5;
@@ -88,20 +88,36 @@
 
   /* Elevation after shiori.sh: a 0.5px ring replaces the border, then soft
      stacked drops. Elevated surfaces set their border transparent. */
-  --ring: 0 0 0 0.5px rgba(82, 82, 82, 0.2);
+  --ring: 0 0 0 0.5px oklch(43.9% 0 0 / 20%);
   --elev-1:
-    var(--ring), 0 1px 1px -1px rgba(64, 64, 64, 0.1), 0 2px 2px -1px rgba(64, 64, 64, 0.06),
+    var(--ring), 0 1px 1px -1px oklch(37.1% 0 0 / 10%), 0 2px 2px -1px oklch(37.1% 0 0 / 6%),
     inset 0 1px 0 oklch(99.11% 0 0 / 70%);
   --elev-2:
-    var(--ring), 0 2px 4px -1px rgba(64, 64, 64, 0.08), 0 6px 12px -3px rgba(64, 64, 64, 0.08),
-    0 16px 32px -8px rgba(64, 64, 64, 0.1);
-  --elev-3: var(--elev-2);
+    var(--ring), 0 2px 4px -1px oklch(37.1% 0 0 / 8%), 0 6px 12px -3px oklch(37.1% 0 0 / 8%),
+    0 16px 32px -8px oklch(37.1% 0 0 / 10%);
+  --elev-3:
+    0 0 0 0.5px var(--line), 0 20px 25px -5px oklch(70.8% 0 0 / 25%),
+    0 8px 10px -6px oklch(70.8% 0 0 / 25%);
+  --menu-shadow:
+    0 0 0 0.5px var(--line), 0 4px 6px -1px oklch(70.8% 0 0 / 25%),
+    0 2px 4px -2px oklch(70.8% 0 0 / 25%);
+  --menu-highlight-shadow: none;
+  --toast-shadow:
+    0 0 0 0.5px oklch(14.5% 0 0 / 12%), 0 2px 8px oklch(14.5% 0 0 / 8%),
+    0 1px 2px oklch(14.5% 0 0 / 6%);
+  --filled-shadow:
+    var(--ring), 0 1px 2px oklch(37.1% 0 0 / 10%), inset 0 0.5px 0 oklch(99.11% 0 0 / 16%);
   --scrim: oklch(97% 0 0 / 80%);
   --scrim-blur: blur(4px);
   --menu-highlight: oklch(97% 0 0);
+  --menu-icon: oklch(14.5% 0 0);
+  --row-hover: var(--hov);
+  --icon-hover: oklch(92.2% 0 0);
+  --input-bg: var(--hov);
+  --input-shadow: none;
   --segment-on: var(--bg2);
-  --segment-shadow: 0 1px 2px oklch(70.8% 0 0 / 25%);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --segment-shadow: var(--elev-1);
+  --font-mono: "Inter Variable", Inter, sans-serif;
   --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: light;
 }
@@ -109,10 +125,10 @@
 :root[data-theme="dark"] {
   --bg: oklch(14.5% 0 0);
   --bg2: oklch(20.5% 0 0);
-  --line: oklch(28.3% 0 0);
+  --line: color-mix(in oklch, oklch(26.9% 0 0), oklch(99.11% 0 0) 2%);
   --line-2: oklch(37.1% 0 0);
   --hov: oklch(20.5% 0 0);
-  --sel: oklch(30.5% 0 0);
+  --sel: color-mix(in oklch, oklch(26.9% 0 0), oklch(99.11% 0 0) 5%);
   --ink: oklch(97% 0 0);
   --mut: oklch(70.8% 0 0);
   --fnt: oklch(55.6% 0 0);
@@ -133,12 +149,23 @@
   --elev-3:
     inset 0 0 0 0.5px rgba(255, 255, 255, 0.04), inset 0 0.5px 0 rgba(255, 255, 255, 0.04),
     0 1px 3px oklch(14.5% 0 0 / 40%), 0 2px 12px oklch(14.5% 0 0 / 70%);
+  --menu-shadow: var(--elev-3);
+  --menu-highlight-shadow: inset 0 0.5px 0 oklch(92.2% 0 0 / 6%), 0 1px 2px oklch(14.5% 0 0 / 30%);
+  --toast-shadow: 0 0 0 0.5px oklch(97% 0 0 / 10%), 0 2px 8px #0000004d, 0 1px 2px #0003;
+  --filled-shadow:
+    var(--ring), 0 1px 2px oklch(14.5% 0 0 / 30%), inset 0 0.5px 0 oklch(92.2% 0 0 / 20%);
   --scrim: oklch(14.5% 0 0 / 90%);
   --ghost: oklch(43.9% 0 0);
   --menu-highlight: oklch(26.9% 0 0);
-  --segment-on: oklch(37.1% 0 0);
-  --segment-shadow: 0 1px 2px oklch(14.5% 0 0 / 40%);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --menu-icon: oklch(92.2% 0 0);
+  --row-hover: color-mix(in oklch, oklch(43.9% 0 0) 30%, oklch(14.5% 0 0));
+  --icon-hover: oklch(26.9% 0 0);
+  --input-bg: oklch(26.9% 0 0);
+  --input-shadow:
+    inset 0 0 0 0.5px #ffffff0a, inset 0 0.5px 0 #ffffff0a, 0 1px 3px oklch(14.5% 0 0 / 30%);
+  --segment-on: oklch(26.9% 0 0);
+  --segment-shadow: var(--elev-1);
+  --font-mono: "Inter Variable", Inter, sans-serif;
   --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: dark;
 }

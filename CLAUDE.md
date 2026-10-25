@@ -99,7 +99,7 @@ automatic fix step**:
 
 ## Design fidelity
 
-Build against `docs/methods/shiori-match.md` and the "Shiori match 2026-10-25" section in `docs/design/tokens.md`. Use the system font stack, neutral oklch palette, measured shadows, and orange tile mark. Body and nav use 400; titles, controls, and labels use 500; reader headings use 600. Primary buttons stay ink. Healthy rows have no completion badge. Keep local letter chips and `/api/preview-image` for images; no third-party calls per row.
+Build against `docs/methods/shiori-match.md` and the "Shiori match 2026-10-25" section in `docs/design/tokens.md`. Use self-hosted Inter Variable everywhere, neutral oklch palette, measured shadows, and orange tile mark. Body and nav use 400; titles, controls, and labels use 500; reader headings use 600. Primary buttons stay ink. Healthy rows have no completion badge. Keep local letter chips and `/api/preview-image` for images; no third-party calls per row.
 
 ## User context
 

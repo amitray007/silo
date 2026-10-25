@@ -95,12 +95,14 @@ export function ListRow({
         style={selected ? { background: 'var(--sel)' } : undefined}
       >
         <span className="silo-row-titleline">
-          <RowSelectCheckbox
-            visible={showCheck}
-            isSelected={selected}
-            onToggle={() => selection.toggle(link.id)}
-          />
-          {!showCheck && <Chip domain={domain} />}
+          <span className="silo-row-iconwrap">
+            <RowSelectCheckbox
+              visible={showCheck}
+              isSelected={selected}
+              onToggle={() => selection.toggle(link.id)}
+            />
+            {!showCheck && <Chip domain={domain} />}
+          </span>
           <span className="silo-row-title">{link.title ?? deriveTitleFromUrl(link.url)}</span>
         </span>
         <span className="silo-row-meta">
@@ -159,7 +161,7 @@ export function ListRow({
               toggleMenu();
             }}
           >
-            ⋯
+            <ReaderIcon name="more" />
           </button>
         </span>
       </a>

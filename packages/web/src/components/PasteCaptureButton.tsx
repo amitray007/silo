@@ -92,30 +92,36 @@ export function PasteCaptureButton({ tags }: { tags?: string[] }) {
             className="silo-popover silo-menu-surface silo-capture-popover"
             data-reader-menu
           >
-            <div className="silo-capture-title">Paste to save</div>
-            <p>Press ⌘V anywhere on this page to save a link.</p>
-            <form onSubmit={submit}>
-              <input
-                ref={input}
-                className="silo-field"
-                aria-label="Link URL"
-                placeholder="https://"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-              />
-              <button type="submit" className="silo-primary-button" disabled={capture.isPending}>
-                Save link
+            <div className="silo-capture-heading">
+              <p className="silo-capture-title">Paste to save</p>
+              <p className="silo-capture-hint">
+                Press <kbd>⌘V</kbd> anywhere on this page to save a link.
+              </p>
+            </div>
+            <div className="silo-capture-entry">
+              <form onSubmit={submit}>
+                <input
+                  ref={input}
+                  className="silo-field"
+                  aria-label="Link URL"
+                  placeholder="https://"
+                  value={url}
+                  onChange={(event) => setUrl(event.target.value)}
+                />
+                <button type="submit" className="silo-primary-button" disabled={capture.isPending}>
+                  Save link
+                </button>
+              </form>
+              <button
+                type="button"
+                className="silo-settings-btn"
+                onClick={paste}
+                disabled={capture.isPending}
+              >
+                Paste from clipboard
               </button>
-            </form>
-            <button
-              type="button"
-              className="silo-settings-btn"
-              onClick={paste}
-              disabled={capture.isPending}
-            >
-              Paste from clipboard
-            </button>
-            {message && <p role={message === 'Saved' ? 'status' : 'alert'}>{message}</p>}
+              {message && <p role={message === 'Saved' ? 'status' : 'alert'}>{message}</p>}
+            </div>
           </div>
         )}
       </MenuPresence>

@@ -12,6 +12,7 @@ import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderMeta } from './ReaderMeta';
 import { ReaderPlayer } from './ReaderPlayer';
+import { ReaderSegment } from './ReaderSegment';
 import { type OriginalState, useOriginal } from './useOriginal';
 import type { useReaderActions } from './useReaderActions';
 import { seekChapter, YouTubeStats } from './YouTubeDetails';
@@ -113,7 +114,7 @@ function ReaderMore({
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
       >
-        ⋯
+        <ReaderIcon name="more" />
       </button>
       <MenuPresence>
         {open && (
@@ -214,7 +215,11 @@ function ReaderArticle({
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
       <YouTubeStats source={link.sourceData} />
       <ReaderMeta key={link.id} link={link} trashed={trashed} />
-      <ArticleBody link={link} loading={loading} />
+      <div className="silo-reader-body-column">
+        <div className="silo-reader-body-wrap">
+          <ArticleBody link={link} loading={loading} />
+        </div>
+      </div>
     </article>
   );
 }
@@ -307,30 +312,7 @@ export function ReaderPane({
           {title}
         </button>
         <div className="silo-reader-viewtools">
-          <div className="silo-reader-segment" role="tablist" aria-label="Link view">
-            {(['reader', 'original'] as const).map((value) => (
-              <button
-                type="button"
-                role="tab"
-                id={`${id}-${value}`}
-                aria-controls={`${id}-panel`}
-                key={value}
-                aria-selected={tab === value}
-                disabled={!link}
-                onClick={() => setTab(value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                    event.preventDefault();
-                    const next = value === 'reader' ? 'original' : 'reader';
-                    setTab(next);
-                    document.getElementById(`${id}-${next}`)?.focus();
-                  }
-                }}
-              >
-                {value === 'reader' ? 'Reader' : 'Live'}
-              </button>
-            ))}
-          </div>
+          <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
         </div>
         <div className="silo-reader-right">
           <div className="silo-reader-desktop">

@@ -4,7 +4,7 @@ import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { SettingsProvider, useSettings } from './SettingsContext';
-import { SettingsPage } from './SettingsPage';
+import { SettingsModal } from './SettingsModal';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -66,7 +66,7 @@ function Harness() {
       <button type="button" onClick={() => openSettings()}>
         trigger
       </button>
-      {open && <SettingsPage />}
+      {open && <SettingsModal />}
     </div>
   );
 }
@@ -89,7 +89,7 @@ function renderPage() {
   return utils;
 }
 
-describe('SettingsPage', () => {
+describe('SettingsModal', () => {
   beforeEach(() => {
     vi.stubGlobal('fetch', mockFetchRouter());
   });
@@ -98,22 +98,22 @@ describe('SettingsPage', () => {
     vi.unstubAllGlobals();
   });
 
-  it('opens the Plugins page with a vertical tab list', () => {
+  it('opens the Plugins modal without changing the URL', () => {
     renderPage();
-    expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
-    expect(screen.getByTestId('settings-url').textContent).toBe('/settings/plugins');
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
     expect(
       screen.getByRole('tablist', { name: 'Settings sections' }).getAttribute('aria-orientation'),
-    ).toBe('vertical');
+    ).toBeNull();
     expect(screen.getByRole('tab', { name: 'Plugins' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
   });
 
-  it('switches routed tabs and keeps the existing settings controls', () => {
+  it('switches modal tabs and keeps the existing settings controls', () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
-    expect(screen.getByTestId('settings-url').textContent).toBe('/settings/preferences');
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
     expect(screen.getByRole('tab', { name: 'Preferences' }).getAttribute('aria-selected')).toBe(
       'true',
     );
@@ -127,8 +127,8 @@ describe('SettingsPage', () => {
 
   it('returns from Settings with its close control', () => {
     renderPage();
-    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
-    expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
     expect(screen.getByTestId('settings-url').textContent).toBe('/');
   });
 
@@ -139,26 +139,26 @@ describe('SettingsPage', () => {
       'true',
     );
     expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Preferences' }));
-    expect(screen.getByTestId('settings-url').textContent).toBe('/settings/preferences');
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
   });
 
   it('Escape returns to links when no dialog is open', () => {
     renderPage();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
   });
 
-  it('focuses the page heading on entry', () => {
+  it('focuses the modal on entry', () => {
     renderPage();
-    expect(document.activeElement).toBe(screen.getByRole('heading', { name: 'Plugins' }));
+    expect(document.activeElement).toBe(screen.getByRole('dialog', { name: 'Settings' }));
   });
 
   it('remembers the last tab when reopening Settings', () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByText('trigger'));
-    expect(screen.getByTestId('settings-url').textContent).toBe('/settings/access');
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
     expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
   });
 
@@ -292,7 +292,7 @@ describe('SettingsPage', () => {
       expect(await screen.findByRole('dialog', { name: 'Connect over MCP' })).toBeDefined();
       // Settings itself is still mounted underneath — the dialog stacks on
       // top rather than replacing it.
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
 
     it('Escape closes only the MCP setup dialog, not the Settings modal underneath', async () => {
@@ -306,7 +306,7 @@ describe('SettingsPage', () => {
       await waitFor(() =>
         expect(screen.queryByRole('dialog', { name: 'Connect over MCP' })).toBeNull(),
       );
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
   });
 });
