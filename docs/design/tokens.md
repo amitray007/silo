@@ -112,8 +112,15 @@ The sections above are the original v2 design record. This section records where
 
 ## Shiori match 2026-10-25
 
-`docs/methods/shiori-match.md` supersedes the earlier visual values. The app uses the system sans-serif stack and Tailwind neutral oklch tones. All panes share `--bg`; menus and dialogs use `--bg2`. Dividers are 0.5px. Control, popup, and dialog shadows use `--elev-1`, `--elev-2`, and `--elev-3`.
+`docs/methods/shiori-match.md` supersedes the earlier visual values. The app uses self-hosted Inter Variable and Tailwind neutral oklch tones. All panes share `--bg`; menus and dialogs use `--bg2`. Dividers are 0.5px. Control, popup, and dialog shadows use `--elev-1`, `--elev-2`, and `--elev-3`.
 
 Body and nav use weight 400. Row titles, pane titles, section labels, menus, and buttons use 500. Reader titles and headings use 600. Monospace text uses `--font-mono`. No font files or external font requests are needed.
 
 `--ghost` is quaternary text: neutral 400 in light and neutral 600 in dark. Counts, day labels, and key hints intentionally use it to match Shiori. These labels fail WCAG AA contrast. This is an accepted reference trade-off, limited to those roles. Primary, secondary, and tertiary text retain separate tokens. The orange tile and local source chips preserve Silo's identity and privacy.
+
+
+## Shiori match pass 2, 2026-10-26
+
+Pass 2 in `docs/methods/shiori-match.md` overrides the earlier recipes. Inter Variable is self-hosted through `@fontsource-variable/inter` (OFL-1.1), at weights 400, 500, and 600. Reader body text is 16px with a 28px line height. Icons use a 20px box, a 24-unit viewBox, and a 1.5px rounded stroke.
+
+Row hover uses `--row-hover`; controls use `--icon-hover`. The reader segment chip uses `--segment-on` and the full control shadow. Dark inputs use neutral 800 and the low contrast shadow. Focus outlines use tertiary text at 2px with a 2px offset. Settings remains silo's modal with its own tabs and Compact links preference.

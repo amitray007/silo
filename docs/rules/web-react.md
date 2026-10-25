@@ -48,7 +48,7 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 - Use **redesign CSS custom properties** (`var(--ink)`, `var(--bg2)`, etc.).
   Do not hardcode hex values. The tokens (`src/styles/tokens.css`) are the source of
   truth, in both light and dark.
-- Fonts use the system sans-serif and monospace stacks in `src/styles/`.
+- Fonts use self-hosted Inter Variable from `@fontsource-variable/inter` in `src/styles/base.css`.
   Do not use a CDN or `fonts.googleapis.com`. No third-party fetch per row (letter-chips, not remote
   favicons).
 - Surface API failures honestly: the client throws a typed `ApiError` (mirroring

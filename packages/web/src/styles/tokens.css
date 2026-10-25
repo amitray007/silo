@@ -7,10 +7,10 @@
 :root {
   --bg: oklch(99.11% 0 0);
   --bg2: color-mix(in oklch, oklch(99.11% 0 0) 50%, white);
-  --line: oklch(90.6% 0 0);
+  --line: color-mix(in oklch, oklch(92.2% 0 0), oklch(14.5% 0 0) 2%);
   --line-2: oklch(87% 0 0);
   --hov: oklch(97% 0 0);
-  --sel: oklch(93.7% 0 0);
+  --sel: color-mix(in oklch, oklch(97% 0 0), oklch(14.5% 0 0) 4%);
   --ink: oklch(14.5% 0 0);
   --mut: oklch(43.9% 0 0);
   --fnt: oklch(55.6% 0 0);
@@ -99,9 +99,13 @@
   --scrim: oklch(97% 0 0 / 80%);
   --scrim-blur: blur(4px);
   --menu-highlight: oklch(97% 0 0);
+  --row-hover: var(--hov);
+  --icon-hover: oklch(92.2% 0 0);
+  --input-bg: var(--hov);
+  --input-shadow: none;
   --segment-on: var(--bg2);
-  --segment-shadow: 0 1px 2px oklch(70.8% 0 0 / 25%);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --segment-shadow: var(--elev-1);
+  --font-mono: "Inter Variable", Inter, sans-serif;
   --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: light;
 }
@@ -109,10 +113,10 @@
 :root[data-theme="dark"] {
   --bg: oklch(14.5% 0 0);
   --bg2: oklch(20.5% 0 0);
-  --line: oklch(28.3% 0 0);
+  --line: color-mix(in oklch, oklch(26.9% 0 0), oklch(99.11% 0 0) 2%);
   --line-2: oklch(37.1% 0 0);
   --hov: oklch(20.5% 0 0);
-  --sel: oklch(30.5% 0 0);
+  --sel: color-mix(in oklch, oklch(26.9% 0 0), oklch(99.11% 0 0) 5%);
   --ink: oklch(97% 0 0);
   --mut: oklch(70.8% 0 0);
   --fnt: oklch(55.6% 0 0);
@@ -136,9 +140,14 @@
   --scrim: oklch(14.5% 0 0 / 90%);
   --ghost: oklch(43.9% 0 0);
   --menu-highlight: oklch(26.9% 0 0);
-  --segment-on: oklch(37.1% 0 0);
-  --segment-shadow: 0 1px 2px oklch(14.5% 0 0 / 40%);
-  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --row-hover: color-mix(in oklch, oklch(43.9% 0 0) 30%, oklch(14.5% 0 0));
+  --icon-hover: oklch(26.9% 0 0);
+  --input-bg: oklch(26.9% 0 0);
+  --input-shadow:
+    inset 0 0 0 0.5px #ffffff0a, inset 0 0.5px 0 #ffffff0a, 0 1px 3px oklch(14.5% 0 0 / 30%);
+  --segment-on: oklch(26.9% 0 0);
+  --segment-shadow: var(--elev-1);
+  --font-mono: "Inter Variable", Inter, sans-serif;
   --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: dark;
 }
