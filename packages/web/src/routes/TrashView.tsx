@@ -10,15 +10,12 @@ import type { TrashLinkJson } from '../api/types';
 import { ContentHeader } from '../components';
 import { CenteredPanel } from '../components/CenteredPanel';
 import {
-  Dock,
   DockAction,
-  DockDivider,
   DockIconAction,
   DockRestoreIcon,
   DockTrashIcon,
   SelectionDock,
 } from '../components/Dock';
-import { HeaderActionButton } from '../components/HeaderActionButton';
 import { CheckIcon, TrashIcon } from '../components/NavIcons';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { useTrashSelection } from '../components/SelectionContext';
@@ -39,7 +36,7 @@ import { LoadingState } from './shared/ListStates';
  * disabled while their batch is pending so a double-click can't fire a second
  * overlapping batch against the same (possibly already-deleted) ids.
  */
-function TrashSelectionDock({ selectedIds }: { selectedIds: string[] }) {
+function TrashSelectionDock({ selectedIds, allIds }: { selectedIds: string[]; allIds: string[] }) {
   const selection = useTrashSelection();
   const bulkRestore = useBulkRestore();
   const bulkDeleteNow = useBulkDeleteNow();
@@ -59,6 +56,7 @@ function TrashSelectionDock({ selectedIds }: { selectedIds: string[] }) {
 
   return (
     <SelectionDock selectedCount={selectedIds.length} onClear={selection.clear}>
+      <DockAction onClick={() => selection.selectAll(allIds)}>Select all</DockAction>
       <DockIconAction onClick={handleRestore} icon={<DockRestoreIcon />} disabled={busy}>
         Restore
       </DockIconAction>
@@ -69,63 +67,9 @@ function TrashSelectionDock({ selectedIds }: { selectedIds: string[] }) {
   );
 }
 
-/**
- * The idle trash dock (v3's `trDockIdle`, `Silo-v3.html:288-295`) —
- * "{trashLine} · select all · empty all", shown whenever the trash is
- * non-empty and nothing is selected. `trashLine` matches v3's copy exactly
- * (`Silo-v3.html:1037`): "deleted links keep their text · auto-empties after
- * {purgeWindowDays} days".
- */
-function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; allIds: string[] }) {
-  const selection = useTrashSelection();
-  const emptyTrash = useEmptyTrash();
-
-  return (
-    <Dock padding="9px 18px">
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--fnt)', whiteSpace: 'normal' }}>
-        Deleted links keep their text · auto-empties after {purgeWindowDays} days
-      </span>
-      <DockDivider />
-      <DockAction onClick={() => selection.selectAll(allIds)}>Select all</DockAction>
-      <DockIconAction
-        onClick={() => {
-          if (!emptyTrash.isPending) emptyTrash.mutate();
-        }}
-        icon={<DockTrashIcon />}
-        disabled={emptyTrash.isPending}
-      >
-        Empty all
-      </DockIconAction>
-    </Dock>
-  );
-}
-
-/** How long the "✓ Confirm?" state stays up before auto-resetting back to "Empty Now" if the user doesn't act on it (method file decision 4: "auto-resets on blur, or a short timeout"). */
+/** The second click confirms emptying trash; an unused confirmation expires. */
 const CONFIRM_RESET_MS = 4000;
 
-/**
- * The `ContentHeader` right-slot "Empty Now" button (method file
- * "tag-capture-empty-trash", decision 4) — the SAME `HeaderActionButton`
- * pill (one control, not a pair) that swaps its OWN icon/label in place: it
- * starts as a trash-can icon + "Empty Now"; the FIRST click flips it to a
- * check-mark icon + "Confirm?" (no separate Cancel control — a single
- * `confirming` boolean drives both states); the SECOND click (on the
- * "Confirm?" state) actually calls `useEmptyTrash().mutate()`. Emptying
- * trash is destructive + irreversible, so a single tap must never fire it —
- * this two-state toggle is the confirm gate, without a `window.confirm`
- * dialog.
- *
- * The confirm state auto-resets — a timer (`CONFIRM_RESET_MS`) OR the
- * mutation settling both clear it back to idle, so an accidental first tap
- * doesn't leave a live "Confirm?" trap sitting in the header indefinitely.
- * `isPending` disables the button so the in-flight mutation can't be
- * re-triggered by a second click.
- *
- * This is a SEPARATE surface from `TrashIdleDock`'s existing "Empty all" —
- * both stay (decision 4: "leave the existing idle-dock as-is"); this one
- * lives in the header so it's reachable without scrolling to the bottom
- * dock, and has its own confirm step since the dock's "empty all" has none.
- */
 function TrashEmptyNowButton() {
   const emptyTrash = useEmptyTrash();
   const [confirming, setConfirming] = useState(false);
@@ -150,14 +94,18 @@ function TrashEmptyNowButton() {
   }
 
   return (
-    <HeaderActionButton
-      icon={confirming ? <CheckIcon /> : <TrashIcon size={16} stroke="currentColor" />}
-      label={confirming ? 'Confirm?' : 'Empty Now'}
+    <button
+      type="button"
+      className="silo-reader-btn silo-empty-trash"
       onClick={handleClick}
       disabled={emptyTrash.isPending}
       title={confirming ? 'Confirm emptying the trash' : 'Permanently empty the trash'}
-      ariaLabel={confirming ? 'Confirm emptying the trash' : 'Empty the trash now'}
-    />
+      aria-label={confirming ? 'Confirm emptying the trash' : 'Empty trash'}
+      onBlur={() => setConfirming(false)}
+    >
+      {confirming ? <CheckIcon /> : <TrashIcon size={16} stroke="currentColor" />}
+      {confirming ? 'Confirm?' : 'Empty trash'}
+    </button>
   );
 }
 
@@ -265,27 +213,7 @@ function TrashBody({
   );
 }
 
-/**
- * `/trash` (plan 011, V3-5) — day-grouped trash rows with a purge countdown,
- * per-row restore/delete-now, and the bottom docks (idle "select all · empty
- * all" / selection "restore · delete now · clear"). The per-row
- * restore/delete-now mutations (`useRestoreLink`/`useDeleteNow`) live in
- * `TrashRowActions` (`TrashRow.tsx`), not here — this component only owns the
- * feed orchestration, the day-grouping, and the two bulk docks (rendering
- * itself delegated to `TrashBody`, kept in this file for its complexity
- * budget).
- *
- * The header's search input (`TrashSearchInput`, Trash search slice) was
- * REMOVED by a later user-feedback pass, mirroring the tag page's own
- * search-box removal (`TagView.tsx`'s doc comment): the command palette
- * (⌘K / `/`) handles trash search now, so `ContentHeader` here renders only
- * the route title (plus, per the method file "tag-capture-empty-trash",
- * decision 4, the header-level "Empty Now" button — see `TrashEmptyNowButton`
- * — passed as `ContentHeader`'s `children`, the same right-aligned slot
- * `ContentFrame` gives Library/Tag's `PasteCaptureButton`). The trash count
- * still lives in the sidebar nav item, matching Library's own "count in
- * sidebar, not heading bar" treatment.
- */
+/** Trash keeps its list, bulk actions, and purge policy beside the shared reader. */
 export function TrashView() {
   const { data: counts } = useCounts();
   const { data, isLoading, isError } = useTrashList();
@@ -308,9 +236,16 @@ export function TrashView() {
       trashed
       purgeWindowDays={purgeWindowDays}
     >
-      <ContentHeader title="Trash">{links.length > 0 && <TrashEmptyNowButton />}</ContentHeader>
+      <ContentHeader title="Trash" count={counts?.trash}>
+        {links.length > 0 && <TrashEmptyNowButton />}
+      </ContentHeader>
       <div className="silo-content-body">
         <div className="silo-content-col silo-route-fade">
+          {links.length > 0 && (
+            <p className="silo-hint-line">
+              Deleted links keep their text - auto-empties after {purgeWindowDays} days
+            </p>
+          )}
           <TrashBody
             loading={isLoading}
             isError={isError}
@@ -320,9 +255,8 @@ export function TrashView() {
         </div>
       </div>
 
-      {hasSelection && <TrashSelectionDock selectedIds={selectedIds} />}
-      {!hasSelection && links.length > 0 && (
-        <TrashIdleDock purgeWindowDays={purgeWindowDays} allIds={links.map((l) => l.id)} />
+      {hasSelection && (
+        <TrashSelectionDock selectedIds={selectedIds} allIds={links.map((link) => link.id)} />
       )}
     </ReaderLayout>
   );

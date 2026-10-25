@@ -62,11 +62,19 @@ function renderReader({
   trash = [],
   extra = [],
   route = '/',
+  liveCount,
+  trashCount,
+  tagCount,
+  pageSize = Infinity,
 }: {
   live?: LinkJson[];
   trash?: TrashLinkJson[];
   extra?: LinkJson[];
   route?: string;
+  liveCount?: number;
+  trashCount?: number;
+  tagCount?: number;
+  pageSize?: number;
 } = {}) {
   const state = { live: [...live], trash: [...trash], settings: { ...settings } };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -76,11 +84,22 @@ function renderReader({
     const reads: Record<string, () => Response> = {
       '/api/auth/check': () => json({ authRequired: false }),
       '/api/settings': () => json(state.settings),
-      '/api/tags': () => json({ tags: [{ name: 'mcp', count: state.live.length }] }),
+      '/api/tags': () => json({ tags: [{ name: 'mcp', count: tagCount ?? state.live.length }] }),
       '/api/counts': () =>
-        json({ live: state.live.length, trash: state.trash.length, purgeWindowDays: 30 }),
+        json({
+          live: liveCount ?? state.live.length,
+          trash: trashCount ?? state.trash.length,
+          purgeWindowDays: 30,
+        }),
       '/api/trash': () => json({ links: state.trash }),
-      '/api/links': () => json({ links: state.live }),
+      '/api/links': () => {
+        const offset = Number(url.searchParams.get('cursor') ?? 0);
+        const end = offset + pageSize;
+        return json({
+          links: state.live.slice(offset, end),
+          nextCursor: end < state.live.length ? String(end) : undefined,
+        });
+      },
     };
     const read = reads[url.pathname];
     if (method === 'GET' && read) return read();
@@ -332,7 +351,8 @@ describe('reader keyboard and phone toolbar', () => {
         expect.objectContaining({ method: 'POST' }),
       ),
     );
-    await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
+    await selected('Second link');
+    expect(screen.getByTestId('url').textContent).toBe('/?link=b');
   });
   it.each(['input', 'textarea', 'contenteditable'])(
     'ignores reader and palette shortcuts while typing in %s',
@@ -520,5 +540,197 @@ describe('reader keyboard and phone toolbar', () => {
     fireEvent.keyDown(document, { key: '[' });
     expect(localStorage.getItem('silo.sidebarCollapsed')).toBe('false');
     expect(screen.getByTestId('url').textContent).toBe('/?link=a');
+  });
+});
+
+describe('review regressions', () => {
+  it('dismisses previews on navigation and never previews the active row', async () => {
+    const media = window.matchMedia;
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...media(query),
+      matches: query === '(hover: hover)',
+    }));
+    const { container } = renderReader({ route: '/?link=a' });
+    await selected();
+    const first = container.querySelector<HTMLElement>('[data-link-id="a"]');
+    const second = container.querySelector<HTMLElement>('[data-link-id="b"]');
+    fireEvent.mouseEnter(second as HTMLElement);
+    await waitFor(() => expect(document.querySelector('.silo-popover')).not.toBeNull());
+    // Even navigation against the first-row boundary closes the preview.
+    fireEvent.keyDown(document, { key: 'k' });
+    expect(document.querySelector('.silo-popover')).toBeNull();
+    fireEvent.mouseEnter(first as HTMLElement);
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 200));
+    });
+    expect(document.querySelector('.silo-popover')).toBeNull();
+    fireEvent.mouseEnter(second as HTMLElement);
+    await waitFor(() => expect(document.querySelector('.silo-popover')).not.toBeNull());
+    fireEvent.click(second as HTMLElement);
+    await selected('Second link');
+    expect(document.querySelector('.silo-popover')).toBeNull();
+  });
+
+  it('shows an empty capture hint and the original link for a full capture without text', async () => {
+    renderReader({ live: [makeLink({ ...a, extractedText: null })], route: '/?link=a' });
+    await selected();
+    expect(reader().getByText('No text was captured for this page.')).toBeDefined();
+    expect(reader().getByRole('link', { name: 'Open original' }).getAttribute('href')).toBe(a.url);
+    expect(reader().queryByRole('button', { name: 'Retry capture' })).toBeNull();
+  });
+
+  it('moves row focus with keyboard selection and keeps one row in the tab order', async () => {
+    const { container } = renderReader();
+    await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+    const first = container.querySelector<HTMLElement>('[data-link-id="a"]');
+    const second = container.querySelector<HTMLElement>('[data-link-id="b"]');
+    first?.focus();
+    fireEvent.click(first as HTMLElement);
+    await selected();
+    fireEvent.keyDown(first as HTMLElement, { key: 'j' });
+    await selected('Second link');
+    expect(document.activeElement).toBe(second);
+    expect(first?.tabIndex).toBe(-1);
+    expect(second?.tabIndex).toBe(0);
+    expect(first?.getAttribute('aria-current')).toBeNull();
+    expect(second?.getAttribute('aria-current')).toBe('true');
+  });
+
+  it.each([
+    ['/', 'Library', { liveCount: 60000 }, '60000'],
+    ['/tags/mcp', '# mcp', { tagCount: 1234 }, '1234'],
+    ['/trash', 'Trash', { trashCount: 3456 }, '3456'],
+  ] as const)(
+    'shows the server total in the %s list header',
+    async (route, title, counts, total) => {
+      renderReader({ route, ...counts, trash: [makeTrashLink(a)] });
+      const heading = await screen.findByRole('heading', { level: 1, name: title });
+      await waitFor(() =>
+        expect(heading.parentElement?.querySelector('.silo-pane-count')?.textContent).toBe(total),
+      );
+    },
+  );
+
+  it.each([
+    ['a', [a, b], 'Second link', '/?link=b'],
+    ['b', [a, b], 'First link', '/?link=a'],
+    ['a', [a], null, '/'],
+  ] as const)(
+    'replaces the selected URL after removing row %s',
+    async (id, links, nextTitle, url) => {
+      const { container } = renderReader({ live: [...links] });
+      await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+      const row = container.querySelector<HTMLElement>(`[data-link-id="${id}"]`);
+      fireEvent.click(row as HTMLElement);
+      await selected(id === 'a' ? 'First link' : 'Second link');
+      fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
+      fireEvent.click(screen.getByText('Move to trash'));
+      await waitFor(() => expect(screen.getByTestId('url').textContent).toBe(url));
+      if (nextTitle) await selected(nextTitle);
+      fireEvent.click(screen.getByText('Browser back'));
+      await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
+    },
+  );
+
+  it('selects a surviving neighbor after bulk removal, skipping removed neighbors', async () => {
+    const c = makeLink({ id: 'c', title: 'Third link' });
+    const { container } = renderReader({ live: [a, b, c] });
+    await selectFirst();
+    for (const id of ['a', 'b']) {
+      const row = container.querySelector<HTMLElement>(`[data-link-id="${id}"]`);
+      fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Select item' }));
+    }
+    fireEvent.click(
+      within(container.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
+        name: 'Move to trash',
+      }),
+    );
+    await selected('Third link');
+    expect(screen.getByTestId('url').textContent).toBe('/?link=c');
+    fireEvent.click(screen.getByText('Browser back'));
+    await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
+  });
+
+  it('advances the trash reader after a row menu deletion', async () => {
+    const { container } = renderReader({
+      trash: [makeTrashLink(a), makeTrashLink(b)],
+      route: '/trash?link=a',
+    });
+    await selected();
+    const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
+    await selected('Second link');
+    expect(screen.getByTestId('url').textContent).toBe('/trash?link=b');
+  });
+
+  it('fetches the next page from the phone toolbar and advances past the loaded boundary', async () => {
+    const media = window.matchMedia;
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...media(query),
+      matches: query.includes('max-width: 719px'),
+    }));
+    const { fetchMock } = renderReader({ pageSize: 1, route: '/?link=a' });
+    await selected();
+    const next = within(reader().getByRole('toolbar')).getByRole('button', { name: 'Next' });
+    expect((next as HTMLButtonElement).disabled).toBe(false);
+    fireEvent.click(next);
+    await selected('Second link');
+    expect(fetchMock).toHaveBeenCalledWith('/api/links?cursor=1', expect.any(Object));
+    expect((next as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('closes one layer per Escape: row menu, selection, reader', async () => {
+    const { container } = renderReader({ route: '/?link=a' });
+    await selected();
+    const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
+    const options = within(row as HTMLElement).getByRole('button', { name: 'Options' });
+    fireEvent.click(options);
+    fireEvent.click(screen.getByRole('button', { name: 'Select item' }));
+    fireEvent.click(options);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(options.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.getByText('1 selected')).toBeDefined();
+    expect(screen.getByTestId('url').textContent).toBe('/?link=a');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByText('1 selected')).toBeNull();
+    expect(screen.getByTestId('url').textContent).toBe('/?link=a');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
+  });
+
+  it('keeps trash content readable without edit controls or the edit shortcut', async () => {
+    renderReader({
+      trash: [makeTrashLink({ ...a, notes: 'Saved note', tags: ['mcp'] })],
+      route: '/trash?link=a',
+    });
+    await selected();
+    expect(reader().getByText('Saved note')).toBeDefined();
+    expect(reader().getByRole('link', { name: /#\s*mcp/ })).toBeDefined();
+    fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
+    expect(reader().queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(reader().queryByRole('button', { name: 'Edit tags' })).toBeNull();
+    expect(reader().getByText('Saved note').closest('button')).toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    fireEvent.keyDown(document, { key: 'e' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps focus on the phone view tabs while switching with arrows', async () => {
+    const media = window.matchMedia;
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...media(query),
+      matches: query.includes('max-width: 719px'),
+    }));
+    renderReader({ route: '/?link=a' });
+    await selected();
+    const tab = reader().getByRole('tab', { name: 'Reader' });
+    tab.focus();
+    fireEvent.keyDown(tab, { key: 'ArrowRight' });
+    const original = reader().getByRole('tab', { name: 'Original' });
+    expect(document.activeElement).toBe(original);
+    fireEvent.keyDown(original, { key: 'ArrowLeft' });
+    expect(document.activeElement).toBe(tab);
   });
 });

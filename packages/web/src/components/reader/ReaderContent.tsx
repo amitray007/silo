@@ -18,8 +18,7 @@ function Paragraphs({ link }: { link: LinkJson }) {
 function RetryCapture({ id }: { id: string }) {
   const retry = useRetryCapture(id);
   return (
-    <div className="silo-reader-retry">
-      <p>No page text was captured.</p>
+    <>
       <button
         type="button"
         className="silo-reader-btn"
@@ -29,6 +28,20 @@ function RetryCapture({ id }: { id: string }) {
         {retry.isPending ? 'Retrying…' : 'Retry capture'}
       </button>
       {retry.isError && <p role="alert">{retry.error.message}</p>}
+    </>
+  );
+}
+
+function NoCapturedText({ link }: { link: LinkJson }) {
+  return (
+    <div className="silo-reader-retry">
+      <p>No text was captured for this page.</p>
+      <a className="silo-reader-btn" href={link.url} target="_blank" rel="noopener noreferrer">
+        Open original
+      </a>
+      {(link.captureStatus === 'partial' || link.captureStatus === 'bare') && (
+        <RetryCapture id={link.id} />
+      )}
     </div>
   );
 }
@@ -109,11 +122,7 @@ export function ReaderContent({ link }: { link: LinkJson }) {
         </figure>
       )}
       <Paragraphs link={link} />
-      {!link.extractedText?.trim() &&
-        !link.description?.trim() &&
-        (link.captureStatus === 'partial' || link.captureStatus === 'bare') && (
-          <RetryCapture id={link.id} />
-        )}
+      {!link.extractedText?.trim() && !link.description?.trim() && <NoCapturedText link={link} />}
     </>
   );
 }

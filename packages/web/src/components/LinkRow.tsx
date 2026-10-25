@@ -7,6 +7,7 @@ import { ListRow } from './ListRow';
 import { RowMenu } from './RowMenu';
 import { useRowMenu } from './RowMenuContext';
 import { RowPopover } from './RowPopover';
+import { useReaderSelection } from './reader/ReaderSelection';
 import { useLibrarySelection } from './SelectionContext';
 
 function isInlineSurfaceOn(source: SettingsMap['plugins']['hacker_news'] | undefined) {
@@ -17,6 +18,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
   const selection = useLibrarySelection();
+  const reader = useReaderSelection();
   const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
   const { data: settings } = useSettings();
   useEffect(() => {
@@ -38,7 +40,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
         )
       }
       onEnter={(event) => {
-        if (!menuOpen && isHoverCapable())
+        if (!menuOpen && reader?.selectedId !== link.id && isHoverCapable())
           scheduleShow(link, event.currentTarget.getBoundingClientRect());
       }}
       onLeave={() => scheduleHide(link.id)}

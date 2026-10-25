@@ -49,7 +49,9 @@ function ReaderActions({
   return (
     <div className="silo-reader-tools">
       <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
-      <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={disabled} />
+      {!trashed && (
+        <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={disabled} />
+      )}
       <IconButton
         name="external"
         label="Open original"
@@ -196,7 +198,14 @@ function ReaderArticle({
         {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
         {link.captureStatus === 'enriching' && <span className="silo-capturing">◌ Capturing</span>}
       </div>
-      {link.notes ? (
+      {trashed ? (
+        link.notes && (
+          <div className="silo-reader-notecard">
+            <span>¶ Note</span>
+            <span>{link.notes}</span>
+          </div>
+        )
+      ) : link.notes ? (
         <button
           type="button"
           className="silo-reader-notecard"
@@ -219,14 +228,16 @@ function ReaderArticle({
             {tag}
           </Link>
         ))}
-        <button
-          type="button"
-          className="silo-reader-tag"
-          aria-label="Edit tags"
-          onClick={() => actions.edit('tags')}
-        >
-          <ReaderIcon name="plus" />
-        </button>
+        {!trashed && (
+          <button
+            type="button"
+            className="silo-reader-tag"
+            aria-label="Edit tags"
+            onClick={() => actions.edit('tags')}
+          >
+            <ReaderIcon name="plus" />
+          </button>
+        )}
       </div>
       <ReaderContent link={link} />
     </article>
@@ -241,7 +252,7 @@ export function ReaderPane({
   close,
   step,
   index,
-  count,
+  canGoNext,
   actions,
   trashed,
   purgeWindowDays,
@@ -255,7 +266,7 @@ export function ReaderPane({
   close: () => void;
   step: (delta: number) => void;
   index: number;
-  count: number;
+  canGoNext: boolean;
   actions: Actions;
   trashed: boolean;
   purgeWindowDays: number;
@@ -265,9 +276,14 @@ export function ReaderPane({
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: changing Reader/Original also resets the scroll position.
+  const wasOpen = useRef(false);
   useEffect(() => {
-    if (selectedId && matchMedia('(max-width: 719px)').matches) panelRef.current?.focus();
+    if (selectedId && !wasOpen.current && matchMedia('(max-width: 719px)').matches)
+      panelRef.current?.focus();
+    wasOpen.current = Boolean(selectedId);
+  }, [selectedId]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: reset scroll when the content changes.
+  useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
   }, [selectedId, tab]);
 
@@ -305,12 +321,7 @@ export function ReaderPane({
           <div className="silo-reader-tools">
             <IconButton name="close" label="Close reader" onClick={close} disabled={!selectedId} />
             <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
-            <IconButton
-              name="down"
-              label="Next"
-              onClick={() => step(1)}
-              disabled={index < 0 || index >= count - 1}
-            />
+            <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
           </div>
         </div>
         <button type="button" className="silo-reader-back" onClick={close}>
@@ -362,14 +373,11 @@ export function ReaderPane({
       </div>
       <div className="silo-reader-rbar" role="toolbar" aria-label="Reader actions">
         <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
-        <IconButton
-          name="down"
-          label="Next"
-          onClick={() => step(1)}
-          disabled={index < 0 || index >= count - 1}
-        />
+        <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
         <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={!link} />
-        <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={!link} />
+        {!trashed && (
+          <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={!link} />
+        )}
         <IconButton
           name={trashed ? 'restore' : 'trash'}
           label={trashed ? 'Restore' : 'Move to trash'}

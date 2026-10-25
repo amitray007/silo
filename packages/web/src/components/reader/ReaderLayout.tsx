@@ -1,10 +1,10 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useLocation, useSearchParams } from 'react-router';
 import { useLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { ReaderPane } from './ReaderPane';
 import { ReaderSelectionContext } from './ReaderSelection';
 import { useReaderActions, useReaderKeyboard } from './useReaderActions';
+import { useReaderNavigation } from './useReaderNavigation';
 
 /** Each route supplies its loaded pages. The reader never owns a second list. */
 export function ReaderLayout({
@@ -14,6 +14,8 @@ export function ReaderLayout({
   purgeWindowDays = 30,
   title,
   children,
+  hasNextPage = false,
+  fetchNextPage,
 }: {
   links: LinkJson[];
   loading?: boolean;
@@ -21,13 +23,15 @@ export function ReaderLayout({
   purgeWindowDays?: number;
   title: string;
   children: ReactNode;
+  hasNextPage?: boolean;
+  fetchNextPage?: () => Promise<LinkJson[]>;
 }) {
-  const [params, setParams] = useSearchParams();
-  const location = useLocation();
-  const locationKey = useRef(location.key);
-  locationKey.current = location.key;
-  const selectedId = params.get('link');
-  const index = links.findIndex((link) => link.id === selectedId);
+  const { selectedId, index, select, close, removed, step, advancing } = useReaderNavigation({
+    links,
+    loading,
+    hasNextPage,
+    fetchNextPage,
+  });
   const listed = links[index];
   const seen = useRef(new Set<string>());
   for (const link of links) seen.current.add(link.id);
@@ -50,37 +54,7 @@ export function ReaderLayout({
   const lastSelectedId = useRef(selectedId);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const select = useCallback(
-    (id: string) => {
-      setParams((current) => {
-        const next = new URLSearchParams(current);
-        next.set('link', id);
-        return next;
-      });
-    },
-    [setParams],
-  );
-  const close = useCallback(() => {
-    // A late mutation response must not close a newer reader selection.
-    if (locationKey.current !== location.key) return;
-    setParams(
-      (current) => {
-        if (current.get('link') !== selectedId) return current;
-        const next = new URLSearchParams(current);
-        next.delete('link');
-        return next;
-      },
-      { replace: true },
-    );
-  }, [setParams, selectedId, location.key]);
-  const step = useCallback(
-    (delta: number) => {
-      const next = links[index < 0 ? 0 : index + delta];
-      if (next) select(next.id);
-    },
-    [links, index, select],
-  );
-  const actions = useReaderActions(resolved ?? previous.current, trashed, close);
+  const actions = useReaderActions(resolved ?? previous.current, trashed, removed);
   useReaderKeyboard({
     step,
     close,
@@ -96,6 +70,12 @@ export function ReaderLayout({
       );
       (row ?? rootRef.current?.querySelector<HTMLElement>('.silo-listpane'))?.focus();
     }
+    const activeRow = document.activeElement?.closest('.silo-link-row');
+    if (selectedId && activeRow && !matchMedia('(max-width: 719px)').matches) {
+      rootRef.current
+        ?.querySelector<HTMLElement>(`[data-link-id="${CSS.escape(selectedId)}"]`)
+        ?.focus();
+    }
     lastSelectedId.current = selectedId;
     rootRef.current
       ?.querySelector(`[data-link-id="${CSS.escape(selectedId ?? '')}"]`)
@@ -109,14 +89,14 @@ export function ReaderLayout({
           {children}
         </section>
         <ReaderPane
-          link={resolved ?? (actions.busy ? previous.current : undefined)}
+          link={resolved ?? previous.current}
           selectedId={selectedId}
           tab={tab}
           setTab={setTab}
           close={close}
           step={step}
           index={index}
-          count={links.length}
+          canGoNext={index >= 0 && (index < links.length - 1 || hasNextPage) && !advancing}
           actions={actions}
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}

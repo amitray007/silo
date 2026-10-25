@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
-import { useDeleteTag } from '../api/hooks';
+import { useDeleteTag, useTags } from '../api/hooks';
 import { HeaderActionButton } from '../components/HeaderActionButton';
 import { CheckIcon, TrashIcon } from '../components/NavIcons';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
@@ -102,12 +102,20 @@ export function TagView() {
   const { name } = useParams<{ name: string }>();
   const tag = name ?? '';
   const view = useListView(tag);
+  const { data } = useTags();
+  const count = data?.tags.find((entry) => entry.name === tag)?.count;
 
   return (
-    <ReaderLayout links={view.links} loading={view.isLoading} title={`# ${tag}`}>
+    <ReaderLayout
+      links={view.links}
+      loading={view.isLoading}
+      title={`# ${tag}`}
+      hasNextPage={Boolean(view.hasNextPage)}
+      fetchNextPage={view.fetchNextPage}
+    >
       <ContentFrame
         title={`# ${tag}`}
-        count={view.links.length}
+        count={count}
         headerSlot={
           <>
             <PasteCaptureButton tags={[tag]} />

@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { SelectionProvider } from '../components/SelectionContext';
 import { makeTrashLink as trashLink } from '../test/fixtures';
@@ -23,12 +24,20 @@ function renderTrashView(fetchImpl: typeof fetch) {
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
           <SelectionProvider>
-            <TrashView />
+            <HoverPreviewProvider>
+              <TrashView />
+            </HoverPreviewProvider>
           </SelectionProvider>
         </RowMenuProvider>
       </QueryClientProvider>
     </MemoryRouter>,
   );
+}
+
+function selectAllRows() {
+  fireEvent.click(screen.getAllByRole('button', { name: 'Options' })[0] as HTMLElement);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Select item' }));
+  fireEvent.click(screen.getByText('Select all'));
 }
 
 describe('TrashView', () => {
@@ -80,10 +89,10 @@ describe('TrashView', () => {
     await waitFor(() => expect(screen.getByText('An old post')).toBeDefined());
     // The heading itself still renders exactly "Trash" (no count/meta chrome
     // baked into the `<h1>`) — its PARENT row now also carries the header's
-    // "Empty Now" button (`TrashEmptyNowButton`, method file
+    // "Empty trash" button (`TrashEmptyNowButton`, method file
     // "tag-capture-empty-trash" decision 4) whenever trash is non-empty, so
     // this no longer asserts the whole row's text is bare "Trash" (that's
-    // covered by the dedicated "header Empty Now button" suite below).
+    // covered by the dedicated "header Empty trash button" suite below).
     const heading = screen.getByRole('heading', { name: 'Trash' });
     expect(heading.textContent).toBe('Trash');
     expect(screen.getByText('Today')).toBeDefined();
@@ -150,7 +159,7 @@ describe('TrashView', () => {
     );
   });
 
-  it('the idle trash dock ("select all · empty all") shows when the trash is non-empty and nothing is selected', async () => {
+  it('shows the purge hint and no dock until a row is selected', async () => {
     const link = trashLink({ id: '1', title: 'One', url: 'https://example.com/1' });
     const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -165,11 +174,11 @@ describe('TrashView', () => {
 
     await waitFor(() => expect(screen.getByText('One')).toBeDefined());
     expect(screen.getByText(/auto-empties after 30 days/)).toBeDefined();
-    expect(screen.getByText('Select all')).toBeDefined();
-    expect(screen.getByText('Empty all')).toBeDefined();
+    expect(screen.queryByText('Select all')).toBeNull();
+    expect(screen.queryByText('Empty all')).toBeNull();
   });
 
-  it('"empty all" calls the empty-trash endpoint', async () => {
+  it('the header confirms before calling the empty-trash endpoint', async () => {
     const link = trashLink({ id: '1', title: 'One', url: 'https://example.com/1' });
     const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
@@ -187,7 +196,8 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('One')).toBeDefined());
-    fireEvent.click(screen.getByText('Empty all'));
+    fireEvent.click(screen.getByRole('button', { name: 'Empty trash' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm emptying the trash' }));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith('/api/trash', {
@@ -198,15 +208,8 @@ describe('TrashView', () => {
     );
   });
 
-  /**
-   * The `ContentHeader`'s "Empty Now" button (`TrashEmptyNowButton`, method
-   * file "tag-capture-empty-trash" decision 4) — a SEPARATE surface from the
-   * idle dock's "Empty all" tested above. Two-state inline confirm: only
-   * shown when trash is non-empty, first click flips it to "Confirm?" WITHOUT
-   * calling `useEmptyTrash`, and only the second click (on the "Confirm?"
-   * state) actually calls it.
-   */
-  describe('header "Empty Now" button', () => {
+  /** The header owns the two-click confirmation; the selection dock has no empty action. */
+  describe('header "Empty trash" button', () => {
     function oneLinkFetch() {
       const item = trashLink({ id: '1', title: 'One', url: 'https://example.com/1' });
       return vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
@@ -236,14 +239,14 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
-      expect(screen.queryByRole('button', { name: 'Empty the trash now' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Empty trash' })).toBeNull();
     });
 
     it('appears when the trash is non-empty', async () => {
       renderTrashView(oneLinkFetch());
 
       await waitFor(() => expect(screen.getByText('One')).toBeDefined());
-      expect(screen.getByRole('button', { name: 'Empty the trash now' })).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Empty trash' })).toBeDefined();
     });
 
     it('the first click flips to "Confirm?" without calling useEmptyTrash', async () => {
@@ -251,7 +254,7 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('One')).toBeDefined());
-      const button = screen.getByRole('button', { name: 'Empty the trash now' });
+      const button = screen.getByRole('button', { name: 'Empty trash' });
       fireEvent.click(button);
 
       expect(
@@ -268,7 +271,7 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('One')).toBeDefined());
-      fireEvent.click(screen.getByRole('button', { name: 'Empty the trash now' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Empty trash' }));
 
       const confirmButton = await screen.findByRole('button', {
         name: 'Confirm emptying the trash',
@@ -321,7 +324,7 @@ describe('TrashView', () => {
       renderTrashView(twoLinkFetch());
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('Select all'));
+      selectAllRows();
 
       expect(screen.getByText('2 selected')).toBeDefined();
       expect(screen.getByText('Restore')).toBeDefined();
@@ -334,7 +337,7 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('Select all'));
+      selectAllRows();
       fireEvent.click(screen.getByText('Restore'));
 
       await waitFor(() =>
@@ -356,7 +359,7 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('Select all'));
+      selectAllRows();
       fireEvent.click(screen.getByText('Delete now'));
 
       await waitFor(() =>
@@ -375,17 +378,17 @@ describe('TrashView', () => {
       );
     });
 
-    it('"clear" empties the selection and brings back the idle dock', async () => {
+    it('"clear" empties the selection and hides the dock', async () => {
       renderTrashView(twoLinkFetch());
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('Select all'));
+      selectAllRows();
       expect(screen.getByText('2 selected')).toBeDefined();
 
       fireEvent.click(screen.getByText('Clear'));
 
       expect(screen.queryByText('2 selected')).toBeNull();
-      expect(screen.getByText('Select all')).toBeDefined();
+      expect(screen.queryByText('Select all')).toBeNull();
     });
 
     it("acting on a row's own restore button drops it from the selection (no stale count)", async () => {
@@ -396,7 +399,7 @@ describe('TrashView', () => {
       renderTrashView(twoLinkFetch());
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('Select all'));
+      selectAllRows();
       expect(screen.getByText('2 selected')).toBeDefined();
 
       // Row A's per-row restore button — `getAllByTitle('Restore')` returns the
@@ -440,7 +443,7 @@ describe('TrashView', () => {
       renderTrashView(fetchImpl);
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
-      fireEvent.click(screen.getByText('Select all'));
+      selectAllRows();
 
       const dockRestore = screen.getByText('Restore').closest('button') as HTMLButtonElement;
       fireEvent.click(dockRestore);

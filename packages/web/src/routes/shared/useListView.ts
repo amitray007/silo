@@ -33,7 +33,7 @@ export interface ListViewState {
   error: ApiError | undefined;
   hasNextPage: boolean | undefined;
   isFetchingNextPage: boolean;
-  fetchNextPage: () => void;
+  fetchNextPage: () => Promise<LinkJson[]>;
 }
 
 export function useListView(tag?: string): ListViewState {
@@ -42,8 +42,9 @@ export function useListView(tag?: string): ListViewState {
 
   const links = data?.pages.flatMap((page) => page.links) ?? [];
 
-  const triggerFetchNextPage = useCallback(() => {
-    fetchNextPage();
+  const triggerFetchNextPage = useCallback(async () => {
+    const result = await fetchNextPage({ cancelRefetch: false });
+    return result.data?.pages.flatMap((page) => page.links) ?? [];
   }, [fetchNextPage]);
 
   return {

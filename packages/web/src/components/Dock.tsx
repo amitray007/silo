@@ -102,7 +102,7 @@ function DockSelectedLabel({ count }: { count: number }) {
 }
 
 /** The `|` divider between a dock's label and its actions — one shared style for the vertical rule every dock uses. */
-export function DockDivider() {
+function DockDivider() {
   return <span style={{ width: 1, height: 'var(--s3-5)', background: 'var(--line)' }} />;
 }
 

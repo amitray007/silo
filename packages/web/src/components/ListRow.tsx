@@ -53,6 +53,7 @@ export function ListRow({
         rel="noopener"
         className="silo-link-row"
         data-link-id={link.id}
+        tabIndex={reader?.selectedId && reader.selectedId !== link.id ? -1 : 0}
         data-active={reader?.selectedId === link.id}
         data-trashed={purge !== undefined}
         aria-current={reader?.selectedId === link.id ? 'true' : undefined}

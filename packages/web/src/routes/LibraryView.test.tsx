@@ -68,7 +68,7 @@ function mockUseInfiniteLinks(overrides: MockInfiniteLinksResult) {
     error: null,
     hasNextPage: false,
     isFetchingNextPage: false,
-    fetchNextPage: vi.fn(),
+    fetchNextPage: vi.fn().mockResolvedValue({ data: undefined }),
     ...overrides,
   } as ReturnType<typeof hooks.useInfiniteLinks>);
 }
@@ -133,7 +133,7 @@ describe('LibraryView', () => {
   });
 
   it('the load-more button calls fetchNextPage and page 2 appends once data updates', () => {
-    const fetchNextPage = vi.fn();
+    const fetchNextPage = vi.fn().mockResolvedValue({ data: undefined });
     const page1 = link({ id: 'p1', title: 'Page one' });
     mockUseInfiniteLinks({
       data: { pages: [{ links: [page1] } as LinksResponse], pageParams: [undefined] },
@@ -163,7 +163,7 @@ describe('LibraryView', () => {
   });
 
   it('the sentinel intersecting triggers fetchNextPage exactly once when eligible', () => {
-    const fetchNextPage = vi.fn();
+    const fetchNextPage = vi.fn().mockResolvedValue({ data: undefined });
     const page1 = link({ id: 'p1' });
     mockUseInfiniteLinks({
       data: { pages: [{ links: [page1] } as LinksResponse], pageParams: [undefined] },

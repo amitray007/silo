@@ -1,4 +1,4 @@
-import { useCaptureLink } from '../api/hooks';
+import { useCaptureLink, useCounts } from '../api/hooks';
 import { HeaderActionButton, type HeaderActionResult } from '../components/HeaderActionButton';
 import { AddIcon } from '../components/NavIcons';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
@@ -122,10 +122,17 @@ export function PasteCaptureButton({ tags }: { tags?: string[] }) {
  */
 export function LibraryView() {
   const view = useListView();
+  const { data: counts } = useCounts();
 
   return (
-    <ReaderLayout links={view.links} loading={view.isLoading} title="Library">
-      <ContentFrame title="Library" count={view.links.length} headerSlot={<PasteCaptureButton />}>
+    <ReaderLayout
+      links={view.links}
+      loading={view.isLoading}
+      title="Library"
+      hasNextPage={Boolean(view.hasNextPage)}
+      fetchNextPage={view.fetchNextPage}
+    >
+      <ContentFrame title="Library" count={counts?.live} headerSlot={<PasteCaptureButton />}>
         {ListBody(view, <LibraryEmptyState />)}
       </ContentFrame>
     </ReaderLayout>

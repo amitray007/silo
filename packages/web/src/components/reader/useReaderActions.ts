@@ -55,7 +55,7 @@ export function useReaderActions(
     trash: () => act('trash'),
     restore: () => act('restore'),
     remove: () => act('delete'),
-    edit: (focus: 'title' | 'note' | 'tags' = 'title') => link && openEdit(link, focus),
+    edit: (focus: 'title' | 'note' | 'tags' = 'title') => !trashed && link && openEdit(link, focus),
     open: () => {
       const url = link && originalUrl(link.url);
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
@@ -79,6 +79,9 @@ export function useReaderKeyboard({
   selected: boolean;
 }) {
   const { openMenuId } = useRowMenu();
+  const librarySelection = useLibrarySelection();
+  const trashSelection = useTrashSelection();
+  const hasSelection = librarySelection.selected.length > 0 || trashSelection.selected.length > 0;
   const commands = useMemo(() => {
     const commands: Record<string, (() => void) | undefined> = {
       j: () => step(1),
@@ -89,7 +92,7 @@ export function useReaderKeyboard({
     if (selected)
       Object.assign(commands, {
         Escape: close,
-        e: () => actions.edit(),
+        e: trashed ? undefined : () => actions.edit(),
         o: actions.open,
         c: actions.copy,
         r: toggleTab,
@@ -101,6 +104,7 @@ export function useReaderKeyboard({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (ignoreReaderKey(event) || openMenuId !== null) return;
+      if (event.key === 'Escape' && hasSelection) return;
       const command = commands[event.key];
       if (!command) return;
       event.preventDefault();
@@ -109,7 +113,7 @@ export function useReaderKeyboard({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [commands, openMenuId]);
+  }, [commands, openMenuId, hasSelection]);
 }
 
 function ignoreReaderKey(event: KeyboardEvent) {

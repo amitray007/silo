@@ -49,23 +49,26 @@ function RowMenuLayer({
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [openMenuId, closeMenu]);
   useEffect(() => {
+    const dismiss =
+      openMenuId !== null
+        ? closeMenu
+        : [librarySelection, trashSelection].find((scope) => scope.selected.length > 0)?.clear;
+    if (!dismiss) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
-      if (openMenuId !== null) {
-        closeMenu();
+      if (
+        palette.open ||
+        drawerOpen ||
+        document.querySelector('[role="dialog"], [data-reader-menu]')
+      )
         return;
-      }
-      if (librarySelection.selected.length > 0) {
-        librarySelection.clear();
-        return;
-      }
-      if (trashSelection.selected.length > 0) {
-        trashSelection.clear();
-      }
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      dismiss();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [openMenuId, closeMenu, librarySelection, trashSelection]);
+  }, [openMenuId, closeMenu, librarySelection, trashSelection, palette.open, drawerOpen]);
   return editingLink ? (
     <EditModal key={editingLink.id} link={editingLink} focus={editingFocus} />
   ) : null;

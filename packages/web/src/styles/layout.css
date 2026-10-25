@@ -678,7 +678,7 @@
     background: var(--hov);
     color: var(--ink);
   }
-  .silo-reader-notecard:hover,
+  button.silo-reader-notecard:hover,
   .silo-reader-tag:hover {
     background: var(--sel);
   }
@@ -984,4 +984,26 @@
   .silo-reader-segment button {
     padding: 0 9px;
   }
+}
+
+.silo-empty-trash {
+  height: 26px;
+  padding: 0 9px;
+  font-size: 12.5px;
+  background: var(--panel);
+  color: var(--warn);
+}
+.silo-hint-line {
+  margin: 12px 12px 0;
+  color: var(--fnt);
+  font-size: 12.5px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-empty-trash:hover {
+    background: var(--hov);
+  }
+}
+
+div.silo-reader-notecard {
+  cursor: default;
 }
