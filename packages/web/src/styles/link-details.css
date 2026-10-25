@@ -1,9 +1,9 @@
 /* Approved reader meta, focused edit, and shared menu system. */
 .silo-menu-surface {
   width: 248px;
-  padding: 5px;
-  border: 1px solid transparent;
-  border-radius: 12px;
+  padding: 4px;
+  border: 0;
+  border-radius: 8px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
   color: var(--ink);
@@ -40,8 +40,11 @@
 .silo-menu-item {
   height: 32px;
   min-height: 32px;
-  gap: 9px;
-  padding: 0 8px;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 5px;
+  font-weight: 500;
+  margin-bottom: 1px;
   background: none;
   color: var(--ink);
   text-decoration: none;
@@ -51,8 +54,8 @@
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 20px;
   color: var(--mut);
 }
 .silo-menu-icon svg {
@@ -73,7 +76,7 @@
 }
 .silo-menu-item:is(:hover, :focus, .is-current),
 .silo-menu-item[aria-current="true"] {
-  background: var(--hov);
+  background: var(--menu-highlight);
 }
 .silo-menu-item:focus-visible {
   outline: 1px solid var(--line-2);
@@ -550,18 +553,20 @@
   z-index: 38;
 }
 .silo-margin-note {
-  margin: 18px 0;
-  border-left: 2px solid var(--mark);
-  padding: 2px 0 2px 14px;
+  margin: 32px 0;
+  border: 0;
+  background: var(--hov);
+  border-radius: 16px;
+  padding: 12px 16px;
 }
 .silo-margin-note.is-empty {
   border-color: var(--line-2);
 }
 .silo-note-label {
-  font-size: 11.5px;
-  font-weight: 600;
+  font-size: 13px;
+  font-weight: 500;
   color: var(--fnt);
-  letter-spacing: 0.02em;
+  letter-spacing: normal;
   display: flex;
   gap: 6px;
   align-items: center;
@@ -576,9 +581,10 @@
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   font: inherit;
-  font-size: 14px;
-  color: var(--ink);
-  margin-top: 3px;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--mut);
+  margin-top: 4px;
   border: 0;
   padding: 0;
   background: none;
@@ -595,8 +601,8 @@ button.silo-note-text {
   width: 100%;
   resize: none;
   font: inherit;
-  font-size: 14px;
-  line-height: 1.55;
+  font-size: 15px;
+  line-height: 1.75;
   border: 0;
   background: none;
   color: var(--ink);
@@ -610,7 +616,8 @@ button.silo-note-text {
   box-shadow: none;
 }
 .silo-margin-note:has(textarea:focus-visible) {
-  border-left-color: var(--markt);
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
 }
 .silo-reader-rbar .silo-reader-iconbtn:focus-visible {
   background: var(--hov);
@@ -657,5 +664,40 @@ button.silo-note-text {
   .silo-modal-layer-sheet {
     align-items: center;
     padding: 16px;
+  }
+}
+
+.silo-menu-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.silo-menu-presence {
+  display: contents;
+}
+.silo-menu-surface {
+  min-width: 160px;
+}
+.silo-popover {
+  transform: scale(1);
+  opacity: 1;
+  transition:
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.silo-popover[data-closing="true"],
+.silo-menu-presence[data-closing="true"] > .silo-popover {
+  transform: scale(0.95);
+  opacity: 0;
+  transition-duration: 100ms;
+  transition-timing-function: ease-in;
+  pointer-events: none;
+}
+@starting-style {
+  .silo-popover {
+    transform: scale(0.95);
+    opacity: 0;
   }
 }

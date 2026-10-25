@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
+import { SettingsView } from '../routes/SettingsView';
 import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
@@ -80,7 +81,7 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
                 />
                 <Route path="/trash" element={<div>trash content</div>} />
                 <Route path="/probe" element={<EscapeProbe />} />
-                <Route path="/settings" element={<div>settings route content</div>} />
+                <Route path="/settings/:tab" element={<SettingsView />} />
               </Route>
             </Routes>
           </AuthProvider>
@@ -116,61 +117,40 @@ describe('AppFrame', () => {
     expect(screen.getByText('outlet content')).toBeDefined();
   });
 
-  describe('Settings modal', () => {
+  describe('Settings page', () => {
     it('clicking the sidebar Settings nav item opens the modal, with the real theme toggle inside Preferences', () => {
       renderAppFrame();
 
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
       expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
       expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
     });
 
-    it('does NOT navigate to /settings when opening the modal from the sidebar button (per user feedback: Settings is a popover, not a route change)', () => {
+    it('navigates to the Settings page and returns to the previous outlet', () => {
       renderAppFrame();
-      expect(screen.getByTestId('current-path').textContent).toBe('/');
-
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-      // The underlying route/outlet content is untouched — still "/", not "/settings".
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.queryByText('outlet content')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
       expect(screen.getByTestId('current-path').textContent).toBe('/');
+    });
+
+    it('Escape returns from the Settings page', () => {
+      renderAppFrame();
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull();
       expect(screen.getByText('outlet content')).toBeDefined();
     });
 
-    it('Escape closes the Settings modal and restores focus to the trigger', () => {
+    it('clicking the page background leaves Settings open', () => {
       renderAppFrame();
-
-      const settingsLink = screen.getByRole('link', { name: /settings/i });
-      // jsdom's fireEvent.click doesn't implicitly focus the target the way a
-      // real browser click does — focus it explicitly so the modal's
-      // focus-restore-on-close has a real "trigger" element to return to.
-      settingsLink.focus();
-      // ModalShell restores focus on close only for KEYBOARD opens (a
-      // mouse-opened modal restoring focus paints a noisy ring). This test
-      // verifies the keyboard restore path, so open via keyboard.
-      fireEvent.keyDown(settingsLink, { key: 'Enter' });
-      fireEvent.click(settingsLink);
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull();
-      expect(document.activeElement).toBe(settingsLink);
-    });
-
-    it('clicking the scrim closes the Settings modal', () => {
-      renderAppFrame();
-
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      const dialog = screen.getByRole('dialog', { name: /settings/i });
-
-      // The scrim is `dialog.parentElement` (the fixed-inset backdrop `SettingsModal` renders around the panel).
-      fireEvent.click(dialog.parentElement as Element);
-
-      expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull();
+      fireEvent.click(screen.getByRole('region', { name: 'Settings' }));
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
     });
 
     it('switches tabs via the underlined tab strip (opens on Plugins by default, matching v3)', () => {
@@ -199,7 +179,7 @@ describe('AppFrame', () => {
       // capture-phase Escape listener; both open at once = double-close bugs).
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
       expect(screen.queryByRole('dialog', { name: /edit link/i })).toBeNull();
     });
   });
@@ -271,9 +251,9 @@ describe('AppFrame', () => {
     fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('true');
 
-    fireEvent.click(screen.getByRole('link', { name: /trash/i }));
+    fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
-    expect(screen.getByText('trash content')).toBeDefined();
+    expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('false');
   });
 
@@ -342,32 +322,22 @@ describe('AppFrame', () => {
       expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/edit/i);
     });
 
-    it('⌘K while the Settings modal is open does NOT open the palette (same yield rule)', () => {
+    it('allows search from the Settings page', () => {
       mockAppFrameFetch();
       renderAppFrame();
-
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-
-      pressCmdK();
-
-      const dialogs = screen.getAllByRole('dialog');
-      expect(dialogs).toHaveLength(1);
-      expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/settings/i);
-    });
-
-    it('opening Settings while the palette is already open closes the palette (the reverse direction)', () => {
-      mockAppFrameFetch();
-      renderAppFrame();
-
       pressCmdK();
       expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeDefined();
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+    });
 
+    it('opening Settings closes the previous search palette', () => {
+      mockAppFrameFetch();
+      renderAppFrame();
+      pressCmdK();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-
-      const dialogs = screen.getAllByRole('dialog');
-      expect(dialogs).toHaveLength(1);
-      expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/settings/i);
+      expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
     });
   });
 

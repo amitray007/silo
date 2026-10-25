@@ -80,6 +80,7 @@ export function ContentFrame({
     <>
       <ContentHeader
         title={title}
+        collection={title === 'Library'}
         count={count}
         {...(captureError !== undefined ? { captureError } : {})}
       >

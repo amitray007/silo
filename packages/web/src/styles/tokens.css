@@ -1,22 +1,22 @@
 /**
- * Redesign 2026-10: neutral palette from silo-redesign.src.html.
+ * Shiori match 2026-10-25: measured neutral palette and elevations.
  * Existing roles keep their names: bg2 = panel, mark = accent,
  * markt = accent-ink, warn = danger, ease-out = ease.
  * Light is the default; the pre-paint script sets data-theme on <html>.
  */
 :root {
-  --bg: #f6f6f5;
-  --bg2: #ffffff;
-  --line: #e6e6e4;
-  --line-2: #d6d6d3;
-  --hov: #f1f1ef;
-  --sel: #ebebe9;
-  --ink: #0c0c0b;
-  --mut: #5c5c59;
-  --fnt: #6e6e6e;
-  --ghost: var(--fnt);
-  --btn: #111110;
-  --btn-ink: #ffffff;
+  --bg: oklch(99.11% 0 0);
+  --bg2: color-mix(in oklch, oklch(99.11% 0 0) 50%, white);
+  --line: oklch(90.6% 0 0);
+  --line-2: oklch(87% 0 0);
+  --hov: oklch(97% 0 0);
+  --sel: oklch(93.7% 0 0);
+  --ink: oklch(14.5% 0 0);
+  --mut: oklch(43.9% 0 0);
+  --fnt: oklch(55.6% 0 0);
+  --ghost: oklch(70.8% 0 0);
+  --btn: oklch(14.5% 0 0);
+  --btn-ink: oklch(99.11% 0 0);
   --accent-a: #ffb23f;
   --accent-b: #ff6a13;
   --mark: #f26b1d;
@@ -62,12 +62,12 @@
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
   /* Retained type and spacing roles for the existing components. */
-  --text-xs: 0.72rem;
-  --text-sm: 0.8rem;
+  --text-xs: 0.75rem;
+  --text-sm: 0.8125rem;
   --text-base: 0.875rem;
-  --text-md: 0.95rem;
-  --text-lg: 1.05rem;
-  --text-xl: 1.15rem;
+  --text-md: 0.9375rem;
+  --text-lg: 1rem;
+  --text-xl: 1.25rem;
   --lh-tight: 1.2;
   --lh-snug: 1.45;
   --tracking-tight: -0.01em;
@@ -91,41 +91,54 @@
   --ring: 0 0 0 0.5px rgba(82, 82, 82, 0.2);
   --elev-1:
     var(--ring), 0 1px 1px -1px rgba(64, 64, 64, 0.1), 0 2px 2px -1px rgba(64, 64, 64, 0.06),
-    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+    inset 0 1px 0 oklch(99.11% 0 0 / 70%);
   --elev-2:
     var(--ring), 0 2px 4px -1px rgba(64, 64, 64, 0.08), 0 6px 12px -3px rgba(64, 64, 64, 0.08),
     0 16px 32px -8px rgba(64, 64, 64, 0.1);
-  --elev-3:
-    var(--ring), 0 2px 4px -1px rgba(64, 64, 64, 0.08), 0 12px 24px -6px rgba(64, 64, 64, 0.1),
-    0 32px 64px -12px rgba(64, 64, 64, 0.16);
-  --scrim: rgba(241, 241, 239, 0.8);
+  --elev-3: var(--elev-2);
+  --scrim: oklch(97% 0 0 / 80%);
   --scrim-blur: blur(4px);
+  --menu-highlight: oklch(97% 0 0);
+  --segment-on: var(--bg2);
+  --segment-shadow: 0 1px 2px oklch(70.8% 0 0 / 25%);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: light;
 }
 
 :root[data-theme="dark"] {
-  --bg: #0a0a0a;
-  --bg2: #111111;
-  --line: #222222;
-  --line-2: #2e2e2e;
-  --hov: #181818;
-  --sel: #1f1f1f;
-  --ink: #f3f3f2;
-  --mut: #a3a3a0;
-  --fnt: #818181;
-  --btn: #f3f3f2;
-  --btn-ink: #0a0a0a;
+  --bg: oklch(14.5% 0 0);
+  --bg2: oklch(20.5% 0 0);
+  --line: oklch(28.3% 0 0);
+  --line-2: oklch(37.1% 0 0);
+  --hov: oklch(20.5% 0 0);
+  --sel: oklch(30.5% 0 0);
+  --ink: oklch(97% 0 0);
+  --mut: oklch(70.8% 0 0);
+  --fnt: oklch(55.6% 0 0);
+  --btn: oklch(92.2% 0 0);
+  --btn-ink: oklch(20.5% 0 0);
   --accent-soft: #2a1709;
   --danger-soft: #2a0f0d;
   --markt: #ff9a52;
-  --ring: 0 0 0 0.5px rgba(0, 0, 0, 0.6), inset 0 0 0 0.5px rgba(255, 255, 255, 0.07);
-  --elev-1: var(--ring), 0 1px 2px rgba(0, 0, 0, 0.3), inset 0 0.5px 0 rgba(255, 255, 255, 0.1);
+  --ring: 0 0 0 0.5px oklch(14.5% 0 0 / 70%);
+  --elev-1:
+    var(--ring), 0 1px 2px oklch(14.5% 0 0 / 30%), inset 0 0.5px 0 oklch(92.2% 0 0 / 10%),
+    inset 0 0 0 0.5px oklch(92.2% 0 0 / 5%);
   --elev-2:
-    var(--ring), 0 2px 4px -1px rgba(0, 0, 0, 0.3), 0 6px 12px -3px rgba(0, 0, 0, 0.4),
-    0 16px 32px -8px rgba(0, 0, 0, 0.5);
+    var(--ring), 0 2px 4px -1px oklch(14.5% 0 0 / 30%), 0 6px 12px -3px oklch(14.5% 0 0 / 40%), 0 16px 32px -8px oklch(
+      14.5% 0 0 /
+      50%
+    ), inset 0 0 0 0.5px oklch(92.2% 0 0 / 6%);
   --elev-3:
-    var(--ring), 0 2px 4px -1px rgba(0, 0, 0, 0.3), 0 12px 24px -6px rgba(0, 0, 0, 0.45),
-    0 32px 64px -12px rgba(0, 0, 0, 0.6);
-  --scrim: rgba(10, 10, 10, 0.8);
+    inset 0 0 0 0.5px rgba(255, 255, 255, 0.04), inset 0 0.5px 0 rgba(255, 255, 255, 0.04),
+    0 1px 3px oklch(14.5% 0 0 / 40%), 0 2px 12px oklch(14.5% 0 0 / 70%);
+  --scrim: oklch(14.5% 0 0 / 90%);
+  --ghost: oklch(43.9% 0 0);
+  --menu-highlight: oklch(26.9% 0 0);
+  --segment-on: oklch(37.1% 0 0);
+  --segment-shadow: 0 1px 2px oklch(14.5% 0 0 / 40%);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: dark;
 }

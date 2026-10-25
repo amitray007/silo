@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRetryCapture, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
+import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
 import { useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
@@ -109,16 +110,18 @@ export function LinkMenuActions({
           {tags.tags.length > 0 && <span className="silo-tag-count">{tags.tags.length}</span>}
           <span className="silo-menu-chevron">›</span>
         </button>
-        {tagsOpen && (
-          <TagPicker
-            membership={tags}
-            link={link}
-            className="silo-tags-flyout"
-            onClose={() => setTagsOpen(false)}
-            onMouseEnter={keep}
-            onMouseLeave={hide}
-          />
-        )}
+        <MenuPresence>
+          {tagsOpen && (
+            <TagPicker
+              membership={tags}
+              link={link}
+              className="silo-tags-flyout"
+              onClose={() => setTagsOpen(false)}
+              onMouseEnter={keep}
+              onMouseLeave={hide}
+            />
+          )}
+        </MenuPresence>
       </div>
       <MenuAction
         icon="✓"

@@ -179,8 +179,9 @@ describe('TagView', () => {
 
     renderTagView('mcp', fetchImpl);
 
-    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add link' });
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith(
@@ -233,7 +234,7 @@ describe('TagView', () => {
     // the visible gap between "Delete" and "Add" via the header's own
     // `gap: 13`.
     const deleteButton = await screen.findByRole('button', { name: 'Delete this tag' });
-    const addButton = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const addButton = await screen.findByRole('button', { name: 'Add link' });
     const deleteWrapper = deleteButton.parentElement;
     const addWrapper = addButton.parentElement;
     expect(deleteWrapper?.parentElement).toBe(addWrapper?.parentElement);

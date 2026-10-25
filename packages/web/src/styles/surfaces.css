@@ -21,12 +21,12 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
-  border: 1px solid transparent;
-  border-radius: 16px;
+  border: 0;
+  border-radius: 12px;
   background: var(--bg2);
   box-shadow: var(--elev-3);
   outline: none;
-  animation: siloIn 0.18s var(--ease-out);
+  animation: siloIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
   overscroll-behavior: contain;
 }
 .silo-modal-header {
@@ -79,15 +79,16 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
-  min-height: 34px;
+  min-height: 32px;
   padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   font-family: inherit;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   color: var(--ink);
-  background: transparent;
+  background: var(--hov);
+  box-shadow: var(--elev-1);
   cursor: pointer;
 }
 .silo-edit-save-btn,
@@ -95,7 +96,7 @@
   background: var(--btn);
   border-color: var(--btn);
   color: var(--btn-ink);
-  font-weight: 600;
+  font-weight: 500;
 }
 .silo-save-hint {
   font: inherit;
@@ -113,25 +114,25 @@
   cursor: default;
 }
 .silo-palette {
-  width: min(620px, 100%);
+  width: min(90vw, 672px);
   max-height: 100%;
   background: var(--bg2);
-  border: 1px solid transparent;
-  border-radius: 16px;
+  border: 0;
+  border-radius: 12px;
   box-shadow: var(--elev-3);
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  animation: siloIn 0.18s var(--ease-out);
+  animation: siloIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
 }
 .silo-palette-input {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-height: 54px;
+  min-height: 44px;
   flex: none;
   padding: 0 12px 0 16px;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0.5px solid var(--line);
   color: var(--mut);
 }
 .silo-palette-input input {
@@ -141,7 +142,7 @@
   background: none;
   color: var(--ink);
   font: inherit;
-  font-size: 16px;
+  font-size: 14px;
   padding: 8px 0;
 }
 .silo-palette-input:has(input:focus-visible) {
@@ -177,7 +178,7 @@
   cursor: pointer;
 }
 .silo-palette-row[aria-selected="true"] {
-  background: var(--sel);
+  background: var(--menu-highlight);
 }
 .silo-palette-footer {
   display: flex;
@@ -186,7 +187,7 @@
   min-height: 42px;
   flex: none;
   padding: 6px 12px 6px 16px;
-  border-top: 1px solid var(--line);
+  border-top: 0.5px solid var(--line);
   background: var(--bg);
   color: var(--mut);
   font-size: 12px;
@@ -313,7 +314,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
+  width: 36px;
+  min-width: 36px;
   height: 32px;
   padding: 0;
   border: 0;
@@ -323,7 +325,7 @@
 .silo-toggle > span {
   position: relative;
   width: 36px;
-  height: 22px;
+  height: 20px;
   border-radius: 999px;
   background: var(--line-2);
   transition: background 0.15s ease;
@@ -333,19 +335,19 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--solid-ink);
+  background: white;
   box-shadow: var(--elev-1);
   transition: transform 0.15s var(--ease-out);
 }
 .silo-toggle[aria-checked="true"] > span {
-  background: var(--btn);
+  background: var(--toggle-on);
 }
 .silo-toggle[aria-checked="true"] > span::after {
-  transform: translateX(14px);
-  background: var(--btn-ink);
+  transform: translateX(16px);
+  background: white;
 }
 .silo-toggle:disabled {
   opacity: 0.4;
@@ -496,8 +498,8 @@
 .silo-login-card {
   width: min(360px, 100%);
   padding: 24px;
-  border: 1px solid transparent;
-  border-radius: 16px;
+  border: 0;
+  border-radius: 12px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
 }
@@ -568,7 +570,7 @@
     min-width: 40px;
   }
   .silo-palette-row {
-    min-height: 46px;
+    min-height: 40px;
   }
   .silo-palette-footer {
     min-height: 48px;
@@ -603,7 +605,7 @@
     flex-direction: row;
     overflow-x: auto;
     border-right: 0;
-    border-bottom: 1px solid var(--line);
+    border-bottom: 0.5px solid var(--line);
     padding: 4px 8px 8px;
     gap: 4px;
   }
@@ -703,8 +705,8 @@
 .silo-reader-prose {
   /* After shiori.sh prose: body in the secondary tone, emphasis in ink. */
   color: var(--mut);
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.75;
   overflow-wrap: anywhere;
 }
 .silo-reader-prose :is(h1, h2, h3, h4, h5, h6, strong, b, a, code, kbd, samp, th, mark) {
@@ -714,20 +716,20 @@
   color: var(--fnt);
 }
 .silo-reader-prose :is(h1, h2, h3, h4, h5, h6) {
-  line-height: 1.25;
+  line-height: 1.33;
   font-weight: 600;
-  letter-spacing: -0.025em;
-  margin: 2em 0 0.65em;
+  letter-spacing: -0.5px;
+  margin: 40px 0 20px;
   text-wrap: pretty;
 }
 .silo-reader-prose h1 {
   font-size: 26px;
 }
 .silo-reader-prose :where(h2) {
-  font-size: 21px;
+  font-size: 20px;
 }
 .silo-reader-prose h3 {
-  font-size: 18px;
+  font-size: 17px;
 }
 .silo-reader-prose h4 {
   font-size: 16px;
@@ -740,7 +742,7 @@
   letter-spacing: 0.02em;
 }
 .silo-reader-prose :is(p, ul, ol, dl, pre, figure, blockquote, .silo-reader-table) {
-  margin: 0 0 1.25em;
+  margin: 0 0 16px;
 }
 .silo-reader-prose :is(ul, ol) {
   padding-left: 24px;
@@ -758,7 +760,7 @@
 }
 .silo-reader-prose a {
   text-underline-offset: 2px;
-  text-decoration-color: var(--line-2);
+  text-decoration: underline;
 }
 .silo-reader-prose a:hover {
   text-decoration-color: currentColor;
@@ -767,7 +769,7 @@
   text-decoration: none;
 }
 .silo-reader-prose :is(code, kbd, samp) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   font-weight: 500;
   background: var(--hov);
@@ -775,9 +777,12 @@
   padding: 2px 6px;
 }
 .silo-reader-prose pre {
-  padding: 16px;
+  padding: 12px 16px;
   background: var(--hov);
-  border: 1px solid var(--line);
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 24px;
   border-radius: 8px;
   overflow-x: auto;
   white-space: pre;
@@ -785,9 +790,9 @@
 }
 .silo-reader-prose pre code {
   padding: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
-  line-height: 1.8;
+  line-height: 24px;
   background: none;
 }
 .silo-reader-table {
@@ -801,7 +806,7 @@
 }
 .silo-reader-prose :is(th, td) {
   padding: 10px 12px 10px 0;
-  border-bottom: 1px solid var(--line);
+  border-bottom: 0.5px solid var(--line);
   text-align: left;
   vertical-align: top;
   min-width: 100px;
@@ -824,7 +829,7 @@
 .silo-reader-prose hr {
   margin: 28px 0;
   border: 0;
-  border-top: 1px solid var(--line);
+  border-top: 0.5px solid var(--line);
 }
 
 .silo-reader-prose ul {
@@ -935,4 +940,139 @@
   .silo-reader-prose img {
     transition: none;
   }
+}
+
+.silo-palette-layer {
+  padding-top: min(20vh, 200px);
+  background: transparent;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+.silo-palette-row {
+  height: 40px;
+  font-size: 14px;
+  padding: 0 10px;
+}
+.silo-palette-row > span > span:not(:first-child) {
+  display: none;
+}
+.silo-settings-btn {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 500;
+  border: 0;
+  background: var(--hov);
+  box-shadow: var(--elev-1);
+}
+:root[data-theme="dark"] .silo-settings-btn {
+  background: var(--menu-highlight);
+}
+.silo-settings-select-trigger {
+  height: 32px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hov);
+  font-size: 14px;
+  font-weight: 500;
+}
+.silo-collection .silo-menu-surface {
+  width: 160px;
+  min-width: 160px;
+}
+
+/* Settings use the same full-bleed columns as the library. */
+.silo-settings-page {
+  height: 100%;
+}
+.silo-settings-route-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+}
+.silo-settings-route-tabs .silo-nav-item {
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--mut);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.silo-settings-route-tabs .silo-nav-item[data-active="true"] {
+  color: var(--ink);
+  background: var(--sel);
+}
+.silo-settings-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.silo-settings-main .silo-panehead {
+  padding: 0 16px;
+}
+.silo-settings-main .silo-panehead h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+}
+.silo-settings-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 24px 32px 96px;
+}
+.silo-settings-route-panel {
+  max-width: 616px;
+  margin: 0 auto;
+}
+@media (max-width: 719px) {
+  .silo-settings-page {
+    flex-direction: column;
+  }
+  .silo-settings-navigation {
+    width: 100%;
+    border-right: 0;
+  }
+  .silo-settings-route-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    flex: none;
+    padding: 8px;
+  }
+  .silo-settings-route-tabs .silo-nav-item {
+    flex: none;
+    min-height: 40px;
+  }
+  .silo-settings-scroll {
+    padding: 8px 20px calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+  .silo-settings-route-panel :is(button, input, select) {
+    min-height: 40px;
+  }
+  .silo-settings-route-panel .silo-toggle {
+    min-width: 40px;
+  }
+}
+
+.silo-settings-route-panel :is(pre, code) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.silo-settings-hero-btn-primary,
+.silo-settings-hero-btn-secondary {
+  height: 32px;
+  min-height: 32px;
+  padding: 0 12px;
+  font-size: 14px;
+  font-weight: 500;
 }

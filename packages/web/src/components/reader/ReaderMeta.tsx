@@ -2,6 +2,10 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useEditLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
+import { relativeTimeFromNow } from '../../lib/relativeTime';
+import { deriveDomain } from '../../lib/url';
+import { Chip } from '../Chip';
+import { MenuPresence } from '../MenuPresence';
 import { TagPicker, useLinkTags } from '../TagOptionsList';
 import { ReaderIcon } from './ReaderIcon';
 
@@ -10,47 +14,59 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
   const membership = useLinkTags(link);
   return (
     <>
-      <div className="silo-meta-strip">
-        {membership.tags.map((tag) => (
-          <span className="silo-meta-tag" key={tag}>
-            <Link to={`/tags/${encodeURIComponent(tag)}`}>
-              <span>#</span>
-              {tag}
-            </Link>
-            {!trashed && (
+      <div className="silo-reader-byline">
+        <div className="silo-reader-source">
+          <Chip domain={deriveDomain(link.url)} size={16} />
+          <span title={relativeTimeFromNow(link.createdAt)}>{deriveDomain(link.url)}</span>
+          {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
+          {link.captureStatus === 'enriching' && (
+            <span className="silo-capturing">◌ Capturing</span>
+          )}
+        </div>
+        <div className="silo-meta-strip">
+          {membership.tags.map((tag) => (
+            <span className="silo-meta-tag" key={tag}>
+              <Link to={`/tags/${encodeURIComponent(tag)}`}>
+                <span>#</span>
+                {tag}
+              </Link>
+              {!trashed && (
+                <button
+                  type="button"
+                  aria-label={`Remove tag ${tag}`}
+                  disabled={membership.busy}
+                  onClick={() => void membership.toggle(tag, true)}
+                >
+                  ×
+                </button>
+              )}
+            </span>
+          ))}
+          {!trashed && (
+            <div className="silo-meta-tag-anchor">
               <button
                 type="button"
-                aria-label={`Remove tag ${tag}`}
-                disabled={membership.busy}
-                onClick={() => void membership.toggle(tag, true)}
+                className="silo-meta-add"
+                aria-haspopup="menu"
+                aria-expanded={tagOpen}
+                onClick={() => setTagOpen((open) => !open)}
               >
-                ×
+                <ReaderIcon name="plus" />
+                Tag
               </button>
-            )}
-          </span>
-        ))}
-        {!trashed && (
-          <div className="silo-meta-tag-anchor">
-            <button
-              type="button"
-              className="silo-meta-add"
-              aria-haspopup="menu"
-              aria-expanded={tagOpen}
-              onClick={() => setTagOpen((open) => !open)}
-            >
-              <ReaderIcon name="plus" />
-              Tag
-            </button>
-            {tagOpen && (
-              <TagPicker
-                membership={membership}
-                link={link}
-                className="silo-strip-picker"
-                onClose={() => setTagOpen(false)}
-              />
-            )}
-          </div>
-        )}
+              <MenuPresence>
+                {tagOpen && (
+                  <TagPicker
+                    membership={membership}
+                    link={link}
+                    className="silo-strip-picker"
+                    onClose={() => setTagOpen(false)}
+                  />
+                )}
+              </MenuPresence>
+            </div>
+          )}
+        </div>
       </div>
       {membership.error && (
         <div className="silo-toast" role="alert">

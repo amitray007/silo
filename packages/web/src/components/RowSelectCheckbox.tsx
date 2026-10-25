@@ -51,11 +51,11 @@ export function RowSelectCheckbox({
       }}
       style={{
         flex: 'none',
-        width: 18,
-        height: 18,
+        width: 20,
+        height: 20,
         padding: 0,
         cursor: 'pointer',
-        borderRadius: 5,
+        borderRadius: 4,
         border: `1px solid ${isSelected ? 'var(--ink)' : 'var(--ghost)'}`,
         background: isSelected ? 'var(--ink)' : 'transparent',
         color: 'var(--bg)',

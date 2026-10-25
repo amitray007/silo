@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
@@ -336,8 +336,16 @@ describe('TrashView', () => {
       selectAllRows();
 
       expect(screen.getByText('2 selected')).toBeDefined();
-      expect(screen.getByText('Restore')).toBeDefined();
-      expect(screen.getByText('Delete now')).toBeDefined();
+      expect(
+        within(document.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
+          name: 'Restore',
+        }),
+      ).toBeDefined();
+      expect(
+        within(document.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
+          name: 'Delete now',
+        }),
+      ).toBeDefined();
       expect(screen.getByText('Clear')).toBeDefined();
     });
 
@@ -347,7 +355,11 @@ describe('TrashView', () => {
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
       selectAllRows();
-      fireEvent.click(screen.getByText('Restore'));
+      fireEvent.click(
+        within(document.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
+          name: 'Restore',
+        }),
+      );
 
       await waitFor(() =>
         expect(fetchImpl).toHaveBeenCalledWith(
@@ -369,14 +381,22 @@ describe('TrashView', () => {
 
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
       selectAllRows();
-      fireEvent.click(screen.getByText('Delete now'));
+      fireEvent.click(
+        within(document.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
+          name: 'Delete now',
+        }),
+      );
       expect(fetchImpl).not.toHaveBeenCalledWith(
         expect.stringMatching(/^\/api\/trash\//),
         expect.objectContaining({ method: 'DELETE' }),
       );
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(screen.queryByRole('alertdialog')).toBeNull();
-      fireEvent.click(screen.getByText('Delete now'));
+      fireEvent.click(
+        within(document.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
+          name: 'Delete now',
+        }),
+      );
       fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
 
       await waitFor(() =>
@@ -462,12 +482,16 @@ describe('TrashView', () => {
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
       selectAllRows();
 
-      const dockRestore = screen.getByText('Restore').closest('button') as HTMLButtonElement;
+      const dockRestore = within(document.querySelector('.silo-selection-dock') as HTMLElement)
+        .getByRole('button', { name: 'Restore' })
+        .closest('button') as HTMLButtonElement;
       fireEvent.click(dockRestore);
 
       // While the batch is in flight, the dock's restore/delete-now are disabled.
       await waitFor(() => expect(dockRestore.disabled).toBe(true));
-      const dockDelete = screen.getByText('Delete now').closest('button') as HTMLButtonElement;
+      const dockDelete = within(document.querySelector('.silo-selection-dock') as HTMLElement)
+        .getByRole('button', { name: 'Delete now' })
+        .closest('button') as HTMLButtonElement;
       expect(dockDelete.disabled).toBe(true);
 
       releaseA(new Response(null, { status: 204 }));

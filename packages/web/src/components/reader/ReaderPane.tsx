@@ -1,9 +1,8 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
 import { purgeCountdownDays } from '../../lib/buckets';
-import { relativeTimeFromNow } from '../../lib/relativeTime';
-import { deriveDomain, deriveTitleFromUrl } from '../../lib/url';
-import { Chip } from '../Chip';
+import { deriveTitleFromUrl } from '../../lib/url';
+import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
 import { embedFor } from './embedFor';
@@ -116,48 +115,50 @@ function ReaderMore({
       >
         ⋯
       </button>
-      {open && (
-        <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
-          {!trashed && link ? (
-            <LinkMenuActions
-              link={link}
-              onClose={() => setOpen(false)}
-              onTrash={actions.trash}
-              onCopy={actions.copy}
-              busy={actions.busy}
-            />
-          ) : (
-            <>
-              <MenuAction
-                icon={<ReaderIcon name="external" />}
-                shortcut="o"
-                onClick={() => {
-                  setOpen(false);
-                  actions.open();
-                }}
-              >
-                Open original
-              </MenuAction>
-              <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
-                Copy link
-              </MenuAction>
-              <div className="silo-menu-separator" />
-              <MenuAction
-                icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
-                danger={!trashed}
-                disabled={actions.busy}
-                onClick={() => {
-                  setOpen(false);
-                  if (trashed) actions.restore();
-                  else actions.trash();
-                }}
-              >
-                {trashed ? 'Restore' : 'Move to trash'}
-              </MenuAction>
-            </>
-          )}
-        </MenuSurface>
-      )}
+      <MenuPresence>
+        {open && (
+          <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
+            {!trashed && link ? (
+              <LinkMenuActions
+                link={link}
+                onClose={() => setOpen(false)}
+                onTrash={actions.trash}
+                onCopy={actions.copy}
+                busy={actions.busy}
+              />
+            ) : (
+              <>
+                <MenuAction
+                  icon={<ReaderIcon name="external" />}
+                  shortcut="o"
+                  onClick={() => {
+                    setOpen(false);
+                    actions.open();
+                  }}
+                >
+                  Open original
+                </MenuAction>
+                <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
+                  Copy link
+                </MenuAction>
+                <div className="silo-menu-separator" />
+                <MenuAction
+                  icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
+                  danger={!trashed}
+                  disabled={actions.busy}
+                  onClick={() => {
+                    setOpen(false);
+                    if (trashed) actions.restore();
+                    else actions.trash();
+                  }}
+                >
+                  {trashed ? 'Restore' : 'Move to trash'}
+                </MenuAction>
+              </>
+            )}
+          </MenuSurface>
+        )}
+      </MenuPresence>
     </div>
   );
 }
@@ -179,7 +180,6 @@ function ReaderArticle({
   purgeWindowDays: number;
   loading: boolean;
 }) {
-  const domain = deriveDomain(link.url);
   const embed = embedFor(link.url, link.sourceData);
   const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider) ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
@@ -213,14 +213,6 @@ function ReaderArticle({
       {video && <ReaderPlayer embed={video} url={link.url} />}
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
       <YouTubeStats source={link.sourceData} />
-      <div className="silo-reader-source">
-        <Chip domain={domain} size={20} />
-        <span>{link.siteName || domain}</span>
-        <span className="silo-reader-dot">•</span>
-        <span>{relativeTimeFromNow(link.createdAt)}</span>
-        {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
-        {link.captureStatus === 'enriching' && <span className="silo-capturing">◌ Capturing</span>}
-      </div>
       <ReaderMeta key={link.id} link={link} trashed={trashed} />
       <ArticleBody link={link} loading={loading} />
     </article>
@@ -316,7 +308,7 @@ export function ReaderPane({
         </button>
         <div className="silo-reader-viewtools">
           <div className="silo-reader-segment" role="tablist" aria-label="Link view">
-            {(['original', 'reader'] as const).map((value) => (
+            {(['reader', 'original'] as const).map((value) => (
               <button
                 type="button"
                 role="tab"
@@ -340,21 +332,23 @@ export function ReaderPane({
             ))}
           </div>
         </div>
-        <div className="silo-reader-desktop">
-          <ReaderActions
+        <div className="silo-reader-right">
+          <div className="silo-reader-desktop">
+            <ReaderActions
+              actions={actions}
+              disabled={!link}
+              trashed={trashed}
+              original={shownOriginal}
+            />
+          </div>
+          <ReaderMore
+            key={selectedId}
             actions={actions}
             disabled={!link}
             trashed={trashed}
-            original={shownOriginal}
+            link={link}
           />
         </div>
-        <ReaderMore
-          key={selectedId}
-          actions={actions}
-          disabled={!link}
-          trashed={trashed}
-          link={link}
-        />
       </div>
       {actions.feedback && (
         <div className="silo-toast" role="status">

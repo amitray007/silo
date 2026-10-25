@@ -256,7 +256,7 @@ export function TrashView() {
       trashed
       purgeWindowDays={purgeWindowDays}
     >
-      <ContentHeader title="Trash" count={counts?.trash}>
+      <ContentHeader collection title="Trash" count={counts?.trash}>
         {links.length > 0 && <TrashEmptyNowButton />}
       </ContentHeader>
       <div className="silo-content-body">

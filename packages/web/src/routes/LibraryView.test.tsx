@@ -308,7 +308,7 @@ describe('LibraryView header (no paste box)', () => {
     // omnibar's removal) — assert there's exactly one, and it's that one.
     expect(screen.queryByText('Paste a link to keep')).toBeNull();
     expect(screen.queryByRole('textbox')).toBeNull();
-    expect(screen.getByRole('button', { name: 'Add a link from the clipboard' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Add link' })).toBeDefined();
 
     // The title still renders (header didn't lose its heading).
     expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();

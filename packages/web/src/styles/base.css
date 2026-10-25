@@ -1,4 +1,3 @@
-@import "./fonts.css";
 @import "./tokens.css";
 @import "./layout.css";
 
@@ -16,23 +15,16 @@ body {
 }
 
 body {
-  font-family: "Geist", system-ui, sans-serif;
-  /* Bumped from v3's 15px (build brief "global scale + dark mode" pass) —
-     the Orpheus reference (docs/design/refs/*.png) reads larger/roomier
-     throughout; every rem-based leaf style scales up proportionally with
-     this root without individually touching each component. */
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", "Noto Sans", Arial,
+    sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
   font-size: 16px;
   line-height: 1.55;
   background: var(--bg);
   color: var(--ink);
-  /* Typography-craft pass: Geist ships tabular figures, so this one
-     root-level declaration gives every changing number in the app (points/
-     comments, countdowns, counts, "N found"/"N selected", tag counts) fixed
-     digit widths without 10 separate inline edits — it only affects digit
-     glyphs, so the wordmark/prose are unaffected. */
   font-variant-numeric: tabular-nums;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  -webkit-font-smoothing: subpixel-antialiased;
+  -moz-osx-font-smoothing: auto;
   transition:
     background 0.16s ease,
     color 0.16s ease;
@@ -809,7 +801,7 @@ select {
 @keyframes siloIn {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.98);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
@@ -866,7 +858,7 @@ select {
 
   @starting-style {
     opacity: 0;
-    transform: scale(0.96) translateY(-2px);
+    transform: scale(0.95);
   }
 }
 

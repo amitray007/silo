@@ -195,16 +195,15 @@ afterEach(() => {
 
 describe('reader selection and history', () => {
   it.each(['/?link=a', '/tags/mcp?link=a', '/trash?link=a'])(
-    'preserves reader and URL when opening and closing Settings at %s',
+    'returns to the same reader URL after visiting Settings from %s',
     async (route) => {
       renderReader({ route, trash: [makeTrashLink(a)] });
       await selected();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
-      expect(screen.getByTestId('url').textContent).toBe(route);
-      await selected();
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByTestId('url').textContent).toBe('/settings/plugins');
       fireEvent.keyDown(document, { key: 'Escape' });
-      expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+      expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull();
       expect(screen.getByTestId('url').textContent).toBe(route);
       await selected();
     },
@@ -640,17 +639,26 @@ describe('review regressions', () => {
   });
 
   it.each([
-    ['/', 'Library', { liveCount: 60000 }, '60000'],
+    ['/', 'Library', { liveCount: 60000 }, '60k'],
     ['/tags/mcp', '# mcp', { tagCount: 1234 }, '1234'],
-    ['/trash', 'Trash', { trashCount: 3456 }, '3456'],
+    ['/trash', 'Trash', { trashCount: 3456 }, '3.5k'],
   ] as const)(
     'shows the server total in the %s list header',
     async (route, title, counts, total) => {
       renderReader({ route, ...counts, trash: [makeTrashLink(a)] });
       const heading = await screen.findByRole('heading', { level: 1, name: title });
-      await waitFor(() =>
-        expect(heading.parentElement?.querySelector('.silo-pane-count')?.textContent).toBe(total),
-      );
+      if (title === 'Library' || title === 'Trash') {
+        fireEvent.click(within(heading).getByRole('button'));
+        await waitFor(() =>
+          expect(screen.getByRole('menuitem', { name: new RegExp(title) }).textContent).toContain(
+            total,
+          ),
+        );
+      } else {
+        await waitFor(() =>
+          expect(heading.parentElement?.querySelector('.silo-pane-count')?.textContent).toBe(total),
+        );
+      }
     },
   );
 
@@ -865,7 +873,7 @@ describe('review regressions', () => {
     expect(container.querySelector('.silo-reader-prose')).toBeNull();
   });
 
-  it('opens every newly selected link on the Live tab, listed before Reader', async () => {
+  it('opens every newly selected link on Live while listing Reader first', async () => {
     renderReader({ route: '/?link=a' });
     await waitFor(() =>
       expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe(
@@ -876,7 +884,7 @@ describe('review regressions', () => {
       reader()
         .getAllByRole('tab')
         .map((tab) => tab.textContent),
-    ).toEqual(['Live', 'Reader']);
+    ).toEqual(['Reader', 'Live']);
     await selected();
     fireEvent.click(screen.getByText('Second link'));
     await waitFor(() =>
