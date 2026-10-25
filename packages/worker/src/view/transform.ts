@@ -244,10 +244,13 @@ function revealContent(document: Document): void {
   for (const element of elements) {
     const length = ['script', 'style', 'template'].includes(element.localName)
       ? 0
-      : Array.from(element.childNodes).reduce(
-          (total, child) => total + (lengths.get(child) ?? (child.textContent ?? '').trim().length),
-          0,
-        );
+      : Array.from(element.childNodes)
+          .filter((child) => child.nodeType !== 8)
+          .reduce(
+            (total, child) =>
+              total + (lengths.get(child) ?? (child.textContent ?? '').trim().length),
+            0,
+          );
     lengths.set(element, length);
   }
   const bodyLength = lengths.get(document.body) ?? 0;

@@ -164,7 +164,7 @@ describe('script-gated article visibility', () => {
       transformPage(
         `<div id="article" hidden
       style="visibility:hidden;opacity:0;display:none;color:red">${'Article text. '.repeat(40)}</div>
-      <nav hidden style="display:none;visibility:hidden;opacity:0">Menu</nav>`,
+      <nav hidden style="display:none;visibility:hidden;opacity:0">Menu<!--${'Ignored comment'.repeat(100)}--></nav>`,
         base,
       ),
     );

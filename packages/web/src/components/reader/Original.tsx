@@ -23,13 +23,13 @@ function fallbackReason(reason: string | undefined): string {
 }
 
 function PageSurface({ link, state, showReader }: OriginalProps) {
-  const { mode, preparing, reload, frameReady } = state;
+  const { mode, preparing, reload } = state;
   const { loading, timedOut, onLoad } = useFrameLoading(`${link.id}-${link.url}-${reload}`, 0);
   const framed = mode === 'direct' || mode === 'view';
-  const busy = !timedOut && (preparing || (framed && loading));
+  const busy = loading && (preparing || framed);
   return (
     <div className="silo-original-surface" aria-busy={busy}>
-      {framed && frameReady && (
+      {framed && (
         <iframe
           key={`${mode}-${reload}`}
           title={mode === 'view' ? 'Silo view' : 'Live page'}

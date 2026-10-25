@@ -59,7 +59,6 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
     embed,
     mode: unavailable ? ('card' as const) : mode,
     preparing,
-    frameReady: mode === 'direct' || (mode === 'view' && viewCheck.data === true),
     reason: hint.isError || unavailable ? 'fetch-error' : hint.data?.reason,
     reload,
     refresh,

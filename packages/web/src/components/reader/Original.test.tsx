@@ -134,7 +134,10 @@ describe('Original mode order', () => {
     );
     try {
       await waitFor(() => expect(requests).toContain('HEAD /api/links/link-id/view'));
-      expect(view.container.querySelector('iframe')).toBeNull();
+      expect(view.container.querySelector('iframe')?.getAttribute('title')).toBe('Silo view');
+      expect(
+        view.container.querySelector('.silo-frame-loading')?.getAttribute('data-loading'),
+      ).toBe('true');
       failView?.();
       failView = undefined;
       await waitFor(() =>
