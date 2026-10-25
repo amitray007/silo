@@ -8,7 +8,7 @@ Harbor's full design lives at `_archive/projects/harbor/`. It is a **reference i
 - **Semantic/AI "Recall" layer** (embeddings, hybrid BM25+vector search, LLM Q&A over corpus) — harbor deferred this to Phase 3–4; silo does not assume it.
 - **Weekly digest email** — outbound notification; unproven need for silo.
 - **8-intent taxonomy** (read/watch/try/reference/visit/buy/inspiration/listen) — may be too much; silo should decide its own minimal categorization.
-- **Full always-archived SingleFile capture of every page** — **decided against for silo (2026-07-03).** Silo stores metadata + extracted text, not a frozen page snapshot. Deletion is a soft **trash** with configurable auto-purge (7/30 days), not permanent content hoarding. Revisit only if link-rot becomes a felt pain.
+- **Full always-archived SingleFile capture of every page** — **decided against for silo (2026-07-03).** Silo stores metadata, extracted text, and readable article HTML. It never stores a page copy. The live Original view is in scope; see [Reader and Original](../methods/reader-and-original.md). Deletion is a soft **trash** with configurable auto-purge (7/30 days), not permanent content hoarding. Revisit only if link-rot becomes a felt pain.
 - **Restaurants / products / apps / repos as first-class types** — harbor tried to hold everything; silo should decide which types actually matter to the user.
 - **Browser extension / iOS Shortcut / Android share target** — capture-surface expansion; park until the core capture loop is proven.
 

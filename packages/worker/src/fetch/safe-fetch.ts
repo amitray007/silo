@@ -86,6 +86,8 @@ export type SafeFetchResult =
       contentType: string | undefined;
       finalUrl: string;
       status: number;
+      xFrameOptions?: string;
+      contentSecurityPolicy?: string;
     }
   | {
       ok: false;
@@ -119,6 +121,7 @@ const defaultResolver: Resolver = (hostname) =>
   });
 
 export interface SafeFetchOptions {
+  signal?: AbortSignal;
   maxRedirects?: number;
   maxBodyBytes?: number;
   timeoutMs?: number;
@@ -373,6 +376,12 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
       contentType,
       finalUrl: url.toString(),
       status: response.status,
+      ...(response.headers.has('x-frame-options')
+        ? { xFrameOptions: response.headers.get('x-frame-options') ?? '' }
+        : {}),
+      ...(response.headers.has('content-security-policy')
+        ? { contentSecurityPolicy: response.headers.get('content-security-policy') ?? '' }
+        : {}),
     },
   };
 }
@@ -447,6 +456,9 @@ export async function safeFetch(
 
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const onAbort = () => controller.abort();
+  options.signal?.addEventListener('abort', onAbort, { once: true });
+  if (options.signal?.aborted) controller.abort();
 
   try {
     let currentUrl = rawUrl;
@@ -468,6 +480,7 @@ export async function safeFetch(
     return { ok: false, reason: 'too-many-redirects' };
   } finally {
     clearTimeout(timer);
+    options.signal?.removeEventListener('abort', onAbort);
   }
 }
 

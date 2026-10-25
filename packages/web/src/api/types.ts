@@ -303,3 +303,5 @@ export type OAuthClientsResponse = { clients: ConnectedOAuthClient[] };
  * (operator override > derived `mcp.<hostname>` > localhost dev default).
  */
 export type AppConfig = { mcpUrl?: string };
+
+export type FrameHint = { mode: 'direct' | 'view' | 'none'; reason?: string; contentType?: string };

@@ -24,6 +24,7 @@ import { oauthCorsMiddleware } from './routes/oauth/oauth-cors.js';
 import { registerOAuthRegisterRoutes } from './routes/oauth/register.js';
 import { registerOAuthTokenRoutes } from './routes/oauth/token.js';
 import { registerOAuthWellKnownRoutes } from './routes/oauth/well-known.js';
+import { registerPageViewRoutes } from './routes/page-view.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerTagsRoutes } from './routes/tags.js';
@@ -229,6 +230,7 @@ export function createApp(): Hono {
   registerFaviconRoutes(api);
   registerPreviewImageRoutes(api);
   registerContentImageRoutes(api);
+  registerPageViewRoutes(api);
   registerSettingsRoutes(api);
   registerExportRoutes(api);
   registerImportRoutes(api);

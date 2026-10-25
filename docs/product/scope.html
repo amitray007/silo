@@ -247,7 +247,7 @@
         </tr>
         <tr>
           <td class="cap">Trusted list view</td>
-          <td class="detail">A clean, scannable list of everything saved — the place you go to see your material. Crisp boundary: clicking an item opens the <em>original</em> in a new tab; silo shows the card, never renders content (the in-silo reader stays Later).</td>
+          <td class="detail">A clean, scannable list of everything saved — the place you go to see your material. Selecting a link opens the in-silo Reader. Original shows a player, a live site, a script-free silo view, or a link card. Open in new tab is always available.</td>
           <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
         </tr>
         <tr>
@@ -291,6 +291,11 @@
           <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
         </tr>
         <tr>
+          <td class="cap">Reading experience</td>
+          <td class="detail">An in-silo Reader for readable article HTML, with players for supported sources. Original is a best-effort live fetch; some sites still show only a card.</td>
+          <td class="stage"><span class="chip now"><span class="dot now"></span>Now</span></td>
+        </tr>
+        <tr>
           <td class="cap">MCP surface</td>
           <td class="detail">Claude reaches into silo: add a link, list/filter/search items, read an item's details + notes. Reuses the exact operations the human UI uses. <strong>The immediate second increment</strong> — it's silo's identity, it's cheap once the core exists, and building it early keeps the store agent-native rather than UI-shaped.</td>
           <td class="stage"><span class="chip next"><span class="dot next"></span>Next</span></td>
@@ -310,11 +315,6 @@
           <td class="detail">A vector/embedding index silo <em>stores and matches</em> so "find by meaning" queries work — <strong>not AI in silo</strong>. Silo holds the index; the agent decides relevance. Bolts onto the same base once it proves itself.</td>
           <td class="stage"><span class="chip later"><span class="dot later"></span>Later</span></td>
         </tr>
-        <tr>
-          <td class="cap">Reading experience</td>
-          <td class="detail">A good in-silo viewer/reader — articles, tweets, HN threads rendered cleanly so silo is a nice place to actually read, not just store.</td>
-          <td class="stage"><span class="chip later"><span class="dot later"></span>Later</span></td>
-        </tr>
       </tbody>
     </table>
   </div>
@@ -325,7 +325,7 @@
     <ul>
       <li>No AI inside silo. <span>Silo never summarizes, classifies, or "understands" on its own. All intelligence is an external agent over MCP. Silo is the shelves, not the librarian.</span></li>
       <li>Not a file store. <span>Silo saves references to web material — no PDF/document upload, no ingesting local files. If you can't point a URL at it, it's not silo's job.</span></li>
-      <li>Not a content archive. <span>No permanent page snapshots (harbor's SingleFile). Silo stores metadata + extracted text, not a frozen copy of the page. Deletion is soft (trash → auto-purge), not hoarding.</span></li>
+      <li>Not a content archive. <span>Silo stores metadata, extracted text, and readable article HTML. It never stores a page copy. Original fetches live on request and keeps only a temporary memory cache. Some sites show only a card. Deletion is soft (trash → auto-purge).</span></li>
       <li>Not trying to natively understand <em>every</em> website. <span>"Just a link" is the floor; source plugins are the opt-in upgrade for the few sources you care about.</span></li>
       <li>Not harbor's everything-store. <span>No restaurants / products / apps as first-class types, no 8-intent taxonomy, no weekly digest, no read-later queue (tags do that job).</span></li>
       <li>Not multi-user. <span>Silo is single-user and private — yours. No sharing, no accounts-for-others, no social layer.</span></li>

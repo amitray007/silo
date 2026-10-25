@@ -93,6 +93,12 @@ function renderReader({
           trash: trashCount ?? state.trash.length,
           purgeWindowDays: 30,
         }),
+      ...Object.fromEntries(
+        [...state.live, ...extra].map((link) => [
+          `/api/links/${link.id}/frame`,
+          () => json({ mode: link.url.endsWith('.zip') ? 'none' : 'direct' }),
+        ]),
+      ),
       '/api/trash': () => json({ links: state.trash }),
       '/api/links': () => {
         const offset = Number(url.searchParams.get('cursor') ?? 0);
@@ -297,11 +303,9 @@ describe('reader content', () => {
     const { container } = renderReader({ route: '/?link=a' });
     await selected();
     fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
+    await waitFor(() => expect(container.querySelector('iframe')?.getAttribute('src')).toBe(a.url));
     const frame = container.querySelector('iframe');
-    expect(frame?.getAttribute('src')).toBe(a.url);
-    expect(frame?.getAttribute('sandbox')).toBe(
-      'allow-scripts allow-same-origin allow-popups allow-forms',
-    );
+    expect(frame?.getAttribute('sandbox')).toBeNull();
     expect(frame?.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect(frame?.getAttribute('loading')).toBe('lazy');
     expect(
@@ -309,7 +313,7 @@ describe('reader content', () => {
         .getByRole('link', { name: /Open in new tab/ })
         .getAttribute('href'),
     ).toBe(a.url);
-    expect(reader().getByText(/Blank page\?/)).toBeDefined();
+    expect(reader().getByRole('button', { name: 'Show silo view' })).toBeDefined();
   });
   it('does not mount an unrequested Original iframe when selecting another link', async () => {
     const attributes = vi.spyOn(HTMLIFrameElement.prototype, 'setAttribute');
@@ -859,10 +863,12 @@ describe('review regressions', () => {
     const { container } = renderReader({ live: [makeLink({ ...a, url })], route: '/?link=a' });
     await selected();
     fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
-    expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(mode);
+    await waitFor(() =>
+      expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(mode),
+    );
     expect(reader().getAllByRole('link', { name: /Open in new tab/ }).length).toBeGreaterThan(0);
     if (mode === 'direct') {
-      expect(reader().getByText(/Blank page/)).toBeDefined();
+      expect(reader().getByRole('button', { name: 'Show silo view' })).toBeDefined();
       if (url.includes('/pdf/'))
         expect(screen.getByTitle('Original page').hasAttribute('sandbox')).toBe(false);
     }

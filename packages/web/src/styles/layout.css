@@ -1033,6 +1033,7 @@ div.silo-reader-notecard {
   position: sticky;
   top: 0;
   z-index: 1;
+  flex-wrap: wrap;
 }
 .silo-original-bar .silo-reader-btn {
   flex: none;
@@ -1049,4 +1050,10 @@ div.silo-reader-notecard {
 }
 .silo-reader-tweet {
   margin-bottom: 22px;
+}
+
+@media (max-width: 719px) {
+  .silo-original-bar > span {
+    flex-basis: 100%;
+  }
 }

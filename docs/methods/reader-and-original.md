@@ -278,3 +278,37 @@ same. Paul Graham's article now has 66,518 text characters while its status
 remains `partial`. YouTube stores its meta description, not a transcript; Vimeo
 still contains a verification wall. Existing Reader HTML is preserved by design,
 so the upgrade does not rewrite prior image selections or shell captures.
+
+## Running Original (Unit 3)
+
+Run the HTTP process through `@silo/app` (`pnpm --filter @silo/app start:api`).
+It registers the process-local `PageViewer` before accepting requests, even if
+queue startup fails. Running `@silo/api` alone does not register a viewer:
+`/frame` and `/view` return 503 and the web shows a link card.
+
+The viewer keeps up to 32 MiB of encoded output in memory for ten minutes.
+It never writes a page copy to the database or disk. Two fetch/transform jobs
+can run at once; other links wait up to one second in a bounded queue. Closing
+Original aborts its request. A shared fetch stops when its last client leaves.
+The transform pool terminates a job after three seconds, including startup.
+
+Run the separate browser sandbox proof with:
+
+```sh
+pnpm exec playwright install chromium firefox webkit
+pnpm test:view-sandbox
+```
+
+This test is outside the default `test` script. It starts a local fixture server,
+uses the production transform and response headers, and closes every browser
+and the server. It checks script execution, cookie/storage/parent access,
+blocked fetches, ordinary popups with no opener, and top-level isolation in all
+three engines. On macOS, it gives Firefox separate test app metadata to avoid
+accessing the user's Firefox data ([upstream issue](https://github.com/microsoft/playwright/issues/42768)).
+The fixture checks are separate from real-link QA.
+
+Silo view allows live GET requests for CSS, images, fonts, and media. Links open
+ordinary pages in new tabs. Its iframe and response CSP omit scripts, same-origin
+access, and forms. Unsafe silo API calls still require the CSRF header.
+Frame hints use the request URL's origin; reverse proxies must preserve the
+public Host and scheme. Vite preserves the browser Host for local QA.

@@ -15,6 +15,7 @@ import type {
   CreatedAccessTokenJson,
   EditLinkRequest,
   EmptyTrashResponse,
+  FrameHint,
   LinkJson,
   LinkResponse,
   LinksResponse,
@@ -55,6 +56,7 @@ export const queryKeys = {
     if (filter?.status !== undefined) key.status = filter.status;
     return ['links', key] as const;
   },
+  frame: (id: string) => ['frame', id] as const,
   link: (id: string) => ['link', id] as const,
   /**
    * `tag` (optional, command-center search plan 024) is folded into the key
@@ -976,5 +978,17 @@ export function useAppConfig() {
   return useQuery({
     queryKey: queryKeys.appConfig(),
     queryFn: () => apiGet<AppConfig>('/api/config'),
+  });
+}
+
+/** Fetch only on Original, after player detection. Abort when the reader closes. */
+export function useFrameHint(id: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.frame(id),
+    queryFn: ({ signal }) =>
+      apiGet<FrameHint>(`/api/links/${encodeURIComponent(id)}/frame`, signal),
+    enabled,
+    retry: false,
+    staleTime: 0,
   });
 }

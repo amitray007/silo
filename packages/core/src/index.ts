@@ -237,6 +237,14 @@ export {
   listTrash,
   searchTrash,
 } from './links/trash.js';
+export {
+  type FrameHint,
+  type PageView,
+  type PageViewer,
+  PageViewerUnavailableError,
+  setPageViewer,
+  viewPage,
+} from './links/view.js';
 // Settings persistence (plan 016): a single-user key -> value store —
 // theme/trash-purge-cycle/plugin-toggle settings the web Settings modal
 // reads + writes. Appended as its own minimal block (this barrel is shared

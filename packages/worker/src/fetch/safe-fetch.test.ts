@@ -580,3 +580,92 @@ describe('safeFetch — IPv6 literal URLs (bracket stripping)', () => {
     }
   });
 });
+
+describe('safeFetch — final policy headers and client cancellation', () => {
+  it('keeps final enforced CSP and duplicate XFO, ignoring redirect and report-only policies', async () => {
+    handler = (req, res) => {
+      if (req.url === '/start') {
+        res.writeHead(302, {
+          location: '/end',
+          'x-frame-options': 'DENY',
+          'content-security-policy': "frame-ancestors 'none'",
+        });
+      } else {
+        res.setHeader('x-frame-options', ['SAMEORIGIN', 'DENY']);
+        res.setHeader('content-security-policy', [
+          'frame-ancestors https://silo.test',
+          'frame-ancestors https:',
+        ]);
+        res.writeHead(200, {
+          'content-type': 'text/html',
+          'content-security-policy-report-only': "frame-ancestors 'none'",
+        });
+      }
+      res.end('<p>Hi</p>');
+    };
+    const result = await safeFetch(`http://public.test:${port}/start`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+    });
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.finalUrl).toBe(`http://public.test:${port}/end`);
+    expect(result.xFrameOptions).toBe('SAMEORIGIN, DENY');
+    expect(result.contentSecurityPolicy).toBe(
+      'frame-ancestors https://silo.test, frame-ancestors https:',
+    );
+  });
+  it('does not promote a report-only policy into enforced CSP', async () => {
+    handler = (_req, res) => {
+      res.writeHead(200, {
+        'content-type': 'text/html',
+        'content-security-policy-report-only': "frame-ancestors 'none'",
+      });
+      res.end('<p>Hi</p>');
+    };
+    const result = await safeFetch(`http://public.test:${port}/`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+    });
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.contentSecurityPolicy).toBeUndefined();
+  });
+  it('aborts DNS immediately on client disconnect, before the fetch timeout', async () => {
+    const controller = new AbortController();
+    const output = safeFetch('http://public.test/', {
+      resolver: () => new Promise(() => {}),
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+    controller.abort();
+    const started = Date.now();
+    expect(await output).toMatchObject({ ok: false });
+    expect(Date.now() - started).toBeLessThan(1_000);
+  });
+  it('aborts an in-flight response body and closes its socket', async () => {
+    let began: (() => void) | undefined;
+    let closed: (() => void) | undefined;
+    const bodyStarted = new Promise<void>((resolve) => {
+      began = resolve;
+    });
+    const bodyClosed = new Promise<void>((resolve) => {
+      closed = resolve;
+    });
+    handler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'text/html' });
+      res.write('<p>Unfinished');
+      res.on('close', () => closed?.());
+      began?.();
+    };
+    const controller = new AbortController();
+    const output = safeFetch(`http://public.test:${port}/`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      signal: controller.signal,
+    });
+    await bodyStarted;
+    controller.abort();
+    expect(await output).toMatchObject({ ok: false });
+    await bodyClosed;
+  });
+});
