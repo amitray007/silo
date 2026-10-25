@@ -215,7 +215,11 @@ function ReaderArticle({
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
       <YouTubeStats source={link.sourceData} />
       <ReaderMeta key={link.id} link={link} trashed={trashed} />
-      <ArticleBody link={link} loading={loading} />
+      <div className="silo-reader-body-column">
+        <div className="silo-reader-body-wrap">
+          <ArticleBody link={link} loading={loading} />
+        </div>
+      </div>
     </article>
   );
 }

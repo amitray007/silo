@@ -134,7 +134,8 @@
   flex: 1;
   min-height: 0;
   overscroll-behavior: contain;
-  padding: 12px 12px 100px;
+  padding: 12px 12px 128px;
+  border-top: 0.5px solid var(--line);
 }
 .silo-content-col {
   min-height: 0;
@@ -145,7 +146,7 @@
   line-height: 20px;
   font-weight: 400;
   color: var(--ghost);
-  padding: 12px 12px 4px;
+  padding: 24px 12px 4px;
   margin: 0;
 }
 .silo-frame .silo-list-menu {
@@ -1743,4 +1744,14 @@ div.silo-reader-notecard {
 
 .silo-link-row[data-active="true"] .silo-row-actions {
   background: linear-gradient(to right, transparent, var(--sel) 12px);
+}
+
+.silo-reader-body-column {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+}
+.silo-reader-body-wrap {
+  padding: 8px 0 40px;
+  width: 100%;
 }
