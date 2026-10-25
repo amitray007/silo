@@ -64,12 +64,16 @@ export function TrashRow({
   onDelete: (id: string) => void;
 }) {
   const selection = useTrashSelection();
+  const restore = useRestoreLink(link.id);
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
   return (
     <ListRow
       link={link}
       selection={selection}
+      busy={restore.isPending}
+      error={restore.isError ? "Couldn't restore this link. Try again." : undefined}
+      onRemove={() => restore.mutate()}
       purge={purgeCountdownDays(link.deletedAt, purgeWindowDays)}
       menuOpen={menuOpen}
       toggleMenu={() => toggleMenu(link.id)}

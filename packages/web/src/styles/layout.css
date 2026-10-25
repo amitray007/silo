@@ -130,17 +130,18 @@
   flex: 1;
   min-height: 0;
   overscroll-behavior: contain;
-  padding: 0 8px 100px;
+  padding: 12px 12px 100px;
 }
 .silo-content-col {
   min-height: 0;
   width: 100%;
 }
 .silo-daylabel {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--fnt);
-  padding: 14px 12px 6px;
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 400;
+  color: var(--ghost);
+  padding: 12px 12px 4px;
   margin: 0;
 }
 .silo-frame .silo-list-menu {
@@ -186,6 +187,8 @@
   padding-right: 22px;
 }
 .silo-row-title {
+  font-size: 14px;
+  line-height: 20px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;
@@ -235,11 +238,8 @@
   background: var(--line);
   color: var(--ink);
 }
-.silo-link-row:focus-within .silo-rowmore {
-  opacity: 1;
-}
 .silo-letter-chip {
-  border-radius: 5px;
+  border-radius: 4px;
   flex: none;
   display: inline-grid;
   place-items: center;
@@ -640,9 +640,6 @@
   }
   .silo-link-row[data-active="true"]:hover {
     background: var(--sel);
-  }
-  .silo-link-row:hover .silo-rowmore {
-    opacity: 1;
   }
   .silo-reader-iconbtn:not(:disabled):hover,
   .silo-reader-addnote:hover,
@@ -1293,4 +1290,150 @@ div.silo-reader-notecard {
   margin-left: auto;
   color: var(--ghost);
   font-size: 12px;
+}
+
+/* Compact link rows retain the detailed view through a browser preference. */
+.silo-link-row[data-compact="true"] {
+  height: 44px;
+  min-height: 44px;
+  padding: 0 8px 0 12px;
+  justify-content: center;
+}
+.silo-link-row[data-compact="true"] .silo-row-titleline {
+  gap: 12px;
+  padding-right: 0;
+}
+.silo-link-row[data-compact="true"] :is(.silo-row-meta, .silo-row-note, .silo-row-rich) {
+  display: none;
+}
+.silo-row-actions {
+  display: flex;
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  opacity: 0;
+  pointer-events: none;
+}
+.silo-row-actions .silo-reader-iconbtn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  color: var(--fnt);
+}
+.silo-row-actions .silo-rowmore {
+  position: static;
+  opacity: 1;
+}
+.silo-link-row:is(:focus-within, [data-active="true"]) .silo-row-actions,
+.silo-row-actions:has([aria-expanded="true"]) {
+  opacity: 1;
+  pointer-events: auto;
+}
+.silo-link-row:is(:focus-within, [data-active="true"]) .silo-row-titleline {
+  padding-right: 100px;
+}
+.silo-row-note-icon {
+  position: absolute;
+  right: 8px;
+  top: 14px;
+  color: var(--fnt);
+}
+.silo-link-row:is(:focus-within, [data-active="true"]) .silo-row-note-icon {
+  right: 108px;
+}
+.silo-link-row:has(.silo-row-note-icon) .silo-row-titleline {
+  padding-right: 24px;
+}
+.silo-link-row:has(.silo-row-note-icon):is(:focus-within, [data-active="true"])
+  .silo-row-titleline {
+  padding-right: 124px;
+}
+.silo-capture {
+  position: relative;
+}
+.silo-capture .silo-add-trigger {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+.silo-capture .silo-capture-popover {
+  position: absolute;
+  z-index: 21;
+  right: 0;
+  top: 36px;
+  width: 300px;
+  max-width: calc(100vw - 32px);
+  padding: 16px;
+}
+.silo-capture-title {
+  font-size: 14px;
+  font-weight: 500;
+}
+.silo-capture p {
+  color: var(--fnt);
+  font-size: 13px;
+  line-height: 20px;
+  margin: 8px 0 12px;
+}
+.silo-capture form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.silo-capture input {
+  min-width: 0;
+  width: 100%;
+  height: 32px;
+  border: 0.5px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  padding: 0 8px;
+  font: inherit;
+}
+.silo-primary-button {
+  height: 32px;
+  flex: none;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-link-row:hover .silo-row-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .silo-link-row:hover .silo-row-titleline {
+    padding-right: 100px;
+  }
+  .silo-link-row:hover .silo-row-note-icon {
+    right: 108px;
+  }
+  .silo-link-row:has(.silo-row-note-icon):hover .silo-row-titleline {
+    padding-right: 124px;
+  }
+}
+@media (max-width: 719px), (hover: none) {
+  .silo-row-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .silo-row-actions > button:not(.silo-rowmore) {
+    display: none;
+  }
+  .silo-link-row[data-compact="true"] .silo-row-titleline {
+    padding-right: 32px;
+  }
+  .silo-link-row[data-compact="true"] .silo-row-note-icon {
+    right: 44px;
+  }
+  .silo-link-row[data-compact="true"]:has(.silo-row-note-icon) .silo-row-titleline {
+    padding-right: 56px;
+  }
 }

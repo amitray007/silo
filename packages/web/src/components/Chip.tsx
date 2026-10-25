@@ -19,7 +19,7 @@ const glyphs: Record<string, string> = {
 };
 
 /** Local letter chips use the prototype's fixed source colors, with no requests. */
-export function Chip({ domain, size = 18 }: { domain: string | null | undefined; size?: number }) {
+export function Chip({ domain, size = 20 }: { domain: string | null | undefined; size?: number }) {
   const host = String(domain ?? '')
     .replace(/^www\./i, '')
     .toLowerCase();

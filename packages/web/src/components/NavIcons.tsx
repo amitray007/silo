@@ -141,24 +141,6 @@ export function LogOutIcon() {
  * visible "Add" label, so the icon just needs to read as "add" at a glance — a
  * plus is crisper at 16px than the busier clipboard/paste glyph it replaced.
  */
-export function AddIcon() {
-  return (
-    <svg
-      width="16"
-      height="16"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.5"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="M8 3.5v9M3.5 8h9" />
-    </svg>
-  );
-}
-
 /**
  * The magnifier glyph shared by every search-style input's leading icon —
  * `Omnibar` and the Trash screen's search input (`TrashView.tsx`'s

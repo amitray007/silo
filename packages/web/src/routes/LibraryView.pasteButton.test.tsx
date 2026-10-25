@@ -84,8 +84,9 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard({ readText: () => Promise.resolve('https://example.com/post') });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add link' });
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -99,12 +100,36 @@ describe('LibraryView paste-capture button', () => {
     expect((await screen.findByRole('status')).textContent).toBe('Saved');
   });
 
+  it('saves a typed URL and closes with Escape, returning focus to Add', async () => {
+    renderLibraryView();
+    const trigger = screen.getByRole('button', { name: 'Add link' });
+    fireEvent.click(trigger);
+    const input = screen.getByRole('textbox', { name: 'Link URL' });
+    expect(document.activeElement).toBe(input);
+    fireEvent.change(input, { target: { value: 'https://example.com/typed' } });
+    fireEvent.submit(input.closest('form') as HTMLFormElement);
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/links',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('https://example.com/typed'),
+        }),
+      ),
+    );
+    await screen.findByRole('status');
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(document.activeElement).toBe(trigger);
+  });
+
   it('shows "Clipboard is empty" for blank clipboard content, without calling capture', async () => {
     stubClipboard({ readText: () => Promise.resolve('   ') });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add link' });
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Clipboard is empty');
     expect(fetch).not.toHaveBeenCalledWith(
@@ -117,8 +142,9 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard({ readText: () => Promise.resolve('just some notes') });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add link' });
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe("That doesn't look like a link");
     expect(fetch).not.toHaveBeenCalledWith(
@@ -131,8 +157,9 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard(undefined);
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add link' });
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Clipboard access blocked');
   });
@@ -141,10 +168,11 @@ describe('LibraryView paste-capture button', () => {
     stubClipboard({ readText: () => Promise.reject(new Error('Permission denied')) });
     renderLibraryView();
 
-    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add link' });
     // A rejected readText() must be swallowed by the component's own
     // try/catch — fireEvent.click must not throw/reject up through the test.
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
 
     expect((await screen.findByRole('alert')).textContent).toBe('Clipboard access blocked');
   });

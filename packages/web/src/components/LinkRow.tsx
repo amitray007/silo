@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useSettings } from '../api/hooks';
+import { useSettings, useTrashLink } from '../api/hooks';
 import type { LinkJson, SettingsMap } from '../api/types';
 import { isHoverCapable } from '../lib/pointer';
 import { useHoverPreview } from './HoverPreviewContext';
@@ -26,10 +26,14 @@ export function LinkRow({ link }: { link: LinkJson }) {
   }, [menuOpen, scheduleHide, link.id]);
   useEffect(() => () => dismiss(link.id), [dismiss, link.id]);
   const source = link.sourceData;
+  const trash = useTrashLink(link.id);
   return (
     <ListRow
       link={link}
       selection={selection}
+      busy={trash.isPending}
+      error={trash.isError ? "Couldn't move this link to trash. Try again." : undefined}
+      onRemove={() => trash.mutate()}
       menuOpen={menuOpen}
       toggleMenu={() => toggleMenu(link.id)}
       menu={(anchor) =>

@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
+import { useCompactLinks } from '../../lib/useCompactLinks';
 import { ThemeToggle } from '../../theme/ThemeToggle';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
+import { ToggleSwitch } from './ToggleSwitch';
 
 const PURGE_DAY_OPTIONS = [7, 30, 90] as const satisfies readonly SettingsMap['trashPurgeDays'][];
 
@@ -113,6 +115,7 @@ function TrashPurgeDropdown({
 export function PreferencesTab() {
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
+  const [compact, setCompact] = useCompactLinks();
   const purgeDays = settings?.trashPurgeDays ?? 30;
 
   function setPurgeDays(value: SettingsMap['trashPurgeDays']): void {
@@ -121,6 +124,13 @@ export function PreferencesTab() {
 
   return (
     <>
+      <div style={settingsRowDivided}>
+        <div style={{ flex: 1 }}>
+          <div style={rowLabel}>Compact links</div>
+          <div style={rowDesc}>Show links in one line on this browser.</div>
+        </div>
+        <ToggleSwitch label="Compact links" on={compact} onToggle={() => setCompact(!compact)} />
+      </div>
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Theme</div>
