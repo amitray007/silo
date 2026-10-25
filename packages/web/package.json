@@ -14,6 +14,7 @@
   "dependencies": {
     "@tanstack/react-query": "catalog:",
     "cmdk": "catalog:",
+    "dompurify": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:"

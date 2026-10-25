@@ -380,7 +380,7 @@
   margin: 0 auto;
   padding: 40px 40px 80px;
 }
-.silo-reader h2 {
+.silo-reader > h2 {
   font-size: 30px;
   line-height: 1.15;
   font-weight: 600;
@@ -804,7 +804,7 @@
   .silo-reader {
     padding: 22px 20px calc(96px + env(safe-area-inset-bottom, 0px));
   }
-  .silo-reader h2 {
+  .silo-reader > h2 {
     font-size: 25px;
   }
   .silo-reader-body p {
@@ -1006,4 +1006,39 @@
 
 div.silo-reader-notecard {
   cursor: default;
+}
+
+.silo-reader-player {
+  display: block;
+  width: 100%;
+  min-height: 200px;
+  border: 0;
+  border-radius: 10px;
+  margin-bottom: 22px;
+  background: var(--hov);
+}
+.silo-original-player,
+.silo-original-card {
+  padding: 20px;
+}
+.silo-original-bar {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+.silo-original-bar .silo-reader-btn {
+  flex: none;
+  min-height: 40px;
+}
+.silo-original {
+  min-height: 100%;
+  height: auto;
+}
+.silo-original-frame {
+  flex: none;
+  height: calc(100dvh - 190px);
+  min-height: 320px;
+}
+.silo-reader-tweet {
+  margin-bottom: 22px;
 }

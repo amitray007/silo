@@ -696,3 +696,106 @@
     min-height: 40px;
   }
 }
+
+/* Captured prose uses the redesign's neutral surfaces and reading rhythm. */
+.silo-reader-prose {
+  font-size: 16px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.silo-reader-prose :is(h1, h2, h3, h4, h5, h6) {
+  line-height: 1.25;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 30px 0 12px;
+  text-wrap: pretty;
+}
+.silo-reader-prose h1 {
+  font-size: 28px;
+}
+.silo-reader-prose :where(h2) {
+  font-size: 24px;
+}
+.silo-reader-prose h3 {
+  font-size: 20px;
+}
+.silo-reader-prose :is(h4, h5, h6) {
+  font-size: 17px;
+}
+.silo-reader-prose :is(p, ul, ol, dl, pre, figure, blockquote, .silo-reader-table) {
+  margin: 0 0 18px;
+}
+.silo-reader-prose :is(ul, ol) {
+  padding-left: 24px;
+}
+.silo-reader-prose li {
+  margin: 6px 0;
+}
+.silo-reader-prose li > :is(ul, ol) {
+  margin-bottom: 0;
+}
+.silo-reader-prose blockquote {
+  border-left: 3px solid var(--line-2);
+  padding-left: 18px;
+  color: var(--mut);
+}
+.silo-reader-prose a {
+  color: var(--ink);
+  text-underline-offset: 3px;
+}
+.silo-reader-prose :is(code, kbd, samp) {
+  font-family: ui-monospace, monospace;
+  font-size: 0.875em;
+  background: var(--hov);
+  border-radius: 4px;
+  padding: 2px 4px;
+}
+.silo-reader-prose pre {
+  padding: 16px;
+  background: var(--hov);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  overflow-x: auto;
+  white-space: pre;
+  overflow-wrap: normal;
+}
+.silo-reader-prose pre code {
+  padding: 0;
+  font-size: 14px;
+}
+.silo-reader-table {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.silo-reader-prose table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 14px;
+}
+.silo-reader-prose :is(th, td) {
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  text-align: left;
+  min-width: 100px;
+}
+.silo-reader-prose th {
+  background: var(--hov);
+  font-weight: 600;
+}
+.silo-reader-prose img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 12px auto;
+  border-radius: 8px;
+}
+.silo-reader-prose :is(figcaption, caption) {
+  color: var(--mut);
+  font-size: 13px;
+  text-align: center;
+}
+.silo-reader-prose hr {
+  margin: 28px 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}

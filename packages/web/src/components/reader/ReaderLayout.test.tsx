@@ -61,6 +61,7 @@ function renderReader({
   live = [a, b],
   trash = [],
   extra = [],
+  details = {},
   route = '/',
   liveCount,
   trashCount,
@@ -70,6 +71,7 @@ function renderReader({
   live?: LinkJson[];
   trash?: TrashLinkJson[];
   extra?: LinkJson[];
+  details?: Record<string, { contentHtml: string | null; contentImageCount: number }>;
   route?: string;
   liveCount?: number;
   trashCount?: number;
@@ -113,7 +115,9 @@ function renderReader({
       return new Response(null, { status: 204 });
     }
     const link = [...state.live, ...extra].find((link) => path === `/api/links/${link.id}`);
-    return link ? json({ link }) : json({ error: 'not_found', message: 'Unknown link' }, 404);
+    return link
+      ? json({ link: { ...link, contentHtml: null, contentImageCount: 0, ...details[link.id] } })
+      : json({ error: 'not_found', message: 'Unknown link' }, 404);
   });
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -194,11 +198,11 @@ describe('reader selection and history', () => {
     },
   );
 
-  it('pushes URL selection, reuses loaded rows, and browser Back returns to the list', async () => {
+  it('pushes URL selection, fetches row detail, and browser Back returns to the list', async () => {
     const { fetchMock, container } = renderReader();
     await selectFirst();
     expect(screen.getByTestId('url').textContent).toBe('/?link=a');
-    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a')).toBe(false);
+    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a')).toBe(true);
     expect(container.querySelector('.silo-three-pane')?.getAttribute('data-reader')).toBe('true');
     fireEvent.click(screen.getByText('Browser back'));
     await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
@@ -795,5 +799,91 @@ describe('review regressions', () => {
     expect(document.activeElement).toBe(original);
     fireEvent.keyDown(original, { key: 'ArrowLeft' });
     expect(document.activeElement).toBe(tab);
+  });
+  it('loads detail prose for a listed row, sanitizes it, and preserves API image indices', async () => {
+    const { container, fetchMock } = renderReader({
+      route: '/?link=a',
+      details: {
+        a: {
+          contentHtml:
+            '<h1>Article heading</h1><p style="color:red" onclick="bad()">Safe prose <a href="javascript:alert(1)">bad link</a><a href="https://react.dev">React docs</a></p><script>alert(1)</script><img src="https://cdn.test/a.png" onerror="bad()"><img src="https://cdn.test/a.png"><img src="https://cdn.test/extra.png"><pre><code>const a = 1;</code></pre><table><caption>Values</caption><tbody><tr><td>A</td></tr></tbody></table>',
+          contentImageCount: 2,
+        },
+      },
+    });
+    await waitFor(() => expect(screen.getByText('Article heading')).toBeDefined());
+    expect(fetchMock).toHaveBeenCalledWith('/api/links/a', expect.any(Object));
+    const prose = container.querySelector('.silo-reader-prose');
+    expect(prose?.querySelector('script, [style], [onclick], [onerror]')).toBeNull();
+    expect(prose?.querySelector('a')?.getAttribute('href')).toBeNull();
+    const anchor = within(prose as HTMLElement).getByRole('link', { name: 'React docs' });
+    expect(anchor.getAttribute('target')).toBe('_blank');
+    expect(anchor.getAttribute('rel')).toBe('noopener noreferrer');
+    expect(
+      Array.from(prose?.querySelectorAll('img') ?? [], (img) => img.getAttribute('src')),
+    ).toEqual(['/api/links/a/content-image/0', '/api/links/a/content-image/1']);
+    expect(prose?.querySelector('img')?.getAttribute('loading')).toBe('lazy');
+    expect(within(prose as HTMLElement).getByRole('region', { name: 'Values' })).toBeDefined();
+    expect(reader().queryByText('First paragraph.')).toBeNull();
+  });
+
+  it.each([
+    ['https://youtube.com/watch?v=jNQXAC9IVRw', 'YouTube video'],
+    ['https://vimeo.com/76979871', 'Vimeo video'],
+    ['https://loom.com/share/1234567890abcdef1234567890abcdef', 'Loom video'],
+  ])('shows %s above the Reader title with description text', async (url, title) => {
+    const { container } = renderReader({
+      live: [makeLink({ ...a, url, extractedText: 'Video description.' })],
+      route: '/?link=a',
+    });
+    await selected();
+    const player = screen.getByTitle(title);
+    const heading = reader().getByRole('heading', { name: 'First link' });
+    expect(player.compareDocumentPosition(heading) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(reader().getByText('Video description.')).toBeDefined();
+    expect(player.getAttribute('referrerpolicy')).toBe('strict-origin-when-cross-origin');
+    expect(player.getAttribute('allow')).toBe(
+      'autoplay; encrypted-media; picture-in-picture; fullscreen',
+    );
+    expect(player.hasAttribute('allowfullscreen')).toBe(true);
+    expect(player.hasAttribute('sandbox')).toBe(false);
+    expect(container.querySelector('.silo-reader-prose')).toBeNull();
+  });
+
+  it.each([
+    ['https://youtube.com/watch?v=jNQXAC9IVRw', 'player'],
+    ['https://paulgraham.com/greatwork.html', 'direct'],
+    ['https://arxiv.org/pdf/1706.03762', 'direct'],
+    ['https://downloads.test/archive.zip', 'card'],
+  ])('selects Original mode for %s', async (url, mode) => {
+    const { container } = renderReader({ live: [makeLink({ ...a, url })], route: '/?link=a' });
+    await selected();
+    fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
+    expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(mode);
+    expect(reader().getAllByRole('link', { name: /Open in new tab/ }).length).toBeGreaterThan(0);
+    if (mode === 'direct') {
+      expect(reader().getByText(/Blank page/)).toBeDefined();
+      if (url.includes('/pdf/'))
+        expect(screen.getByTitle('Original page').hasAttribute('sandbox')).toBe(false);
+    }
+  });
+
+  it('keeps the tweet card below its themed Original player', async () => {
+    const { container } = renderReader({
+      live: [
+        makeLink({
+          ...a,
+          url: 'https://x.com/karpathy/status/1886192184808149383',
+          sourceData: twitterSourceData,
+        }),
+      ],
+      route: '/?link=a',
+    });
+    await selected();
+    fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
+    expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=light');
+    expect(container.querySelector('.silo-reader-tweet')).not.toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
+    expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=dark');
   });
 });

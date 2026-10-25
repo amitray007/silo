@@ -5,9 +5,12 @@ import { purgeCountdownDays } from '../../lib/buckets';
 import { relativeTimeFromNow } from '../../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../../lib/url';
 import { Chip } from '../Chip';
+import { embedFor } from './embedFor';
+import { Original } from './Original';
 import { ReaderContent } from './ReaderContent';
 import { ReaderIcon } from './ReaderIcon';
-import { originalUrl, type useReaderActions } from './useReaderActions';
+import { ReaderPlayer } from './ReaderPlayer';
+import type { useReaderActions } from './useReaderActions';
 
 type Actions = ReturnType<typeof useReaderActions>;
 type Tab = 'reader' | 'original';
@@ -121,35 +124,6 @@ function ReaderMore({
   );
 }
 
-function Original({ link }: { link: LinkJson }) {
-  const url = originalUrl(link.url);
-  return (
-    <div className="silo-original">
-      <div className="silo-original-bar">
-        <span title={link.url}>{link.url}</span>
-        {url && (
-          <a className="silo-reader-btn" href={url} target="_blank" rel="noopener noreferrer">
-            Open in new tab <ReaderIcon name="external" />
-          </a>
-        )}
-      </div>
-      <p className="silo-original-hint">
-        Blank page? Some sites block embedding. Open it in a new tab.
-      </p>
-      {url && (
-        <iframe
-          title="Original page"
-          className="silo-original-frame"
-          src={url}
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-          referrerPolicy="no-referrer"
-          loading="lazy"
-        />
-      )}
-    </div>
-  );
-}
-
 function ReaderArticle({
   link,
   actions,
@@ -162,6 +136,8 @@ function ReaderArticle({
   purgeWindowDays: number;
 }) {
   const domain = deriveDomain(link.url);
+  const embed = embedFor(link.url, link.sourceData);
+  const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider) ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
   return (
     <article className="silo-reader">
@@ -189,6 +165,7 @@ function ReaderArticle({
           </div>
         </div>
       )}
+      {video && <ReaderPlayer embed={video} />}
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
       <div className="silo-reader-source">
         <Chip domain={domain} size={20} />
@@ -305,7 +282,7 @@ export function ReaderPane({
   if (link)
     content =
       tab === 'original' ? (
-        <Original link={link} />
+        <Original key={link.id} link={link} />
       ) : (
         <ReaderArticle
           link={link}

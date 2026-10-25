@@ -81,7 +81,7 @@ export type SourceData =
       language?: string;
       languagePct?: number;
     }
-  | { kind: 'youtube'; channel: string; thumbnailUrl: string };
+  | { kind: 'youtube'; channel: string; thumbnailUrl: string; videoId?: string };
 
 /**
  * Mirrors `LinkJson` in `packages/api/src/link-json.ts` — the whitelisted,
@@ -106,6 +106,9 @@ export type LinkJson = {
   createdAt: string;
   updatedAt: string;
 };
+
+/** Detail-only Reader fields, mirroring the API's LinkDetailJson. */
+export type LinkDetailJson = LinkJson & { contentHtml: string | null; contentImageCount: number };
 
 /** `LinkJson` plus `deletedAt` (ISO string) — `GET /api/trash`'s per-row shape. */
 export type TrashLinkJson = LinkJson & { deletedAt: string };
@@ -135,7 +138,7 @@ export type TrashSearchResultJson = TrashLinkJson & { rank: number };
 export type TrashSearchResponse = { results: TrashSearchResultJson[]; nextCursor?: string };
 
 /** `GET /api/links/:id` response envelope. */
-export type LinkResponse = { link: LinkJson };
+export type LinkResponse = { link: LinkDetailJson };
 
 /**
  * `POST /api/links/:id/restore` response envelope — mirrors

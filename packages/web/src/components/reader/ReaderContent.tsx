@@ -1,6 +1,8 @@
 import { useRetryCapture } from '../../api/hooks';
-import type { LinkJson } from '../../api/types';
+import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
+import { embedFor } from './embedFor';
+import { ReaderProse } from './ReaderProse';
 
 function Paragraphs({ link }: { link: LinkJson }) {
   const text = link.extractedText?.trim() || link.description?.trim();
@@ -46,7 +48,7 @@ function NoCapturedText({ link }: { link: LinkJson }) {
   );
 }
 
-export function ReaderContent({ link }: { link: LinkJson }) {
+export function ReaderContent({ link }: { link: LinkJson | LinkDetailJson }) {
   if (link.captureStatus === 'enriching')
     return (
       <div role="status" aria-label="Capturing page">
@@ -60,23 +62,25 @@ export function ReaderContent({ link }: { link: LinkJson }) {
     );
 
   const source = link.sourceData;
-  if (source.kind === 'twitter')
-    return (
-      <div className="silo-reader-tweet">
-        <div className="silo-reader-who">
-          <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
-        </div>
-        <p>{source.text}</p>
-        <div className="silo-reader-stats">
-          <span>{source.likes} likes</span>
-          <span>{source.reposts} reposts</span>
-          <span>{source.replies} replies</span>
-        </div>
-      </div>
-    );
-
+  const embed = embedFor(link.url, source);
+  const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider);
+  const prose = !video && 'contentHtml' in link && link.contentHtml !== null;
   return (
     <>
+      {source.kind === 'twitter' && (
+        <div className="silo-reader-tweet">
+          <div className="silo-reader-who">
+            <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
+          </div>
+          <p>{source.text}</p>
+          <div className="silo-reader-stats">
+            <span>{source.likes} likes</span>
+            <span>{source.reposts} reposts</span>
+            <span>{source.replies} replies</span>
+          </div>
+        </div>
+      )}
+
       {source.kind === 'hacker_news' && (
         <div className="silo-reader-card">
           <div>
@@ -110,19 +114,24 @@ export function ReaderContent({ link }: { link: LinkJson }) {
       )}
       {source.kind === 'youtube' && (
         <figure className="silo-reader-video">
-          <img
-            src={previewImageUrl(link.id)}
-            alt="Video thumbnail"
-            loading="lazy"
-            onError={(event) => {
-              event.currentTarget.hidden = true;
-            }}
-          />
+          {!video && (
+            <img
+              src={previewImageUrl(link.id)}
+              alt="Video thumbnail"
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
+          )}
           <figcaption>{source.channel}</figcaption>
         </figure>
       )}
-      <Paragraphs link={link} />
-      {!link.extractedText?.trim() && !link.description?.trim() && <NoCapturedText link={link} />}
+      {prose && 'contentHtml' in link ? <ReaderProse link={link} /> : <Paragraphs link={link} />}
+      {!prose &&
+        source.kind !== 'twitter' &&
+        !link.extractedText?.trim() &&
+        !link.description?.trim() && <NoCapturedText link={link} />}
     </>
   );
 }

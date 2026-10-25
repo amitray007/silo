@@ -34,12 +34,10 @@ export function ReaderLayout({
     fetchNextPage,
   });
   const listed = links[index];
-  const seen = useRef(new Set<string>());
-  for (const link of links) seen.current.add(link.id);
   const detail = useLink(selectedId ?? undefined, {
-    enabled: !trashed && !loading && !listed && !seen.current.has(selectedId ?? ''),
+    enabled: !trashed && !loading,
   });
-  const resolved = listed ?? (trashed ? undefined : detail.data?.link);
+  const resolved = trashed ? listed : (detail.data?.link ?? listed);
   const previous = useRef<LinkJson | undefined>(undefined);
   if (resolved) previous.current = resolved;
   if (previous.current?.id !== selectedId) previous.current = undefined;
