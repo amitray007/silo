@@ -118,7 +118,7 @@ describe('Sidebar', () => {
     expect(screen.getByText('silo')).toBeDefined();
     // Trash count is compact-formatted; Library's raw count is shown beside Library.
     await waitFor(() => expect(screen.getByText('128')).toBeDefined());
-    await waitFor(() => expect(screen.getByText('1.5k')).toBeDefined());
+    expect(screen.queryByRole('link', { name: /trash/i })).toBeNull();
 
     // The `#` is its own span (spacing fix), so the tag name is a separate text
     // node — query by name and read tag rows by role for order. Tag counts are
@@ -151,27 +151,19 @@ describe('Sidebar', () => {
     await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
     const libraryLink = screen.getByRole('link', { name: /library/i });
-    const trashLink = screen.getByRole('link', { name: /trash/i });
     const settingsLink = screen.getByRole('link', { name: /settings/i });
     const tagLink = screen.getByRole('link', { name: /#\s*ai/i });
 
     expect(libraryLink.querySelector('svg')).not.toBeNull();
-    expect(trashLink.querySelector('svg')).not.toBeNull();
     expect(settingsLink.querySelector('svg')).not.toBeNull();
     expect(tagLink.querySelector('svg')).toBeNull();
   });
 
-  it('marks the current route active via aria-current', async () => {
+  it('leaves Library inactive on Trash, which is reached through the collection menu', () => {
     vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 0, trash: 0, purgeWindowDays: 30 }));
-
     renderSidebar(['/trash']);
-
-    await waitFor(() => {
-      const trashLink = screen.getByRole('link', { name: /trash/i });
-      expect(trashLink.getAttribute('aria-current')).toBe('page');
-    });
-    const libraryLink = screen.getByRole('link', { name: /library/i });
-    expect(libraryLink.getAttribute('aria-current')).toBeNull();
+    expect(screen.getByRole('link', { name: /library/i }).getAttribute('aria-current')).toBeNull();
+    expect(screen.queryByRole('link', { name: /trash/i })).toBeNull();
   });
 
   it('an active tag row gets the same themed neutral state as Library/Trash', async () => {
@@ -264,7 +256,7 @@ describe('Sidebar', () => {
 
       const searchIcon = searchButton.querySelector('svg');
       const libraryIcon = libraryLink.querySelector('svg');
-      expect(searchIcon?.getAttribute('width')).toBe('18');
+      expect(searchIcon?.getAttribute('width')).toBe('16');
       expect(searchIcon?.getAttribute('width')).toBe(libraryIcon?.getAttribute('width'));
     });
 
@@ -274,7 +266,7 @@ describe('Sidebar', () => {
       vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 2, purgeWindowDays: 30 }));
       renderSidebar();
 
-      await waitFor(() => expect(screen.getByText('2')).toBeDefined());
+      await waitFor(() => expect(screen.getByText('3')).toBeDefined());
       expect(screen.getByText('⌘')).toBeDefined();
       expect(screen.getByText('K')).toBeDefined();
     });
@@ -456,54 +448,30 @@ describe('Sidebar', () => {
       fireEvent.change(input, { target: { value: 'newtag' } });
       fireEvent.keyDown(input, { key: 'Enter' });
 
-      await waitFor(() => expect(screen.getByText("Couldn't create — try again")).toBeDefined());
+      await waitFor(() => expect(screen.getByText("Couldn't create - try again")).toBeDefined());
       // The input stays open with the value intact — a failed create must
       // never look identical to a successful one.
       expect(screen.getByPlaceholderText('Tag name')).toHaveProperty('value', 'newtag');
     });
   });
 
-  it('orders sections brand → Library/Trash → divider → Tags → divider → Settings, with Settings no longer bottom-pinned', async () => {
-    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/counts') {
-        return Promise.resolve(jsonResponse({ live: 1, trash: 0, purgeWindowDays: 30 }));
-      }
-      if (url === '/api/tags') {
-        return Promise.resolve(jsonResponse({ tags: tagCounts(['ai', 'design']) }));
-      }
-      throw new Error(`unexpected fetch: ${url}`);
-    });
-
-    const { container } = renderSidebar();
-    await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
-
-    const nav = container.querySelector('nav[aria-label="Sidebar"]');
-    expect(nav).not.toBeNull();
-
-    // Order of top-level children: brand, Library, Trash, divider, Tags
-    // section, divider, Settings.
-    const children = Array.from(nav?.children ?? []) as HTMLElement[];
-    const settingsLink = screen.getByRole('link', { name: /settings/i });
-    const tagsHeader = screen.getByText('Tags');
-
-    const dividerIndices = children
-      .map((el, i) => ({ el, i }))
-      .filter(({ el }) => el.style.borderTop === '1px solid var(--line)')
-      .map(({ i }) => i);
-    const settingsIndex = children.findIndex((el) => el.contains(settingsLink));
-    const tagsSectionIndex = children.findIndex((el) => el.contains(tagsHeader));
-
-    // Two dividers: one above Tags, one between Tags and Settings.
-    expect(dividerIndices).toHaveLength(2);
-    const [firstDividerIndex, secondDividerIndex] = dividerIndices;
-    expect(firstDividerIndex).toBeLessThan(tagsSectionIndex);
-    expect(tagsSectionIndex).toBeLessThan(secondDividerIndex as number);
-    expect(secondDividerIndex).toBeLessThan(settingsIndex);
-    // Settings is the very last top-level child now — no flex spacer
-    // pinning it to the bottom anymore (that spacer used to be the last
-    // child, after Settings' own NavItemLink).
-    expect(settingsIndex).toBe(children.length - 1);
+  it('persists the collapsed Tags group without removing its header', async () => {
+    vi.mocked(fetch).mockImplementation(() =>
+      Promise.resolve(jsonResponse({ tags: tagCounts(['ai']) })),
+    );
+    const view = renderSidebar();
+    await screen.findByText('ai');
+    fireEvent.click(screen.getByRole('button', { name: 'Tags' }));
+    expect(screen.queryByText('ai')).toBeNull();
+    expect(localStorage.getItem('silo.tagsExpanded')).toBe('false');
+    view.unmount();
+    renderSidebar();
+    expect(screen.getByRole('button', { name: 'Tags' }).getAttribute('aria-expanded')).toBe(
+      'false',
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Tags' }));
+    await screen.findByText('ai');
+    localStorage.removeItem('silo.tagsExpanded');
   });
 
   it('renders the Tags header + tools calmly with zero tags (not gated on tag count)', async () => {
@@ -521,9 +489,7 @@ describe('Sidebar', () => {
     renderSidebar();
 
     await waitFor(() => expect(screen.getByText('Tags')).toBeDefined());
-    expect(screen.getByText('Tags').parentElement?.style.padding).toBe(
-      'var(--s-0-5) var(--s2-5) var(--s1) calc(var(--s2-5) + 3px)',
-    );
+    expect(screen.getByRole('button', { name: 'Tags' }).getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByRole('button', { name: /new tag/i })).toBeDefined();
     expect(screen.queryAllByText(/^#/)).toHaveLength(0);
     expect(screen.queryByText(/more$/)).toBeNull();

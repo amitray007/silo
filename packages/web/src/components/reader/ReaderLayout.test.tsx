@@ -640,17 +640,26 @@ describe('review regressions', () => {
   });
 
   it.each([
-    ['/', 'Library', { liveCount: 60000 }, '60000'],
+    ['/', 'Library', { liveCount: 60000 }, '60k'],
     ['/tags/mcp', '# mcp', { tagCount: 1234 }, '1234'],
-    ['/trash', 'Trash', { trashCount: 3456 }, '3456'],
+    ['/trash', 'Trash', { trashCount: 3456 }, '3.5k'],
   ] as const)(
     'shows the server total in the %s list header',
     async (route, title, counts, total) => {
       renderReader({ route, ...counts, trash: [makeTrashLink(a)] });
       const heading = await screen.findByRole('heading', { level: 1, name: title });
-      await waitFor(() =>
-        expect(heading.parentElement?.querySelector('.silo-pane-count')?.textContent).toBe(total),
-      );
+      if (title === 'Library' || title === 'Trash') {
+        fireEvent.click(within(heading).getByRole('button'));
+        await waitFor(() =>
+          expect(screen.getByRole('menuitem', { name: new RegExp(title) }).textContent).toContain(
+            total,
+          ),
+        );
+      } else {
+        await waitFor(() =>
+          expect(heading.parentElement?.querySelector('.silo-pane-count')?.textContent).toBe(total),
+        );
+      }
     },
   );
 

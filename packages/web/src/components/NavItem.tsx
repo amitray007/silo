@@ -37,13 +37,13 @@ export function NavItem({
   const sharedStyle = {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
+    gap: '8px',
     width: '100%',
     boxSizing: 'border-box' as const,
     textAlign: 'left' as const,
-    padding: '0 10px',
-    borderRadius: 8,
-    fontWeight: 500,
+    padding: '0 8px',
+    borderRadius: 6,
+    fontWeight: 400,
     cursor: 'pointer',
     textDecoration: 'none',
     color: active ? 'var(--ink)' : 'var(--mut)',
@@ -51,11 +51,7 @@ export function NavItem({
 
   const children = (
     <>
-      {icon && (
-        <span style={{ flex: 'none', display: 'grid', placeItems: 'center', width: 18 }}>
-          {icon}
-        </span>
-      )}
+      {icon && <span className="silo-nav-icon">{icon}</span>}
 
       <span
         style={{
@@ -75,7 +71,7 @@ export function NavItem({
             lineHeight: 1,
             fontSize: 'var(--text-xs)',
             fontWeight: 400,
-            color: 'var(--fnt)',
+            color: 'var(--ghost)',
           }}
         >
           {meta}
@@ -113,7 +109,6 @@ export function NavItem({
         WebkitAppearance: 'none',
         border: 0,
         fontFamily: 'inherit',
-        background: 'none',
       }}
     >
       {children}

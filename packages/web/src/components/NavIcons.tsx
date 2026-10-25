@@ -15,8 +15,8 @@
 export function LibraryIcon() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="16"
+      height="16"
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"
@@ -80,8 +80,8 @@ export function TrashIcon({
 export function SettingsIcon() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="16"
+      height="16"
       viewBox="0 0 16 16"
       fill="currentColor"
       stroke="none"
@@ -108,8 +108,8 @@ export function SettingsIcon() {
 export function LogOutIcon() {
   return (
     <svg
-      width="18"
-      height="18"
+      width="16"
+      height="16"
       viewBox="0 0 16 16"
       fill="none"
       stroke="currentColor"

@@ -271,9 +271,9 @@ describe('AppFrame', () => {
     fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('true');
 
-    fireEvent.click(screen.getByRole('link', { name: /trash/i }));
+    fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
-    expect(screen.getByText('trash content')).toBeDefined();
+    expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('false');
   });
 

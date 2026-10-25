@@ -53,7 +53,7 @@ describe('App routing', () => {
   it('renders the Library view (and its active nav item) at /', async () => {
     renderApp(['/']);
     // Both the sidebar and list header show the server total.
-    await waitFor(() => expect(screen.getAllByText('128')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText('128')).toHaveLength(1));
     await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
     expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();
     const libraryLink = screen.getByRole('link', { name: /library/i });
@@ -63,8 +63,11 @@ describe('App routing', () => {
   it('renders the Trash view + active nav item at /trash', async () => {
     renderApp(['/trash']);
     await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
-    const trashLink = screen.getByRole('link', { name: /trash/i });
-    expect(trashLink.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(
+      screen.getByRole('heading', { name: 'Trash' }).querySelector('button') as HTMLButtonElement,
+    );
+    expect(screen.getByRole('menuitem', { name: /Library/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Trash/ })).toBeDefined();
   });
 
   it('renders the tag-scoped Library view (title + empty state) at /tags/:name', async () => {
