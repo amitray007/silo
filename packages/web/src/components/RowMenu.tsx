@@ -105,10 +105,14 @@ export function LinkMenuActions({
           aria-expanded={tagsOpen}
           onClick={keep}
         >
-          <span className="silo-menu-icon">#</span>
+          <span className="silo-menu-icon">
+            <ReaderIcon name="hash" />
+          </span>
           <span>Tags</span>
           {tags.tags.length > 0 && <span className="silo-tag-count">{tags.tags.length}</span>}
-          <span className="silo-menu-chevron">›</span>
+          <span className="silo-menu-chevron">
+            <ReaderIcon name="right" />
+          </span>
         </button>
         <MenuPresence>
           {tagsOpen && (
@@ -124,7 +128,7 @@ export function LinkMenuActions({
         </MenuPresence>
       </div>
       <MenuAction
-        icon="✓"
+        icon={<ReaderIcon name="check" />}
         onClick={() => {
           selection.toggle(link.id);
           closeMenu();

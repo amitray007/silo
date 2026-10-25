@@ -1,13 +1,14 @@
 /* Approved reader meta, focused edit, and shared menu system. */
 .silo-menu-surface {
   width: 248px;
-  padding: 4px;
+  padding: 6px 0;
   border: 0;
   border-radius: 8px;
   background: var(--bg2);
-  box-shadow: var(--elev-2);
+  box-shadow: var(--menu-shadow);
   color: var(--ink);
-  font-size: 13px;
+  font-size: 16px;
+  line-height: 24px;
 }
 .silo-row-menu-portal {
   width: 236px;
@@ -40,15 +41,17 @@
 .silo-menu-item {
   height: 32px;
   min-height: 32px;
-  gap: 8px;
-  padding: 6px 12px;
-  border-radius: 5px;
-  font-weight: 500;
-  margin-bottom: 1px;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-weight: 400;
+  margin: 0 6px;
+  width: calc(100% - 12px);
+  line-height: 20px;
   background: none;
   color: var(--ink);
   text-decoration: none;
-  font-size: 13px;
+  font-size: 14px;
 }
 .silo-menu-icon {
   display: inline-grid;
@@ -56,11 +59,11 @@
   flex: none;
   width: 20px;
   height: 20px;
-  color: var(--mut);
+  color: inherit;
 }
 .silo-menu-icon svg {
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 20px;
 }
 .silo-menu-shortcut {
   margin-left: auto;
@@ -95,8 +98,8 @@
   opacity: 0.6;
 }
 .silo-menu-separator {
-  height: 1px;
-  margin: 5px -5px;
+  height: 0.5px;
+  margin: 6px 0;
   background: var(--line);
 }
 .silo-menu-chevron {
@@ -157,15 +160,18 @@
   padding: 6px 8px;
 }
 .silo-modal-header {
-  padding: 14px 16px 12px 18px;
+  padding: 28px 28px 0;
 }
 .silo-modal-header h2 {
-  font-size: 15px;
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: -0.2px;
 }
 .silo-modal-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--line);
-  background: color-mix(in srgb, var(--hov) 55%, var(--bg2));
+  padding: 0 28px 28px;
+  border: 0;
+  background: none;
 }
 .silo-modal-footer .silo-footer-spacer {
   flex: 1;
@@ -183,7 +189,7 @@
   background: var(--danger-soft);
 }
 .silo-url-card {
-  margin: 0 18px;
+  margin: 16px 28px 0;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -216,9 +222,9 @@
   text-decoration: none;
 }
 .silo-edit-fields {
-  padding: 14px 18px 18px;
+  padding: 16px 28px;
   display: grid;
-  gap: 14px;
+  gap: 16px;
   overflow: visible;
 }
 .silo-edit-field label {
@@ -236,15 +242,17 @@
   width: 100%;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--bg2);
+  background: var(--input-bg);
+  box-shadow: var(--input-shadow);
   color: var(--ink);
-  padding: 8px 10px;
+  padding: 8px 12px;
   font: inherit;
   font-size: 14px;
+  line-height: 20px;
 }
 .silo-edit-field textarea {
   resize: vertical;
-  min-height: 64px;
+  min-height: 80px;
   line-height: 1.5;
 }
 .silo-edit-description > textarea {
@@ -333,7 +341,7 @@
   z-index: 2;
 }
 .silo-confirm-content {
-  padding: 20px 20px 0;
+  padding: 28px 28px 0;
 }
 .silo-confirm-icon {
   width: 36px;
@@ -347,9 +355,10 @@
 }
 .silo-confirm-content h2 {
   margin: 0;
-  font-size: 15.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
+  font-size: 18px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
 }
 .silo-confirm-content p {
   margin: 4px 0 0;
@@ -379,12 +388,12 @@
 }
 
 .silo-confirm-layer .silo-modal-footer {
-  padding: 18px 20px 20px;
+  padding: 16px 28px 28px;
   border: 0;
   background: none;
 }
 .silo-palette-row {
-  border-radius: 6px;
+  border-radius: 8px;
   min-height: 32px;
 }
 .silo-reader-more-menu {
@@ -700,4 +709,139 @@ button.silo-note-text {
     transform: scale(0.95);
     opacity: 0;
   }
+}
+
+/* Collection menus use the compact recipe; context menus use the roomy recipe. */
+.silo-collection .silo-menu-surface {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  gap: 1px;
+  box-shadow: var(--elev-2);
+}
+.silo-collection .silo-menu-item {
+  min-height: 32px;
+  height: auto;
+  margin: 0;
+  width: 100%;
+  border-radius: 5px;
+  padding: 6px 12px;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 19.5px;
+  font-weight: 500;
+}
+.silo-collection .silo-menu-item:is(:focus, [aria-current="true"]) {
+  box-shadow: var(--menu-highlight-shadow);
+}
+.silo-menu-surface > .silo-menu-heading {
+  display: none;
+}
+.silo-menu-item kbd {
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+.silo-modal-panel:not(.silo-modal-panel-settings) {
+  position: relative;
+  border-radius: 16px;
+  width: min(var(--modal-width), 90vw);
+  max-height: calc(100dvh - 32px);
+}
+.silo-modal-header .silo-settings-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  border: 0;
+}
+.silo-modal-header .silo-settings-close:hover {
+  background: var(--icon-hover);
+}
+.silo-modal-header .silo-settings-close svg {
+  width: 20px;
+  height: 20px;
+}
+:root[data-theme="dark"] .silo-edit-field > .silo-field {
+  border: 0;
+}
+.silo-edit-field label {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.silo-menu-icon {
+  color: var(--menu-icon);
+}
+.silo-menu-item {
+  text-align: start;
+}
+.silo-modal-header h2 {
+  flex: 1;
+  text-align: left;
+}
+.silo-dialog-content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px;
+}
+.silo-dialog-content .silo-modal-header {
+  padding: 0;
+}
+.silo-dialog-content .silo-url-card {
+  margin: 16px 0 0;
+}
+.silo-dialog-content .silo-edit-fields {
+  padding: 16px 0;
+}
+.silo-dialog-content .silo-modal-footer {
+  padding: 0;
+}
+.silo-dialog-content .silo-confirm-content {
+  padding: 0;
+}
+.silo-dialog-content .silo-confirm-content + .silo-modal-footer {
+  padding-top: 16px;
+}
+.silo-dialog-content .silo-modal-body {
+  padding: 16px 0 0;
+}
+.silo-edit-field textarea {
+  min-height: 80px;
+  resize: none;
+}
+.silo-dialog-content .silo-settings-close {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  gap: 6px;
+  padding: 0;
+}
+
+@media (min-width: 720px) {
+  .silo-row-menu-portal,
+  .silo-row-menu-portal .silo-menu-surface,
+  .silo-reader-more-menu {
+    width: max-content;
+  }
+}
+
+.silo-edit-field > .silo-field:focus-visible,
+.silo-capture input:focus-visible,
+.silo-tag-tokens:focus-within {
+  outline: none;
+  border-color: var(--toggle-on);
+  box-shadow:
+    var(--input-shadow),
+    0 0 0 2px color-mix(in oklch, var(--toggle-on) 20%, transparent);
+}
+.silo-tag-tokens {
+  background: var(--input-bg);
+  box-shadow: var(--input-shadow);
+}
+:root[data-theme="dark"] .silo-tag-tokens,
+:root[data-theme="dark"] .silo-capture input {
+  border: 0;
 }

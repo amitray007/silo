@@ -12,6 +12,7 @@ import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderMeta } from './ReaderMeta';
 import { ReaderPlayer } from './ReaderPlayer';
+import { ReaderSegment } from './ReaderSegment';
 import { type OriginalState, useOriginal } from './useOriginal';
 import type { useReaderActions } from './useReaderActions';
 import { seekChapter, YouTubeStats } from './YouTubeDetails';
@@ -307,30 +308,7 @@ export function ReaderPane({
           {title}
         </button>
         <div className="silo-reader-viewtools">
-          <div className="silo-reader-segment" role="tablist" aria-label="Link view">
-            {(['reader', 'original'] as const).map((value) => (
-              <button
-                type="button"
-                role="tab"
-                id={`${id}-${value}`}
-                aria-controls={`${id}-panel`}
-                key={value}
-                aria-selected={tab === value}
-                disabled={!link}
-                onClick={() => setTab(value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                    event.preventDefault();
-                    const next = value === 'reader' ? 'original' : 'reader';
-                    setTab(next);
-                    document.getElementById(`${id}-${next}`)?.focus();
-                  }
-                }}
-              >
-                {value === 'reader' ? 'Reader' : 'Live'}
-              </button>
-            ))}
-          </div>
+          <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
         </div>
         <div className="silo-reader-right">
           <div className="silo-reader-desktop">

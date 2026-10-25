@@ -28,7 +28,7 @@ export function ConfirmDialog({
   };
   return (
     <ModalShell
-      width={380}
+      width={448}
       ariaLabel={title}
       role="alertdialog"
       describedBy={descriptionId}

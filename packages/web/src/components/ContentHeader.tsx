@@ -56,6 +56,7 @@ function CollectionTitle({ title }: { title: string }) {
             {(['Library', 'Trash'] as const).map((name) => (
               <MenuAction
                 key={name}
+                pressed={name === title}
                 icon={<ReaderIcon name={name === 'Library' ? 'sidebar' : 'trash'} />}
                 onClick={() => {
                   setOpen(false);

@@ -296,8 +296,8 @@ describe('RowMenu', () => {
       'Open originalo',
       'Copy linkc',
       'Edite',
-      '#Tags1›',
-      '✓Select',
+      'Tags1',
+      'Select',
       'Move to trash⌫',
     ]);
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Open original/ }));

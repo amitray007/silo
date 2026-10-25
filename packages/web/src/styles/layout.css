@@ -191,6 +191,7 @@
   padding-right: 22px;
 }
 .silo-row-title {
+  flex: 1;
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
@@ -332,6 +333,8 @@
   cursor: pointer;
   text-decoration: none;
   font: inherit;
+  font-weight: 500;
+  gap: 6px;
 }
 .silo-reader-iconbtn:disabled {
   opacity: 0.35;
@@ -348,6 +351,10 @@
   gap: 2px;
 }
 .silo-reader-segment button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
   min-height: 26px;
   line-height: 19.5px;
   padding: 4px 10px;
@@ -361,13 +368,11 @@
   cursor: pointer;
 }
 .silo-reader-segment button[aria-selected="true"] {
-  background: var(--segment-on);
+  background: none;
   color: var(--ink);
-  box-shadow: var(--segment-shadow);
+  box-shadow: none;
 }
-:root[data-theme="dark"] .silo-reader-segment button[aria-selected="true"] {
-  background: var(--segment-on);
-}
+
 .silo-reader-back {
   display: none;
 }
@@ -1318,6 +1323,8 @@ div.silo-reader-notecard {
   display: none;
 }
 .silo-row-actions {
+  padding-left: 12px;
+  background: linear-gradient(to right, transparent, var(--row-hover) 12px);
   display: flex;
   position: absolute;
   right: 8px;
@@ -1341,7 +1348,7 @@ div.silo-reader-notecard {
   pointer-events: auto;
 }
 .silo-link-row:is(:focus-within, [data-active="true"]) .silo-row-titleline {
-  padding-right: 100px;
+  padding-right: 0;
 }
 .silo-row-note-icon {
   position: absolute;
@@ -1357,7 +1364,7 @@ div.silo-reader-notecard {
 }
 .silo-link-row:has(.silo-row-note-icon):is(:focus-within, [data-active="true"])
   .silo-row-titleline {
-  padding-right: 124px;
+  padding-right: 24px;
 }
 .silo-capture {
   position: relative;
@@ -1372,9 +1379,10 @@ div.silo-reader-notecard {
   z-index: 21;
   right: 0;
   top: 36px;
-  width: 300px;
+  width: 256px;
   max-width: calc(100vw - 32px);
-  padding: 16px;
+  padding: 0;
+  box-shadow: var(--menu-shadow);
 }
 .silo-capture-title {
   font-size: 14px;
@@ -1421,13 +1429,13 @@ div.silo-reader-notecard {
     pointer-events: auto;
   }
   .silo-link-row:hover .silo-row-titleline {
-    padding-right: 100px;
+    padding-right: 0;
   }
   .silo-link-row:hover .silo-row-note-icon {
     right: 108px;
   }
   .silo-link-row:has(.silo-row-note-icon):hover .silo-row-titleline {
-    padding-right: 124px;
+    padding-right: 24px;
   }
 }
 @media (max-width: 719px), (hover: none) {
@@ -1571,6 +1579,11 @@ div.silo-reader-notecard {
 .silo-tags-header {
   gap: 0;
   margin: 0;
+  padding: 0;
+}
+.silo-tags-title {
+  display: flex;
+  align-self: flex-start;
   padding: 0 8px;
 }
 .silo-tags-toggle {
@@ -1633,9 +1646,7 @@ div.silo-reader-notecard {
 .silo-row-wrap {
   padding-top: 1px;
 }
-.silo-row-title {
-  flex: 1;
-}
+
 .silo-reader-icon {
   width: 20px;
   height: 20px;
@@ -1646,13 +1657,90 @@ div.silo-reader-notecard {
   fill: none;
   flex: none;
 }
-.silo-reader-iconbtn {
-  font-weight: 500;
-  gap: 6px;
-  padding: 0;
-}
+
 @media (hover: hover) and (pointer: fine) {
   .silo-link-row:hover:not([data-active="true"]) {
     background: var(--row-hover);
   }
+}
+
+.silo-capture-heading {
+  padding: 12px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.silo-capture-heading .silo-capture-title {
+  margin: 0;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+.silo-capture-heading .silo-capture-hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  line-height: 16px;
+}
+.silo-capture-hint kbd {
+  background: var(--hov);
+  border-radius: 4px;
+  padding: 2px 4px;
+  font-size: 11px;
+}
+.silo-capture-entry {
+  padding: 8px;
+  border-top: 0.5px solid var(--line);
+}
+.silo-capture-entry form {
+  flex-direction: column;
+}
+.silo-capture input {
+  background: var(--input-bg);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  line-height: 20px;
+  height: 38px;
+  box-shadow: var(--input-shadow);
+}
+.silo-capture-entry .silo-settings-btn {
+  width: 100%;
+  justify-content: center;
+}
+.silo-reader-viewtools {
+  gap: normal;
+}
+
+.silo-reader-segment {
+  position: relative;
+  isolation: isolate;
+  align-items: center;
+}
+
+.silo-reader-segment-chip {
+  position: absolute;
+  z-index: -1;
+  left: 2px;
+  top: 2px;
+  bottom: 2px;
+  border-radius: 6px;
+  background: var(--segment-on);
+  box-shadow: var(--segment-shadow);
+  transition:
+    transform 180ms var(--ease-out),
+    width 180ms var(--ease-out);
+}
+.silo-reader-segment button:hover:not([aria-selected="true"]) {
+  background: var(--row-hover);
+  color: var(--mut);
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-reader-segment-chip {
+    transition: none;
+  }
+}
+
+.silo-link-row[data-active="true"] .silo-row-actions {
+  background: linear-gradient(to right, transparent, var(--sel) 12px);
 }
