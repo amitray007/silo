@@ -703,8 +703,8 @@
 .silo-reader-prose {
   /* After shiori.sh prose: body in the secondary tone, emphasis in ink. */
   color: var(--mut);
-  font-size: 16px;
-  line-height: 1.7;
+  font-size: 15px;
+  line-height: 1.75;
   overflow-wrap: anywhere;
 }
 .silo-reader-prose :is(h1, h2, h3, h4, h5, h6, strong, b, a, code, kbd, samp, th, mark) {
@@ -714,20 +714,20 @@
   color: var(--fnt);
 }
 .silo-reader-prose :is(h1, h2, h3, h4, h5, h6) {
-  line-height: 1.25;
+  line-height: 1.33;
   font-weight: 600;
-  letter-spacing: -0.025em;
-  margin: 2em 0 0.65em;
+  letter-spacing: -0.5px;
+  margin: 40px 0 20px;
   text-wrap: pretty;
 }
 .silo-reader-prose h1 {
   font-size: 26px;
 }
 .silo-reader-prose :where(h2) {
-  font-size: 21px;
+  font-size: 20px;
 }
 .silo-reader-prose h3 {
-  font-size: 18px;
+  font-size: 17px;
 }
 .silo-reader-prose h4 {
   font-size: 16px;
@@ -740,7 +740,7 @@
   letter-spacing: 0.02em;
 }
 .silo-reader-prose :is(p, ul, ol, dl, pre, figure, blockquote, .silo-reader-table) {
-  margin: 0 0 1.25em;
+  margin: 0 0 16px;
 }
 .silo-reader-prose :is(ul, ol) {
   padding-left: 24px;
@@ -758,7 +758,7 @@
 }
 .silo-reader-prose a {
   text-underline-offset: 2px;
-  text-decoration-color: var(--line-2);
+  text-decoration: underline;
 }
 .silo-reader-prose a:hover {
   text-decoration-color: currentColor;
@@ -767,7 +767,7 @@
   text-decoration: none;
 }
 .silo-reader-prose :is(code, kbd, samp) {
-  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-family: var(--font-mono);
   font-size: 0.85em;
   font-weight: 500;
   background: var(--hov);
@@ -775,9 +775,12 @@
   padding: 2px 6px;
 }
 .silo-reader-prose pre {
-  padding: 16px;
+  padding: 12px 16px;
   background: var(--hov);
-  border: 1px solid var(--line);
+  border: 0;
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 24px;
   border-radius: 8px;
   overflow-x: auto;
   white-space: pre;
@@ -785,9 +788,9 @@
 }
 .silo-reader-prose pre code {
   padding: 0;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 400;
-  line-height: 1.8;
+  line-height: 24px;
   background: none;
 }
 .silo-reader-table {

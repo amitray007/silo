@@ -874,7 +874,7 @@ describe('review regressions', () => {
     expect(container.querySelector('.silo-reader-prose')).toBeNull();
   });
 
-  it('opens every newly selected link on the Live tab, listed before Reader', async () => {
+  it('opens every newly selected link on Live while listing Reader first', async () => {
     renderReader({ route: '/?link=a' });
     await waitFor(() =>
       expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe(
@@ -885,7 +885,7 @@ describe('review regressions', () => {
       reader()
         .getAllByRole('tab')
         .map((tab) => tab.textContent),
-    ).toEqual(['Live', 'Reader']);
+    ).toEqual(['Reader', 'Live']);
     await selected();
     fireEvent.click(screen.getByText('Second link'));
     await waitFor(() =>

@@ -1,9 +1,7 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
 import { purgeCountdownDays } from '../../lib/buckets';
-import { relativeTimeFromNow } from '../../lib/relativeTime';
-import { deriveDomain, deriveTitleFromUrl } from '../../lib/url';
-import { Chip } from '../Chip';
+import { deriveTitleFromUrl } from '../../lib/url';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
 import { embedFor } from './embedFor';
@@ -179,7 +177,6 @@ function ReaderArticle({
   purgeWindowDays: number;
   loading: boolean;
 }) {
-  const domain = deriveDomain(link.url);
   const embed = embedFor(link.url, link.sourceData);
   const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider) ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
@@ -213,14 +210,6 @@ function ReaderArticle({
       {video && <ReaderPlayer embed={video} url={link.url} />}
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
       <YouTubeStats source={link.sourceData} />
-      <div className="silo-reader-source">
-        <Chip domain={domain} size={20} />
-        <span>{link.siteName || domain}</span>
-        <span className="silo-reader-dot">•</span>
-        <span>{relativeTimeFromNow(link.createdAt)}</span>
-        {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
-        {link.captureStatus === 'enriching' && <span className="silo-capturing">◌ Capturing</span>}
-      </div>
       <ReaderMeta key={link.id} link={link} trashed={trashed} />
       <ArticleBody link={link} loading={loading} />
     </article>
@@ -316,7 +305,7 @@ export function ReaderPane({
         </button>
         <div className="silo-reader-viewtools">
           <div className="silo-reader-segment" role="tablist" aria-label="Link view">
-            {(['original', 'reader'] as const).map((value) => (
+            {(['reader', 'original'] as const).map((value) => (
               <button
                 type="button"
                 role="tab"
@@ -340,21 +329,23 @@ export function ReaderPane({
             ))}
           </div>
         </div>
-        <div className="silo-reader-desktop">
-          <ReaderActions
+        <div className="silo-reader-right">
+          <div className="silo-reader-desktop">
+            <ReaderActions
+              actions={actions}
+              disabled={!link}
+              trashed={trashed}
+              original={shownOriginal}
+            />
+          </div>
+          <ReaderMore
+            key={selectedId}
             actions={actions}
             disabled={!link}
             trashed={trashed}
-            original={shownOriginal}
+            link={link}
           />
         </div>
-        <ReaderMore
-          key={selectedId}
-          actions={actions}
-          disabled={!link}
-          trashed={trashed}
-          link={link}
-        />
       </div>
       {actions.feedback && (
         <div className="silo-toast" role="status">
