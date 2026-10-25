@@ -9,6 +9,7 @@ const paths = {
   copy: 'M9 7V3h12v12h-4M3 9h12v12H3z',
   edit: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
   external: 'M14 3h7v7M21 3 10 14M10 5H3v16h16v-7',
+  arrowUpRight: 'M7 17 17 7M8.5 7H17v8.5',
   trash: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6',
   restore: 'M4 12a8 8 0 1 0 2-5M4 3v5h5',
   plus: 'M12 5v14M5 12h14',

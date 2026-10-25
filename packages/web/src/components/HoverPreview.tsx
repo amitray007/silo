@@ -5,6 +5,7 @@ import type { LinkJson, SettingsMap, SourceData } from '../api/types';
 import { previewImageUrl } from '../lib/previewImage';
 import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
+import { ReaderIcon } from './reader/ReaderIcon';
 
 /** Where the popover is pinned — `useHoverPreview` computes this from the hovered row's bounding rect, already clamped to the viewport (v3's `pvTop`/`pvLeft`). */
 export type HoverPreviewPosition = { top: number; left: number };
@@ -656,7 +657,7 @@ function SourceVariant({
  *
  * `onMouseEnter`/`onMouseLeave` call the caller's `keep`/`hide` (v3's
  * `pvKeep`/`pvHide`) so moving the pointer FROM the row INTO the card (e.g.
- * to click `open ↗`) cancels the pending close instead of racing it.
+ * to click `Open`) cancels the pending close instead of racing it.
  */
 export function HoverPreview({
   link,
@@ -684,7 +685,7 @@ export function HoverPreview({
   const { data: settings } = useSettings();
 
   return createPortal(
-    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — the only actual control inside (the `open ↗` anchor) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
+    // biome-ignore lint/a11y/noStaticElementInteractions: pointer-hover handoff only (v3's `pvKeep`/`pvHide`) — the only actual control inside (the `Open` anchor) is independently keyboard-operable; this wrapper just extends the hover region onto the card itself.
     <div
       className="silo-popover"
       onMouseEnter={onKeep}
@@ -754,9 +755,9 @@ export function HoverPreview({
           href={link.url}
           target="_blank"
           rel="noopener"
-          className="silo-edit-footer-btn"
+          className="silo-edit-footer-btn silo-preview-open"
           style={{
-            // Brightened from `--fnt` (direct user feedback): "Open ↗" is
+            // Brightened from `--fnt` (direct user feedback): "Open" is
             // this card's own primary affordance — the actual link-out
             // action, not meta text like the domain/time beside it.
             color: 'var(--mut)',
@@ -764,7 +765,8 @@ export function HoverPreview({
             fontWeight: 500,
           }}
         >
-          Open ↗
+          Open
+          <ReaderIcon name="arrowUpRight" size={16} />
         </a>
       </div>
     </div>,

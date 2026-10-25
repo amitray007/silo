@@ -1062,6 +1062,16 @@
 .silo-edit-footer-btn {
   background: var(--bg2);
 }
+.silo-preview-open {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+.silo-preview-open svg {
+  width: 16px;
+  height: 16px;
+  stroke-width: 2;
+}
 :root[data-theme="dark"] .silo-edit-footer-btn {
   background: var(--input-bg);
 }
