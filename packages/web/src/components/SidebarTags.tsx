@@ -158,14 +158,14 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
           >
             <span className="silo-tags-label">Tags</span>
             <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
               className="silo-section-caret"
+              data-expanded={expanded}
               aria-hidden="true"
-              style={{ transform: expanded ? undefined : 'rotate(-90deg)' }}
             >
-              <path d="m2 3.5 3 3 3-3Z" />
+              <path d="m7 10 5 5 5-5" />
             </svg>
           </button>
         </div>
