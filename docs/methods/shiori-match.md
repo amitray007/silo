@@ -208,3 +208,55 @@ Shadows (light / dark), from shiori's `--control-shadow` and `--popup-shadow`:
   tests.
 - Use the QA API on port 8787 (database copy `silo_redesign_qa`). Never touch
   the real `silo` database.
+
+## Pass 2: exact copy (2026-10-26)
+
+Amit: keep analyzing and copy shiori exactly (sidebar, icons, buttons,
+modals, popovers, command palette, search and input boxes, alignment,
+padding, font, size, weight, spacing). Do not copy shiori's settings: restore
+silo's settings modal.
+
+**Source of truth.** Shiori is Tailwind v4 plus Base UI, so each element's
+class list is its style recipe. Captured from the logged-in app:
+- Class-annotated HTML (svg paths truncated): `/tmp/copy-spec/sidebar.html`,
+  `list.html`, `reader.html`, and `clean-*.html` for the add popover,
+  collection menu, row More menu, reader More menu, command palette (empty and
+  typed), and the feedback modal (the reference for silo's modals).
+- Computed values: `/tmp/copy-spec/shiori-s1.json` (sidebar),
+  `shiori-s2.json` (list, rows, reader header).
+- Screenshots, dark and light: `/tmp/copy-spec/shots/`.
+- Utility definitions (`focus-ring`, `shadow-control`, `ring-border`,
+  `bg-elevated-secondary`, `text-icon-*`, and the rest):
+  `/tmp/shiori-css/pretty-globals-Dqh-4ozJ.css`.
+
+**Corrections to pass 1.**
+- Font is Inter Variable on every element (`* { font-family: Inter
+  Variable, Inter, sans-serif }`), not the system stack. Self-host it (for
+  example `@fontsource-variable/inter`, OFL); no third-party font requests.
+- Icons are 20px boxes, `viewBox="0 0 24 24"`, stroke 1.5, round caps and
+  joins, `currentColor`. Match that style. Do not copy shiori's path data;
+  redraw silo's icons on that grid or use a permissive set such as Lucide at
+  stroke 1.5.
+- Sidebar rows are `h-8 px-2 py-1.5 gap-2 rounded-md text-sm`; icon 20px.
+  Section headers `text-[13px] font-medium` tertiary with a 10px filled caret;
+  section block `mt-3`. Groups `px-2 pt-1 pb-2 gap-0.5`. Top bar 44px with the
+  logo link `p-1 rounded-full` and a collapse button that shows only on
+  sidebar hover.
+- Buttons: `rounded-lg`, `font-medium`, `motion-safe:active:scale-[0.96]`,
+  `focus-ring` (2px tertiary outline, offset 2). Icon buttons `size-8`,
+  tertiary, hover `palette-200` light / `palette-800` dark.
+- Row hover bg is `oklch(23.3% 0 0)` in dark; selected `oklch(30.5% 0 0)`.
+- Reader body text in the app is 16px/28px secondary (not 15px).
+- Menus: two recipes. Collection menu: `p-1 gap-px rounded-lg min-w-40`,
+  items `h-8 px-3 py-1.5 text-[13px] font-medium rounded-[5px]`. Context
+  menus (row and reader More): `py-1.5 rounded-lg ring-border shadow-md`,
+  items `mx-1.5 px-2 py-1.5 text-sm rounded-lg gap-2.5`, icon 20px, 0.5px
+  separators `my-1.5`, danger item red.
+- Command palette: copy `clean-cmdk-*.html` exactly (layout, input row,
+  result rows, scroll area, backdrop).
+
+**Settings.** Restore silo's settings modal and its tabs as they were before
+unit 6 (commit 2020e44 has the original). Remove the `/settings/:tab` page
+route and redirect any `/settings` URL to open the modal. Keep the "Compact
+links" preference inside silo's Preferences tab. Silo's modal may use the new
+tokens, font, and controls.
