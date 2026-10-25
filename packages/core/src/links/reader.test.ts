@@ -41,8 +41,14 @@ describeIfPg('Reader storage (Postgres)', () => {
       if (status !== 'enriching')
         await core.recordEnrichment(created.id, { status, text: 'Keep text' });
       const before = await core.getById(created.id);
-      expect(await core.recordReaderUpgrade(created.id, content)).toBe(true);
-      expect(await core.getById(created.id)).toEqual({ ...before, ...content });
+      expect(await core.recordReaderUpgrade(created.id, content, 'Recovered text')).toBe(true);
+      const after = await core.getById(created.id);
+      expect(after).toEqual({
+        ...before,
+        searchVector: after?.searchVector,
+        ...content,
+        extractedText: before?.extractedText || 'Recovered text',
+      });
       expect(
         await core.recordReaderUpgrade(created.id, {
           contentHtml: '<p>Do not replace</p>',

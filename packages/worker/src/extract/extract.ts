@@ -185,7 +185,10 @@ export function buildExtractVirtualConsole(): VirtualConsole {
  * Run Readability over a script-and-remote-resource-disabled jsdom DOM.
  * Keep article HTML and text; use main/article/body when the article is too thin.
  */
-function extractReadableText(url: string, dom: JSDOM): { text?: string; reader?: ReaderContent } {
+function extractReadableText(
+  url: string,
+  dom: JSDOM,
+): { text?: string; reader?: ReaderContent | undefined } {
   const document = dom.window.document;
   normalizeLazyImages(document);
   // Readability mutates its input. Keep the original for fallback and embedded JSON.
@@ -208,6 +211,13 @@ function extractReadableText(url: string, dom: JSDOM): { text?: string; reader?:
     url,
   );
   return { ...(text ? { text } : {}), ...(reader ? { reader } : {}) };
+}
+
+/** Use textContent so recovered text cannot introduce publisher markup. */
+function readerFromText(dom: JSDOM, text: string, url: string): ReaderContent | undefined {
+  const paragraph = dom.window.document.createElement('p');
+  paragraph.textContent = text;
+  return sanitizeReaderContent(paragraph.outerHTML, url);
 }
 
 /** SPA/JS-wall heuristic over the raw HTML string (cheap, no DOM needed). */
@@ -334,15 +344,15 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
     let text = readable.text;
     if ((text?.length ?? 0) < FULL_TEXT_THRESHOLD) {
       text = applyEmbeddedJsonRecovery(dom, fields, text);
+      if (text !== readable.text) {
+        readable.reader = readerFromText(dom, text ?? '', url);
+      }
     }
     // YouTube ships a client-rendered shell, not a transcript. Keep the video's
     // meta description instead of turning its navigation/footer into an article.
     if (detectSource(url).kind === 'youtube' && fields.description) {
       text = normalizeWhitespace(fields.description);
-      const paragraph = dom.window.document.createElement('p');
-      paragraph.textContent = fields.description;
-      const reader = sanitizeReaderContent(paragraph.outerHTML, url);
-      if (reader) readable.reader = reader;
+      readable.reader = readerFromText(dom, fields.description, url);
     }
     const result = buildResult(fields, text);
     if (readable.reader) result.reader = readable.reader;

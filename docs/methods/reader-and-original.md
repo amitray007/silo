@@ -123,8 +123,9 @@ per-URL table: capture status, text length, Reader result, Original mode.
      enricher trashes links on 404/410, so neither is safe for a bulk upgrade.
      Add a separate, resumable "reader upgrade" job (and a command such as
      `pnpm --filter @silo/app reader-upgrade`) for live links of any status.
-     It only fills `content_html`/`content_images`, keeps existing data and
-     status on failure, and never trashes. Cap stored HTML (for example
+     It fills missing `content_html`/`content_images` and null or empty
+     `extracted_text`, preserves non-empty text and status, keeps existing data
+     on failure, and never trashes. Cap stored HTML (for example
      1 MB) by dropping trailing blocks, never by cutting markup.
 4. **Player embeds.** A pure web function `embedFor(url, sourceData)` returns
    `{ provider, src, aspect }` from URL patterns. It never uses provider-
@@ -202,3 +203,78 @@ URL with curl and in the browser.
 2. One commit per unit, staged by explicit path, ending with
    `Co-Authored-By: Claude <noreply@anthropic.com>`.
 3. Report: SHA, files, checks, the per-URL table, and anything not done.
+
+## Extractor comparison (Unit 1)
+
+**Decision (2026-10-25): keep Readability.** Defuddle is not clearly better across
+this set. Its Node path recovers the HN opening post, the Linear method index,
+and more Cloudflare entries. It returns no RFC text, reduces BBC to a short
+fragment, and includes replies in the X result. These tradeoffs do not justify
+replacing the current extractor.
+
+Method: fetch each of the 26 URLs once with `safeFetch`, then reuse those exact
+responses for every parser run. Redirects follow the production fetch policy.
+Twenty-five responses were HTML; the arXiv PDF was excluded from HTML parsing.
+Run Readability 0.6.0 and Defuddle 0.19.6 on separate inert jsdom 30.1.1 documents,
+with the same image normalization. Also run Defuddle's Node API with its bundled
+linkedom adapter and `useAsync: false`; no parser may fetch another page or API.
+Lengths are whitespace-normalized JavaScript string lengths (UTF-16 code units),
+measured before the Reader sanitizer, HTML cap, embedded JSON recovery, or YouTube
+metadata fallback. Inspect each output's prose and opening/closing sections for
+main-content presence and navigation/footer leakage. Listing pages are judged
+against their entries; the HN page is judged against its post and discussion.
+
+Defuddle on jsdom logged `Selector exceeds maximum allowed length of 2048` and
+frequently returned page chrome. The Node/linkedom run avoids using that
+compatibility failure as the only basis for the decision. `R` is Readability
+with jsdom; `D-J` is Defuddle with jsdom; `D-N` is Defuddle Node/linkedom. Presence
+compares R with D-N. A larger length alone does not mean better extraction.
+
+| URL | R chars | D-J chars | D-N chars | Main content R / D-N | Content and junk assessment |
+| --- | ---: | ---: | ---: | --- | --- |
+| https://paulgraham.com/greatwork.html | 66,518 | 66,518 | 66,721 | yes / yes | Both keep the essay and acknowledgements; no site navigation. |
+| https://simonwillison.net/2024/Dec/31/llms-in-2024/ | 40,570 | 42,185 | 39,613 | yes / yes | Both keep the article and its monthly link list; Node drops the date. |
+| https://www.joelonsoftware.com/2000/08/09/the-joel-test-12-steps-to-better-code/ | 20,093 | 22,997 | 20,040 | yes / yes | Both keep all 12 steps; no site menu or footer in Node. |
+| https://martinfowler.com/articles/microservices.html | 34,044 | 50,584 | 40,800 | yes / yes | Node also keeps article notes and revision history; Readability is shorter. |
+| https://en.wikipedia.org/wiki/Hypertext | 30,249 | 37,107 | 26,574 | yes / yes | Both keep article prose; Node moves citations and drops some link sections. |
+| https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Frame-Options | 3,265 | 12,763 | 3,057 | yes / yes | Both keep header guidance; Node drops See also links. |
+| https://maggieappleton.com/garden-history | 29,483 | 58,772 | 28,926 | yes / yes | Both keep the essay; Node includes footnotes and image descriptions. |
+| https://stephango.com/defuddle | 549 | 682 | 487 | yes / yes | Node drops project resource links; both keep the short article. |
+| https://til.simonwillison.net/youtube/fixing-153-embed | 1,370 | 1,504 | 1,413 | yes / yes | Both keep the explanation, code, and edit/history links. |
+| https://react.dev/learn | 11,463 | 13,644 | 11,602 | yes / yes | Both keep tutorial prose and examples; no global nav in Node. |
+| https://modelcontextprotocol.io/introduction | 1,853 | 3,158 | 2,196 | yes / yes | Both keep the introduction; Node includes more next-step cards. |
+| https://linear.app/method | 154 | 898 | 492 | partial / yes | Readability keeps the introduction only; Node also keeps the method index. |
+| https://github.com/mozilla/readability | 6,572 | 10,301 | 6,587 | yes / yes | Both keep the README; Node excludes GitHub menus and footer. |
+| https://github.com/kepano/defuddle | 11,820 | 15,298 | 11,807 | yes / yes | Both keep the README; Node excludes GitHub menus and footer. |
+| https://news.ycombinator.com/item?id=44067409 | 12,858 | 17,109 | 17,109 | partial / yes | Readability starts in comments and misses the opening post; Node keeps post and comment metadata. |
+| https://www.youtube.com/watch?v=jNQXAC9IVRw | 0 | 0 | 0 | no / no | Empty static body; neither provides video text or a transcript. |
+| https://www.youtube.com/watch?v=aircAruvnKk | 0 | 0 | 0 | no / no | Empty static body; neither provides video text or a transcript. |
+| https://youtu.be/zjkBMFhNj_g | 0 | 0 | 0 | no / no | Empty static body after redirect; neither provides a transcript. |
+| https://vimeo.com/76979871 | 206 | 206 | 118 | no / no | Both extract a human-verification wall, not video content. |
+| https://arxiv.org/abs/1706.03762 | 1,798 | 4,889 | 1,924 | yes / yes | Both keep the abstract and version history; Node also keeps minor utility links. |
+| https://arxiv.org/pdf/1706.03762 | 0 | 0 | 0 | N/A / N/A | PDF fetched once; excluded from HTML parsers, lengths shown as 0. |
+| https://www.rfc-editor.org/rfc/rfc7034.html | 23,599 | 23,599 | 0 | yes / no | Readability keeps the RFC including page headers; Node returns no text. |
+| https://blog.cloudflare.com/ | 1,630 | 7,900 | 4,979 | partial / yes | Listing, not an article: Node keeps more entries; Readability keeps a subset. |
+| https://www.bbc.com/news | 7,015 | 8,684 | 375 | yes / partial | Listing: Readability retains many stories plus navigation; Node retains only 375 characters. |
+| https://x.com/karpathy/status/1886192184808149383 | 997 | 4,109 | 2,628 | yes / yes | Readability isolates the target post; Node includes replies and engagement counts. |
+| https://substack.com/@soamjena/note/c-218382601 | 337 | 322 | 322 | yes / yes | Both keep the note; Node drops the posting timestamp. |
+
+D-J retains navigation/footer text on Simon Willison, Joel, Fowler, Wikipedia,
+MDN, Maggie Appleton, Steph Ango, React, MCP, Linear, both GitHub repositories,
+arXiv abs, Cloudflare, BBC, and X. R and D-N have the per-page limits noted above.
+None of these static parsers overcomes a video shell or a verification wall.
+The comparison checks fetched HTML, not authenticated or browser-rendered pages.
+The parser interfaces follow the upstream [Readability documentation](https://github.com/mozilla/readability)
+and [Defuddle Node documentation](https://github.com/kepano/defuddle#nodejs).
+
+The Reader cap regression uses 12,000 paragraphs (1,284,040 input bytes). A local
+run took 521 ms and stored 1,048,512 bytes, below the 1 MiB cap. The test requires
+completion within five seconds. This is a local synthetic measurement.
+
+The QA upgrade used only `silo_reader_qa`: 8 upgraded, 0 unchanged, 1 unavailable
+(the PDF). It filled missing text and its generated search index only; all
+statuses, timestamps, existing Reader HTML/images, and non-empty text stayed the
+same. Paul Graham's article now has 66,518 text characters while its status
+remains `partial`. YouTube stores its meta description, not a transcript; Vimeo
+still contains a verification wall. Existing Reader HTML is preserved by design,
+so the upgrade does not rewrite prior image selections or shell captures.

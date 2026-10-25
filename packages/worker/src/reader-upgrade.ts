@@ -10,7 +10,7 @@ export async function upgradeReader(
   deps = { safeFetch, extract },
 ): Promise<ReaderUpgradeOutcome> {
   const link = await getById(linkId);
-  if (!link || link.contentHtml !== null) return 'unchanged';
+  if (!link || (link.contentHtml !== null && link.extractedText)) return 'unchanged';
   const result = await deps.safeFetch(link.url);
   if (!result.ok) return 'unavailable';
   const extracted = await deps.extract({
@@ -19,7 +19,9 @@ export async function upgradeReader(
     contentType: result.contentType,
   });
   if (!extracted.reader) return 'unavailable';
-  return (await recordReaderUpgrade(linkId, extracted.reader)) ? 'upgraded' : 'unchanged';
+  return (await recordReaderUpgrade(linkId, extracted.reader, extracted.text))
+    ? 'upgraded'
+    : 'unchanged';
 }
 
 /** Sequential, bounded pages. Successful rows are the durable resume checkpoint. */

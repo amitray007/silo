@@ -68,27 +68,62 @@ function httpUrl(raw: string | null, baseUrl: string, stripHash = false): string
   }
 }
 
-/** Normalize publisher lazy attributes before the article extractor removes them. */
+/** Choose the largest declared width or density; an existing src still wins. */
+function bestSrcset(srcset: string, baseUrl: string): string | undefined {
+  let best: string | undefined;
+  let largest = 0;
+  for (const candidate of srcset.split(',')) {
+    const [source, descriptor = '1x'] = candidate.trim().split(/\s+/);
+    const size = /^(\d+(?:\.\d+)?)[wx]$/.exec(descriptor);
+    const score = size ? Number(size[1]) : 0;
+    const url = httpUrl(source ?? null, baseUrl);
+    if (url && score > largest) {
+      best = url;
+      largest = score;
+    }
+  }
+  return best;
+}
+
+/** Resolve image targets before Readability rewrites or removes publisher attributes. */
 export function normalizeLazyImages(document: Document): void {
+  const base = document.querySelector('base[href]');
+  const baseUrl = httpUrl(base?.getAttribute('href') ?? null, document.URL) ?? document.URL;
+  // An unsupported document base must not affect Readability's URL processing either.
+  if (base && !httpUrl(base.getAttribute('href'), document.URL)) base.remove();
   for (const image of document.querySelectorAll('img')) {
-    const lazySrc = image.getAttribute('data-src') ?? image.getAttribute('data-lazy-src');
-    if (lazySrc) image.setAttribute('src', lazySrc);
-    const lazySrcset = image.getAttribute('data-srcset');
-    if (lazySrcset) image.setAttribute('srcset', lazySrcset);
+    const source =
+      image.getAttribute('data-src') ??
+      image.getAttribute('data-lazy-src') ??
+      image.getAttribute('src');
+    const srcset = image.getAttribute('data-srcset') ?? image.getAttribute('srcset') ?? '';
+    const src = source?.trim() ? httpUrl(source, baseUrl) : bestSrcset(srcset, baseUrl);
+    if (src) image.setAttribute('src', src);
+    else image.removeAttribute('src');
+    image.removeAttribute('srcset');
   }
 }
 
-/** Drop complete trailing nodes, descending through wrappers, rather than slice markup. */
+/** Measure each block once and remove the suffix that does not fit, keeping wrappers. */
 function capHtml(container: HTMLElement): void {
-  while (Buffer.byteLength(container.innerHTML) > READER_HTML_MAX_BYTES) {
-    let tail = container.lastChild;
-    if (!tail) return;
-    while (tail.lastChild && tail.childNodes.length === 1) tail = tail.lastChild;
-    if (tail.nodeType === 1 && tail.childNodes.length > 1) {
-      tail.lastChild?.remove();
-    } else {
-      tail.remove();
+  if (Buffer.byteLength(container.innerHTML) <= READER_HTML_MAX_BYTES) return;
+  let blocks = container;
+  let budget = READER_HTML_MAX_BYTES;
+  while (blocks.childNodes.length === 1 && blocks.firstElementChild) {
+    const wrapper = blocks.firstElementChild as HTMLElement;
+    budget -= Buffer.byteLength((wrapper.cloneNode(false) as HTMLElement).outerHTML);
+    blocks = wrapper;
+  }
+  const serializer = container.ownerDocument.createElement('div');
+  let used = 0;
+  let drop = false;
+  for (const block of Array.from(blocks.childNodes)) {
+    if (!drop) {
+      serializer.replaceChildren(block.cloneNode(true));
+      used += Buffer.byteLength(serializer.innerHTML);
+      drop = used > budget;
     }
+    if (drop) block.remove();
   }
 }
 

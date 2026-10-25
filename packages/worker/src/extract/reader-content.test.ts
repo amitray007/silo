@@ -64,4 +64,15 @@ describe('Reader sanitizer', () => {
       dom.window.close();
     }
   });
+  it('caps 12,000 paragraphs in under five seconds without repeatedly serializing the DOM', () => {
+    const html = `<article>${`<p>${'a'.repeat(100)}</p>`.repeat(12_000)}<img src="/tail.png"></article>`;
+    const start = performance.now();
+    const result = sanitizeReaderContent(html, url);
+    const elapsed = performance.now() - start;
+    expect(elapsed).toBeLessThan(5_000);
+    expect(Buffer.byteLength(result?.contentHtml ?? '')).toBeLessThanOrEqual(1024 * 1024);
+    expect(result?.contentHtml).toContain(`<p>${'a'.repeat(100)}</p>`);
+    expect(result?.contentHtml).toMatch(/<\/p><\/article>$/);
+    expect(result?.contentImages).toEqual([]);
+  }, 10_000);
 });

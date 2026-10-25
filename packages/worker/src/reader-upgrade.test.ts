@@ -77,6 +77,56 @@ describeIfPg('Reader upgrade job (Postgres)', () => {
     },
   );
 
+  it.each([null, ''])(
+    'fills missing text (%s) even when Reader HTML already exists',
+    async (text) => {
+      const id = await capture('bare');
+      const reader = { contentHtml: '<p>Already captured Reader</p>', contentImages: [] };
+      await core.recordReaderUpgrade(id, reader);
+      await pool.query('UPDATE links SET extracted_text = $1 WHERE id = $2', [text, id]);
+      const before = await core.getById(id);
+      fetcher.mockResolvedValue({
+        ok: true,
+        html: '<article><p>Recovered search text.</p><img src="/new.png"></article>',
+        contentType: 'text/html',
+        finalUrl: 'https://journal.example.org/bare',
+        status: 200,
+      });
+      expect(await core.findReaderUpgradeCandidates()).toEqual([{ id, url: before?.url }]);
+      expect(await job.upgradeReader(id)).toBe('upgraded');
+      const after = await core.getById(id);
+      expect(after).toEqual({
+        ...before,
+        extractedText: 'Recovered search text.',
+        searchVector: after?.searchVector,
+      });
+      expect(after?.searchVector).toContain("'recov'");
+      expect(await job.upgradeReader(id)).toBe('unchanged');
+    },
+  );
+
+  it('fills missing text together with new Reader content without changing status', async () => {
+    const id = await capture('partial');
+    await pool.query("UPDATE links SET extracted_text = '' WHERE id = $1", [id]);
+    const before = await core.getById(id);
+    fetcher.mockResolvedValue({
+      ok: true,
+      html: '<p>New search text.</p>',
+      contentType: 'text/html',
+      finalUrl: 'https://journal.example.org/partial',
+      status: 200,
+    });
+    expect(await job.upgradeReader(id)).toBe('upgraded');
+    const after = await core.getById(id);
+    expect(after).toEqual({
+      ...before,
+      extractedText: 'New search text.',
+      searchVector: after?.searchVector,
+      contentHtml: after?.contentHtml,
+      contentImages: [],
+    });
+  });
+
   it.each(['not-found', 'timeout'] as const)(
     'never trashes or modifies data on %s',
     async (reason) => {

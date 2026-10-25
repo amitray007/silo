@@ -382,3 +382,46 @@ it('uses YouTube meta description instead of page chrome when there is no transc
   expect(result.text).toBe('A video at the zoo & its animals.');
   expect(result.reader?.contentHtml).toBe('<p>A video at the zoo &amp; its animals.</p>');
 });
+
+describe('Reader recovery and image URL normalization', () => {
+  it('replaces a loading shell and its images when embedded JSON wins', async () => {
+    const text = 'Recovered article with <literal markup> & real prose. '.repeat(30);
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: `<main><p>Loading...</p><img src="/spinner.png"></main><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { pageProps: { content: text } } })}</script>`,
+    });
+    expect(result.text).toContain('Recovered article');
+    expect(result.reader?.contentHtml).toContain('Recovered article');
+    expect(result.reader?.contentHtml).not.toContain('Loading...');
+    expect(result.reader?.contentImages).toEqual([]);
+    expect(result.reader?.contentHtml).not.toContain('<literal');
+  });
+
+  it.each([
+    ['https://cdn.example.org/assets/', 'https://cdn.example.org/assets/photo.jpg'],
+    ['/assets/', 'https://journal.example.org/assets/photo.jpg'],
+    ['javascript:alert(1)', 'https://journal.example.org/articles/photo.jpg'],
+    ['data:text/html,base', 'https://journal.example.org/articles/photo.jpg'],
+  ])('resolves relative images against the supported document base %s', async (base, expected) => {
+    const result = await extract({
+      url: 'https://journal.example.org/articles/final',
+      contentType: 'text/html',
+      html: `<head><base href="${base}"></head><article><p>Article content.</p><img src="photo.jpg"></article>`,
+    });
+    expect(result.reader?.contentImages).toEqual([expected]);
+  });
+
+  it('keeps srcset-only and lazy-srcset-only images using their largest candidate', async () => {
+    const result = await extract({
+      url: 'https://journal.example.org/articles/final',
+      contentType: 'text/html',
+      html: '<base href="https://cdn.example.org/"><article><p>Article content.</p><img srcset="small.jpg 400w, large.jpg 1200w, medium.jpg 800w"><img data-srcset="normal.png 1x, retina.png 2x"><img src="chosen.png" srcset="other.png 3x"></article>',
+    });
+    expect(result.reader?.contentImages).toEqual([
+      'https://cdn.example.org/large.jpg',
+      'https://cdn.example.org/retina.png',
+      'https://cdn.example.org/chosen.png',
+    ]);
+  });
+});
