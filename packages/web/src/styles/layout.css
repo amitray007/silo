@@ -300,7 +300,8 @@
 }
 .silo-reader-head {
   display: grid;
-  grid-template-columns: minmax(100px, 1fr) auto auto;
+  /* Equal side tracks keep the Reader/Live segment centered; max-content stops overlap. */
+  grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
   padding: 0 8px;
   gap: 8px;
 }
