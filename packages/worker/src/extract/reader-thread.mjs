@@ -11,3 +11,5 @@ parentPort.on('message', async ({ html, url, description }) => {
     parentPort.postMessage({ error: 'reader-failed' });
   }
 });
+
+parentPort.postMessage({ ready: true });

@@ -1,10 +1,10 @@
 import { db, links } from '@silo/db';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { readerContentSchema } from '../capture.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Link } from './links.js';
 import { whereLive } from './live.js';
-import { readerContentSchema } from './reader.js';
 import { sourceDataSchema } from './source-data.js';
 
 /**

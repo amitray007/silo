@@ -209,3 +209,15 @@ it('rewrites footnotes and backlinks to safe IDs and strips arbitrary and duplic
     dom.window.close();
   }
 });
+
+it('preserves commas inside Substack CDN srcset-only URLs', () => {
+  const small =
+    'https://substackcdn.com/image/fetch/w_400,c_limit,f_webp,q_auto:good,fl_progressive:steep/https%3A%2F%2Fexample.org%2Fphoto.png';
+  const large = small.replace('w_400', 'w_1200');
+  const result = sanitizeReaderContent(
+    `<p>Photo</p><img srcset="${small} 400w, ${large} 1200w"><img srcset="${small} 1x, ${large} 2x">`,
+    url,
+  );
+  expect(result?.contentImages).toEqual([large, large]);
+  expect(result?.contentHtml).not.toContain('srcset');
+});

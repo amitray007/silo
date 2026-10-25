@@ -20,6 +20,7 @@ import {
   registerEnqueuer,
 } from '@silo/queue';
 import { enrichLink } from './enrich.js';
+import { closeReaderPool } from './extract/reader-worker.js';
 import { registerScheduledJobs } from './jobs/index.js';
 
 /** Local per-node worker slots (plan: "the worker" — not yet horizontally tuned). */
@@ -89,7 +90,10 @@ export async function startWorker(): Promise<WorkerHandle> {
   );
 
   return {
-    stop: () => boss.stop({ graceful: true }),
+    stop: async () => {
+      await boss.stop({ graceful: true });
+      await closeReaderPool();
+    },
   };
 }
 

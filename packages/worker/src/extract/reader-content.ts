@@ -1,4 +1,4 @@
-import { READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core';
+import { READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core/capture';
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
@@ -185,10 +185,12 @@ function rewriteLinks(fragment: DocumentFragment, finalUrl: string): void {
 function responsiveSource(image: Element): string | null {
   let best: string | null = null;
   let largest = 0;
-  for (const candidate of (image.getAttribute('srcset') ?? '').split(',')) {
-    const [source, descriptor = '1x'] = candidate.trim().split(/\s+/);
-    const size = /^(\d+(?:\.\d+)?)[wx]$/.exec(descriptor);
-    const score = size ? Number(size[1]) : 0;
+  // A candidate URL may contain commas (Substack/Cloudinary). Only whitespace
+  // plus a width/density descriptor ends it; commas are separators after that.
+  const candidates = /(?:^|\s*,\s*)(\S+)\s+(\d+(?:\.\d+)?)[wx](?=\s*(?:,|$))/g;
+  for (const match of (image.getAttribute('srcset') ?? '').matchAll(candidates)) {
+    const source = match[1];
+    const score = Number(match[2]);
     if (source && score > largest) {
       best = source;
       largest = score;

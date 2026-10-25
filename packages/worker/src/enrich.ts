@@ -7,11 +7,10 @@
  * Contract (plan R11 / Risks): this function RESOLVES on every *expected*
  * degraded-capture outcome — a blocked/dead/timed-out/oversized fetch, or a
  * thin/JS-walled/non-HTML extraction — by recording a terminal `partial`/
- * `bare` status and returning normally. It THROWS only for a genuinely
- * unexpected failure (e.g. `getById`/`recordEnrichment` itself throwing —
- * a real infra/db problem), which is exactly the signal pg-boss's
- * `work()` needs to retry with backoff and eventually dead-letter (see
- * `worker.ts`). A degraded capture is not a bug; an unreachable database is.
+ * `bare` status and returning normally. Reader thread timeouts/failures and
+ * unexpected failures (such as `getById`/`recordEnrichment` throwing)
+ * propagate so pg-boss retries with backoff and eventually dead-letters the
+ * job (see `worker.ts`).
  */
 
 import type { SettingsMap, SourceData } from '@silo/core';

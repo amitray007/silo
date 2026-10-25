@@ -226,24 +226,61 @@ Defuddle content before the stored HTML cap. DOMPurify, the tag/attribute
 allowlist, URL checks, ordered image targets, and `capHtml` remain. A small
 sanitizer adapter chooses one URL for srcset-only images, then strips srcset.
 
-Parsing, Defuddle, recovery, and sanitization run in a fresh worker thread with
-a **five-second hard deadline**, including thread startup, and a 256 MiB V8
-old-generation limit. The parent terminates and awaits the thread on success,
-error, or timeout. Timeout logs `reader-timeout` and returns metadata without
-text or Reader HTML. This contains the synchronous hang reported in
+**Review fixes (2026-10-26):** parsing, Defuddle, recovery, and sanitization
+share one reusable worker thread with a FIFO queue. Fetch jobs stay concurrent;
+CPU extraction is serialized to avoid cold-start contention on small hosts.
+The **five-second page deadline starts only after the ready handshake**, when
+the page is sent to the thread. Startup has a separate 30-second deadline.
+A failed or timed-out thread is terminated and awaited before its replacement
+handles the next queued page. Idle threads are unreferenced; worker shutdown
+closes the pool after in-flight enrichment jobs finish. Each thread retains
+the 256 MiB V8 old-generation limit.
+
+Timeout and thread failures log their reason and throw `ReaderExtractionError`.
+`enrichLink` propagates that error to pg-boss's existing retry/backoff and
+dead-letter path instead of recording a successful metadata-only capture.
+This contains the synchronous hang reported in
 [Defuddle issue 447](https://github.com/kepano/defuddle/issues/447).
-The stuck-thread test also checks that the parent event loop stays responsive.
+Tests cover slow startup, ten queued pages, thread reuse, termination,
+replacement, exit recovery, shutdown, and the enrichment rejection path.
+
+The thread imports `@silo/core/capture`, a pure public entry for capture
+contracts and URL classification. It never imports the database barrel or
+constructs a Postgres pool. A real-thread test removes `DATABASE_URL` and
+checks the full extraction path. Challenge detection takes precedence over
+SPA-shell classification. YouTube player titles take precedence over
+metascraper titles, as before the Defuddle change.
 
 The input gets one jsdom document. The sanitizer and YouTube path reuse that
 window. Our Readability/fallback clones, challenge-page clone, sanitizer's
 second window, and spacer-template reparse are gone. Defuddle owns lazy-image,
 layout-table, and small-image cleanup. `normalizeLazyImages`,
-`unwrapLayoutTables`, `withoutSpacers`, and the generic thin-content fallback
-are deleted. All cached article bodies remain available without the fallback;
-BBC is an accepted exception. A generic body fallback would bring back page
-chrome. Defuddle can retain a decorative GIF whose dimensions are unknown;
-we no longer guess from filenames. The layout tests assert reading order,
-prose, data-cell values, and meaningful images through the extractor.
+`unwrapLayoutTables`, and `withoutSpacers` remain deleted. Defuddle can retain
+a decorative GIF whose dimensions are unknown; we no longer guess from
+filenames. Layout tests assert reading order, prose, data-cell values, and
+meaningful images through the extractor. Srcset candidates are split at
+width/density descriptors, preserving commas inside Substack/CDN URLs.
+
+The old generic Reader HTML fallback remains deleted. A minimal search-text
+guard runs only when Defuddle returns fewer than 1,000 characters and the
+body-minus-chrome text is at least five times longer and at least 200
+characters. It strips scripts, styles, navigation, headers, footers, sidebars,
+noscript, templates, and explicitly hidden elements. It changes only search
+text and capture status, never Reader HTML or its image list. Embedded-JSON
+article recovery takes precedence. This is static text recovery, not a full
+visibility calculation; publisher CSS can hide other text.
+
+A database-free rerun of all 26 cached responses kept the same Reader HTML
+metrics below. BBC still has 500 Reader characters, but its search text now
+contains 6,540 characters. A separate cached response of
+`https://paulgraham.com/hwh.html` returned 18,019 text characters in every
+request. On this Mac, fresh-pool batches of 1, 5, and 10 requests completed in
+1,240, 967, and 1,240 ms; the next warm page took 60, 48, and 45 ms. These are
+local measurements, not a 1-vCPU deployment benchmark. No request timed out.
+
+The lead's QA database copy is `silo_reader_qa`. This fix used cached pages and
+disposable test databases only. It did not run `reader-upgrade`; refresh and
+backfill remain with the lead.
 
 Footnote targets and references matching `fn:*`/`fnref:*` get generated
 `silo-fn-<number>` IDs. All other publisher IDs and duplicate IDs are removed.
@@ -255,8 +292,9 @@ Cheap option checks on Maggie Appleton tried `removeExactSelectors`,
 `removePartialSelectors`, `removeLowScoring`, `removeContentPatterns`,
 `standardize`, and `includeReplies`. Only `removeLowScoring: false` restored
 all four tweets. A run across the cache also restored Simon Willison's site
-navigation and year archive, so defaults remain. BBC's 500-character fragment
-is accepted; no site-specific fallback was added. X replies/counts remain.
+navigation and year archive, so defaults remain. BBC's 500-character Reader
+fragment remains; the search-text guard recovers its listing text without a
+site-specific rule. X replies/counts remain.
 
 ### Cached production-pipeline comparison
 
@@ -298,7 +336,7 @@ for article presence and navigation/footer leakage.
 | https://arxiv.org/pdf/1706.03762 | 0 / 0 | 0 / 0 | 0 / 0 | 0 / 0 | PDF guard; no HTML parsing. |
 | https://www.rfc-editor.org/rfc/rfc7034.html | 23,599 / 23,105 | 0 / 0 | 14 / 14 | 0 / 0 | RFC recovered by jsdom normalization; RFC page headers remain. |
 | https://blog.cloudflare.com/ | 1,630 / 4,979 | 6 / 19 | 0 / 0 | 0 / 0 | More listing entries retained. |
-| https://www.bbc.com/news | 6,729 / 500 | 51 / 6 | 0 / 0 | 42 / 2 | Short More to explore/Most watched fragment; main listing lost. |
+| https://www.bbc.com/news | 6,729 / 500 | 51 / 6 | 0 / 0 | 42 / 2 | Reader keeps a short More to explore/Most watched fragment; search text recovers 6,540 characters. |
 | https://x.com/karpathy/status/1886192184808149383 | 997 / 2,628 | 0 / 2 | 0 / 0 | 1 / 0 | Target post plus replies and engagement counts. |
 | https://substack.com/@soamjena/note/c-218382601 | 337 / 322 | 0 / 0 | 0 / 0 | 1 / 0 | Note kept; timestamp omitted. |
 

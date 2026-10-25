@@ -1,4 +1,4 @@
-import { detectSource, type ReaderContent } from '@silo/core';
+import { detectSource, type ReaderContent } from '@silo/core/capture';
 import { Defuddle } from 'defuddle/node';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { parseHTML } from 'linkedom';
@@ -14,6 +14,7 @@ export interface PageContent {
   title?: string;
   description?: string;
   videoDescription?: boolean;
+  challenge?: boolean;
 }
 
 /** Suppress stylesheet-parser noise while keeping other jsdom errors visible. */
@@ -43,7 +44,7 @@ export async function extractPageContent(
 ): Promise<PageContent> {
   const dom = new JSDOM(html, { url, virtualConsole: buildExtractVirtualConsole() });
   try {
-    if (isChallengePage(dom.window.document)) return {};
+    if (isChallengePage(dom.window.document)) return { challenge: true };
     const youtube = extractYouTubeWatch(html, url, dom);
     if (youtube?.text) {
       return {
@@ -90,7 +91,10 @@ async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
   const text = normalizeWhitespace(textContainer.textContent ?? '');
   if (text) result.text = text;
   if (reader) result.reader = reader;
+  const defuddleText = result.text;
   applyRecovery(dom, url, result);
+  // Embedded article recovery takes precedence over generic page text.
+  if (result.text === defuddleText) applyThinTextFallback(dom.window.document, result);
   return result;
 }
 
@@ -106,4 +110,18 @@ function applyRecovery(dom: JSDOM, url: string, result: PageContent): void {
       if (recoveredReader) result.reader = recoveredReader;
     }
   }
+}
+
+/** Recover search text only after severe pruning; never publish a generic body as Reader HTML. */
+function applyThinTextFallback(document: Document, result: PageContent): void {
+  const length = result.text?.length ?? 0;
+  if (length >= 1_000) return;
+  // Defuddle works on linkedom, so this original jsdom DOM is still available.
+  for (const node of document.querySelectorAll(
+    'script, style, nav, header, footer, aside, noscript, template, [hidden], [aria-hidden="true"]',
+  ))
+    node.remove();
+  const main = document.querySelector('main, article') ?? document.body;
+  const text = normalizeWhitespace(main?.textContent ?? '');
+  if (text.length >= Math.max(FULL_TEXT_THRESHOLD, length * 5)) result.text = text;
 }

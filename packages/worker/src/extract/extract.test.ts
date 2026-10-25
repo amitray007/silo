@@ -471,3 +471,32 @@ describe('challenge screens', () => {
     expect(result.reader?.contentHtml).toContain('Cloudflare, DataDome and PerimeterX');
   });
 });
+
+it('gives the YouTube player title precedence over metascraper title', async () => {
+  const player = {
+    videoDetails: {
+      videoId: 'abcdefghijk',
+      title: 'Player title',
+      shortDescription: 'Player description.',
+    },
+  };
+  const result = await extract({
+    url: 'https://www.youtube.com/watch?v=abcdefghijk',
+    contentType: 'text/html',
+    html: `<title>Page title</title><meta property="og:title" content="Generic metadata title"><script>var ytInitialPlayerResponse = ${JSON.stringify(player)};</script>`,
+  });
+  expect(result.title).toBe('Player title');
+  expect(result.text).toBe('Player description.');
+  expect(result.status).toBe('partial');
+});
+
+it('lets a metadata-free challenge verdict win over SPA shell markers', async () => {
+  const result = await extract({
+    url: URL_UNDER_TEST,
+    contentType: 'text/html',
+    html: '<div>Please enable JS and disable any ad blocker</div><div id="root"></div>',
+  });
+  expect(result).toMatchObject({ status: 'bare' });
+  expect(result.text).toBeUndefined();
+  expect(result.reader).toBeUndefined();
+});

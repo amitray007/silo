@@ -1,4 +1,4 @@
-/** Static metadata stays available when isolated Reader extraction fails or times out. */
+/** Static metadata and readable content, with isolated, retryable Reader extraction. */
 import type { ReaderContent } from '@silo/core';
 import metascraper from 'metascraper';
 import metascraperDescription from 'metascraper-description';
@@ -8,7 +8,8 @@ import metascraperPublisher from 'metascraper-publisher';
 import metascraperTitle from 'metascraper-title';
 import metascraperUrl from 'metascraper-url';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
-import { extractPage } from './reader-worker.js';
+import type { PageContent } from './reader-page.js';
+import { extractPage, ReaderExtractionError } from './reader-worker.js';
 
 // PRIVACY: deliberately does NOT include `metascraper-logo-favicon` — it
 // performs a third-party favicon fetch per row, which violates silo's
@@ -183,7 +184,8 @@ function isJsWalled(fields: MetascraperFields, text: string | undefined, html: s
 export async function extract(input: ExtractInput): Promise<ExtractResult> {
   const { url, html, contentType } = input;
 
-  // Guard the "never throws" contract: `new JSDOM(html, { url })` and
+  // Invalid input degrades to bare; infrastructure/parser timeouts remain retryable.
+  // `new JSDOM(html, { url })` and
   // metascraper both throw on an unparseable `url`. The real caller (U5) feeds
   // safeFetch's already-validated finalUrl, so this is defense in depth — an
   // invalid URL degrades to `bare` rather than throwing.
@@ -197,7 +199,7 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
     return { status: 'bare' };
   }
 
-  // Metadata survives a parser error or hard timeout. No publisher URLs are fetched.
+  // Parser timeouts reject so the capture job retries. No publisher URLs are fetched.
   const fields = await runMetascraper(url, html);
   try {
     const page = await extractPage(
@@ -205,18 +207,25 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
       url,
       fields.description ? { description: fields.description } : {},
     );
-    if (fields.title === undefined && page.title) fields.title = page.title;
-    if (fields.description === undefined && page.description) fields.description = page.description;
-    const result = buildResult(fields, page.text);
-    if (page.videoDescription) result.status = 'partial';
-    if (page.reader) result.reader = page.reader;
-    if (result.status === 'bare' && isJsWalled(fields, page.text, html)) result.status = 'partial';
-    return result;
+    return pageResult(fields, page, html);
   } catch (error) {
     console.warn(
       '[reader] extraction unavailable',
       error instanceof Error ? error.message : 'reader-failed',
     );
+    if (error instanceof ReaderExtractionError) throw error;
     return buildResult(fields, undefined);
   }
+}
+
+function pageResult(fields: MetascraperFields, page: PageContent, html: string): ExtractResult {
+  if ((fields.title === undefined || page.videoDescription) && page.title)
+    fields.title = page.title;
+  if (fields.description === undefined && page.description) fields.description = page.description;
+  const result = buildResult(fields, page.text);
+  if (page.challenge) return result;
+  if (page.videoDescription) result.status = 'partial';
+  if (page.reader) result.reader = page.reader;
+  if (result.status === 'bare' && isJsWalled(fields, page.text, html)) result.status = 'partial';
+  return result;
 }

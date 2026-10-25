@@ -1,3 +1,4 @@
+import * as defuddle from 'defuddle/node';
 import { describe, expect, it, vi } from 'vitest';
 import { extractPageContent } from './reader-page.js';
 
@@ -25,4 +26,29 @@ describe('static Defuddle extraction', () => {
       vi.unstubAllGlobals();
     }
   });
+});
+
+it('rescues search text after severe pruning without publishing generic body HTML', async () => {
+  const original = defuddle.Defuddle;
+  const parse = vi.spyOn(defuddle, 'Defuddle').mockImplementation(async (...args) => ({
+    ...(await original(...args)),
+    content: '<p>Small captured fragment.</p>',
+  }));
+  const body = 'The article explains how to build and maintain useful software. '.repeat(30).trim();
+  try {
+    const result = await extractPageContent(
+      `<header>Site menu</header><main><p>${body}</p></main><footer>Footer links</footer>`,
+      'https://journal.example.org/article',
+    );
+    expect(result.text).toBe(body);
+    expect(result.text).not.toMatch(/Site menu|Footer links/);
+    expect(result.reader?.contentHtml).toBe('<p>Small captured fragment.</p>');
+    const short = await extractPageContent(
+      `<nav>${body}</nav><main><p>Short original note.</p></main>`,
+      'https://journal.example.org/note',
+    );
+    expect(short.text).toBe('Small captured fragment.');
+  } finally {
+    parse.mockRestore();
+  }
 });
