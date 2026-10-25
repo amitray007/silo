@@ -237,6 +237,47 @@ export function transformPage(html: string, finalUrl: string): string {
   }
 }
 
+/** Reveal page-sized script gates without opening small menus or tabs. */
+function revealContent(document: Document): void {
+  const lengths = new Map<Node, number>();
+  const elements = Array.from(document.querySelectorAll<HTMLElement>('body, body *')).reverse();
+  for (const element of elements) {
+    const length = ['script', 'style', 'template'].includes(element.localName)
+      ? 0
+      : Array.from(element.childNodes).reduce(
+          (total, child) => total + (lengths.get(child) ?? (child.textContent ?? '').trim().length),
+          0,
+        );
+    lengths.set(element, length);
+  }
+  const bodyLength = lengths.get(document.body) ?? 0;
+  for (const element of [document.documentElement, ...elements]) {
+    const length = element === document.documentElement ? bodyLength : (lengths.get(element) ?? 0);
+    const large = length >= 200 && length >= bodyLength * 0.5;
+    if (element !== document.documentElement && element !== document.body && !large) continue;
+    revealElement(element);
+    if (large) element.classList.add('silo-view-shown');
+  }
+  const style = document.createElement('style');
+  style.textContent = `html, body, .silo-view-shown.silo-view-shown {
+    visibility: visible !important; opacity: 1 !important;
+  }
+  body { display: block !important; }`;
+  document.body.append(style);
+}
+
+function revealElement(element: HTMLElement): void {
+  element.removeAttribute('hidden');
+  for (const [property, value] of [
+    ['visibility', 'hidden'],
+    ['opacity', '0'],
+    ['display', 'none'],
+  ]) {
+    if (property && element.style.getPropertyValue(property).trim().toLowerCase() === value)
+      element.style.removeProperty(property);
+  }
+}
+
 /** Reuse the stylesheet builder's inert DOM instead of retaining a second large page tree. */
 export function sanitizePageDom(dom: JSDOM, finalUrl: string): string {
   const document = dom.window.document;
@@ -248,6 +289,7 @@ export function sanitizePageDom(dom: JSDOM, finalUrl: string): string {
     if (link.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('stylesheet'))
       link.setAttribute('rel', 'stylesheet');
   }
+  revealContent(document);
   const purifier = createDOMPurify(dom.window);
   purifier.addHook('uponSanitizeElement', (node) => {
     if (!(node instanceof dom.window.Element)) return;

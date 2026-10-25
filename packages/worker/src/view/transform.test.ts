@@ -67,7 +67,7 @@ describe('final-DOM page sanitizer', () => {
     const dom = new JSDOM(output);
     try {
       const doc = dom.window.document;
-      expect(doc.querySelector('main')?.className).toBe('layout');
+      expect(doc.querySelector('main')?.classList.contains('layout')).toBe(true);
       expect(doc.querySelector('noscript,base,script')).toBeNull();
       expect(doc.querySelector('img')?.src).toBe('https://publisher.test/photo.jpg');
       expect(doc.querySelector('picture img')?.getAttribute('src')).toBe(
@@ -155,5 +155,62 @@ describe('CSS resource token decoding', () => {
     );
     expect(output).toContain(`content:'url(../literal.png); @import "fake.css"'`);
     expect(output).toContain('https://publisher.test/a%22b.png');
+  });
+});
+
+describe('script-gated article visibility', () => {
+  it('reveals a large inline gate and leaves a small hidden menu untouched', () => {
+    const dom = new JSDOM(
+      transformPage(
+        `<div id="article" hidden
+      style="visibility:hidden;opacity:0;display:none;color:red">${'Article text. '.repeat(40)}</div>
+      <nav hidden style="display:none;visibility:hidden;opacity:0">Menu</nav>`,
+        base,
+      ),
+    );
+    try {
+      const article = dom.window.document.querySelector<HTMLElement>('#article');
+      expect(article?.hidden).toBe(false);
+      expect(article?.style.visibility).toBe('');
+      expect(article?.style.opacity).toBe('');
+      expect(article?.style.display).toBe('');
+      expect(article?.style.color).toBe('red');
+      expect(article?.classList.contains('silo-view-shown')).toBe(true);
+      const menu = dom.window.document.querySelector('nav');
+      expect(menu?.hidden).toBe(true);
+      expect(menu?.style.display).toBe('none');
+      expect(menu?.style.visibility).toBe('hidden');
+      expect(menu?.style.opacity).toBe('0');
+      expect(menu?.classList.contains('silo-view-shown')).toBe(false);
+    } finally {
+      dom.window.close();
+    }
+  });
+  it.each([
+    '<html class="async-hide"><head><style>.async-hide{opacity:0!important}</style></head>',
+    '<html hidden style="visibility:hidden"><head><style>body{display:none}</style></head>',
+  ])('overrides root script gates with the final stylesheet: %s', (head) => {
+    const dom = new JSDOM(
+      transformPage(
+        `${head}<body hidden style="opacity:0;display:none">
+      <article>${'Article text. '.repeat(40)}</article></body></html>`,
+        base,
+      ),
+    );
+    try {
+      const doc = dom.window.document;
+      expect(doc.documentElement.hidden).toBe(false);
+      expect(doc.documentElement.classList.contains('silo-view-shown')).toBe(true);
+      expect(doc.body.hidden).toBe(false);
+      expect(doc.body.style.display).toBe('');
+      const override = doc.body.lastElementChild?.textContent;
+      expect(override).toContain('.silo-view-shown.silo-view-shown');
+      expect(override).toContain('visibility: visible !important');
+      expect(override).toContain('opacity: 1 !important');
+      expect(override).toContain('display: block !important');
+      expect(doc.body.lastElementChild?.localName).toBe('style');
+    } finally {
+      dom.window.close();
+    }
   });
 });

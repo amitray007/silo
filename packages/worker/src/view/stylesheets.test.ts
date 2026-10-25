@@ -73,7 +73,7 @@ describe('bounded server-side stylesheets', () => {
     );
     expect(fetch.mock.calls.length).toBeLessThanOrEqual(15);
     expect(peak).toBeLessThanOrEqual(3);
-    expect((output.match(/<style/g) ?? []).length).toBe(15);
+    expect((output.match(/<style/g) ?? []).length).toBe(16); // 15 sheets plus the visibility override.
     expect(output).toContain('<link');
   });
 

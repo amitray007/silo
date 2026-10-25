@@ -9,6 +9,7 @@ import { PageCache } from './cache.js';
 import { ViewLimit } from './limit.js';
 import { allowsFraming } from './policy.js';
 import { TransformPool } from './pool.js';
+import { pageTextLength } from './text.js';
 
 type Page = {
   finalUrl: string;
@@ -17,6 +18,7 @@ type Page = {
   contentSecurityPolicy?: string;
   html?: Buffer;
   reason?: string;
+  textLength?: number;
 };
 type Pending = { controller: AbortController; promise: Promise<Page>; users: number };
 type ViewerOptions = {
@@ -41,6 +43,8 @@ function hintFor(page: Page, origin: string): FrameHint {
     return { mode: 'none', reason: page.reason ?? 'unsupported-content', ...contentType };
   if (allowsFraming(page, page.finalUrl, origin)) return { mode: 'direct', ...contentType };
   if (page.reason) return { mode: 'none', reason: page.reason, ...contentType };
+  if (page.html && (page.textLength ?? 0) < 200)
+    return { mode: 'none', reason: 'needs-script', ...contentType };
   return page.html
     ? { mode: 'view', reason: 'framing-blocked', ...contentType }
     : { mode: 'none', reason: 'non-html-framing-blocked', ...contentType };
@@ -76,7 +80,9 @@ export function createPageViewer(options: ViewerOptions = {}): {
       const mime = contentType?.split(';')[0]?.trim().toLowerCase();
       if (mime === 'text/html' || mime === 'application/xhtml+xml') {
         try {
-          page.html = Buffer.from(await transform(fetched.html, finalUrl, signal));
+          const html = await transform(fetched.html, finalUrl, signal);
+          page.html = Buffer.from(html);
+          page.textLength = pageTextLength(html);
         } catch {
           signal.throwIfAborted();
           page.reason = 'transform-unavailable';

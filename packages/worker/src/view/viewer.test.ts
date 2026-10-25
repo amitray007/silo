@@ -68,6 +68,7 @@ describe('page viewer shared fetch', () => {
     const { request, fetch } = setup();
     fetch.mockResolvedValue(
       success({
+        html: `<article>${'Article text. '.repeat(30)}</article>`,
         xFrameOptions: 'DENY',
         contentSecurityPolicy: 'frame-ancestors https://allowed.test:5175',
       }),
@@ -76,6 +77,27 @@ describe('page viewer shared fetch', () => {
     expect((await request('a', 'https://allowed.test:5176')).frame.mode).toBe('view');
     expect((await request('a', 'https://silo.test')).frame.mode).toBe('view');
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('uses needs-script for a thin transformed page, excluding page chrome', async () => {
+    const { request } = setup({
+      fetch: async () => success({ xFrameOptions: 'DENY' }),
+      transform: async () => `<html><body><nav>${'Navigation '.repeat(50)}</nav>
+        <header>${'Header '.repeat(50)}</header><aside>${'Sidebar '.repeat(50)}</aside>
+        <footer>${'Footer '.repeat(50)}</footer><article>${'x'.repeat(50)}</article>
+        <style>${'body{color:red}'.repeat(50)}</style></body></html>`,
+    });
+    expect((await request()).frame).toEqual({
+      mode: 'none',
+      reason: 'needs-script',
+      contentType: 'text/html',
+    });
+  });
+  it('keeps a blocked page with exactly 200 article characters in view mode', async () => {
+    const { request } = setup({
+      fetch: async () => success({ xFrameOptions: 'DENY' }),
+      transform: async () => `<article>${'x'.repeat(200)}</article>`,
+    });
+    expect((await request()).frame.mode).toBe('view');
   });
   it('treats failure as none and blocked non-HTML as none; a frameable PDF is direct', async () => {
     const { request, fetch, transform } = setup();
