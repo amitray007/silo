@@ -8,9 +8,10 @@ const params = z.object({ id: z.uuid() });
 
 async function pageResponse(c: Context, html: boolean): Promise<Response> {
   const { id } = params.parse(c.req.param());
+  const { fresh } = z.object({ fresh: z.literal('1').optional() }).parse(c.req.query());
   try {
     const origin = new URL(process.env.SILO_PUBLIC_API_URL?.trim() || c.req.url).origin;
-    const page = await viewPage(id, origin, c.req.raw.signal);
+    const page = await viewPage(id, origin, c.req.raw.signal, fresh === '1');
     if (!page) return c.json({ error: 'not_found', message: 'Link not found' }, 404);
     if (!html) {
       c.header('Cache-Control', 'private, no-store');

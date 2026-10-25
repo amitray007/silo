@@ -48,6 +48,21 @@ describeIfPg('Original routes (Postgres)', () => {
       });
     }
   });
+  it.each(['view', 'frame'])(
+    'passes fresh=1 through /%s and rejects other values',
+    async (route) => {
+      const { core, app } = harness.mod();
+      const link = await capture('fresh');
+      const viewer = vi.fn(async () => ({
+        frame: { mode: 'view' as const },
+        html: '<p>Fresh</p>',
+      }));
+      core.setPageViewer(viewer);
+      expect((await app.request(`/api/links/${link.id}/${route}?fresh=1`)).status).toBe(200);
+      expect(viewer).toHaveBeenCalledWith(expect.objectContaining({ fresh: true }));
+      expect((await app.request(`/api/links/${link.id}/${route}?fresh=yes`)).status).toBe(400);
+    },
+  );
   it('serves the exact security headers and only the stored link URL', async () => {
     const { core, app } = harness.mod();
     const link = await capture('headers');

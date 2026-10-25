@@ -56,6 +56,7 @@ export function createPageViewer(options: ViewerOptions = {}): {
   const fetchPage = options.fetch ?? ((url, signal) => safeFetch(url, { signal }));
   const cache = new PageCache<Page>(options.cacheBytes, options.ttlMs);
   const limit = new ViewLimit(options.waitMs);
+  const refreshed = new Map<string, number>();
   const pending = new Map<string, Pending>();
 
   async function load(url: string, signal: AbortSignal): Promise<Page> {
@@ -132,13 +133,25 @@ export function createPageViewer(options: ViewerOptions = {}): {
     });
   }
 
-  const view: PageViewer = async ({ id, url, origin, signal }) => {
+  function bypassCache(key: string, fresh = false): boolean {
+    const now = Date.now();
+    for (const [key, time] of refreshed) if (now - time >= 5_000) refreshed.delete(key);
+    if (!fresh || refreshed.has(key)) return false;
+    if (refreshed.size >= 1_024) throw new PageViewerUnavailableError();
+    refreshed.set(key, now);
+    return true;
+  }
+
+  const view: PageViewer = async ({ id, url, origin, signal, fresh }) => {
     signal.throwIfAborted();
     const key = `${id}:${url}`;
-    const cached = cache.get(key);
+    const bypass = bypassCache(id, fresh);
+    const cached = bypass ? undefined : cache.get(key);
     const existing = pending.get(key);
     const entry = existing && !existing.controller.signal.aborted ? existing : undefined;
-    const page = cached ?? (await subscribe(entry ?? start(key, url), signal));
+    const page = entry
+      ? await subscribe(entry, signal)
+      : (cached ?? (await subscribe(start(key, url), signal)));
     return { frame: hintFor(page, origin), ...(page.html ? { html: page.html.toString() } : {}) };
   };
   return {

@@ -56,7 +56,7 @@ export class TransformPool {
     if (this.workers.size >= 2) throw new Error('transform-pool-busy');
     const worker = new Worker(this.entry, {
       execArgv: [],
-      resourceLimits: { maxOldGenerationSizeMb: 128 },
+      resourceLimits: { maxOldGenerationSizeMb: 256 },
     });
     worker.on('error', () => this.workers.delete(worker));
     worker.on('exit', () => this.workers.delete(worker));

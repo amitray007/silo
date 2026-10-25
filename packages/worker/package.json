@@ -19,6 +19,7 @@
     "@mozilla/readability": "catalog:",
     "@silo/core": "workspace:*",
     "@silo/queue": "workspace:*",
+    "dompurify": "catalog:",
     "drizzle-orm": "catalog:",
     "ipaddr.js": "catalog:",
     "jsdom": "catalog:",
@@ -30,8 +31,9 @@
     "metascraper-title": "catalog:",
     "metascraper-url": "catalog:",
     "pg-boss": "catalog:",
+    "tsx": "catalog:",
     "undici": "catalog:",
-    "dompurify": "catalog:"
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@silo/db": "workspace:*",
@@ -40,7 +42,6 @@
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "pg": "catalog:",
-    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

@@ -14,6 +14,7 @@ export type PageViewer = (input: {
   url: string;
   origin: string;
   signal: AbortSignal;
+  fresh?: boolean;
 }) => Promise<PageView>;
 
 export class PageViewerUnavailableError extends Error {
@@ -34,9 +35,10 @@ export async function viewPage(
   id: string,
   origin: string,
   signal: AbortSignal,
+  fresh = false,
 ): Promise<PageView | null> {
   const link = await getById(id);
   if (!link) return null;
   if (!viewer) throw new PageViewerUnavailableError();
-  return viewer({ id, url: link.url, origin, signal });
+  return viewer({ id, url: link.url, origin, signal, fresh });
 }

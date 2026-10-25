@@ -53,6 +53,12 @@ const READER_TAGS = [
   'dd',
   'abbr',
   'time',
+  'cite',
+  'q',
+  'details',
+  'summary',
+  'colgroup',
+  'col',
 ];
 
 function httpUrl(raw: string | null, baseUrl: string, stripHash = false): string | undefined {
@@ -189,6 +195,8 @@ export function sanitizeReaderContent(html: string, finalUrl: string): ReaderCon
         'rowspan',
         'scope',
         'start',
+        'reversed',
+        'open',
         'datetime',
       ],
       ALLOW_DATA_ATTR: false,

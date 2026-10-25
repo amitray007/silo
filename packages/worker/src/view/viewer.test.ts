@@ -37,6 +37,33 @@ describe('page viewer shared fetch', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(transform).toHaveBeenCalledTimes(1);
   });
+  it('refresh bypasses and replaces cache once per link per five seconds, coalescing both routes', async () => {
+    const { view, request, fetch } = setup();
+    await request();
+    fetch.mockResolvedValue(success({ html: '<p>Fresh</p>' }));
+    const fresh = () =>
+      view({
+        id: 'a',
+        url: 'https://publisher.test/a',
+        origin: 'https://silo.test',
+        signal: new AbortController().signal,
+        fresh: true,
+      });
+    const [a, b] = await Promise.all([fresh(), fresh()]);
+    expect(a.html).toBe('<p>Fresh</p>');
+    expect(b.html).toBe('<p>Fresh</p>');
+    expect((await request()).html).toBe('<p>Fresh</p>');
+    expect(fetch).toHaveBeenCalledTimes(2);
+    await fresh();
+    expect(fetch).toHaveBeenCalledTimes(2);
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(Date.now() + 5_001);
+    try {
+      await fresh();
+      expect(fetch).toHaveBeenCalledTimes(3);
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it('evaluates policy per request origin, from the same cached final response', async () => {
     const { request, fetch } = setup();
     fetch.mockResolvedValue(

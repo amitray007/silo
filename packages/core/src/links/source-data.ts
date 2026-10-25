@@ -169,6 +169,10 @@ const youtubeSourceData = z
       .regex(/^[A-Za-z0-9_-]{11}$/)
       .optional(),
     channel: z.string().min(1).max(256),
+    duration: z.number().int().nonnegative().max(100_000_000).optional(),
+    views: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    publishedAt: z.string().max(64).optional(),
+    keywords: z.array(z.string().max(500)).max(100).optional(),
     thumbnailUrl: z.string().min(1).max(2000),
   })
   .strict();

@@ -78,6 +78,9 @@ const TAGS = [
   'summary',
 ];
 const ATTRS = [
+  'data-color-mode',
+  'data-light-theme',
+  'data-dark-theme',
   'id',
   'class',
   'style',
@@ -133,12 +136,34 @@ function resolveUrl(value: string, base: string, image = false): string | undefi
   }
 }
 
-/** CSS stays inert under CSP. Resolve CSS resources without trusting a publisher's base tag. */
-function resolveCss(css: string, base: string): string {
-  // Escapes/comments can hide URL tokens. Drop those declarations rather than reinterpret them.
-  const plain = css.replace(/\/\*[\s\S]*?\*\//g, '');
-  if (plain.includes('\\')) return '';
-  return plain
+function decodeCssTokens(css: string): string {
+  return css
+    .replace(/\\(?:\r\n|[\n\r\f])/g, '')
+    .replace(
+      /\\([a-f\d]{1,6})\s?|\\(.)/gi,
+      (_all, hex: string | undefined, char: string | undefined) =>
+        hex ? String.fromCodePoint(Math.min(Number.parseInt(hex, 16), 0x10ffff)) : (char ?? ''),
+    );
+}
+
+/** Resolve resource URLs and remove legacy executable CSS, including escaped tokens. */
+export function resolveCss(css: string, base: string): string {
+  const plain = css
+    .replace(/\/\*[\s\S]*?\*\//g, '')
+    .replace(
+      /@((?:\\[a-f\d]{1,6}\s?|\\.|[\w-])+)/gi,
+      (_all, name: string) => `@${decodeCssTokens(name)}`,
+    );
+  const dangerous = /expression\s*\(|(?:javascript|vbscript)\s*:|(?:behavior|-moz-binding)\s*:/i;
+  const cleaned = plain
+    .split(/([;{}])/)
+    .map((part) => {
+      const decoded = decodeCssTokens(part);
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: CSS URL schemes ignore ASCII controls and whitespace.
+      return dangerous.test(decoded.replace(/[\u0000-\u0020\u007f]/g, '')) ? '' : part;
+    })
+    .join('');
+  return cleaned
     .replace(
       /url\(\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^)'"\s]*))\s*\)/gi,
       (_all, double: string, single: string, bare: string) => {
@@ -149,7 +174,8 @@ function resolveCss(css: string, base: string): string {
     .replace(/@import\s+(["'])(.*?)\1/gi, (_all, _quote: string, raw: string) => {
       const url = resolveUrl(raw, base);
       return url ? `@import "${url.replaceAll('"', '%22')}"` : '@import ""';
-    });
+    })
+    .replaceAll('<', '\\3c ');
 }
 
 function resolveSrcset(raw: string, base: string): string {
@@ -203,51 +229,56 @@ function prepareElement(element: Element, base: string): void {
 export function transformPage(html: string, finalUrl: string): string {
   const dom = new JSDOM(html, { url: finalUrl, virtualConsole: new VirtualConsole() });
   try {
-    const document = dom.window.document;
-    for (const node of Array.from(document.querySelectorAll('noscript')).reverse())
-      node.replaceWith(...Array.from(node.childNodes));
-    for (const base of document.querySelectorAll('base')) base.remove();
-    for (const element of document.querySelectorAll('*')) prepareElement(element, finalUrl);
-    for (const link of document.querySelectorAll('link[rel]')) {
-      if (link.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('stylesheet'))
-        link.setAttribute('rel', 'stylesheet');
-    }
-    const purifier = createDOMPurify(dom.window);
-    purifier.addHook('uponSanitizeElement', (node) => {
-      if (!(node instanceof dom.window.Element)) return;
-      if (
-        node.localName === 'link' &&
-        !node.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('stylesheet')
-      )
-        node.remove();
-      if (
-        node.localName === 'meta' &&
-        !node.hasAttribute('charset') &&
-        node.getAttribute('name')?.toLowerCase() !== 'viewport'
-      )
-        node.remove();
-    });
-    return `<!doctype html>\n${purifier.sanitize(document.documentElement.outerHTML, {
-      WHOLE_DOCUMENT: true,
-      ALLOWED_TAGS: TAGS,
-      ALLOWED_ATTR: ATTRS,
-      ALLOW_DATA_ATTR: false,
-      ALLOW_ARIA_ATTR: true,
-      FORBID_TAGS: [
-        'script',
-        'iframe',
-        'frame',
-        'object',
-        'embed',
-        'form',
-        'template',
-        'svg',
-        'math',
-      ],
-      FORBID_CONTENTS: ['script', 'iframe', 'object', 'embed', 'template', 'svg', 'math'],
-      FORBID_ATTR: ['srcdoc', 'ping', 'download', 'http-equiv'],
-    })}`;
+    return sanitizePageDom(dom, finalUrl);
   } finally {
     dom.window.close();
   }
+}
+
+/** Reuse the stylesheet builder's inert DOM instead of retaining a second large page tree. */
+export function sanitizePageDom(dom: JSDOM, finalUrl: string): string {
+  const document = dom.window.document;
+  for (const node of Array.from(document.querySelectorAll('noscript')).reverse())
+    node.replaceWith(...Array.from(node.childNodes));
+  for (const base of document.querySelectorAll('base')) base.remove();
+  for (const element of document.querySelectorAll('*')) prepareElement(element, finalUrl);
+  for (const link of document.querySelectorAll('link[rel]')) {
+    if (link.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('stylesheet'))
+      link.setAttribute('rel', 'stylesheet');
+  }
+  const purifier = createDOMPurify(dom.window);
+  purifier.addHook('uponSanitizeElement', (node) => {
+    if (!(node instanceof dom.window.Element)) return;
+    if (
+      node.localName === 'link' &&
+      !node.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('stylesheet')
+    )
+      node.remove();
+    if (
+      node.localName === 'meta' &&
+      !node.hasAttribute('charset') &&
+      node.getAttribute('name')?.toLowerCase() !== 'viewport'
+    )
+      node.remove();
+  });
+  return `<!doctype html>\n${purifier.sanitize(document.documentElement.outerHTML, {
+    WHOLE_DOCUMENT: true,
+    ALLOWED_TAGS: TAGS,
+    ALLOWED_ATTR: ATTRS,
+    ALLOW_DATA_ATTR: false,
+    ALLOW_ARIA_ATTR: true,
+    FORBID_TAGS: [
+      'script',
+      'iframe',
+      'frame',
+      'object',
+      'embed',
+      'form',
+      'template',
+      'svg',
+      'math',
+    ],
+    FORBID_CONTENTS: ['script', 'iframe', 'object', 'embed', 'template', 'svg', 'math'],
+    FORBID_ATTR: ['srcdoc', 'ping', 'download', 'http-equiv'],
+  })}`;
 }

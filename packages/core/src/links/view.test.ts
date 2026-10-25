@@ -40,6 +40,7 @@ describe('PageViewer port', () => {
       url: 'https://stored.test',
       origin: 'https://silo.test:5175',
       signal,
+      fresh: false,
     });
   });
 });

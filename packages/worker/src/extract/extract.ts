@@ -42,6 +42,7 @@ import { isChallengePage } from './challenge-page.js';
 import { recoverEmbeddedJson } from './embedded-json.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
 import { normalizeLazyImages, sanitizeReaderContent } from './reader-content.js';
+import { extractYouTubeWatch } from './youtube-watch.js';
 
 // PRIVACY: deliberately does NOT include `metascraper-logo-favicon` — it
 // performs a third-party favicon fetch per row, which violates silo's
@@ -316,6 +317,17 @@ function isJsWalled(fields: MetascraperFields, text: string | undefined, html: s
  * rules degrade to `undefined` fields rather than throwing; any genuinely
  * unexpected error here is a real defect, not an "expected" degraded case.
  */
+function youtubeResult(html: string, url: string): ExtractResult | undefined {
+  const youtube = extractYouTubeWatch(html, url);
+  if (!youtube?.text) return undefined;
+  return {
+    status: 'partial',
+    text: youtube.text,
+    ...(youtube.title ? { title: youtube.title } : {}),
+    ...(youtube.reader ? { reader: youtube.reader } : {}),
+  };
+}
+
 export async function extract(input: ExtractInput): Promise<ExtractResult> {
   const { url, html, contentType } = input;
 
@@ -332,6 +344,9 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
     // parse it as HTML at all (R10).
     return { status: 'bare' };
   }
+
+  const youtube = youtubeResult(html, url);
+  if (youtube) return youtube;
 
   // `extractReadableText` is synchronous CPU work (jsdom parse + Readability),
   // not I/O — running it before awaiting `runMetascraper` (rather than
