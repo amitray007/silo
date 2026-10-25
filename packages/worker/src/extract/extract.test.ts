@@ -336,3 +336,49 @@ describe('extract — never throws (contract)', () => {
     ).resolves.toEqual({ status: 'bare' });
   });
 });
+
+describe('Reader extraction', () => {
+  it('recovers an article in a table layout and retains its formatting', async () => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: `<table><tr><td><h1>Great work</h1><font>${'<p>Finding good problems takes curiosity and persistence. <em>Follow your interest.</em></p>'.repeat(12)}</font></td></tr></table>`,
+    });
+    expect(result.status).toBe('full');
+    expect(result.text).toContain('Finding good problems');
+    expect(result.reader?.contentHtml).toContain('<em>Follow your interest.</em>');
+  });
+
+  it('normalizes lazy images before parsing and stores absolute ordered targets', async () => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: `<article><h1>Photo story</h1>${'<p>A useful article about looking at the natural world and recording observations.</p>'.repeat(8)}<img src="/placeholder.gif" data-src="../photo.jpg" data-srcset="/large.jpg 2x"><img data-lazy-src="/second.png"></article>`,
+    });
+    expect(result.reader?.contentImages).toEqual([
+      'https://journal.example.com/photo.jpg',
+      'https://journal.example.com/second.png',
+    ]);
+    expect(result.reader?.contentHtml).not.toContain('srcset');
+  });
+
+  it('runs Readability on short content that the readerability heuristic rejects', async () => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: '<main><h2>Short note</h2><p>Read this small note.</p></main>',
+    });
+    expect(result.text).toContain('Read this small note.');
+    expect(result.reader?.contentHtml).toContain('Read this small note.');
+  });
+});
+
+it('uses YouTube meta description instead of page chrome when there is no transcript', async () => {
+  const result = await extract({
+    url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+    contentType: 'text/html',
+    html: '<meta name="description" content="A video at the zoo &amp; its animals."><body><p>About Press Copyright Privacy</p></body>',
+  });
+  expect(result.text).toBe('A video at the zoo & its animals.');
+  expect(result.reader?.contentHtml).toBe('<p>A video at the zoo &amp; its animals.</p>');
+});

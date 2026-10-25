@@ -267,5 +267,10 @@ export async function enrichLink(
     sourceData,
   );
 
+  if (link.sourceKind === 'youtube' && extracted.description) {
+    extracted.text = extracted.description;
+    extracted.status = 'partial';
+  }
+
   await recordThenMaybeSettle(linkId, { ...extracted, ...(sourceData ? { sourceData } : {}) });
 }

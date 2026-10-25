@@ -80,6 +80,28 @@ describeIfPg('enrichLink (integration)', () => {
     return link.id;
   }
 
+  it('stores a YouTube page description as text when no transcript is available', async () => {
+    const link = await core.createLink({
+      url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+      sourceKind: 'youtube',
+    });
+    const description = 'A short video at the zoo.';
+    await enrichMod.enrichLink(
+      link.id,
+      stubDeps(
+        {
+          ok: true,
+          html: '<html></html>',
+          contentType: 'text/html',
+          finalUrl: link.url,
+          status: 200,
+        },
+        { status: 'partial', description, text: 'About Privacy Terms footer' },
+      ),
+    );
+    expect((await core.getById(link.id))?.extractedText).toBe(description);
+  });
+
   it('fetch ok + extract full -> records full with metadata', async () => {
     const id = await newLink('https://example.com/full');
     await enrichMod.enrichLink(

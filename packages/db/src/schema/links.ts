@@ -39,6 +39,8 @@ export const links = pgTable(
     imageUrl: text('image_url'),
     siteName: text('site_name'),
     extractedText: text('extracted_text'),
+    contentHtml: text('content_html'),
+    contentImages: jsonb('content_images').$type<string[]>(),
 
     sourceKind: text('source_kind').notNull(),
     // Deliberately typed as the loose storage shape, NOT `SourceData`.

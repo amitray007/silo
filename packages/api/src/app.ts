@@ -10,6 +10,7 @@ import { generalTokenAuth } from './general-auth.js';
 import { registerAccessTokenRoutes } from './routes/access-tokens.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConfigRoutes } from './routes/config.js';
+import { registerContentImageRoutes } from './routes/content-image.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
@@ -227,6 +228,7 @@ export function createApp(): Hono {
   registerCountsRoutes(api);
   registerFaviconRoutes(api);
   registerPreviewImageRoutes(api);
+  registerContentImageRoutes(api);
   registerSettingsRoutes(api);
   registerExportRoutes(api);
   registerImportRoutes(api);

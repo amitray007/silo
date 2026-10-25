@@ -35,6 +35,7 @@ describe('enrichSource', () => {
     });
     expect(result).toEqual({
       kind: 'youtube',
+      videoId: 'dQw4w9WgXcQ',
       channel: 'Rick Astley',
       thumbnailUrl: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
     });
@@ -131,6 +132,7 @@ describe('enrichSource', () => {
       });
       expect(result).toEqual({
         kind: 'youtube',
+        videoId: 'dQw4w9WgXcQ',
         channel: 'Someone',
         thumbnailUrl: 'https://img.youtube.com/vi/dQw4w9WgXcQ/hqdefault.jpg',
       });

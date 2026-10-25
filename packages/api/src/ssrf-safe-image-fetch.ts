@@ -211,28 +211,32 @@ export async function fetchImageSafely(
   // safe-fetch.ts's identical defense-in-depth reasoning.
   const allowLoopback = IS_TEST_ENV && (options.allowLoopbackForTests ?? false);
 
-  const validated = await validateAndPinHost(rawUrl, resolver, allowLoopback);
-  if (!validated) {
-    return { ok: false };
-  }
-  const { url, hostname, pinned } = validated;
-
-  const agent = new Agent({
-    connect: {
-      lookup(host, _opts, callback) {
-        if (host !== hostname) {
-          callback(new Error('ssrf-safe-image-fetch: unexpected host'), []);
-          return;
-        }
-        callback(null, [{ address: pinned.address, family: pinned.family === 6 ? 6 : 4 }]);
-      },
-    },
-  });
-
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
-
+  let agent: Agent | undefined;
+  let onAbort: (() => void) | undefined;
   try {
+    const deadline = new Promise<undefined>((resolve) => {
+      onAbort = () => resolve(undefined);
+      controller.signal.addEventListener('abort', onAbort, { once: true });
+    });
+    const validated = await Promise.race([
+      validateAndPinHost(rawUrl, resolver, allowLoopback),
+      deadline,
+    ]);
+    if (!validated || controller.signal.aborted) return { ok: false };
+    const { url, hostname, pinned } = validated;
+    agent = new Agent({
+      connect: {
+        lookup(host, _opts, callback) {
+          if (host !== hostname) {
+            callback(new Error('ssrf-safe-image-fetch: unexpected host'), []);
+            return;
+          }
+          callback(null, [{ address: pinned.address, family: pinned.family === 6 ? 6 : 4 }]);
+        },
+      },
+    });
     const response = await undiciFetch(url, {
       dispatcher: agent,
       redirect: 'manual',
@@ -256,7 +260,8 @@ export async function fetchImageSafely(
     return { ok: false };
   } finally {
     clearTimeout(timer);
-    await agent.destroy().catch(() => {
+    if (onAbort) controller.signal.removeEventListener('abort', onAbort);
+    await agent?.destroy().catch(() => {
       // best-effort teardown
     });
   }

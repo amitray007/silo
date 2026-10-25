@@ -185,6 +185,12 @@ export {
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
+export type { ReaderContent } from './links/reader.js';
+export {
+  findReaderUpgradeCandidates,
+  READER_HTML_MAX_BYTES,
+  recordReaderUpgrade,
+} from './links/reader.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
 // over a link's own tags + title terms — see related.ts's doc comment.
 export { findRelated } from './links/related.js';
@@ -231,7 +237,6 @@ export {
   listTrash,
   searchTrash,
 } from './links/trash.js';
-
 // Settings persistence (plan 016): a single-user key -> value store —
 // theme/trash-purge-cycle/plugin-toggle settings the web Settings modal
 // reads + writes. Appended as its own minimal block (this barrel is shared

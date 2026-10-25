@@ -51,6 +51,7 @@ export async function enrichYouTube(
   const data = parsed as YouTubeOEmbedResponse;
   const candidate = {
     kind: 'youtube' as const,
+    videoId,
     channel: data.author_name,
     thumbnailUrl: youtubeThumbnailUrl(videoId),
   };

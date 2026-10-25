@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ImageFetchResolver } from './ssrf-safe-image-fetch.js';
 import { fetchImageSafely } from './ssrf-safe-image-fetch.js';
 
@@ -206,4 +206,17 @@ describe('fetchImageSafely — production defaults (no options)', () => {
     const result = await fetchImageSafely(`http://localhost:${port}/img.png`);
     expect(result.ok).toBe(false);
   });
+});
+
+it('bounds a DNS resolver that never settles by the same five-second deadline', async () => {
+  vi.useFakeTimers();
+  try {
+    const result = fetchImageSafely('https://never.example.org/photo.png', {
+      resolver: () => new Promise(() => {}),
+    });
+    await vi.advanceTimersByTimeAsync(5001);
+    expect(await result).toEqual({ ok: false });
+  } finally {
+    vi.useRealTimers();
+  }
 });

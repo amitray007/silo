@@ -30,7 +30,8 @@
     "metascraper-title": "catalog:",
     "metascraper-url": "catalog:",
     "pg-boss": "catalog:",
-    "undici": "catalog:"
+    "undici": "catalog:",
+    "dompurify": "catalog:"
   },
   "devDependencies": {
     "@silo/db": "workspace:*",

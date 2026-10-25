@@ -28,7 +28,8 @@
  * deferred limitation (see the plan's Scope Boundaries).
  */
 
-import { isProbablyReaderable, Readability } from '@mozilla/readability';
+import { Readability } from '@mozilla/readability';
+import { detectSource, type ReaderContent } from '@silo/core';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import metascraper from 'metascraper';
 import metascraperDescription from 'metascraper-description';
@@ -39,6 +40,7 @@ import metascraperTitle from 'metascraper-title';
 import metascraperUrl from 'metascraper-url';
 import { recoverEmbeddedJson } from './embedded-json.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
+import { normalizeLazyImages, sanitizeReaderContent } from './reader-content.js';
 
 // PRIVACY: deliberately does NOT include `metascraper-logo-favicon` — it
 // performs a third-party favicon fetch per row, which violates silo's
@@ -92,6 +94,7 @@ export interface ExtractResult {
   siteName?: string;
   text?: string;
   status: CaptureStatus;
+  reader?: ReaderContent;
 }
 
 export interface ExtractInput {
@@ -116,7 +119,7 @@ function isHtmlContentType(contentType: string | undefined): boolean {
   return mimeType !== undefined && HTML_CONTENT_TYPES.includes(mimeType);
 }
 
-type MetascraperFields = Omit<ExtractResult, 'status' | 'text'>;
+type MetascraperFields = Omit<ExtractResult, 'status' | 'text' | 'reader'>;
 
 /**
  * Run metascraper and map its fields onto ExtractResult's naming
@@ -180,29 +183,31 @@ export function buildExtractVirtualConsole(): VirtualConsole {
 
 /**
  * Run Readability over a script-and-remote-resource-disabled jsdom DOM.
- * Returns the trimmed/normalized text (or undefined if Readability found
- * nothing / the DOM is not "readerable"), plus the DOM itself (reused by the
- * embedded-JSON tier so the HTML is only parsed once).
+ * Keep article HTML and text; use main/article/body when the article is too thin.
  */
-function extractReadableText(url: string, html: string): { dom: JSDOM; text: string | undefined } {
-  const virtualConsole = buildExtractVirtualConsole();
-
-  // No `runScripts` / `resources` option set — this is jsdom's default and
-  // means embedded <script> tags are parsed into the DOM but NEVER
-  // executed, and no remote resource (image, stylesheet, subresource
-  // script) is fetched. This is load-bearing: `html` is untrusted,
-  // attacker-influenced content. `virtualConsole` above only filters logging
-  // output and does not affect this security property.
-  const dom = new JSDOM(html, { url, virtualConsole });
-
-  if (!isProbablyReaderable(dom.window.document)) {
-    return { dom, text: undefined };
+function extractReadableText(url: string, dom: JSDOM): { text?: string; reader?: ReaderContent } {
+  const document = dom.window.document;
+  normalizeLazyImages(document);
+  // Readability mutates its input. Keep the original for fallback and embedded JSON.
+  const article = new Readability(document.cloneNode(true) as Document).parse();
+  const readableText = normalizeWhitespace(article?.textContent ?? '');
+  const fallback = document.cloneNode(true) as Document;
+  for (const node of fallback.querySelectorAll(
+    'script, style, nav, header, footer, aside, noscript, template',
+  )) {
+    node.remove();
   }
-
-  const article = new Readability(dom.window.document).parse();
-  const rawText = article?.textContent;
-  const text = rawText ? normalizeWhitespace(rawText) : undefined;
-  return { dom, text: text && text.length > 0 ? text : undefined };
+  const main = fallback.querySelector('main, article') ?? fallback.body;
+  const fallbackText = normalizeWhitespace(main?.textContent ?? '');
+  // Prefer the article when substantial; a thin result must beat the fallback.
+  const useArticle =
+    readableText.length >= FULL_TEXT_THRESHOLD || readableText.length >= fallbackText.length;
+  const text = useArticle ? readableText : fallbackText;
+  const reader = sanitizeReaderContent(
+    useArticle ? (article?.content ?? '') : (main?.innerHTML ?? ''),
+    url,
+  );
+  return { ...(text ? { text } : {}), ...(reader ? { reader } : {}) };
 }
 
 /** SPA/JS-wall heuristic over the raw HTML string (cheap, no DOM needed). */
@@ -322,22 +327,28 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
   // wrapping it in `Promise.all`) is the honest shape: there is no real
   // concurrency to buy here, since JS is single-threaded and the parse must
   // complete before this function can do anything else regardless.
-  const { dom, text: readableText } = extractReadableText(url, html);
-  const fields = await runMetascraper(url, html);
-
-  let text = readableText;
-  if ((text?.length ?? 0) < FULL_TEXT_THRESHOLD) {
-    text = applyEmbeddedJsonRecovery(dom, fields, text);
+  const dom = new JSDOM(html, { url, virtualConsole: buildExtractVirtualConsole() });
+  try {
+    const readable = extractReadableText(url, dom);
+    const fields = await runMetascraper(url, html);
+    let text = readable.text;
+    if ((text?.length ?? 0) < FULL_TEXT_THRESHOLD) {
+      text = applyEmbeddedJsonRecovery(dom, fields, text);
+    }
+    // YouTube ships a client-rendered shell, not a transcript. Keep the video's
+    // meta description instead of turning its navigation/footer into an article.
+    if (detectSource(url).kind === 'youtube' && fields.description) {
+      text = normalizeWhitespace(fields.description);
+      const paragraph = dom.window.document.createElement('p');
+      paragraph.textContent = fields.description;
+      const reader = sanitizeReaderContent(paragraph.outerHTML, url);
+      if (reader) readable.reader = reader;
+    }
+    const result = buildResult(fields, text);
+    if (readable.reader) result.reader = readable.reader;
+    if (result.status === 'bare' && isJsWalled(fields, text, html)) result.status = 'partial';
+    return result;
+  } finally {
+    dom.window.close();
   }
-
-  const result = buildResult(fields, text);
-  // A JS-walled shell with no usable metadata would otherwise classify as
-  // `bare`; the SPA markers are evidence there IS content (just client-rendered
-  // and unreachable statically), so force `partial` — but keep every field that
-  // WAS extracted (e.g. an og:image / og:site_name present on the shell) rather
-  // than dropping them.
-  if (result.status === 'bare' && isJsWalled(fields, text, html)) {
-    result.status = 'partial';
-  }
-  return result;
 }

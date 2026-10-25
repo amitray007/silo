@@ -164,6 +164,10 @@ const githubSourceData = z
 const youtubeSourceData = z
   .object({
     kind: z.literal('youtube'),
+    videoId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{11}$/)
+      .optional(),
     channel: z.string().min(1).max(256),
     thumbnailUrl: z.string().min(1).max(2000),
   })

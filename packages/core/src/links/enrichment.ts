@@ -3,6 +3,7 @@ import { eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import type { Link } from './links.js';
 import { whereLive } from './live.js';
+import { readerContentSchema } from './reader.js';
 import { sourceDataSchema } from './source-data.js';
 
 /**
@@ -68,6 +69,7 @@ export const enrichmentResultSchema = z.object({
   siteName: z.string().max(FIELD_MAX.siteName).optional(),
   text: z.string().max(FIELD_MAX.text).optional(),
   status: enrichmentStatus,
+  reader: readerContentSchema.optional(),
   /**
    * The per-source enricher's result (HN points/comments, GitHub repo stats,
    * YouTube channel+thumbnail — source-data/rich-previews slice, plan 012).
@@ -198,6 +200,7 @@ export async function recordEnrichment(
       imageUrl: sql`coalesce(${parsed.imageUrl ?? null}, ${links.imageUrl})`,
       siteName: sql`coalesce(${parsed.siteName ?? null}, ${links.siteName})`,
       extractedText: sql`coalesce(${parsed.text ?? null}, ${links.extractedText})`,
+      ...(parsed.reader ?? {}),
       captureStatus: parsed.status,
       sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
       sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,
