@@ -1,19 +1,7 @@
 import { db, links } from '@silo/db';
 import { asc, eq, gt, isNull, or, sql } from 'drizzle-orm';
-import { z } from 'zod';
+import { type ReaderContent, readerContentSchema } from '../capture.js';
 import { whereLive } from './live.js';
-
-export const READER_HTML_MAX_BYTES = 1024 * 1024;
-
-/** HTML and its ordered image targets must always be written together. */
-export const readerContentSchema = z.object({
-  contentHtml: z
-    .string()
-    .min(1)
-    .refine((html) => Buffer.byteLength(html) <= READER_HTML_MAX_BYTES),
-  contentImages: z.array(z.httpUrl()).max(10_000),
-});
-export type ReaderContent = z.infer<typeof readerContentSchema>;
 
 const missingText = or(isNull(links.extractedText), eq(links.extractedText, ''));
 

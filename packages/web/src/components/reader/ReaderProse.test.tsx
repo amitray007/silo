@@ -83,3 +83,23 @@ it('preserves the full article typography fixture', () => {
   expect(output).toContain('colspan="2"');
   expect(output).toContain('rowspan="2"');
 });
+
+it('keeps namespaced footnotes in-page and rejects arbitrary publisher IDs', () => {
+  const { container } = render(
+    <ReaderProse
+      link={{
+        ...makeLink(),
+        contentImageCount: 0,
+        contentHtml:
+          '<p id="location">Article <a id="silo-fn-1" href="#silo-fn-2">1</a><a href="#location">unsafe</a></p><ol><li id="silo-fn-2">Note <a href="#silo-fn-1">back</a></li></ol>',
+      }}
+    />,
+  );
+  expect(container.querySelector('[id="location"]')).toBeNull();
+  const forward = container.querySelector('a[href="#silo-fn-2"]');
+  expect(forward).not.toBeNull();
+  expect(forward?.hasAttribute('target')).toBe(false);
+  expect(container.querySelector('#silo-fn-2')?.textContent).toContain('Note');
+  expect(container.querySelector('a[href="#silo-fn-1"]')).not.toBeNull();
+  expect(container.querySelector('a[href="#location"]')).toBeNull();
+});

@@ -67,6 +67,7 @@ export {
   TOKEN_PREFIX_LEN,
   verifyAccessToken,
 } from './auth/tokens.js';
+export { READER_HTML_MAX_BYTES, type ReaderContent } from './capture.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
 // of the single-id write ops above, modeled on `import.ts`'s sequential-
 // bulk-with-per-item-results pattern (see bulk.ts's module doc comment).
@@ -185,10 +186,8 @@ export {
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
-export type { ReaderContent } from './links/reader.js';
 export {
   findReaderUpgradeCandidates,
-  READER_HTML_MAX_BYTES,
   recordReaderUpgrade,
 } from './links/reader.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
