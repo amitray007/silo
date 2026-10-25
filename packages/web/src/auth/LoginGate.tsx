@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
-import { GrainDot } from '../components/GrainDot';
+import { BrandMark } from '../components/BrandMark';
 import { type LoginResult, useAuth } from './AuthContext';
 
 type LoginFailure = Exclude<LoginResult, { kind: 'success' }>;
@@ -15,7 +15,7 @@ type LoginFailure = Exclude<LoginResult, { kind: 'success' }>;
  * A single password field for `SILO_APP_PASSWORD` — a human password,
  * separate from the machine `SILO_API_TOKEN` extensions/MCP use
  * (`docs/superpowers/specs/2026-07-11-web-auth-cookie-upgrade.md`). Design:
- * Oat tokens, Geist 400/500, the brand grain dot, a plain bordered `--bg2`
+ * Neutral tokens, self-hosted Geist, the orange tile mark, a plain bordered `--bg2`
  * submit button (amber stays a mark only, never a button fill, per
  * `docs/design/tokens.md`).
  */
@@ -87,12 +87,12 @@ export function LoginGate() {
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 'var(--s5)' }}>
-          <GrainDot size={16} />
+          <BrandMark />
           <span
             style={{
-              fontWeight: 500,
-              fontSize: 'var(--text-md)',
-              letterSpacing: 'var(--tracking-tight)',
+              fontWeight: 600,
+              fontSize: 16,
+              letterSpacing: '-0.02em',
               color: 'var(--ink)',
             }}
           >

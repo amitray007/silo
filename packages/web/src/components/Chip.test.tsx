@@ -27,7 +27,7 @@ describe('Chip', () => {
     expect(screen.getByText('T')).toBeDefined();
   });
 
-  it('uses the Oat chip tokens (bg2 fill, line border) on the outer chip', () => {
+  it('uses the chip tokens (bg2 fill, line border) on the outer chip', () => {
     render(<Chip domain="tbray.org" />);
     const letter = screen.getByText('T');
     const chip = letter.parentElement;

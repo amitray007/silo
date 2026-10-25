@@ -124,7 +124,7 @@ export function PreferencesTab() {
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Theme</div>
-          <div style={rowDesc}>Oat, in two lights</div>
+          <div style={rowDesc}>Light, dark, or follow the system.</div>
         </div>
         <ThemeToggle />
       </div>

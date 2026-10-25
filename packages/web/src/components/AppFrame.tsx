@@ -3,9 +3,9 @@ import { Outlet, useLocation, useMatch } from 'react-router';
 import { useCommandPalette } from '../lib/useCommandPalette';
 import { usePasteCapture } from '../lib/usePasteCapture';
 import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
+import { BrandMark } from './BrandMark';
 import { CommandPalette } from './CommandPalette';
 import { EditModal } from './EditModal';
-import { GrainDot } from './GrainDot';
 import { HoverPreviewProvider } from './HoverPreviewContext';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
@@ -316,12 +316,8 @@ export function AppFrame() {
               >
                 <span aria-hidden="true">☰</span>
               </button>
-              <GrainDot size={24} plate />
-              <span
-                style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}
-              >
-                silo
-              </span>
+              <BrandMark />
+              <span style={{ fontWeight: 600, fontSize: 16, letterSpacing: '-0.02em' }}>silo</span>
             </div>
 
             {/* The scrim is a pointer-only dismiss affordance (aria-hidden — the

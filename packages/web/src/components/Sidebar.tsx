@@ -4,7 +4,7 @@ import { useCounts, useTags } from '../api/hooks';
 import type { TagCount } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { formatCount } from '../lib/formatCount';
-import { GrainDot } from './GrainDot';
+import { BrandMark } from './BrandMark';
 import { LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { useSettings } from './SettingsContext';
@@ -268,16 +268,14 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         style={{
           display: 'flex',
           alignItems: 'center',
-          gap: 10,
+          gap: 9,
           padding: '4px 9px 16px',
           textDecoration: 'none',
           color: 'inherit',
         }}
       >
-        <GrainDot size={26} plate />
-        <span style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}>
-          silo
-        </span>
+        <BrandMark />
+        <span style={{ fontWeight: 600, fontSize: 16, letterSpacing: '-0.02em' }}>silo</span>
       </a>
 
       <SidebarSearchItem onOpenSearch={onOpenSearch} />

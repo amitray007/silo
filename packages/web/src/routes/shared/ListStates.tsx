@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ApiError } from '../../api/client';
+import { BrandMark } from '../../components/BrandMark';
 import { CenteredPanel } from '../../components/CenteredPanel';
-import { GrainDot } from '../../components/GrainDot';
 import { Skeleton } from '../../components/Skeleton';
 
 /**
@@ -92,7 +92,7 @@ export function LoadingState() {
   );
 }
 
-/** The design's richer empty state (`Silo-v2.html:96-103`) — the Stack mark + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
+/** The design's richer empty state (`Silo-v2.html:96-103`) — the orange tile mark + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
 export function EmptyState({ title, body }: { title: string; body: ReactNode }) {
   return (
     <CenteredPanel>
@@ -101,7 +101,7 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
           pane, rather than a stray glyph floating in a large dark card (direct
           user feedback that the small bare mark "looked bad"). Sized up to 40
           so it holds the composition. */}
-      <GrainDot size={40} plate />
+      <BrandMark size={40} />
       <p
         style={{
           margin: '18px 0 0',

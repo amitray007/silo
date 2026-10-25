@@ -23,7 +23,7 @@ function renderWithProviders(ui: ReactNode) {
 }
 
 describe('DayGroup', () => {
-  it('renders the label in the Oat style', () => {
+  it('renders the label in the token style', () => {
     renderWithProviders(<DayGroup label="Today" links={[]} />);
     const label = screen.getByText('Today');
     expect(label.style.fontSize).toBe('var(--text-sm)');

@@ -1,4 +1,40 @@
-# Silo — Design system "Oat" (source of truth)
+# Silo - Design tokens
+
+## Redesign 2026-10
+
+The approved three-pane prototype replaces Oat's warm palette and Stack mark
+with crisp neutral surfaces and an orange tile mark. This gives the list and
+reader separate surfaces while keeping primary actions in ink. The source is
+`docs/design/prototypes/silo-redesign.src.html`; its token blocks and brand
+styles take precedence over the historical design notes below.
+
+- Geist Sans 400/500/600 is self-hosted. Use 600 for the brand, pane titles,
+  reader headings, and controls where the prototype uses it. The 600 latin
+  woff2 is extracted from the built prototype and stored beside `fonts.css`.
+- Light: ground `#f6f6f5`, panel `#ffffff`, line `#e6e6e4`, stronger line
+  `#d6d6d3`, hover `#f1f1ef`, selection `#ebebe9`, ink `#0c0c0b`, muted
+  `#5c5c59`, faint `#8a8a86`, button `#111110` on `#ffffff`.
+- Dark: ground `#0a0a0a`, panel `#111111`, line `#222222`, stronger line
+  `#2e2e2e`, hover `#181818`, selection `#1f1f1f`, ink `#f3f3f2`, muted
+  `#a3a3a0`, faint `#757572`, button `#f3f3f2` on `#0a0a0a`.
+- Brand gradient: `#ffb23f` to `#ff6a13` at 160 degrees. The 26px tile has a
+  7px radius and three white bars at 1/0.72/0.46 opacity. It replaces the
+  Stack mark in the app, favicon, PWA icons, and staged macOS icon.
+- Accent `#f26b1d`; accent text light/dark `#b8480a`/`#ff9a52`; accent soft
+  light/dark `#fff1e6`/`#2a1709`; danger `#d63a2f`. Accent is allowed for the
+  mark, the prototype's Add link focus accents, and toast action text.
+  Primary buttons stay ink. Focus rings elsewhere stay neutral.
+- Keep existing token names where roles match: `--bg2` maps to prototype
+  `--panel`, `--mark` to `--accent`, `--markt` to `--accent-ink`, `--warn` to
+  `--danger`, and `--ease-out` to `--ease`. `--ghost` uses the faint tone for
+  non-text affordances. Settings surface aliases use the neutral ramp.
+- Elevation and scrims match the prototype in both themes. Existing type and
+  spacing scales remain for components until their redesign unit. Removed
+  tokens: the old mark plate, badge colors, and unused motion/spacing roles.
+- Keep the pre-paint theme script and both themes. Healthy rows have no
+  completion badge. Letter chips remain local; images use the preview proxy.
+
+The sections below record earlier decisions. They do not override this redesign.
 
 **Canonical home:** Claude Design project **"Silo"** (`3a2c2144-2546-4c3b-93a9-e9e172848e09`) — 11 cards: Foundations (brand, colors, type), Components (omnibar, rows, filters, marks, settings), Screens (library light / dark / interactive).
 **Direction:** v2 "Oat" — chosen 2026-07-03 after the Geist Pixel/Mono system was rejected. Grounded in a live analysis of shiori.sh (gstack browse, computed CSS): **learn its structure and layout; own the brand.**

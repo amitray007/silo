@@ -42,7 +42,7 @@ body {
 }
 
 ::selection {
-  background: rgba(201, 143, 45, 0.22);
+  background: var(--sel);
 }
 
 input::placeholder,
@@ -1203,4 +1203,37 @@ select {
     transition-duration: 0.12s !important;
     transition-timing-function: ease !important;
   }
+}
+
+/* Orange tile brand mark: proportions from the prototype's 26px mark. */
+.silo-brand-mark {
+  display: inline-block;
+  flex: none;
+  position: relative;
+  border-radius: 26.923077%;
+  background: linear-gradient(160deg, var(--accent-a), var(--accent-b));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.35),
+    0 1px 2px rgba(180, 70, 0, 0.35);
+}
+
+.silo-brand-mark i {
+  position: absolute;
+  left: 23.076923%;
+  right: 23.076923%;
+  height: 15.384615%;
+  border-radius: 3px;
+  background: #fff;
+}
+
+.silo-brand-mark i:nth-child(1) {
+  top: 25%;
+}
+.silo-brand-mark i:nth-child(2) {
+  top: 42.307692%;
+  opacity: 0.72;
+}
+.silo-brand-mark i:nth-child(3) {
+  top: 59.615385%;
+  opacity: 0.46;
 }
