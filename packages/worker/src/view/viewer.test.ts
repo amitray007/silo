@@ -162,8 +162,26 @@ describe('page viewer shared fetch', () => {
     await small.request();
     expect(small.fetch).toHaveBeenCalledTimes(2);
   });
-  it('returns none when the worker transform fails or times out', async () => {
+  it('keeps direct framing after a transform timeout and checks cached policy per origin', async () => {
+    const { request, fetch } = setup({
+      transform: async () => {
+        throw new Error('transform-timeout');
+      },
+    });
+    fetch.mockResolvedValue(
+      success({ contentSecurityPolicy: 'frame-ancestors https://silo.test' }),
+    );
+    expect(await request()).toEqual({ frame: { mode: 'direct', contentType: 'text/html' } });
+    expect((await request('a', 'https://blocked.test')).frame).toEqual({
+      mode: 'none',
+      reason: 'transform-unavailable',
+      contentType: 'text/html',
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+  it('returns none when framing is blocked and the worker transform fails or times out', async () => {
     const { request } = setup({
+      fetch: async () => success({ xFrameOptions: 'DENY' }),
       transform: async () => {
         throw new Error('transform-timeout');
       },

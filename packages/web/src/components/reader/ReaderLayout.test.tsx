@@ -313,7 +313,7 @@ describe('reader content', () => {
         .getByRole('link', { name: /Open in new tab/ })
         .getAttribute('href'),
     ).toBe(a.url);
-    expect(reader().getByRole('button', { name: 'Show silo view' })).toBeDefined();
+    expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
   });
   it('does not mount an unrequested Original iframe when selecting another link', async () => {
     const attributes = vi.spyOn(HTMLIFrameElement.prototype, 'setAttribute');
@@ -868,7 +868,7 @@ describe('review regressions', () => {
     );
     expect(reader().getAllByRole('link', { name: /Open in new tab/ }).length).toBeGreaterThan(0);
     if (mode === 'direct') {
-      expect(reader().getByRole('button', { name: 'Show silo view' })).toBeDefined();
+      expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
       if (url.includes('/pdf/'))
         expect(screen.getByTitle('Original page').hasAttribute('sandbox')).toBe(false);
     }

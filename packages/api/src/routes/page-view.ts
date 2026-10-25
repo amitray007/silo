@@ -7,12 +7,10 @@ import { PAGE_VIEW_HEADERS } from '../page-view-headers.js';
 const params = z.object({ id: z.uuid() });
 
 async function pageResponse(c: Context, html: boolean): Promise<Response> {
-  if (html) {
-    for (const [name, value] of Object.entries(PAGE_VIEW_HEADERS)) c.header(name, value);
-  }
   const { id } = params.parse(c.req.param());
   try {
-    const page = await viewPage(id, new URL(c.req.url).origin, c.req.raw.signal);
+    const origin = new URL(process.env.SILO_PUBLIC_API_URL?.trim() || c.req.url).origin;
+    const page = await viewPage(id, origin, c.req.raw.signal);
     if (!page) return c.json({ error: 'not_found', message: 'Link not found' }, 404);
     if (!html) {
       c.header('Cache-Control', 'private, no-store');
@@ -25,6 +23,14 @@ async function pageResponse(c: Context, html: boolean): Promise<Response> {
     if (!(error instanceof PageViewerUnavailableError)) throw error;
     return c.json({ error: 'service_unavailable', message: 'Page viewer unavailable' }, 503);
   }
+}
+
+/** Register before authentication so rejected requests receive the same sandbox policy. */
+export function registerPageViewHeaders(app: Hono): void {
+  app.use('/links/:id/view', async (c, next) => {
+    for (const [name, value] of Object.entries(PAGE_VIEW_HEADERS)) c.header(name, value);
+    await next();
+  });
 }
 
 export function registerPageViewRoutes(app: Hono): void {

@@ -29,12 +29,18 @@ type ViewerOptions = {
 
 function hintFor(page: Page, origin: string): FrameHint {
   const contentType = page.contentType ? { contentType: page.contentType } : {};
-  if (page.reason) return { mode: 'none', reason: page.reason, ...contentType };
   const mime = page.contentType?.split(';')[0]?.trim().toLowerCase() ?? '';
   const displayable =
-    page.html || mime === 'application/pdf' || mime === 'text/plain' || mime.startsWith('image/');
-  if (!displayable) return { mode: 'none', reason: 'unsupported-content', ...contentType };
+    page.html ||
+    mime === 'text/html' ||
+    mime === 'application/xhtml+xml' ||
+    mime === 'application/pdf' ||
+    mime === 'text/plain' ||
+    mime.startsWith('image/');
+  if (!displayable)
+    return { mode: 'none', reason: page.reason ?? 'unsupported-content', ...contentType };
   if (allowsFraming(page, page.finalUrl, origin)) return { mode: 'direct', ...contentType };
+  if (page.reason) return { mode: 'none', reason: page.reason, ...contentType };
   return page.html
     ? { mode: 'view', reason: 'framing-blocked', ...contentType }
     : { mode: 'none', reason: 'non-html-framing-blocked', ...contentType };

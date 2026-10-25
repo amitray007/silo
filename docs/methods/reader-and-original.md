@@ -310,5 +310,7 @@ The fixture checks are separate from real-link QA.
 Silo view allows live GET requests for CSS, images, fonts, and media. Links open
 ordinary pages in new tabs. Its iframe and response CSP omit scripts, same-origin
 access, and forms. Unsafe silo API calls still require the CSRF header.
-Frame hints use the request URL's origin; reverse proxies must preserve the
-public Host and scheme. Vite preserves the browser Host for local QA.
+Frame hints use `SILO_PUBLIC_API_URL`'s origin when configured, otherwise the
+request URL's origin. Set this public HTTPS URL behind a TLS-terminating
+reverse proxy. Frame hints ignore forwarded headers. Vite preserves the
+browser Host for local QA.

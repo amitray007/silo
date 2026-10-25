@@ -8,6 +8,13 @@ const describeIfPg = postgresReachable() ? describe : describe.skip;
 const CSP =
   "sandbox allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; img-src * data:; style-src * 'unsafe-inline'; font-src * data:; media-src *; frame-ancestors 'self'";
 
+function expectSecurityHeaders(response: Response) {
+  expect(response.headers.get('content-security-policy')).toBe(CSP);
+  expect(response.headers.get('x-content-type-options')).toBe('nosniff');
+  expect(response.headers.get('referrer-policy')).toBe('no-referrer');
+  expect(response.headers.get('cache-control')).toBe('private, no-store');
+}
+
 describeIfPg('Original routes (Postgres)', () => {
   const harness = setupPgHarness('silo_page_view_test', async () => {
     const core = await import('@silo/core');
@@ -17,6 +24,7 @@ describeIfPg('Original routes (Postgres)', () => {
   beforeEach(() => {
     vi.stubEnv('SILO_API_TOKEN', '');
     vi.stubEnv('SILO_APP_PASSWORD', '');
+    vi.stubEnv('SILO_PUBLIC_API_URL', '');
   });
   afterEach(() => {
     harness.mod().core.setPageViewer(undefined);
@@ -33,7 +41,7 @@ describeIfPg('Original routes (Postgres)', () => {
     for (const route of ['view', 'frame']) {
       const response = await harness.mod().app.request(`/api/links/${link.id}/${route}`);
       expect(response.status).toBe(503);
-      if (route === 'view') expect(response.headers.get('content-security-policy')).toBe(CSP);
+      if (route === 'view') expectSecurityHeaders(response);
       expect(await response.json()).toEqual({
         error: 'service_unavailable',
         message: 'Page viewer unavailable',
@@ -54,12 +62,41 @@ describeIfPg('Original routes (Postgres)', () => {
     expect(response.status).toBe(200);
     expect(await response.text()).toBe('<!doctype html><p>Safe page</p>');
     expect(response.headers.get('content-type')).toBe('text/html; charset=UTF-8');
-    expect(response.headers.get('content-security-policy')).toBe(CSP);
-    expect(response.headers.get('x-content-type-options')).toBe('nosniff');
-    expect(response.headers.get('referrer-policy')).toBe('no-referrer');
-    expect(response.headers.get('cache-control')).toBe('private, no-store');
+    expectSecurityHeaders(response);
     expect(viewer).toHaveBeenCalledWith(
       expect.objectContaining({ id: link.id, url: link.url, origin: 'https://silo.test:5175' }),
+    );
+  });
+  it.each(['frame', 'view'])(
+    'uses the configured public API origin behind TLS termination for /%s',
+    async (route) => {
+      vi.stubEnv('SILO_PUBLIC_API_URL', ' https://silo.public.test:8443/ ');
+      const { core, app } = harness.mod();
+      const link = await capture(`public-${route}`);
+      const viewer = vi.fn(async () => ({
+        frame: { mode: 'direct' as const },
+        html: '<p>Page</p>',
+      }));
+      core.setPageViewer(viewer);
+      const response = await app.request(`http://internal:8787/api/links/${link.id}/${route}`, {
+        headers: { 'X-Forwarded-Proto': 'http', 'X-Forwarded-Host': 'attacker.test' },
+      });
+      expect(response.status).toBe(200);
+      expect(viewer).toHaveBeenCalledWith(
+        expect.objectContaining({ origin: 'https://silo.public.test:8443' }),
+      );
+    },
+  );
+  it('ignores spoofed forwarded headers when no public API URL is configured', async () => {
+    const { core, app } = harness.mod();
+    const link = await capture('forwarded');
+    const viewer = vi.fn(async () => ({ frame: { mode: 'direct' as const } }));
+    core.setPageViewer(viewer);
+    await app.request(`http://silo.test:8787/api/links/${link.id}/frame`, {
+      headers: { 'X-Forwarded-Proto': 'https', 'X-Forwarded-Host': 'attacker.test' },
+    });
+    expect(viewer).toHaveBeenCalledWith(
+      expect.objectContaining({ origin: 'http://silo.test:8787' }),
     );
   });
   it.each(['direct', 'view', 'none'] as const)(
@@ -82,7 +119,9 @@ describeIfPg('Original routes (Postgres)', () => {
     const link = await capture('missing-html');
     const viewer = vi.fn(async () => ({ frame: { mode: 'none' as const } }));
     core.setPageViewer(viewer);
-    expect((await app.request(`/api/links/${link.id}/view`)).status).toBe(404);
+    const unavailable = await app.request(`/api/links/${link.id}/view`);
+    expect(unavailable.status).toBe(404);
+    expectSecurityHeaders(unavailable);
     await core.softDelete(link.id);
     for (const route of ['view', 'frame']) {
       expect((await app.request(`/api/links/${link.id}/${route}`)).status).toBe(404);
@@ -99,7 +138,9 @@ describeIfPg('Original routes (Postgres)', () => {
     const link = await capture('auth');
     core.setPageViewer(async () => ({ frame: { mode: 'view' }, html: '<p>Safe</p>' }));
     for (const route of ['view', 'frame']) {
-      expect((await app.request(`/api/links/${link.id}/${route}`)).status).toBe(401);
+      const unauthorized = await app.request(`/api/links/${link.id}/${route}`);
+      expect(unauthorized.status).toBe(401);
+      if (route === 'view') expectSecurityHeaders(unauthorized);
       expect(
         (
           await app.request(`/api/links/${link.id}/${route}`, {
@@ -107,6 +148,20 @@ describeIfPg('Original routes (Postgres)', () => {
           })
         ).status,
       ).toBe(200);
+    }
+  });
+  it('checks /view availability with HEAD, including authentication and security headers', async () => {
+    const { core, app } = harness.mod();
+    const link = await capture('head');
+    core.setPageViewer(async () => ({ frame: { mode: 'view' }, html: '<p>Safe</p>' }));
+    for (const status of [200, 404, 503, 401]) {
+      if (status === 404) core.setPageViewer(async () => ({ frame: { mode: 'none' } }));
+      if (status === 503) core.setPageViewer(undefined);
+      if (status === 401) vi.stubEnv('SILO_API_TOKEN', 'test-only-token');
+      const response = await app.request(`/api/links/${link.id}/view`, { method: 'HEAD' });
+      expect(response.status).toBe(status);
+      expectSecurityHeaders(response);
+      expect(await response.text()).toBe('');
     }
   });
   it('maps a saturated viewer to 503', async () => {

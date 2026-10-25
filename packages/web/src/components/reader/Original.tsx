@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiUrl } from '../../api/client';
 import { useFrameHint } from '../../api/hooks';
@@ -16,10 +17,12 @@ function OriginalBar({
   link,
   mode,
   switchMode,
+  canView,
 }: {
   link: LinkJson;
   mode: Mode;
   switchMode: (mode: FrameMode) => void;
+  canView: boolean;
 }) {
   const url = originalUrl(link.url);
   return (
@@ -27,7 +30,7 @@ function OriginalBar({
       <span title={link.url}>
         {labels[mode]} · {link.url}
       </span>
-      {(mode === 'direct' || mode === 'view') && (
+      {(mode === 'view' || (mode === 'direct' && canView)) && (
         <button
           className="silo-reader-btn"
           type="button"
@@ -50,13 +53,11 @@ function OriginalContent({
   mode,
   embed,
   loading,
-  fail,
 }: {
   link: LinkJson;
   mode: Mode;
   embed: PlayerEmbed | undefined;
   loading: boolean;
-  fail: () => void;
 }) {
   if (embed)
     return (
@@ -78,11 +79,6 @@ function OriginalContent({
         }
         referrerPolicy="no-referrer"
         loading="lazy"
-        ref={(node) => {
-          if (!node) return;
-          node.addEventListener('error', fail);
-          return () => node.removeEventListener('error', fail);
-        }}
       />
     );
   }
@@ -103,26 +99,38 @@ export function Original({ link }: { link: LinkJson }) {
   const embed = embedFor(link.url, link.sourceData, theme);
   const hint = useFrameHint(link.id, !embed && Boolean(originalUrl(link.url)));
   const [selected, setSelected] = useState<FrameMode>();
-  const [failed, setFailed] = useState(false);
   let mode: Mode = 'card';
   if (embed) mode = 'player';
-  else if (!failed && (hint.data?.mode === 'direct' || hint.data?.mode === 'view'))
+  else if (hint.data?.mode === 'direct' || hint.data?.mode === 'view')
     mode = selected ?? hint.data.mode;
-  if (
-    mode === 'view' &&
-    hint.data?.contentType &&
-    !/^(?:text\/html|application\/xhtml\+xml)(?:;|$)/i.test(hint.data.contentType)
-  )
+  const canView = hint.data?.mode === 'view';
+  const viewCheck = useQuery({
+    queryKey: ['page-view-ready', link.id],
+    queryFn: async ({ signal }) => {
+      const response = await fetch(apiUrl(`/api/links/${encodeURIComponent(link.id)}/view`), {
+        method: 'HEAD',
+        credentials: 'include',
+        cache: 'no-store',
+        signal,
+      });
+      return response.ok;
+    },
+    enabled: mode === 'view' && canView,
+    retry: false,
+    staleTime: 0,
+    gcTime: 0,
+  });
+  // Iframe load events also fire for HTTP errors. Check the authenticated route first.
+  if (mode === 'view' && (!canView || viewCheck.isFetching || viewCheck.data !== true))
     mode = 'card';
   return (
     <div className="silo-original" data-mode={mode}>
-      <OriginalBar link={link} mode={mode} switchMode={setSelected} />
+      <OriginalBar link={link} mode={mode} switchMode={setSelected} canView={canView} />
       <OriginalContent
         link={link}
         mode={mode}
         embed={embed}
-        loading={hint.isFetching}
-        fail={() => setFailed(true)}
+        loading={hint.isFetching || viewCheck.isFetching}
       />
     </div>
   );
