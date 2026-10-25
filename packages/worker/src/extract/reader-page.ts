@@ -1,0 +1,109 @@
+import { detectSource, type ReaderContent } from '@silo/core';
+import { Defuddle } from 'defuddle/node';
+import { JSDOM, VirtualConsole } from 'jsdom';
+import { parseHTML } from 'linkedom';
+import { isChallengePage } from './challenge-page.js';
+import { recoverEmbeddedJson } from './embedded-json.js';
+import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
+import { sanitizeReaderContent } from './reader-content.js';
+import { extractYouTubeWatch } from './youtube-watch.js';
+
+export interface PageContent {
+  text?: string;
+  reader?: ReaderContent;
+  title?: string;
+  description?: string;
+  videoDescription?: boolean;
+}
+
+/** Suppress stylesheet-parser noise while keeping other jsdom errors visible. */
+export function buildExtractVirtualConsole(): VirtualConsole {
+  const virtualConsole = new VirtualConsole();
+  virtualConsole.on('jsdomError', (error) => {
+    if (error.message !== 'Could not parse CSS stylesheet') console.error(error);
+  });
+  return virtualConsole;
+}
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, ' ').trim();
+}
+
+function readerFromText(dom: JSDOM, text: string, url: string): ReaderContent | undefined {
+  const paragraph = dom.window.document.createElement('p');
+  paragraph.textContent = text;
+  return sanitizeReaderContent(paragraph.outerHTML, url, dom);
+}
+
+/** Runs only in a terminable thread. No scripts, remote resources, or async extractors. */
+export async function extractPageContent(
+  html: string,
+  url: string,
+  description?: string,
+): Promise<PageContent> {
+  const dom = new JSDOM(html, { url, virtualConsole: buildExtractVirtualConsole() });
+  try {
+    if (isChallengePage(dom.window.document)) return {};
+    const youtube = extractYouTubeWatch(html, url, dom);
+    if (youtube?.text) {
+      return {
+        text: youtube.text,
+        videoDescription: true,
+        ...(youtube.title ? { title: youtube.title } : {}),
+        ...(youtube.reader ? { reader: youtube.reader } : {}),
+      };
+    }
+    if (detectSource(url).kind === 'youtube' && description) {
+      const reader = readerFromText(dom, description, url);
+      return { text: normalizeWhitespace(description), ...(reader ? { reader } : {}) };
+    }
+    return await extractDocument(dom, url);
+  } finally {
+    dom.window.close();
+  }
+}
+
+async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
+  // jsdom repairs malformed HTML (notably the RFC's body/pre nesting). Defuddle's
+  // selectors need linkedom; running directly on jsdom hits its selector limit.
+  const { document } = parseHTML(dom.serialize());
+  Object.defineProperty(document, 'URL', { value: url, configurable: true });
+  Object.defineProperty(document, 'styleSheets', { value: [] });
+  const view = document.defaultView;
+  if (view && !view.getComputedStyle) {
+    Object.defineProperty(view, 'getComputedStyle', {
+      value: () => ({ display: '' }),
+      configurable: true,
+    });
+  }
+  const article = await Defuddle(document, url, {
+    useAsync: false,
+    fetch: async () => {
+      throw new Error('Reader network access is disabled');
+    },
+  });
+  const reader = sanitizeReaderContent(article.content, url, dom);
+  const result: PageContent = {};
+  // Search text follows Defuddle's content, before the stored-HTML byte cap.
+  const textContainer = document.createElement('div');
+  textContainer.innerHTML = article.content;
+  const text = normalizeWhitespace(textContainer.textContent ?? '');
+  if (text) result.text = text;
+  if (reader) result.reader = reader;
+  applyRecovery(dom, url, result);
+  return result;
+}
+
+function applyRecovery(dom: JSDOM, url: string, result: PageContent): void {
+  const text = result.text ?? '';
+  if (text.length < FULL_TEXT_THRESHOLD) {
+    const recovered = recoverEmbeddedJson(dom);
+    if (recovered?.title) result.title = recovered.title;
+    if (recovered?.description) result.description = recovered.description;
+    if (recovered?.text && recovered.text.length > text.length) {
+      result.text = recovered.text;
+      const recoveredReader = readerFromText(dom, recovered.text, url);
+      if (recoveredReader) result.reader = recoveredReader;
+    }
+  }
+}

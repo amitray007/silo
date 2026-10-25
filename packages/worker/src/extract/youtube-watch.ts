@@ -1,4 +1,5 @@
 import type { SourceData } from '@silo/core';
+import type { JSDOM } from 'jsdom';
 import { z } from 'zod';
 import { sanitizeReaderContent } from './reader-content.js';
 
@@ -108,7 +109,7 @@ function descriptionHtml(text: string, videoId: string): string {
     .join('');
 }
 
-export function extractYouTubeWatch(html: string, url: string) {
+export function extractYouTubeWatch(html: string, url: string, dom?: JSDOM) {
   if (!/^https?:\/\/(?:www\.|m\.)?youtube\.com\//i.test(url)) return undefined;
   const parsed = playerSchema.safeParse(playerJson(html));
   if (!parsed.success) return undefined;
@@ -130,7 +131,7 @@ export function extractYouTubeWatch(html: string, url: string) {
       }
     : undefined;
   const reader = text
-    ? sanitizeReaderContent(descriptionHtml(text, details.videoId), url)
+    ? sanitizeReaderContent(descriptionHtml(text, details.videoId), url, dom)
     : undefined;
   return { text, reader, sourceData, title: details.title };
 }

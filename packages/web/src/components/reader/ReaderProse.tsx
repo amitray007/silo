@@ -72,6 +72,7 @@ function readerHtml(link: LinkDetailJson): string {
       'col',
     ],
     ALLOWED_ATTR: [
+      'id',
       'href',
       'src',
       'alt',
@@ -88,8 +89,12 @@ function readerHtml(link: LinkDetailJson): string {
     ALLOW_ARIA_ATTR: false,
     RETURN_DOM_FRAGMENT: true,
   });
+  for (const node of fragment.querySelectorAll('[id]')) {
+    if (!/^silo-fn-[1-9]\d*$/.test(node.id)) node.removeAttribute('id');
+  }
   for (const anchor of fragment.querySelectorAll('a')) {
     const href = anchor.getAttribute('href');
+    if (href && /^#silo-fn-[1-9]\d*$/.test(href)) continue;
     if (!href || !/^https?:\/\//i.test(href)) anchor.removeAttribute('href');
     anchor.setAttribute('target', '_blank');
     anchor.setAttribute('rel', 'noopener noreferrer');

@@ -3,7 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
-import { buildExtractVirtualConsole, extract } from './extract.js';
+import { extract } from './extract.js';
+import { buildExtractVirtualConsole } from './reader-page.js';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__');
 
@@ -137,7 +138,7 @@ describe('extract — null/short inputs classify without throwing', () => {
 describe('extract — security: jsdom does not execute scripts', () => {
   it('constructs the DOM the same way extract.ts does, and the inline script never runs', () => {
     // This is the load-bearing proof: construct a JSDOM exactly the way
-    // `extractReadableText` in extract.ts does (`new JSDOM(html, { url })`,
+    // `extractPageContent` in extract.ts does (`new JSDOM(html, { url })`,
     // no `runScripts`/`resources` option), and assert directly against
     // jsdom's OWN `window`/`document` — not against metascraper's output.
     // metascraper parses the raw HTML string with its own independent
@@ -271,7 +272,7 @@ describe('extract — jsdom CSS-parse noise is suppressed', () => {
     // OWN default virtual console (no fix applied) before this fixture was
     // committed: it deterministically logs exactly "Could not parse CSS
     // stylesheet" to console.error. This is cosmetic noise (see the
-    // `virtualConsole` comment in extractReadableText) — the DOM and
+    // `virtualConsole` comment in extractPageContent) — the DOM and
     // readable text extract fine regardless — so extract() must not let it
     // reach the worker's stderr.
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -301,7 +302,7 @@ describe('extract — jsdom CSS-parse noise is suppressed', () => {
     // Guard against an overly broad fix (e.g. suppressing ALL `jsdomError`s
     // rather than only the specific CSS-parse message). Builds the REAL
     // production `VirtualConsole` via `buildExtractVirtualConsole` — the
-    // exact listener extractReadableText wires up, not a copy that merely
+    // exact listener extractPageContent wires up, not a copy that merely
     // claims to be wired "the same way" — then emits a real `jsdomError`
     // event through jsdom's own EventEmitter-based API (not a reimplemented
     // predicate called directly) with a message OTHER than "Could not parse
@@ -349,7 +350,7 @@ describe('Reader extraction', () => {
     expect(result.reader?.contentHtml).toContain('<em>Follow your interest.</em>');
   });
 
-  it('normalizes lazy images before parsing and stores absolute ordered targets', async () => {
+  it('keeps lazy images as absolute ordered targets', async () => {
     const result = await extract({
       url: URL_UNDER_TEST,
       contentType: 'text/html',
@@ -362,7 +363,7 @@ describe('Reader extraction', () => {
     expect(result.reader?.contentHtml).not.toContain('srcset');
   });
 
-  it('runs Readability on short content that the readerability heuristic rejects', async () => {
+  it('keeps short content without a readerability precheck', async () => {
     const result = await extract({
       url: URL_UNDER_TEST,
       contentType: 'text/html',

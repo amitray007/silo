@@ -16,13 +16,14 @@
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
-    "@mozilla/readability": "catalog:",
     "@silo/core": "workspace:*",
     "@silo/queue": "workspace:*",
+    "defuddle": "0.19.6",
     "dompurify": "catalog:",
     "drizzle-orm": "catalog:",
     "ipaddr.js": "catalog:",
     "jsdom": "catalog:",
+    "linkedom": "^0.18.14",
     "metascraper": "catalog:",
     "metascraper-description": "catalog:",
     "metascraper-image": "catalog:",

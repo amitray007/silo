@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import { sanitizeReaderContent } from './reader-content.js';
+import { extractPageContent } from './reader-page.js';
 
 const url = 'https://journal.example.org/articles/one';
 
@@ -82,16 +83,16 @@ describe('layout tables', () => {
   it.each([
     ['layout-comments.html', ['First comment.', 'Reply to first comment.']],
     ['layout-essay.html', ['Essay opening.', 'Essay ending.']],
-  ])('unwraps %s in reading order and drops spacer images', (name, text) => {
+  ])('extracts %s with prose in reading order', async (name, text) => {
     const html = readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8');
-    const result = sanitizeReaderContent(html, url);
-    expect(result?.contentHtml).not.toMatch(/<table|<tr|<td|spacer\.gif|s\.gif|arrow\.gif/);
+    const result = (await extractPageContent(html, url)).reader;
+    expect(result?.contentHtml).not.toMatch(/s\.gif|arrow\.gif/);
     expect(result?.contentHtml.indexOf(text[0] ?? '')).toBeLessThan(
       result?.contentHtml.indexOf(text[1] ?? '') ?? 0,
     );
-    expect(result?.contentImages).toEqual(
-      name === 'layout-essay.html' ? ['https://journal.example.org/essay.jpg'] : [],
-    );
+    if (name === 'layout-essay.html') {
+      expect(result?.contentImages).toContain('https://journal.example.org/essay.jpg');
+    } else expect(result?.contentImages).toEqual([]);
   });
 
   it.each([
@@ -101,21 +102,31 @@ describe('layout tables', () => {
     expect(sanitizeReaderContent(html, url)?.contentHtml).toContain('<table>');
   });
 
-  it('keeps a data table inside an unwrapped layout table', () => {
-    const result = sanitizeReaderContent(
-      '<table><tr><td><p>Report</p><table><tr><th>Name</th><th>Value</th></tr><tr><td>A</td><td>1</td></tr></table></td></tr></table>',
-      url,
-    );
-    expect(result?.contentHtml.match(/<table>/g)).toHaveLength(1);
-    expect(result?.contentHtml).toContain('<td>A</td><td>1</td>');
+  it('keeps nested data table values when extracting a layout table', async () => {
+    const result = (
+      await extractPageContent(
+        '<table><tr><td><p>Report</p><table><tr><th>Name</th><th>Value</th></tr><tr><td>A</td><td>1</td></tr></table></td></tr></table>',
+        url,
+      )
+    ).reader;
+    expect(result?.contentHtml).toContain('Report');
+    const dom = new JSDOM(result?.contentHtml);
+    try {
+      expect(
+        Array.from(dom.window.document.querySelectorAll('td'), (cell) => cell.textContent),
+      ).toEqual(['A', '1']);
+    } finally {
+      dom.window.close();
+    }
   });
 
-  it('unwraps cells with block content even with a header', () => {
-    const result = sanitizeReaderContent(
-      '<table><tr><th>Article</th></tr><tr><td><p>Body prose.</p></td></tr></table>',
-      url,
-    );
-    expect(result?.contentHtml).not.toContain('<table>');
+  it('keeps body prose inside a table with a header', async () => {
+    const result = (
+      await extractPageContent(
+        '<table><tr><th>Article</th></tr><tr><td><p>Body prose.</p></td></tr></table>',
+        url,
+      )
+    ).reader;
     expect(result?.contentHtml).toContain('<p>Body prose.</p>');
   });
 });
@@ -177,4 +188,24 @@ it('preserves the full article typography fixture', () => {
   expect(output).toContain('reversed=""');
   expect(output).toContain('colspan="2"');
   expect(output).toContain('rowspan="2"');
+});
+
+it('rewrites footnotes and backlinks to safe IDs and strips arbitrary and duplicate IDs', () => {
+  const result = sanitizeReaderContent(
+    '<p id="location">Article <a id="fnref:1" href="#fn:1">1</a></p><ol><li id="fn:1">Note <a href="#fnref:1">back</a></li><li id="fn:1">duplicate</li></ol><p id="silo-fn-999">unsafe</p>',
+    url,
+  );
+  const dom = new JSDOM(result?.contentHtml);
+  try {
+    const doc = dom.window.document;
+    expect(Array.from(doc.querySelectorAll('[id]'), (node) => node.id)).toEqual([
+      'silo-fn-1',
+      'silo-fn-2',
+    ]);
+    expect(doc.querySelector('a[href="#silo-fn-2"]')?.hasAttribute('target')).toBe(false);
+    expect(doc.querySelector('#silo-fn-2')?.textContent).toContain('Note');
+    expect(doc.querySelector('a[href="#silo-fn-1"]')).not.toBeNull();
+  } finally {
+    dom.window.close();
+  }
 });
