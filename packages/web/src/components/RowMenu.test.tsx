@@ -336,7 +336,7 @@ describe('RowMenu', () => {
   });
   it('opens phone tags on click and keeps the sheet open when the pointer leaves the trigger', () => {
     const media = vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
-      matches: query === '(max-width: 719px)',
+      matches: query === '(max-width: 640px)',
       media: query,
       onchange: null,
       addListener: vi.fn(),

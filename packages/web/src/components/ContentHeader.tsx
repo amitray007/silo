@@ -1,6 +1,7 @@
 import { type ReactNode, useState } from 'react';
-import { useNavigate } from 'react-router';
-import { useCounts } from '../api/hooks';
+import { useNavigate, useOutletContext } from 'react-router';
+import { useCounts, useTags } from '../api/hooks';
+import { layoutMedia, useMediaQuery } from '../lib/breakpoints';
 import { formatCount } from '../lib/formatCount';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
@@ -34,8 +35,11 @@ interface ContentHeaderProps {
  */
 function CollectionTitle({ title }: { title: string }) {
   const [open, setOpen] = useState(false);
+  const phone = useMediaQuery(layoutMedia.phone);
   const navigate = useNavigate();
+  const frame = useOutletContext<{ showSidebar: () => void } | undefined>();
   const { data: counts } = useCounts();
+  const { data: tags } = useTags();
   return (
     <div className="silo-collection">
       <h1>
@@ -52,7 +56,7 @@ function CollectionTitle({ title }: { title: string }) {
       </h1>
       <MenuPresence>
         {open && (
-          <MenuSurface onClose={() => setOpen(false)}>
+          <MenuSurface sheet={false} onClose={() => setOpen(false)}>
             {(['Library', 'Trash'] as const).map((name) => (
               <MenuAction
                 key={name}
@@ -67,6 +71,31 @@ function CollectionTitle({ title }: { title: string }) {
                 <span className="silo-collection-count">
                   {counts ? formatCount(name === 'Library' ? counts.live : counts.trash) : ''}
                 </span>
+              </MenuAction>
+            ))}
+            {tags?.tags.length ? <div className="silo-menu-separator" /> : null}
+            {phone && frame && (
+              <MenuAction
+                icon={<ReaderIcon name="hash" />}
+                onClick={() => {
+                  setOpen(false);
+                  frame.showSidebar();
+                }}
+              >
+                Manage tags
+              </MenuAction>
+            )}
+            {tags?.tags.map((tag) => (
+              <MenuAction
+                key={tag.name}
+                icon={<ReaderIcon name="hash" />}
+                onClick={() => {
+                  setOpen(false);
+                  navigate(`/tags/${encodeURIComponent(tag.name)}`);
+                }}
+              >
+                {tag.name}
+                <span className="silo-collection-count">{formatCount(tag.count)}</span>
               </MenuAction>
             ))}
           </MenuSurface>

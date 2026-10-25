@@ -1,6 +1,7 @@
 import { type ReactNode, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import type { LinkJson } from '../api/types';
+import { layoutMedia } from '../lib/breakpoints';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { Chip } from './Chip';
 import { useMenuClosing } from './MenuPresence';
@@ -44,8 +45,10 @@ export function MenuSurface({
   link,
   onMouseEnter,
   onMouseLeave,
+  sheet = true,
 }: {
   children: ReactNode;
+  sheet?: boolean;
   className?: string;
   onClose: () => void;
   link?: LinkJson | undefined;
@@ -56,7 +59,7 @@ export function MenuSurface({
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
-  const phone = matchMedia('(max-width: 719px)').matches;
+  const phone = sheet && matchMedia(layoutMedia.phone).matches;
   useEffect(() => {
     const trigger = document.activeElement;
     const panel = ref.current;

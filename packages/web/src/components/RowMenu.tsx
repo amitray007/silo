@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRetryCapture, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
+import { layoutMedia } from '../lib/breakpoints';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
 import { useRowMenu } from './RowMenuContext';
@@ -51,7 +52,7 @@ export function LinkMenuActions({
     setTagsOpen(true);
   };
   const hide = () => {
-    if (matchMedia('(max-width: 719px)').matches) return;
+    if (matchMedia(layoutMedia.phone).matches) return;
     clearTimeout(tagsTimer.current);
     tagsTimer.current = setTimeout(() => setTagsOpen(false), 140);
   };
@@ -91,10 +92,10 @@ export function LinkMenuActions({
       <div
         className="silo-tags-anchor"
         onMouseEnter={() => {
-          if (!matchMedia('(max-width: 719px)').matches) keep();
+          if (!matchMedia(layoutMedia.phone).matches) keep();
         }}
         onMouseLeave={() => {
-          if (!matchMedia('(max-width: 719px)').matches) hide();
+          if (!matchMedia(layoutMedia.phone).matches) hide();
         }}
       >
         <button

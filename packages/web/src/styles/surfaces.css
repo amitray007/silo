@@ -368,7 +368,7 @@
   box-shadow: var(--elev-2);
   transform-origin: top right;
 }
-@media (min-width: 720px) {
+@media (min-width: 641px) {
   .silo-row-menu-portal[data-flyout-side="right"] .silo-tags-flyout {
     right: auto;
     left: calc(100% - 2px);
@@ -528,7 +528,7 @@
     opacity: 0.88;
   }
 }
-@media (max-width: 719px) {
+@media (max-width: 640px) {
   .silo-modal-layer-sheet,
   .silo-confirm-layer {
     padding: 0;
@@ -694,7 +694,7 @@
   min-width: 18px;
   min-height: 18px;
 }
-@media (max-width: 719px) {
+@media (max-width: 640px) {
   .silo-edit-fields .silo-tag-chip-remove {
     min-width: 40px;
     min-height: 40px;

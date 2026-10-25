@@ -1,5 +1,6 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
+import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { deriveTitleFromUrl } from '../../lib/url';
 import { MenuPresence } from '../MenuPresence';
@@ -96,11 +97,13 @@ function ReaderMore({
   disabled,
   trashed,
   link,
+  original,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
   link: LinkJson | undefined;
+  original: OriginalState | undefined;
 }) {
   const [open, setOpen] = useState(false);
   return (
@@ -119,6 +122,18 @@ function ReaderMore({
       <MenuPresence>
         {open && (
           <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
+            {original && original.mode !== 'player' && (
+              <MenuAction
+                icon={<ReaderIcon name="refresh" />}
+                disabled={original.preparing}
+                onClick={() => {
+                  setOpen(false);
+                  original.refresh.mutate();
+                }}
+              >
+                Refresh Live
+              </MenuAction>
+            )}
             {!trashed && link ? (
               <LinkMenuActions
                 link={link}
@@ -236,7 +251,6 @@ export function ReaderPane({
   actions,
   trashed,
   purgeWindowDays,
-  title,
   loading,
 }: {
   link: LinkJson | undefined;
@@ -250,20 +264,23 @@ export function ReaderPane({
   actions: Actions;
   trashed: boolean;
   purgeWindowDays: number;
-  title: string;
   loading: boolean;
 }) {
+  const phone = useMediaQuery(layoutMedia.phone);
+  const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const original = useOriginal(link, tab === 'original');
   const shownOriginal = tab === 'original' && link ? original : undefined;
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const wasOpen = useRef(false);
+  const wasFullWindow = useRef(fullWindow);
   useEffect(() => {
-    if (selectedId && !wasOpen.current && matchMedia('(max-width: 719px)').matches)
+    if (selectedId && fullWindow && (!wasOpen.current || !wasFullWindow.current))
       panelRef.current?.focus();
     wasOpen.current = Boolean(selectedId);
-  }, [selectedId]);
+    wasFullWindow.current = fullWindow;
+  }, [selectedId, fullWindow]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset scroll when the content changes.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
@@ -300,35 +317,34 @@ export function ReaderPane({
   return (
     <section className="silo-readerpane" aria-label="Link reader" ref={panelRef} tabIndex={-1}>
       <div className="silo-reader-head">
-        <div className="silo-reader-desktop">
+        <div className="silo-reader-navigation" role="toolbar" aria-label="Reader navigation">
           <div className="silo-reader-tools">
             <IconButton name="close" label="Close reader" onClick={close} disabled={!selectedId} />
             <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
             <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
           </div>
         </div>
-        <button type="button" className="silo-reader-back" onClick={close}>
-          <ReaderIcon name="back" />
-          {title}
-        </button>
         <div className="silo-reader-viewtools">
           <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
         </div>
         <div className="silo-reader-right">
-          <div className="silo-reader-desktop">
-            <ReaderActions
-              actions={actions}
-              disabled={!link}
-              trashed={trashed}
-              original={shownOriginal}
-            />
-          </div>
+          {!phone && (
+            <div className="silo-reader-inline-actions">
+              <ReaderActions
+                actions={actions}
+                disabled={!link}
+                trashed={trashed}
+                original={shownOriginal}
+              />
+            </div>
+          )}
           <ReaderMore
             key={selectedId}
             actions={actions}
             disabled={!link}
             trashed={trashed}
             link={link}
+            original={shownOriginal}
           />
         </div>
       </div>
@@ -351,21 +367,6 @@ export function ReaderPane({
         aria-labelledby={`${id}-${tab}`}
       >
         {content}
-      </div>
-      <div className="silo-reader-rbar" role="toolbar" aria-label="Reader actions">
-        <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
-        <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
-        <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={!link} />
-        <RefreshButton original={shownOriginal} />
-        {!trashed && (
-          <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={!link} />
-        )}
-        <IconButton
-          name={trashed ? 'restore' : 'trash'}
-          label={trashed ? 'Restore' : 'Move to trash'}
-          onClick={trashed ? actions.restore : actions.trash}
-          disabled={!link || actions.busy}
-        />
       </div>
     </section>
   );

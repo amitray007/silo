@@ -83,7 +83,7 @@
   min-height: 0;
 }
 .silo-listpane {
-  width: 384px;
+  width: 360px;
   flex: none;
   min-width: 0;
   display: flex;
@@ -300,7 +300,7 @@
 }
 .silo-reader-head {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  grid-template-columns: minmax(100px, 1fr) auto auto;
   padding: 0 8px;
   gap: 8px;
 }
@@ -314,7 +314,7 @@
   height: 16px;
   stroke: currentColor;
   fill: none;
-  stroke-width: 1.6;
+  stroke-width: 1.5;
   stroke-linecap: round;
   stroke-linejoin: round;
   flex: none;
@@ -374,9 +374,6 @@
   box-shadow: none;
 }
 
-.silo-reader-back {
-  display: none;
-}
 .silo-reader-scroll {
   overflow: auto;
   flex: 1;
@@ -642,9 +639,6 @@
   border: 0;
   background: white;
 }
-.silo-reader-rbar {
-  display: none;
-}
 @media (hover: hover) and (pointer: fine) {
   .silo-link-row:hover {
     background: var(--hov);
@@ -663,7 +657,7 @@
     background: var(--sel);
   }
 }
-@media (max-width: 1099px) {
+@media (max-width: 640px) {
   .silo-sidebar {
     position: absolute;
     z-index: 31;
@@ -703,157 +697,50 @@
   .silo-panehead {
     padding-left: 44px;
   }
-  .silo-listpane {
-    width: 340px;
-  }
-  .silo-reader {
-    padding: 48px 32px 128px;
-  }
 }
-@media (max-width: 719px) {
-  .silo-content,
-  .silo-frame[data-collapsed="true"] .silo-content {
-    margin: 0;
-    border: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
+/* Below 1024 the reader covers the sidebar and list together. */
+@media (max-width: 1023px) {
   .silo-listpane {
     width: 100%;
-    border-right: 0;
   }
-  .silo-three-pane[data-reader="true"] .silo-listpane,
   .silo-three-pane[data-reader="false"] .silo-readerpane {
     display: none;
   }
-  .silo-panehead,
-  .silo-reader-head {
-    height: calc(52px + env(safe-area-inset-top, 0px));
-    padding-top: env(safe-area-inset-top, 0px);
-    padding-right: 6px;
+  .silo-band:has(.silo-three-pane[data-reader="true"]) > .silo-sidebar {
+    visibility: hidden;
   }
-  .silo-panehead h1 {
-    font-size: 16px;
-  }
-  .silo-reader-head {
-    padding-left: 6px;
-  }
-  .silo-reader-iconbtn {
-    width: 40px;
-    height: 40px;
-    border-radius: 8px;
-  }
-  .silo-reader-icon {
-    width: 18px;
-    height: 18px;
-  }
-  .silo-frame .silo-list-menu {
-    top: calc(6px + env(safe-area-inset-top, 0px));
-    left: 4px;
-  }
-  .silo-frame .silo-panehead {
-    padding-left: 48px;
-  }
-  .silo-content-body {
-    padding: 0 6px calc(100px + env(safe-area-inset-bottom, 0px));
-  }
-  .silo-link-row {
-    padding: 11px 12px;
-    min-height: 56px;
-    justify-content: center;
-  }
-  .silo-row-title {
-    font-size: 15px;
-  }
-  .silo-row-titleline {
-    padding-right: 26px;
-  }
-  /* Keep touch access to row menus and multi-select, which the prototype omitted. */
-  .silo-rowmore {
-    opacity: 1;
-    top: 8px;
-    right: 0;
-  }
-  .silo-link-row[data-active="true"] {
-    background: none;
-  }
-  .silo-link-row[data-active="true"]:active {
-    background: var(--sel);
-  }
-  .silo-daylabel {
-    padding-top: 18px;
-  }
-  .silo-reader {
-    padding: 22px 20px calc(96px + env(safe-area-inset-bottom, 0px));
-  }
-  .silo-reader > h2 {
-    font-size: 24px;
-  }
-  .silo-reader-body p {
-    font-size: 15px;
-  }
-  .silo-reader-tweet {
-    padding: 16px;
-    font-size: 16.5px;
-  }
-  .silo-reader-desktop {
-    display: none;
-  }
-  .silo-reader-back {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    height: 40px;
-    padding: 0 10px 0 4px;
-    border-radius: 8px;
-    color: var(--ink);
-    font: inherit;
-    font-weight: 500;
-    font-size: 15px;
-    background: none;
-    border: 0;
-    cursor: pointer;
-    min-width: 0;
-    max-width: 40%;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-  }
-  .silo-reader-more {
-    display: grid;
-  }
-  .silo-reader-rbar {
-    display: flex;
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    z-index: 5;
-    justify-content: space-around;
-    align-items: center;
-    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
-    background: color-mix(in srgb, var(--bg2) 88%, transparent);
-    backdrop-filter: blur(14px);
-    -webkit-backdrop-filter: blur(14px);
-    border-top: 1px solid var(--line);
-  }
-  .silo-reader-trashactions {
-    width: 100%;
-  }
-  .silo-reader-trashactions .silo-reader-btn {
-    flex: 1;
-    height: 36px;
-    font-size: 14px;
-  }
-  .silo-sidebar .silo-nav-item {
-    min-height: 44px;
-    font-size: 15px;
-  }
-  .silo-sidebar input {
-    --sidebar-input-size: 16px;
+  .silo-three-pane[data-reader="true"] .silo-readerpane {
+    position: fixed;
+    inset: 0;
+    z-index: 25;
+    background: var(--bg);
   }
   .silo-content:has(.silo-three-pane[data-reader="true"]) .silo-list-menu {
     display: none;
+  }
+  .silo-reader {
+    max-width: 700px;
+  }
+}
+@media (max-width: 640px) {
+  .silo-listpane {
+    border-right: 0;
+  }
+  .silo-frame .silo-list-menu {
+    display: none;
+  }
+  .silo-frame .silo-panehead {
+    padding-left: 16px;
+  }
+  .silo-content-body {
+    padding: 12px 12px calc(100px + env(safe-area-inset-bottom, 0px));
+  }
+  .silo-reader {
+    max-width: 676px;
+    padding: 48px 20px 40px;
+  }
+  .silo-reader > h2 {
+    font-size: 24px;
   }
 }
 
@@ -871,18 +758,6 @@
 .silo-header-primary:focus-visible {
   outline-color: var(--mark);
 }
-@media (max-width: 719px) {
-  .silo-header-primary .silo-add-label {
-    display: none;
-  }
-  .silo-header-primary {
-    --btn: transparent;
-    --btn-ink: var(--ink);
-    min-width: 40px;
-    min-height: 40px;
-  }
-}
-
 @media (max-width: 499px) {
   .silo-row-menu-portal {
     --tags-flyout-right: 0px;
@@ -952,20 +827,6 @@
 }
 .silo-letter-chip[data-domain="paulgraham.com"] {
   --chip-color: var(--chip-pg);
-}
-
-/* Keep the complete reader header inside the smallest side-by-side mode. */
-@media (min-width: 720px) and (max-width: 759px) {
-  .silo-reader-head {
-    padding: 0 6px;
-    gap: 2px;
-  }
-  .silo-reader-head .silo-reader-iconbtn {
-    width: 26px;
-  }
-  .silo-reader-segment button {
-    padding: 0 9px;
-  }
 }
 
 .silo-empty-trash {
@@ -1177,7 +1038,7 @@ div.silo-reader-notecard {
     transform: rotate(360deg);
   }
 }
-@media (max-width: 719px) {
+@media (max-width: 640px) {
   .silo-page-loading-body {
     padding: 32px 20px;
   }
@@ -1244,7 +1105,7 @@ div.silo-reader-notecard {
 .silo-frame-notice a {
   color: var(--ink);
 }
-@media (max-width: 719px) {
+@media (max-width: 640px) {
   .silo-frame-notice a {
     display: inline-flex;
     align-items: center;
@@ -1465,26 +1326,23 @@ div.silo-reader-notecard {
     padding-right: calc(var(--row-tools-room) + 28px);
   }
 }
-@media (max-width: 719px), (hover: none) {
-  .silo-row-actions {
-    opacity: 1;
-    pointer-events: auto;
-  }
-  .silo-row-actions > button:not(.silo-rowmore) {
+@media (hover: none) {
+  .silo-link-row .silo-row-actions {
     display: none;
+    background: none;
   }
   .silo-link-row,
   .silo-link-row[data-compact="true"] {
-    --row-tools-room: 40px;
+    --row-tools-room: 0px;
   }
   .silo-link-row[data-compact="true"] .silo-row-titleline {
-    padding-right: 32px;
+    padding-right: 0;
   }
   .silo-link-row[data-compact="true"] .silo-row-note-icon {
-    right: 44px;
+    right: 8px;
   }
   .silo-link-row[data-compact="true"]:has(.silo-row-note-icon) .silo-row-titleline {
-    padding-right: 56px;
+    padding-right: 24px;
   }
 }
 
@@ -1498,8 +1356,7 @@ div.silo-reader-notecard {
   display: flex;
   position: relative;
 }
-.silo-reader-head > .silo-reader-desktop,
-.silo-reader-back {
+.silo-reader-navigation {
   grid-column: 1;
   grid-row: 1;
 }
@@ -1531,19 +1388,6 @@ div.silo-reader-notecard {
   margin: 0 0 16px;
   font-size: inherit;
   line-height: inherit;
-}
-@media (min-width: 720px) and (max-width: 859px) {
-  .silo-reader-right .silo-reader-desktop {
-    display: none;
-  }
-}
-@media (max-width: 719px) {
-  .silo-reader-head {
-    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
-  }
-  .silo-reader-back {
-    max-width: 100%;
-  }
 }
 @media (max-width: 639px) {
   .silo-reader > h2 {
@@ -1817,4 +1661,74 @@ div.silo-reader-notecard {
 .silo-reader-body-wrap {
   padding: 8px 0 40px;
   width: 100%;
+}
+
+/* Inline tools yield to More when the docked reader has little room. */
+.silo-readerpane {
+  container-type: inline-size;
+}
+@container (max-width: 560px) {
+  .silo-reader-inline-actions {
+    display: none;
+  }
+}
+.silo-mobile-bar {
+  display: flex;
+  position: absolute;
+  z-index: 20;
+  left: 16px;
+  right: 16px;
+  bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  height: 56px;
+  padding: 6px;
+  border-radius: 999px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+}
+.silo-mobile-bar-button {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  height: 44px;
+  border: 0;
+  border-radius: 999px;
+  padding: 0;
+  color: var(--fnt);
+  background: none;
+  cursor: pointer;
+}
+.silo-mobile-bar-button:is([aria-current="page"], [aria-expanded="true"]) {
+  color: var(--ink);
+}
+.silo-mobile-bar-button .silo-reader-icon {
+  width: 28px;
+  height: 28px;
+}
+.silo-mobile-more.silo-menu-surface {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  right: 0;
+  width: 192px;
+  min-width: 192px;
+  border-radius: 8px;
+  transform-origin: bottom right;
+}
+.silo-mobile-more .silo-menu-item {
+  min-height: 32px;
+  height: 32px;
+}
+.silo-mobile-more .silo-menu-grab {
+  display: none;
+}
+.silo-content:has(.silo-three-pane[data-reader="true"]) .silo-mobile-bar {
+  display: none;
+}
+@media (max-width: 640px) {
+  .silo-selection-dock {
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+  }
+  .silo-collection .silo-menu-surface {
+    max-height: calc(100dvh - 140px);
+    overflow-y: auto;
+  }
 }

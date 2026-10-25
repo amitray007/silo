@@ -4,6 +4,7 @@ import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App';
 import type { LinkJson, SettingsMap, TrashLinkJson } from '../../api/types';
+import { layoutMedia } from '../../lib/breakpoints';
 import {
   githubSourceData,
   hackerNewsSourceData,
@@ -434,9 +435,7 @@ describe('reader keyboard and phone toolbar', () => {
         ? pending
         : original(input, init),
     );
-    fireEvent.click(
-      within(reader().getByRole('toolbar')).getByRole('button', { name: 'Move to trash' }),
-    );
+    fireEvent.click(reader().getByRole('button', { name: 'Move to trash' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/links/a/trash',
@@ -461,17 +460,15 @@ describe('reader keyboard and phone toolbar', () => {
         ? Promise.resolve(json({ error: 'unavailable', message: 'Try again later' }, 503))
         : original(input, init),
     );
-    fireEvent.click(
-      within(reader().getByRole('toolbar')).getByRole('button', { name: 'Move to trash' }),
-    );
+    fireEvent.click(reader().getByRole('button', { name: 'Move to trash' }));
     await waitFor(() => expect(reader().getByRole('status').textContent).toBe('Try again later'));
     expect(screen.getByTestId('url').textContent).toBe('/?link=a');
     await selected();
   });
-  it('keeps all phone toolbar actions wired, with bounded previous/next', async () => {
+  it('keeps header actions wired, with bounded previous/next', async () => {
     const { fetchMock } = renderReader({ route: '/?link=a' });
     await selected();
-    const toolbar = within(reader().getByRole('toolbar', { name: 'Reader actions' }));
+    const toolbar = reader();
     expect((toolbar.getByRole('button', { name: 'Previous' }) as HTMLButtonElement).disabled).toBe(
       true,
     );
@@ -492,10 +489,10 @@ describe('reader keyboard and phone toolbar', () => {
       ),
     );
   });
-  it('restores trash from the phone toolbar', async () => {
+  it('restores trash from the header', async () => {
     const { fetchMock } = renderReader({ trash: [makeTrashLink(a)], route: '/trash?link=a' });
     await selected();
-    const toolbar = within(reader().getByRole('toolbar', { name: 'Reader actions' }));
+    const toolbar = within(document.querySelector('.silo-reader-inline-actions') as HTMLElement);
     fireEvent.click(toolbar.getByRole('button', { name: 'Restore' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
@@ -575,7 +572,7 @@ describe('reader keyboard and phone toolbar', () => {
     const media = window.matchMedia;
     vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
       ...media(query),
-      matches: query.includes('min-width: 1100px'),
+      matches: query === layoutMedia.sidebar,
     }));
     renderReader({ route: '/?link=a' });
     await selected();
@@ -760,7 +757,7 @@ describe('review regressions', () => {
     const media = window.matchMedia;
     vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
       ...media(query),
-      matches: query.includes('max-width: 719px'),
+      matches: query === layoutMedia.phone || query === layoutMedia.fullWindowReader,
     }));
     const { fetchMock } = renderReader({ pageSize: 1, route: '/?link=a' });
     await selected();
@@ -812,7 +809,7 @@ describe('review regressions', () => {
     const media = window.matchMedia;
     vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
       ...media(query),
-      matches: query.includes('max-width: 719px'),
+      matches: query === layoutMedia.phone || query === layoutMedia.fullWindowReader,
     }));
     renderReader({ route: '/?link=a' });
     await selected();
@@ -910,7 +907,7 @@ describe('review regressions', () => {
     );
     expect(reader().getByRole('button', { name: 'Open original' })).toBeDefined();
     expect(reader().queryByLabelText(/^Original mode/)).toBeNull();
-    const groups = container.querySelectorAll('.silo-reader-desktop .silo-reader-tools');
+    const groups = container.querySelectorAll('.silo-reader-inline-actions .silo-reader-tools');
     const tools = [...(groups[groups.length - 1]?.children ?? [])];
     expect(tools.map((tool) => tool.getAttribute('aria-label')).slice(0, 2)).toEqual(
       mode === 'player' ? ['Copy link', 'Edit'] : ['Copy link', 'Refresh Live'],
@@ -962,4 +959,63 @@ describe('review regressions', () => {
       expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=dark'),
     );
   });
+});
+
+describe('responsive reader header', () => {
+  it('moves phone actions into More and keeps navigation in the header', async () => {
+    const media = window.matchMedia;
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...media(query),
+      matches: query === layoutMedia.phone || query === layoutMedia.fullWindowReader,
+    }));
+    const { container } = renderReader({ route: '/?link=a' });
+    await selected();
+    expect(reader().getByRole('button', { name: 'Close reader' })).toBeDefined();
+    expect(reader().getByRole('button', { name: 'Previous' })).toBeDefined();
+    expect(reader().getByRole('button', { name: 'Next' })).toBeDefined();
+    expect(reader().queryByRole('button', { name: 'Copy link' })).toBeNull();
+    expect(reader().queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(container.querySelector('.silo-reader-rbar')).toBeNull();
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+    await screen.findByTitle('Live page');
+    fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
+    for (const name of ['Copy link', 'Refresh Live', 'Edit', 'Open original', 'Move to trash']) {
+      expect(screen.getByRole('menuitem', { name: new RegExp(name) })).toBeDefined();
+    }
+    fireEvent.click(screen.getByRole('menuitem', { name: /Copy link/ }));
+    await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(a.url));
+  });
+
+  it('keeps tags reachable from the Library collection menu', async () => {
+    renderReader();
+    await screen.findByText('First link');
+    fireEvent.click(screen.getByRole('button', { name: 'Library' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /mcp/ }));
+    await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/tags/mcp'));
+  });
+});
+
+it('opens phone tag management from the collection menu and restores focus on close', async () => {
+  const media = window.matchMedia;
+  vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+    ...media(query),
+    matches: query === layoutMedia.phone || query === layoutMedia.fullWindowReader,
+  }));
+  renderReader();
+  await screen.findByText('First link');
+  const collection = within(screen.getByRole('region', { name: 'Library links' })).getByRole(
+    'button',
+    { name: 'Library' },
+  );
+  fireEvent.click(collection);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Manage tags' }));
+  expect(screen.getByRole('navigation', { name: 'Sidebar' }).getAttribute('data-open')).toBe(
+    'true',
+  );
+  expect(screen.getByRole('button', { name: 'New tag' })).toBeDefined();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.getByRole('navigation', { name: 'Sidebar' }).getAttribute('data-open')).toBe(
+    'false',
+  );
+  expect(document.activeElement).toBe(collection);
 });

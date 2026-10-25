@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
+import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { DeleteForeverDialog } from '../DeleteForeverDialog';
 import { ReaderPane } from './ReaderPane';
 import { ReaderSelectionContext } from './ReaderSelection';
@@ -27,6 +28,7 @@ export function ReaderLayout({
   hasNextPage?: boolean;
   fetchNextPage?: () => Promise<LinkJson[]>;
 }) {
+  const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const { selectedId, index, select, close, removed, step, advancing } = useReaderNavigation({
     links,
     loading,
@@ -70,7 +72,7 @@ export function ReaderLayout({
       (row ?? rootRef.current?.querySelector<HTMLElement>('.silo-listpane'))?.focus();
     }
     const activeRow = document.activeElement?.closest('.silo-link-row');
-    if (selectedId && activeRow && !matchMedia('(max-width: 719px)').matches) {
+    if (selectedId && activeRow && !matchMedia(layoutMedia.fullWindowReader).matches) {
       rootRef.current
         ?.querySelector<HTMLElement>(`[data-link-id="${CSS.escape(selectedId)}"]`)
         ?.focus();
@@ -84,7 +86,12 @@ export function ReaderLayout({
   return (
     <ReaderSelectionContext.Provider value={selection}>
       <div className="silo-three-pane" data-reader={Boolean(selectedId)} ref={rootRef}>
-        <section tabIndex={-1} className="silo-listpane" aria-label={`${title} links`}>
+        <section
+          tabIndex={-1}
+          className="silo-listpane"
+          aria-label={`${title} links`}
+          inert={fullWindow && Boolean(selectedId)}
+        >
           {children}
         </section>
         <ReaderPane
@@ -99,7 +106,6 @@ export function ReaderLayout({
           actions={actions}
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
-          title={title}
           loading={Boolean(selectedId) && (loading || detail.isFetching)}
         />
         <ReaderDeleteDialog actions={actions} link={resolved ?? previous.current} />

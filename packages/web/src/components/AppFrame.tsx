@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useMatch } from 'react-router';
+import { layoutMedia } from '../lib/breakpoints';
 import { useCommandPalette } from '../lib/useCommandPalette';
 import { isTextEntryElement, usePasteCapture } from '../lib/usePasteCapture';
 import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
 import { CommandPalette } from './CommandPalette';
 import { EditModal } from './EditModal';
 import { HoverPreviewProvider } from './HoverPreviewContext';
+import { MobileBar } from './MobileBar';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
@@ -113,7 +115,7 @@ export function AppFrame() {
   const commandPalette = useCommandPalette();
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const toggleSidebar = useCallback(() => {
-    if (!matchMedia('(min-width: 1100px)').matches) {
+    if (!matchMedia(layoutMedia.sidebar).matches) {
       closeDrawer();
       return;
     }
@@ -132,7 +134,7 @@ export function AppFrame() {
       closeDrawer();
       return;
     }
-    if (matchMedia('(min-width: 1100px)').matches) {
+    if (matchMedia(layoutMedia.sidebar).matches) {
       toggleSidebar();
       return;
     }
@@ -147,7 +149,7 @@ export function AppFrame() {
     }
   }, [location.pathname, commandPalette.closePalette]);
   useEffect(() => {
-    const wide = matchMedia('(min-width: 1100px)');
+    const wide = matchMedia(layoutMedia.sidebar);
     const onChange = () => setDrawerOpen(false);
     wide.addEventListener('change', onChange);
     return () => wide.removeEventListener('change', onChange);
@@ -166,7 +168,7 @@ export function AppFrame() {
         return;
       if (event.key === '[') {
         event.preventDefault();
-        if (matchMedia('(min-width: 1100px)').matches) toggleSidebar();
+        if (matchMedia(layoutMedia.sidebar).matches) toggleSidebar();
         else setDrawerOpen((open) => !open);
       }
       if (event.key === 'n') {
@@ -180,7 +182,10 @@ export function AppFrame() {
   useEffect(() => {
     if (!drawerOpen) {
       if (drawerWasOpen.current && !document.querySelector('[role="dialog"], [role="alertdialog"]'))
-        menuButtonRef.current?.focus();
+        (matchMedia(layoutMedia.phone).matches
+          ? document.querySelector<HTMLElement>('.silo-collection-trigger')
+          : menuButtonRef.current
+        )?.focus();
       drawerWasOpen.current = false;
       return;
     }
@@ -248,7 +253,8 @@ export function AppFrame() {
                   >
                     <ReaderIcon name="menu" />
                   </button>
-                  <Outlet />
+                  <Outlet context={{ showSidebar }} />
+                  <MobileBar onSearch={commandPalette.openPalette} />
                 </main>
                 <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
               </div>
