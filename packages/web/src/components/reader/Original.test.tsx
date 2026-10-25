@@ -10,14 +10,14 @@ import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Original } from './Original';
 import { useOriginal } from './useOriginal';
 
-function Standalone({ link }: { link: LinkJson }) {
+function Standalone({ link, showReader = () => {} }: { link: LinkJson; showReader?: () => void }) {
   const state = useOriginal(link, true);
   return (
     <>
       <button type="button" onClick={() => state.refresh.mutate()}>
         Refresh Live
       </button>
-      <Original link={link} state={state} />
+      <Original link={link} state={state} showReader={showReader} />
     </>
   );
 }
@@ -27,6 +27,7 @@ function show(
   mode: 'direct' | 'view' | 'none' | 'error' = 'direct',
   url = link.url,
   contentType?: string,
+  reason?: string,
 ) {
   const fetch = vi.fn(
     async (_url: string, init?: RequestInit) =>
@@ -36,21 +37,22 @@ function show(
           : JSON.stringify(
               mode === 'error'
                 ? { error: 'service_unavailable', message: 'Unavailable' }
-                : { mode, contentType },
+                : { mode, contentType, reason },
             ),
         { status: mode === 'error' ? 503 : 200 },
       ),
   );
   vi.stubGlobal('fetch', fetch);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const showReader = vi.fn();
   const rendered = render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <Standalone link={{ ...link, url }} />
+        <Standalone link={{ ...link, url }} showReader={showReader} />
       </ThemeProvider>
     </QueryClientProvider>,
   );
-  return { ...rendered, fetch, client };
+  return { ...rendered, fetch, client, showReader };
 }
 afterEach(() => {
   setApiBaseUrl('');
@@ -97,7 +99,7 @@ describe('Original mode order', () => {
   });
   it.each(['none', 'error'] as const)('uses a card for %s with an escape link', async (mode) => {
     const { container } = show(mode);
-    await waitFor(() => expect(screen.queryByLabelText('Preparing page...')).toBeNull());
+    await waitFor(() => expect(container.querySelector('.silo-original-card')).not.toBeNull());
     expect(container.querySelector('iframe')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Article' })).toBeDefined();
     expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe('card');
@@ -135,7 +137,9 @@ describe('Original mode order', () => {
       expect(view.container.querySelector('iframe')).toBeNull();
       failView?.();
       failView = undefined;
-      await waitFor(() => expect(screen.queryByLabelText('Preparing page...')).toBeNull());
+      await waitFor(() =>
+        expect(view.container.querySelector('.silo-original-card')).not.toBeNull(),
+      );
       expect(requests).toContain('GET /api/links/link-id/frame');
       expect(view.container.querySelector('iframe')).toBeNull();
       expect(view.container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(
@@ -202,5 +206,47 @@ describe('Original mode order', () => {
     expect(container.querySelector('iframe')?.getAttribute('src')).toContain(
       '/api/links/link-id/view',
     );
+  });
+});
+
+describe('Live resilience', () => {
+  it.each(['direct', 'view'] as const)(
+    'keeps the same skeleton through %s frame loading',
+    async (mode) => {
+      const { container } = show(mode);
+      const skeleton = screen.getByLabelText('Loading page...');
+      const frame = await screen.findByTitle(mode === 'view' ? 'Silo view' : 'Live page');
+      expect(screen.getByLabelText('Loading page...')).toBe(skeleton);
+      expect(container.querySelectorAll('.silo-page-loading')).toHaveLength(1);
+      fireEvent.load(frame);
+      await waitFor(() =>
+        expect(container.querySelector('.silo-frame-loading')?.getAttribute('data-loading')).toBe(
+          'false',
+        ),
+      );
+      expect(screen.getByLabelText('Loading page...')).toBe(skeleton);
+      expect(skeleton.closest('[aria-hidden]')?.getAttribute('aria-hidden')).toBe('true');
+    },
+  );
+  it('sandboxes direct pages without allowing top-level navigation', async () => {
+    show('direct');
+    const frame = await screen.findByTitle('Live page');
+    expect(frame.getAttribute('sandbox')).toBe(
+      'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation',
+    );
+  });
+  it.each([
+    ['needs-script', 'This page needs its own scripts to display.'],
+    ['fetch-error', 'Silo could not load this page.'],
+    ['unsupported-content', 'This content cannot be displayed here.'],
+  ])('shows the reason and both escape actions for %s', async (reason, message) => {
+    const { showReader } = show('none', link.url, 'text/html', reason);
+    await screen.findByText(message);
+    fireEvent.click(screen.getByRole('button', { name: 'Show Reader' }));
+    expect(showReader).toHaveBeenCalledTimes(1);
+    const action = screen.getByRole('link', { name: 'Open in new tab' });
+    expect(action.getAttribute('href')).toBe(link.url);
+    expect(action.getAttribute('target')).toBe('_blank');
+    expect(action.getAttribute('rel')).toBe('noopener noreferrer');
   });
 });

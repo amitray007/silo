@@ -15,6 +15,11 @@ function subscribeTheme(changed: () => void) {
   return () => observer.disconnect();
 }
 
+function originalMode(embed: boolean, hinted: FrameHint['mode'] | undefined) {
+  if (embed) return 'player' as const;
+  return hinted === 'direct' || hinted === 'view' ? hinted : ('card' as const);
+}
+
 export function useOriginal(link: LinkJson | undefined, active: boolean) {
   const theme = useSyncExternalStore(subscribeTheme, readTheme);
   const client = useQueryClient();
@@ -30,11 +35,7 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
     },
   });
   const hinted = hint.data?.mode;
-  const mode = embed
-    ? ('player' as const)
-    : hinted === 'direct' || hinted === 'view'
-      ? hinted
-      : ('card' as const);
+  const mode = originalMode(Boolean(embed), hinted);
   const viewCheck = useQuery({
     queryKey: ['page-view-ready', id, reload],
     queryFn: async ({ signal }) =>
@@ -58,6 +59,8 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
     embed,
     mode: unavailable ? ('card' as const) : mode,
     preparing,
+    frameReady: mode === 'direct' || (mode === 'view' && viewCheck.data === true),
+    reason: hint.isError || unavailable ? 'fetch-error' : hint.data?.reason,
     reload,
     refresh,
   };

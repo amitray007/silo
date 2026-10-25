@@ -310,7 +310,9 @@ describe('reader content', () => {
     fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     await waitFor(() => expect(container.querySelector('iframe')?.getAttribute('src')).toBe(a.url));
     const frame = container.querySelector('iframe');
-    expect(frame?.getAttribute('sandbox')).toBeNull();
+    expect(frame?.getAttribute('sandbox')).toBe(
+      'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation',
+    );
     expect(frame?.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect(frame?.getAttribute('loading')).toBeNull();
     expect(reader().getByRole('button', { name: 'Open original' })).toBeDefined();
@@ -916,8 +918,24 @@ describe('review regressions', () => {
     if (mode === 'direct') {
       expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
       if (url.includes('/pdf/'))
-        expect((await screen.findByTitle('Live page')).hasAttribute('sandbox')).toBe(false);
+        expect((await screen.findByTitle('Live page')).getAttribute('sandbox')).not.toContain(
+          'allow-top-navigation',
+        );
     }
+  });
+
+  it('switches the fallback card to the Reader tab', async () => {
+    renderReader({
+      live: [makeLink({ ...a, url: 'https://downloads.test/archive.zip' })],
+      route: '/?link=a',
+    });
+    await selected();
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Show Reader' }));
+    expect(reader().getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+    expect(reader().getByText('First paragraph.')).toBeDefined();
   });
 
   it('shows one tweet card in Reader and only its themed embed in Original', async () => {

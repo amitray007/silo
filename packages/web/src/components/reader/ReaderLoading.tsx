@@ -55,7 +55,7 @@ export function PlayerSkeleton() {
 }
 
 /** Bound the opaque overlay even when a third-party frame never emits load. */
-export function useFrameLoading(src: string) {
+export function useFrameLoading(src: string, minimumMs = 200) {
   const initial = { src, loaded: false, minimum: false, timedOut: false };
   const [progress, setProgress] = useState(initial);
   if (progress.src !== src) setProgress(initial);
@@ -63,7 +63,7 @@ export function useFrameLoading(src: string) {
     const minimum = setTimeout(
       () =>
         setProgress((current) => (current.src === src ? { ...current, minimum: true } : current)),
-      200,
+      minimumMs,
     );
     const deadline = setTimeout(
       () =>
@@ -76,7 +76,7 @@ export function useFrameLoading(src: string) {
       clearTimeout(minimum);
       clearTimeout(deadline);
     };
-  }, [src]);
+  }, [src, minimumMs]);
   return {
     loading:
       progress.src !== src || (!progress.timedOut && (!progress.loaded || !progress.minimum)),

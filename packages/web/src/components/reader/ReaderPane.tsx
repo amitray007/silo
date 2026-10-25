@@ -287,7 +287,7 @@ export function ReaderPane({
   if (link)
     content =
       tab === 'original' ? (
-        <Original key={link.id} link={link} state={original} />
+        <Original key={link.id} link={link} state={original} showReader={() => setTab('reader')} />
       ) : (
         <ReaderArticle
           link={link}

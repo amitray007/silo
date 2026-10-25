@@ -1009,6 +1009,12 @@ div.silo-reader-notecard {
 }
 .silo-original-card {
   padding: 20px;
+  overflow: auto;
+}
+.silo-original-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
 }
 .silo-original {
   height: 100%;
@@ -1078,6 +1084,19 @@ div.silo-reader-notecard {
   background: var(--bg2);
   pointer-events: none;
 }
+.silo-original-surface > .silo-frame-loading {
+  opacity: 1;
+  transition:
+    opacity 150ms,
+    visibility 0s;
+}
+.silo-original-surface > .silo-frame-loading[data-loading="false"] {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 150ms,
+    visibility 0s 150ms;
+}
 .silo-page-loading {
   flex: 1;
   min-height: 0;
@@ -1085,7 +1104,6 @@ div.silo-reader-notecard {
   flex-direction: column;
   background: var(--bg2);
   overflow: hidden;
-  animation: siloFade 180ms var(--ease-out) 120ms backwards;
 }
 .silo-page-loading-bar {
   display: flex;
@@ -1165,6 +1183,10 @@ div.silo-reader-notecard {
   }
 }
 @media (prefers-reduced-motion: reduce) {
+  .silo-original-surface > .silo-frame-loading[data-loading] {
+    /* biome-ignore lint/complexity/noImportantStyles: Override the global reduced-motion transition reset. */
+    transition: none !important;
+  }
   .silo-page-loading,
   .silo-page-loading-spinner,
   .silo-page-skel,

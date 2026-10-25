@@ -5,54 +5,89 @@ import { ReaderPlayer } from './ReaderPlayer';
 import type { OriginalState } from './useOriginal';
 import { originalUrl } from './useReaderActions';
 
-function PageFrame({ src, silo, url }: { src: string; silo: boolean; url: string }) {
-  const { loading, timedOut, onLoad } = useFrameLoading(src);
-  return (
-    <div className="silo-original-surface" aria-busy={loading}>
-      <iframe
-        title={silo ? 'Silo view' : 'Live page'}
-        sandbox={silo ? 'allow-popups allow-popups-to-escape-sandbox' : undefined}
-        className="silo-original-frame"
-        src={src}
-        referrerPolicy="no-referrer"
-        onLoad={onLoad}
-      />
-      {timedOut && <FrameLoadNotice href={url} />}
-      {loading && (
-        <div className="silo-frame-loading">
-          <PageSkeleton url={url} label="Loading page..." />
-        </div>
-      )}
-    </div>
-  );
+function fallbackReason(reason: string | undefined): string {
+  if (reason === 'needs-script') return 'This page needs its own scripts to display.';
+  if (
+    [
+      'fetch-error',
+      'dns-error',
+      'timeout',
+      'http-error',
+      'not-found',
+      'too-many-redirects',
+      'body-too-large',
+    ].includes(reason ?? '')
+  )
+    return 'Silo could not load this page.';
+  return 'This content cannot be displayed here.';
 }
 
-export function Original({ link, state }: { link: LinkJson; state: OriginalState }) {
-  const { mode, preparing, embed, reload } = state;
+function PageSurface({ link, state, showReader }: OriginalProps) {
+  const { mode, preparing, reload, frameReady } = state;
+  const { loading, timedOut, onLoad } = useFrameLoading(`${link.id}-${link.url}-${reload}`, 0);
+  const framed = mode === 'direct' || mode === 'view';
+  const busy = !timedOut && (preparing || (framed && loading));
   return (
-    <div className="silo-original" data-mode={mode}>
-      {preparing ? (
-        <PageSkeleton url={link.url} label="Preparing page..." />
-      ) : embed ? (
-        <div className="silo-original-player">
-          <ReaderPlayer key={reload} embed={embed} url={link.url} fill />
-        </div>
-      ) : mode === 'direct' || mode === 'view' ? (
-        <PageFrame
+    <div className="silo-original-surface" aria-busy={busy}>
+      {framed && frameReady && (
+        <iframe
           key={`${mode}-${reload}`}
-          url={link.url}
-          silo={mode === 'view'}
+          title={mode === 'view' ? 'Silo view' : 'Live page'}
+          sandbox={
+            mode === 'view'
+              ? 'allow-popups allow-popups-to-escape-sandbox'
+              : 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation'
+          }
+          className="silo-original-frame"
           src={
             mode === 'view'
               ? apiUrl(`/api/links/${encodeURIComponent(link.id)}/view?reload=${reload}`)
               : (originalUrl(link.url) ?? '')
           }
+          referrerPolicy="no-referrer"
+          onLoad={onLoad}
         />
-      ) : (
+      )}
+      {timedOut && (preparing || framed) && <FrameLoadNotice href={link.url} />}
+      {!preparing && !framed && (
         <div className="silo-original-card">
           <h2>{link.title || link.url}</h2>
-          <p>{link.description || 'This content cannot be displayed here.'}</p>
+          {link.description && <p>{link.description}</p>}
+          <p>{fallbackReason(state.reason)}</p>
+          <div className="silo-original-actions">
+            <button type="button" className="silo-reader-btn" onClick={showReader}>
+              Show Reader
+            </button>
+            <a
+              className="silo-reader-btn"
+              href={originalUrl(link.url)}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              Open in new tab
+            </a>
+          </div>
         </div>
+      )}
+      <div className="silo-frame-loading" data-loading={busy} aria-hidden={!busy}>
+        <PageSkeleton url={link.url} label="Loading page..." />
+      </div>
+    </div>
+  );
+}
+
+type OriginalProps = { link: LinkJson; state: OriginalState; showReader: () => void };
+
+export function Original(props: OriginalProps) {
+  const { link, state } = props;
+  return (
+    <div className="silo-original" data-mode={state.mode}>
+      {state.embed ? (
+        <div className="silo-original-player">
+          <ReaderPlayer key={state.reload} embed={state.embed} url={link.url} fill />
+        </div>
+      ) : (
+        <PageSurface {...props} />
       )}
     </div>
   );
