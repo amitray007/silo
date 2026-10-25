@@ -11,13 +11,45 @@ export function ReaderSkeleton({ label = 'Loading article' }: { label?: string }
   );
 }
 
-/** Keep an overlay for 200ms and until the actual frame/player load event. */
+/** Bound the opaque overlay even when a third-party frame never emits load. */
 export function useFrameLoading(src: string) {
-  const [loaded, setLoaded] = useState<string>();
-  const [minimum, setMinimum] = useState<string>();
+  const initial = { src, loaded: false, minimum: false, timedOut: false };
+  const [progress, setProgress] = useState(initial);
+  if (progress.src !== src) setProgress(initial);
   useEffect(() => {
-    const timer = setTimeout(() => setMinimum(src), 200);
-    return () => clearTimeout(timer);
+    const minimum = setTimeout(
+      () =>
+        setProgress((current) => (current.src === src ? { ...current, minimum: true } : current)),
+      200,
+    );
+    const deadline = setTimeout(
+      () =>
+        setProgress((current) =>
+          current.src === src && !current.loaded ? { ...current, timedOut: true } : current,
+        ),
+      12_000,
+    );
+    return () => {
+      clearTimeout(minimum);
+      clearTimeout(deadline);
+    };
   }, [src]);
-  return { loading: loaded !== src || minimum !== src, onLoad: () => setLoaded(src) };
+  return {
+    loading:
+      progress.src !== src || (!progress.timedOut && (!progress.loaded || !progress.minimum)),
+    timedOut: progress.src === src && progress.timedOut && !progress.loaded,
+    onLoad: () =>
+      setProgress((current) => (current.src === src ? { ...current, loaded: true } : current)),
+  };
+}
+
+export function FrameLoadNotice({ href }: { href: string }) {
+  return (
+    <div className="silo-frame-notice" role="status">
+      Still loading?{' '}
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        Open in new tab
+      </a>
+    </div>
+  );
 }

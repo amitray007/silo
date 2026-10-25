@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PlayerEmbed } from './embedFor';
-import { ReaderSkeleton, useFrameLoading } from './ReaderLoading';
+import { FrameLoadNotice, ReaderSkeleton, useFrameLoading } from './ReaderLoading';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object'
@@ -23,8 +23,16 @@ function tweetHeight(data: unknown): number | undefined {
     : undefined;
 }
 
-export function ReaderPlayer({ embed, fill = false }: { embed: PlayerEmbed; fill?: boolean }) {
-  const { loading, onLoad } = useFrameLoading(embed.src);
+export function ReaderPlayer({
+  embed,
+  fill = false,
+  url,
+}: {
+  embed: PlayerEmbed;
+  fill?: boolean;
+  url?: string;
+}) {
+  const { loading, timedOut, onLoad } = useFrameLoading(embed.src);
   const frame = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState<{ src: string; height: number }>();
   useEffect(() => {
@@ -60,6 +68,7 @@ export function ReaderPlayer({ embed, fill = false }: { embed: PlayerEmbed; fill
         allowFullScreen
         loading="lazy"
       />
+      {timedOut && <FrameLoadNotice href={url ?? embed.src} />}
       {loading && (
         <div className="silo-frame-loading">
           <ReaderSkeleton label="Loading player..." />

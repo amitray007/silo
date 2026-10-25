@@ -198,7 +198,7 @@ function ReaderArticle({
           </div>
         </div>
       )}
-      {video && <ReaderPlayer embed={video} />}
+      {video && <ReaderPlayer embed={video} url={link.url} />}
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
       <YouTubeStats source={link.sourceData} />
       <div className="silo-reader-source">

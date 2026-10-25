@@ -1,12 +1,12 @@
 import { apiUrl } from '../../api/client';
 import type { LinkJson } from '../../api/types';
-import { ReaderSkeleton, useFrameLoading } from './ReaderLoading';
+import { FrameLoadNotice, ReaderSkeleton, useFrameLoading } from './ReaderLoading';
 import { ReaderPlayer } from './ReaderPlayer';
 import type { OriginalState } from './useOriginal';
 import { originalUrl } from './useReaderActions';
 
-function PageFrame({ src, silo }: { src: string; silo: boolean }) {
-  const { loading, onLoad } = useFrameLoading(src);
+function PageFrame({ src, silo, url }: { src: string; silo: boolean; url: string }) {
+  const { loading, timedOut, onLoad } = useFrameLoading(src);
   return (
     <div className="silo-original-surface" aria-busy={loading}>
       <iframe
@@ -17,6 +17,7 @@ function PageFrame({ src, silo }: { src: string; silo: boolean }) {
         referrerPolicy="no-referrer"
         onLoad={onLoad}
       />
+      {timedOut && <FrameLoadNotice href={url} />}
       {loading && (
         <div className="silo-frame-loading">
           <ReaderSkeleton label="Loading page..." />
@@ -34,11 +35,12 @@ export function Original({ link, state }: { link: LinkJson; state: OriginalState
         <ReaderSkeleton label="Preparing page..." />
       ) : embed ? (
         <div className="silo-original-player">
-          <ReaderPlayer key={reload} embed={embed} fill />
+          <ReaderPlayer key={reload} embed={embed} url={link.url} fill />
         </div>
       ) : mode === 'direct' || mode === 'view' ? (
         <PageFrame
           key={`${mode}-${reload}`}
+          url={link.url}
           silo={mode === 'view'}
           src={
             mode === 'view'

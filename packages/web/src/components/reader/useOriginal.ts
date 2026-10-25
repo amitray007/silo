@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { apiGet, apiUrl } from '../../api/client';
 import { queryKeys, useFrameHint } from '../../api/hooks';
 import type { FrameHint, LinkJson } from '../../api/types';
@@ -25,10 +25,14 @@ function originalMode(
     hint?.mode === 'view' ||
     (hint?.mode === 'direct' &&
       /^(?:text\/html|application\/xhtml\+xml)(?:;|$)/i.test(hint.contentType ?? 'text/html'));
+  const allowed =
+    (selected === 'direct' && hint?.mode === 'direct') || (selected === 'view' && canView);
   const mode = embed
     ? ('player' as const)
     : hint?.mode === 'direct' || hint?.mode === 'view'
-      ? (selected ?? hint.mode)
+      ? allowed
+        ? selected
+        : hint.mode
       : ('card' as const);
   return { canView, mode };
 }
@@ -40,6 +44,14 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
   const hint = useFrameHint(id, active && !embed && Boolean(link && originalUrl(link.url)));
   const [choice, setChoice] = useState<{ id: string; mode: FrameMode }>();
   const [reload, setReload] = useState(0);
+  useEffect(() => {
+    if (!hint.data) return;
+    setChoice((current) =>
+      current?.id === id && originalMode(undefined, hint.data, current.mode).mode !== current.mode
+        ? undefined
+        : current,
+    );
+  }, [hint.data, id]);
   const refresh = useMutation({
     mutationFn: () => apiGet<FrameHint>(`/api/links/${encodeURIComponent(id)}/frame?fresh=1`),
     onSuccess: (data) => {

@@ -1157,3 +1157,26 @@ div.silo-reader-notecard {
     background: none;
   }
 }
+
+.silo-frame-notice {
+  position: absolute;
+  bottom: 8px;
+  left: 12px;
+  max-width: calc(100% - 24px);
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg2);
+  color: var(--mut);
+  font-size: 12px;
+}
+.silo-frame-notice a {
+  color: var(--ink);
+}
+@media (max-width: 719px) {
+  .silo-frame-notice a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 40px;
+  }
+}
