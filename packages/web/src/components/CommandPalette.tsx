@@ -817,7 +817,12 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               enterKeyHint="go"
             />
             <kbd className="silo-palette-esc">esc</kbd>
-            <button type="button" className="silo-palette-cancel" onClick={closePalette}>
+            <button
+              type="button"
+              className="silo-palette-cancel"
+              onKeyDown={(event) => event.stopPropagation()}
+              onClick={closePalette}
+            >
               Cancel
             </button>
           </div>
@@ -875,6 +880,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
                 Filter by
                 <button
                   type="button"
+                  onKeyDown={(event) => event.stopPropagation()}
                   onClick={() => {
                     setQ(`${q.trim() ? `${q.trim()} ` : ''}#`);
                     palette.inputRef.current?.focus();

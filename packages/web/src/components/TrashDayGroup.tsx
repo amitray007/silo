@@ -12,16 +12,18 @@ export function TrashDayGroup({
   label,
   links,
   purgeWindowDays,
+  onDelete,
 }: {
   label: string;
   links: TrashLinkJson[];
   purgeWindowDays: number;
+  onDelete: (id: string) => void;
 }) {
   return (
     <div>
       <DayGroupHeading label={label} />
       {links.map((link) => (
-        <TrashRow key={link.id} link={link} purgeWindowDays={purgeWindowDays} />
+        <TrashRow key={link.id} link={link} purgeWindowDays={purgeWindowDays} onDelete={onDelete} />
       ))}
     </div>
   );

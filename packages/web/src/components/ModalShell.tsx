@@ -54,9 +54,15 @@ export function trapDialogTab(e: React.KeyboardEvent<HTMLDivElement>) {
   if (e.key !== 'Tab') return;
   const panel = e.currentTarget;
   const focusables = Array.from(
-    panel.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input, textarea, select'),
+    panel.querySelectorAll<HTMLElement>(
+      'a[href], button:not(:disabled), input:not(:disabled), textarea:not(:disabled), select:not(:disabled)',
+    ),
   ).filter((el) => el.offsetParent !== null);
-  if (focusables.length === 0) return;
+  if (focusables.length === 0) {
+    e.preventDefault();
+    panel.focus();
+    return;
+  }
   const first = focusables[0] as HTMLElement;
   const last = focusables[focusables.length - 1] as HTMLElement;
   if (e.shiftKey && (document.activeElement === first || document.activeElement === panel)) {
@@ -80,6 +86,7 @@ export function ModalShell({
   role = 'dialog',
   onKeyDown,
   describedBy,
+  focusPanel = false,
 }: {
   /** Preferred width, capped to the available viewport. */
   width: number;
@@ -103,6 +110,7 @@ export function ModalShell({
   role?: 'dialog' | 'alertdialog';
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   describedBy?: string;
+  focusPanel?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
@@ -130,6 +138,10 @@ export function ModalShell({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (focusPanel) panelRef.current?.focus();
+  }, [focusPanel]);
 
   // Push/pop this instance onto the shared open-modal stack (see the
   // `openModalStack` doc comment above `ensureModalityListeners`) so its

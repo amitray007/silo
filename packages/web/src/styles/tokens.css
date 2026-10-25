@@ -13,7 +13,7 @@
   --sel: #ebebe9;
   --ink: #0c0c0b;
   --mut: #5c5c59;
-  --fnt: #8a8a86;
+  --fnt: #6e6e6e;
   --ghost: var(--fnt);
   --btn: #111110;
   --btn-ink: #ffffff;
@@ -24,6 +24,8 @@
   --accent-soft: #fff1e6;
   --warn: #d63a2f;
   --solid-ink: #ffffff;
+  --logo-tile: #f6f6f5;
+  --logo-ink: #181818;
 
   /* Local source-chip colors from the approved prototype. */
   --chip-0: #e5484d;
@@ -99,7 +101,7 @@
   --sel: #1f1f1f;
   --ink: #f3f3f2;
   --mut: #a3a3a0;
-  --fnt: #757572;
+  --fnt: #818181;
   --btn: #f3f3f2;
   --btn-ink: #0a0a0a;
   --accent-soft: #2a1709;

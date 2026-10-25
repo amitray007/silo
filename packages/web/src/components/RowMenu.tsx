@@ -438,6 +438,11 @@ export function RowMenu({ link }: { link: LinkJson }) {
           closeMenu();
         }}
       >
+        <span style={iconSlotStyle}>
+          <MenuIcon>
+            <path d="m3.5 8 3 3 6-6" />
+          </MenuIcon>
+        </span>
         <span>{selection.isSelected(link.id) ? 'Deselect item' : 'Select item'}</span>
       </MenuItem>
       <MenuItem onClick={handleEdit}>

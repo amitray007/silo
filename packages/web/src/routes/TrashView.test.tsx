@@ -149,6 +149,15 @@ describe('TrashView', () => {
     await waitFor(() => expect(screen.getByText('Delete me')).toBeDefined());
     fireEvent.click(screen.getByRole('button', { name: 'Options' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
+    expect(fetchImpl).not.toHaveBeenCalledWith(
+      expect.stringMatching(/^\/api\/trash\//),
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith('/api/trash/1', {
@@ -361,6 +370,14 @@ describe('TrashView', () => {
       await waitFor(() => expect(screen.getByText('Row A')).toBeDefined());
       selectAllRows();
       fireEvent.click(screen.getByText('Delete now'));
+      expect(fetchImpl).not.toHaveBeenCalledWith(
+        expect.stringMatching(/^\/api\/trash\//),
+        expect.objectContaining({ method: 'DELETE' }),
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(screen.queryByRole('alertdialog')).toBeNull();
+      fireEvent.click(screen.getByText('Delete now'));
+      fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
 
       await waitFor(() =>
         expect(fetchImpl).toHaveBeenCalledWith('/api/trash/a', {

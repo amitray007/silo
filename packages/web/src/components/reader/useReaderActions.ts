@@ -21,6 +21,7 @@ export function useReaderActions(
   const librarySelection = useLibrarySelection();
   const trashSelection = useTrashSelection();
   const { openEdit } = useRowMenu();
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notice, setNotice] = useState({ id, message: '' });
   const feedback = notice.id === id ? notice.message : '';
   const setFeedback = (message: string) => setNotice({ id, message });
@@ -45,6 +46,7 @@ export function useReaderActions(
         onRemoved();
       },
       onError: (error) => setFeedback(error.message),
+      onSettled: () => setConfirmingDelete(false),
     });
   }
 
@@ -54,7 +56,10 @@ export function useReaderActions(
     copy,
     trash: () => act('trash'),
     restore: () => act('restore'),
-    remove: () => act('delete'),
+    remove: () => setConfirmingDelete(true),
+    confirmingDelete,
+    cancelDelete: () => setConfirmingDelete(false),
+    confirmDelete: () => act('delete'),
     edit: (focus: 'title' | 'note' | 'tags' = 'title') => !trashed && link && openEdit(link, focus),
     open: () => {
       const url = link && originalUrl(link.url);

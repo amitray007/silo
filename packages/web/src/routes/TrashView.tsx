@@ -3,6 +3,7 @@ import {
   useBulkDeleteNow,
   useBulkRestore,
   useCounts,
+  useDeleteNow,
   useEmptyTrash,
   useTrashList,
 } from '../api/hooks';
@@ -10,6 +11,7 @@ import type { TrashLinkJson } from '../api/types';
 import { ContentHeader } from '../components';
 import { CenteredPanel } from '../components/CenteredPanel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
+import { DeleteForeverDialog } from '../components/DeleteForeverDialog';
 import {
   DockAction,
   DockIconAction,
@@ -41,6 +43,7 @@ function TrashSelectionDock({ selectedIds, allIds }: { selectedIds: string[]; al
   const selection = useTrashSelection();
   const bulkRestore = useBulkRestore();
   const bulkDeleteNow = useBulkDeleteNow();
+  const [deleteBatch, setDeleteBatch] = useState<string[] | null>(null);
   const busy = bulkRestore.isPending || bulkDeleteNow.isPending;
 
   const handleRestore = () => {
@@ -51,20 +54,40 @@ function TrashSelectionDock({ selectedIds, allIds }: { selectedIds: string[]; al
 
   const handleDeleteNow = () => {
     if (busy) return;
-    const batch = selectedIds;
-    bulkDeleteNow.mutate(batch, { onSettled: () => selection.deselect(batch) });
+    if (!deleteBatch) return;
+    const batch = deleteBatch;
+    bulkDeleteNow.mutate(batch, {
+      onSettled: () => {
+        selection.deselect(batch);
+        setDeleteBatch(null);
+      },
+    });
   };
 
   return (
-    <SelectionDock selectedCount={selectedIds.length} onClear={selection.clear}>
-      <DockAction onClick={() => selection.selectAll(allIds)}>Select all</DockAction>
-      <DockIconAction onClick={handleRestore} icon={<DockRestoreIcon />} disabled={busy}>
-        Restore
-      </DockIconAction>
-      <DockIconAction onClick={handleDeleteNow} icon={<DockTrashIcon />} disabled={busy}>
-        Delete now
-      </DockIconAction>
-    </SelectionDock>
+    <>
+      <SelectionDock selectedCount={selectedIds.length} onClear={selection.clear}>
+        <DockAction onClick={() => selection.selectAll(allIds)}>Select all</DockAction>
+        <DockIconAction onClick={handleRestore} icon={<DockRestoreIcon />} disabled={busy}>
+          Restore
+        </DockIconAction>
+        <DockIconAction
+          onClick={() => setDeleteBatch([...selectedIds])}
+          icon={<DockTrashIcon />}
+          disabled={busy}
+        >
+          Delete now
+        </DockIconAction>
+      </SelectionDock>
+      {deleteBatch && (
+        <DeleteForeverDialog
+          count={deleteBatch.length}
+          pending={bulkDeleteNow.isPending}
+          onConfirm={handleDeleteNow}
+          onClose={() => setDeleteBatch(null)}
+        />
+      )}
+    </>
   );
 }
 
@@ -155,11 +178,13 @@ function TrashBody({
   isError,
   shownLinks,
   purgeWindowDays,
+  onDelete,
 }: {
   loading: boolean;
   isError: boolean;
   shownLinks: TrashLinkJson[];
   purgeWindowDays: number;
+  onDelete: (id: string) => void;
 }) {
   // Reuse the shared list `LoadingState` (Library/Tag) — Trash is also
   // day-grouped (`TrashDayGroup` → the same `DayGroupHeading`) and `TrashRow`
@@ -198,6 +223,7 @@ function TrashBody({
           label={group.label}
           links={group.items}
           purgeWindowDays={purgeWindowDays}
+          onDelete={onDelete}
         />
       ))}
     </>
@@ -209,6 +235,8 @@ export function TrashView() {
   const { data: counts } = useCounts();
   const { data, isLoading, isError } = useTrashList();
   const selection = useTrashSelection();
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const remove = useDeleteNow(deleteId ?? '');
 
   const links = data?.links ?? [];
   const purgeWindowDays = counts?.purgeWindowDays ?? 30;
@@ -242,10 +270,23 @@ export function TrashView() {
             isError={isError}
             shownLinks={links}
             purgeWindowDays={purgeWindowDays}
+            onDelete={setDeleteId}
           />
         </div>
       </div>
 
+      {deleteId && (
+        <DeleteForeverDialog
+          pending={remove.isPending}
+          onClose={() => setDeleteId(null)}
+          onConfirm={() =>
+            remove.mutate(undefined, {
+              onSuccess: () => selection.deselect([deleteId]),
+              onSettled: () => setDeleteId(null),
+            })
+          }
+        />
+      )}
       {hasSelection && (
         <TrashSelectionDock selectedIds={selectedIds} allIds={links.map((link) => link.id)} />
       )}

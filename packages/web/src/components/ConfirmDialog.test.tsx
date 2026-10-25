@@ -25,6 +25,28 @@ describe('ConfirmDialog', () => {
     expect(onConfirm).toHaveBeenCalledTimes(1);
   });
 
+  it('focuses the panel when confirmation becomes pending and traps Tab without enabled controls', () => {
+    const props = {
+      title: 'Delete forever?',
+      action: 'Delete',
+      onConfirm: vi.fn(),
+      onClose: vi.fn(),
+    };
+    const { rerender } = render(<ConfirmDialog {...props}>Cannot undo.</ConfirmDialog>);
+    screen.getByRole('button', { name: 'Delete' }).focus();
+    rerender(
+      <ConfirmDialog {...props} pending>
+        Cannot undo.
+      </ConfirmDialog>,
+    );
+    const panel = screen.getByRole('alertdialog');
+    expect(document.activeElement).toBe(panel);
+    expect(fireEvent.keyDown(panel, { key: 'Tab' })).toBe(false);
+    expect(document.activeElement).toBe(panel);
+    expect(fireEvent.keyDown(panel, { key: 'Tab', shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(panel);
+  });
+
   it('blocks repeated confirmation and dismissal while the action is pending', () => {
     const onConfirm = vi.fn();
     const onClose = vi.fn();

@@ -364,6 +364,13 @@
   box-shadow: var(--elev-2);
   transform-origin: top right;
 }
+@media (min-width: 720px) {
+  .silo-row-menu-portal[data-flyout-side="right"] .silo-tags-flyout {
+    right: auto;
+    left: calc(100% - 2px);
+    transform-origin: top left;
+  }
+}
 .silo-row-menu {
   position: absolute;
   right: 8px;

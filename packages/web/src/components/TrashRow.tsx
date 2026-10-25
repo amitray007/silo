@@ -1,4 +1,4 @@
-import { useDeleteNow, useRestoreLink } from '../api/hooks';
+import { useRestoreLink } from '../api/hooks';
 import type { TrashLinkJson } from '../api/types';
 import { purgeCountdownDays } from '../lib/buckets';
 import { ListRow } from './ListRow';
@@ -6,12 +6,11 @@ import { useRowMenu } from './RowMenuContext';
 import { RowPopover } from './RowPopover';
 import { useTrashSelection } from './SelectionContext';
 
-function TrashRowMenu({ link }: { link: TrashLinkJson }) {
+function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () => void }) {
   const restore = useRestoreLink(link.id);
-  const remove = useDeleteNow(link.id);
   const selection = useTrashSelection();
   const { closeMenu } = useRowMenu();
-  const busy = restore.isPending || remove.isPending;
+  const busy = restore.isPending;
   return (
     <div
       className="silo-trash-row-menu"
@@ -52,15 +51,7 @@ function TrashRowMenu({ link }: { link: TrashLinkJson }) {
       >
         Restore
       </button>
-      <button
-        type="button"
-        role="menuitem"
-        disabled={busy}
-        onClick={() => {
-          selection.deselect([link.id]);
-          remove.mutate(undefined, { onSuccess: closeMenu });
-        }}
-      >
+      <button type="button" role="menuitem" disabled={busy} onClick={onDelete}>
         Delete now
       </button>
     </div>
@@ -70,9 +61,11 @@ function TrashRowMenu({ link }: { link: TrashLinkJson }) {
 export function TrashRow({
   link,
   purgeWindowDays,
+  onDelete,
 }: {
   link: TrashLinkJson;
   purgeWindowDays: number;
+  onDelete: (id: string) => void;
 }) {
   const selection = useTrashSelection();
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
@@ -87,7 +80,13 @@ export function TrashRow({
       menu={(anchor) =>
         menuOpen && (
           <RowPopover anchor={anchor} onDismiss={closeMenu}>
-            <TrashRowMenu link={link} />
+            <TrashRowMenu
+              link={link}
+              onDelete={() => {
+                closeMenu();
+                onDelete(link.id);
+              }}
+            />
           </RowPopover>
         )
       }

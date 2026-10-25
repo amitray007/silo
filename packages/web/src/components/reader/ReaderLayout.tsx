@@ -1,6 +1,7 @@
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
+import { DeleteForeverDialog } from '../DeleteForeverDialog';
 import { ReaderPane } from './ReaderPane';
 import { ReaderSelectionContext } from './ReaderSelection';
 import { useReaderActions, useReaderKeyboard } from './useReaderActions';
@@ -103,7 +104,18 @@ export function ReaderLayout({
           title={title}
           loading={Boolean(selectedId) && (loading || detail.isFetching)}
         />
+        <ReaderDeleteDialog actions={actions} />
       </div>
     </ReaderSelectionContext.Provider>
   );
+}
+
+function ReaderDeleteDialog({ actions }: { actions: ReturnType<typeof useReaderActions> }) {
+  return actions.confirmingDelete ? (
+    <DeleteForeverDialog
+      pending={actions.busy}
+      onConfirm={actions.confirmDelete}
+      onClose={actions.cancelDelete}
+    />
+  ) : null;
 }

@@ -47,6 +47,7 @@ export function RowPopover({
     <div
       className="silo-row-menu-portal"
       ref={ref}
+      data-flyout-side={position && position.left < 232 ? 'right' : 'left'}
       style={{
         position: 'fixed',
         zIndex: 36,

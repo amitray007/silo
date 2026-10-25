@@ -29,6 +29,7 @@ export function ConfirmDialog({
       ariaLabel={title}
       role="alertdialog"
       describedBy={descriptionId}
+      focusPanel={pending}
       onClose={dismiss}
       zIndex={60}
     >

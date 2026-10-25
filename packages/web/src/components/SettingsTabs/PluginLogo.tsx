@@ -96,18 +96,7 @@ const tileBase: CSSProperties = {
   flex: 'none',
 };
 
-/**
- * A brand logo inside a circular tile — the grid card's centerpiece and the
- * expand panel's header glyph (plan 026 U4). Colorful marks (YC, YouTube)
- * sit on a faint neutral `--bg2` tile since they already carry their own
- * color; dark monochrome marks (GitHub, X) get a near-white circular backing
- * (`#f5f0e6`, a warm off-white in the Oat family rather than a stark
- * `#fff`) with the glyph tinted dark via `currentColor` — both cases stay
- * legible in light AND dark theme because the backing is either the theme's
- * own `--bg2` (colorful case) or a FIXED warm off-white (monochrome case,
- * deliberately theme-invariant — a dark logo would vanish against a dark
- * `--bg2` in the dark theme otherwise).
- */
+/** Brand marks use a neutral light tile for monochrome visibility in both themes. */
 export function PluginLogo({ source, size = 44 }: { source: LogoSource; size?: number }) {
   const Logo = LOGO_BY_SOURCE[source];
   const isDarkMonochrome = DARK_MONOCHROME_SOURCES.has(source);
@@ -126,8 +115,8 @@ export function PluginLogo({ source, size = 44 }: { source: LogoSource; size?: n
         ...tileBase,
         width: size,
         height: size,
-        background: isDarkMonochrome ? '#f5f0e6' : 'var(--bg2)',
-        color: isDarkMonochrome ? '#181717' : undefined,
+        background: isDarkMonochrome ? 'var(--logo-tile)' : 'var(--bg2)',
+        color: isDarkMonochrome ? 'var(--logo-ink)' : undefined,
         border: isDarkMonochrome ? 'none' : '1px solid var(--line)',
       }}
     >

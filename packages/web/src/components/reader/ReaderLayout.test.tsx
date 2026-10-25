@@ -178,6 +178,22 @@ afterEach(() => {
 });
 
 describe('reader selection and history', () => {
+  it.each(['/?link=a', '/tags/mcp?link=a', '/trash?link=a'])(
+    'preserves reader and URL when opening and closing Settings at %s',
+    async (route) => {
+      renderReader({ route, trash: [makeTrashLink(a)] });
+      await selected();
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByTestId('url').textContent).toBe(route);
+      await selected();
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+      expect(screen.getByTestId('url').textContent).toBe(route);
+      await selected();
+    },
+  );
+
   it('pushes URL selection, reuses loaded rows, and browser Back returns to the list', async () => {
     const { fetchMock, container } = renderReader();
     await selectFirst();
@@ -484,6 +500,15 @@ describe('reader keyboard and phone toolbar', () => {
     const { fetchMock } = renderReader({ trash: [makeTrashLink(a)], route: '/trash?link=a' });
     await selected();
     fireEvent.click(reader().getByRole('button', { name: 'Delete forever' }));
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      '/api/trash/a',
+      expect.objectContaining({ method: 'DELETE' }),
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(screen.getByTestId('url').textContent).toBe('/trash?link=a');
+    fireEvent.click(reader().getByRole('button', { name: 'Delete forever' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         '/api/trash/a',
@@ -652,6 +677,43 @@ describe('review regressions', () => {
     await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
   });
 
+  it('keeps the row deletion confirmation trapped while the optimistic removal is pending', async () => {
+    const { container, fetchMock } = renderReader({
+      trash: [makeTrashLink(a), makeTrashLink(b)],
+      route: '/trash?link=a',
+    });
+    await selected();
+    const original = fetchMock.getMockImplementation();
+    let finish: (() => void) | undefined;
+    fetchMock.mockImplementation(async (input, init) => {
+      if (String(input) === '/api/trash/a' && init?.method === 'DELETE') {
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      }
+      return original?.(input, init) as Promise<Response>;
+    });
+    const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
+    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
+    await waitFor(() => expect(container.querySelector('[data-link-id="a"]')).toBeNull());
+    const panel = screen.getByRole('alertdialog');
+    expect(document.activeElement).toBe(panel);
+    expect(screen.getByRole('button', { name: 'Confirm permanent deletion' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(fireEvent.keyDown(panel, { key: 'Tab' })).toBe(false);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByRole('alertdialog')).toBe(panel);
+    await act(async () => {
+      finish?.();
+    });
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+    await selected('Second link');
+  });
+
   it('advances the trash reader after a row menu deletion', async () => {
     const { container } = renderReader({
       trash: [makeTrashLink(a), makeTrashLink(b)],
@@ -661,6 +723,7 @@ describe('review regressions', () => {
     const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
     fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
     await selected('Second link');
     expect(screen.getByTestId('url').textContent).toBe('/trash?link=b');
   });
