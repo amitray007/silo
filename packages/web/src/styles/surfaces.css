@@ -314,7 +314,8 @@
   flex: none;
   display: grid;
   place-items: center;
-  width: 40px;
+  width: 36px;
+  min-width: 36px;
   height: 32px;
   padding: 0;
   border: 0;
@@ -324,7 +325,7 @@
 .silo-toggle > span {
   position: relative;
   width: 36px;
-  height: 22px;
+  height: 20px;
   border-radius: 999px;
   background: var(--line-2);
   transition: background 0.15s ease;
@@ -334,19 +335,19 @@
   position: absolute;
   top: 2px;
   left: 2px;
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
-  background: var(--solid-ink);
+  background: white;
   box-shadow: var(--elev-1);
   transition: transform 0.15s var(--ease-out);
 }
 .silo-toggle[aria-checked="true"] > span {
-  background: var(--btn);
+  background: var(--toggle-on);
 }
 .silo-toggle[aria-checked="true"] > span::after {
-  transform: translateX(14px);
-  background: var(--btn-ink);
+  transform: translateX(16px);
+  background: white;
 }
 .silo-toggle:disabled {
   opacity: 0.4;
@@ -980,4 +981,89 @@
 .silo-collection .silo-menu-surface {
   width: 160px;
   min-width: 160px;
+}
+
+/* Settings use the same full-bleed columns as the library. */
+.silo-settings-page {
+  height: 100%;
+}
+.silo-settings-route-tabs {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 12px 8px;
+}
+.silo-settings-route-tabs .silo-nav-item {
+  height: 32px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--mut);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.silo-settings-route-tabs .silo-nav-item[data-active="true"] {
+  color: var(--ink);
+  background: var(--sel);
+}
+.silo-settings-main {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+}
+.silo-settings-main .silo-panehead {
+  padding: 0 16px;
+}
+.silo-settings-main .silo-panehead h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  outline: none;
+}
+.silo-settings-scroll {
+  flex: 1;
+  overflow: auto;
+  min-height: 0;
+  padding: 24px 32px 96px;
+}
+.silo-settings-route-panel {
+  max-width: 616px;
+  margin: 0 auto;
+}
+@media (max-width: 719px) {
+  .silo-settings-page {
+    flex-direction: column;
+  }
+  .silo-settings-navigation {
+    width: 100%;
+    border-right: 0;
+  }
+  .silo-settings-route-tabs {
+    flex-direction: row;
+    overflow-x: auto;
+    flex: none;
+    padding: 8px;
+  }
+  .silo-settings-route-tabs .silo-nav-item {
+    flex: none;
+    min-height: 40px;
+  }
+  .silo-settings-scroll {
+    padding: 8px 20px calc(40px + env(safe-area-inset-bottom, 0px));
+  }
+  .silo-settings-route-panel :is(button, input, select) {
+    min-height: 40px;
+  }
+  .silo-settings-route-panel .silo-toggle {
+    min-width: 40px;
+  }
+}
+
+.silo-settings-route-panel :is(pre, code) {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }

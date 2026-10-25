@@ -115,11 +115,11 @@ const cardBase: CSSProperties = {
   flexDirection: 'row',
   alignItems: 'center',
   gap: 14,
-  padding: '14px 10px',
-  borderRadius: 8,
+  padding: '16px 0',
+  borderRadius: 0,
   border: 0,
-  borderTop: '1px solid var(--line)',
-  background: 'var(--bg2)',
+  borderBottom: '0.5px solid var(--line)',
+  background: 'var(--bg)',
   cursor: 'pointer',
   transition: 'border-color .15s ease, box-shadow .15s ease',
   font: 'inherit',
@@ -129,15 +129,15 @@ const cardBase: CSSProperties = {
 const cardTitle: CSSProperties = {
   flex: 1,
   textAlign: 'left',
-  fontSize: 'var(--text-sm)',
+  fontSize: 'var(--text-base)',
   fontWeight: 500,
   color: 'var(--ink)',
 };
 
 const panelShell: CSSProperties = {
-  borderRadius: 12,
-  border: '1px solid var(--line)',
-  padding: '16px 18px',
+  borderRadius: 0,
+  border: 0,
+  padding: '16px 0',
   marginTop: 4,
 };
 
@@ -149,7 +149,7 @@ const panelHeaderRow: CSSProperties = {
 
 const panelDivider: CSSProperties = {
   border: 'none',
-  borderTop: '1px solid var(--line)',
+  borderBottom: '0.5px solid var(--line)',
   margin: '14px 0',
 };
 
@@ -157,7 +157,8 @@ const featureRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 16,
-  padding: '10px 0',
+  padding: '16px 0',
+  borderBottom: '0.5px solid var(--line)',
 };
 
 /** The grid card's status dot — a smaller, non-interactive readout of `enabled` (the card itself is the click target, selecting the source; the actual toggle lives in the expand panel). */
@@ -200,7 +201,7 @@ function SourceCard({
       aria-controls={panelId}
       style={{
         ...cardBase,
-        background: selected ? 'var(--hov)' : 'var(--bg2)',
+        background: selected ? 'var(--hov)' : 'var(--bg)',
       }}
     >
       <PluginLogo source={logoSource} size={32} />

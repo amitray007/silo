@@ -82,20 +82,33 @@ describe('App routing', () => {
     renderApp(['/settings']);
     // v3's Settings is a MODAL — landing on /settings opens it over an empty
     // route backdrop (the modal IS the settings surface).
-    await waitFor(() => expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined());
     // The modal's own content is present (a tab), not a stale "coming soon".
     expect(screen.getByRole('tab', { name: /preferences/i })).toBeDefined();
   });
 
+  it.each([
+    ['/settings?tab=prefs', 'Preferences'],
+    ['/settings/prefs', 'Preferences'],
+    ['/settings/import-export', 'Import & export'],
+    ['/settings/unknown', 'Plugins'],
+  ])('resolves the Settings deep link %s', async (route, selectedTab) => {
+    renderApp([route]);
+    await screen.findByRole('region', { name: 'Settings' });
+    expect(screen.getByRole('tab', { name: selectedTab }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+  });
+
   it('closes the Settings modal when navigating away from /settings (no floating modal over the new route)', async () => {
     renderApp(['/settings']);
-    await waitFor(() => expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined());
 
     // Click the Library nav item — leaving /settings unmounts SettingsView,
     // whose cleanup closes the modal.
     fireEvent.click(screen.getByRole('link', { name: /library/i }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull());
   });
 
   it('renders a calm not-found view for an unknown path', async () => {

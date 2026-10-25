@@ -195,16 +195,15 @@ afterEach(() => {
 
 describe('reader selection and history', () => {
   it.each(['/?link=a', '/tags/mcp?link=a', '/trash?link=a'])(
-    'preserves reader and URL when opening and closing Settings at %s',
+    'returns to the same reader URL after visiting Settings from %s',
     async (route) => {
       renderReader({ route, trash: [makeTrashLink(a)] });
       await selected();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
-      expect(screen.getByTestId('url').textContent).toBe(route);
-      await selected();
+      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByTestId('url').textContent).toBe('/settings/plugins');
       fireEvent.keyDown(document, { key: 'Escape' });
-      expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+      expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull();
       expect(screen.getByTestId('url').textContent).toBe(route);
       await selected();
     },

@@ -10,7 +10,6 @@ import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
 import { SettingsProvider, useSettings } from './SettingsContext';
-import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
 
 const DRAWER_ID = 'silo-drawer';
@@ -33,10 +32,10 @@ function RowMenuLayer({
     }
   }, [settingsOpen, editingLink, closeEdit]);
   useEffect(() => {
-    if ((settingsOpen || editingLink) && palette.open) {
+    if (editingLink && palette.open) {
       palette.closePalette();
     }
-  }, [settingsOpen, editingLink, palette.open, palette.closePalette]);
+  }, [editingLink, palette.open, palette.closePalette]);
   useEffect(() => {
     if ((palette.open || drawerOpen) && openMenuId !== null) {
       closeMenu();
@@ -72,11 +71,6 @@ function RowMenuLayer({
   return editingLink ? (
     <EditModal key={editingLink.id} link={editingLink} focus={editingFocus} />
   ) : null;
-}
-
-function SettingsLayer() {
-  const { open } = useSettings();
-  return open ? <SettingsModal /> : null;
 }
 
 function initialCollapsed() {
@@ -130,8 +124,9 @@ export function AppFrame() {
     if (previousPath.current !== location.pathname) {
       previousPath.current = location.pathname;
       setDrawerOpen(false);
+      commandPalette.closePalette();
     }
-  }, [location.pathname]);
+  }, [location.pathname, commandPalette.closePalette]);
   useEffect(() => {
     const wide = matchMedia('(min-width: 1100px)');
     const onChange = () => setDrawerOpen(false);
@@ -238,7 +233,6 @@ export function AppFrame() {
                 </main>
                 <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
               </div>
-              <SettingsLayer />
               <CommandPalette palette={commandPalette} />
             </div>
           </SelectionProvider>
