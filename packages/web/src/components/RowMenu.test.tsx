@@ -211,7 +211,7 @@ describe('RowMenu', () => {
     act(() => {
       vi.advanceTimersByTime(100);
     });
-    expect(screen.queryByPlaceholderText('Find or create tag')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Find or create tag' })).toBeNull();
     vi.useRealTimers();
   });
 
@@ -236,7 +236,7 @@ describe('RowMenu', () => {
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(screen.queryByPlaceholderText('Find or create tag')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Find or create tag' })).toBeNull();
     vi.useRealTimers();
   });
 
@@ -349,7 +349,7 @@ describe('RowMenu', () => {
     renderMenu();
     const tags = screen.getByText('Tags').closest('button') as HTMLButtonElement;
     fireEvent.mouseEnter(tags.parentElement as HTMLElement);
-    expect(screen.queryByPlaceholderText('Find or create tag')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Find or create tag' })).toBeNull();
     fireEvent.click(tags);
     fireEvent.mouseLeave(tags.parentElement as HTMLElement);
     expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();

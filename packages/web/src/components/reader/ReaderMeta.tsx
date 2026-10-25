@@ -5,6 +5,7 @@ import type { LinkJson } from '../../api/types';
 import { relativeTimeFromNow } from '../../lib/relativeTime';
 import { deriveDomain } from '../../lib/url';
 import { Chip } from '../Chip';
+import { MenuPresence } from '../MenuPresence';
 import { TagPicker, useLinkTags } from '../TagOptionsList';
 import { ReaderIcon } from './ReaderIcon';
 
@@ -53,14 +54,16 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
                 <ReaderIcon name="plus" />
                 Tag
               </button>
-              {tagOpen && (
-                <TagPicker
-                  membership={membership}
-                  link={link}
-                  className="silo-strip-picker"
-                  onClose={() => setTagOpen(false)}
-                />
-              )}
+              <MenuPresence>
+                {tagOpen && (
+                  <TagPicker
+                    membership={membership}
+                    link={link}
+                    className="silo-strip-picker"
+                    onClose={() => setTagOpen(false)}
+                  />
+                )}
+              </MenuPresence>
             </div>
           )}
         </div>

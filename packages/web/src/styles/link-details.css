@@ -1,9 +1,9 @@
 /* Approved reader meta, focused edit, and shared menu system. */
 .silo-menu-surface {
   width: 248px;
-  padding: 5px;
-  border: 1px solid transparent;
-  border-radius: 12px;
+  padding: 4px;
+  border: 0;
+  border-radius: 8px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
   color: var(--ink);
@@ -40,8 +40,11 @@
 .silo-menu-item {
   height: 32px;
   min-height: 32px;
-  gap: 9px;
-  padding: 0 8px;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 5px;
+  font-weight: 500;
+  margin-bottom: 1px;
   background: none;
   color: var(--ink);
   text-decoration: none;
@@ -51,8 +54,8 @@
   display: inline-grid;
   place-items: center;
   flex: none;
-  width: 15px;
-  height: 15px;
+  width: 20px;
+  height: 20px;
   color: var(--mut);
 }
 .silo-menu-icon svg {
@@ -73,7 +76,7 @@
 }
 .silo-menu-item:is(:hover, :focus, .is-current),
 .silo-menu-item[aria-current="true"] {
-  background: var(--hov);
+  background: var(--menu-highlight);
 }
 .silo-menu-item:focus-visible {
   outline: 1px solid var(--line-2);
@@ -661,5 +664,40 @@ button.silo-note-text {
   .silo-modal-layer-sheet {
     align-items: center;
     padding: 16px;
+  }
+}
+
+.silo-menu-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.silo-menu-presence {
+  display: contents;
+}
+.silo-menu-surface {
+  min-width: 160px;
+}
+.silo-popover {
+  transform: scale(1);
+  opacity: 1;
+  transition:
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.silo-popover[data-closing="true"],
+.silo-menu-presence[data-closing="true"] > .silo-popover {
+  transform: scale(0.95);
+  opacity: 0;
+  transition-duration: 100ms;
+  transition-timing-function: ease-in;
+  pointer-events: none;
+}
+@starting-style {
+  .silo-popover {
+    transform: scale(0.95);
+    opacity: 0;
   }
 }

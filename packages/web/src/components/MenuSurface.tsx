@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { LinkJson } from '../api/types';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { Chip } from './Chip';
+import { useMenuClosing } from './MenuPresence';
 
 export function LinkIdentity({ link }: { link: LinkJson }) {
   const domain = deriveDomain(link.url);
@@ -51,6 +52,7 @@ export function MenuSurface({
   onMouseEnter?: (() => void) | undefined;
   onMouseLeave?: (() => void) | undefined;
 }) {
+  const closing = useMenuClosing();
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
@@ -58,6 +60,9 @@ export function MenuSurface({
   useEffect(() => {
     const trigger = document.activeElement;
     const panel = ref.current;
+    const boundary = panel?.parentElement?.classList.contains('silo-menu-presence')
+      ? panel.parentElement.parentElement
+      : panel?.parentElement;
     panel
       ?.querySelector<HTMLElement>('input, button:not(:disabled), a[href]')
       ?.focus({ preventScroll: true });
@@ -65,7 +70,7 @@ export function MenuSurface({
       if (
         !(event.target instanceof Element && event.target.closest('[data-reader-menu]')) &&
         !panel?.contains(event.target as Node) &&
-        !panel?.parentElement?.contains(event.target as Node)
+        !boundary?.contains(event.target as Node)
       )
         close.current();
     };
@@ -81,7 +86,13 @@ export function MenuSurface({
     return () => {
       document.removeEventListener('mousedown', pointer);
       document.removeEventListener('keydown', keyboard, true);
-      if (trigger instanceof HTMLElement && trigger.isConnected)
+      if (
+        trigger instanceof HTMLElement &&
+        trigger.isConnected &&
+        (!document.activeElement ||
+          document.activeElement === document.body ||
+          panel?.contains(document.activeElement))
+      )
         trigger.focus({ preventScroll: true });
     };
   }, []);
@@ -91,7 +102,10 @@ export function MenuSurface({
       role="menu"
       aria-label="Link actions"
       ref={ref}
-      data-reader-menu
+      data-reader-menu={closing ? undefined : true}
+      data-closing={closing}
+      aria-hidden={closing || undefined}
+      inert={closing}
       onMouseDown={(event) => event.stopPropagation()}
       onClick={(event) => event.stopPropagation()}
       onMouseEnter={onMouseEnter}
@@ -164,7 +178,7 @@ export function MenuAction({
       <span className="silo-menu-icon" aria-hidden="true">
         {icon}
       </span>
-      <span>{children}</span>
+      <span className="silo-menu-label">{children}</span>
       {shortcut && (
         <span className="silo-menu-shortcut" aria-hidden="true">
           <kbd>{shortcut}</kbd>

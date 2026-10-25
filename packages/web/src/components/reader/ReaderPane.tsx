@@ -2,6 +2,7 @@ import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { deriveTitleFromUrl } from '../../lib/url';
+import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
 import { embedFor } from './embedFor';
@@ -114,48 +115,50 @@ function ReaderMore({
       >
         ⋯
       </button>
-      {open && (
-        <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
-          {!trashed && link ? (
-            <LinkMenuActions
-              link={link}
-              onClose={() => setOpen(false)}
-              onTrash={actions.trash}
-              onCopy={actions.copy}
-              busy={actions.busy}
-            />
-          ) : (
-            <>
-              <MenuAction
-                icon={<ReaderIcon name="external" />}
-                shortcut="o"
-                onClick={() => {
-                  setOpen(false);
-                  actions.open();
-                }}
-              >
-                Open original
-              </MenuAction>
-              <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
-                Copy link
-              </MenuAction>
-              <div className="silo-menu-separator" />
-              <MenuAction
-                icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
-                danger={!trashed}
-                disabled={actions.busy}
-                onClick={() => {
-                  setOpen(false);
-                  if (trashed) actions.restore();
-                  else actions.trash();
-                }}
-              >
-                {trashed ? 'Restore' : 'Move to trash'}
-              </MenuAction>
-            </>
-          )}
-        </MenuSurface>
-      )}
+      <MenuPresence>
+        {open && (
+          <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
+            {!trashed && link ? (
+              <LinkMenuActions
+                link={link}
+                onClose={() => setOpen(false)}
+                onTrash={actions.trash}
+                onCopy={actions.copy}
+                busy={actions.busy}
+              />
+            ) : (
+              <>
+                <MenuAction
+                  icon={<ReaderIcon name="external" />}
+                  shortcut="o"
+                  onClick={() => {
+                    setOpen(false);
+                    actions.open();
+                  }}
+                >
+                  Open original
+                </MenuAction>
+                <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
+                  Copy link
+                </MenuAction>
+                <div className="silo-menu-separator" />
+                <MenuAction
+                  icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
+                  danger={!trashed}
+                  disabled={actions.busy}
+                  onClick={() => {
+                    setOpen(false);
+                    if (trashed) actions.restore();
+                    else actions.trash();
+                  }}
+                >
+                  {trashed ? 'Restore' : 'Move to trash'}
+                </MenuAction>
+              </>
+            )}
+          </MenuSurface>
+        )}
+      </MenuPresence>
     </div>
   );
 }

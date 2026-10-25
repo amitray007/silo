@@ -222,7 +222,7 @@ describe('LinkRow', () => {
   it('right-clicking anywhere on the row opens the same options menu, suppressing the browser context menu', () => {
     renderRow(<LinkRow link={link({ title: 'A post' })} />);
     const anchor = screen.getByRole('link', { name: /A post/ });
-    expect(screen.queryByText('Move to trash')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Move to trash' })).toBeNull();
 
     const event = fireEvent.contextMenu(anchor);
 
@@ -242,7 +242,7 @@ describe('LinkRow', () => {
     expect(screen.getByText('Move to trash')).toBeDefined();
 
     fireEvent.contextMenu(anchor);
-    expect(screen.queryByText('Move to trash')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Move to trash' })).toBeNull();
   });
 
   it('renders the ▲points·comments rich line for a Hacker News link (plan 012 phase 2)', () => {

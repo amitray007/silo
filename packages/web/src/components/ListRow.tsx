@@ -4,6 +4,7 @@ import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { useCompactLinks } from '../lib/useCompactLinks';
 import { Chip } from './Chip';
+import { MenuPresence } from './MenuPresence';
 import { RowSelectCheckbox } from './RowSelectCheckbox';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useReaderSelection } from './reader/ReaderSelection';
@@ -167,7 +168,7 @@ export function ListRow({
           {error}
         </span>
       )}
-      {menu(anchorRef.current)}
+      <MenuPresence>{menu(anchorRef.current)}</MenuPresence>
     </span>
   );
 }

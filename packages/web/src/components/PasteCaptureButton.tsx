@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useCaptureLink } from '../api/hooks';
 import { looksLikeUrl } from '../lib/url';
+import { MenuPresence } from './MenuPresence';
 import { ReaderIcon } from './reader/ReaderIcon';
 
 export function PasteCaptureButton({ tags }: { tags?: string[] }) {
@@ -83,39 +84,41 @@ export function PasteCaptureButton({ tags }: { tags?: string[] }) {
       >
         <ReaderIcon name="plus" />
       </button>
-      {open && (
-        <div
-          role="dialog"
-          aria-label="Paste to save"
-          className="silo-popover silo-menu-surface silo-capture-popover"
-          data-reader-menu
-        >
-          <div className="silo-capture-title">Paste to save</div>
-          <p>Press ⌘V anywhere on this page to save a link.</p>
-          <form onSubmit={submit}>
-            <input
-              ref={input}
-              className="silo-field"
-              aria-label="Link URL"
-              placeholder="https://"
-              value={url}
-              onChange={(event) => setUrl(event.target.value)}
-            />
-            <button type="submit" className="silo-primary-button" disabled={capture.isPending}>
-              Save link
-            </button>
-          </form>
-          <button
-            type="button"
-            className="silo-settings-btn"
-            onClick={paste}
-            disabled={capture.isPending}
+      <MenuPresence>
+        {open && (
+          <div
+            role="dialog"
+            aria-label="Paste to save"
+            className="silo-popover silo-menu-surface silo-capture-popover"
+            data-reader-menu
           >
-            Paste from clipboard
-          </button>
-          {message && <p role={message === 'Saved' ? 'status' : 'alert'}>{message}</p>}
-        </div>
-      )}
+            <div className="silo-capture-title">Paste to save</div>
+            <p>Press ⌘V anywhere on this page to save a link.</p>
+            <form onSubmit={submit}>
+              <input
+                ref={input}
+                className="silo-field"
+                aria-label="Link URL"
+                placeholder="https://"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+              />
+              <button type="submit" className="silo-primary-button" disabled={capture.isPending}>
+                Save link
+              </button>
+            </form>
+            <button
+              type="button"
+              className="silo-settings-btn"
+              onClick={paste}
+              disabled={capture.isPending}
+            >
+              Paste from clipboard
+            </button>
+            {message && <p role={message === 'Saved' ? 'status' : 'alert'}>{message}</p>}
+          </div>
+        )}
+      </MenuPresence>
     </div>
   );
 }

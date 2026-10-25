@@ -157,7 +157,7 @@ function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
           minWidth: 0,
         }}
       >
-        <Chip domain={domain} size={18} />
+        <Chip domain={domain} size={20} />
         <span
           style={{
             flex: 1,

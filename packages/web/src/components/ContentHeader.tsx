@@ -2,6 +2,7 @@ import { type ReactNode, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useCounts } from '../api/hooks';
 import { formatCount } from '../lib/formatCount';
+import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
 import { ReaderIcon } from './reader/ReaderIcon';
 
@@ -49,25 +50,27 @@ function CollectionTitle({ title }: { title: string }) {
           <ReaderIcon name="down" />
         </button>
       </h1>
-      {open && (
-        <MenuSurface onClose={() => setOpen(false)}>
-          {(['Library', 'Trash'] as const).map((name) => (
-            <MenuAction
-              key={name}
-              icon={<ReaderIcon name={name === 'Library' ? 'sidebar' : 'trash'} />}
-              onClick={() => {
-                setOpen(false);
-                navigate(name === 'Library' ? '/' : '/trash');
-              }}
-            >
-              {name}
-              <span className="silo-collection-count">
-                {counts ? formatCount(name === 'Library' ? counts.live : counts.trash) : ''}
-              </span>
-            </MenuAction>
-          ))}
-        </MenuSurface>
-      )}
+      <MenuPresence>
+        {open && (
+          <MenuSurface onClose={() => setOpen(false)}>
+            {(['Library', 'Trash'] as const).map((name) => (
+              <MenuAction
+                key={name}
+                icon={<ReaderIcon name={name === 'Library' ? 'sidebar' : 'trash'} />}
+                onClick={() => {
+                  setOpen(false);
+                  navigate(name === 'Library' ? '/' : '/trash');
+                }}
+              >
+                {name}
+                <span className="silo-collection-count">
+                  {counts ? formatCount(name === 'Library' ? counts.live : counts.trash) : ''}
+                </span>
+              </MenuAction>
+            ))}
+          </MenuSurface>
+        )}
+      </MenuPresence>
     </div>
   );
 }
