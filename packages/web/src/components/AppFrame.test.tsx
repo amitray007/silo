@@ -161,7 +161,7 @@ describe('AppFrame', () => {
       expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
-      expect(screen.getByText(/light, dark, or follow the system/i)).toBeDefined();
+      expect(screen.getByText(/match the app to light or dark/i)).toBeDefined();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();

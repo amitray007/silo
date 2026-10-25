@@ -134,7 +134,7 @@ export function PreferencesTab() {
       <div style={settingsRowDivided}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Theme</div>
-          <div style={rowDesc}>Light, dark, or follow the system.</div>
+          <div style={rowDesc}>Match the app to light or dark.</div>
         </div>
         <ThemeToggle />
       </div>
