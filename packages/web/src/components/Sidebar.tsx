@@ -167,7 +167,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           }}
         >
           <BrandMark size={24} />
-          <span style={{ fontWeight: 600, fontSize: 16, letterSpacing: '-0.02em' }}>silo</span>
+          <span className="silo-sidebar-wordmark">silo</span>
         </a>
         <button
           type="button"

@@ -32,7 +32,7 @@
   height: 44px;
   flex: none;
   padding: 0 8px;
-  margin-bottom: 4px;
+  margin-bottom: 2px;
 }
 .silo-sidebar-grow {
   flex: 1;
@@ -1500,4 +1500,14 @@ div.silo-reader-notecard {
   .silo-reader > h2 {
     font-size: 24px;
   }
+}
+
+.silo-sidebar-wordmark {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
