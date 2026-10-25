@@ -47,6 +47,11 @@ describe('embedFor', () => {
       'figma',
       'https://embed.figma.com/design/AbCdEfGhIjKlMnOpQrStUv?node-id=1%3A2&embed-host=silo',
     ],
+    ...['Design-(Community)', 'Design-v1.0'].map((filename) => [
+      `https://www.figma.com/design/AbCdEfGhIjKlMnOpQrStUv/${filename}`,
+      'figma',
+      'https://embed.figma.com/design/AbCdEfGhIjKlMnOpQrStUv?embed-host=silo',
+    ]),
     ...['design', 'board', 'proto'].map((type) => [
       `https://www.figma.com/${type}/AbCdEfGhIjKlMnOpQrStUv/Design`,
       'figma',

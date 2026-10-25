@@ -868,21 +868,25 @@ describe('review regressions', () => {
     }
   });
 
-  it('keeps the tweet card below its themed Original player', async () => {
+  it('shows one tweet card in Reader and only its themed embed in Original', async () => {
     const { container } = renderReader({
       live: [
         makeLink({
           ...a,
           url: 'https://x.com/karpathy/status/1886192184808149383',
           sourceData: twitterSourceData,
+          extractedText: twitterSourceData.text,
         }),
       ],
       route: '/?link=a',
     });
     await selected();
+    expect(reader().getAllByText(twitterSourceData.text)).toHaveLength(1);
+    expect(container.querySelector('.silo-reader-body')).toBeNull();
     fireEvent.click(reader().getByRole('tab', { name: 'Original' }));
     expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=light');
-    expect(container.querySelector('.silo-reader-tweet')).not.toBeNull();
+    expect(container.querySelector('.silo-reader-tweet')).toBeNull();
+    expect(reader().queryByText(twitterSourceData.text)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
     expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=dark');
   });

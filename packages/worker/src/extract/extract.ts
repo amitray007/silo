@@ -38,6 +38,7 @@ import metascraperLogo from 'metascraper-logo';
 import metascraperPublisher from 'metascraper-publisher';
 import metascraperTitle from 'metascraper-title';
 import metascraperUrl from 'metascraper-url';
+import { isChallengePage } from './challenge-page.js';
 import { recoverEmbeddedJson } from './embedded-json.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
 import { normalizeLazyImages, sanitizeReaderContent } from './reader-content.js';
@@ -339,8 +340,9 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
   // complete before this function can do anything else regardless.
   const dom = new JSDOM(html, { url, virtualConsole: buildExtractVirtualConsole() });
   try {
-    const readable = extractReadableText(url, dom);
     const fields = await runMetascraper(url, html);
+    if (isChallengePage(dom.window.document)) return buildResult(fields, undefined);
+    const readable = extractReadableText(url, dom);
     let text = readable.text;
     if ((text?.length ?? 0) < FULL_TEXT_THRESHOLD) {
       text = applyEmbeddedJsonRecovery(dom, fields, text);

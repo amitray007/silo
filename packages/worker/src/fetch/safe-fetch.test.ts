@@ -210,7 +210,7 @@ describe('safeFetch — happy path (via loopback test server, allowLoopbackForTe
   it.each([403, 429, 500, 503])('returns http-error (not not-found) for a %i', async (status) => {
     handler = (_req, res) => {
       res.writeHead(status, { 'content-type': 'text/html' });
-      res.end('nope');
+      res.end('<h1>Verify you are human</h1><p>Checking if the site connection is secure...</p>');
     };
     const result = await safeFetch(`http://example.test:${port}/status-${status}`, {
       resolver: loopbackResolver(),
@@ -220,6 +220,7 @@ describe('safeFetch — happy path (via loopback test server, allowLoopbackForTe
     if (!result.ok) {
       expect(result.reason).toBe('http-error');
       expect(result.detail).toBe(String(status));
+      expect(result).not.toHaveProperty('html');
     }
   });
 

@@ -2,7 +2,6 @@ import { useState } from 'react';
 import type { LinkJson } from '../../api/types';
 import { useTheme } from '../../theme/ThemeProvider';
 import { embedFor } from './embedFor';
-import { ReaderContent } from './ReaderContent';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderPlayer } from './ReaderPlayer';
 import { originalUrl } from './useReaderActions';
@@ -34,7 +33,6 @@ export function Original({ link }: { link: LinkJson }) {
       {embed ? (
         <div className="silo-original-player">
           <ReaderPlayer embed={embed} />
-          {embed.provider === 'twitter' && <ReaderContent link={link} />}
         </div>
       ) : mode === 'direct' ? (
         <>

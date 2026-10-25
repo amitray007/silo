@@ -127,12 +127,58 @@ function capHtml(container: HTMLElement): void {
   }
 }
 
+/** Keep text grids; flatten table-based page layout and comment indentation. */
+function unwrapLayoutTables(fragment: DocumentFragment): void {
+  for (const table of Array.from(fragment.querySelectorAll('table')).reverse()) {
+    const cells = Array.from(table.querySelectorAll('td, th')).filter(
+      (cell) => cell.closest('table') === table,
+    );
+    const blocks = cells.some((cell) =>
+      cell.querySelector(
+        'p, div, section, article, blockquote, pre, ul, ol, dl, h1, h2, h3, h4, h5, h6, table',
+      ),
+    );
+    const rows = Array.from(table.querySelectorAll('tr')).filter(
+      (row) => row.closest('table') === table,
+    );
+    const grid =
+      rows.length > 1 &&
+      rows.every(
+        (row) =>
+          row.cells.length > 1 && Array.from(row.cells).every((cell) => cell.textContent?.trim()),
+      );
+    if (!blocks && (table.querySelector('th') || grid)) continue;
+    const content = table.ownerDocument.createDocumentFragment();
+    for (const cell of cells) {
+      if (!cell.textContent?.trim() && !cell.querySelector('img')) continue;
+      const block = table.ownerDocument.createElement('div');
+      block.append(...Array.from(cell.childNodes));
+      content.append(block);
+    }
+    table.replaceWith(content);
+  }
+}
+
+function withoutSpacers(html: string, document: Document): HTMLTemplateElement {
+  const source = document.createElement('template');
+  source.innerHTML = html;
+  for (const image of source.content.querySelectorAll('img')) {
+    const tiny = image.getAttribute('width') === '1' && image.getAttribute('height') === '1';
+    const spacer = /(?:^|\/)(?:s|spacer|space|pixel|transparent|blank)\.gif(?:[?#]|$)/i.test(
+      image.getAttribute('src') ?? '',
+    );
+    if (tiny || spacer) image.remove();
+  }
+  return source;
+}
+
 /** Inert jsdom only: no scripts, remote resources or publisher styles. */
 export function sanitizeReaderContent(html: string, finalUrl: string): ReaderContent | undefined {
   const dom = new JSDOM('', { url: finalUrl, virtualConsole: new VirtualConsole() });
   try {
+    const source = withoutSpacers(html, dom.window.document);
     const purifier = createDOMPurify(dom.window);
-    const fragment = purifier.sanitize(html, {
+    const fragment = purifier.sanitize(source.innerHTML, {
       ALLOWED_TAGS: READER_TAGS,
       ALLOWED_ATTR: [
         'href',
@@ -166,6 +212,7 @@ export function sanitizeReaderContent(html: string, finalUrl: string): ReaderCon
         imageCount++;
       }
     }
+    unwrapLayoutTables(fragment);
     const container = dom.window.document.createElement('div');
     container.append(fragment);
     capHtml(container);

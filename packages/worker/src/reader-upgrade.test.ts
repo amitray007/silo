@@ -156,6 +156,42 @@ describeIfPg('Reader upgrade job (Postgres)', () => {
     expect(fetcher).not.toHaveBeenCalled();
   });
 
+  it('explicitly refreshes existing HTML after a sanitizer change while preserving text and status', async () => {
+    const id = await capture('full');
+    await core.recordReaderUpgrade(id, {
+      contentHtml: '<p>Old HTML</p><img src="https://journal.example.org/old.jpg">',
+      contentImages: ['https://journal.example.org/old.jpg'],
+    });
+    const before = await core.getById(id);
+    fetcher.mockResolvedValue({
+      ok: true,
+      html: '<table><tr><td><p>Refreshed prose.</p><img src="/new.jpg"></td></tr></table>',
+      contentType: 'text/html',
+      finalUrl: before?.url ?? '',
+      status: 200,
+    });
+    expect(await core.findReaderUpgradeCandidates(undefined, true)).toEqual([
+      { id, url: before?.url },
+    ]);
+    expect(await job.runReaderUpgrade(undefined, { refreshHtml: true })).toEqual({
+      upgraded: 1,
+      unchanged: 0,
+      unavailable: 0,
+    });
+    const after = await core.getById(id);
+    expect(after?.contentHtml).toContain('<p>Refreshed prose.</p>');
+    expect(after?.contentHtml).not.toContain('<table');
+    expect(after?.contentImages).toEqual(['https://journal.example.org/new.jpg']);
+    expect(after).toEqual({
+      ...before,
+      contentHtml: after?.contentHtml,
+      contentImages: after?.contentImages,
+    });
+    fetcher.mockResolvedValue({ ok: false, reason: 'timeout' });
+    expect(await job.upgradeReader(id, undefined, { refreshHtml: true })).toBe('unavailable');
+    expect(await core.getById(id)).toEqual(after);
+  });
+
   it('resumes by skipping successful rows and retries prior failures on the next run', async () => {
     await capture('full');
     const retryId = await capture('bare');

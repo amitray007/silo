@@ -127,7 +127,8 @@ export function ReaderContent({ link }: { link: LinkJson | LinkDetailJson }) {
           <figcaption>{source.channel}</figcaption>
         </figure>
       )}
-      {prose && 'contentHtml' in link ? <ReaderProse link={link} /> : <Paragraphs link={link} />}
+      {source.kind !== 'twitter' &&
+        (prose && 'contentHtml' in link ? <ReaderProse link={link} /> : <Paragraphs link={link} />)}
       {!prose &&
         source.kind !== 'twitter' &&
         !link.extractedText?.trim() &&

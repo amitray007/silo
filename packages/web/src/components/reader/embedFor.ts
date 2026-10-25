@@ -83,7 +83,7 @@ function otherEmbed(url: URL): PlayerEmbed | undefined {
 
 function figma(url: URL): PlayerEmbed | undefined {
   if (!['figma.com', 'www.figma.com', 'embed.figma.com'].includes(url.hostname)) return undefined;
-  const path = /^\/(design|file|board|proto)\/([A-Za-z\d]{10,128})(?:\/[\w%-]+)?\/?$/.exec(
+  const path = /^\/(design|file|board|proto)\/([A-Za-z\d]{10,128})(?:\/[^/]*)?\/?$/.exec(
     url.pathname,
   );
   if (!path) return undefined;
@@ -147,7 +147,7 @@ export function embedFor(
         src: `https://platform.twitter.com/embed/Tweet.html?id=${id}&theme=${theme}`,
         title: 'X post',
         aspect: 'auto',
-        height: 550,
+        height: 250,
       };
     return undefined;
   }

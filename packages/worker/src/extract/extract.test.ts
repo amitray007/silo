@@ -425,3 +425,48 @@ describe('Reader recovery and image URL normalization', () => {
     ]);
   });
 });
+
+describe('challenge screens', () => {
+  it('keeps Vimeo metadata without article text, HTML or embedded JSON recovery', async () => {
+    const result = await extract({
+      url: 'https://vimeo.com/76979871',
+      html: fixture('challenge-vimeo.html'),
+      contentType: 'text/html',
+    });
+    expect(result.title).toBe('The New Vimeo Player (You Know, For Videos)');
+    expect(result.description).toBe('Vimeo video preview');
+    expect(result.imageUrl).toBe('https://i.vimeocdn.com/video/poster.jpg');
+    expect(result.status).toBe('partial');
+    expect(result.text).toBeUndefined();
+    expect(result.reader).toBeUndefined();
+  });
+
+  it.each([
+    '<title>Just a moment...</title><p>Waiting...</p>',
+    '<h1>Verify you are human</h1>',
+    '<div>Verify you are human</div>',
+    '<p>Checking if the site connection is secure...</p>',
+    '<p>Enable JavaScript and cookies to continue</p>',
+    '<script src="https://geo.captcha-delivery.com/captcha/"></script><p>Access denied</p>',
+    '<div id="px-captcha"></div><p>Press &amp; Hold to confirm you are a human</p>',
+    '<h1>Pardon Our Interruption</h1><p>Unusual activity detected</p>',
+    '<p>Please enable JS and disable any ad blocker</p>',
+  ])('discards challenge copy: %s', async (body) => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      html: `<html><head><meta property="og:title" content="Saved metadata"></head><body>${body}</body></html>`,
+      contentType: 'text/html',
+    });
+    expect(result.text).toBeUndefined();
+    expect(result.reader).toBeUndefined();
+    expect(result.title).toBeDefined();
+  });
+
+  it('keeps an article about bot protection with ordinary Cloudflare scripts', async () => {
+    const html = `<article><h1>How bot protection works</h1><p>${'Cloudflare, DataDome and PerimeterX provide challenge pages. '.repeat(150)}</p></article><script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>`;
+    const result = await extract({ url: URL_UNDER_TEST, html, contentType: 'text/html' });
+    expect(result.status).toBe('full');
+    expect(result.text).toContain('Cloudflare, DataDome and PerimeterX');
+    expect(result.reader?.contentHtml).toContain('Cloudflare, DataDome and PerimeterX');
+  });
+});

@@ -18,13 +18,13 @@ export type ReaderContent = z.infer<typeof readerContentSchema>;
 const missingText = or(isNull(links.extractedText), eq(links.extractedText, ''));
 
 /** Keyset traversal visits failures once per run. A restart skips completed rows. */
-export async function findReaderUpgradeCandidates(afterId?: string) {
+export async function findReaderUpgradeCandidates(afterId?: string, refreshHtml = false) {
   return db
     .select({ id: links.id, url: links.url })
     .from(links)
     .where(
       whereLive(
-        or(isNull(links.contentHtml), missingText),
+        refreshHtml ? undefined : or(isNull(links.contentHtml), missingText),
         afterId ? gt(links.id, afterId) : undefined,
       ),
     )
@@ -32,19 +32,24 @@ export async function findReaderUpgradeCandidates(afterId?: string) {
     .limit(100);
 }
 
-/** Fill missing Reader content and text without changing status, metadata or timestamps. */
+/** Fill missing text; optionally refresh HTML after a sanitizer change. Preserve metadata/status. */
 export async function recordReaderUpgrade(
   linkId: string,
   content: ReaderContent,
   text?: string,
+  refreshHtml = false,
 ): Promise<boolean> {
   const parsed = readerContentSchema.parse(content);
   const recoveredText = text?.trim() ? text : undefined;
   const updated = await db
     .update(links)
     .set({
-      contentHtml: sql`coalesce(${links.contentHtml}, ${parsed.contentHtml})`,
-      contentImages: sql`case when ${links.contentHtml} is null then ${JSON.stringify(parsed.contentImages)}::jsonb else ${links.contentImages} end`,
+      contentHtml: refreshHtml
+        ? parsed.contentHtml
+        : sql`coalesce(${links.contentHtml}, ${parsed.contentHtml})`,
+      contentImages: refreshHtml
+        ? parsed.contentImages
+        : sql`case when ${links.contentHtml} is null then ${JSON.stringify(parsed.contentImages)}::jsonb else ${links.contentImages} end`,
       ...(recoveredText
         ? {
             extractedText: sql`case when ${missingText} then ${recoveredText} else ${links.extractedText} end`,
@@ -55,7 +60,9 @@ export async function recordReaderUpgrade(
     .where(
       whereLive(
         eq(links.id, linkId),
-        or(isNull(links.contentHtml), recoveredText ? missingText : undefined),
+        refreshHtml
+          ? undefined
+          : or(isNull(links.contentHtml), recoveredText ? missingText : undefined),
       ),
     )
     .returning({ id: links.id });

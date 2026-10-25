@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import { sanitizeReaderContent } from './reader-content.js';
@@ -75,4 +76,46 @@ describe('Reader sanitizer', () => {
     expect(result?.contentHtml).toMatch(/<\/p><\/article>$/);
     expect(result?.contentImages).toEqual([]);
   }, 10_000);
+});
+
+describe('layout tables', () => {
+  it.each([
+    ['layout-comments.html', ['First comment.', 'Reply to first comment.']],
+    ['layout-essay.html', ['Essay opening.', 'Essay ending.']],
+  ])('unwraps %s in reading order and drops spacer images', (name, text) => {
+    const html = readFileSync(new URL(`./__fixtures__/${name}`, import.meta.url), 'utf8');
+    const result = sanitizeReaderContent(html, url);
+    expect(result?.contentHtml).not.toMatch(/<table|<tr|<td|spacer\.gif|s\.gif|arrow\.gif/);
+    expect(result?.contentHtml.indexOf(text[0] ?? '')).toBeLessThan(
+      result?.contentHtml.indexOf(text[1] ?? '') ?? 0,
+    );
+    expect(result?.contentImages).toEqual(
+      name === 'layout-essay.html' ? ['https://journal.example.org/essay.jpg'] : [],
+    );
+  });
+
+  it.each([
+    '<table><tr><th>Name</th><th>Value</th></tr><tr><td>A</td><td>1</td></tr></table>',
+    '<table><tr><td>A</td><td>1</td></tr><tr><td>B</td><td>2</td></tr></table>',
+  ])('keeps data tables and plain text grids', (html) => {
+    expect(sanitizeReaderContent(html, url)?.contentHtml).toContain('<table>');
+  });
+
+  it('keeps a data table inside an unwrapped layout table', () => {
+    const result = sanitizeReaderContent(
+      '<table><tr><td><p>Report</p><table><tr><th>Name</th><th>Value</th></tr><tr><td>A</td><td>1</td></tr></table></td></tr></table>',
+      url,
+    );
+    expect(result?.contentHtml.match(/<table>/g)).toHaveLength(1);
+    expect(result?.contentHtml).toContain('<td>A</td><td>1</td>');
+  });
+
+  it('unwraps cells with block content even with a header', () => {
+    const result = sanitizeReaderContent(
+      '<table><tr><th>Article</th></tr><tr><td><p>Body prose.</p></td></tr></table>',
+      url,
+    );
+    expect(result?.contentHtml).not.toContain('<table>');
+    expect(result?.contentHtml).toContain('<p>Body prose.</p>');
+  });
 });
