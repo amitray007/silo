@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PlayerEmbed } from './embedFor';
-import { FrameLoadNotice, ReaderSkeleton, useFrameLoading } from './ReaderLoading';
+import { FrameLoadNotice, PlayerSkeleton, useFrameLoading } from './ReaderLoading';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object'
@@ -70,8 +70,8 @@ export function ReaderPlayer({
       />
       {timedOut && <FrameLoadNotice href={url ?? embed.src} />}
       {loading && (
-        <div className="silo-frame-loading">
-          <ReaderSkeleton label="Loading player..." />
+        <div className="silo-frame-loading" data-player="true">
+          <PlayerSkeleton />
         </div>
       )}
     </div>

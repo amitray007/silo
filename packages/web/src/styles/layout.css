@@ -1066,8 +1066,103 @@ div.silo-reader-notecard {
 .silo-frame-loading {
   position: absolute;
   inset: 0;
-  background: var(--bg);
+  display: flex;
+  background: var(--bg2);
   pointer-events: none;
+}
+.silo-page-loading {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  overflow: hidden;
+  animation: siloFade 180ms var(--ease-out) 120ms backwards;
+}
+.silo-page-loading-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 16px;
+  border-bottom: 1px solid var(--line);
+  color: var(--mut);
+  font-size: 12px;
+}
+.silo-page-loading-spinner {
+  width: 12px;
+  height: 12px;
+  margin-left: auto;
+  border: 1.5px solid var(--line-2);
+  border-top-color: var(--mut);
+  border-radius: 50%;
+  animation: siloSpin 0.8s linear infinite;
+}
+.silo-page-loading-body {
+  width: 100%;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 48px 32px;
+}
+.silo-page-skel {
+  height: 10px;
+  margin: 0 0 14px;
+  border-radius: 5px;
+  background: linear-gradient(90deg, var(--sel) 30%, var(--line-2) 50%, var(--sel) 70%);
+  background-size: 200% 100%;
+  animation: siloShimmer 1.8s ease-in-out infinite;
+}
+.silo-page-skel[data-kind="title"] {
+  height: 22px;
+  margin-bottom: 12px;
+  border-radius: 6px;
+}
+.silo-page-skel[data-kind="meta"] {
+  width: 28%;
+  height: 10px;
+  margin: 20px 0 36px;
+}
+.silo-page-skel-paragraph {
+  margin-bottom: 18px;
+}
+.silo-frame-loading[data-player="true"] {
+  background: none;
+}
+.silo-player-loading {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 10px;
+  background: linear-gradient(90deg, var(--hov) 30%, var(--sel) 50%, var(--hov) 70%);
+  background-size: 200% 100%;
+  animation: siloShimmer 1.8s ease-in-out infinite;
+}
+.silo-original-player .silo-player-loading {
+  border-radius: 0;
+}
+.silo-player-loading .silo-page-loading-spinner {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border-width: 2px;
+}
+@keyframes siloSpin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (max-width: 719px) {
+  .silo-page-loading-body {
+    padding: 32px 20px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-page-loading,
+  .silo-page-loading-spinner,
+  .silo-page-skel,
+  .silo-player-loading {
+    animation: none;
+  }
 }
 .silo-youtube-stats {
   color: var(--mut);

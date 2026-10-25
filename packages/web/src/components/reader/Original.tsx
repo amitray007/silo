@@ -1,6 +1,6 @@
 import { apiUrl } from '../../api/client';
 import type { LinkJson } from '../../api/types';
-import { FrameLoadNotice, ReaderSkeleton, useFrameLoading } from './ReaderLoading';
+import { FrameLoadNotice, PageSkeleton, useFrameLoading } from './ReaderLoading';
 import { ReaderPlayer } from './ReaderPlayer';
 import type { OriginalState } from './useOriginal';
 import { originalUrl } from './useReaderActions';
@@ -20,7 +20,7 @@ function PageFrame({ src, silo, url }: { src: string; silo: boolean; url: string
       {timedOut && <FrameLoadNotice href={url} />}
       {loading && (
         <div className="silo-frame-loading">
-          <ReaderSkeleton label="Loading page..." />
+          <PageSkeleton url={url} label="Loading page..." />
         </div>
       )}
     </div>
@@ -32,7 +32,7 @@ export function Original({ link, state }: { link: LinkJson; state: OriginalState
   return (
     <div className="silo-original" data-mode={mode}>
       {preparing ? (
-        <ReaderSkeleton label="Preparing page..." />
+        <PageSkeleton url={link.url} label="Preparing page..." />
       ) : embed ? (
         <div className="silo-original-player">
           <ReaderPlayer key={reload} embed={embed} url={link.url} fill />
