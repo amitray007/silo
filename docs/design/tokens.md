@@ -109,3 +109,11 @@ The sections above are the original v2 design record. This section records where
 **Motion.** Emil-Kowalski-conformant: custom easing curves (`--ease-out/in-out/drawer`), transform+opacity only, origin-aware popovers, `@starting-style` entrances, universal `:active` press feedback, hover states gated behind `@media (hover:hover) and (pointer:fine)`, and `prefers-reduced-motion` that removes movement while keeping gentle opacity/color fades. Keyboard-initiated actions (⌘K, Escape) never animate. Route content and the row's hover-revealed meta fade in rather than snap.
 
 **Amber discipline holds:** `--mark`/`--markt` remain marks only (grain dot, ¶/◆/◌, the "keep" hint, active-tag dot) — never a button fill, border, active state, or focus ring. Focus rings use `--ghost`, never amber.
+
+## Shiori match 2026-10-25
+
+`docs/methods/shiori-match.md` supersedes the earlier visual values. The app uses the system sans-serif stack and Tailwind neutral oklch tones. All panes share `--bg`; menus and dialogs use `--bg2`. Dividers are 0.5px. Control, popup, and dialog shadows use `--elev-1`, `--elev-2`, and `--elev-3`.
+
+Body and nav use weight 400. Row titles, pane titles, section labels, menus, and buttons use 500. Reader titles and headings use 600. Monospace text uses `--font-mono`. No font files or external font requests are needed.
+
+`--ghost` is quaternary text: neutral 400 in light and neutral 600 in dark. Counts, day labels, and key hints intentionally use it to match Shiori. These labels fail WCAG AA contrast. This is an accepted reference trade-off, limited to those roles. Primary, secondary, and tertiary text retain separate tokens. The orange tile and local source chips preserve Silo's identity and privacy.
