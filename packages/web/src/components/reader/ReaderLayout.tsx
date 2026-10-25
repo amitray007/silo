@@ -102,15 +102,22 @@ export function ReaderLayout({
           title={title}
           loading={Boolean(selectedId) && (loading || detail.isFetching)}
         />
-        <ReaderDeleteDialog actions={actions} />
+        <ReaderDeleteDialog actions={actions} link={resolved ?? previous.current} />
       </div>
     </ReaderSelectionContext.Provider>
   );
 }
 
-function ReaderDeleteDialog({ actions }: { actions: ReturnType<typeof useReaderActions> }) {
+function ReaderDeleteDialog({
+  actions,
+  link,
+}: {
+  actions: ReturnType<typeof useReaderActions>;
+  link: LinkJson | undefined;
+}) {
   return actions.confirmingDelete ? (
     <DeleteForeverDialog
+      link={link}
       pending={actions.busy}
       onConfirm={actions.confirmDelete}
       onClose={actions.cancelDelete}

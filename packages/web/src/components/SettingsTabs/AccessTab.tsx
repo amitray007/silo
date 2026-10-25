@@ -60,6 +60,7 @@ function TwoStepRevoke({
       {confirming && (
         <ConfirmDialog
           title={`Revoke ${name}?`}
+          item={name}
           action="Revoke"
           actionLabel="Confirm revoke?"
           pending={pending}
@@ -391,6 +392,7 @@ function ConnectedAppsSection() {
             {confirmingAll && (
               <ConfirmDialog
                 title="Revoke all connected apps?"
+                item="All connected apps"
                 action="Revoke all"
                 actionLabel="Confirm revoke all?"
                 pending={revokeAll.isPending}

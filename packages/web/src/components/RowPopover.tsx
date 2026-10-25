@@ -51,7 +51,6 @@ export function RowPopover({
       style={{
         position: 'fixed',
         zIndex: 36,
-        visibility: position ? 'visible' : 'hidden',
         ...position,
       }}
     >

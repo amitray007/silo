@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { DevTools } from './dev/DevTools';
 import './styles/base.css';
 import './styles/surfaces.css';
+import './styles/link-details.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
 const queryClient = new QueryClient({

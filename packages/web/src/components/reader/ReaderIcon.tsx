@@ -1,4 +1,5 @@
 const paths = {
+  note: 'M3 2.5h10v8l-3 3H3zM10 10.5h3M10 10.5v3M5.5 5.5h5M5.5 8h4',
   refresh: 'M13 6a5 5 0 1 0 .1 4M13 2v4H9',
   close: 'M4 4l8 8M12 4l-8 8',
   up: 'm4 10 4-4 4 4',

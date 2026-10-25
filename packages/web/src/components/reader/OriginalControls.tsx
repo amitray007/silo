@@ -1,41 +1,63 @@
+import { useState } from 'react';
+import type { LinkJson } from '../../api/types';
+import { MenuAction, MenuSurface } from '../MenuSurface';
 import { ReaderIcon } from './ReaderIcon';
 import type { OriginalState } from './useOriginal';
 
-export function OriginalControls({ state }: { state: OriginalState }) {
+export function OriginalControls({
+  state,
+  link,
+}: {
+  state: OriginalState;
+  link?: LinkJson | undefined;
+}) {
+  const [open, setOpen] = useState(false);
   const label = { direct: 'Live site', view: 'Silo view', player: 'Player', card: 'Link card' }[
     state.mode
   ];
   return (
     <div className="silo-original-controls">
-      <details className="silo-original-mode">
-        <summary aria-label={`Original mode: ${label}`}>
+      <div className="silo-original-mode">
+        <button
+          type="button"
+          className="silo-mode-trigger"
+          aria-label={`Original mode: ${label}`}
+          aria-haspopup="menu"
+          aria-expanded={open}
+          onClick={() => setOpen((current) => !current)}
+        >
           {label} <span aria-hidden="true">⌄</span>
-        </summary>
-        <div className="silo-original-mode-menu">
-          {(['view', 'direct'] as const).map((mode) => {
-            const enabled = mode === 'view' ? state.canView : state.canDirect;
-            const reason =
-              mode === 'view'
-                ? 'A Silo view is unavailable for this content.'
-                : 'This site blocks framing or uses a player.';
-            return (
-              <span key={mode} title={enabled ? undefined : reason}>
-                <button
-                  type="button"
-                  disabled={!enabled || state.preparing}
-                  aria-pressed={state.mode === mode}
-                  onClick={(event) => {
-                    state.switchMode(mode);
-                    event.currentTarget.closest('details')?.removeAttribute('open');
-                  }}
-                >
-                  {mode === 'view' ? 'Silo view' : 'Live site'}
-                </button>
-              </span>
-            );
-          })}
-        </div>
-      </details>
+        </button>
+        {open && (
+          <MenuSurface
+            className="silo-original-mode-menu"
+            link={link}
+            onClose={() => setOpen(false)}
+          >
+            {(['view', 'direct'] as const).map((mode) => (
+              <MenuAction
+                key={mode}
+                title={
+                  (mode === 'view' ? state.canView : state.canDirect)
+                    ? undefined
+                    : mode === 'view'
+                      ? 'A Silo view is unavailable for this content.'
+                      : 'This site blocks framing or uses a player.'
+                }
+                icon={<ReaderIcon name={mode === 'view' ? 'sidebar' : 'external'} />}
+                disabled={!(mode === 'view' ? state.canView : state.canDirect) || state.preparing}
+                pressed={state.mode === mode}
+                onClick={() => {
+                  state.switchMode(mode);
+                  setOpen(false);
+                }}
+              >
+                {mode === 'view' ? 'Silo view' : 'Live site'}
+              </MenuAction>
+            ))}
+          </MenuSurface>
+        )}
+      </div>
       <button
         type="button"
         className="silo-reader-iconbtn"

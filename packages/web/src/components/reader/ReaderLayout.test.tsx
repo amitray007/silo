@@ -328,10 +328,10 @@ describe('reader content', () => {
     renderReader({ route: '/?link=a' });
     await selected();
     fireEvent.click(reader().getByRole('button', { name: 'Add a note' }));
-    expect(document.activeElement).toBe(screen.getByPlaceholderText('Why you kept it'));
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
-    fireEvent.click(reader().getByRole('button', { name: 'Edit tags' }));
-    expect(screen.getByPlaceholderText('Find or create a tag')).toBeDefined();
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Note' }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
+    fireEvent.click(reader().getByRole('button', { name: 'Tag' }));
+    expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();
   });
 });
 
@@ -365,7 +365,7 @@ describe('reader keyboard and phone toolbar', () => {
     const { fetchMock } = renderReader({ route: '/?link=a' });
     await selected();
     fireEvent.keyDown(document, { key: 'e' });
-    expect(screen.getByRole('dialog', { name: 'Edit item' })).toBeDefined();
+    expect(screen.getByRole('dialog', { name: 'Edit link' })).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     fireEvent.keyDown(document, { key });
     await waitFor(() =>
@@ -480,7 +480,7 @@ describe('reader keyboard and phone toolbar', () => {
     fireEvent.click(toolbar.getByRole('button', { name: 'Copy link' }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(a.url));
     fireEvent.click(toolbar.getByRole('button', { name: 'Edit' }));
-    expect(screen.getByRole('dialog', { name: 'Edit item' })).toBeDefined();
+    expect(screen.getByRole('dialog', { name: 'Edit link' })).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     fireEvent.click(toolbar.getByRole('button', { name: 'Move to trash' }));
     await waitFor(() =>
@@ -671,7 +671,7 @@ describe('review regressions', () => {
     for (const id of ['a', 'b']) {
       const row = container.querySelector<HTMLElement>(`[data-link-id="${id}"]`);
       fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
-      fireEvent.click(screen.getByRole('button', { name: 'Select item' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Select item' }));
     }
     fireEvent.click(
       within(container.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
@@ -757,7 +757,7 @@ describe('review regressions', () => {
     const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
     const options = within(row as HTMLElement).getByRole('button', { name: 'Options' });
     fireEvent.click(options);
-    fireEvent.click(screen.getByRole('button', { name: 'Select item' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Select item' }));
     fireEvent.click(options);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(options.getAttribute('aria-expanded')).toBe('false');

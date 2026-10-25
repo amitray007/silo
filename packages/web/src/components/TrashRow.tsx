@@ -2,8 +2,10 @@ import { useRestoreLink } from '../api/hooks';
 import type { TrashLinkJson } from '../api/types';
 import { purgeCountdownDays } from '../lib/buckets';
 import { ListRow } from './ListRow';
+import { MenuAction, MenuSurface } from './MenuSurface';
 import { useRowMenu } from './RowMenuContext';
 import { RowPopover } from './RowPopover';
+import { ReaderIcon } from './reader/ReaderIcon';
 import { useTrashSelection } from './SelectionContext';
 
 function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () => void }) {
@@ -12,37 +14,30 @@ function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () =>
   const { closeMenu } = useRowMenu();
   const busy = restore.isPending;
   return (
-    <div
-      className="silo-trash-row-menu"
-      role="menu"
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <button
-        type="button"
-        role="menuitem"
+    <MenuSurface className="silo-row-menu" link={link} onClose={closeMenu}>
+      <MenuAction
+        icon="✓"
         onClick={() => {
           selection.toggle(link.id);
           closeMenu();
         }}
       >
         {selection.isSelected(link.id) ? 'Deselect item' : 'Select item'}
-      </button>
-      <a role="menuitem" href={link.url} target="_blank" rel="noopener noreferrer">
+      </MenuAction>
+      <MenuAction icon={<ReaderIcon name="external" />} href={link.url} onClick={closeMenu}>
         Open original
-      </a>
-      <button
-        type="button"
-        role="menuitem"
+      </MenuAction>
+      <MenuAction
+        icon={<ReaderIcon name="copy" />}
         onClick={() => {
           navigator.clipboard?.writeText(link.url).catch(() => {});
           closeMenu();
         }}
       >
         Copy link
-      </button>
-      <button
-        type="button"
-        role="menuitem"
+      </MenuAction>
+      <MenuAction
+        icon={<ReaderIcon name="restore" />}
         disabled={busy}
         onClick={() => {
           selection.deselect([link.id]);
@@ -50,11 +45,12 @@ function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () =>
         }}
       >
         Restore
-      </button>
-      <button type="button" role="menuitem" disabled={busy} onClick={onDelete}>
+      </MenuAction>
+      <div className="silo-menu-separator" />
+      <MenuAction icon={<ReaderIcon name="trash" />} danger disabled={busy} onClick={onDelete}>
         Delete now
-      </button>
-    </div>
+      </MenuAction>
+    </MenuSurface>
   );
 }
 

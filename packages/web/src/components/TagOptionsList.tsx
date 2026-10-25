@@ -1,139 +1,261 @@
-import { useState } from 'react';
-import type { TagOption } from '../lib/tagOptions';
+import { useEffect, useId, useRef, useState } from 'react';
+import { useAddTag, useCreateTag, useRemoveTag, useTags } from '../api/hooks';
+import type { LinkJson } from '../api/types';
+import { buildTagOptions } from '../lib/tagOptions';
+import { MenuSurface } from './MenuSurface';
 
-/**
- * The find-tag input styling shared by `RowMenu`'s `TagsFlyout` and
- * `EditModal`'s `EditTagsFlyout` — same `silo-field` box (border/radius/bg/
- * font), only the bottom margin differs (RowMenu's `var(--s1)` vs
- * EditModal's un-tokenized 3px, which has no clean `--s*` match between
- * `--s-0-5`/2px and `--s1`/4px — see `EditTagsFlyout`'s own K3 comment).
- * Takes `margin` as a param rather than forking the whole style object
- * (jscpd guards production src at 1.5%).
- */
-export function tagSearchFieldStyle(margin: string): React.CSSProperties {
-  return {
-    width: '100%',
-    boxSizing: 'border-box',
-    margin,
-    padding: 'var(--s1-5) var(--s2)',
-    border: '1px solid var(--line)',
-    borderRadius: 7,
-    background: 'var(--bg2)',
-    color: 'var(--ink)',
-    font: 'inherit',
-    fontSize: 'var(--text-sm)',
-    outline: 'none',
-  };
+/** Live tag membership, shared by strip, submenu, and edit tokens. */
+export function useLinkTags(link: LinkJson) {
+  const [tags, setTags] = useState(link.tags);
+  const [error, setError] = useState('');
+  useEffect(() => setTags(link.tags), [link.tags]);
+  const add = useAddTag(link.id);
+  const remove = useRemoveTag(link.id);
+  const create = useCreateTag();
+  const busy = add.isPending || remove.isPending || create.isPending;
+  async function toggle(name: string, active: boolean, isNew = false) {
+    if (busy) return;
+    setError('');
+    try {
+      if (isNew) name = (await create.mutateAsync(name)).name;
+      if (active) await remove.mutateAsync(name);
+      else await add.mutateAsync(name);
+      setTags((current) =>
+        active ? current.filter((tag) => tag !== name) : [...new Set([...current, name])],
+      );
+    } catch {
+      setError("Couldn't update tags. Try again.");
+    }
+  }
+  return { tags, toggle, busy, error };
 }
 
-/**
- * The shared toggle-list row rendered inside both `RowMenu`'s `TagsFlyout`
- * and `EditModal`'s `EditTagsFlyout` (plan 011, V3-4) — pulled out once both
- * popovers needed the exact same "# {name} · active dot" button (`jscpd`
- * flagged the inline duplicate at >1.5% production `tsx` duplication; this
- * component is the fix, not a workaround). `size` picks the two popovers'
- * slightly different paddings/font-sizes (v3's row-menu tags fly-out vs. the
- * edit modal's wider tags picker) without forking the whole row.
- *
- * Hover feedback (`--hov` background on the hovered row) added per the
- * RowMenu redesign (build brief item 11: "the tags hover all look bad") —
- * previously every row was flat/inert until clicked, which read as broken
- * rather than interactive.
- */
-export function TagOptionsList({
-  opts,
-  hidden,
-  size = 'sm',
-  onToggle,
-}: {
-  opts: TagOption[];
-  hidden: number;
-  size?: 'sm' | 'md';
-  onToggle: (name: string, active: boolean) => void;
-}) {
-  const [hoveredName, setHoveredName] = useState<string | null>(null);
-  // `md` (both current call sites: `RowMenu`'s `TagsFlyout` and `EditModal`'s
-  // `EditTagsFlyout`) is tokenized to sit closer to the main `RowMenu`
-  // popover's own row rhythm (`--s2-5 --s3`, i.e. 10px 12px) — was a
-  // hardcoded `6px 9px`, visibly tighter/cramped next to the redesigned main
-  // menu it now sits beside. `sm` is kept for any future denser use.
-  const rowPadding = size === 'sm' ? '5px 9px' : 'var(--s2) var(--s2-5)';
-  const notePadding = size === 'sm' ? '4px 9px 2px' : 'var(--s2) var(--s2-5) var(--s1)';
+type Membership = ReturnType<typeof useLinkTags>;
 
+function useTagOptions(tags: string[], query: string) {
+  const { data } = useTags();
+  const all = data?.tags ?? [];
+  const { opts, hidden } = buildTagOptions(all, tags, query);
+  const name = query.trim();
+  const canCreate =
+    name.length > 0 &&
+    ![...all.map((tag) => tag.name), ...tags].some(
+      (tag) => tag.toLowerCase() === name.toLowerCase(),
+    );
+  return { opts, hidden, name, canCreate, all };
+}
+
+function TagChoices({
+  membership,
+  query,
+  onChosen,
+  selected = -1,
+  listId,
+}: {
+  membership: Membership;
+  query: string;
+  onChosen?: (() => void) | undefined;
+  selected?: number;
+  listId: string;
+}) {
+  const { opts, hidden, name, canCreate, all } = useTagOptions(membership.tags, query);
   return (
-    <>
-      {opts.map((opt) => (
+    <div id={listId} role="listbox" aria-label="Tags" aria-multiselectable="true">
+      {opts.map((opt, index) => (
         <button
-          key={opt.name}
+          id={`${listId}-${index}`}
           type="button"
-          aria-pressed={opt.active}
-          className="silo-tag-option"
-          onClick={() => onToggle(opt.name, opt.active)}
-          onMouseEnter={() => setHoveredName(opt.name)}
-          onMouseLeave={() => setHoveredName((current) => (current === opt.name ? null : current))}
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--s2)',
-            width: '100%',
-            boxSizing: 'border-box',
-            border: 0,
-            background: hoveredName === opt.name ? 'var(--hov)' : 'none',
-            fontFamily: 'inherit',
-            textAlign: 'left',
-            padding: rowPadding,
-            borderRadius: 7,
-            fontSize: 'var(--text-sm)',
-            fontWeight: 400,
-            cursor: 'pointer',
-            // Brightened inactive from `--mut` to `--ink` (direct user
-            // feedback): this is a primary clickable tag-picker label — the
-            // active/inactive distinction is already carried by the trailing
-            // dot marker below (`opt.active ? 'var(--mark)' : 'transparent'`)
-            // plus the row's own hover fill, so dimming the LABEL text on top
-            // of that was redundant and read as muddy, same reasoning as
-            // `NavItem`'s `default`/`tag` variants.
-            color: 'var(--ink)',
-            transform: 'scale(1)',
+          role="option"
+          aria-selected={opt.active}
+          key={opt.name}
+          disabled={membership.busy}
+          className={`silo-menu-item silo-tag-option${selected === index ? ' is-current' : ''}`}
+          onClick={() => {
+            void membership.toggle(opt.name, opt.active);
+            onChosen?.();
           }}
         >
-          <span style={{ flex: 'none', color: 'var(--ghost)' }}>#</span>
-          {/* Truncates instead of overflowing the popover — a long tag name
-              (e.g. pasted/scraped text mistaken for a tag) used to blow past
-              this row's fixed-width container with no wrap/ellipsis at all
-              (bug report: a ~45-char tag overran the flyout entirely).
-              `minWidth: 0` is required alongside `flex: 1` for the
-              `text-overflow: ellipsis` to actually kick in inside a flex
-              row — without it the flex item refuses to shrink below its
-              content's intrinsic width and the overflow: hidden never bites. */}
           <span
-            style={{
-              flex: 1,
-              minWidth: 0,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
+            className={`silo-tag-checkbox${opt.active ? ' is-checked' : ''}`}
+            aria-hidden="true"
           >
-            {opt.name}
+            {opt.active ? '✓' : ''}
           </span>
-          <span
-            style={{
-              flex: 'none',
-              marginLeft: 'auto',
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: opt.active ? 'var(--mark)' : 'transparent',
-            }}
-          />
+          <span>{opt.name}</span>
+          <span className="silo-tag-count">
+            {all.find((tag) => tag.name === opt.name)?.count ?? 0}
+          </span>
         </button>
       ))}
-      {hidden > 0 && (
-        <div style={{ padding: notePadding, fontSize: 'var(--text-xs)', color: 'var(--fnt)' }}>
-          {hidden} more — type to narrow
+      {canCreate && (
+        <button
+          id={`${listId}-${opts.length}`}
+          type="button"
+          role="option"
+          aria-selected="false"
+          className={`silo-menu-item${selected === opts.length ? ' is-current' : ''}`}
+          disabled={membership.busy}
+          onClick={() => {
+            void membership.toggle(name, false, true);
+            onChosen?.();
+          }}
+        >
+          <span className="silo-menu-icon" aria-hidden="true">
+            +
+          </span>
+          Create “{name}”
+        </button>
+      )}
+      {hidden > 0 && <div className="silo-tag-more">{hidden} more - type to narrow</div>}
+      {opts.length === 0 && !canCreate && <div className="silo-tag-more">No tags yet</div>}
+    </div>
+  );
+}
+
+export function TagPicker({
+  membership,
+  link,
+  onClose,
+  className,
+  onMouseEnter,
+  onMouseLeave,
+}: {
+  membership: Membership;
+  link: LinkJson;
+  onClose: () => void;
+  className?: string;
+  onMouseEnter?: () => void;
+  onMouseLeave?: () => void;
+}) {
+  const [query, setQuery] = useState('');
+  const id = useId();
+  return (
+    <MenuSurface
+      className={`silo-tag-picker ${className ?? ''}`}
+      link={link}
+      onClose={onClose}
+      onMouseEnter={onMouseEnter}
+      onMouseLeave={onMouseLeave}
+    >
+      <div className="silo-tag-search">
+        <input
+          className="silo-field"
+          aria-label="Find or create tag"
+          placeholder="Find or create tag"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </div>
+      <TagChoices membership={membership} query={query} listId={id} />
+      {membership.error && <div role="alert">{membership.error}</div>}
+    </MenuSurface>
+  );
+}
+
+export function TagTokenField({
+  membership,
+  open,
+  onOpenChange,
+}: {
+  membership: Membership;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  const [query, setQuery] = useState('');
+  const [selected, setSelected] = useState(0);
+  const input = useRef<HTMLInputElement>(null);
+  const id = useId();
+  const { opts, canCreate, name } = useTagOptions(membership.tags, query);
+  const changeOpen = (value: boolean) => {
+    onOpenChange(value);
+  };
+  return (
+    <fieldset
+      aria-label="Tags"
+      className="silo-tag-token-group"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) changeOpen(false);
+      }}
+    >
+      <div className="silo-tag-tokens">
+        {membership.tags.map((tag) => (
+          <span className="silo-tag-token" key={tag}>
+            <b>#</b>
+            <span>{tag}</span>
+            <button
+              type="button"
+              title="Remove"
+              aria-label={`Remove tag ${tag}`}
+              disabled={membership.busy}
+              onClick={() => void membership.toggle(tag, true)}
+            >
+              ×
+            </button>
+          </span>
+        ))}
+        <input
+          ref={input}
+          id="edit-tags"
+          role="combobox"
+          aria-label="Tags"
+          aria-expanded={open}
+          aria-controls={id}
+          aria-activedescendant={
+            open && (opts.length || canCreate)
+              ? `${id}-${Math.min(selected, opts.length - (canCreate ? 0 : 1))}`
+              : undefined
+          }
+          aria-autocomplete="list"
+          placeholder="Add tag"
+          value={query}
+          onFocus={() => changeOpen(true)}
+          onChange={(event) => {
+            setQuery(event.target.value);
+            setSelected(0);
+            changeOpen(true);
+          }}
+          onKeyDown={(event) => {
+            const count = opts.length + Number(canCreate);
+            if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+              event.preventDefault();
+              changeOpen(true);
+              setSelected((current) =>
+                count ? (current + (event.key === 'ArrowDown' ? 1 : -1) + count) % count : 0,
+              );
+            }
+            if (event.key === 'Enter' && !event.metaKey && !event.ctrlKey && open && count) {
+              event.preventDefault();
+              const choice = opts[selected];
+              void membership.toggle(choice?.name ?? name, choice?.active ?? false, !choice);
+              setQuery('');
+              setSelected(0);
+            }
+            if (event.key === 'Backspace' && !query && membership.tags.length)
+              void membership.toggle(membership.tags.at(-1) as string, true);
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              changeOpen(false);
+            }
+          }}
+        />
+      </div>
+      {open && (
+        <div className="silo-tag-suggestions">
+          <TagChoices
+            membership={membership}
+            query={query}
+            selected={selected}
+            listId={id}
+            onChosen={() => {
+              setQuery('');
+              setSelected(0);
+              input.current?.focus();
+            }}
+          />
         </div>
       )}
-    </>
+      {membership.error && <div role="alert">{membership.error}</div>}
+    </fieldset>
   );
 }

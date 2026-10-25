@@ -192,7 +192,7 @@ describe('AppFrame', () => {
 
       // Open the Edit modal (via the probe's real useRowMenu().openEdit).
       fireEvent.click(screen.getByText('open edit'));
-      expect(screen.getByRole('dialog', { name: /edit item/i })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: /edit link/i })).toBeDefined();
 
       // Now open Settings from the sidebar — the Edit modal must close, so the
       // two focus-trapped scrim modals never coexist (each registers its own
@@ -200,7 +200,7 @@ describe('AppFrame', () => {
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
       expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-      expect(screen.queryByRole('dialog', { name: /edit item/i })).toBeNull();
+      expect(screen.queryByRole('dialog', { name: /edit link/i })).toBeNull();
     });
   });
 

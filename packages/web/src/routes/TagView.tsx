@@ -42,6 +42,7 @@ function DeleteTagButton({ tag }: { tag: string }) {
       {confirming && (
         <ConfirmDialog
           title="Delete tag?"
+          item={`#${tag}`}
           action="Delete tag"
           actionLabel="Confirm deleting this tag"
           pending={deleteTag.isPending}

@@ -1,16 +1,17 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { Link } from 'react-router';
 import type { LinkJson } from '../../api/types';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { relativeTimeFromNow } from '../../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../../lib/url';
 import { Chip } from '../Chip';
+import { MenuAction, MenuSurface } from '../MenuSurface';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
 import { OriginalControls } from './OriginalControls';
 import { ReaderContent } from './ReaderContent';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
+import { ReaderMeta } from './ReaderMeta';
 import { ReaderPlayer } from './ReaderPlayer';
 import { type OriginalState, useOriginal } from './useOriginal';
 import type { useReaderActions } from './useReaderActions';
@@ -80,36 +81,17 @@ function ReaderMore({
   disabled,
   trashed,
   original,
+  link,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
   original: OriginalState | undefined;
+  link: LinkJson | undefined;
 }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const pointer = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const keyboard = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        setOpen(false);
-        ref.current?.querySelector('button')?.focus();
-      }
-    };
-    document.addEventListener('mousedown', pointer);
-    document.addEventListener('keydown', keyboard, true);
-    return () => {
-      document.removeEventListener('mousedown', pointer);
-      document.removeEventListener('keydown', keyboard, true);
-    };
-  }, [open]);
   return (
-    <div className="silo-reader-more" ref={ref}>
+    <div className="silo-reader-more">
       <button
         type="button"
         className="silo-reader-iconbtn"
@@ -122,10 +104,47 @@ function ReaderMore({
         ⋯
       </button>
       {open && (
-        <div className="silo-reader-more-menu" data-reader-menu>
-          {original && <OriginalControls state={original} />}
-          <ReaderActions actions={actions} disabled={disabled} trashed={trashed} />
-        </div>
+        <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
+          {original && <OriginalControls state={original} link={link} />}
+          <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
+            Copy link
+          </MenuAction>
+          {!trashed && (
+            <MenuAction
+              icon={<ReaderIcon name="edit" />}
+              shortcut="e"
+              onClick={() => {
+                setOpen(false);
+                actions.edit();
+              }}
+            >
+              Edit
+            </MenuAction>
+          )}
+          <MenuAction
+            icon={<ReaderIcon name="external" />}
+            shortcut="o"
+            onClick={() => {
+              setOpen(false);
+              actions.open();
+            }}
+          >
+            Open original
+          </MenuAction>
+          <div className="silo-menu-separator" />
+          <MenuAction
+            icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
+            danger={!trashed}
+            disabled={actions.busy}
+            onClick={() => {
+              setOpen(false);
+              if (trashed) actions.restore();
+              else actions.trash();
+            }}
+          >
+            {trashed ? 'Restore' : 'Move to trash'}
+          </MenuAction>
+        </MenuSurface>
       )}
     </div>
   );
@@ -190,47 +209,7 @@ function ReaderArticle({
         {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
         {link.captureStatus === 'enriching' && <span className="silo-capturing">◌ Capturing</span>}
       </div>
-      {trashed ? (
-        link.notes && (
-          <div className="silo-reader-notecard">
-            <span>¶ Note</span>
-            <span>{link.notes}</span>
-          </div>
-        )
-      ) : link.notes ? (
-        <button
-          type="button"
-          className="silo-reader-notecard"
-          onClick={() => actions.edit('note')}
-          title="Edit note"
-        >
-          <span>¶ Note</span>
-          <span>{link.notes}</span>
-        </button>
-      ) : (
-        <button type="button" className="silo-reader-addnote" onClick={() => actions.edit('note')}>
-          <ReaderIcon name="plus" />
-          Add a note
-        </button>
-      )}
-      <div className="silo-reader-tags">
-        {link.tags.map((tag) => (
-          <Link className="silo-reader-tag" to={`/tags/${encodeURIComponent(tag)}`} key={tag}>
-            <span>#</span>
-            {tag}
-          </Link>
-        ))}
-        {!trashed && (
-          <button
-            type="button"
-            className="silo-reader-tag"
-            aria-label="Edit tags"
-            onClick={() => actions.edit('tags')}
-          >
-            <ReaderIcon name="plus" />
-          </button>
-        )}
-      </div>
+      <ReaderMeta key={link.id} link={link} trashed={trashed} />
       <ArticleBody link={link} loading={loading} />
     </article>
   );
@@ -349,7 +328,7 @@ export function ReaderPane({
           </div>
           {tab === 'original' && link && (
             <div className="silo-reader-desktop">
-              <OriginalControls state={original} />
+              <OriginalControls state={original} link={link} />
             </div>
           )}
         </div>
@@ -361,6 +340,7 @@ export function ReaderPane({
           actions={actions}
           disabled={!link}
           trashed={trashed}
+          link={link}
           original={tab === 'original' ? original : undefined}
         />
       </div>

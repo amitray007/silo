@@ -94,12 +94,10 @@ describe('Original mode order', () => {
       }),
     );
     fireEvent.click(screen.getByLabelText('Original mode: Silo view'));
-    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Live site' }).disabled).toBe(
+    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Live site' }).disabled).toBe(
       true,
     );
-    expect(screen.getByRole('button', { name: 'Live site' }).parentElement?.title).toContain(
-      'blocks framing',
-    );
+    expect(screen.getByRole('menuitem', { name: 'Live site' }).title).toContain('blocks framing');
   });
   it.each(['none', 'error'] as const)('uses a card for %s with an escape link', async (mode) => {
     const { container } = show(mode);

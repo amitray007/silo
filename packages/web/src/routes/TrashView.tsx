@@ -110,6 +110,7 @@ function TrashEmptyNowButton() {
       {confirming && (
         <ConfirmDialog
           title="Empty trash?"
+          item="All links in trash"
           action="Empty trash"
           actionLabel="Confirm emptying the trash"
           pending={emptyTrash.isPending}
@@ -277,6 +278,7 @@ export function TrashView() {
 
       {deleteId && (
         <DeleteForeverDialog
+          link={links.find((link) => link.id === deleteId)}
           pending={remove.isPending}
           onClose={() => setDeleteId(null)}
           onConfirm={() =>

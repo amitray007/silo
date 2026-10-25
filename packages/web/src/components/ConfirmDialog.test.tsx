@@ -68,4 +68,25 @@ describe('ConfirmDialog', () => {
     expect(onConfirm).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
   });
+  it('names the affected item beside the warning and danger action', () => {
+    const { container } = render(
+      <ConfirmDialog
+        title="Delete tag?"
+        item="#reading"
+        action="Delete tag"
+        onConfirm={vi.fn()}
+        onClose={vi.fn()}
+      >
+        Links with this tag will stay in your library.
+      </ConfirmDialog>,
+    );
+    expect(screen.getByText('#reading').closest('.silo-confirm-item')).not.toBeNull();
+    expect(container.querySelector('.silo-confirm-icon')).not.toBeNull();
+    expect(screen.getByRole('alertdialog').getAttribute('aria-describedby')).toBe(
+      screen.getByText('Links with this tag will stay in your library.').id,
+    );
+    expect(
+      screen.getByRole('button', { name: 'Delete tag' }).classList.contains('silo-confirm-btn'),
+    ).toBe(true);
+  });
 });

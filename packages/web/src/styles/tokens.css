@@ -23,6 +23,7 @@
   --markt: #b8480a;
   --accent-soft: #fff1e6;
   --warn: #d63a2f;
+  --danger-soft: #fdecea;
   --solid-ink: #ffffff;
   --logo-tile: #f6f6f5;
   --logo-ink: #181818;
@@ -105,6 +106,7 @@
   --btn: #f3f3f2;
   --btn-ink: #0a0a0a;
   --accent-soft: #2a1709;
+  --danger-soft: #2a0f0d;
   --markt: #ff9a52;
   --elev-1: 0 1px 2px rgba(0, 0, 0, 0.5);
   --elev-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -6px rgba(0, 0, 0, 0.6);

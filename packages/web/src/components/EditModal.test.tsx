@@ -54,7 +54,11 @@ describe('EditModal', () => {
   beforeEach(() => {
     vi.stubGlobal(
       'fetch',
-      vi.fn().mockResolvedValue(jsonResponse({ tags: [{ name: 'mcp', count: 2 }] })),
+      vi
+        .fn()
+        .mockImplementation(() =>
+          Promise.resolve(jsonResponse({ tags: [{ name: 'mcp', count: 2 }] })),
+        ),
     );
   });
 
@@ -78,7 +82,7 @@ describe('EditModal', () => {
 
   it('shows "Choose tags" when the link has no tags', () => {
     renderModal({ tags: [] });
-    expect(screen.getByText('Choose tags')).toBeDefined();
+    expect(screen.getByPlaceholderText('Add tag')).toBeDefined();
   });
 
   it('shows the domain in the header', () => {
@@ -121,7 +125,7 @@ describe('EditModal', () => {
           }),
         ),
       );
-      expect(screen.queryByRole('dialog')).toBeNull();
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
     },
   );
 
@@ -163,8 +167,8 @@ describe('EditModal', () => {
     );
     renderModal({ tags: ['mcp'] });
 
-    fireEvent.click(screen.getByText('▾'));
-    await waitFor(() => expect(screen.getByPlaceholderText('Find or create a tag')).toBeDefined());
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Tags' }));
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Tags' })).toBeDefined());
     await waitFor(() => expect(screen.getByText('design')).toBeDefined());
 
     fireEvent.click(screen.getByText('design').closest('button') as HTMLButtonElement);
@@ -179,14 +183,14 @@ describe('EditModal', () => {
 
   it('typing a query that matches no existing tag shows a create option; clicking it creates + assigns the tag', async () => {
     renderModal({ tags: [] });
-    fireEvent.click(screen.getByText('Choose tags'));
-    const input = await screen.findByPlaceholderText('Find or create a tag');
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Tags' }));
+    const input = await screen.findByRole('combobox', { name: 'Tags' });
     fireEvent.change(input, { target: { value: 'brand-new-tag' } });
 
-    await waitFor(() => expect(screen.getByText('Create "brand-new-tag"')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Create “brand-new-tag”')).toBeDefined());
 
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ name: 'brand-new-tag' }, 201));
-    fireEvent.click(screen.getByText('Create "brand-new-tag"'));
+    fireEvent.click(screen.getByText('Create “brand-new-tag”'));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -211,7 +215,7 @@ describe('EditModal', () => {
     // background refetch of `link.tags` (which never happens, since `link`
     // is a one-time snapshot) landing first.
     await waitFor(() => expect(screen.queryByText('mcp')).toBeNull());
-    expect(screen.getByText('Choose tags')).toBeDefined();
+    expect(screen.getByPlaceholderText('Add tag')).toBeDefined();
   });
 
   it('adding a tag via the fly-out shows it as a chip immediately in the same modal instance', async () => {
@@ -225,7 +229,7 @@ describe('EditModal', () => {
     );
     renderModal({ tags: ['mcp'] });
 
-    fireEvent.click(screen.getByText('▾'));
+    fireEvent.focus(screen.getByRole('combobox', { name: 'Tags' }));
     await waitFor(() => expect(screen.getByText('design')).toBeDefined());
 
     vi.mocked(fetch).mockResolvedValueOnce(
@@ -243,7 +247,7 @@ describe('EditModal', () => {
 
   it('trash calls the trash mutation and closes the modal', async () => {
     renderModal();
-    fireEvent.click(screen.getByText('Trash'));
+    fireEvent.click(screen.getByText('Move to trash'));
 
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith(
@@ -312,5 +316,54 @@ describe('EditModal', () => {
 
     fireEvent.click(screen.getByText('Cancel'));
     await waitFor(() => expect(document.activeElement).toBe(trigger));
+  });
+  it('uses arrow selection, Enter to add/create, and Backspace to remove the last token', async () => {
+    vi.mocked(fetch).mockImplementation(() =>
+      Promise.resolve(
+        jsonResponse({
+          tags: [
+            { name: 'mcp', count: 2 },
+            { name: 'design', count: 1 },
+          ],
+          name: 'new-tag',
+        }),
+      ),
+    );
+    renderModal({ tags: [] });
+    const input = screen.getByRole('combobox', { name: 'Tags' });
+    fireEvent.focus(input);
+    await screen.findByRole('option', { name: /mcp/ });
+    fireEvent.keyDown(input, { key: 'ArrowDown' });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove tag design' })).toBeDefined(),
+    );
+    fireEvent.keyDown(input, { key: 'Backspace' });
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: 'Remove tag design' })).toBeNull(),
+    );
+    fireEvent.change(input, { target: { value: 'new-tag' } });
+    vi.mocked(fetch).mockImplementationOnce(() =>
+      Promise.resolve(jsonResponse({ name: 'new-tag' })),
+    );
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove tag new-tag' })).toBeDefined(),
+    );
+  });
+
+  it('orders fields and includes URL actions and the real, unlimited note count', () => {
+    const { container } = renderModal();
+    expect(
+      Array.from(container.querySelectorAll('.silo-edit-field > label')).map(
+        (label) => label.textContent?.split(' ')[0],
+      ),
+    ).toEqual(['Title', 'Tags', 'Note', 'Description']);
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeDefined();
+    expect(screen.getByRole('link', { name: 'Open original' }).getAttribute('href')).toBe(
+      'https://example.com/a-post',
+    );
+    expect(screen.getByText('Why you kept it · 13 characters')).toBeDefined();
+    expect(screen.getByPlaceholderText('Why you kept it').hasAttribute('maxlength')).toBe(false);
   });
 });
