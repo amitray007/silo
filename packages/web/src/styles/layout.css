@@ -199,7 +199,7 @@
 }
 .silo-row-meta {
   padding-left: 28px;
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--fnt);
   display: flex;
   gap: 6px;
@@ -218,7 +218,7 @@
 .silo-row-note,
 .silo-row-rich {
   padding-left: 28px;
-  font-size: 12.5px;
+  font-size: 14px;
   color: var(--mut);
   white-space: nowrap;
   overflow: hidden;
@@ -557,12 +557,12 @@
   margin-left: auto;
 }
 .silo-reader-btn {
-  height: 30px;
+  height: 32px;
   padding: 0 12px;
   border-radius: 8px;
   font: inherit;
   font-weight: 500;
-  font-size: 13px;
+  font-size: 14px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1510,4 +1510,10 @@ div.silo-reader-notecard {
   overflow: hidden;
   clip-path: inset(50%);
   white-space: nowrap;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-iconbtn:not(:disabled):hover {
+    background: color-mix(in srgb, var(--ink) 8%, transparent);
+  }
 }

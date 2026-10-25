@@ -201,7 +201,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
             // Library/Trash nav icons above and the `+ New tag` glyph below —
             // one clean column, matching shiori's Tags spacing. Dim (--ghost)
             // glyph, bright (--ink) label.
-            icon={<span style={{ color: 'var(--ghost)', fontSize: 'var(--text-md)' }}>#</span>}
+            icon={<span style={{ color: 'var(--fnt)', fontSize: 'var(--text-md)' }}>#</span>}
             label={tag.name}
             meta={tag.count > 0 ? formatCount(tag.count) : undefined}
             variant="tag"

@@ -288,7 +288,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
           ) : (
             <NavItem
               title="New tag"
-              label="New tag"
+              label={<span style={{ color: 'var(--fnt)' }}>New tag</span>}
               icon={<ReaderIcon name="plus" />}
               onClick={openNewTag}
             />
