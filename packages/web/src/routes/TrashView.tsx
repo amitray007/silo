@@ -20,6 +20,7 @@ import {
 } from '../components/Dock';
 import { HeaderActionButton } from '../components/HeaderActionButton';
 import { CheckIcon, TrashIcon } from '../components/NavIcons';
+import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { useTrashSelection } from '../components/SelectionContext';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
@@ -81,7 +82,7 @@ function TrashIdleDock({ purgeWindowDays, allIds }: { purgeWindowDays: number; a
 
   return (
     <Dock padding="9px 18px">
-      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--fnt)', whiteSpace: 'nowrap' }}>
+      <span style={{ fontSize: 'var(--text-xs)', color: 'var(--fnt)', whiteSpace: 'normal' }}>
         Deleted links keep their text · auto-empties after {purgeWindowDays} days
       </span>
       <DockDivider />
@@ -300,7 +301,13 @@ export function TrashView() {
   // selection) — see that component's doc comment. No listener needed here.
 
   return (
-    <>
+    <ReaderLayout
+      links={links}
+      loading={isLoading}
+      title="Trash"
+      trashed
+      purgeWindowDays={purgeWindowDays}
+    >
       <ContentHeader title="Trash">{links.length > 0 && <TrashEmptyNowButton />}</ContentHeader>
       <div className="silo-content-body">
         <div className="silo-content-col silo-route-fade">
@@ -317,6 +324,6 @@ export function TrashView() {
       {!hasSelection && links.length > 0 && (
         <TrashIdleDock purgeWindowDays={purgeWindowDays} allIds={links.map((l) => l.id)} />
       )}
-    </>
+    </ReaderLayout>
   );
 }

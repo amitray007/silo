@@ -250,8 +250,8 @@ function TagsFlyout({
       onMouseLeave={onMouseLeave}
       style={{
         position: 'absolute',
-        right: 'calc(100% - 2px)',
-        top: -6,
+        right: 'var(--tags-flyout-right, calc(100% - 2px))',
+        top: 'var(--tags-flyout-top, -6px)',
         // Matches the main `RowMenu` popover's `width: 224` exactly (was 216)
         // so the two panels read as one coherent sibling pair sitting side by
         // side, not a narrower/cramped afterthought hanging off the main
@@ -503,6 +503,14 @@ export function RowMenu({ link }: { link: LinkJson }) {
 
       <Divider />
 
+      <MenuItem
+        onClick={() => {
+          selection.toggle(link.id);
+          closeMenu();
+        }}
+      >
+        <span>{selection.isSelected(link.id) ? 'Deselect item' : 'Select item'}</span>
+      </MenuItem>
       <MenuItem onClick={handleEdit}>
         <span style={iconSlotStyle}>
           <EditIcon />

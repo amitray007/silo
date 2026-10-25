@@ -77,31 +77,23 @@ describe('LinkRow', () => {
     expect(screen.queryByRole('img')).toBeNull();
   });
 
-  it('dims the title while enriching (no ◌/¶/◆ mark glyph — only the loader carries img role)', () => {
+  it('shows Capturing and the domain beneath an enriching title', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
-    // The only img-role element while enriching is the EnrichingLoader
-    // (aria-label "enriching") — no mark/status glyph. The title is dimmed.
-    expect(screen.getByRole('img').getAttribute('aria-label')).toBe('enriching');
-    expect(screen.getByText('A post').style.color).toBe('var(--fnt)');
+    expect(screen.getByText('◌ Capturing')).toBeDefined();
+    expect(screen.getByText('example.com')).toBeDefined();
+    expect(screen.getByText('A post').className).toBe('silo-row-title');
   });
 
-  it('shows the dot-grid loader (not the old ◌ Capturing chip) while enriching, and hides the redundant domain suffix', () => {
-    // Enriching state (user-picked, reference-studied): the favicon is
-    // replaced by the EnrichingLoader dot-grid (aria-label "enriching"); there
-    // is NO "◌ Capturing" chip; and the domain suffix is hidden because the
-    // title IS the URL then (which already contains the domain — no duplicate).
+  it('keeps the local letter chip while enriching', () => {
     renderRow(
       <LinkRow
         link={link({ captureStatus: 'enriching', title: null, url: 'https://www.example.com/a' })}
       />,
     );
-    expect(screen.getByLabelText('enriching')).toBeDefined();
-    expect(screen.queryByText('◌')).toBeNull();
-    expect(screen.queryByText('Capturing')).toBeNull();
-    // The URL shows as the title; the separate "example.com" domain suffix does
-    // NOT (that would be redundant with the URL). It returns once enriched.
+    expect(screen.getByText('E')).toBeDefined();
+    expect(screen.queryByLabelText('enriching')).toBeNull();
     expect(screen.getByText('www.example.com/a')).toBeDefined();
-    expect(screen.queryByText('example.com')).toBeNull();
+    expect(screen.getByText('example.com')).toBeDefined();
   });
 
   it('shows the favicon chip (not the loader) and the domain suffix once the row is full', () => {

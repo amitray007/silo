@@ -1,100 +1,31 @@
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
 
-/**
- * The three row "looks" v3 draws (`docs/design/app/Silo-v3.html`):
- * - `default` — Library/Trash: weight 500, `--ink` inactive color, `7px 10px` padding.
- * - `settings` — the Settings row: weight 400, `--mut` inactive color (never
- *   `--ink`, even though it's never "active"), `7px 10px` padding.
- * - `tag` — a Tags-section row: weight 500, `--ink` inactive color, `7px 10px`
- *   padding (bumped from the old 5px/400 so tag rows read as solid and roomy
- *   as the nav rows above, per user feedback).
- * Inactive labels for `default`/`tag` match the active `--ink` color — the
- * active/inactive distinction is carried entirely by the `--surface-active`/
- * `--hov` highlight box (see the `active` styling below), not by dimming the
- * label text, so a resting nav row never reads as muddy (direct user
- * feedback: primary nav labels rendered in `--mut` looked too dim to read as
- * the crisp, clickable labels they are). `settings` deliberately stays one
- * step dimmer at `--mut` — it's a secondary/utility row, never "active".
- * A single named variant (vs. four independent styling props) keeps callers
- * picking a row LOOK rather than reconstructing one prop-by-prop.
- */
 export type NavItemVariant = 'default' | 'settings' | 'tag';
-
-const VARIANT_STYLE: Record<
-  NavItemVariant,
-  { fontWeight: number; inactiveColor: string; padding: string; gap: string }
-> = {
-  // K3 (oat-conformance audit): 10px → var(--s2-5) exact on every variant. All
-  // three variants now share the same 7px vertical padding — the tag row's old
-  // 5px was tightened as a "secondary strip" look, but user feedback asked for
-  // the tag list to read as solid/roomy as the nav rows, so they're unified.
-  // 7px has no clean --s* match (between --s1-5/6px and --s2/8px) — left
-  // un-tokenized rather than nudging row height off the reference.
-  default: {
-    fontWeight: 500,
-    inactiveColor: 'var(--ink)',
-    padding: '7px var(--s2-5)',
-    gap: 'var(--s2-5)',
-  },
-  settings: {
-    fontWeight: 400,
-    inactiveColor: 'var(--mut)',
-    padding: '7px var(--s2-5)',
-    gap: 'var(--s2-5)',
-  },
-  // Tag rows bumped to match the nav rows (was 5px/400): roomier 7px height +
-  // weight 500 so the tag list reads as solid, bigger, and consistent with
-  // Library/Trash above — not a cramped secondary strip (user feedback: "make
-  // the tags a bit bigger / better").
-  tag: {
-    fontWeight: 500,
-    inactiveColor: 'var(--ink)',
-    padding: '7px var(--s2-5)',
-    gap: 'var(--s1-5)',
-  },
-};
 
 interface NavItemSharedProps {
   label: ReactNode;
   meta?: ReactNode;
   active?: boolean;
-  /** Leading icon slot (v3: inline SVGs for Library/Trash/Settings). Tags pass none. */
+
   icon?: ReactNode;
-  /** Which of v3's three row looks to render; default `'default'` (Library/Trash). */
+
   variant?: NavItemVariant | undefined;
 }
 
 interface NavItemAnchorProps
   extends NavItemSharedProps,
     Omit<AnchorHTMLAttributes<HTMLAnchorElement>, 'className' | 'style' | 'color'> {
-  /** A real, linkable route — renders an `<a>`. */
   href: string;
 }
 
 interface NavItemButtonProps
   extends NavItemSharedProps,
     Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'className' | 'style' | 'color' | 'type'> {
-  /** No route to link to (e.g. Search, which opens a palette in place) — renders a `<button type="button">`. */
   href?: undefined;
 }
 
 type NavItemProps = NavItemAnchorProps | NavItemButtonProps;
 
-/**
- * A sidebar nav row (Library / Trash / a tag / Search). Presentational —
- * renders a plain `<a>` when given `href` (so callers, e.g. react-router's
- * `NavLink` via `asChild`-style prop spreading, or a direct href, can drive
- * navigation; W5 wraps this with whatever router primitive it uses), or a
- * `<button type="button">` when `href` is omitted (plan 024's Search row,
- * which has no `/route` of its own and just opens the floating palette in
- * place). Both element types share IDENTICAL styling — icon slot, meta slot,
- * padding, font, active/hover chrome — so a row's LOOK never depends on
- * which element it renders as.
- *
- * Active state = ink text on a raised `--hov` background — NEVER amber, per
- * the binding Oat rule ("amber never fills a control"). `aria-current` only
- * ever applies to the anchor form — a button has no "current page" to mark.
- */
 export function NavItem({
   label,
   meta,
@@ -103,50 +34,19 @@ export function NavItem({
   variant = 'default',
   ...props
 }: NavItemProps) {
-  const { fontWeight, inactiveColor, padding, gap } = VARIANT_STYLE[variant];
-
   const sharedStyle = {
     display: 'flex',
     alignItems: 'center',
-    gap,
+    gap: '10px',
     width: '100%',
     boxSizing: 'border-box' as const,
     textAlign: 'left' as const,
-    padding,
+    padding: '0 10px',
     borderRadius: 8,
-    fontSize: 'var(--text-base)',
-    fontWeight,
+    fontWeight: 500,
     cursor: 'pointer',
     textDecoration: 'none',
-    color: active ? 'var(--ink)' : inactiveColor,
-    // Active = ink on a filled `--surface-active` box with a hairline
-    // `--line` edge — the SAME family as the hover pill's `--hov`/
-    // `--surface-hover` fill, one step darker/more saturated so the
-    // active row reads as a clearly highlighted BOX, not just bold/ink
-    // text (direct user feedback fix: the previous `background:
-    // var(--bg)` was literally invisible in dark mode — the sidebar rail
-    // sits `transparent` directly on the app's own `--bg` ground, so
-    // painting the active row the same color as its own backdrop
-    // produced no visible box at all). `--elev-1` keeps a subtle lift so
-    // the active pill still reads as raised, not flat-painted.
-    // Never amber (tokens.md: "active = ink on raised bg, never amber").
-    // The INACTIVE background is intentionally omitted here (review fix,
-    // CodeRabbit): inline styles always beat CSS class rules regardless
-    // of specificity, so an inline `background: 'transparent'` for the
-    // non-active case would silently defeat `.silo-nav-item:hover`'s
-    // `--hov` background in base.css — the hover feedback would never
-    // actually paint. Only the ACTIVE case sets an inline background
-    // (it's a per-instance boolean CSS can't express); the resting/hover
-    // background for every other row is CSS-owned.
-    ...(active
-      ? {
-          background: 'var(--surface-active)',
-          boxShadow: `var(--elev-1), inset 0 0 0 1px var(--line)`,
-        }
-      : {}),
-    transform: 'scale(1)',
-    transition:
-      'background .15s ease, color .15s ease, box-shadow .15s ease, transform .1s var(--ease-out)',
+    color: active ? 'var(--ink)' : 'var(--mut)',
   };
 
   const children = (
@@ -156,11 +56,7 @@ export function NavItem({
           {icon}
         </span>
       )}
-      {/* `minWidth: 0` + ellipsis so a long tag name (the sidebar Tags list
-          renders arbitrary user tag names here) truncates cleanly instead of
-          overflowing the row and shoving the count off the edge. `flex: 1`
-          lets it consume the row's free width and shrink below its content
-          size — a flex item won't shrink past its content without minWidth:0. */}
+
       <span
         style={{
           flex: 1,
@@ -173,11 +69,6 @@ export function NavItem({
         {label}
       </span>
       {meta !== undefined && (
-        // `lineHeight: 1` matches the Search row's `/` shortcut chip (fix,
-        // direct user feedback) — both sit on the identical collapsed
-        // line-box baseline instead of the body's inherited 1.55, so the
-        // count column and the chip above it land on one shared vertical
-        // center.
         <span
           style={{
             marginLeft: 'auto',
@@ -201,6 +92,8 @@ export function NavItem({
         href={href}
         aria-current={active ? 'page' : undefined}
         className="silo-nav-item"
+        data-active={active}
+        data-variant={variant}
         style={sharedStyle}
       >
         {children}
@@ -216,19 +109,6 @@ export function NavItem({
       className="silo-nav-item"
       style={{
         ...sharedStyle,
-        // A native `<button>` carries its own UA form-control chrome (a
-        // border, a system font-family, `appearance: auto`) that an `<a>`
-        // never has — left alone, `appearance: auto` makes Chromium apply
-        // its own intrinsic form-control sizing ON TOP OF the flex content
-        // size, so the row rendered ~4px taller than the byte-identical
-        // anchor row despite matching padding/font-size/line-height
-        // (row-parity fix, this diff). `appearance: none` drops that
-        // reserved sizing; `border: 0` + `fontFamily: inherit` +
-        // `background: none` strip the rest of the UA chrome. Deliberately
-        // NOT the `font` shorthand — it also resets size/weight/line-height,
-        // which would silently clobber the explicit values `sharedStyle`
-        // sets just above (object spread order: these keys apply AFTER
-        // `sharedStyle`, so `font: 'inherit'` would win and undo them).
         appearance: 'none',
         WebkitAppearance: 'none',
         border: 0,

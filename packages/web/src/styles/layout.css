@@ -1,0 +1,987 @@
+/* Unit 2: prototype shell, list, reader, and width modes. */
+.silo-frame {
+  height: 100dvh;
+  background: var(--bg);
+  color: var(--ink);
+  font-size: 14px;
+  line-height: 1.45;
+  overflow: hidden;
+}
+.silo-band {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 100%;
+}
+.silo-sidebar {
+  width: 244px;
+  flex: none;
+  display: flex;
+  flex-direction: column;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 10px 12px;
+  gap: 2px;
+  background: var(--bg);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.silo-sidebar-brandrow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 6px 14px;
+}
+.silo-sidebar-grow {
+  flex: 1;
+  min-height: 12px;
+}
+.silo-nav-item {
+  min-height: 32px;
+  font-size: 14px;
+}
+.silo-nav-item[data-active="true"] {
+  background: var(--bg2);
+  box-shadow:
+    var(--elev-1),
+    0 0 0 1px var(--line);
+}
+:root[data-theme="dark"] .silo-nav-item[data-active="true"] {
+  background: var(--sel);
+  box-shadow: none;
+}
+.silo-tag-scroll {
+  max-height: 264px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+.silo-scrim {
+  display: none;
+  border: 0;
+  padding: 0;
+}
+.silo-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  margin: 8px 8px 8px 0;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: var(--elev-1);
+}
+.silo-frame[data-collapsed="true"] .silo-sidebar:not([data-open="true"]) {
+  display: none;
+}
+.silo-frame[data-collapsed="true"] .silo-content {
+  margin-left: 8px;
+}
+.silo-three-pane {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
+.silo-listpane {
+  width: 400px;
+  flex: none;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid var(--line);
+  position: relative;
+}
+.silo-panehead,
+.silo-reader-head {
+  height: 48px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 10px 0 14px;
+  border-bottom: 1px solid var(--line);
+}
+.silo-panehead h1 {
+  font-size: 14px;
+  font-weight: 600;
+  margin: 0;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-pane-count {
+  margin-left: 2px;
+  font-size: 12px;
+  color: var(--fnt);
+}
+.silo-pane-spacer {
+  flex: 1;
+}
+.silo-pane-error {
+  color: var(--warn);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-content-body {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+  padding: 0 8px 100px;
+}
+.silo-content-col {
+  min-height: 0;
+  width: 100%;
+}
+.silo-daylabel {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fnt);
+  padding: 14px 12px 6px;
+  margin: 0;
+}
+.silo-frame .silo-list-menu {
+  display: none;
+  position: absolute;
+  top: 9px;
+  left: 8px;
+  z-index: 6;
+}
+.silo-frame[data-collapsed="true"] .silo-list-menu {
+  display: grid;
+}
+.silo-frame[data-collapsed="true"] .silo-panehead {
+  padding-left: 44px;
+}
+.silo-row-wrap {
+  position: relative;
+  display: block;
+}
+.silo-link-row {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  cursor: default;
+  transition: background 0.12s;
+  color: var(--ink);
+  text-decoration: none;
+}
+.silo-link-row:active {
+  background: var(--sel);
+}
+.silo-link-row[data-active="true"] {
+  background: var(--sel);
+}
+.silo-row-titleline {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding-right: 22px;
+}
+.silo-row-title {
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-link-row[data-trashed="true"] .silo-row-title {
+  color: var(--mut);
+}
+.silo-row-meta {
+  padding-left: 28px;
+  font-size: 12.5px;
+  color: var(--fnt);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  min-width: 0;
+}
+.silo-row-meta > span:first-child {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-row-purge {
+  margin-left: auto;
+  white-space: nowrap;
+}
+.silo-row-note,
+.silo-row-rich {
+  padding-left: 28px;
+  font-size: 12.5px;
+  color: var(--mut);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-row-note {
+  font-style: italic;
+}
+.silo-rowmore {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  opacity: 0;
+}
+.silo-rowmore[aria-expanded="true"] {
+  opacity: 1;
+  background: var(--line);
+  color: var(--ink);
+}
+.silo-link-row:focus-within .silo-rowmore {
+  opacity: 1;
+}
+.silo-letter-chip {
+  border-radius: 5px;
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  font-size: 10.5px;
+  font-weight: 600;
+  color: #fff;
+  background: var(--chip-color);
+  letter-spacing: -0.02em;
+}
+.silo-capturing {
+  color: var(--mark);
+  font-size: 12px;
+  white-space: nowrap;
+  font-weight: 500;
+  animation: siloPulse 1.4s ease-in-out infinite;
+}
+.silo-trash-row-menu {
+  position: absolute;
+  z-index: 30;
+  top: calc(100% - 3px);
+  right: 8px;
+  width: 200px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  padding: 6px;
+}
+.silo-trash-row-menu > * {
+  display: block;
+  width: 100%;
+  border: 0;
+  text-align: left;
+  padding: 8px 10px;
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border-radius: 6px;
+  text-decoration: none;
+  cursor: pointer;
+}
+.silo-selection-dock {
+  flex-wrap: wrap;
+  justify-content: center;
+}
+.silo-readerpane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  outline: none;
+  position: relative;
+}
+.silo-reader-head {
+  justify-content: space-between;
+  padding: 0 10px;
+  gap: 4px;
+}
+.silo-reader-tools {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.silo-reader-icon {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  flex: none;
+  display: block;
+}
+.silo-reader-iconbtn {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  color: var(--mut);
+  flex: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  text-decoration: none;
+  font: inherit;
+}
+.silo-reader-iconbtn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.silo-reader-iconbtn:active {
+  transform: scale(0.92);
+}
+.silo-reader-segment {
+  display: inline-flex;
+  background: var(--hov);
+  border-radius: 8px;
+  padding: 2px;
+  gap: 2px;
+}
+.silo-reader-segment button {
+  height: 26px;
+  padding: 0 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--mut);
+  background: none;
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+.silo-reader-segment button[aria-selected="true"] {
+  background: var(--bg2);
+  color: var(--ink);
+  box-shadow: var(--elev-1);
+}
+:root[data-theme="dark"] .silo-reader-segment button[aria-selected="true"] {
+  background: var(--line-2);
+}
+.silo-reader-back,
+.silo-reader-more {
+  display: none;
+}
+.silo-reader-scroll {
+  overflow: auto;
+  flex: 1;
+  min-height: 0;
+  overscroll-behavior: contain;
+}
+.silo-reader {
+  max-width: 680px;
+  margin: 0 auto;
+  padding: 40px 40px 80px;
+}
+.silo-reader h2 {
+  font-size: 30px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+  margin: 0 0 12px;
+  text-wrap: balance;
+  overflow-wrap: anywhere;
+}
+.silo-reader-source {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--mut);
+  font-size: 13.5px;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+}
+.silo-reader-dot {
+  color: var(--line-2);
+}
+.silo-reader-agent {
+  color: var(--markt);
+  font-weight: 500;
+}
+.silo-reader-notecard {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: var(--hov);
+  border-radius: 12px;
+  padding: 14px 16px;
+  margin: 0 0 22px;
+  cursor: text;
+  border: 0;
+  font: inherit;
+}
+.silo-reader-notecard > span {
+  display: block;
+}
+.silo-reader-notecard > span:first-child {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fnt);
+  margin-bottom: 4px;
+}
+.silo-reader-notecard > span:last-child {
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.silo-reader-addnote {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  height: 26px;
+  padding: 0 8px;
+  margin: 0 0 18px -8px;
+  border-radius: 6px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.silo-reader-tags {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 26px;
+  flex-wrap: wrap;
+}
+.silo-reader-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 24px;
+  padding: 0 9px;
+  border-radius: 999px;
+  background: var(--hov);
+  color: var(--mut);
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  border: 0;
+  cursor: pointer;
+  text-decoration: none;
+}
+.silo-reader-tag span {
+  color: var(--fnt);
+}
+.silo-reader-body p {
+  font-size: 16px;
+  line-height: 1.7;
+  margin: 0 0 18px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.silo-reader-tweet {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 18px 20px;
+  font-size: 17px;
+  line-height: 1.55;
+}
+.silo-reader-tweet p {
+  white-space: pre-wrap;
+  margin: 0;
+}
+.silo-reader-who {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 10px;
+  font-size: 14px;
+  flex-wrap: wrap;
+}
+.silo-reader-who strong {
+  font-weight: 600;
+}
+.silo-reader-who span {
+  color: var(--fnt);
+}
+.silo-reader-stats {
+  display: flex;
+  gap: 12px;
+  font-size: 12.5px;
+  color: var(--mut);
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.silo-reader-card {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 14px 16px;
+  display: flex;
+  gap: 24px;
+  color: var(--mut);
+  font-size: 13px;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+}
+.silo-reader-card b {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 15px;
+  display: block;
+}
+.silo-reader-video {
+  margin: 0 0 22px;
+  color: var(--mut);
+}
+.silo-reader-video img {
+  width: 100%;
+  border-radius: 12px;
+}
+.silo-reader-trashnote {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 12px 10px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  color: var(--markt);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: 22px;
+}
+.silo-reader-trashnote > span {
+  flex: 1;
+  min-width: 180px;
+}
+.silo-reader-trashactions {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.silo-reader-btn {
+  height: 30px;
+  padding: 0 12px;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 500;
+  font-size: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  white-space: nowrap;
+  border: 1px solid var(--line);
+  background: var(--bg2);
+  color: var(--ink);
+  text-decoration: none;
+  cursor: pointer;
+}
+.silo-reader-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.silo-reader-danger {
+  color: var(--warn);
+}
+.silo-reader-hint,
+.silo-reader-retry {
+  color: var(--fnt);
+  font-size: 13px;
+  margin-top: 16px;
+}
+.silo-reader-skeleton {
+  height: 12px;
+  border-radius: 6px;
+  background: var(--hov);
+  margin: 10px 0;
+  animation: siloPulse 1.6s ease-in-out infinite;
+}
+.silo-reader-feedback {
+  padding: 8px 16px;
+  color: var(--mut);
+  font-size: 12px;
+}
+.silo-empty-reader {
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--fnt);
+  text-align: center;
+  padding: 24px;
+}
+.silo-empty-reader svg {
+  margin: auto;
+  width: 28px;
+  height: 28px;
+}
+.silo-empty-reader p {
+  margin: 14px 0 6px;
+  color: var(--mut);
+  font-weight: 500;
+}
+.silo-empty-reader span {
+  font-size: 13px;
+}
+.silo-original {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+.silo-original-bar {
+  min-height: 40px;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px 4px 16px;
+  border-bottom: 1px solid var(--line);
+  background: var(--bg);
+}
+.silo-original-bar > span {
+  flex: 1;
+  min-width: 0;
+  color: var(--mut);
+  font-size: 12.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-original-hint {
+  margin: 0;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  color: var(--mut);
+}
+.silo-original-frame {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+  background: white;
+}
+.silo-reader-rbar {
+  display: none;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-link-row:hover {
+    background: var(--hov);
+  }
+  .silo-link-row[data-active="true"]:hover {
+    background: var(--sel);
+  }
+  .silo-link-row:hover .silo-rowmore {
+    opacity: 1;
+  }
+  .silo-reader-iconbtn:not(:disabled):hover,
+  .silo-reader-addnote:hover,
+  .silo-trash-row-menu > *:hover {
+    background: var(--hov);
+    color: var(--ink);
+  }
+  .silo-reader-notecard:hover,
+  .silo-reader-tag:hover {
+    background: var(--sel);
+  }
+}
+@media (max-width: 1099px) {
+  .silo-sidebar {
+    position: absolute;
+    z-index: 31;
+    top: 0;
+    bottom: 0;
+    left: 0;
+    width: min(280px, 84%);
+    box-shadow: var(--elev-3);
+    padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+    transform: translateX(-100%);
+    visibility: hidden;
+    transition:
+      transform 0.3s var(--ease-drawer),
+      visibility 0s 0.3s;
+  }
+  .silo-sidebar[data-open="true"] {
+    display: flex;
+    transform: translateX(0);
+    visibility: visible;
+    transition-delay: 0s;
+  }
+  .silo-scrim[data-open="true"] {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: var(--scrim);
+    z-index: 30;
+  }
+  .silo-content {
+    margin-left: 8px;
+  }
+  .silo-frame .silo-list-menu {
+    display: grid;
+  }
+  .silo-panehead {
+    padding-left: 44px;
+  }
+  .silo-listpane {
+    width: 340px;
+  }
+  .silo-reader {
+    padding: 32px 28px 72px;
+  }
+}
+@media (max-width: 719px) {
+  .silo-content,
+  .silo-frame[data-collapsed="true"] .silo-content {
+    margin: 0;
+    border: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .silo-listpane {
+    width: 100%;
+    border-right: 0;
+  }
+  .silo-three-pane[data-reader="true"] .silo-listpane,
+  .silo-three-pane[data-reader="false"] .silo-readerpane {
+    display: none;
+  }
+  .silo-panehead,
+  .silo-reader-head {
+    height: calc(52px + env(safe-area-inset-top, 0px));
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-right: 6px;
+  }
+  .silo-panehead h1 {
+    font-size: 16px;
+  }
+  .silo-reader-head {
+    padding-left: 6px;
+  }
+  .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+  }
+  .silo-reader-icon {
+    width: 18px;
+    height: 18px;
+  }
+  .silo-frame .silo-list-menu {
+    top: calc(6px + env(safe-area-inset-top, 0px));
+    left: 4px;
+  }
+  .silo-frame .silo-panehead {
+    padding-left: 48px;
+  }
+  .silo-content-body {
+    padding: 0 6px calc(100px + env(safe-area-inset-bottom, 0px));
+  }
+  .silo-link-row {
+    padding: 11px 12px;
+    min-height: 56px;
+    justify-content: center;
+  }
+  .silo-row-title {
+    font-size: 15px;
+  }
+  .silo-row-titleline {
+    padding-right: 26px;
+  }
+  /* Keep touch access to row menus and multi-select, which the prototype omitted. */
+  .silo-rowmore {
+    opacity: 1;
+    top: 8px;
+    right: 0;
+  }
+  .silo-link-row[data-active="true"] {
+    background: none;
+  }
+  .silo-link-row[data-active="true"]:active {
+    background: var(--sel);
+  }
+  .silo-daylabel {
+    padding-top: 18px;
+  }
+  .silo-reader {
+    padding: 22px 20px calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+  .silo-reader h2 {
+    font-size: 25px;
+  }
+  .silo-reader-body p {
+    font-size: 17px;
+  }
+  .silo-reader-tweet {
+    padding: 16px;
+    font-size: 16.5px;
+  }
+  .silo-reader-desktop {
+    display: none;
+  }
+  .silo-reader-back {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    height: 40px;
+    padding: 0 10px 0 4px;
+    border-radius: 8px;
+    color: var(--ink);
+    font: inherit;
+    font-weight: 500;
+    font-size: 15px;
+    background: none;
+    border: 0;
+    cursor: pointer;
+    min-width: 0;
+    max-width: 40%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+  }
+  .silo-reader-more {
+    display: grid;
+  }
+  .silo-reader-rbar {
+    display: flex;
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 5;
+    justify-content: space-around;
+    align-items: center;
+    padding: 6px 8px calc(6px + env(safe-area-inset-bottom, 0px));
+    background: color-mix(in srgb, var(--bg2) 88%, transparent);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-top: 1px solid var(--line);
+  }
+  .silo-reader-trashactions {
+    width: 100%;
+  }
+  .silo-reader-trashactions .silo-reader-btn {
+    flex: 1;
+    height: 36px;
+    font-size: 14px;
+  }
+  .silo-sidebar .silo-nav-item {
+    min-height: 44px;
+    font-size: 15px;
+  }
+  .silo-sidebar input {
+    --sidebar-input-size: 16px;
+  }
+  .silo-content:has(.silo-three-pane[data-reader="true"]) .silo-list-menu {
+    display: none;
+  }
+}
+
+.silo-reader-more-menu {
+  position: absolute;
+  top: 48px;
+  right: 8px;
+  z-index: 8;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--elev-2);
+  padding: 6px;
+}
+.silo-header-primary:focus-visible {
+  outline-color: var(--mark);
+}
+@media (max-width: 719px) {
+  .silo-header-primary .silo-add-label {
+    display: none;
+  }
+  .silo-header-primary {
+    --btn: transparent;
+    --btn-ink: var(--ink);
+    min-width: 40px;
+    min-height: 40px;
+  }
+}
+
+@media (max-width: 499px) {
+  .silo-row-menu-portal {
+    --tags-flyout-right: 0px;
+    --tags-flyout-top: calc(100% - 2px);
+  }
+}
+
+.silo-letter-chip[data-tone="0"] {
+  --chip-color: var(--chip-0);
+}
+.silo-letter-chip[data-tone="1"] {
+  --chip-color: var(--chip-1);
+}
+.silo-letter-chip[data-tone="2"] {
+  --chip-color: var(--chip-2);
+}
+.silo-letter-chip[data-tone="3"] {
+  --chip-color: var(--chip-3);
+}
+.silo-letter-chip[data-tone="4"] {
+  --chip-color: var(--chip-4);
+}
+.silo-letter-chip[data-tone="5"] {
+  --chip-color: var(--chip-5);
+}
+.silo-letter-chip[data-tone="6"] {
+  --chip-color: var(--chip-6);
+}
+.silo-letter-chip[data-tone="7"] {
+  --chip-color: var(--chip-7);
+}
+.silo-letter-chip[data-domain="sqlite.org"] {
+  --chip-color: var(--chip-sqlite);
+}
+.silo-letter-chip[data-domain="x.com"] {
+  --chip-color: var(--chip-x);
+}
+.silo-letter-chip[data-domain="modelcontextprotocol.io"] {
+  --chip-color: var(--chip-mcp);
+}
+.silo-letter-chip[data-domain="inkandswitch.com"] {
+  --chip-color: var(--chip-inkandswitch);
+}
+.silo-letter-chip[data-domain="linear.app"] {
+  --chip-color: var(--chip-linear);
+}
+.silo-letter-chip[data-domain="github.com"] {
+  --chip-color: var(--chip-github);
+}
+.silo-letter-chip[data-domain="ciechanow.ski"] {
+  --chip-color: var(--chip-ciechanowski);
+}
+.silo-letter-chip[data-domain="simonwillison.net"] {
+  --chip-color: var(--chip-simon);
+}
+.silo-letter-chip[data-domain="maggieappleton.com"] {
+  --chip-color: var(--chip-maggie);
+}
+.silo-letter-chip[data-domain="youtube.com"] {
+  --chip-color: var(--chip-youtube);
+}
+.silo-letter-chip[data-domain="news.ycombinator.com"] {
+  --chip-color: var(--chip-hn);
+}
+.silo-letter-chip[data-domain="stripe.press"] {
+  --chip-color: var(--chip-stripe);
+}
+.silo-letter-chip[data-domain="paulgraham.com"] {
+  --chip-color: var(--chip-pg);
+}
+
+/* Keep the complete reader header inside the smallest side-by-side mode. */
+@media (min-width: 720px) and (max-width: 759px) {
+  .silo-reader-head {
+    padding: 0 6px;
+    gap: 2px;
+  }
+  .silo-reader-head .silo-reader-iconbtn {
+    width: 26px;
+  }
+  .silo-reader-segment button {
+    padding: 0 9px;
+  }
+}

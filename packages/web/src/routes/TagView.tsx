@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router';
 import { useDeleteTag } from '../api/hooks';
 import { HeaderActionButton } from '../components/HeaderActionButton';
 import { CheckIcon, TrashIcon } from '../components/NavIcons';
+import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { PasteCaptureButton } from './LibraryView';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
@@ -103,18 +104,20 @@ export function TagView() {
   const view = useListView(tag);
 
   return (
-    <ContentFrame
-      title={`# ${tag}`}
-      count={view.links.length}
-      headerSlot={
-        <>
-          <PasteCaptureButton tags={[tag]} />
-          <DeleteTagButton tag={tag} />
-        </>
-      }
-      fadeKey={tag}
-    >
-      {ListBody(view, <TagEmptyState tag={tag} />)}
-    </ContentFrame>
+    <ReaderLayout links={view.links} loading={view.isLoading} title={`# ${tag}`}>
+      <ContentFrame
+        title={`# ${tag}`}
+        count={view.links.length}
+        headerSlot={
+          <>
+            <PasteCaptureButton tags={[tag]} />
+            <DeleteTagButton tag={tag} />
+          </>
+        }
+        fadeKey={tag}
+      >
+        {ListBody(view, <TagEmptyState tag={tag} />)}
+      </ContentFrame>
+    </ReaderLayout>
   );
 }

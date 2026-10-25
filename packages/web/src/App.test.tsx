@@ -68,7 +68,9 @@ describe('App routing', () => {
 
   it('renders the tag-scoped Library view (title + empty state) at /tags/:name', async () => {
     renderApp(['/tags/mcp']);
-    await waitFor(() => expect(screen.getByText('# mcp')).toBeDefined());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '# mcp', level: 1 })).toBeDefined(),
+    );
     await waitFor(() => expect(screen.getByText('No links tagged # mcp yet.')).toBeDefined());
   });
 

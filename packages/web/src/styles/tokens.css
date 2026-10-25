@@ -24,6 +24,29 @@
   --accent-soft: #fff1e6;
   --warn: #d63a2f;
 
+  /* Local source-chip colors from the approved prototype. */
+  --chip-0: #e5484d;
+  --chip-1: #0091ff;
+  --chip-2: #30a46c;
+  --chip-3: #8e4ec6;
+  --chip-4: #f76b15;
+  --chip-5: #12a594;
+  --chip-6: #d6409f;
+  --chip-7: #3e63dd;
+  --chip-sqlite: #0f80cc;
+  --chip-x: #000;
+  --chip-mcp: #1f1f1f;
+  --chip-inkandswitch: #222;
+  --chip-linear: #5e6ad2;
+  --chip-github: #24292f;
+  --chip-ciechanowski: #1c1c1c;
+  --chip-simon: #6d5bd0;
+  --chip-maggie: #1aa092;
+  --chip-youtube: #ff0033;
+  --chip-hn: #ff6600;
+  --chip-stripe: #635bff;
+  --chip-pg: #9c8458;
+
   /* Existing settings surfaces use the same neutral palette. */
   --hero-grad-from: var(--hov);
   --hero-grad-to: var(--bg);

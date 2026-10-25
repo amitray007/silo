@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { RowMenuProvider } from '../components/RowMenuContext';
 import { SelectionProvider } from '../components/SelectionContext';
@@ -18,13 +19,15 @@ function renderTrashView(fetchImpl: typeof fetch) {
   vi.stubGlobal('fetch', fetchImpl);
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <RowMenuProvider>
-        <SelectionProvider>
-          <TrashView />
-        </SelectionProvider>
-      </RowMenuProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <RowMenuProvider>
+          <SelectionProvider>
+            <TrashView />
+          </SelectionProvider>
+        </RowMenuProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -84,7 +87,7 @@ describe('TrashView', () => {
     const heading = screen.getByRole('heading', { name: 'Trash' });
     expect(heading.textContent).toBe('Trash');
     expect(screen.getByText('Today')).toBeDefined();
-    const countdown = screen.getByText(/^(29|30)d$/);
+    const countdown = screen.getByText(/^Purges in (29|30) days$/);
     expect(countdown).toBeDefined();
   });
 
@@ -106,7 +109,8 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('Restore me')).toBeDefined());
-    fireEvent.click(screen.getByTitle('Restore'));
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Restore' }));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith(
@@ -134,7 +138,8 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('Delete me')).toBeDefined());
-    fireEvent.click(screen.getByTitle('Delete now'));
+    fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith('/api/trash/1', {
@@ -398,8 +403,8 @@ describe('TrashView', () => {
       // two rows' buttons plus, once a selection is active, the dock's own
       // "Restore" is a text action (not title="Restore"), so the two here are
       // the per-row ones in DOM order (A then B).
-      const rowRestoreButtons = screen.getAllByTitle('Restore');
-      fireEvent.click(rowRestoreButtons[0] as HTMLElement);
+      fireEvent.click(screen.getAllByRole('button', { name: 'Options' })[0] as HTMLElement);
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Restore' }));
 
       await waitFor(() => expect(screen.getByText('1 selected')).toBeDefined());
     });

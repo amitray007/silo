@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import * as hooks from '../api/hooks';
@@ -23,15 +24,17 @@ function jsonResponse(body: unknown, status = 200): Response {
 function renderLibraryView() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <RowMenuProvider>
-        <SelectionProvider>
-          <HoverPreviewProvider>
-            <LibraryView />
-          </HoverPreviewProvider>
-        </SelectionProvider>
-      </RowMenuProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <RowMenuProvider>
+          <SelectionProvider>
+            <HoverPreviewProvider>
+              <LibraryView />
+            </HoverPreviewProvider>
+          </SelectionProvider>
+        </RowMenuProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 

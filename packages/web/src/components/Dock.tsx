@@ -51,6 +51,7 @@ export function Dock({
 }) {
   return (
     <div
+      className="silo-selection-dock"
       style={{
         position: 'absolute',
         left: 0,

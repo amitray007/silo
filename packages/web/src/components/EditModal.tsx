@@ -213,14 +213,24 @@ function EditTagsFlyout({
  * `handleClose` below, which layers Edit's own two-step Escape priority
  * (tags fly-out first) on top of `ModalShell`'s single Escape listener.
  */
-export function EditModal({ link }: { link: LinkJson }) {
+export function EditModal({
+  link,
+  focus = 'title',
+}: {
+  link: LinkJson;
+  focus?: 'title' | 'note' | 'tags';
+}) {
   const { closeEdit } = useRowMenu();
   const selection = useLibrarySelection();
   const [title, setTitle] = useState(link.title ?? '');
   const [description, setDescription] = useState(link.description ?? '');
   const [note, setNote] = useState(link.notes ?? '');
   const [tags, setTags] = useState(link.tags);
-  const [tagsOpen, setTagsOpen] = useState(false);
+  const [tagsOpen, setTagsOpen] = useState(focus === 'tags');
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => {
+    if (focus === 'note') noteRef.current?.focus();
+  }, [focus]);
   const [tagQuery, setTagQuery] = useState('');
   const removeTag = useRemoveTag(link.id);
   const editLink = useEditLink(link.id);
@@ -396,6 +406,7 @@ export function EditModal({ link }: { link: LinkJson }) {
         <span style={{ color: 'var(--markt)' }}>¶</span> Note
       </p>
       <textarea
+        ref={noteRef}
         value={note}
         onChange={(e) => setNote(e.target.value)}
         rows={2}

@@ -11,7 +11,8 @@ interface RowMenuContextValue {
   /** The link currently open in the edit modal, or `null` when the modal is closed. */
   editingLink: LinkJson | null;
   /** Opens the edit modal for `link` (and closes the row menu, matching v3's `editFn`: `menuId: null` + `openEdit`). */
-  openEdit: (link: LinkJson) => void;
+  openEdit: (link: LinkJson, focus?: 'title' | 'note' | 'tags') => void;
+  editingFocus: 'title' | 'note' | 'tags';
   /** Closes the edit modal without saving. */
   closeEdit: () => void;
 }
@@ -33,13 +34,15 @@ export function RowMenuProvider({ children }: { children: ReactNode }) {
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [editingLink, setEditingLink] = useState<LinkJson | null>(null);
 
+  const [editingFocus, setEditingFocus] = useState<'title' | 'note' | 'tags'>('title');
   const toggleMenu = useCallback((id: string) => {
     setOpenMenuId((current) => (current === id ? null : id));
   }, []);
 
   const closeMenu = useCallback(() => setOpenMenuId(null), []);
 
-  const openEdit = useCallback((link: LinkJson) => {
+  const openEdit = useCallback((link: LinkJson, focus: 'title' | 'note' | 'tags' = 'title') => {
+    setEditingFocus(focus);
     setOpenMenuId(null);
     setEditingLink(link);
   }, []);
@@ -47,8 +50,8 @@ export function RowMenuProvider({ children }: { children: ReactNode }) {
   const closeEdit = useCallback(() => setEditingLink(null), []);
 
   const value = useMemo(
-    () => ({ openMenuId, toggleMenu, closeMenu, editingLink, openEdit, closeEdit }),
-    [openMenuId, toggleMenu, closeMenu, editingLink, openEdit, closeEdit],
+    () => ({ openMenuId, toggleMenu, closeMenu, editingLink, editingFocus, openEdit, closeEdit }),
+    [openMenuId, toggleMenu, closeMenu, editingLink, editingFocus, openEdit, closeEdit],
   );
 
   return <RowMenuContext.Provider value={value}>{children}</RowMenuContext.Provider>;
