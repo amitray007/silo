@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useState, useSyncExternalStore } from 'react';
 import { apiGet, apiUrl } from '../../api/client';
 import { queryKeys, useFrameHint } from '../../api/hooks';
 import type { FrameHint, LinkJson } from '../../api/types';
@@ -15,43 +15,13 @@ function subscribeTheme(changed: () => void) {
   return () => observer.disconnect();
 }
 
-type FrameMode = 'direct' | 'view';
-function originalMode(
-  embed: unknown,
-  hint: FrameHint | undefined,
-  selected: FrameMode | undefined,
-) {
-  const canView =
-    hint?.mode === 'view' ||
-    (hint?.mode === 'direct' &&
-      /^(?:text\/html|application\/xhtml\+xml)(?:;|$)/i.test(hint.contentType ?? 'text/html'));
-  const allowed =
-    (selected === 'direct' && hint?.mode === 'direct') || (selected === 'view' && canView);
-  const mode = embed
-    ? ('player' as const)
-    : hint?.mode === 'direct' || hint?.mode === 'view'
-      ? allowed
-        ? selected
-        : hint.mode
-      : ('card' as const);
-  return { canView, mode };
-}
 export function useOriginal(link: LinkJson | undefined, active: boolean) {
   const theme = useSyncExternalStore(subscribeTheme, readTheme);
   const client = useQueryClient();
   const embed = link ? embedFor(link.url, link.sourceData, theme) : undefined;
   const id = link?.id ?? '';
   const hint = useFrameHint(id, active && !embed && Boolean(link && originalUrl(link.url)));
-  const [choice, setChoice] = useState<{ id: string; mode: FrameMode }>();
   const [reload, setReload] = useState(0);
-  useEffect(() => {
-    if (!hint.data) return;
-    setChoice((current) =>
-      current?.id === id && originalMode(undefined, hint.data, current.mode).mode !== current.mode
-        ? undefined
-        : current,
-    );
-  }, [hint.data, id]);
   const refresh = useMutation({
     mutationFn: () => apiGet<FrameHint>(`/api/links/${encodeURIComponent(id)}/frame?fresh=1`),
     onSuccess: (data) => {
@@ -59,11 +29,12 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
       setReload((value) => value + 1);
     },
   });
-  const { canView, mode } = originalMode(
-    embed,
-    hint.data,
-    choice?.id === id ? choice.mode : undefined,
-  );
+  const hinted = hint.data?.mode;
+  const mode = embed
+    ? ('player' as const)
+    : hinted === 'direct' || hinted === 'view'
+      ? hinted
+      : ('card' as const);
   const viewCheck = useQuery({
     queryKey: ['page-view-ready', id, reload],
     queryFn: async ({ signal }) =>
@@ -75,24 +46,20 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
           signal,
         })
       ).ok,
-    enabled: active && mode === 'view' && canView,
+    enabled: active && mode === 'view',
     retry: false,
     staleTime: 0,
     gcTime: 0,
   });
   const preparing =
     hint.isFetching || refresh.isPending || (mode === 'view' && viewCheck.isFetching);
-  const unavailable =
-    mode === 'view' && (!canView || (!viewCheck.isFetching && viewCheck.data !== true));
+  const unavailable = mode === 'view' && !viewCheck.isFetching && viewCheck.data !== true;
   return {
     embed,
     mode: unavailable ? ('card' as const) : mode,
     preparing,
-    canView,
-    canDirect: hint.data?.mode === 'direct',
     reload,
     refresh,
-    switchMode: (mode: FrameMode) => setChoice({ id, mode }),
   };
 }
 export type OriginalState = ReturnType<typeof useOriginal>;

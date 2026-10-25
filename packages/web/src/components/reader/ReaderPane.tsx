@@ -8,7 +8,6 @@ import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
-import { OriginalControls } from './OriginalControls';
 import { ReaderContent } from './ReaderContent';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
@@ -46,18 +45,33 @@ function IconButton({
   );
 }
 
+function RefreshButton({ original }: { original: OriginalState | undefined }) {
+  if (!original || original.mode === 'player') return null;
+  return (
+    <IconButton
+      name="refresh"
+      label="Refresh Original"
+      onClick={() => original.refresh.mutate()}
+      disabled={original.preparing}
+    />
+  );
+}
+
 function ReaderActions({
   actions,
   disabled,
   trashed,
+  original,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
+  original: OriginalState | undefined;
 }) {
   return (
     <div className="silo-reader-tools">
       <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
+      <RefreshButton original={original} />
       {!trashed && (
         <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={disabled} />
       )}
@@ -81,13 +95,11 @@ function ReaderMore({
   actions,
   disabled,
   trashed,
-  original,
   link,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
-  original: OriginalState | undefined;
   link: LinkJson | undefined;
 }) {
   const [open, setOpen] = useState(false);
@@ -144,7 +156,6 @@ function ReaderMore({
               </MenuAction>
             </>
           )}
-          {original && <OriginalControls state={original} link={link} />}
         </MenuSurface>
       )}
     </div>
@@ -246,6 +257,7 @@ export function ReaderPane({
   loading: boolean;
 }) {
   const original = useOriginal(link, tab === 'original');
+  const shownOriginal = tab === 'original' && link ? original : undefined;
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -327,14 +339,14 @@ export function ReaderPane({
               </button>
             ))}
           </div>
-          {tab === 'original' && link && (
-            <div className="silo-reader-desktop">
-              <OriginalControls state={original} link={link} />
-            </div>
-          )}
         </div>
         <div className="silo-reader-desktop">
-          <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
+          <ReaderActions
+            actions={actions}
+            disabled={!link}
+            trashed={trashed}
+            original={shownOriginal}
+          />
         </div>
         <ReaderMore
           key={selectedId}
@@ -342,12 +354,16 @@ export function ReaderPane({
           disabled={!link}
           trashed={trashed}
           link={link}
-          original={tab === 'original' ? original : undefined}
         />
       </div>
       {actions.feedback && (
         <div className="silo-toast" role="status">
           {actions.feedback}
+        </div>
+      )}
+      {shownOriginal?.refresh.isError && (
+        <div className="silo-toast" role="alert">
+          Refresh failed
         </div>
       )}
       <div
@@ -364,6 +380,7 @@ export function ReaderPane({
         <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
         <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
         <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={!link} />
+        <RefreshButton original={shownOriginal} />
         {!trashed && (
           <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={!link} />
         )}

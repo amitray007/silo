@@ -876,6 +876,12 @@ describe('review regressions', () => {
       expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(mode),
     );
     expect(reader().getByRole('button', { name: 'Open original' })).toBeDefined();
+    expect(reader().queryByLabelText(/^Original mode/)).toBeNull();
+    const groups = container.querySelectorAll('.silo-reader-desktop .silo-reader-tools');
+    const tools = [...(groups[groups.length - 1]?.children ?? [])];
+    expect(tools.map((tool) => tool.getAttribute('aria-label')).slice(0, 2)).toEqual(
+      mode === 'player' ? ['Copy link', 'Edit'] : ['Copy link', 'Refresh Original'],
+    );
     if (mode === 'direct') {
       expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
       if (url.includes('/pdf/'))

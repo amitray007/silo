@@ -1044,8 +1044,7 @@ div.silo-reader-notecard {
   display: flex;
   flex-direction: column;
 }
-.silo-reader-viewtools,
-.silo-original-controls {
+.silo-reader-viewtools {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1053,59 +1052,6 @@ div.silo-reader-notecard {
 }
 .silo-original {
   flex: 1;
-}
-.silo-original-controls {
-  font-size: 12px;
-}
-.silo-original-mode {
-  position: relative;
-}
-.silo-original-mode summary {
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 6px;
-  list-style: none;
-  white-space: nowrap;
-  color: var(--mut);
-}
-.silo-original-mode summary::-webkit-details-marker {
-  display: none;
-}
-.silo-original-mode-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
-  z-index: 10;
-  min-width: 140px;
-  padding: 4px;
-  background: var(--bg2);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  box-shadow: var(--elev-2);
-}
-.silo-original-mode-menu span {
-  display: block;
-}
-.silo-original-mode-menu button {
-  width: 100%;
-  padding: 8px;
-  text-align: left;
-  background: none;
-  border: 0;
-  border-radius: 4px;
-  color: var(--ink);
-  font: inherit;
-  cursor: pointer;
-}
-.silo-original-mode-menu button:disabled {
-  color: var(--ghost);
-  cursor: default;
-}
-.silo-original-mode-menu button[aria-pressed="true"] {
-  background: var(--hov);
-}
-.silo-reader-more-menu .silo-original-controls {
-  margin-bottom: 8px;
 }
 .silo-reader-loading {
   padding: 24px;

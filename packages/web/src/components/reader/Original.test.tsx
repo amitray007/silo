@@ -1,21 +1,22 @@
 /// <reference types="node" />
 import { createServer } from 'node:http';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setApiBaseUrl } from '../../api/client';
 import type { LinkJson } from '../../api/types';
 import { makeLink } from '../../test/fixtures';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Original } from './Original';
-import { OriginalControls } from './OriginalControls';
 import { useOriginal } from './useOriginal';
 
 function Standalone({ link }: { link: LinkJson }) {
   const state = useOriginal(link, true);
   return (
     <>
-      <OriginalControls state={state} />
+      <button type="button" onClick={() => state.refresh.mutate()}>
+        Refresh Original
+      </button>
       <Original link={link} state={state} />
     </>
   );
@@ -74,11 +75,11 @@ describe('Original mode order', () => {
       '/api/links/link-id/frame',
       expect.objectContaining({ credentials: 'include', signal: expect.any(AbortSignal) }),
     );
-    expect(screen.getByLabelText('Original mode: Live site')).toBeDefined();
+    expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe('direct');
     expect(screen.queryByRole('button', { name: 'Show silo view' })).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
   });
-  it('uses silo view for blocked framing and allows an explicit live-site attempt', async () => {
+  it('uses silo view for blocked framing', async () => {
     const { container, fetch } = show('view');
     await waitFor(() => expect(screen.getByTitle('Silo view')).toBeDefined());
     expect(container.querySelector('iframe')?.getAttribute('sandbox')).toBe(
@@ -93,18 +94,13 @@ describe('Original mode order', () => {
         signal: expect.any(AbortSignal),
       }),
     );
-    fireEvent.click(screen.getByLabelText('Original mode: Silo view'));
-    expect(screen.getByRole<HTMLButtonElement>('menuitem', { name: 'Live site' }).disabled).toBe(
-      true,
-    );
-    expect(screen.getByRole('menuitem', { name: 'Live site' }).title).toContain('blocks framing');
   });
   it.each(['none', 'error'] as const)('uses a card for %s with an escape link', async (mode) => {
     const { container } = show(mode);
     await waitFor(() => expect(screen.queryByLabelText('Preparing page...')).toBeNull());
     expect(container.querySelector('iframe')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Article' })).toBeDefined();
-    expect(screen.getByLabelText('Original mode: Link card')).toBeDefined();
+    expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe('card');
     expect(container.querySelector('.silo-original-bar')).toBeNull();
   });
   it('shows the card when /frame succeeds but the real /view HTTP request returns 503', async () => {
@@ -142,7 +138,9 @@ describe('Original mode order', () => {
       await waitFor(() => expect(screen.queryByLabelText('Preparing page...')).toBeNull());
       expect(requests).toContain('GET /api/links/link-id/frame');
       expect(view.container.querySelector('iframe')).toBeNull();
-      expect(screen.getByLabelText('Original mode: Link card')).toBeDefined();
+      expect(view.container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(
+        'card',
+      );
     } finally {
       failView?.();
       view.unmount();
@@ -193,11 +191,9 @@ describe('Original mode order', () => {
     view.unmount();
     expect(signal?.aborted).toBe(true);
   });
-  it('drops a manual direct choice when Refresh now requires silo view', async () => {
+  it('follows a Refresh result that now requires silo view', async () => {
     const { container, fetch } = show('direct', link.url, 'text/html');
     await screen.findByTitle('Original page');
-    fireEvent.click(screen.getByLabelText('Original mode: Live site'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Live site' }));
     fetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ mode: 'view', contentType: 'text/html' })),
     );
@@ -206,40 +202,5 @@ describe('Original mode order', () => {
     expect(container.querySelector('iframe')?.getAttribute('src')).toContain(
       '/api/links/link-id/view',
     );
-  });
-  it('keeps an allowed manual view choice after Refresh', async () => {
-    const { container } = show('direct', link.url, 'text/html');
-    await screen.findByTitle('Original page');
-    fireEvent.click(screen.getByLabelText('Original mode: Live site'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Silo view' }));
-    await screen.findByTitle('Silo view');
-    const previous = container.querySelector('iframe');
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Original' }));
-    await waitFor(() => expect(container.querySelector('iframe')).not.toBe(previous));
-    await screen.findByTitle('Silo view');
-  });
-  it('forgets an invalid manual view choice instead of restoring it on a later result', async () => {
-    const { container, fetch } = show('direct', link.url, 'text/html');
-    await screen.findByTitle('Original page');
-    fireEvent.click(screen.getByLabelText('Original mode: Live site'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Silo view' }));
-    await screen.findByTitle('Silo view');
-    fetch.mockResolvedValueOnce(
-      new Response(JSON.stringify({ mode: 'direct', contentType: 'application/pdf' })),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Original' }));
-    await screen.findByTitle('Original page');
-    const previous = container.querySelector('iframe');
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Original' }));
-    await waitFor(() => expect(container.querySelector('iframe')).not.toBe(previous));
-    await screen.findByTitle('Original page');
-  });
-  it('revalidates a manual choice on ordinary frame-query results too', async () => {
-    const { client } = show('direct', link.url, 'text/html');
-    await screen.findByTitle('Original page');
-    fireEvent.click(screen.getByLabelText('Original mode: Live site'));
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Live site' }));
-    act(() => client.setQueryData(['frame', link.id], { mode: 'view', contentType: 'text/html' }));
-    await screen.findByTitle('Silo view');
   });
 });
