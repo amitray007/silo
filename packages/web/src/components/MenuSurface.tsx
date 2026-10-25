@@ -46,9 +46,13 @@ export function MenuSurface({
   onMouseEnter,
   onMouseLeave,
   sheet = true,
+  role = 'menu',
+  label = 'Link actions',
 }: {
   children: ReactNode;
   sheet?: boolean;
+  role?: 'menu' | 'dialog';
+  label?: string;
   className?: string;
   onClose: () => void;
   link?: LinkJson | undefined;
@@ -66,9 +70,10 @@ export function MenuSurface({
     const boundary = panel?.parentElement?.classList.contains('silo-menu-presence')
       ? panel.parentElement.parentElement
       : panel?.parentElement;
-    panel
-      ?.querySelector<HTMLElement>('input, button:not(:disabled), a[href]')
-      ?.focus({ preventScroll: true });
+    (
+      panel?.querySelector<HTMLElement>('[role="radio"][aria-checked="true"]') ??
+      panel?.querySelector<HTMLElement>('input, button:not(:disabled), a[href]')
+    )?.focus({ preventScroll: true });
     const pointer = (event: MouseEvent) => {
       if (
         !(event.target instanceof Element && event.target.closest('[data-reader-menu]')) &&
@@ -100,10 +105,11 @@ export function MenuSurface({
     };
   }, []);
   const panel = (
+    // biome-ignore lint/a11y/useAriaPropsSupportedByRole: both supported roles, menu and dialog, accept an accessible label.
     <div
       className={`silo-popover silo-menu-surface ${className}`}
-      role="menu"
-      aria-label="Link actions"
+      role={role}
+      aria-label={label}
       ref={ref}
       data-reader-menu={closing ? undefined : true}
       data-closing={closing}

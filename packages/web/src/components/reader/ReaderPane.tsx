@@ -3,6 +3,7 @@ import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { deriveTitleFromUrl } from '../../lib/url';
+import { useReaderWidth } from '../../lib/useReaderWidth';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
@@ -14,6 +15,7 @@ import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderMeta } from './ReaderMeta';
 import { ReaderPlayer } from './ReaderPlayer';
 import { ReaderSegment } from './ReaderSegment';
+import { ReaderSettings } from './ReaderSettings';
 import { type OriginalState, useOriginal } from './useOriginal';
 import type { useReaderActions } from './useReaderActions';
 import { seekChapter, YouTubeStats } from './YouTubeDetails';
@@ -196,12 +198,17 @@ function ReaderArticle({
   purgeWindowDays: number;
   loading: boolean;
 }) {
+  const [width] = useReaderWidth();
   const embed = embedFor(link.url, link.sourceData);
   const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider) ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: delegated native anchor clicks also fire on Enter.
-    <article className="silo-reader" onClick={(event) => seekChapter(event, video)}>
+    <article
+      className="silo-reader"
+      data-width={width}
+      onClick={(event) => seekChapter(event, video)}
+    >
       {trashed && (
         <div className="silo-reader-trashnote">
           <ReaderIcon name="trash" />
@@ -328,6 +335,7 @@ export function ReaderPane({
           <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
         </div>
         <div className="silo-reader-right">
+          {tab === 'reader' && link && <ReaderSettings key={`settings-${selectedId}`} />}
           {!phone && (
             <div className="silo-reader-inline-actions">
               <ReaderActions

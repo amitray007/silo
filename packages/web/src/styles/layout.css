@@ -386,6 +386,15 @@
   margin: 0 auto;
   padding: 48px 32px 128px;
 }
+.silo-reader[data-width="narrow"] {
+  max-width: 700px;
+}
+.silo-reader[data-width="medium"] {
+  max-width: 860px;
+}
+.silo-reader[data-width="wide"] {
+  max-width: 1100px;
+}
 .silo-reader > h2 {
   font-size: 30px;
   line-height: 1.25;
@@ -1732,4 +1741,33 @@ div.silo-reader-notecard {
     max-height: calc(100dvh - 140px);
     overflow-y: auto;
   }
+}
+
+.silo-reader-settings.silo-menu-surface {
+  right: 0;
+  width: max-content;
+  padding: 12px;
+}
+.silo-reader-settings .silo-menu-grab {
+  display: none;
+}
+.silo-reader-settings h3 {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fnt);
+}
+.silo-reader-settings button[aria-checked="true"] {
+  background: var(--segment-on);
+  box-shadow: var(--segment-shadow);
+  color: var(--ink);
+}
+.silo-reader-settings button[aria-checked="true"]:hover {
+  background: var(--segment-on);
+  color: var(--ink);
+}
+
+.silo-reader > .silo-player-surface {
+  max-width: 636px;
+  margin-inline: auto;
 }

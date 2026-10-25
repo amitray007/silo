@@ -1,4 +1,5 @@
 const paths = {
+  textSize: 'm3 18 5-12 5 12M5 14h6M20 18v-7M20 12c-4-3-7 1-5 4 1 2 4 2 5 0',
   note: 'M5 3h14v13l-5 5H5zM14 16h5M14 16v5M8 8h8M8 12h6',
   refresh: 'M20 9a8 8 0 1 0 0 6M20 3v6h-6',
   close: 'M6 6l12 12M18 6 6 18',

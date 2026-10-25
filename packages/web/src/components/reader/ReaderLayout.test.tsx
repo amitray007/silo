@@ -976,6 +976,7 @@ describe('responsive reader header', () => {
     expect(reader().queryByRole('button', { name: 'Copy link' })).toBeNull();
     expect(reader().queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(container.querySelector('.silo-reader-rbar')).toBeNull();
+    expect(reader().getByRole('button', { name: 'Reader settings' })).toBeDefined();
     fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     await screen.findByTitle('Live page');
     fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
@@ -1018,4 +1019,46 @@ it('opens phone tag management from the collection menu and restores focus on cl
     'false',
   );
   expect(document.activeElement).toBe(collection);
+});
+
+it('opens reader settings, persists widths, handles arrow keys, and returns focus on Escape', async () => {
+  const { container } = renderReader();
+  await screen.findByText('First link');
+  expect(reader().queryByRole('button', { name: 'Reader settings' })).toBeNull();
+  await selectFirst();
+  const article = container.querySelector('article.silo-reader');
+  expect(article?.getAttribute('data-width')).toBe('medium');
+  const trigger = reader().getByRole('button', { name: 'Reader settings' });
+  trigger.focus();
+  fireEvent.click(trigger);
+  expect(screen.getByRole('dialog', { name: 'Reader settings' })).toBeDefined();
+  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Medium' }));
+  for (const [label, value] of [
+    ['Narrow', 'narrow'],
+    ['Medium', 'medium'],
+    ['Wide', 'wide'],
+  ] as const) {
+    fireEvent.click(screen.getByRole('radio', { name: label }));
+    expect(article?.getAttribute('data-width')).toBe(value);
+    expect(localStorage.getItem('silo.readerWidth')).toBe(value);
+    expect(screen.getByRole('radiogroup', { name: 'Width' })).toBeDefined();
+  }
+  fireEvent.keyDown(screen.getByRole('radio', { name: 'Wide' }), { key: 'ArrowRight' });
+  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Narrow' }));
+  expect(article?.getAttribute('data-width')).toBe('narrow');
+  fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' });
+  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Wide' }));
+  expect(article?.getAttribute('data-width')).toBe('wide');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  expect(screen.queryByRole('dialog', { name: 'Reader settings' })).toBeNull();
+  expect(article).toBe(container.querySelector('article.silo-reader'));
+  fireEvent.click(trigger);
+  fireEvent.mouseDown(document.body);
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Reader settings' })).toBeNull());
+  fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+  await waitFor(() =>
+    expect(reader().queryByRole('button', { name: 'Reader settings' })).toBeNull(),
+  );
+  expect(container.querySelector('.silo-original')?.hasAttribute('data-width')).toBe(false);
 });
