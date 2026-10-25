@@ -33,6 +33,7 @@
 
 import { lookup as dnsLookup } from 'node:dns';
 import { Agent, type Response as UndiciResponse, fetch as undiciFetch } from 'undici';
+import type { BodyByteBudget } from './body-budget.js';
 import { classifyIp } from './ip-rules.js';
 
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:']);
@@ -124,6 +125,8 @@ export interface SafeFetchOptions {
   signal?: AbortSignal;
   maxRedirects?: number;
   maxBodyBytes?: number;
+  /** Shared streaming cap for a group of related responses. */
+  bodyBudget?: BodyByteBudget;
   timeoutMs?: number;
   /** TEST-ONLY SEAM — see {@link Resolver}. Defaults to real DNS. */
   resolver?: Resolver;
@@ -278,6 +281,7 @@ type HopOutcome = { kind: 'redirect'; nextUrl: string } | { kind: 'done'; result
 interface HopContext {
   resolver: Resolver;
   maxBodyBytes: number;
+  bodyBudget: BodyByteBudget | undefined;
   controller: AbortController;
   isLastHop: boolean;
   allowLoopbackForTests: boolean;
@@ -363,7 +367,7 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
   }
 
   const contentType = response.headers.get('content-type') ?? undefined;
-  const body = await readBodyWithCap(response, ctx.maxBodyBytes, ctx.controller);
+  const body = await readBodyWithCap(response, ctx.maxBodyBytes, ctx.controller, ctx.bodyBudget);
   if (!body.ok) {
     return { kind: 'done', result: body };
   }
@@ -458,7 +462,8 @@ export async function safeFetch(
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const onAbort = () => controller.abort();
   options.signal?.addEventListener('abort', onAbort, { once: true });
-  if (options.signal?.aborted) controller.abort();
+  options.bodyBudget?.signal.addEventListener('abort', onAbort, { once: true });
+  if (options.signal?.aborted || options.bodyBudget?.signal.aborted) controller.abort();
 
   try {
     let currentUrl = rawUrl;
@@ -467,6 +472,7 @@ export async function safeFetch(
       const outcome = await performHop(currentUrl, {
         resolver,
         maxBodyBytes,
+        bodyBudget: options.bodyBudget,
         controller,
         isLastHop: hop === maxRedirects,
         allowLoopbackForTests,
@@ -481,6 +487,7 @@ export async function safeFetch(
   } finally {
     clearTimeout(timer);
     options.signal?.removeEventListener('abort', onAbort);
+    options.bodyBudget?.signal.removeEventListener('abort', onAbort);
   }
 }
 
@@ -493,18 +500,26 @@ async function readBodyWithCap(
   response: UndiciResponse,
   maxBodyBytes: number,
   controller: AbortController,
+  budget?: BodyByteBudget,
 ): Promise<{ ok: true; bytes: Uint8Array } | { ok: false; reason: SafeFetchFailureReason }> {
   if (!response.body) {
     return { ok: true, bytes: new Uint8Array(0) };
   }
 
-  const reader = response.body.getReader();
+  const reader = budget ? response.body.getReader({ mode: 'byob' }) : response.body.getReader();
   const chunks: Uint8Array[] = [];
   let total = 0;
 
   try {
     for (;;) {
-      const { done, value } = await reader.read();
+      const result = budget
+        ? await readReserved(reader as ReadableStreamBYOBReader, budget)
+        : await (reader as ReadableStreamDefaultReader<Uint8Array>).read();
+      if (!result) {
+        await reader.cancel();
+        return { ok: false, reason: 'body-too-large' };
+      }
+      const { done, value } = result;
       if (done) {
         break;
       }
@@ -529,6 +544,20 @@ async function readBodyWithCap(
     offset += chunk.byteLength;
   }
   return { ok: true, bytes: combined };
+}
+
+/** BYOB prevents a single arbitrary stream chunk from overshooting the shared cap. */
+async function readReserved(reader: ReadableStreamBYOBReader, budget: BodyByteBudget) {
+  const reserved = budget.reserve(64 * 1024);
+  if (!reserved) return undefined;
+  let read = 0;
+  try {
+    const result = await reader.read(new Uint8Array(reserved));
+    read = result.value?.byteLength ?? 0;
+    return result;
+  } finally {
+    budget.settle(reserved, read);
+  }
 }
 
 /**

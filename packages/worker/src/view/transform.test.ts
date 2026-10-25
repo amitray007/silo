@@ -1,6 +1,6 @@
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
-import { transformPage } from './transform.js';
+import { resolveCss, transformPage } from './transform.js';
 
 const base = 'https://publisher.test/articles/story.html';
 const payloads = [
@@ -105,5 +105,55 @@ describe('final-DOM page sanitizer', () => {
     expect(output).toContain('src="data:image/png;base64,AAAA"');
     expect(output).not.toMatch(/href="data:|src="data:image\/svg|javascript:|data:text/);
     expect(output).toContain('https://publisher.test/ok.jpg 2x');
+  });
+});
+
+describe('CSS resource token decoding', () => {
+  it.each([
+    String.raw`u\72l(../image.png)`,
+    String.raw`\75\72\6c(../image\2e png)`,
+    `URL(/**/'../image.png'/**/)`,
+    `url(/**/"../image.png"/**/)`,
+    `url(/**/../image.png/**/)`,
+    String.raw`url(../im\61ge.png)`,
+  ])('rewrites %s in sheets and inline CSS', (value) => {
+    expect(resolveCss(`.x{background:${value}}`, base)).toContain(
+      'url("https://publisher.test/image.png")',
+    );
+    const output = transformPage(
+      `<style>.x{background:${value}}</style><p style='background:${value.replaceAll("'", '&#39;')}'>x</p>`,
+      base,
+    );
+    const dom = new JSDOM(output);
+    try {
+      expect(dom.window.document.querySelector('style')?.textContent).toContain(
+        'https://publisher.test/image.png',
+      );
+      expect(dom.window.document.querySelector('p')?.getAttribute('style')).toContain(
+        'https://publisher.test/image.png',
+      );
+    } finally {
+      dom.window.close();
+    }
+  });
+  it.each([
+    String.raw`u\72l("jav\61script:evil")`,
+    `url(/**/vbscript:evil/**/)`,
+    String.raw`u\72l('java\000009script:evil')`,
+    `url('data:text/html,evil')`,
+    `url('file:///evil')`,
+  ])('strips decoded dangerous URL %s', (value) => {
+    const output = resolveCss(`p{color:red;background:${value};color:blue}`, base);
+    expect(output).not.toContain('evil');
+    expect(output).toContain('color:red');
+    expect(output).toContain('color:blue');
+  });
+  it('keeps punctuation and literal URL syntax inside quoted strings inert', () => {
+    const output = resolveCss(
+      String.raw`p{content:'url(../literal.png); @import "fake.css"';background:url('../a\"b.png')}`,
+      base,
+    );
+    expect(output).toContain(`content:'url(../literal.png); @import "fake.css"'`);
+    expect(output).toContain('https://publisher.test/a%22b.png');
   });
 });

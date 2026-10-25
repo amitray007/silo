@@ -51,7 +51,7 @@ describe('bounded server-side stylesheets', () => {
       ),
     ).toContain('<link');
   });
-  it('caps sheets including imports, total accepted bytes, and concurrency', async () => {
+  it('caps sheets including imports and concurrency', async () => {
     let active = 0;
     let peak = 0;
     const fetch = vi.fn(async (target: string) => {
@@ -60,7 +60,7 @@ describe('bounded server-side stylesheets', () => {
       active--;
       return {
         ok: true as const,
-        html: 'a'.repeat(1024 * 1024),
+        html: '.a{color:red}',
         contentType: 'text/css',
         finalUrl: target,
         status: 200,
@@ -73,8 +73,42 @@ describe('bounded server-side stylesheets', () => {
     );
     expect(fetch.mock.calls.length).toBeLessThanOrEqual(15);
     expect(peak).toBeLessThanOrEqual(3);
-    expect((output.match(/<style/g) ?? []).length).toBe(3);
+    expect((output.match(/<style/g) ?? []).length).toBe(15);
     expect(output).toContain('<link');
+  });
+
+  it.each([
+    String.raw`@import u\72l("https://x/{a}.css");`,
+    String.raw`@im\70ort u\000072l('next.css');`,
+    String.raw`@\69mport URL(/**/ "next.css" /**/);`,
+    `@import url(/**/next.css/**/);`,
+    String.raw`@import 'next\2e css';`,
+    `@import "next.css" screen and (width > 1px);`,
+    '@import url("unterminated.css")',
+    '@import "bad\n@import "next.css";',
+  ])('removes all imported-sheet imports: %s', async (nested) => {
+    const fetch = fetcher({
+      'https://site.test/a.css': '@import "b.css"; .a{color:red}',
+      'https://site.test/b.css': `${nested} .b{color:blue}`,
+    });
+    const output = await inlinePageStyles('<link rel="stylesheet" href="/a.css">', url, fetch);
+    expect(output).not.toMatch(/@import|next\.css|https:\/\/x/);
+    expect(output).toContain('.a{color:red}');
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it.each([
+    String.raw`@import u\72l(/**/"css/b\2e css"/**/);`,
+    String.raw`@im\70ort url(/**/css/b.css/**/);`,
+    `@import 'css/b.css';`,
+  ])('fetches decoded top-level import targets: %s', async (rule) => {
+    const fetch = fetcher({
+      'https://site.test/a.css': `${rule} .a{color:red}`,
+      'https://site.test/css/b.css': String.raw`.b{background:u\72l(../image\2e png)}`,
+    });
+    const output = await inlinePageStyles('<link rel="stylesheet" href="/a.css">', url, fetch);
+    expect(output).toContain('https://site.test/image.png');
+    expect(output).not.toContain('@import');
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
   it('strips executable declarations, including obfuscation', () => {
     const css = resolveCss(

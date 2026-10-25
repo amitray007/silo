@@ -1,5 +1,6 @@
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { type CssToken, cssImports, cssTokens } from './css-tokens.ts';
 
 const TAGS = [
   'html',
@@ -136,46 +137,47 @@ function resolveUrl(value: string, base: string, image = false): string | undefi
   }
 }
 
-function decodeCssTokens(css: string): string {
-  return css
-    .replace(/\\(?:\r\n|[\n\r\f])/g, '')
-    .replace(
-      /\\([a-f\d]{1,6})\s?|\\(.)/gi,
-      (_all, hex: string | undefined, char: string | undefined) =>
-        hex ? String.fromCodePoint(Math.min(Number.parseInt(hex, 16), 0x10ffff)) : (char ?? ''),
-    );
+/** Resolve decoded resource URLs and remove legacy executable CSS. */
+export function resolveCss(css: string, base: string): string {
+  const tokens = cssTokens(css);
+  const importStrings = new Set(
+    cssImports(tokens).map((rule) => {
+      let index = rule.start + 1;
+      while (tokens[index]?.kind === 'space') index++;
+      return index;
+    }),
+  );
+  let output = '';
+  let raw = '';
+  let decoded = '';
+  for (const [index, token] of tokens.entries()) {
+    if (token.kind === 'symbol' && /[;{}]/.test(token.value)) {
+      if (!dangerousCss(decoded)) output += raw;
+      output += token.raw;
+      raw = '';
+      decoded = '';
+      continue;
+    }
+    decoded += token.value;
+    raw += resolveCssToken(token, base, importStrings.has(index));
+  }
+  if (!dangerousCss(decoded)) output += raw;
+  return output.replaceAll('<', '\\3c ');
 }
 
-/** Resolve resource URLs and remove legacy executable CSS, including escaped tokens. */
-export function resolveCss(css: string, base: string): string {
-  const plain = css
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(
-      /@((?:\\[a-f\d]{1,6}\s?|\\.|[\w-])+)/gi,
-      (_all, name: string) => `@${decodeCssTokens(name)}`,
-    );
-  const dangerous = /expression\s*\(|(?:javascript|vbscript)\s*:|(?:behavior|-moz-binding)\s*:/i;
-  const cleaned = plain
-    .split(/([;{}])/)
-    .map((part) => {
-      const decoded = decodeCssTokens(part);
-      // biome-ignore lint/suspicious/noControlCharactersInRegex: CSS URL schemes ignore ASCII controls and whitespace.
-      return dangerous.test(decoded.replace(/[\u0000-\u0020\u007f]/g, '')) ? '' : part;
-    })
-    .join('');
-  return cleaned
-    .replace(
-      /url\(\s*(?:"([^"\n]*)"|'([^'\n]*)'|([^)'"\s]*))\s*\)/gi,
-      (_all, double: string, single: string, bare: string) => {
-        const url = resolveUrl(double ?? single ?? bare, base);
-        return url ? `url("${url.replaceAll('"', '%22')}")` : 'url("")';
-      },
-    )
-    .replace(/@import\s+(["'])(.*?)\1/gi, (_all, _quote: string, raw: string) => {
-      const url = resolveUrl(raw, base);
-      return url ? `@import "${url.replaceAll('"', '%22')}"` : '@import ""';
-    })
-    .replaceAll('<', '\\3c ');
+function dangerousCss(decoded: string): boolean {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: CSS URL schemes ignore ASCII controls and whitespace.
+  const compact = decoded.replace(/[\u0000-\u0020\u007f]/g, '');
+  return /expression\(|(?:javascript|vbscript):|(?:behavior|-moz-binding):/i.test(compact);
+}
+
+function resolveCssToken(token: CssToken, base: string, importTarget: boolean): string {
+  if (token.kind === 'url' || (token.kind === 'string' && importTarget)) {
+    const url = resolveUrl(token.value, base) ?? '';
+    const quoted = `"${url.replaceAll('\\', '%5C').replaceAll('"', '%22')}"`;
+    return token.kind === 'url' ? `url(${quoted})` : quoted;
+  }
+  return token.kind === 'at' ? `@${token.value}` : token.raw;
 }
 
 function resolveSrcset(raw: string, base: string): string {
