@@ -5,6 +5,7 @@ import { relativeTimeFromNow } from '../../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../../lib/url';
 import { Chip } from '../Chip';
 import { MenuAction, MenuSurface } from '../MenuSurface';
+import { LinkMenuActions } from '../RowMenu';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
 import { OriginalControls } from './OriginalControls';
@@ -105,45 +106,45 @@ function ReaderMore({
       </button>
       {open && (
         <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
-          {original && <OriginalControls state={original} link={link} />}
-          <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
-            Copy link
-          </MenuAction>
-          {!trashed && (
-            <MenuAction
-              icon={<ReaderIcon name="edit" />}
-              shortcut="e"
-              onClick={() => {
-                setOpen(false);
-                actions.edit();
-              }}
-            >
-              Edit
-            </MenuAction>
+          {!trashed && link ? (
+            <LinkMenuActions
+              link={link}
+              onClose={() => setOpen(false)}
+              onTrash={actions.trash}
+              onCopy={actions.copy}
+              busy={actions.busy}
+            />
+          ) : (
+            <>
+              <MenuAction
+                icon={<ReaderIcon name="external" />}
+                shortcut="o"
+                onClick={() => {
+                  setOpen(false);
+                  actions.open();
+                }}
+              >
+                Open original
+              </MenuAction>
+              <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
+                Copy link
+              </MenuAction>
+              <div className="silo-menu-separator" />
+              <MenuAction
+                icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
+                danger={!trashed}
+                disabled={actions.busy}
+                onClick={() => {
+                  setOpen(false);
+                  if (trashed) actions.restore();
+                  else actions.trash();
+                }}
+              >
+                {trashed ? 'Restore' : 'Move to trash'}
+              </MenuAction>
+            </>
           )}
-          <MenuAction
-            icon={<ReaderIcon name="external" />}
-            shortcut="o"
-            onClick={() => {
-              setOpen(false);
-              actions.open();
-            }}
-          >
-            Open original
-          </MenuAction>
-          <div className="silo-menu-separator" />
-          <MenuAction
-            icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
-            danger={!trashed}
-            disabled={actions.busy}
-            onClick={() => {
-              setOpen(false);
-              if (trashed) actions.restore();
-              else actions.trash();
-            }}
-          >
-            {trashed ? 'Restore' : 'Move to trash'}
-          </MenuAction>
+          {original && <OriginalControls state={original} link={link} />}
         </MenuSurface>
       )}
     </div>

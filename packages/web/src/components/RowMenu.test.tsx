@@ -292,16 +292,25 @@ describe('RowMenu', () => {
 
   it('navigates action rows with arrows and puts the danger action last', () => {
     renderMenu();
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Open originalo',
+      'Copy linkc',
+      'Edite',
+      '#Tags1›',
+      '✓Select',
+      'Move to trash⌫',
+    ]);
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Open original/ }));
     const copy = screen.getByRole('menuitem', { name: 'Copy link' });
     copy.focus();
     fireEvent.keyDown(copy, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Select item' }));
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Edit' }));
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' });
     const danger = screen.getByRole('menuitem', { name: 'Move to trash' });
     expect(document.activeElement).toBe(danger);
     expect(danger.classList.contains('silo-menu-danger')).toBe(true);
     fireEvent.keyDown(danger, { key: 'Home' });
-    expect(document.activeElement?.textContent).toContain('Tags');
+    expect(document.activeElement?.textContent).toContain('Open original');
   });
 
   it('stops mousedown/click propagation so a click inside the popover never bubbles up (no row navigation)', () => {

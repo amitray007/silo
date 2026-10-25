@@ -8,7 +8,28 @@ import { useLibrarySelection } from './SelectionContext';
 import { TagPicker, useLinkTags } from './TagOptionsList';
 
 export function RowMenu({ link }: { link: LinkJson }) {
-  const { closeMenu, openEdit } = useRowMenu();
+  const { closeMenu } = useRowMenu();
+  return (
+    <MenuSurface className="silo-row-menu" link={link} onClose={closeMenu}>
+      <LinkMenuActions link={link} onClose={closeMenu} />
+    </MenuSurface>
+  );
+}
+
+export function LinkMenuActions({
+  link,
+  onClose: closeMenu,
+  onTrash,
+  onCopy,
+  busy = false,
+}: {
+  link: LinkJson;
+  onClose: () => void;
+  onTrash?: () => void;
+  onCopy?: () => Promise<void>;
+  busy?: boolean;
+}) {
+  const { openEdit } = useRowMenu();
   const selection = useLibrarySelection();
   const [tagsOpen, setTagsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -34,7 +55,37 @@ export function RowMenu({ link }: { link: LinkJson }) {
     tagsTimer.current = setTimeout(() => setTagsOpen(false), 140);
   };
   return (
-    <MenuSurface className="silo-row-menu" link={link} onClose={closeMenu}>
+    <>
+      <MenuAction
+        href={link.url}
+        onClick={closeMenu}
+        icon={<ReaderIcon name="external" />}
+        shortcut="o"
+      >
+        Open original
+      </MenuAction>
+      <MenuAction
+        icon={<ReaderIcon name="copy" />}
+        shortcut="c"
+        onClick={() => {
+          (onCopy ? onCopy() : navigator.clipboard.writeText(link.url)).catch(() => {});
+          setCopied(true);
+          clearTimeout(copyTimer.current);
+          copyTimer.current = setTimeout(() => setCopied(false), 700);
+        }}
+      >
+        {copied ? 'Copied' : 'Copy link'}
+      </MenuAction>
+      <MenuAction
+        icon={<ReaderIcon name="edit" />}
+        shortcut="e"
+        onClick={() => {
+          closeMenu();
+          openEdit(link);
+        }}
+      >
+        Edit
+      </MenuAction>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: hover supplements the native Tags button. */}
       <div
         className="silo-tags-anchor"
@@ -70,36 +121,13 @@ export function RowMenu({ link }: { link: LinkJson }) {
         )}
       </div>
       <MenuAction
-        href={link.url}
-        onClick={closeMenu}
-        icon={<ReaderIcon name="external" />}
-        shortcut="o"
-      >
-        Open original
-      </MenuAction>
-      <MenuAction
-        icon={<ReaderIcon name="copy" />}
-        shortcut="c"
-        onClick={() => {
-          navigator.clipboard.writeText(link.url).catch(() => {});
-          setCopied(true);
-          clearTimeout(copyTimer.current);
-          copyTimer.current = setTimeout(() => setCopied(false), 700);
-        }}
-      >
-        {copied ? 'Copied' : 'Copy link'}
-      </MenuAction>
-      <MenuAction
         icon="✓"
         onClick={() => {
           selection.toggle(link.id);
           closeMenu();
         }}
       >
-        {selection.isSelected(link.id) ? 'Deselect item' : 'Select item'}
-      </MenuAction>
-      <MenuAction icon={<ReaderIcon name="edit" />} shortcut="e" onClick={() => openEdit(link)}>
-        Edit
+        {selection.isSelected(link.id) ? 'Deselect' : 'Select'}
       </MenuAction>
       {link.captureStatus !== 'full' && (
         <MenuAction
@@ -116,14 +144,17 @@ export function RowMenu({ link }: { link: LinkJson }) {
       <MenuAction
         icon={<ReaderIcon name="trash" />}
         danger
+        shortcut="⌫"
+        disabled={busy}
         onClick={() => {
           closeMenu();
           selection.deselect([link.id]);
-          trash.mutate();
+          if (onTrash) onTrash();
+          else trash.mutate();
         }}
       >
         Move to trash
       </MenuAction>
-    </MenuSurface>
+    </>
   );
 }

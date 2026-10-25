@@ -71,9 +71,13 @@
   font-size: 11px;
   color: var(--fnt);
 }
-.silo-menu-item:is(:hover, :focus-visible, .is-current),
+.silo-menu-item:is(:hover, :focus, .is-current),
 .silo-menu-item[aria-current="true"] {
   background: var(--hov);
+}
+.silo-menu-item:focus-visible {
+  outline: 1px solid var(--line-2);
+  outline-offset: -1px;
 }
 .silo-menu-danger,
 .silo-menu-danger .silo-menu-icon {
@@ -618,6 +622,22 @@ button.silo-note-text {
   margin-top: 3px;
   min-height: 44px;
   overflow: hidden;
+}
+.silo-margin-note textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.silo-margin-note:has(textarea:focus-visible) {
+  border-left-color: var(--markt);
+}
+.silo-reader-rbar .silo-reader-iconbtn:focus-visible {
+  background: var(--hov);
+  color: var(--ink);
+}
+@media (max-width: 719px) {
+  .silo-reader-rbar .silo-reader-iconbtn:hover:not(:focus-visible) {
+    background: none;
+  }
 }
 .silo-note-hint {
   font-size: 11.5px;

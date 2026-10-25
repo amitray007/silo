@@ -530,6 +530,16 @@ describe('reader keyboard and phone toolbar', () => {
     const more = reader().getByRole('button', { name: 'More actions' });
     fireEvent.click(more);
     expect(more.getAttribute('aria-expanded')).toBe('true');
+    const items = screen.getAllByRole('menuitem');
+    expect(items.map((item) => item.textContent)).toEqual([
+      'Open originalo',
+      'Copy linkc',
+      'Edite',
+      '#Tags›',
+      '✓Select',
+      'Move to trash⌫',
+    ]);
+    expect(document.activeElement).toBe(items[0]);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(more.getAttribute('aria-expanded')).toBe('false');
     expect(screen.getByTestId('url').textContent).toBe('/?link=a');
@@ -671,7 +681,7 @@ describe('review regressions', () => {
     for (const id of ['a', 'b']) {
       const row = container.querySelector<HTMLElement>(`[data-link-id="${id}"]`);
       fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Select item' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Select' }));
     }
     fireEvent.click(
       within(container.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
@@ -757,7 +767,7 @@ describe('review regressions', () => {
     const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
     const options = within(row as HTMLElement).getByRole('button', { name: 'Options' });
     fireEvent.click(options);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Select item' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Select' }));
     fireEvent.click(options);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(options.getAttribute('aria-expanded')).toBe('false');
