@@ -8,6 +8,8 @@
   align-items: flex-start;
   padding: 12vh 16px 16px;
   background: var(--scrim);
+  backdrop-filter: var(--scrim-blur);
+  -webkit-backdrop-filter: var(--scrim-blur);
   animation: siloFade 0.15s var(--ease-out);
 }
 .silo-confirm-layer {
@@ -19,7 +21,7 @@
   display: flex;
   flex-direction: column;
   overflow: auto;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 16px;
   background: var(--bg2);
   box-shadow: var(--elev-3);
@@ -114,7 +116,7 @@
   width: min(620px, 100%);
   max-height: 100%;
   background: var(--bg2);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 16px;
   box-shadow: var(--elev-3);
   overflow: hidden;
@@ -358,7 +360,7 @@
   top: -6px;
   width: 224px;
   padding: 6px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
@@ -377,7 +379,7 @@
   top: calc(100% - 3px);
   z-index: 30;
   width: 216px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
@@ -426,7 +428,7 @@
   flex-wrap: wrap;
   gap: 8px;
   padding: 6px 8px 6px 14px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
@@ -494,7 +496,7 @@
 .silo-login-card {
   width: min(360px, 100%);
   padding: 24px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 16px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
@@ -699,9 +701,17 @@
 
 /* Captured prose uses the redesign's neutral surfaces and reading rhythm. */
 .silo-reader-prose {
+  /* After shiori.sh prose: body in the secondary tone, emphasis in ink. */
+  color: var(--mut);
   font-size: 16px;
   line-height: 1.7;
   overflow-wrap: anywhere;
+}
+.silo-reader-prose :is(h1, h2, h3, h4, h5, h6, strong, b, a, code, kbd, samp, th, mark) {
+  color: var(--ink);
+}
+.silo-reader-prose li::marker {
+  color: var(--fnt);
 }
 .silo-reader-prose :is(h1, h2, h3, h4, h5, h6) {
   line-height: 1.25;
@@ -711,16 +721,16 @@
   text-wrap: pretty;
 }
 .silo-reader-prose h1 {
-  font-size: 28px;
+  font-size: 26px;
 }
 .silo-reader-prose :where(h2) {
-  font-size: 24px;
+  font-size: 21px;
 }
 .silo-reader-prose h3 {
-  font-size: 20px;
+  font-size: 18px;
 }
 .silo-reader-prose h4 {
-  font-size: 18px;
+  font-size: 16px;
 }
 .silo-reader-prose h5 {
   font-size: 16px;
@@ -747,15 +757,22 @@
   color: var(--mut);
 }
 .silo-reader-prose a {
-  color: var(--ink);
-  text-underline-offset: 3px;
+  text-underline-offset: 2px;
+  text-decoration-color: var(--line-2);
+}
+.silo-reader-prose a:hover {
+  text-decoration-color: currentColor;
+}
+.silo-reader-prose :is(h1, h2, h3, h4, h5, h6) a {
+  text-decoration: none;
 }
 .silo-reader-prose :is(code, kbd, samp) {
-  font-family: ui-monospace, monospace;
-  font-size: 0.875em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  font-weight: 500;
   background: var(--hov);
   border-radius: 4px;
-  padding: 2px 4px;
+  padding: 2px 6px;
 }
 .silo-reader-prose pre {
   padding: 16px;
@@ -768,7 +785,10 @@
 }
 .silo-reader-prose pre code {
   padding: 0;
-  font-size: 14px;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.8;
+  background: none;
 }
 .silo-reader-table {
   max-width: 100%;
@@ -780,14 +800,14 @@
   font-size: 14px;
 }
 .silo-reader-prose :is(th, td) {
-  padding: 8px 12px;
-  border: 1px solid var(--line);
+  padding: 10px 12px 10px 0;
+  border-bottom: 1px solid var(--line);
   text-align: left;
+  vertical-align: top;
   min-width: 100px;
 }
 .silo-reader-prose th {
-  background: var(--hov);
-  font-weight: 600;
+  font-weight: 500;
 }
 .silo-reader-prose img {
   display: block;
@@ -797,7 +817,7 @@
   border-radius: 8px;
 }
 .silo-reader-prose :is(figcaption, caption) {
-  color: var(--mut);
+  color: var(--fnt);
   font-size: 13px;
   text-align: center;
 }
@@ -832,7 +852,7 @@
   font-style: italic;
 }
 .silo-reader-prose :is(strong, b) {
-  font-weight: 600;
+  font-weight: 500;
 }
 .silo-reader-prose :is(u, ins) {
   text-decoration: underline;

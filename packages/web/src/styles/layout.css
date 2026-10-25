@@ -68,7 +68,7 @@
   position: relative;
   margin: 8px 8px 8px 0;
   background: var(--bg2);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
   overflow: hidden;
   box-shadow: var(--elev-1);
@@ -263,7 +263,7 @@
   top: calc(100% - 3px);
   right: 8px;
   width: 200px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
@@ -684,6 +684,8 @@
     position: absolute;
     inset: 0;
     background: var(--scrim);
+    backdrop-filter: var(--scrim-blur);
+    -webkit-backdrop-filter: var(--scrim-blur);
     z-index: 30;
   }
   .silo-content {
@@ -855,7 +857,7 @@
   right: 8px;
   z-index: 8;
   background: var(--bg2);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 8px;
   box-shadow: var(--elev-2);
   padding: 6px;

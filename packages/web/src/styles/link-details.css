@@ -2,7 +2,7 @@
 .silo-menu-surface {
   width: 248px;
   padding: 5px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
@@ -323,7 +323,7 @@
   right: -1px;
   top: calc(100% + 6px);
   background: var(--bg2);
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 12px;
   box-shadow: var(--elev-2);
   padding: 5px;
@@ -403,6 +403,8 @@
     height: 100%;
     border: 0;
     background: var(--scrim);
+    backdrop-filter: var(--scrim-blur);
+    -webkit-backdrop-filter: var(--scrim-blur);
   }
   .silo-menu-sheet-layer > .silo-menu-surface {
     position: relative;

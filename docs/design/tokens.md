@@ -28,7 +28,16 @@ styles take precedence over the historical design notes below.
   `--panel`, `--mark` to `--accent`, `--markt` to `--accent-ink`, `--warn` to
   `--danger`, and `--ease-out` to `--ease`. `--ghost` uses the faint tone for
   non-text affordances. Settings surface aliases use the neutral ramp.
-- Elevation and scrims match the prototype in both themes. Existing type and
+- Elevation follows shiori.sh's shipped CSS (studied 2026-10-25): a 0.5px
+  `--ring` replaces the border on raised surfaces, which set their border
+  transparent, then two or three soft stacked drops. `--elev-1` is the control
+  shadow, `--elev-2` the menu shadow, and `--elev-3` the dialog shadow. Scrims
+  are light in light mode (`#f1f1ef` at 80%) and near-black in dark mode, both
+  with `--scrim-blur` (4px).
+- Reader prose follows shiori's prose rules: body in `--mut`, headings, links,
+  code, and bold in ink, list markers and captions in `--fnt`, bold at 500,
+  headings 26/21/18/16px, tables with row rules only.
+- Existing type and
   spacing scales remain for components until their redesign unit. Removed
   tokens: the old mark plate, badge colors, and unused motion/spacing roles.
 - Keep the pre-paint theme script and both themes. Healthy rows have no
