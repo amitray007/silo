@@ -126,7 +126,7 @@ function ignoreReaderKey(event: KeyboardEvent) {
     isTextEntryElement(document.activeElement) ||
     Boolean(
       document.querySelector(
-        '[role="dialog"], [data-reader-menu], .silo-sidebar[data-open="true"]',
+        '[role="dialog"], [role="alertdialog"], [data-reader-menu], .silo-sidebar[data-open="true"]',
       ),
     )
   );

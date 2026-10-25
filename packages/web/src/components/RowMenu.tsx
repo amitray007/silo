@@ -44,30 +44,8 @@ const TAGS_FLYOUT_CLOSE_DELAY_MS = 140;
  */
 function menuItemStyle(active = false, danger = false): React.CSSProperties {
   return {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--s3)',
-    width: '100%',
-    boxSizing: 'border-box',
-    border: 0,
     background: active ? 'var(--hov)' : 'none',
-    fontFamily: 'inherit',
-    textAlign: 'left',
-    // Roomier rows (was --s2/--s2-5) so each is an easy, deliberate target
-    // like shiori's menu, not a cramped text line.
-    padding: 'var(--s2-5) var(--s3)',
-    borderRadius: 8,
-    // Labels are --ink/500 (was the muddy --mut at --text-sm): shiori's menu
-    // labels are crisp bright text, clearly readable — the whole point of the
-    // redesign (user feedback: "muddy ugly"). 14px reads solid at this size.
-    // A `danger` row (Move to trash) is --warn so the destructive action reads
-    // red like shiori's, and its icon inherits the same via currentColor.
-    fontSize: 'var(--text-base)',
-    fontWeight: 500,
     color: danger ? 'var(--warn)' : 'var(--ink)',
-    cursor: 'pointer',
-    transform: 'scale(1)',
-    transition: 'background 0.14s ease, transform 0.12s var(--ease-out)',
   };
 }
 
@@ -245,36 +223,9 @@ function TagsFlyout({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover-keep-open convenience only, same rationale as the trigger wrapper in `RowMenu` above — every real control inside (the find-tag input, the tag toggle buttons) is already a proper interactive element with its own semantics; this outer div's mouse handlers just extend the same hover region across the gap between the trigger and this panel.
     <div
-      className="silo-popover"
+      className="silo-popover silo-tags-flyout"
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
-      style={{
-        position: 'absolute',
-        right: 'var(--tags-flyout-right, calc(100% - 2px))',
-        top: 'var(--tags-flyout-top, -6px)',
-        // Matches the main `RowMenu` popover's `width: 224` exactly (was 216)
-        // so the two panels read as one coherent sibling pair sitting side by
-        // side, not a narrower/cramped afterthought hanging off the main
-        // menu — the rest of this panel's chrome (bg/border/radius/shadow/
-        // padding) already matched; width was the one discrepancy.
-        width: 224,
-        // Dark-craft raised-surface convention (tokens.md): floating panels
-        // sit one step up from the page ground on `--bg2` + a hairline
-        // `--line` edge — this popover renders inside `.silo-content`, which
-        // is ITSELF `--bg2`, so a plain `--bg2` fill would vanish into its
-        // parent; the app's own elevation ramp handles that (--elev-2's
-        // shadow + this hairline border) rather than a third surface token.
-        background: 'var(--bg2)',
-        border: '1px solid var(--line)',
-        borderRadius: 12,
-        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
-        boxShadow: 'var(--elev-2)',
-        padding: 'var(--s1-5)',
-        // Grows leftward from the "tags" trigger it's anchored to (its right
-        // edge sits flush against the trigger's left edge) — not the popover's
-        // own center, per review-animations-STANDARDS.md's origin-aware rule.
-        transformOrigin: 'top right',
-      }}
     >
       <input
         value={query}
@@ -398,30 +349,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: this popover's onClick only stops propagation (v3's "clicking inside the menu must not bubble to the row <a> or the document click-outside listener") — it is not itself an interactive control; every real action inside is a proper <button>/<a>.
     // biome-ignore lint/a11y/noStaticElementInteractions: same rationale — a non-interactive click/mousedown guard, not a control.
-    <div
-      className="silo-popover"
-      onMouseDown={stop}
-      onClick={stop}
-      style={{
-        position: 'absolute',
-        right: 'var(--s2)',
-        top: 'calc(100% - 3px)',
-        zIndex: 30,
-        width: 224,
-        // Dark-craft raised-surface convention (tokens.md) — see the matching
-        // comment on `TagsFlyout` above for why `--bg2` (not `--bg`) is
-        // correct here even though this popover's own parent is `--bg2` too.
-        background: 'var(--bg2)',
-        border: '1px solid var(--line)',
-        borderRadius: 12,
-        // K6 (oat-conformance audit): sourced from the shared elevation ramp.
-        boxShadow: 'var(--elev-2)',
-        padding: 'var(--s1-5)',
-        // Anchored top-right to the row's `⋯` trigger — scales from there,
-        // not center (review-animations-STANDARDS.md's origin-aware rule).
-        transformOrigin: 'top right',
-      }}
-    >
+    <div className="silo-popover silo-row-menu" onMouseDown={stop} onClick={stop}>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: hover-open convenience only — the "tags" button below is already keyboard-operable (click toggles the fly-out) and owns all a11y semantics; this wrapper just widens the hover target v3-style. */}
       <div
         onMouseEnter={keepTagsOpen}
@@ -445,6 +373,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
           // toggle-closed path needed since Escape/click-outside close the
           // whole row menu anyway.
           onClick={keepTagsOpen}
+          className="silo-menu-item"
           style={menuItemStyle(tagsFlyOpen)}
         >
           <span style={iconSlotStyle}>
@@ -487,7 +416,7 @@ export function RowMenu({ link }: { link: LinkJson }) {
         <span style={iconSlotStyle}>
           <OpenIcon />
         </span>
-        <span>Open in new tab</span>
+        <span>Open original</span>
       </MenuItem>
       <MenuItem onClick={handleCopy}>
         <span style={iconSlotStyle}>

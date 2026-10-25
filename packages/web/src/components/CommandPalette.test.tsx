@@ -124,6 +124,20 @@ describe('CommandPalette', () => {
     expect(container.textContent).toBe('');
   });
 
+  it('keeps footer hints when empty and applies the supported tag filter', async () => {
+    mockFetchByPath({ '/api/tags': { tags: [] }, '/api/links': { links: [] } });
+    await renderPalette();
+    pressCmdK();
+    expect(screen.getByText('Move')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
+    expect(screen.getByText('Close')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '#tag' }));
+    expect(screen.getByRole('combobox')).toHaveProperty('value', '#');
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   /**
    * Perf regression guard (dedupe-api-calls slice, unit 1): `CommandPalette`
    * is mounted PERMANENTLY at the app root (`AppFrame.tsx`), so if its data

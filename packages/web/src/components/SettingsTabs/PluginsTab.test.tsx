@@ -367,9 +367,9 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     // (shared by the master-off and loading cases) — wait for the settled
     // (disabled) render specifically so this doesn't assert against the
     // transient loading render.
-    const inlineToggle = await screen.findByTitle(/Inline on the row — unavailable/i);
+    const inlineToggle = await screen.findByTitle(/Inline on the row - unavailable/i);
     expect(inlineToggle).toHaveProperty('disabled', true);
-    const hoverToggle = screen.getByTitle(/On hover \(preview card\) — unavailable/i);
+    const hoverToggle = screen.getByTitle(/On hover \(preview card\) - unavailable/i);
     expect(hoverToggle).toHaveProperty('disabled', true);
   });
 

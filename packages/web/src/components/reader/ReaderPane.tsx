@@ -292,7 +292,7 @@ export function ReaderPane({
       <div>
         <ReaderIcon name="sidebar" />
         <p>Select a link to read</p>
-        <span>Use ↑ ↓ or j k to move through your library.</span>
+        <span>Use ↑ ↓ or j k to move through your {trashed ? 'trash' : 'library'}.</span>
       </div>
     </div>
   );
@@ -358,7 +358,7 @@ export function ReaderPane({
         <ReaderMore key={selectedId} actions={actions} disabled={!link} trashed={trashed} />
       </div>
       {actions.feedback && (
-        <div className="silo-reader-feedback" role="status">
+        <div className="silo-toast" role="status">
           {actions.feedback}
         </div>
       )}

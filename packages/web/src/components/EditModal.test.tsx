@@ -105,6 +105,26 @@ describe('EditModal', () => {
     );
   });
 
+  it.each([{ metaKey: true }, { ctrlKey: true }])(
+    'saves with the modified Enter shortcut: %o',
+    async (modifier) => {
+      renderModal();
+      const title = screen.getByLabelText('Title');
+      fireEvent.change(title, { target: { value: 'Keyboard title' } });
+      fireEvent.keyDown(title, { key: 'Enter', ...modifier });
+      await waitFor(() =>
+        expect(fetch).toHaveBeenCalledWith(
+          '/api/links/edit-1',
+          expect.objectContaining({
+            method: 'PATCH',
+            body: JSON.stringify({ title: 'Keyboard title' }),
+          }),
+        ),
+      );
+      expect(screen.queryByRole('dialog')).toBeNull();
+    },
+  );
+
   it('Save with no changes does not PATCH at all', () => {
     renderModal();
     fireEvent.click(screen.getByText('Save'));
@@ -261,7 +281,7 @@ describe('EditModal', () => {
 
   it('clicking inside the panel does not close the modal', () => {
     renderModal();
-    fireEvent.click(screen.getByText('Edit'));
+    fireEvent.click(screen.getByText('Edit link'));
     expect(screen.getByRole('dialog')).toBeDefined();
   });
 

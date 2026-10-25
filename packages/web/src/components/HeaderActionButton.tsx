@@ -79,21 +79,7 @@ export function HeaderActionButton({
         <span
           role={ok ? 'status' : 'alert'}
           aria-live={ok ? 'polite' : 'assertive'}
-          style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            marginTop: 'var(--s1-5)',
-            padding: '6px 10px',
-            background: 'var(--bg2)',
-            border: '1px solid var(--line)',
-            borderRadius: 8,
-            boxShadow: 'var(--elev-2)',
-            fontSize: 'var(--text-sm)',
-            color: ok ? 'var(--ink)' : 'var(--warn)',
-            whiteSpace: 'nowrap',
-            zIndex: 1,
-          }}
+          className="silo-toast"
         >
           {message}
         </span>

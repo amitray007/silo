@@ -24,7 +24,7 @@ function LibraryEmptyState() {
               color: 'var(--fnt)',
             }}
           >
-            Claude can add links here too, once you connect it in Settings → API / MCP.
+            Claude can add links here too, once you connect it in Settings → Access.
           </span>
         </>
       }

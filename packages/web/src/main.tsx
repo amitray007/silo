@@ -6,6 +6,7 @@ import { App } from './App';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { DevTools } from './dev/DevTools';
 import './styles/base.css';
+import './styles/surfaces.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
 const queryClient = new QueryClient({

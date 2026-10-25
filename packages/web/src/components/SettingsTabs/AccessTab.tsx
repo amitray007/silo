@@ -10,6 +10,7 @@ import {
   useUpdateSettings,
 } from '../../api/hooks';
 import type { AccessTokenJson, ConnectedOAuthClient } from '../../api/types';
+import { ConfirmDialog } from '../ConfirmDialog';
 import { Skeleton } from '../Skeleton';
 import { copyLabel, useCopyFlash } from './copyFlash';
 import { McpSetupDialog } from './McpSetupDialog';
@@ -40,42 +41,35 @@ const tokenMetaStyle: CSSProperties = {
   marginTop: 2,
 };
 
-/**
- * The two-step Revoke control shared by `TokenRow` and `OAuthClientRow`. The
- * inline confirm (button flips to "Confirm revoke?" / "Cancel" in place) is a
- * deliberate substitute for a browser `window.confirm` dialog (no-dialogs
- * guidance) — it stays inline, on-tone, and dismissible without a modal.
- * a single "Revoke" button that, once clicked, swaps to Cancel / "Confirm
- * revoke?" so a stray double-click can't fire the DELETE twice. Owns its own
- * `confirming` state; `pending` disables the confirm buttons while the mutation
- * is in flight and flips the label to "Revoking…". `onRevoke` fires only on the
- * confirmed second click.
- */
-function TwoStepRevoke({ onRevoke, pending }: { onRevoke: () => void; pending: boolean }) {
+/** Retains the existing two-step revoke flow in the shared confirmation dialog. */
+function TwoStepRevoke({
+  onRevoke,
+  pending,
+  name,
+}: {
+  onRevoke: () => void;
+  pending: boolean;
+  name: string;
+}) {
   const [confirming, setConfirming] = useState(false);
-
-  if (!confirming) {
-    return (
+  return (
+    <>
       <button type="button" className="silo-settings-btn" onClick={() => setConfirming(true)}>
         Revoke
       </button>
-    );
-  }
-
-  return (
-    <div style={{ display: 'flex', gap: 8 }}>
-      <button
-        type="button"
-        className="silo-settings-btn"
-        disabled={pending}
-        onClick={() => setConfirming(false)}
-      >
-        Cancel
-      </button>
-      <button type="button" className="silo-settings-btn" disabled={pending} onClick={onRevoke}>
-        {pending ? 'Revoking…' : 'Confirm revoke?'}
-      </button>
-    </div>
+      {confirming && (
+        <ConfirmDialog
+          title={`Revoke ${name}?`}
+          action="Revoke"
+          actionLabel="Confirm revoke?"
+          pending={pending}
+          onClose={() => setConfirming(false)}
+          onConfirm={onRevoke}
+        >
+          This connection will lose access to silo. You can connect it again later.
+        </ConfirmDialog>
+      )}
+    </>
   );
 }
 
@@ -97,7 +91,7 @@ function TokenRow({
           {token.lastUsedAt ? `last used ${formatDate(token.lastUsedAt)}` : 'never used'}
         </div>
       </div>
-      <TwoStepRevoke onRevoke={() => onRevoke(token.id)} pending={pending} />
+      <TwoStepRevoke name={token.name} onRevoke={() => onRevoke(token.id)} pending={pending} />
     </div>
   );
 }
@@ -320,7 +314,7 @@ function OAuthClientRow({
           {client.connectionCount > 1 ? ` · (${client.connectionCount} connections)` : ''}
         </div>
       </div>
-      <TwoStepRevoke onRevoke={() => onRevoke(client)} pending={pending} />
+      <TwoStepRevoke name={client.clientName} onRevoke={() => onRevoke(client)} pending={pending} />
     </div>
   );
 }
@@ -387,33 +381,24 @@ function ConnectedAppsSection() {
         </div>
         {clients && clients.length > 0 && (
           <div style={{ display: 'flex', gap: 8 }}>
-            {confirmingAll ? (
-              <>
-                <button
-                  type="button"
-                  className="silo-settings-btn"
-                  disabled={revokeAll.isPending}
-                  onClick={() => setConfirmingAll(false)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="silo-settings-btn"
-                  disabled={revokeAll.isPending}
-                  onClick={handleRevokeAll}
-                >
-                  {revokeAll.isPending ? 'Revoking…' : 'Confirm revoke all?'}
-                </button>
-              </>
-            ) : (
-              <button
-                type="button"
-                className="silo-settings-btn"
-                onClick={() => setConfirmingAll(true)}
+            <button
+              type="button"
+              className="silo-settings-btn"
+              onClick={() => setConfirmingAll(true)}
+            >
+              Revoke all
+            </button>
+            {confirmingAll && (
+              <ConfirmDialog
+                title="Revoke all connected apps?"
+                action="Revoke all"
+                actionLabel="Confirm revoke all?"
+                pending={revokeAll.isPending}
+                onClose={() => setConfirmingAll(false)}
+                onConfirm={handleRevokeAll}
               >
-                Revoke all
-              </button>
+                All connected apps will lose access to silo. You can connect them again later.
+              </ConfirmDialog>
             )}
           </div>
         )}

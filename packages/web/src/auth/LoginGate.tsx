@@ -63,29 +63,8 @@ export function LoginGate() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        background: 'var(--bg)',
-        padding: 'var(--s6)',
-        boxSizing: 'border-box',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '22rem',
-          border: '1px solid var(--line)',
-          borderRadius: 14,
-          background: 'var(--bg2)',
-          boxShadow: 'var(--elev-2)',
-          padding: 'var(--s6)',
-          boxSizing: 'border-box',
-          animation: 'siloIn .2s var(--ease-out)',
-        }}
-      >
+    <div className="silo-login">
+      <div className="silo-login-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 'var(--s5)' }}>
           <BrandMark />
           <span
@@ -100,6 +79,8 @@ export function LoginGate() {
           </span>
         </div>
 
+        <h1>Welcome to silo</h1>
+        <p className="silo-login-lead">Enter your password to open your library.</p>
         <form onSubmit={handleSubmit} noValidate>
           <label
             htmlFor={inputId}
@@ -107,8 +88,7 @@ export function LoginGate() {
               display: 'block',
               fontSize: 'var(--text-xs)',
               fontWeight: 500,
-              letterSpacing: 'var(--tracking-label)',
-              textTransform: 'uppercase',
+              letterSpacing: 'normal',
               color: 'var(--fnt)',
               marginBottom: 'var(--s2)',
             }}
@@ -131,12 +111,11 @@ export function LoginGate() {
               boxSizing: 'border-box',
               border: '1px solid var(--line)',
               borderRadius: 8,
-              background: 'var(--bg)',
+              background: 'var(--bg2)',
               color: 'var(--ink)',
               font: 'inherit',
               fontSize: 'var(--text-base)',
               padding: '9px 12px',
-              outline: 'none',
             }}
           />
 
@@ -182,11 +161,11 @@ export function LoginGate() {
               marginTop: 'var(--s5)',
               border: '1px solid var(--line)',
               borderRadius: 8,
-              background: 'var(--bg)',
-              color: 'var(--ink)',
+              background: 'var(--btn)',
+              color: 'var(--btn-ink)',
               fontFamily: 'inherit',
               fontSize: 'var(--text-base)',
-              fontWeight: 500,
+              fontWeight: 600,
               padding: '9px 12px',
               cursor: pending || value === '' ? 'default' : 'pointer',
               opacity: pending ? 0.7 : 1,

@@ -24,6 +24,7 @@ import type { useCommandPalette } from '../lib/useCommandPalette';
 import { type PaletteScope, usePaletteScope } from '../lib/usePaletteScope';
 import { Chip } from './Chip';
 import { useHoverPreview } from './HoverPreviewContext';
+import { trapDialogTab } from './ModalShell';
 
 /** Either a live link result or a trashed one — `PaletteLinkRow` only ever reads `.id`/`.url`/`.title`, and `TrashLinkJson`/its search variant are both structurally `LinkJson` plus extra fields, so one row renderer covers both scopes. */
 type PaletteLinkResult = LinkJson | SearchResultJson | TrashLinkJson;
@@ -81,36 +82,13 @@ function scopePlaceholder(scope: PaletteScope): string {
   return 'Search links…';
 }
 
-/**
- * A footer keyboard hint: a small key-cap glyph (`↑↓`, `↵`, `esc`) + its label
- * on ONE shared vertical center. The glyph lives in an inline-flex box with
- * `lineHeight: 1` + `place-items:center`, so Unicode arrows — whose own font
- * metrics otherwise float above/below the Latin label — line up cleanly with
- * the word beside them (user feedback: the navigate/open/close glyphs looked
- * misaligned with their text). The pair is itself `align-items:center`.
- */
 function PaletteHint({ glyph, label }: { glyph: string; label: string }) {
   return (
-    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--s1-5)' }}>
-      <span
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          lineHeight: 1,
-          minWidth: 18,
-          height: 16,
-          padding: '0 var(--s1)',
-          borderRadius: 4,
-          border: '1px solid var(--line)',
-          background: 'var(--bg2)',
-          color: 'var(--mut)',
-          fontSize: 'var(--text-xs)',
-        }}
-      >
-        {glyph}
-      </span>
-      <span style={{ lineHeight: 1 }}>{label}</span>
+    <span className="silo-palette-hint">
+      {glyph.split(' ').map((key) => (
+        <kbd key={key}>{key}</kbd>
+      ))}
+      {label}
     </span>
   );
 }
@@ -202,9 +180,10 @@ function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
             {title}
           </span>
           <span
+            className="silo-palette-domain"
             style={{
-              flex: 'none',
-              maxWidth: '14rem',
+              flex: '0 1 auto',
+              maxWidth: '38%',
               fontSize: 'var(--text-base)',
               color: 'var(--fnt)',
               fontWeight: 400,
@@ -574,10 +553,8 @@ function selectIsSettling(args: {
  * like before. The panel below reimplements only the pieces `ModalShell`
  * provided that a top-anchored dialog still needs: the scrim, `role="dialog"`
  * + `aria-modal`, a capture-phase Escape listener 1-to-1 with `ModalShell`'s
- * own, and click-outside-to-close. Focus-trap/Tab-cycling is NOT reimplemented
- * here — `Command.Input` is the sole focusable control in the panel (result
- * rows are `Command.Item`s, not native buttons/links, so Tab has nothing else
- * to cycle to), so trapping Tab would be dead code.
+ * own, and click-outside-to-close. The input, cancel button, and filter
+ * button share ModalShell's Tab-cycling helper.
  *
  * Thin `open`-gated wrapper (perf fix, dedupe-api-calls slice unit 1): this
  * component is mounted PERMANENTLY at the app root, so if it called
@@ -732,8 +709,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
   // Type-to-refocus (user-requested): "if I'm between navigation and start
   // typing, focus returns to the input — except for the up/down arrows." In
   // practice cmdk already keeps focus on the input through arrow navigation
-  // (rows are `role="option"`, never focusable, and the palette has no other
-  // tabbable control inside it), so typing already lands in the input on the
+  // (rows are `role="option"` and never focusable), so typing already lands in the input on the
   // normal path. This handler is the guarantee for any state where focus DID
   // land off the input: a BARE printable character (no ⌘/Ctrl/Alt) pressed
   // anywhere in the dialog while the input isn't focused snaps focus back to it
@@ -742,7 +718,10 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
   // and every modifier combo are `key.length !== 1` or modifier-guarded, so
   // they pass straight through to cmdk / the existing handlers — the "except
   // for the up/down arrows" part of the requirement.
-  const handleRefocusOnType = (event: React.KeyboardEvent) => {
+  const handleRefocusOnType = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    trapDialogTab(event);
+    if (event.key === ' ' && event.target instanceof HTMLElement && event.target.closest('button'))
+      return;
     if (event.key.length !== 1 || event.metaKey || event.ctrlKey || event.altKey) return;
     const input = palette.inputRef.current;
     if (!input || document.activeElement === input) return;
@@ -786,36 +765,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: scrim dismiss is pointer-only convenience — Escape (the capture-phase document listener above) is the keyboard-equivalent close path, matching ModalShell's own scrim.
     // biome-ignore lint/a11y/noStaticElementInteractions: same — a non-interactive click guard, not a control.
-    <div
-      onClick={closePalette}
-      style={{
-        position: 'fixed',
-        inset: 0,
-        background: 'var(--scrim)',
-        // Frosted-glass backdrop, matching the modal shell — the app blurs
-        // behind the palette so it clearly floats above a defocused page.
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        display: 'flex',
-        justifyContent: 'center',
-        // `flex-start` (NOT the default `stretch`): the scrim is a flex row, so
-        // its cross-axis is vertical — without this the panel stretches to the
-        // full scrim height and the result list shows a big empty region below
-        // it (user feedback). `flex-start` lets the panel take its natural
-        // content height (capped at maxHeight:70vh) so it hugs the results.
-        alignItems: 'flex-start',
-        // Top-anchored, not centered (the redesign's whole point): ~17vh
-        // down from the viewport top, the standard command-palette resting
-        // position (Linear/Raycast/VS Code Quick Open) rather than a
-        // vertically-centered modal — a palette is a fleeting, glanceable
-        // overlay, not a form you settle into, so it reads better docked
-        // near where the eye already is (top of screen, near the app chrome)
-        // than dead-center over whatever content was showing.
-        paddingTop: '17vh',
-        zIndex: 40,
-        animation: 'siloFade .16s var(--ease-out)',
-      }}
-    >
+    <div onClick={closePalette} className="silo-modal-layer silo-palette-layer">
       {/* The panel's `onClick` is a stopPropagation guard (keeps the scrim's
           onClick from closing when clicking inside); `onKeyDown` is the
           type-to-refocus handler. Both a click and a key handler are present,
@@ -827,24 +777,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
         aria-label="Command palette"
         onClick={(e) => e.stopPropagation()}
         onKeyDown={handleRefocusOnType}
-        style={{
-          // Wide top-centered panel (~640px) — deliberately wider than
-          // `ModalShell`'s form modals (520/560px): those hold narrow label+
-          // input rows, this holds a scannable list of title+domain rows
-          // that wants the extra horizontal room.
-          width: 640,
-          maxWidth: 'calc(100vw - 48px)',
-          maxHeight: '70vh',
-          display: 'flex',
-          flexDirection: 'column',
-          border: '1px solid var(--line)',
-          borderRadius: 14,
-          background: 'var(--bg)',
-          boxShadow: 'var(--elev-3)',
-          boxSizing: 'border-box',
-          overflow: 'hidden',
-          animation: 'siloIn .2s var(--ease-out)',
-        }}
+        className="silo-palette"
       >
         <Command
           shouldFilter={false}
@@ -854,16 +787,19 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
           onValueChange={setActiveValue}
           style={{ display: 'flex', flexDirection: 'column', minHeight: 0 }}
         >
-          <div
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 'var(--s2-5)',
-              padding: 'var(--s4) var(--s5)',
-              borderBottom: '1px solid var(--line)',
-              flex: 'none',
-            }}
-          >
+          <div className="silo-palette-input">
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.6"
+              aria-hidden="true"
+            >
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 4.5 4.5" />
+            </svg>
             {/* Type-to-refocus: cmdk keeps focus on this input through ARROW
                 navigation (rows are `role="option"`, never focusable), so the
                 common case already lands typed characters here. The dialog's
@@ -876,30 +812,17 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               value={q}
               onValueChange={setQ}
               placeholder={scopePlaceholder(scope)}
-              style={{
-                flex: 1,
-                minWidth: 0,
-                border: 0,
-                background: 'none',
-                outline: 'none',
-                font: 'inherit',
-                fontSize: 'var(--text-md)',
-                color: 'var(--ink)',
-                padding: 0,
-              }}
+              autoCapitalize="off"
+              spellCheck={false}
+              enterKeyHint="go"
             />
+            <kbd className="silo-palette-esc">esc</kbd>
+            <button type="button" className="silo-palette-cancel" onClick={closePalette}>
+              Cancel
+            </button>
           </div>
 
-          <Command.List
-            label={showTagSuggestions ? 'Matching tags' : 'Matching links'}
-            style={{
-              overflowY: 'auto',
-              padding: 'var(--s2)',
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 2,
-            }}
-          >
+          <Command.List label={showTagSuggestions ? 'Matching tags' : 'Matching links'}>
             <Command.Empty>
               <div
                 style={{
@@ -919,22 +842,17 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               </div>
             </Command.Empty>
 
+            {results.length > 0 && (
+              <div className="silo-palette-group">
+                {showTagSuggestions ? 'Tags' : q.trim() ? 'Results' : 'Recent'}
+              </div>
+            )}
             {results.map((result) => (
               <Command.Item
                 key={resultValue(result)}
                 value={resultValue(result)}
                 onSelect={() => onSelectResult(result)}
                 className="silo-palette-row"
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  width: '100%',
-                  boxSizing: 'border-box',
-                  textAlign: 'left',
-                  padding: 'var(--s2) var(--s3)',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                }}
               >
                 {result.kind === 'link' ? (
                   <PaletteLinkRow link={result.link} />
@@ -945,29 +863,28 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
             ))}
           </Command.List>
 
-          {results.length > 0 && (
-            <div
-              style={{
-                flex: 'none',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 'var(--s4)',
-                padding: 'var(--s2) var(--s5)',
-                borderTop: '1px solid var(--line)',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--fnt)',
-              }}
-            >
-              {/* Each hint is a flex pair so the glyph and its label share ONE
-                  vertical center (user feedback: the ↑↓/↵ glyphs floated off
-                  the text baseline). The glyph sits in a fixed-height key-cap
-                  with line-height:1, so its own font metrics can't drag it
-                  above/below the label beside it. */}
-              <PaletteHint glyph="↑↓" label="navigate" />
-              <PaletteHint glyph="↵" label={showTagSuggestions ? 'apply' : 'open'} />
-              <PaletteHint glyph="esc" label="close" />
+          <div className="silo-palette-footer">
+            <div className="silo-palette-keys">
+              <PaletteHint glyph="↑ ↓" label="Move" />
+              <PaletteHint glyph="↵" label={showTagSuggestions ? 'Apply' : 'Open'} />
+              <PaletteHint glyph="esc" label="Close" />
             </div>
-          )}
+            {scope.kind === 'trash' && <span className="silo-palette-filter">Searching trash</span>}
+            {scope.kind !== 'trash' && (
+              <span className="silo-palette-filter">
+                Filter by
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQ(`${q.trim() ? `${q.trim()} ` : ''}#`);
+                    palette.inputRef.current?.focus();
+                  }}
+                >
+                  #tag
+                </button>
+              </span>
+            )}
+          </div>
         </Command>
       </div>
     </div>

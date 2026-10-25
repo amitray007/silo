@@ -105,19 +105,20 @@ const FEATURE_ROWS_BY_SOURCE: Record<
 
 const gridStyle: CSSProperties = {
   display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fit, minmax(96px, 1fr))',
-  gap: 10,
+  gridTemplateColumns: '1fr',
+  gap: 0,
   marginBottom: 4,
 };
 
 const cardBase: CSSProperties = {
   display: 'flex',
-  flexDirection: 'column',
+  flexDirection: 'row',
   alignItems: 'center',
-  gap: 8,
-  padding: '16px 8px 12px',
-  borderRadius: 12,
-  border: '1px solid var(--line)',
+  gap: 14,
+  padding: '14px 10px',
+  borderRadius: 8,
+  border: 0,
+  borderTop: '1px solid var(--line)',
   background: 'var(--bg2)',
   cursor: 'pointer',
   transition: 'border-color .15s ease, box-shadow .15s ease',
@@ -126,6 +127,8 @@ const cardBase: CSSProperties = {
 };
 
 const cardTitle: CSSProperties = {
+  flex: 1,
+  textAlign: 'left',
   fontSize: 'var(--text-sm)',
   fontWeight: 500,
   color: 'var(--ink)',
@@ -166,8 +169,8 @@ function StatusDot({ on }: { on: boolean }) {
         width: 7,
         height: 7,
         borderRadius: '50%',
-        background: on ? 'var(--mark)' : 'transparent',
-        border: `1px solid ${on ? 'var(--mark)' : 'var(--ghost)'}`,
+        background: on ? 'var(--ink)' : 'transparent',
+        border: `1px solid ${on ? 'var(--ink)' : 'var(--ghost)'}`,
         boxSizing: 'border-box',
       }}
     />
@@ -197,11 +200,10 @@ function SourceCard({
       aria-controls={panelId}
       style={{
         ...cardBase,
-        borderColor: selected ? 'var(--mark)' : 'var(--line)',
-        boxShadow: selected ? '0 0 0 1px var(--mark)' : 'none',
+        background: selected ? 'var(--hov)' : 'var(--bg2)',
       }}
     >
-      <PluginLogo source={logoSource} size={44} />
+      <PluginLogo source={logoSource} size={32} />
       <span style={cardTitle}>{name}</span>
       <StatusDot on={on} />
     </button>

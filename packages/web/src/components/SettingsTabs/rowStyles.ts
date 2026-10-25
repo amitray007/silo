@@ -19,7 +19,8 @@ export const settingsRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 16,
-  padding: '16px 0',
+  padding: '14px 0',
+  flexWrap: 'wrap',
 };
 
 /** The roomier row + the `--line` divider under it (every row except a tab's last). */
@@ -28,9 +29,9 @@ export const settingsRowDivided: CSSProperties = {
   borderBottom: '1px solid var(--line)',
 };
 
-/** A row's label line (the setting's name) — Title Case, matching the reference's row-name treatment. */
+/** A row's label line (the setting's name) — sentence case, matching the prototype. */
 export const rowLabel: CSSProperties = {
-  fontSize: 'var(--text-md)',
+  fontSize: 'var(--text-base)',
   fontWeight: 500,
   color: 'var(--ink)',
   lineHeight: 1.35,

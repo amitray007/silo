@@ -59,7 +59,7 @@ function RowMenuLayer({
       if (
         palette.open ||
         drawerOpen ||
-        document.querySelector('[role="dialog"], [data-reader-menu]')
+        document.querySelector('[role="dialog"], [role="alertdialog"], [data-reader-menu]')
       )
         return;
       event.preventDefault();
@@ -147,7 +147,7 @@ export function AppFrame() {
         event.altKey ||
         isTextEntryElement(event.target) ||
         isTextEntryElement(document.activeElement) ||
-        document.querySelector('[role="dialog"], [data-reader-menu]')
+        document.querySelector('[role="dialog"], [role="alertdialog"], [data-reader-menu]')
       )
         return;
       if (event.key === '[') {
@@ -165,7 +165,7 @@ export function AppFrame() {
   }, [toggleSidebar, commandPalette.openPalette]);
   useEffect(() => {
     if (!drawerOpen) {
-      if (drawerWasOpen.current && !document.querySelector('[role="dialog"]'))
+      if (drawerWasOpen.current && !document.querySelector('[role="dialog"], [role="alertdialog"]'))
         menuButtonRef.current?.focus();
       drawerWasOpen.current = false;
       return;

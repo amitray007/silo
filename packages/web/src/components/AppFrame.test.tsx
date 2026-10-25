@@ -183,7 +183,7 @@ describe('AppFrame', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
       expect(screen.getByText(/light, dark, or follow the system/i)).toBeDefined();
 
-      fireEvent.click(screen.getByRole('tab', { name: 'API / MCP' }));
+      fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
     });
 

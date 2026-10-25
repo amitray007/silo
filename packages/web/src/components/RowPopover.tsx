@@ -15,13 +15,20 @@ export function RowPopover({
   const [position, setPosition] = useState<{ left: number; top: number }>();
   useLayoutEffect(() => {
     if (!anchor) return;
-    const row = anchor.getBoundingClientRect();
-    const height = ref.current?.firstElementChild?.getBoundingClientRect().height ?? 0;
-    const leftFloor = innerWidth >= 500 ? 240 : 8;
-    setPosition({
-      left: Math.max(leftFloor, Math.min(row.right - 232, innerWidth - 240)),
-      top: Math.max(8, Math.min(row.bottom + 4, innerHeight - height - 8)),
-    });
+    const place = () => {
+      const row = anchor.getBoundingClientRect();
+      const box = ref.current?.getBoundingClientRect();
+      const height = box?.height ?? 0;
+      const width = box?.width ?? 216;
+      setPosition({
+        left: Math.max(8, Math.min(row.right - width, innerWidth - width - 8)),
+        top: Math.max(8, Math.min(row.bottom + 4, innerHeight - height - 8)),
+      });
+    };
+    place();
+    const observer = new ResizeObserver(place);
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
   }, [anchor]);
   useEffect(() => {
     if (!anchor) return;
@@ -42,7 +49,6 @@ export function RowPopover({
       ref={ref}
       style={{
         position: 'fixed',
-        width: 232,
         zIndex: 36,
         visibility: position ? 'visible' : 'hidden',
         ...position,

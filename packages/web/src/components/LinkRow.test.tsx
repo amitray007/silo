@@ -231,7 +231,7 @@ describe('LinkRow', () => {
     // was suppressed, not just that a menu happens to appear alongside it.
     expect(event).toBe(false);
     expect(screen.getByText('Move to trash')).toBeDefined();
-    expect(screen.getByText('Open in new tab')).toBeDefined();
+    expect(screen.getByText('Open original')).toBeDefined();
   });
 
   it('right-clicking an already-open row toggles its menu closed (same toggleMenu path as ⋯)', () => {

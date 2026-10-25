@@ -11,7 +11,7 @@ export function ComingSoon({ title, subtitle }: { title: string; subtitle?: stri
         style={{
           margin: 0,
           fontSize: 'var(--text-md)',
-          fontWeight: 500,
+          fontWeight: 600,
           color: 'var(--ink)',
           letterSpacing: 'var(--tracking-tight)',
           textWrap: 'balance',

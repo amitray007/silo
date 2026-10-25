@@ -19,8 +19,7 @@ const labelStyle: React.CSSProperties = {
   margin: '0 0 var(--s1)',
   fontSize: 'var(--text-xs)',
   fontWeight: 500,
-  color: 'var(--fnt)',
-  letterSpacing: '0.02em',
+  color: 'var(--mut)',
 };
 
 const fieldStyle: React.CSSProperties = {
@@ -140,7 +139,7 @@ function EditTagsFlyout({
         value={query}
         onChange={(e) => onQueryChange(e.target.value)}
         onKeyDown={(e) => {
-          if (e.key === 'Enter' && canCreate) {
+          if (e.key === 'Enter' && !e.metaKey && !e.ctrlKey && canCreate) {
             e.preventDefault();
             handleCreate();
           }
@@ -286,9 +285,19 @@ export function EditModal({
   };
 
   return (
-    <ModalShell width={520} ariaLabel="Edit item" onClose={handleClose}>
+    <ModalShell
+      width={460}
+      ariaLabel="Edit item"
+      onClose={handleClose}
+      onKeyDown={(event) => {
+        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+          event.preventDefault();
+          handleSave();
+        }
+      }}
+    >
       <ModalHeader
-        title="Edit"
+        title="Edit link"
         onClose={handleClose}
         leading={
           <span style={{ fontSize: 'var(--text-sm)', color: 'var(--fnt)' }}>
@@ -297,157 +306,140 @@ export function EditModal({
         }
       />
 
-      <p style={labelStyle}>Title</p>
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        placeholder="How you'll look for it later"
-        className="silo-field"
-        style={{ ...fieldStyle, fontWeight: 500 }}
-      />
+      <div className="silo-modal-body silo-edit-fields">
+        <label htmlFor="edit-title" style={labelStyle}>
+          Title
+        </label>
+        <input
+          id="edit-title"
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          placeholder="How you'll look for it later"
+          className="silo-field"
+          style={{ ...fieldStyle, fontWeight: 500 }}
+        />
 
-      <p style={labelStyle}>Description</p>
-      <textarea
-        value={description}
-        onChange={(e) => setDescription(e.target.value)}
-        rows={2}
-        placeholder="What this is, in your words"
-        className="silo-field"
-        style={{
-          ...fieldStyle,
-          color: 'var(--mut)',
-          fontSize: 'var(--text-sm)',
-          resize: 'vertical',
-        }}
-      />
-
-      <p style={labelStyle}>Tags</p>
-      <div style={{ position: 'relative', marginBottom: 'var(--s3)' }}>
-        <button
-          type="button"
-          aria-haspopup="true"
-          aria-expanded={tagsOpen}
-          onClick={() => {
-            setTagsOpen((open) => !open);
-            setTagQuery('');
-          }}
+        <label htmlFor="edit-description" style={labelStyle}>
+          Description
+        </label>
+        <textarea
+          id="edit-description"
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          rows={2}
+          placeholder="What this is, in your words"
+          className="silo-field"
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-            gap: 'var(--s1-5)',
-            width: '100%',
-            boxSizing: 'border-box',
-            border: `1px solid ${tagsOpen ? 'var(--ghost)' : 'var(--line)'}`,
-            borderRadius: 8,
-            background: 'var(--bg2)',
-            fontFamily: 'inherit',
+            ...fieldStyle,
+            color: 'var(--mut)',
             fontSize: 'var(--text-sm)',
-            // 7px left un-tokenized (no clean --s* step between --s1-5/6px
-            // and --s2/8px); 11px → var(--s2-5) (K3, oat-conformance audit).
-            padding: '7px var(--s2-5)',
-            cursor: 'pointer',
-            textAlign: 'left',
+            resize: 'vertical',
           }}
-        >
-          {tags.map((tag) => (
-            <span
-              key={tag}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 'var(--s1-5)',
-                border: '1px solid var(--line)',
-                background: 'var(--bg)',
-                borderRadius: 999,
-                padding: 'var(--s-0-5) var(--s2)',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--ink)',
-              }}
-            >
-              <span style={{ color: 'var(--ghost)' }}>#</span>
-              {tag}
-              {/** biome-ignore lint/a11y/useKeyWithClickEvents: this ✕ is inside a <button> that already toggles the fly-out on click/Enter/Space; the nested remove affordance is pointer-only by design (matches v3's chip ✕), keyboard users remove a tag via the fly-out's toggle list instead. */}
-              {/** biome-ignore lint/a11y/noStaticElementInteractions: same — decorative remove glyph, not an independent control. */}
-              <span
-                onClick={(e) => {
-                  e.stopPropagation();
-                  removeTag.mutate(tag, { onSuccess: () => applyTagToggle(tag, false) });
-                }}
-                title="Remove"
-                className="silo-tag-chip-remove"
-                style={{ color: 'var(--ghost)', cursor: 'pointer' }}
-              >
-                ✕
-              </span>
-            </span>
-          ))}
-          {tags.length === 0 && <span style={{ color: 'var(--fnt)' }}>Choose tags</span>}
-          <span style={{ marginLeft: 'auto', color: 'var(--ghost)', fontSize: 'var(--text-xs)' }}>
-            ▾
-          </span>
-        </button>
-        {tagsOpen && (
-          <EditTagsFlyout
-            link={link}
-            assignedTags={tags}
-            query={tagQuery}
-            onQueryChange={setTagQuery}
-            onClose={() => {
-              setTagsOpen(false);
+        />
+
+        <p style={labelStyle}>Tags</p>
+        <div style={{ position: 'relative', marginBottom: 'var(--s3)' }}>
+          <button
+            type="button"
+            aria-haspopup="true"
+            aria-expanded={tagsOpen}
+            onClick={() => {
+              setTagsOpen((open) => !open);
               setTagQuery('');
             }}
-            onToggled={applyTagToggle}
-          />
-        )}
-      </div>
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              flexWrap: 'wrap',
+              gap: 'var(--s1-5)',
+              width: '100%',
+              boxSizing: 'border-box',
+              border: `1px solid ${tagsOpen ? 'var(--ghost)' : 'var(--line)'}`,
+              borderRadius: 8,
+              background: 'var(--bg2)',
+              fontFamily: 'inherit',
+              fontSize: 'var(--text-sm)',
+              // 7px left un-tokenized (no clean --s* step between --s1-5/6px
+              // and --s2/8px); 11px → var(--s2-5) (K3, oat-conformance audit).
+              padding: '7px var(--s2-5)',
+              cursor: 'pointer',
+              textAlign: 'left',
+            }}
+          >
+            {tags.map((tag) => (
+              <span
+                key={tag}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 'var(--s1-5)',
+                  border: '1px solid var(--line)',
+                  background: 'var(--bg)',
+                  borderRadius: 999,
+                  padding: 'var(--s-0-5) var(--s2)',
+                  fontSize: 'var(--text-xs)',
+                  color: 'var(--ink)',
+                }}
+              >
+                <span style={{ color: 'var(--ghost)' }}>#</span>
+                {tag}
+                {/** biome-ignore lint/a11y/useKeyWithClickEvents: this ✕ is inside a <button> that already toggles the fly-out on click/Enter/Space; the nested remove affordance is pointer-only by design (matches v3's chip ✕), keyboard users remove a tag via the fly-out's toggle list instead. */}
+                {/** biome-ignore lint/a11y/noStaticElementInteractions: same — decorative remove glyph, not an independent control. */}
+                <span
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeTag.mutate(tag, { onSuccess: () => applyTagToggle(tag, false) });
+                  }}
+                  title="Remove"
+                  className="silo-tag-chip-remove"
+                  style={{ color: 'var(--ghost)', cursor: 'pointer' }}
+                >
+                  ✕
+                </span>
+              </span>
+            ))}
+            {tags.length === 0 && <span style={{ color: 'var(--fnt)' }}>Choose tags</span>}
+            <span style={{ marginLeft: 'auto', color: 'var(--ghost)', fontSize: 'var(--text-xs)' }}>
+              ▾
+            </span>
+          </button>
+          {tagsOpen && (
+            <EditTagsFlyout
+              link={link}
+              assignedTags={tags}
+              query={tagQuery}
+              onQueryChange={setTagQuery}
+              onClose={() => {
+                setTagsOpen(false);
+                setTagQuery('');
+              }}
+              onToggled={applyTagToggle}
+            />
+          )}
+        </div>
 
-      <p style={labelStyle}>
-        <span style={{ color: 'var(--markt)' }}>¶</span> Note
-      </p>
-      <textarea
-        ref={noteRef}
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        rows={2}
-        placeholder="Why you kept it"
-        className="silo-field"
-        style={{
-          ...fieldStyle,
-          color: 'var(--mut)',
-          fontSize: 'var(--text-sm)',
-          fontStyle: 'italic',
-          resize: 'vertical',
-          marginBottom: 0,
-        }}
-      />
-
-      {/* K3 (oat-conformance audit): gap 14 → var(--s3-5) exact. marginTop
-          17 is LEFT un-tokenized — nearest step is var(--s4)/16px, but that's
-          a visible 1px shift on the footer's own top gap not worth risking
-          in a token-migration-only pass. */}
-      <div style={{ display: 'flex', gap: 'var(--s3-5)', alignItems: 'center', marginTop: 17 }}>
-        <button
-          type="button"
-          onClick={handleTrash}
-          className="silo-edit-footer-btn"
+        <label htmlFor="edit-note" style={labelStyle}>
+          ¶ Note
+        </label>
+        <textarea
+          ref={noteRef}
+          id="edit-note"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          rows={2}
+          placeholder="Why you kept it"
+          className="silo-field"
           style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 'var(--s1-5)',
-            border: 0,
-            background: 'none',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 500,
-            // Brightened from `--fnt` (direct user feedback): "Trash" is a
-            // real footer action button, same tier as "Cancel"/"Save" beside
-            // it, not secondary meta text.
+            ...fieldStyle,
             color: 'var(--mut)',
-            padding: 0,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
+            fontSize: 'var(--text-sm)',
+            resize: 'vertical',
+            marginBottom: 0,
           }}
-        >
+        />
+      </div>
+      <div className="silo-modal-footer">
+        <button type="button" onClick={handleTrash} className="silo-edit-footer-btn">
           <svg
             width="12"
             height="12"
@@ -467,47 +459,11 @@ export function EditModal({
           Trash
         </button>
         <span style={{ flex: 1 }} />
-        <button
-          type="button"
-          onClick={closeEdit}
-          className="silo-edit-footer-btn"
-          style={{
-            border: 0,
-            background: 'none',
-            fontSize: 'var(--text-sm)',
-            fontWeight: 500,
-            // `--mut` (already, unchanged) — same secondary-action tier as
-            // the brightened "Trash" button beside it; "Save" stays the sole
-            // `--ink`-on-a-box PRIMARY CTA of the three.
-            color: 'var(--mut)',
-            padding: 0,
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-          }}
-        >
+        <button type="button" onClick={closeEdit} className="silo-edit-footer-btn">
           Cancel
         </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          className="silo-edit-save-btn"
-          style={{
-            border: '1px solid var(--line)',
-            background: 'var(--bg2)',
-            borderRadius: 8,
-            fontSize: 'var(--text-sm)',
-            fontWeight: 500,
-            color: 'var(--ink)',
-            padding: 'var(--s1-5) var(--s4)',
-            cursor: 'pointer',
-            fontFamily: 'inherit',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 'var(--s1-5)',
-          }}
-        >
-          <span style={{ color: 'var(--markt)' }}>✓</span>
-          Save
+        <button type="button" onClick={handleSave} className="silo-edit-save-btn">
+          Save <kbd className="silo-save-hint">⌘↵</kbd>
         </button>
       </div>
     </ModalShell>

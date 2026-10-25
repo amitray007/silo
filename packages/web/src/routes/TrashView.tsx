@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useState } from 'react';
 import {
   useBulkDeleteNow,
   useBulkRestore,
@@ -9,6 +9,7 @@ import {
 import type { TrashLinkJson } from '../api/types';
 import { ContentHeader } from '../components';
 import { CenteredPanel } from '../components/CenteredPanel';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import {
   DockAction,
   DockIconAction,
@@ -16,7 +17,7 @@ import {
   DockTrashIcon,
   SelectionDock,
 } from '../components/Dock';
-import { CheckIcon, TrashIcon } from '../components/NavIcons';
+import { TrashIcon } from '../components/NavIcons';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { useTrashSelection } from '../components/SelectionContext';
 import { TrashDayGroup } from '../components/TrashDayGroup';
@@ -67,45 +68,35 @@ function TrashSelectionDock({ selectedIds, allIds }: { selectedIds: string[]; al
   );
 }
 
-/** The second click confirms emptying trash; an unused confirmation expires. */
-const CONFIRM_RESET_MS = 4000;
-
 function TrashEmptyNowButton() {
   const emptyTrash = useEmptyTrash();
   const [confirming, setConfirming] = useState(false);
-  const resetTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  useEffect(() => () => clearTimeout(resetTimer.current), []);
-
-  function armConfirm() {
-    setConfirming(true);
-    clearTimeout(resetTimer.current);
-    resetTimer.current = setTimeout(() => setConfirming(false), CONFIRM_RESET_MS);
-  }
-
-  function handleClick(): undefined {
-    if (!confirming) {
-      armConfirm();
-      return undefined;
-    }
-    clearTimeout(resetTimer.current);
-    emptyTrash.mutate(undefined, { onSettled: () => setConfirming(false) });
-    return undefined;
-  }
-
   return (
-    <button
-      type="button"
-      className="silo-reader-btn silo-empty-trash"
-      onClick={handleClick}
-      disabled={emptyTrash.isPending}
-      title={confirming ? 'Confirm emptying the trash' : 'Permanently empty the trash'}
-      aria-label={confirming ? 'Confirm emptying the trash' : 'Empty trash'}
-      onBlur={() => setConfirming(false)}
-    >
-      {confirming ? <CheckIcon /> : <TrashIcon size={16} stroke="currentColor" />}
-      {confirming ? 'Confirm?' : 'Empty trash'}
-    </button>
+    <>
+      <button
+        type="button"
+        className="silo-reader-btn silo-empty-trash"
+        onClick={() => setConfirming(true)}
+        disabled={emptyTrash.isPending}
+        title="Permanently empty the trash"
+        aria-label="Empty trash"
+      >
+        <TrashIcon size={16} stroke="currentColor" />
+        Empty trash
+      </button>
+      {confirming && (
+        <ConfirmDialog
+          title="Empty trash?"
+          action="Empty trash"
+          actionLabel="Confirm emptying the trash"
+          pending={emptyTrash.isPending}
+          onClose={() => setConfirming(false)}
+          onConfirm={() => emptyTrash.mutate(undefined, { onSettled: () => setConfirming(false) })}
+        >
+          All links in trash will be deleted forever. This cannot be undone.
+        </ConfirmDialog>
+      )}
+    </>
   );
 }
 
@@ -127,7 +118,7 @@ function TrashEmptyState({ purgeWindowDays }: { purgeWindowDays: number }) {
         style={{
           margin: 'var(--s5) 0 0',
           fontSize: 'var(--text-md)',
-          fontWeight: 500,
+          fontWeight: 600,
           color: 'var(--ink)',
           letterSpacing: 'var(--tracking-tight)',
           textWrap: 'balance',
