@@ -7,10 +7,14 @@ import { deriveDomain, deriveTitleFromUrl } from '../../lib/url';
 import { Chip } from '../Chip';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
+import { OriginalControls } from './OriginalControls';
 import { ReaderContent } from './ReaderContent';
 import { ReaderIcon } from './ReaderIcon';
+import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderPlayer } from './ReaderPlayer';
+import { type OriginalState, useOriginal } from './useOriginal';
 import type { useReaderActions } from './useReaderActions';
+import { seekChapter, YouTubeStats } from './YouTubeDetails';
 
 type Actions = ReturnType<typeof useReaderActions>;
 type Tab = 'reader' | 'original';
@@ -75,10 +79,12 @@ function ReaderMore({
   actions,
   disabled,
   trashed,
+  original,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
+  original: OriginalState | undefined;
 }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -117,6 +123,7 @@ function ReaderMore({
       </button>
       {open && (
         <div className="silo-reader-more-menu" data-reader-menu>
+          {original && <OriginalControls state={original} />}
           <ReaderActions actions={actions} disabled={disabled} trashed={trashed} />
         </div>
       )}
@@ -124,23 +131,30 @@ function ReaderMore({
   );
 }
 
+function ArticleBody({ link, loading }: { link: LinkJson; loading: boolean }) {
+  return loading && !('contentHtml' in link) ? <ReaderSkeleton /> : <ReaderContent link={link} />;
+}
+
 function ReaderArticle({
   link,
   actions,
   trashed,
   purgeWindowDays,
+  loading,
 }: {
   link: LinkJson;
   actions: Actions;
   trashed: boolean;
   purgeWindowDays: number;
+  loading: boolean;
 }) {
   const domain = deriveDomain(link.url);
   const embed = embedFor(link.url, link.sourceData);
   const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider) ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
   return (
-    <article className="silo-reader">
+    // biome-ignore lint/a11y/useKeyWithClickEvents: delegated native anchor clicks also fire on Enter.
+    <article className="silo-reader" onClick={(event) => seekChapter(event, video)}>
       {trashed && (
         <div className="silo-reader-trashnote">
           <ReaderIcon name="trash" />
@@ -167,6 +181,7 @@ function ReaderArticle({
       )}
       {video && <ReaderPlayer embed={video} />}
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
+      <YouTubeStats source={link.sourceData} />
       <div className="silo-reader-source">
         <Chip domain={domain} size={20} />
         <span>{link.siteName || domain}</span>
@@ -216,7 +231,7 @@ function ReaderArticle({
           </button>
         )}
       </div>
-      <ReaderContent link={link} />
+      <ArticleBody link={link} loading={loading} />
     </article>
   );
 }
@@ -250,6 +265,7 @@ export function ReaderPane({
   title: string;
   loading: boolean;
 }) {
+  const original = useOriginal(link, tab === 'original');
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -282,13 +298,14 @@ export function ReaderPane({
   if (link)
     content =
       tab === 'original' ? (
-        <Original key={link.id} link={link} />
+        <Original key={link.id} link={link} state={original} />
       ) : (
         <ReaderArticle
           link={link}
           actions={actions}
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
+          loading={loading}
         />
       );
   return (
@@ -305,34 +322,47 @@ export function ReaderPane({
           <ReaderIcon name="back" />
           {title}
         </button>
-        <div className="silo-reader-segment" role="tablist" aria-label="Link view">
-          {(['reader', 'original'] as const).map((value) => (
-            <button
-              type="button"
-              role="tab"
-              id={`${id}-${value}`}
-              aria-controls={`${id}-panel`}
-              key={value}
-              aria-selected={tab === value}
-              disabled={!link}
-              onClick={() => setTab(value)}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                  event.preventDefault();
-                  const next = value === 'reader' ? 'original' : 'reader';
-                  setTab(next);
-                  document.getElementById(`${id}-${next}`)?.focus();
-                }
-              }}
-            >
-              {value === 'reader' ? 'Reader' : 'Original'}
-            </button>
-          ))}
+        <div className="silo-reader-viewtools">
+          <div className="silo-reader-segment" role="tablist" aria-label="Link view">
+            {(['reader', 'original'] as const).map((value) => (
+              <button
+                type="button"
+                role="tab"
+                id={`${id}-${value}`}
+                aria-controls={`${id}-panel`}
+                key={value}
+                aria-selected={tab === value}
+                disabled={!link}
+                onClick={() => setTab(value)}
+                onKeyDown={(event) => {
+                  if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                    event.preventDefault();
+                    const next = value === 'reader' ? 'original' : 'reader';
+                    setTab(next);
+                    document.getElementById(`${id}-${next}`)?.focus();
+                  }
+                }}
+              >
+                {value === 'reader' ? 'Reader' : 'Original'}
+              </button>
+            ))}
+          </div>
+          {tab === 'original' && link && (
+            <div className="silo-reader-desktop">
+              <OriginalControls state={original} />
+            </div>
+          )}
         </div>
         <div className="silo-reader-desktop">
           <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
         </div>
-        <ReaderMore key={selectedId} actions={actions} disabled={!link} trashed={trashed} />
+        <ReaderMore
+          key={selectedId}
+          actions={actions}
+          disabled={!link}
+          trashed={trashed}
+          original={tab === 'original' ? original : undefined}
+        />
       </div>
       {actions.feedback && (
         <div className="silo-toast" role="status">
@@ -341,6 +371,7 @@ export function ReaderPane({
       )}
       <div
         className="silo-reader-scroll"
+        data-original={tab === 'original'}
         ref={scrollRef}
         role="tabpanel"
         id={`${id}-panel`}

@@ -81,7 +81,16 @@ export type SourceData =
       language?: string;
       languagePct?: number;
     }
-  | { kind: 'youtube'; channel: string; thumbnailUrl: string; videoId?: string };
+  | {
+      kind: 'youtube';
+      channel: string;
+      thumbnailUrl: string;
+      videoId?: string;
+      duration?: number;
+      views?: number;
+      publishedAt?: string;
+      keywords?: string[];
+    };
 
 /**
  * Mirrors `LinkJson` in `packages/api/src/link-json.ts` — the whitelisted,

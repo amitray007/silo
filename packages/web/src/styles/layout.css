@@ -256,7 +256,6 @@
   font-size: 12px;
   white-space: nowrap;
   font-weight: 500;
-  animation: siloPulse 1.4s ease-in-out infinite;
 }
 .silo-trash-row-menu {
   position: absolute;
@@ -376,9 +375,9 @@
   overscroll-behavior: contain;
 }
 .silo-reader {
-  max-width: 680px;
+  max-width: 900px;
   margin: 0 auto;
-  padding: 40px 40px 80px;
+  padding: 40px clamp(24px, 3vw, 40px) 80px;
 }
 .silo-reader > h2 {
   font-size: 30px;
@@ -626,31 +625,6 @@
   height: 100%;
   display: flex;
   flex-direction: column;
-}
-.silo-original-bar {
-  min-height: 40px;
-  flex: none;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 8px 4px 16px;
-  border-bottom: 1px solid var(--line);
-  background: var(--bg);
-}
-.silo-original-bar > span {
-  flex: 1;
-  min-width: 0;
-  color: var(--mut);
-  font-size: 12.5px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.silo-original-hint {
-  margin: 0;
-  padding: 8px 16px;
-  font-size: 12.5px;
-  color: var(--mut);
 }
 .silo-original-frame {
   flex: 1;
@@ -1025,35 +999,161 @@ div.silo-reader-notecard {
 .silo-reader-player[data-provider="spotify"] {
   min-height: 152px;
 }
-.silo-original-player,
 .silo-original-card {
   padding: 20px;
 }
-.silo-original-bar {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  flex-wrap: wrap;
-}
-.silo-original-bar .silo-reader-btn {
-  flex: none;
-  min-height: 40px;
-}
 .silo-original {
-  min-height: 100%;
-  height: auto;
+  height: 100%;
+  min-height: 0;
+}
+.silo-original-surface,
+.silo-original-player {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
 }
 .silo-original-frame {
-  flex: none;
-  height: calc(100dvh - 190px);
-  min-height: 320px;
+  display: block;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
+}
+.silo-player-surface {
+  position: relative;
+  margin-bottom: 22px;
+}
+.silo-original-player .silo-player-surface {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  margin: 0;
+}
+.silo-original-player .silo-reader-player {
+  flex: 1;
+  height: 100%;
+  border-radius: 0;
+  margin: 0;
 }
 .silo-reader-tweet {
   margin-bottom: 22px;
 }
 
-@media (max-width: 719px) {
-  .silo-original-bar > span {
-    flex-basis: 100%;
+.silo-reader-scroll[data-original="true"] {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.silo-reader-viewtools,
+.silo-original-controls {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.silo-original {
+  flex: 1;
+}
+.silo-original-controls {
+  font-size: 12px;
+}
+.silo-original-mode {
+  position: relative;
+}
+.silo-original-mode summary {
+  cursor: pointer;
+  padding: 6px;
+  border-radius: 6px;
+  list-style: none;
+  white-space: nowrap;
+  color: var(--mut);
+}
+.silo-original-mode summary::-webkit-details-marker {
+  display: none;
+}
+.silo-original-mode-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  z-index: 10;
+  min-width: 140px;
+  padding: 4px;
+  background: var(--bg2);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  box-shadow: var(--elev-2);
+}
+.silo-original-mode-menu span {
+  display: block;
+}
+.silo-original-mode-menu button {
+  width: 100%;
+  padding: 8px;
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.silo-original-mode-menu button:disabled {
+  color: var(--ghost);
+  cursor: default;
+}
+.silo-original-mode-menu button[aria-pressed="true"] {
+  background: var(--hov);
+}
+.silo-reader-more-menu .silo-original-controls {
+  margin-bottom: 8px;
+}
+.silo-reader-loading {
+  padding: 24px;
+}
+.silo-reader .silo-reader-loading {
+  padding: 8px 0;
+}
+
+.silo-player-surface > iframe {
+  margin: 0;
+}
+.silo-frame-loading {
+  position: absolute;
+  inset: 0;
+  background: var(--bg);
+  pointer-events: none;
+}
+.silo-youtube-stats {
+  color: var(--mut);
+  font-size: 13px;
+  margin: 0 0 16px;
+}
+.silo-link-row[data-enriching="true"] {
+  position: relative;
+  isolation: isolate;
+  background-color: var(--hov);
+}
+.silo-link-row[data-enriching="true"]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: linear-gradient(100deg, transparent 20%, var(--line) 50%, transparent 80%);
+  background-size: 200% 100%;
+  animation: siloCaptureSweep 3s ease-in-out infinite;
+}
+@keyframes siloCaptureSweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-link-row[data-enriching="true"]::after {
+    animation: none;
+    background: none;
   }
 }

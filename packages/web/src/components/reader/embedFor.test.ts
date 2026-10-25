@@ -2,15 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { embedFor } from './embedFor';
 
 const source = { kind: 'link' } as const;
-const yt = 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw';
+const yt = 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?enablejsapi=1';
 describe('embedFor', () => {
   it.each([
     ['https://www.youtube.com/watch?v=jNQXAC9IVRw', 'youtube', yt],
-    ['https://youtu.be/jNQXAC9IVRw?t=90', 'youtube', `${yt}?start=90`],
-    ['https://m.youtube.com/shorts/jNQXAC9IVRw?t=1m30s', 'youtube', `${yt}?start=90`],
-    ['https://youtube.com/embed/jNQXAC9IVRw?t=1h2m3s', 'youtube', `${yt}?start=3723`],
+    ['https://youtu.be/jNQXAC9IVRw?t=90', 'youtube', `${yt}&start=90`],
+    ['https://m.youtube.com/shorts/jNQXAC9IVRw?t=1m30s', 'youtube', `${yt}&start=90`],
+    ['https://youtube.com/embed/jNQXAC9IVRw?t=1h2m3s', 'youtube', `${yt}&start=3723`],
     ['https://youtube.com/live/jNQXAC9IVRw?t=oops', 'youtube', yt],
-    ['https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=0', 'youtube', `${yt}?start=0`],
+    ['https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?start=0', 'youtube', `${yt}&start=0`],
     ['https://vimeo.com/76979871', 'vimeo', 'https://player.vimeo.com/video/76979871'],
     [
       'https://vimeo.com/76979871/abcdef1234',

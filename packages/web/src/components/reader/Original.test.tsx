@@ -4,9 +4,22 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setApiBaseUrl } from '../../api/client';
+import type { LinkJson } from '../../api/types';
 import { makeLink } from '../../test/fixtures';
 import { ThemeProvider } from '../../theme/ThemeProvider';
 import { Original } from './Original';
+import { OriginalControls } from './OriginalControls';
+import { useOriginal } from './useOriginal';
+
+function Standalone({ link }: { link: LinkJson }) {
+  const state = useOriginal(link, true);
+  return (
+    <>
+      <OriginalControls state={state} />
+      <Original link={link} state={state} />
+    </>
+  );
+}
 
 const link = makeLink({ id: 'link-id', url: 'https://publisher.test/article', title: 'Article' });
 function show(
@@ -32,7 +45,7 @@ function show(
   const rendered = render(
     <QueryClientProvider client={client}>
       <ThemeProvider>
-        <Original link={{ ...link, url }} />
+        <Standalone link={{ ...link, url }} />
       </ThemeProvider>
     </QueryClientProvider>,
   );
@@ -51,7 +64,7 @@ describe('Original mode order', () => {
       'youtube-nocookie.com/embed/jNQXAC9IVRw',
     );
     expect(fetch).not.toHaveBeenCalled();
-    expect(screen.getByRole('link', { name: /Open in new tab/ })).toBeDefined();
+    expect(container.querySelector('.silo-original-bar')).toBeNull();
   });
   it('waits for the hint, then loads the live site without offering an unapproved silo view', async () => {
     const { container, fetch } = show();
@@ -61,12 +74,9 @@ describe('Original mode order', () => {
       '/api/links/link-id/frame',
       expect.objectContaining({ credentials: 'include', signal: expect.any(AbortSignal) }),
     );
-    expect(screen.getByText(/Live site ·/)).toBeDefined();
+    expect(screen.getByLabelText('Original mode: Live site')).toBeDefined();
     expect(screen.queryByRole('button', { name: 'Show silo view' })).toBeNull();
     expect(fetch).toHaveBeenCalledTimes(1);
-    expect(screen.getByRole('link', { name: /Open in new tab/ }).getAttribute('href')).toBe(
-      link.url,
-    );
   });
   it('uses silo view for blocked framing and allows an explicit live-site attempt', async () => {
     const { container, fetch } = show('view');
@@ -83,19 +93,21 @@ describe('Original mode order', () => {
         signal: expect.any(AbortSignal),
       }),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Load live site' }));
-    expect(container.querySelector('iframe')?.getAttribute('src')).toBe(link.url);
-    expect(container.querySelector('iframe')?.hasAttribute('sandbox')).toBe(false);
-    fireEvent.click(screen.getByRole('button', { name: 'Show silo view' }));
-    await screen.findByTitle('Silo view');
+    fireEvent.click(screen.getByLabelText('Original mode: Silo view'));
+    expect(screen.getByRole<HTMLButtonElement>('button', { name: 'Live site' }).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole('button', { name: 'Live site' }).parentElement?.title).toContain(
+      'blocks framing',
+    );
   });
   it.each(['none', 'error'] as const)('uses a card for %s with an escape link', async (mode) => {
     const { container } = show(mode);
-    await waitFor(() => expect(screen.queryByText('Loading Original…')).toBeNull());
+    await waitFor(() => expect(screen.queryByLabelText('Preparing page...')).toBeNull());
     expect(container.querySelector('iframe')).toBeNull();
     expect(screen.getByRole('heading', { name: 'Article' })).toBeDefined();
-    expect(screen.getByText(/Link card ·/)).toBeDefined();
-    expect(screen.getByRole('link', { name: /Open in new tab/ })).toBeDefined();
+    expect(screen.getByLabelText('Original mode: Link card')).toBeDefined();
+    expect(container.querySelector('.silo-original-bar')).toBeNull();
   });
   it('shows the card when /frame succeeds but the real /view HTTP request returns 503', async () => {
     const requests: string[] = [];
@@ -120,7 +132,7 @@ describe('Original mode order', () => {
     const view = render(
       <QueryClientProvider client={client}>
         <ThemeProvider>
-          <Original link={link} />
+          <Standalone link={link} />
         </ThemeProvider>
       </QueryClientProvider>,
     );
@@ -129,10 +141,10 @@ describe('Original mode order', () => {
       expect(view.container.querySelector('iframe')).toBeNull();
       failView?.();
       failView = undefined;
-      await waitFor(() => expect(screen.queryByText('Loading Original…')).toBeNull());
+      await waitFor(() => expect(screen.queryByLabelText('Preparing page...')).toBeNull());
       expect(requests).toContain('GET /api/links/link-id/frame');
       expect(view.container.querySelector('iframe')).toBeNull();
-      expect(screen.getByText(/Link card ·/)).toBeDefined();
+      expect(screen.getByLabelText('Original mode: Link card')).toBeDefined();
     } finally {
       failView?.();
       view.unmount();
@@ -151,6 +163,17 @@ describe('Original mode order', () => {
     );
   });
 
+  it('refreshes via /frame?fresh=1 and remounts the iframe after it resolves', async () => {
+    const { container, fetch } = show();
+    await screen.findByTitle('Original page');
+    const previous = container.querySelector('iframe');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Original' }));
+    await waitFor(() =>
+      expect(fetch).toHaveBeenCalledWith('/api/links/link-id/frame?fresh=1', expect.anything()),
+    );
+    await waitFor(() => expect(container.querySelector('iframe')).not.toBe(previous));
+    expect(container.querySelector('iframe')?.src).toBe(link.url);
+  });
   it('cancels the frame-hint request when Original closes', async () => {
     let signal: AbortSignal | undefined;
     vi.stubGlobal(
@@ -164,7 +187,7 @@ describe('Original mode order', () => {
     const view = render(
       <QueryClientProvider client={client}>
         <ThemeProvider>
-          <Original link={link} />
+          <Standalone link={link} />
         </ThemeProvider>
       </QueryClientProvider>,
     );

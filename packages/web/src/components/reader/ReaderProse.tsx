@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import type { LinkDetailJson } from '../../api/types';
 
 function readerHtml(link: LinkDetailJson): string {
@@ -63,6 +63,13 @@ function readerHtml(link: LinkDetailJson): string {
       'dt',
       'dd',
       'time',
+      'abbr',
+      'cite',
+      'q',
+      'details',
+      'summary',
+      'colgroup',
+      'col',
     ],
     ALLOWED_ATTR: [
       'href',
@@ -73,6 +80,8 @@ function readerHtml(link: LinkDetailJson): string {
       'rowspan',
       'scope',
       'start',
+      'reversed',
+      'open',
       'datetime',
     ],
     ALLOW_DATA_ATTR: false,
@@ -85,7 +94,10 @@ function readerHtml(link: LinkDetailJson): string {
     anchor.setAttribute('target', '_blank');
     anchor.setAttribute('rel', 'noopener noreferrer');
   }
-  for (const image of fragment.querySelectorAll('img')) image.setAttribute('loading', 'lazy');
+  for (const image of fragment.querySelectorAll('img')) {
+    image.setAttribute('loading', 'lazy');
+    image.setAttribute('data-loaded', 'false');
+  }
   for (const table of fragment.querySelectorAll('table')) {
     const wrapper = document.createElement('div');
     wrapper.className = 'silo-reader-table';
@@ -105,8 +117,24 @@ function readerHtml(link: LinkDetailJson): string {
 
 export function ReaderProse({ link }: { link: LinkDetailJson }) {
   const html = useMemo(() => readerHtml(link), [link]);
+  const root = useRef<HTMLDivElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: new sanitized HTML replaces image elements.
+  useEffect(() => {
+    for (const image of root.current?.querySelectorAll('img') ?? [])
+      if (image.complete) image.dataset.loaded = 'true';
+  }, [html]);
   return (
-    // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized with an explicit DOMPurify allowlist above.
-    <div className="silo-reader-prose" dangerouslySetInnerHTML={{ __html: html }} />
+    <div
+      ref={root}
+      className="silo-reader-prose"
+      onLoadCapture={(event) => {
+        if (event.target instanceof HTMLImageElement) event.target.dataset.loaded = 'true';
+      }}
+      onErrorCapture={(event) => {
+        if (event.target instanceof HTMLImageElement) event.target.dataset.loaded = 'true';
+      }}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: sanitized with an explicit DOMPurify allowlist above.
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
   );
 }

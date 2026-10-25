@@ -79,7 +79,7 @@ describe('LinkRow', () => {
 
   it('shows Capturing and the domain beneath an enriching title', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
-    expect(screen.getByText('◌ Capturing')).toBeDefined();
+    expect(screen.getByText('Capturing')).toBeDefined();
     expect(screen.getByText('example.com')).toBeDefined();
     expect(screen.getByText('A post').className).toBe('silo-row-title');
   });

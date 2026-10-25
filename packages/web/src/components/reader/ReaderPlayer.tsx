@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PlayerEmbed } from './embedFor';
+import { ReaderSkeleton, useFrameLoading } from './ReaderLoading';
 
 function record(value: unknown): Record<string, unknown> | undefined {
   return value !== null && typeof value === 'object'
@@ -22,7 +23,8 @@ function tweetHeight(data: unknown): number | undefined {
     : undefined;
 }
 
-export function ReaderPlayer({ embed }: { embed: PlayerEmbed }) {
+export function ReaderPlayer({ embed, fill = false }: { embed: PlayerEmbed; fill?: boolean }) {
+  const { loading, onLoad } = useFrameLoading(embed.src);
   const frame = useRef<HTMLIFrameElement>(null);
   const [size, setSize] = useState<{ src: string; height: number }>();
   useEffect(() => {
@@ -41,17 +43,28 @@ export function ReaderPlayer({ embed }: { embed: PlayerEmbed }) {
   }, [embed.provider, embed.src]);
   const height = size?.src === embed.src ? size.height : embed.height;
   return (
-    <iframe
-      ref={frame}
-      className="silo-reader-player"
-      data-provider={embed.provider}
-      src={embed.src}
-      title={embed.title}
-      style={{ aspectRatio: embed.aspect, ...(height ? { height } : {}) }}
-      referrerPolicy="strict-origin-when-cross-origin"
-      allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-      allowFullScreen
-      loading="lazy"
-    />
+    <div className="silo-player-surface" aria-busy={loading}>
+      <iframe
+        onLoad={onLoad}
+        ref={frame}
+        className="silo-reader-player"
+        data-provider={embed.provider}
+        src={embed.src}
+        title={embed.title}
+        style={{
+          aspectRatio: fill ? undefined : embed.aspect,
+          ...(!fill && height ? { height } : {}),
+        }}
+        referrerPolicy="strict-origin-when-cross-origin"
+        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        allowFullScreen
+        loading="lazy"
+      />
+      {loading && (
+        <div className="silo-frame-loading">
+          <ReaderSkeleton label="Loading player..." />
+        </div>
+      )}
+    </div>
   );
 }

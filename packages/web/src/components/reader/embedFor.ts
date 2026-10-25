@@ -27,6 +27,7 @@ function youtube(url: URL, source: SourceData): PlayerEmbed | undefined {
     id = url.searchParams.get('v') ?? (source.kind === 'youtube' ? source.videoId : undefined);
   if (!id || !youtubeId.test(id)) return undefined;
   const src = new URL(`https://www.youtube-nocookie.com/embed/${id}`);
+  src.searchParams.set('enablejsapi', '1');
   const start = startSeconds(url.searchParams.get('t') ?? url.searchParams.get('start'));
   if (start !== undefined) src.searchParams.set('start', String(start));
   return { provider: 'youtube', src: src.href, title: 'YouTube video', aspect: '16 / 9' };

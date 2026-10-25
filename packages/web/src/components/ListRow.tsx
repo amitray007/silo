@@ -53,6 +53,7 @@ export function ListRow({
         rel="noopener"
         className="silo-link-row"
         data-link-id={link.id}
+        data-enriching={link.captureStatus === 'enriching'}
         tabIndex={reader?.selectedId && reader.selectedId !== link.id ? -1 : 0}
         data-active={reader?.selectedId === link.id}
         data-trashed={purge !== undefined}
@@ -85,9 +86,7 @@ export function ListRow({
         <span className="silo-row-meta">
           <span>{domain}</span>
           {hovered && <span className="silo-row-time">{relativeTimeFromNow(link.createdAt)}</span>}
-          {link.captureStatus === 'enriching' && (
-            <span className="silo-capturing">◌ Capturing</span>
-          )}
+          {link.captureStatus === 'enriching' && <span className="silo-capturing">Capturing</span>}
           {purge !== undefined && (
             <span className="silo-row-purge" title={`Auto-deletes in ${purge} days`}>
               Purges in {purge} days

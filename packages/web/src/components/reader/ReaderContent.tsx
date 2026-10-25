@@ -64,7 +64,7 @@ export function ReaderContent({ link }: { link: LinkJson | LinkDetailJson }) {
   const source = link.sourceData;
   const embed = embedFor(link.url, source);
   const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider);
-  const prose = !video && 'contentHtml' in link && link.contentHtml !== null;
+  const prose = 'contentHtml' in link && link.contentHtml !== null;
   return (
     <>
       {source.kind === 'twitter' && (
@@ -124,7 +124,6 @@ export function ReaderContent({ link }: { link: LinkJson | LinkDetailJson }) {
               }}
             />
           )}
-          <figcaption>{source.channel}</figcaption>
         </figure>
       )}
       {source.kind !== 'twitter' &&

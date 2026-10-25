@@ -160,7 +160,10 @@ function mutate(path: string, state: { live: LinkJson[]; trash: TrashLinkJson[] 
 
 const reader = () => within(screen.getByRole('region', { name: 'Link reader' }));
 const selected = async (title = 'First link') =>
-  waitFor(() => expect(reader().getByRole('heading', { level: 2, name: title })).toBeDefined());
+  waitFor(() => {
+    expect(reader().getByRole('heading', { level: 2, name: title })).toBeDefined();
+    expect(reader().queryByLabelText('Loading article')).toBeNull();
+  });
 async function selectFirst() {
   await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
   fireEvent.click(screen.getByText('First link'));
@@ -307,12 +310,8 @@ describe('reader content', () => {
     const frame = container.querySelector('iframe');
     expect(frame?.getAttribute('sandbox')).toBeNull();
     expect(frame?.getAttribute('referrerpolicy')).toBe('no-referrer');
-    expect(frame?.getAttribute('loading')).toBe('lazy');
-    expect(
-      reader()
-        .getByRole('link', { name: /Open in new tab/ })
-        .getAttribute('href'),
-    ).toBe(a.url);
+    expect(frame?.getAttribute('loading')).toBeNull();
+    expect(reader().getByRole('button', { name: 'Open original' })).toBeDefined();
     expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
   });
   it('does not mount an unrequested Original iframe when selecting another link', async () => {
@@ -866,7 +865,7 @@ describe('review regressions', () => {
     await waitFor(() =>
       expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe(mode),
     );
-    expect(reader().getAllByRole('link', { name: /Open in new tab/ }).length).toBeGreaterThan(0);
+    expect(reader().getByRole('button', { name: 'Open original' })).toBeDefined();
     if (mode === 'direct') {
       expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
       if (url.includes('/pdf/'))
@@ -894,6 +893,8 @@ describe('review regressions', () => {
     expect(container.querySelector('.silo-reader-tweet')).toBeNull();
     expect(reader().queryByText(twitterSourceData.text)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
-    expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=dark');
+    await waitFor(() =>
+      expect(screen.getByTitle('X post').getAttribute('src')).toContain('theme=dark'),
+    );
   });
 });

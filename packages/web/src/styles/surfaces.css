@@ -300,7 +300,7 @@
 .silo-settings-lead {
   color: var(--mut);
   font-size: 14px;
-  margin: 0 0 18px;
+  margin: 0 0 1.25em;
 }
 .silo-settings-panel pre,
 .silo-settings-panel code {
@@ -707,7 +707,7 @@
   line-height: 1.25;
   font-weight: 600;
   letter-spacing: -0.025em;
-  margin: 30px 0 12px;
+  margin: 2em 0 0.65em;
   text-wrap: pretty;
 }
 .silo-reader-prose h1 {
@@ -719,11 +719,18 @@
 .silo-reader-prose h3 {
   font-size: 20px;
 }
-.silo-reader-prose :is(h4, h5, h6) {
-  font-size: 17px;
+.silo-reader-prose h4 {
+  font-size: 18px;
+}
+.silo-reader-prose h5 {
+  font-size: 16px;
+}
+.silo-reader-prose h6 {
+  font-size: 14px;
+  letter-spacing: 0.02em;
 }
 .silo-reader-prose :is(p, ul, ol, dl, pre, figure, blockquote, .silo-reader-table) {
-  margin: 0 0 18px;
+  margin: 0 0 1.25em;
 }
 .silo-reader-prose :is(ul, ol) {
   padding-left: 24px;
@@ -798,4 +805,114 @@
   margin: 28px 0;
   border: 0;
   border-top: 1px solid var(--line);
+}
+
+.silo-reader-prose ul {
+  list-style: disc outside;
+}
+.silo-reader-prose ol {
+  list-style: decimal outside;
+}
+.silo-reader-prose ul ul {
+  list-style-type: circle;
+}
+.silo-reader-prose ul ul ul {
+  list-style-type: square;
+}
+.silo-reader-prose ol ol {
+  list-style-type: lower-alpha;
+}
+.silo-reader-prose ol ol ol {
+  list-style-type: lower-roman;
+}
+.silo-reader-prose li > p {
+  margin-bottom: 0.5em;
+}
+.silo-reader-prose :is(em, i, cite) {
+  font-style: italic;
+}
+.silo-reader-prose :is(strong, b) {
+  font-weight: 600;
+}
+.silo-reader-prose :is(u, ins) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.silo-reader-prose :is(s, del) {
+  text-decoration: line-through;
+}
+.silo-reader-prose mark {
+  color: var(--ink);
+  background: var(--line-2);
+  padding: 0.05em 0.15em;
+}
+.silo-reader-prose small {
+  font-size: 0.8em;
+}
+.silo-reader-prose :is(sub, sup) {
+  font-size: 0.75em;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+.silo-reader-prose sup {
+  top: -0.5em;
+}
+.silo-reader-prose sub {
+  bottom: -0.25em;
+}
+.silo-reader-prose abbr[title] {
+  text-decoration: underline dotted;
+  cursor: help;
+}
+.silo-reader-prose q {
+  quotes: "“" "”" "‘" "’";
+}
+.silo-reader-prose q::before {
+  content: open-quote;
+}
+.silo-reader-prose q::after {
+  content: close-quote;
+}
+.silo-reader-prose dt {
+  font-weight: 600;
+  margin-top: 1em;
+}
+.silo-reader-prose dd {
+  margin: 0.3em 0 1em 1.5em;
+}
+.silo-reader-prose blockquote > :last-child {
+  margin-bottom: 0;
+}
+.silo-reader-prose figcaption {
+  margin-top: 8px;
+  line-height: 1.5;
+}
+.silo-reader-prose details {
+  margin: 1.25em 0;
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.silo-reader-prose summary {
+  cursor: pointer;
+  font-weight: 500;
+}
+.silo-reader-prose details[open] > summary {
+  margin-bottom: 12px;
+}
+.silo-reader-prose img {
+  opacity: 1;
+  transition: opacity 180ms ease;
+}
+.silo-reader-prose img[data-loaded="false"] {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-reader-prose img[data-loaded="false"] {
+    opacity: 1;
+  }
+  .silo-reader-prose img {
+    transition: none;
+  }
 }
