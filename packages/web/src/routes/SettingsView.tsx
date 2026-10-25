@@ -1,13 +1,11 @@
 import { Navigate, useParams, useSearchParams } from 'react-router';
-import { parseSettingsTab, settingsPath } from '../components/SettingsContext';
-import { SettingsPage } from '../components/SettingsPage';
+import { parseSettingsTab } from '../components/SettingsContext';
 
-/** Legacy Settings links and tab aliases redirect to the canonical page route. */
+/** Every legacy Settings URL opens the shared modal over the library. */
 export function SettingsView() {
-  const { tab: path } = useParams<{ tab: string }>();
+  const params = useParams();
   const [search] = useSearchParams();
-  const tab = parseSettingsTab(path ?? search.get('tab') ?? undefined) ?? 'plugins';
-  const canonical = settingsPath(tab);
-  if (`/settings/${path ?? ''}` !== canonical) return <Navigate to={canonical} replace />;
-  return <SettingsPage />;
+  const tab =
+    parseSettingsTab(params['*']?.split('/')[0] || search.get('tab') || undefined) ?? 'plugins';
+  return <Navigate to="/" replace state={{ settingsTab: tab }} />;
 }

@@ -21,8 +21,7 @@ function AppRoutes() {
         <Route path="/" element={<LibraryView />} />
         <Route path="/trash" element={<TrashView />} />
         <Route path="/tags/:name" element={<TagView />} />
-        <Route path="/settings" element={<SettingsView />} />
-        <Route path="/settings/:tab" element={<SettingsView />} />
+        <Route path="/settings/*" element={<SettingsView />} />
         <Route path="*" element={<NotFoundView />} />
       </Route>
     </Routes>

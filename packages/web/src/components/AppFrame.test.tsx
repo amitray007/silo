@@ -117,40 +117,40 @@ describe('AppFrame', () => {
     expect(screen.getByText('outlet content')).toBeDefined();
   });
 
-  describe('Settings page', () => {
+  describe('Settings modal', () => {
     it('clicking the sidebar Settings nav item opens the modal, with the real theme toggle inside Preferences', () => {
       renderAppFrame();
 
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
       expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
       expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
     });
 
-    it('navigates to the Settings page and returns to the previous outlet', () => {
+    it('keeps the outlet and URL behind the Settings modal', () => {
       renderAppFrame();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
-      expect(screen.queryByText('outlet content')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Close settings' }));
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByText('outlet content')).toBeDefined();
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
       expect(screen.getByTestId('current-path').textContent).toBe('/');
     });
 
-    it('Escape returns from the Settings page', () => {
+    it('Escape returns from the Settings modal', () => {
       renderAppFrame();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
       fireEvent.keyDown(document, { key: 'Escape' });
-      expect(screen.queryByRole('region', { name: 'Settings' })).toBeNull();
+      expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
       expect(screen.getByText('outlet content')).toBeDefined();
     });
 
-    it('clicking the page background leaves Settings open', () => {
+    it('clicking inside the modal leaves Settings open', () => {
       renderAppFrame();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      fireEvent.click(screen.getByRole('region', { name: 'Settings' }));
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      fireEvent.click(screen.getByRole('dialog', { name: 'Settings' }));
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
 
     it('switches tabs via the underlined tab strip (opens on Plugins by default, matching v3)', () => {
@@ -179,7 +179,7 @@ describe('AppFrame', () => {
       // capture-phase Escape listener; both open at once = double-close bugs).
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
       expect(screen.queryByRole('dialog', { name: /edit link/i })).toBeNull();
     });
   });
@@ -253,7 +253,7 @@ describe('AppFrame', () => {
 
     fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
-    expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('false');
   });
 
@@ -322,13 +322,13 @@ describe('AppFrame', () => {
       expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/edit/i);
     });
 
-    it('allows search from the Settings page', () => {
+    it('allows search from the Settings modal', () => {
       mockAppFrameFetch();
       renderAppFrame();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
       pressCmdK();
       expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeDefined();
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
 
     it('opening Settings closes the previous search palette', () => {
@@ -337,7 +337,7 @@ describe('AppFrame', () => {
       pressCmdK();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
       expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
-      expect(screen.getByRole('region', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
   });
 
