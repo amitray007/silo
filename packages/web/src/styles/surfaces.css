@@ -263,8 +263,8 @@
   flex-direction: column;
   gap: 2px;
   padding: 14px 10px;
-  border-right: 1px solid var(--line);
-  background: var(--bg);
+  border-right: 0.5px solid var(--line);
+  background: var(--bg2);
 }
 .silo-settings-nav-title {
   padding: 4px 10px 10px;
@@ -1115,4 +1115,17 @@
   a.silo-reader-iconbtn:active {
     transform: none;
   }
+}
+
+/* Visually hidden text that screen readers still announce. */
+.silo-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }

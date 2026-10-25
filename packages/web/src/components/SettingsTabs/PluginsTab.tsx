@@ -119,7 +119,7 @@ const cardBase: CSSProperties = {
   borderRadius: 0,
   border: 0,
   borderBottom: '0.5px solid var(--line)',
-  background: 'var(--bg)',
+  background: 'transparent',
   cursor: 'pointer',
   transition: 'border-color .15s ease, box-shadow .15s ease',
   font: 'inherit',
@@ -201,7 +201,7 @@ function SourceCard({
       aria-controls={panelId}
       style={{
         ...cardBase,
-        background: selected ? 'var(--hov)' : 'var(--bg)',
+        background: selected ? 'var(--hov)' : 'transparent',
       }}
     >
       <PluginLogo source={logoSource} size={32} />
