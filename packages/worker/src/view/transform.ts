@@ -281,11 +281,23 @@ function revealElement(element: HTMLElement): void {
   }
 }
 
+/** "Turn on JavaScript" banners are noise in a script-free copy; noscript media stays. */
+function scriptNotice(node: Element): boolean {
+  if (node.querySelector('img, picture, video, audio, source, iframe')) return false;
+  let text = node.textContent ?? '';
+  for (const style of node.querySelectorAll('style'))
+    text = text.replace(style.textContent ?? '', ' ');
+  text = text.replace(/\s+/g, ' ').trim();
+  return text.length < 400 && /\bjavascript\b|\bscripts?\b/i.test(text);
+}
+
 /** Reuse the stylesheet builder's inert DOM instead of retaining a second large page tree. */
 export function sanitizePageDom(dom: JSDOM, finalUrl: string): string {
   const document = dom.window.document;
-  for (const node of Array.from(document.querySelectorAll('noscript')).reverse())
-    node.replaceWith(...Array.from(node.childNodes));
+  for (const node of Array.from(document.querySelectorAll('noscript')).reverse()) {
+    if (scriptNotice(node)) node.remove();
+    else node.replaceWith(...Array.from(node.childNodes));
+  }
   for (const base of document.querySelectorAll('base')) base.remove();
   for (const element of document.querySelectorAll('*')) prepareElement(element, finalUrl);
   for (const link of document.querySelectorAll('link[rel]')) {

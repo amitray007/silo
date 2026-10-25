@@ -50,6 +50,22 @@ describe('final-DOM page sanitizer', () => {
     }
   });
 
+  it('drops "turn on JavaScript" noscript banners but keeps other noscript content', () => {
+    const output = transformPage(
+      `<!doctype html><html><body><main><p>Note body</p></main>
+      <noscript><style>#nojs-banner{position:fixed;background:red}</style>
+      <div id="nojs-banner">This site requires JavaScript to run correctly. Please
+      <a href="https://enable-javascript.com/">turn on JavaScript</a> or unblock scripts</div></noscript>
+      <noscript><p>Archive index for readers without a browser.</p></noscript>
+      </body></html>`,
+      base,
+    );
+    expect(output).not.toContain('requires JavaScript');
+    expect(output).not.toContain('nojs-banner');
+    expect(output).toContain('Archive index for readers without a browser.');
+    expect(output).toContain('Note body');
+  });
+
   it('keeps layout, live styles/media and noscript images; resolves every URL without base', () => {
     const output = transformPage(
       `<!doctype html><html><head>
