@@ -113,7 +113,7 @@ function ReaderMore({
         disabled={disabled}
         onClick={() => setOpen((current) => !current)}
       >
-        ⋯
+        <ReaderIcon name="more" />
       </button>
       <MenuPresence>
         {open && (

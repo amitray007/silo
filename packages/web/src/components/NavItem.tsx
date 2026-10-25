@@ -41,12 +41,12 @@ export function NavItem({
     width: '100%',
     boxSizing: 'border-box' as const,
     textAlign: 'left' as const,
-    padding: '0 8px',
+    padding: '6px 8px',
     borderRadius: 6,
     fontWeight: 400,
     cursor: 'pointer',
     textDecoration: 'none',
-    color: active ? 'var(--ink)' : 'var(--mut)',
+    color: active ? 'var(--ink)' : 'var(--nav-color, var(--mut))',
   };
 
   const children = (
@@ -55,7 +55,7 @@ export function NavItem({
 
       <span
         style={{
-          flex: 1,
+          flex: variant === 'tag' && props.href === undefined ? undefined : 1,
           minWidth: 0,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -68,7 +68,7 @@ export function NavItem({
         <span
           style={{
             marginLeft: 'auto',
-            lineHeight: 1,
+            lineHeight: '16px',
             fontSize: 'var(--text-xs)',
             fontWeight: 400,
             color: 'var(--ghost)',

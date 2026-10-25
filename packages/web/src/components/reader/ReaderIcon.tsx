@@ -1,25 +1,44 @@
 const paths = {
-  note: 'M3 2.5h10v8l-3 3H3zM10 10.5h3M10 10.5v3M5.5 5.5h5M5.5 8h4',
-  refresh: 'M13 6a5 5 0 1 0 .1 4M13 2v4H9',
-  close: 'M4 4l8 8M12 4l-8 8',
-  up: 'm4 10 4-4 4 4',
-  down: 'm4 6 4 4 4-4',
-  back: 'm9.5 3-5 5 5 5',
-  copy: 'M6 5V2.5h7.5V10H11M2.5 6H10v7.5H2.5z',
-  edit: 'm10.5 2.5 3 3-7.5 7.5-3.5.5.5-3.5zM9 4l3 3',
-  external: 'M9 2.5h4.5V7M13.5 2.5 7 9M6.5 3.5h-4v10h10v-4',
-  trash: 'M3 4.5h10M6 4.5V2.5h4v2M4 4.5l.5 9h7l.5-9M6.5 7v4M9.5 7v4',
-  restore: 'M3 8a5 5 0 1 0 1.5-3.5M3 2.5v2.5h2.5',
-  plus: 'M8 3v10M3 8h10',
-  sidebar: 'M2.5 2.5h11v11h-11zM6 2.5v11',
-  menu: 'M3 4h10M3 8h10M3 12h10',
-  sun: 'M8 1v1M8 14v1M1 8h1M14 8h1M3 3l1 1M12 12l1 1M3 13l1-1M12 4l1-1M11 8a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
-  moon: 'M13 10a5.5 5.5 0 0 1-7-7A5.5 5.5 0 1 0 13 10',
+  note: 'M5 3h14v13l-5 5H5zM14 16h5M14 16v5M8 8h8M8 12h6',
+  refresh: 'M20 9a8 8 0 1 0 0 6M20 3v6h-6',
+  close: 'M6 6l12 12M18 6 6 18',
+  up: 'm6 15 6-6 6 6',
+  down: 'm6 9 6 6 6-6',
+  back: 'm14 5-7 7 7 7',
+  copy: 'M9 7V3h12v12h-4M3 9h12v12H3z',
+  edit: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
+  external: 'M14 3h7v7M21 3 10 14M10 5H3v16h16v-7',
+  trash: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6',
+  restore: 'M4 12a8 8 0 1 0 2-5M4 3v5h5',
+  plus: 'M12 5v14M5 12h14',
+  sidebar: 'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM9 3v18',
+  menu: 'M4 6h16M4 12h16M4 18h16',
+  sun: 'M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
+  moon: 'M20 15a9 9 0 0 1-11-11A9 9 0 1 0 20 15',
+  library: 'M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z',
+  search: 'M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+  settings:
+    'M3 6h4m6 0h8M3 18h9m6 0h3M13 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0M18 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  logout: 'M10 3H4v18h6M16 7l5 5-5 5M21 12H9',
+  hash: 'M10 3 8 21M16 3l-2 18M4 9h17M3 15h17',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
 } as const;
 
-export function ReaderIcon({ name }: { name: keyof typeof paths }) {
+/** Original silo glyphs drawn on the shared 24-unit grid. */
+export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size?: number }) {
   return (
-    <svg className="silo-reader-icon" viewBox="0 0 16 16" aria-hidden="true">
+    <svg
+      className="silo-reader-icon"
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
       <path d={paths[name]} />
     </svg>
   );

@@ -134,7 +134,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /settings/i })).toBeDefined();
   });
 
-  it('renders v3 icons (svg) for Library, Trash, and Settings — but not for tags', async () => {
+  it('renders v3 icons (svg) for Library, Trash, and Settings — and for tags', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
@@ -156,7 +156,7 @@ describe('Sidebar', () => {
 
     expect(libraryLink.querySelector('svg')).not.toBeNull();
     expect(settingsLink.querySelector('svg')).not.toBeNull();
-    expect(tagLink.querySelector('svg')).toBeNull();
+    expect(tagLink.querySelector('svg')).toBeDefined();
   });
 
   it('leaves Library inactive on Trash, which is reached through the collection menu', () => {
@@ -256,7 +256,7 @@ describe('Sidebar', () => {
 
       const searchIcon = searchButton.querySelector('svg');
       const libraryIcon = libraryLink.querySelector('svg');
-      expect(searchIcon?.getAttribute('width')).toBe('16');
+      expect(searchIcon?.getAttribute('width')).toBe('20');
       expect(searchIcon?.getAttribute('width')).toBe(libraryIcon?.getAttribute('width'));
     });
 

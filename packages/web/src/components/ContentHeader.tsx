@@ -46,7 +46,7 @@ function CollectionTitle({ title }: { title: string }) {
           aria-expanded={open}
           onClick={() => setOpen(!open)}
         >
-          {title}
+          <span>{title}</span>
           <ReaderIcon name="down" />
         </button>
       </h1>

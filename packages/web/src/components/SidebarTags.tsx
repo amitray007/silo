@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
+import { SearchIcon } from './NavIcons';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { Skeleton } from './Skeleton';
@@ -154,7 +155,17 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
             }
           }}
         >
-          Tags <ReaderIcon name={expanded ? 'down' : 'up'} />
+          <span className="silo-tags-label">Tags</span>
+          <svg
+            width="10"
+            height="10"
+            viewBox="0 0 10 10"
+            className="silo-section-caret"
+            aria-hidden="true"
+            style={{ transform: expanded ? undefined : 'rotate(-90deg)' }}
+          >
+            <path d="m2 3.5 3 3 3-3Z" />
+          </svg>
         </button>
         <span style={{ flex: 1 }} />
         {/* The search icon shares the SAME right inset as the tag counts below
@@ -189,20 +200,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
               `⌕` Unicode glyph — that rendered undersized and inconsistent
               across platforms (user feedback: "too small … use a better
               search icon"). 16px, current stroke color. */}
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="7" cy="7" r="4.3" />
-            <path d="m10.3 10.3 3 3" />
-          </svg>
+          <SearchIcon />
         </button>
       </div>
 
@@ -288,7 +286,8 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
           ) : (
             <NavItem
               title="New tag"
-              label={<span style={{ color: 'var(--fnt)' }}>New tag</span>}
+              variant="tag"
+              label={<span style={{ color: 'inherit' }}>New tag</span>}
               icon={<ReaderIcon name="plus" />}
               onClick={openNewTag}
             />
