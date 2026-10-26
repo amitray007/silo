@@ -321,3 +321,5 @@ export type FrameHint = {
   contentType?: string;
   darkTheme?: boolean;
 };
+
+export type SavedLinksResponse = { saved: string[] };

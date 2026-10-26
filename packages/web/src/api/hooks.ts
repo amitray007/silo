@@ -21,6 +21,7 @@ import type {
   LinksResponse,
   OAuthClientsResponse,
   RestoreResponse,
+  SavedLinksResponse,
   SearchResponse,
   SettingsMap,
   TagsResponse,
@@ -58,6 +59,7 @@ export const queryKeys = {
   },
   frame: (id: string) => ['frame', id] as const,
   link: (id: string) => ['link', id] as const,
+  savedLinks: (urls: readonly string[]) => ['saved-links', urls] as const,
   /**
    * `tag` (optional, command-center search plan 024) is folded into the key
    * so a `q`-only search and the SAME `q` scoped to a tag never collide in
@@ -105,6 +107,14 @@ export function useTags() {
   return useQuery({
     queryKey: queryKeys.tags(),
     queryFn: () => apiGet<TagsResponse>('/api/tags'),
+  });
+}
+
+export function useSavedLinks(urls: readonly string[]) {
+  return useQuery({
+    queryKey: queryKeys.savedLinks(urls),
+    queryFn: () => apiPost<SavedLinksResponse>('/api/links/saved', { urls }),
+    enabled: urls.length > 0,
   });
 }
 
@@ -377,6 +387,7 @@ export function useCaptureLink() {
       queryClient.invalidateQueries({ queryKey: ['links'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
       queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
+      queryClient.invalidateQueries({ queryKey: ['saved-links'] });
     },
   });
 }
@@ -398,6 +409,7 @@ function invalidateLinkQueries(
 ): void {
   queryClient.invalidateQueries({ queryKey: ['links'] });
   queryClient.invalidateQueries({ queryKey: ['link'] });
+  if (affects.counts) queryClient.invalidateQueries({ queryKey: ['saved-links'] });
   if (affects.tags) queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
   if (affects.counts) queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
 }
@@ -617,6 +629,7 @@ function insertIntoTrashCache(
 
 /** The shared settle tail for every trash-lifecycle mutation below: the trash list itself, plus `counts` (live/trash tallies) — trash mutations never touch tag counts. */
 function invalidateTrashQueries(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: ['saved-links'] });
   queryClient.invalidateQueries({ queryKey: queryKeys.trash() });
   queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
 }

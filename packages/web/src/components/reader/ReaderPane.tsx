@@ -198,8 +198,20 @@ function ReaderMore({
   );
 }
 
-function ArticleBody({ link, loading }: { link: LinkJson; loading: boolean }) {
-  return loading && !('contentHtml' in link) ? <ReaderSkeleton /> : <ReaderContent link={link} />;
+function ArticleBody({
+  link,
+  loading,
+  trashed,
+}: {
+  link: LinkJson;
+  loading: boolean;
+  trashed: boolean;
+}) {
+  return loading && !('contentHtml' in link) ? (
+    <ReaderSkeleton />
+  ) : (
+    <ReaderContent link={link} trashed={trashed} />
+  );
 }
 
 function ReaderArticle({
@@ -256,7 +268,7 @@ function ReaderArticle({
       <ReaderMeta key={link.id} link={link} trashed={trashed} />
       <div className="silo-reader-body-column">
         <div className="silo-reader-body-wrap">
-          <ArticleBody link={link} loading={loading} />
+          <ArticleBody link={link} loading={loading} trashed={trashed} />
         </div>
       </div>
     </article>

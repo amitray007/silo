@@ -17,6 +17,7 @@ import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
+import { registerLinksSavedRoutes } from './routes/links-saved.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
 import { registerLoginRoutes } from './routes/login.js';
 import { registerOAuthAuthorizeRoutes } from './routes/oauth/authorize.js';
@@ -223,6 +224,7 @@ export function createApp(): Hono {
   registerPageViewHeaders(api);
   api.use('*', generalTokenAuth);
   registerLinksRoutes(api);
+  registerLinksSavedRoutes(api);
   registerLinksWriteRoutes(api);
   registerIngestRoutes(api);
   registerTrashRoutes(api);

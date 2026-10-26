@@ -20,6 +20,8 @@ const paths = {
   sun: 'M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
   moon: 'M20 15a9 9 0 0 1-11-11A9 9 0 1 0 20 15',
   library: 'M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z',
+  bookmark: 'M6 3h12v18l-6-4-6 4z',
+  bookmarkFilled: 'M6 3h12v18l-6-4-6 4z',
   search: 'M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
   /** Eight-tooth gear with a center hole. */
   settings:
@@ -39,7 +41,7 @@ export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill="none"
+      fill={name === 'bookmarkFilled' ? 'currentColor' : 'none'}
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"

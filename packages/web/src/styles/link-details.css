@@ -1,4 +1,99 @@
 /* Approved reader meta, focused edit, and shared menu system. */
+.silo-related {
+  margin-top: 52px;
+}
+.silo-related-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  margin-bottom: 16px;
+  border: 0;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.silo-related-caret {
+  flex: none;
+  color: var(--ghost);
+  transition: transform 140ms;
+}
+.silo-related-caret[data-open="false"] {
+  transform: rotate(-90deg);
+}
+.silo-related-line {
+  flex: 1;
+  border-top: 0.5px solid var(--line);
+}
+.silo-related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.silo-related-row {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0 0 12px;
+  border-radius: 8px;
+}
+.silo-related-row:hover {
+  background: var(--row-hover);
+}
+.silo-related-link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.silo-related-title {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-size: 15px;
+  font-weight: 500;
+}
+.silo-related-action {
+  display: flex;
+  align-items: center;
+  flex: none;
+  min-width: 44px;
+  color: var(--fnt);
+  font-size: 12px;
+}
+.silo-related-bookmark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  cursor: pointer;
+}
+.silo-related-bookmark:hover {
+  color: var(--ink);
+}
+.silo-related-bookmark:disabled {
+  cursor: default;
+}
+.silo-related-bookmark[aria-busy="true"] {
+  opacity: 0.5;
+}
 .silo-menu-surface {
   width: 248px;
   padding: 6px 0;

@@ -22,6 +22,16 @@ view copies use only the CSS signal and get a media-gated invert style when it i
 absent. The “Dark page” toggle forces either frame light without reloading and
 stores opted-out hostnames in `silo.lightPages`; non-HTML hints omit `darkTheme`.
 
+## Related links
+
+Related links appear below Reader articles with stored `contentHtml`, except in
+trash. The section lists the first 20 unique outbound HTTP(S) URLs in article
+order, with anchor text or a hostname/path fallback and proxy favicons. It never
+fetches linked pages. Its expanded state is stored in `silo.relatedLinksOpen`.
+A live canonical-URL lookup hides save buttons for links already in the Library.
+Saving uses normal capture without tags, shows pending and filled states, and
+offers an inline retry on failure. Each row opens its URL in a new tab.
+
 ## QA set (binding)
 
 Test with real links, never the dummy `example.com` rows. The set lives in

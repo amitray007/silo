@@ -193,6 +193,7 @@ export {
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
 // over a link's own tags + title terms — see related.ts's doc comment.
 export { findRelated } from './links/related.js';
+export { findSavedUrls } from './links/saved.js';
 // Capture-source provenance (capture-source slice): the closed value set +
 // type for `CreateLinkInput.source` / `Link.source` — the SURFACE a link was
 // captured through, orthogonal to `addedBy`. Single source of truth,

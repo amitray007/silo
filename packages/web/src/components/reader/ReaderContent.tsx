@@ -3,6 +3,7 @@ import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
 import { embedFor } from './embedFor';
 import { ReaderProse } from './ReaderProse';
+import { RelatedLinks } from './RelatedLinks';
 
 function Paragraphs({ link }: { link: LinkJson }) {
   const text = link.extractedText?.trim() || link.description?.trim();
@@ -48,7 +49,13 @@ function NoCapturedText({ link }: { link: LinkJson }) {
   );
 }
 
-export function ReaderContent({ link }: { link: LinkJson | LinkDetailJson }) {
+export function ReaderContent({
+  link,
+  trashed = false,
+}: {
+  link: LinkJson | LinkDetailJson;
+  trashed?: boolean;
+}) {
   if (link.captureStatus === 'enriching')
     return (
       <div role="status" aria-label="Capturing page">
@@ -132,6 +139,7 @@ export function ReaderContent({ link }: { link: LinkJson | LinkDetailJson }) {
         source.kind !== 'twitter' &&
         !link.extractedText?.trim() &&
         !link.description?.trim() && <NoCapturedText link={link} />}
+      <RelatedLinks link={link} trashed={trashed} />
     </>
   );
 }
