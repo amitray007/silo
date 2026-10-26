@@ -820,7 +820,7 @@ button.silo-note-text {
 }
 
 .silo-edit-field > .silo-field:focus-visible,
-.silo-capture input:focus-visible,
+.silo-capture-form input:focus-visible,
 .silo-tag-tokens:focus-within {
   outline: none;
   border-color: var(--toggle-on);
@@ -833,6 +833,6 @@ button.silo-note-text {
   box-shadow: var(--input-shadow);
 }
 :root[data-theme="dark"] .silo-tag-tokens,
-:root[data-theme="dark"] .silo-capture input {
+:root[data-theme="dark"] .silo-capture-form input {
   border: 0;
 }

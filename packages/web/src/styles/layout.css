@@ -1250,49 +1250,12 @@ div.silo-reader-notecard {
   z-index: 21;
   right: 0;
   top: 36px;
-  width: 256px;
+  width: 280px;
   max-width: calc(100vw - 32px);
-  padding: 0;
+  max-height: calc(100dvh - 80px);
+  overflow-y: auto;
+  padding: 0 0 6px;
   box-shadow: var(--menu-shadow);
-}
-.silo-capture-title {
-  font-size: 14px;
-  font-weight: 500;
-}
-.silo-capture p {
-  color: var(--fnt);
-  font-size: 13px;
-  line-height: 20px;
-  margin: 8px 0 12px;
-}
-.silo-capture form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-.silo-capture input {
-  min-width: 0;
-  width: 100%;
-  height: 32px;
-  border: 0.5px solid var(--line);
-  border-radius: 6px;
-  background: var(--bg);
-  color: var(--ink);
-  padding: 0 8px;
-  font: inherit;
-}
-.silo-primary-button {
-  height: 32px;
-  flex: none;
-  padding: 0 12px;
-  border: 0;
-  border-radius: 8px;
-  background: var(--btn);
-  color: var(--btn-ink);
-  font: inherit;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
 }
 @media (hover: hover) and (pointer: fine) {
   .silo-link-row:hover .silo-row-actions {
@@ -1557,6 +1520,7 @@ div.silo-reader-notecard {
   line-height: 20px;
 }
 .silo-capture-heading .silo-capture-hint {
+  color: var(--fnt);
   margin: 2px 0 0;
   font-size: 12px;
   line-height: 16px;
@@ -1568,24 +1532,64 @@ div.silo-reader-notecard {
   font-size: 11px;
 }
 .silo-capture-entry {
-  padding: 8px;
+  padding: 8px 8px 4px;
   border-top: 0.5px solid var(--line);
 }
-.silo-capture-entry form {
-  flex-direction: column;
+.silo-capture-form {
+  position: relative;
+  display: flex;
 }
-.silo-capture input {
-  background: var(--input-bg);
+.silo-capture-form input {
+  min-width: 0;
+  width: 100%;
+  height: 36px;
+  border: 0.5px solid var(--line);
   border-radius: 8px;
-  padding: 8px 12px;
-  font-size: 14px;
+  background: var(--input-bg);
+  color: var(--ink);
+  padding: 0 40px 0 12px;
+  font: inherit;
+  font-size: 13px;
   line-height: 20px;
-  height: 38px;
   box-shadow: var(--input-shadow);
 }
-.silo-capture-entry .silo-settings-btn {
-  width: 100%;
-  justify-content: center;
+.silo-capture-form .silo-capture-submit {
+  position: absolute;
+  right: 2px;
+  top: 2px;
+  width: 32px;
+  height: 32px;
+  border-radius: 6px;
+}
+.silo-capture-submit .silo-reader-icon,
+.silo-capture-paste .silo-reader-icon {
+  width: 16px;
+  height: 16px;
+}
+.silo-capture-message {
+  margin: 6px 4px 2px;
+  color: var(--fnt);
+  font-size: 12px;
+  line-height: 16px;
+}
+.silo-capture-popover .silo-menu-item {
+  height: 36px;
+  min-height: 36px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.silo-capture-section {
+  margin: 8px 16px 4px;
+  color: var(--fnt);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 16px;
+}
+@media (pointer: coarse) {
+  .silo-capture-popover .silo-menu-item {
+    height: 40px;
+    min-height: 40px;
+  }
 }
 .silo-reader-viewtools {
   gap: normal;

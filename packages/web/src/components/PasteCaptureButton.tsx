@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useCaptureLink } from '../api/hooks';
 import { looksLikeUrl } from '../lib/url';
+import { CaptureClientLogo } from './CaptureClientLogo';
 import { MenuPresence } from './MenuPresence';
 import { ReaderIcon } from './reader/ReaderIcon';
 
@@ -33,6 +34,7 @@ export function PasteCaptureButton({ tags }: { tags?: string[] }) {
     };
   }, [open]);
   function save(text: string) {
+    if (capture.isPending) return;
     const value = text.trim();
     if (!looksLikeUrl(value)) {
       setMessage("That doesn't look like a link");
@@ -99,29 +101,75 @@ export function PasteCaptureButton({ tags }: { tags?: string[] }) {
               </p>
             </div>
             <div className="silo-capture-entry">
-              <form onSubmit={submit}>
+              <form className="silo-capture-form" onSubmit={submit}>
                 <input
                   ref={input}
                   className="silo-field"
                   aria-label="Link URL"
-                  placeholder="https://"
+                  placeholder="Paste or type a link"
+                  inputMode="url"
+                  autoCapitalize="none"
+                  autoCorrect="off"
                   value={url}
                   onChange={(event) => setUrl(event.target.value)}
                 />
-                <button type="submit" className="silo-primary-button" disabled={capture.isPending}>
-                  Save link
+                <button
+                  type="submit"
+                  className="silo-reader-iconbtn silo-capture-submit"
+                  aria-label="Save link"
+                  disabled={capture.isPending || !url.trim()}
+                >
+                  <ReaderIcon name="arrowUpRight" />
                 </button>
               </form>
-              <button
-                type="button"
-                className="silo-settings-btn"
-                onClick={paste}
-                disabled={capture.isPending}
-              >
-                Paste from clipboard
-              </button>
-              {message && <p role={message === 'Saved' ? 'status' : 'alert'}>{message}</p>}
+              {message && (
+                <p className="silo-capture-message" role={message === 'Saved' ? 'status' : 'alert'}>
+                  {message}
+                </p>
+              )}
             </div>
+            <button
+              type="button"
+              className="silo-menu-item silo-capture-paste"
+              onClick={paste}
+              disabled={capture.isPending}
+            >
+              <span className="silo-menu-icon">
+                <ReaderIcon name="clipboard" />
+              </span>
+              Paste from clipboard
+            </button>
+            <div className="silo-menu-separator" />
+            <p className="silo-capture-section">Apps &amp; extensions</p>
+            <a
+              className="silo-menu-item"
+              href="https://github.com/amitray007/silo/releases?q=chrome-v&expanded=true"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <CaptureClientLogo client="chrome" />
+              Chrome extension
+            </a>
+            <a
+              className="silo-menu-item"
+              href="https://github.com/amitray007/silo/releases?q=raycast-v&expanded=true"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <CaptureClientLogo client="raycast" />
+              Raycast
+            </a>
+            <a
+              className="silo-menu-item"
+              href="https://github.com/amitray007/silo#clients"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span className="silo-menu-icon">
+                <ReaderIcon name="terminal" />
+              </span>
+              Command line
+            </a>
           </div>
         )}
       </MenuPresence>

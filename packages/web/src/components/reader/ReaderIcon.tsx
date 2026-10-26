@@ -6,6 +6,8 @@ const paths = {
   up: 'm6 15 6-6 6 6',
   down: 'm6 9 6 6 6-6',
   back: 'm14 5-7 7 7 7',
+  clipboard: 'M9 5H5v16h14V5h-4M9 3h6v4H9z',
+  terminal: 'M3 4h18v16H3zM7 9l3 3-3 3M13 15h4',
   copy: 'M9 7V3h12v12h-4M3 9h12v12H3z',
   edit: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
   external: 'M14 3h7v7M21 3 10 14M10 5H3v16h16v-7',
