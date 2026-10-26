@@ -1485,15 +1485,16 @@ div.silo-reader-notecard {
   font-weight: 500;
   line-height: 19.5px;
 }
+/* Solid 10px triangle, one step quieter than the label, like shiori's section caret. */
 .silo-tags-toggle .silo-section-caret {
-  width: 14px;
-  height: 14px;
-  fill: none;
+  width: 10px;
+  height: 10px;
+  margin-left: 2px;
+  fill: currentColor;
   stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
+  stroke-width: 1;
   stroke-linejoin: round;
-  color: var(--fnt);
+  color: var(--ghost);
   transition:
     transform 150ms var(--ease-out),
     color 150ms var(--ease-out);
