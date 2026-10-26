@@ -94,7 +94,7 @@
   --input-shadow: none;
   --segment-on: var(--bg2);
   --segment-shadow: var(--elev-1);
-  --font-mono: "Inter Variable", Inter, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: light;
 }
@@ -142,7 +142,7 @@
     inset 0 0 0 0.5px #ffffff0a, inset 0 0.5px 0 #ffffff0a, 0 1px 3px oklch(14.5% 0 0 / 30%);
   --segment-on: oklch(26.9% 0 0);
   --segment-shadow: var(--elev-1);
-  --font-mono: "Inter Variable", Inter, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   --toggle-on: oklch(62.3% 0.214 259.8);
   color-scheme: dark;
 }

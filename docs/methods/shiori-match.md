@@ -146,8 +146,10 @@ Shadows (light / dark), from shiori's `--control-shadow` and `--popup-shadow`:
 - Prose: 15px/1.75, secondary color; p margin `0 0 16px`; h2 20px/1.33 weight
   600 letter-spacing -0.5px ink, margin `40px 0 20px`; h3 17px weight 600;
   links ink, underline, offset 2px; inline code bg `--hov`, radius 4, padding
-  `2px 6px`, 0.85em weight 500 ink; pre bg `--hov`, radius 8, padding `12px
-  16px`, 14px/24px mono, no border; lists outside markers tertiary.
+  `2px 6px`, 0.85em weight 500 ink; pre bg `--hov`, radius 8, padding `14px
+  16px`, 13px/22px system mono, no border; lists outside markers tertiary.
+  Code uses the system mono stack in `--font-mono`; Inter made code blocks
+  read as prose (changed 2026-10-26).
 - Live tab iframe: keep silo's sandbox and silo-view logic. Do not copy
   shiori's `allow-scripts allow-same-origin` sandbox.
 
