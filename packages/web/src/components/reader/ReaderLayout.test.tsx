@@ -160,7 +160,7 @@ function mutate(path: string, state: { live: LinkJson[]; trash: TrashLinkJson[] 
 }
 
 const reader = () => within(screen.getByRole('region', { name: 'Link reader' }));
-/** Live is the default tab; content assertions switch to Reader first. */
+/** Content assertions run on Reader, the default tab; switch back if a test left Live open. */
 const selected = async (title = 'First link') =>
   waitFor(() => {
     const tab = reader().getByRole<HTMLButtonElement>('tab', { name: 'Reader' });
@@ -872,10 +872,10 @@ describe('review regressions', () => {
     expect(container.querySelector('.silo-reader-prose')).toBeNull();
   });
 
-  it('opens every newly selected link on Live while listing Reader first', async () => {
+  it('opens every newly selected link on Reader, even after Live was open', async () => {
     renderReader({ route: '/?link=a' });
     await waitFor(() =>
-      expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe(
+      expect(reader().getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe(
         'true',
       ),
     );
@@ -885,9 +885,10 @@ describe('review regressions', () => {
         .map((tab) => tab.textContent),
     ).toEqual(['Reader', 'Live']);
     await selected();
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     fireEvent.click(screen.getByText('Second link'));
     await waitFor(() =>
-      expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe(
+      expect(reader().getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe(
         'true',
       ),
     );

@@ -45,9 +45,9 @@ export function ReaderLayout({
   if (previous.current?.id !== selectedId) previous.current = undefined;
   const [view, setView] = useState<{ id: string | null; tab: 'reader' | 'original' }>({
     id: selectedId,
-    tab: 'original',
+    tab: 'reader',
   });
-  const tab = view.id === selectedId ? view.tab : 'original';
+  const tab = view.id === selectedId ? view.tab : 'reader';
   const setTab = useCallback(
     (tab: 'reader' | 'original') => setView({ id: selectedId, tab }),
     [selectedId],
