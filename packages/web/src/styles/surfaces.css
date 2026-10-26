@@ -1143,3 +1143,121 @@
   white-space: nowrap;
   border: 0;
 }
+
+/* Plugins: compact source disclosures. */
+.silo-settings-panel .silo-plugin-section-label {
+  margin: 20px 0 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--fnt);
+  letter-spacing: normal;
+}
+.silo-settings-panel .silo-plugin-section-label:first-child {
+  margin-top: 0;
+}
+.silo-plugin-source,
+.silo-plugin-silo-row {
+  border-bottom: 0.5px solid var(--line);
+}
+.silo-plugin-source-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px 40px;
+  column-gap: 4px;
+  align-items: center;
+  min-height: 52px;
+}
+.silo-plugin-body,
+.silo-plugin-disclosure {
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.silo-plugin-body {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  min-height: 52px;
+  padding: 6px 0;
+  text-align: left;
+}
+.silo-plugin-disclosure {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  color: var(--fnt);
+}
+.silo-plugin-sources .silo-toggle,
+.silo-plugin-silo-row .silo-toggle {
+  width: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  flex-shrink: 0;
+}
+.silo-plugin-copy {
+  display: block;
+  min-width: 0;
+  flex: 1;
+}
+.silo-plugin-name,
+.silo-plugin-label {
+  display: block;
+  font-size: 14px;
+  line-height: 20px;
+  color: var(--ink);
+}
+.silo-plugin-name {
+  font-weight: 500;
+}
+.silo-plugin-label {
+  font-weight: 400;
+}
+.silo-plugin-summary,
+.silo-plugin-description {
+  display: block;
+  font-size: 13px;
+  line-height: 18px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+.silo-plugin-summary {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-plugin-features {
+  padding-left: 40px;
+  padding-right: 44px;
+}
+.silo-plugin-feature,
+.silo-plugin-silo-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 0;
+}
+.silo-plugin-feature {
+  border-top: 0.5px solid var(--line);
+}
+.silo-plugin-feature[data-disabled="true"] .silo-plugin-copy {
+  opacity: 0.5;
+}
+.silo-plugin-silo-row {
+  padding-right: 44px;
+}
+.silo-plugin-sources button:focus-visible,
+.silo-plugin-silo-row button:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-plugin-source-row:has(.silo-plugin-body:hover, .silo-plugin-disclosure:hover) {
+    background: var(--row-hover);
+  }
+}
+/* End Plugins disclosures. */

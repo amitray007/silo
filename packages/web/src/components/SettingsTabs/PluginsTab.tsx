@@ -1,19 +1,12 @@
-import { type CSSProperties, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
-import { rowDesc, rowLabel } from './rowStyles';
 import { ToggleSwitch } from './ToggleSwitch';
 
-/**
- * The all-on shape used while `useSettings()` is still loading (plan 026 —
- * previously each row read `plugins?.[key] ?? true`; now the whole grid/panel
- * needs a full object up front to render feature rows, so this stands in as
- * that "optimistic" default until the real value arrives, matching the prior
- * `?? true` optimism field-for-field).
- */
+// Render defaults while loading; all settings switches stay disabled.
 const LOADING_PLUGINS: PluginsMap = {
   hacker_news: { enabled: true, inline: true, hover: true, palette: true },
   github: { enabled: true, hover: true, palette: true },
@@ -21,16 +14,6 @@ const LOADING_PLUGINS: PluginsMap = {
   twitter: { enabled: true, inline: true, hover: true, palette: true },
 };
 
-/**
- * Grid metadata for the four toggleable sources — mirrors
- * `@silo/core`'s `settingsSchema.plugins` allowlist EXACTLY (`link` excluded:
- * it has no enricher/card to toggle — see `packages/core/src/settings/
- * schema.ts`'s doc comment). `twitter` joined the real allowlist in plan 026
- * (previously a static "Soon" card) and now has a live worker enricher too
- * (`api.fxtwitter.com`) alongside the `silo ingest x` CLI path — `enabled`
- * gates the worker fetch, `inline`/`hover` gate its two render surfaces,
- * mirroring `hacker_news`. `key` indexes directly into `SettingsMap['plugins']`.
- */
 const PLUGIN_SOURCES = [
   { key: 'hacker_news', name: 'Hacker News' },
   { key: 'github', name: 'GitHub' },
@@ -38,7 +21,7 @@ const PLUGIN_SOURCES = [
   { key: 'twitter', name: 'Twitter / X' },
 ] as const satisfies ReadonlyArray<{ key: PluginSource; name: string }>;
 
-/** The feature toggles a given source supports — HN and Twitter render both an inline row line and a hover preview; GitHub/YouTube are hover-only (see `packages/core/src/settings/schema.ts`'s doc comment). Keyed so the panel only ever shows toggles the source's schema actually has. */
+// Only show surfaces supported by each source.
 const FEATURE_ROWS_BY_SOURCE: Record<
   PluginSource,
   ReadonlyArray<{ field: 'inline' | 'hover' | 'palette'; name: string; desc: string }>
@@ -103,116 +86,20 @@ const FEATURE_ROWS_BY_SOURCE: Record<
   ],
 };
 
-const gridStyle: CSSProperties = {
-  display: 'grid',
-  gridTemplateColumns: '1fr',
-  gap: 0,
-  marginBottom: 4,
-};
+const SURFACE_LABELS = { inline: 'Row', hover: 'hover card', palette: '⌘K' };
 
-const cardBase: CSSProperties = {
-  display: 'flex',
-  flexDirection: 'row',
-  alignItems: 'center',
-  gap: 14,
-  padding: '16px 0',
-  borderRadius: 0,
-  border: 0,
-  borderBottom: '0.5px solid var(--line)',
-  background: 'transparent',
-  cursor: 'pointer',
-  transition: 'border-color .15s ease, box-shadow .15s ease',
-  font: 'inherit',
-  color: 'inherit',
-};
-
-const cardTitle: CSSProperties = {
-  flex: 1,
-  textAlign: 'left',
-  fontSize: 'var(--text-base)',
-  fontWeight: 500,
-  color: 'var(--ink)',
-};
-
-const panelShell: CSSProperties = {
-  borderRadius: 0,
-  border: 0,
-  padding: '16px 0',
-  marginTop: 4,
-};
-
-const panelHeaderRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 12,
-};
-
-const panelDivider: CSSProperties = {
-  border: 'none',
-  borderBottom: '0.5px solid var(--line)',
-  margin: '14px 0',
-};
-
-const featureRow: CSSProperties = {
-  display: 'flex',
-  alignItems: 'center',
-  gap: 16,
-  padding: '16px 0',
-  borderBottom: '0.5px solid var(--line)',
-};
-
-/** The grid card's status dot — a smaller, non-interactive readout of `enabled` (the card itself is the click target, selecting the source; the actual toggle lives in the expand panel). */
-function StatusDot({ on }: { on: boolean }) {
-  return (
-    <span
-      aria-hidden="true"
-      style={{
-        width: 7,
-        height: 7,
-        borderRadius: '50%',
-        background: on ? 'var(--ink)' : 'transparent',
-        border: `1px solid ${on ? 'var(--ink)' : 'var(--ghost)'}`,
-        boxSizing: 'border-box',
-      }}
-    />
-  );
-}
-
-function SourceCard({
-  logoSource,
-  name,
-  selected,
-  panelId,
-  on,
-  onSelect,
-}: {
-  logoSource: LogoSource;
-  name: string;
-  selected: boolean;
-  panelId: string;
-  on: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onSelect}
-      aria-expanded={selected}
-      aria-controls={panelId}
-      style={{
-        ...cardBase,
-        background: selected ? 'var(--hov)' : 'transparent',
-      }}
-    >
-      <PluginLogo source={logoSource} size={32} />
-      <span style={cardTitle}>{name}</span>
-      <StatusDot on={on} />
-    </button>
-  );
+function sourceSummary(source: PluginSource, plugins: PluginsMap): string {
+  const state = plugins[source];
+  if (!state.enabled) return 'Off';
+  const list = FEATURE_ROWS_BY_SOURCE[source]
+    .filter(({ field }) => state[field as keyof typeof state])
+    .map(({ field }) => SURFACE_LABELS[field])
+    .join(', ');
+  // Sentence case: "Hover card, ⌘K" when the row surface is off.
+  return list ? list.charAt(0).toUpperCase() + list.slice(1) : 'No surfaces on';
 }
 
 function FeatureToggleRow({
-  field,
   name,
   desc,
   on,
@@ -220,49 +107,25 @@ function FeatureToggleRow({
   loading,
   onToggle,
 }: {
-  field: string;
   name: string;
   desc: string;
   on: boolean;
   masterEnabled: boolean;
-  // Disabled while settings are still loading (plan 026 review fix): during
-  // the initial GET the whole tab renders against the all-on LOADING_PLUGINS
-  // placeholder, so a click here would rebuild the PATCH from placeholder
-  // values and clobber the user's real stored settings. The master toggle
-  // already gates on `loading`; the feature rows must too (the pre-026 UI
-  // disabled every toggle until settings loaded — dropped for feature rows in
-  // the redesign, re-added here).
   loading: boolean;
   onToggle: () => void;
 }) {
   const disabled = !masterEnabled || loading;
   return (
-    <div key={field} style={featureRow}>
-      <div style={{ flex: 1, opacity: disabled ? 0.5 : 1 }}>
-        <div style={rowLabel}>{name}</div>
-        <div style={rowDesc}>{desc}</div>
+    <div className="silo-plugin-feature" data-disabled={disabled}>
+      <div className="silo-plugin-copy">
+        <div className="silo-plugin-label">{name}</div>
+        <div className="silo-plugin-description">{desc}</div>
       </div>
       <ToggleSwitch on={on} disabled={disabled} onToggle={onToggle} label={name} />
     </div>
   );
 }
 
-/**
- * The "silo" section — silo's OWN behaviors, distinct from the source
- * plugins above (those gate ingestion/rendering of external sources; this
- * gates silo's own UI behavior). Sits below the source-plugin grid+panel,
- * separated by a divider. Currently one row (`Link preview images`,
- * `SettingsMap['linkPreviewImages']` — see `packages/core/src/settings/
- * schema.ts`'s doc comment); written as its own component so a future
- * silo-level toggle is just another row here, not a restructure of
- * `PluginsTab`'s already-nontrivial cognitive complexity.
- *
- * Mirrors `AccessTab`'s live MCP-access toggle pattern exactly: read
- * `settings?.linkPreviewImages ?? true` (default-on, matching the app's
- * loading optimism elsewhere), disable while `settings` is still loading OR
- * the mutation is in flight (`updateSettings.isPending`) so a slow PATCH
- * can't be double-fired.
- */
 function SiloSettingsSection({
   settings,
   updateSettings,
@@ -275,11 +138,13 @@ function SiloSettingsSection({
 
   return (
     <>
-      <hr style={panelDivider} />
-      <div style={featureRow}>
-        <div style={{ flex: 1 }}>
-          <div style={rowLabel}>Link preview images</div>
-          <div style={rowDesc}>Show a page's preview image in the hover card.</div>
+      <h3 className="silo-plugin-section-label">Silo</h3>
+      <div className="silo-plugin-silo-row">
+        <div className="silo-plugin-copy">
+          <div className="silo-plugin-label">Link preview images</div>
+          <div className="silo-plugin-description">
+            Show a page's preview image in the hover card.
+          </div>
         </div>
         <ToggleSwitch
           on={linkPreviewImages}
@@ -292,35 +157,14 @@ function SiloSettingsSection({
   );
 }
 
-/**
- * Settings → Plugins (plan 026 redesign; Twitter un-parked from its static
- * "Soon" card into a real toggle) — a 4-up logo grid (HN/GitHub/YouTube/
- * Twitter-X) that expands inline below into a control panel for whichever
- * source is selected. Replaces the flat toggle-row list (plan 016) now that
- * each source has a **master `enabled`** plus the per-feature `inline`/
- * `hover` flags it supports (`SettingsMap['plugins']`, plan 026 schema —
- * see `packages/core/src/settings/schema.ts`'s doc comment).
- *
- * The master toggle flips `.enabled`; feature toggles flip `.inline`/`.hover`
- * and are greyed + disabled while `.enabled` is off (the plan's rule — a
- * disabled source's feature choices are PRESERVED, not reset, so re-enabling
- * restores them; see `setPluginField`'s doc comment). Every write goes
- * through `setPluginField`, which reconstructs the FULL four-source object
- * (`core.setSetting('plugins', ...)` replaces the whole stored value, no
- * sub-key merge).
- *
- * All four sources render through the same generic grid/panel — the UI
- * doesn't need to special-case which fields a source supports; it renders
- * whatever `FEATURE_ROWS_BY_SOURCE[source.key]` lists through the same
- * `setPluginField` path.
- */
+// Keep feature choices when disabling a source; writes replace the full plugins map.
 export function PluginsTab() {
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
   const plugins = settings?.plugins ?? LOADING_PLUGINS;
   const loading = !settings;
 
-  const [selected, setSelected] = useState<LogoSource>('hacker_news');
+  const [selected, setSelected] = useState<LogoSource | null>(null);
   const panelId = useId();
 
   function writeField<S extends PluginSource>(
@@ -333,64 +177,86 @@ export function PluginsTab() {
 
   return (
     <>
-      <div style={gridStyle}>
-        {PLUGIN_SOURCES.map((source) => (
-          <SourceCard
-            key={source.key}
-            logoSource={source.key}
-            name={source.name}
-            selected={selected === source.key}
-            panelId={panelId}
-            on={plugins[source.key].enabled}
-            onSelect={() => setSelected(source.key)}
-          />
-        ))}
-      </div>
-
-      <div id={panelId} style={panelShell}>
-        {(() => {
-          const source = PLUGIN_SOURCES.find((s) => s.key === selected);
-          if (!source) return null;
+      <h3 className="silo-plugin-section-label">Sources</h3>
+      <div className="silo-plugin-sources">
+        {PLUGIN_SOURCES.map((source) => {
           const state = plugins[source.key];
+          const expanded = selected === source.key;
+          const sourcePanelId = `${panelId}-${source.key}`;
+          const toggleExpanded = () => setSelected(expanded ? null : source.key);
           return (
-            <>
-              <div style={panelHeaderRow}>
-                <PluginLogo source={source.key} size={32} />
-                <div style={{ flex: 1 }}>
-                  <div style={rowLabel}>{source.name}</div>
-                </div>
+            <div key={source.key} className="silo-plugin-source">
+              <div className="silo-plugin-source-row">
+                <button
+                  type="button"
+                  className="silo-plugin-body"
+                  onClick={toggleExpanded}
+                  aria-label={source.name}
+                  aria-describedby={`${sourcePanelId}-summary`}
+                  aria-expanded={expanded}
+                  aria-controls={sourcePanelId}
+                >
+                  <PluginLogo source={source.key} />
+                  <span className="silo-plugin-copy">
+                    <span className="silo-plugin-name">{source.name}</span>
+                    <span id={`${sourcePanelId}-summary`} className="silo-plugin-summary">
+                      {sourceSummary(source.key, plugins)}
+                    </span>
+                  </span>
+                </button>
                 <ToggleSwitch
                   on={state.enabled}
                   disabled={loading}
                   onToggle={() => writeField(source.key, 'enabled', !state.enabled)}
                   label={source.name}
                 />
+                <button
+                  type="button"
+                  className="silo-plugin-disclosure"
+                  aria-label={`${expanded ? 'Collapse' : 'Expand'} ${source.name} features`}
+                  aria-expanded={expanded}
+                  aria-controls={sourcePanelId}
+                  onClick={toggleExpanded}
+                >
+                  <svg
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
+                    <title>Disclosure</title>
+                    <path d={expanded ? 'm6 15 6-6 6 6' : 'm6 9 6 6 6-6'} />
+                  </svg>
+                </button>
               </div>
-              <hr style={panelDivider} />
-              {FEATURE_ROWS_BY_SOURCE[source.key].map((row) => (
-                <FeatureToggleRow
-                  key={row.field}
-                  field={row.field}
-                  name={row.name}
-                  desc={row.desc}
-                  on={state[row.field as keyof typeof state] as boolean}
-                  masterEnabled={state.enabled}
-                  loading={loading}
-                  onToggle={() =>
-                    // `row` was drawn from `FEATURE_ROWS_BY_SOURCE[source.key]`, so `row.field`
-                    // is guaranteed to be a field `source.key`'s schema actually has — the
-                    // union-vs-generic correlation TS can't see through `.find()`'s narrowing.
-                    writeField(
-                      source.key,
-                      row.field as keyof PluginsMap[typeof source.key],
-                      !state[row.field as keyof typeof state],
-                    )
-                  }
-                />
-              ))}
-            </>
+              <div id={sourcePanelId} hidden={!expanded} className="silo-plugin-features">
+                {expanded &&
+                  FEATURE_ROWS_BY_SOURCE[source.key].map((row) => (
+                    <FeatureToggleRow
+                      key={row.field}
+                      name={row.name}
+                      desc={row.desc}
+                      on={state[row.field as keyof typeof state] as boolean}
+                      masterEnabled={state.enabled}
+                      loading={loading}
+                      onToggle={() =>
+                        writeField(
+                          source.key,
+                          row.field as keyof PluginsMap[typeof source.key],
+                          !state[row.field as keyof typeof state],
+                        )
+                      }
+                    />
+                  ))}
+              </div>
+            </div>
           );
-        })()}
+        })}
       </div>
 
       <SiloSettingsSection settings={settings} updateSettings={updateSettings} />

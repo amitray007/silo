@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PluginsTab } from './PluginsTab';
 
@@ -10,17 +10,17 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/** The default `/api/settings` GET response, new plan-026 nested `plugins` shape (mirrors `SETTINGS_DEFAULTS`, `packages/core/src/settings/schema.ts`) — every field on, matching the server's all-on default. Includes `twitter` (un-parked from its static "Soon" card into a real toggle). */
+// Settings response with every source surface enabled.
 function defaultSettings() {
   return {
     theme: 'system' as const,
     trashPurgeDays: 30 as const,
     linkPreviewImages: true,
     plugins: {
-      hacker_news: { enabled: true, inline: true, hover: true },
-      github: { enabled: true, hover: true },
-      youtube: { enabled: true, hover: true },
-      twitter: { enabled: true, inline: true, hover: true },
+      hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+      github: { enabled: true, hover: true, palette: true },
+      youtube: { enabled: true, hover: true, palette: true },
+      twitter: { enabled: true, inline: true, hover: true, palette: true },
     },
   };
 }
@@ -63,78 +63,134 @@ function renderTab(initial?: ReturnType<typeof defaultSettings>) {
   return { ...utils, fetchMock, getStore };
 }
 
-/**
- * The grid card button for a source — matched by accessible name, taking the
- * FIRST match. A source's name text also appears a second time once its
- * panel is expanded (the panel header repeats the name as plain text, not a
- * button), so `getByRole` alone is ambiguous whenever that source is
- * selected; the grid always renders before the panel in DOM order, so index
- * 0 is reliably the card.
- */
-function getSourceCard(name: string | RegExp) {
-  return screen.getAllByRole('button', { name })[0] as HTMLElement;
+function getSourceButton(name: string | RegExp) {
+  return screen.getByRole('button', { name });
 }
 
-describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
+function sourceSummary(name: string | RegExp) {
+  const id = getSourceButton(name).getAttribute('aria-describedby');
+  return document.getElementById(id ?? '')?.textContent;
+}
+
+describe('PluginsTab source disclosures', () => {
   afterEach(() => {
     vi.unstubAllGlobals();
   });
 
-  it('renders a 4-up grid with correct titles and status dots — all four are real toggles, no "Soon"', async () => {
+  it('renders four unique source rows, master switches, and all disclosures collapsed', async () => {
     renderTab();
-
-    // HN's panel is expanded by default, so its name appears twice (card +
-    // panel header); each brand SVG's <title> also matches its own name by
-    // text content — getAllByText (existence, not uniqueness) sidesteps both.
-    expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('GitHub').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('YouTube').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('Twitter / X').length).toBeGreaterThan(0);
+    expect(screen.getByRole('heading', { name: 'Sources' })).toBeDefined();
+    expect(screen.getByRole('heading', { name: 'Silo' })).toBeDefined();
+    await screen.findByTitle(/Hacker News is on/i);
+    for (const name of ['Hacker News', 'GitHub', 'YouTube', 'Twitter / X']) {
+      const body = getSourceButton(name);
+      expect(within(body).getByText(name, { selector: 'span' })).toBeDefined();
+      expect(body.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.getByRole('switch', { name }).getAttribute('aria-checked')).toBe('true');
+      const disclosure = getSourceButton(`Expand ${name} features`);
+      expect(disclosure.getAttribute('aria-expanded')).toBe('false');
+      const panel = document.getElementById(disclosure.getAttribute('aria-controls') ?? '');
+      expect(panel?.hidden).toBe(true);
+    }
+    expect(screen.queryByText('Inline on the row')).toBeNull();
     expect(screen.queryByText('Soon')).toBeNull();
-
-    // Each source card is a button with aria-expanded reflecting selection.
-    const hnCard = getSourceCard(/Hacker News/i);
-    expect(hnCard.getAttribute('aria-expanded')).toBe('true'); // selected by default
-    const githubCard = getSourceCard(/^GitHub$/i);
-    expect(githubCard.getAttribute('aria-expanded')).toBe('false');
-    const twitterCard = getSourceCard(/Twitter \/ X/i);
-    expect(twitterCard.getAttribute('aria-expanded')).toBe('false');
-
-    await waitFor(() => expect(screen.getByTitle(/Hacker News is on/i)).toBeDefined());
   });
 
-  it('HN is selected by default, showing its panel with inline + hover feature toggles', async () => {
+  it('opens from the row body, collapses from the chevron, and keeps only one source open', () => {
     renderTab();
-
-    await waitFor(() => expect(screen.getByTitle(/Hacker News is on/i)).toBeDefined());
-    expect(screen.getByText('Inline on the row')).toBeDefined();
-    expect(screen.getByText('On hover (preview card)')).toBeDefined();
+    fireEvent.click(getSourceButton('Hacker News'));
+    expect(getSourceButton('Collapse Hacker News features').getAttribute('aria-expanded')).toBe(
+      'true',
+    );
+    expect(screen.getByRole('switch', { name: 'Inline on the row' })).toBeDefined();
+    fireEvent.click(getSourceButton('Expand GitHub features'));
+    expect(getSourceButton('Hacker News').getAttribute('aria-expanded')).toBe('false');
+    expect(getSourceButton('GitHub').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.queryByText('Inline on the row')).toBeNull();
+    fireEvent.click(getSourceButton('Collapse GitHub features'));
+    expect(getSourceButton('GitHub').getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByText('On hover (preview card)')).toBeNull();
   });
 
-  it('clicking the GitHub card expands its panel showing hover-only (no inline toggle)', async () => {
+  it('summarizes enabled surfaces and updates the summary when a feature changes', async () => {
+    renderTab();
+    await screen.findByTitle(/Hacker News is on/i);
+    expect(sourceSummary('Hacker News')).toBe('Row, hover card, ⌘K');
+    expect(sourceSummary('GitHub')).toBe('Hover card, ⌘K');
+    fireEvent.click(getSourceButton('Hacker News'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Inline on the row' }));
+    await waitFor(() => expect(sourceSummary('Hacker News')).toBe('Hover card, ⌘K'));
+  });
+
+  it('shows Off without expanding when a master switch is turned off', async () => {
+    const { getStore } = renderTab();
+    fireEvent.click(await screen.findByTitle(/Hacker News is on/i));
+    await waitFor(() => expect(sourceSummary('Hacker News')).toBe('Off'));
+    expect(getSourceButton('Hacker News').getAttribute('aria-expanded')).toBe('false');
+    expect(getStore().plugins.hacker_news).toEqual({
+      enabled: false,
+      inline: true,
+      hover: true,
+      palette: true,
+    });
+  });
+
+  it('keeps the open disclosure when its master switch changes', async () => {
+    renderTab();
+    await screen.findByTitle(/Hacker News is on/i);
+    fireEvent.click(getSourceButton('Hacker News'));
+    fireEvent.click(screen.getByRole('switch', { name: 'Hacker News' }));
+    await waitFor(() => expect(sourceSummary('Hacker News')).toBe('Off'));
+    expect(getSourceButton('Hacker News').getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByRole('switch', { name: 'Inline on the row' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+  });
+
+  it('writes only the changed palette field and updates its summary', async () => {
+    const { getStore } = renderTab();
+    await screen.findByTitle(/GitHub is on/i);
+    fireEvent.click(getSourceButton('GitHub'));
+    fireEvent.click(screen.getByRole('switch', { name: 'In the command palette' }));
+    await waitFor(() => expect(sourceSummary('GitHub')).toBe('Hover card'));
+    expect(getStore().plugins).toEqual({
+      ...defaultSettings().plugins,
+      github: { enabled: true, hover: true, palette: false },
+    });
+  });
+
+  it('shows No surfaces on for an enabled source with all features off', async () => {
+    const settings = defaultSettings();
+    settings.plugins.hacker_news = { enabled: true, inline: false, hover: false, palette: false };
+    renderTab(settings);
+    await waitFor(() => expect(sourceSummary('Hacker News')).toBe('No surfaces on'));
+  });
+
+  it('expands GitHub features without an inline toggle', async () => {
     renderTab();
 
-    fireEvent.click(getSourceCard(/^GitHub$/i));
+    fireEvent.click(getSourceButton(/^GitHub$/i));
 
     await waitFor(() => expect(screen.getByTitle(/GitHub is on/i)).toBeDefined());
     expect(screen.getByText('On hover (preview card)')).toBeDefined();
     expect(screen.queryByText('Inline on the row')).toBeNull();
   });
 
-  it('clicking the YouTube card expands its panel showing hover-only (no inline toggle)', async () => {
+  it('expands YouTube features without an inline toggle', async () => {
     renderTab();
 
-    fireEvent.click(getSourceCard(/^YouTube$/i));
+    fireEvent.click(getSourceButton(/^YouTube$/i));
 
     await waitFor(() => expect(screen.getByTitle(/YouTube is on/i)).toBeDefined());
     expect(screen.getByText('On hover (preview card)')).toBeDefined();
     expect(screen.queryByText('Inline on the row')).toBeNull();
   });
 
-  it('clicking the Twitter/X card expands its panel showing BOTH inline and hover toggles (mirrors hacker_news)', async () => {
+  it('expands Twitter / X with inline, hover, and palette toggles', async () => {
     renderTab();
 
-    fireEvent.click(getSourceCard(/Twitter \/ X/i));
+    fireEvent.click(getSourceButton(/^Twitter \/ X$/i));
 
     await waitFor(() => expect(screen.getByTitle(/Twitter \/ X is on/i)).toBeDefined());
     expect(screen.getByText('On hover (preview card)')).toBeDefined();
@@ -145,7 +201,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
   it('toggling Twitter/X hover calls updateSettings with the full nested object, only twitter.hover flipped', async () => {
     const { fetchMock } = renderTab();
 
-    fireEvent.click(getSourceCard(/Twitter \/ X/i));
+    fireEvent.click(getSourceButton(/^Twitter \/ X$/i));
     const hoverToggle = await screen.findByTitle(/On hover \(preview card\) is on/i);
     fireEvent.click(hoverToggle);
 
@@ -157,10 +213,10 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
       expect(body).toEqual({
         plugins: {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: false },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: false, palette: true },
         },
       });
     });
@@ -169,7 +225,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
   it('toggling Twitter/X inline calls updateSettings with only twitter.inline flipped, enabled/hover untouched', async () => {
     const { fetchMock } = renderTab();
 
-    fireEvent.click(getSourceCard(/Twitter \/ X/i));
+    fireEvent.click(getSourceButton(/^Twitter \/ X$/i));
     const inlineToggle = await screen.findByTitle(/Inline on the row is on/i);
     fireEvent.click(inlineToggle);
 
@@ -181,10 +237,10 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
       expect(body).toEqual({
         plugins: {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: false, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: false, hover: true, palette: true },
         },
       });
     });
@@ -193,7 +249,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
   it('toggling Twitter/X master off calls updateSettings with enabled:false and hover preserved', async () => {
     const { fetchMock } = renderTab();
 
-    fireEvent.click(getSourceCard(/Twitter \/ X/i));
+    fireEvent.click(getSourceButton(/^Twitter \/ X$/i));
     const masterToggle = await screen.findByTitle(/Twitter \/ X is on/i);
     fireEvent.click(masterToggle);
 
@@ -205,10 +261,10 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
       expect(body).toEqual({
         plugins: {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: false, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: false, inline: true, hover: true, palette: true },
         },
       });
     });
@@ -230,10 +286,10 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
       expect(body).toEqual({
         plugins: {
-          hacker_news: { enabled: false, inline: true, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       });
     });
@@ -242,6 +298,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
   it('toggling HN inline calls updateSettings with only inline flipped, enabled/hover untouched', async () => {
     const { fetchMock } = renderTab();
 
+    fireEvent.click(getSourceButton('Hacker News'));
     const inlineToggle = await screen.findByTitle(/Inline on the row is on/i);
     fireEvent.click(inlineToggle);
 
@@ -253,10 +310,10 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
       expect(body).toEqual({
         plugins: {
-          hacker_news: { enabled: true, inline: false, hover: true },
-          github: { enabled: true, hover: true },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: false, hover: true, palette: true },
+          github: { enabled: true, hover: true, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       });
     });
@@ -265,7 +322,7 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
   it('toggling GitHub hover calls updateSettings with the full nested object, only github.hover flipped', async () => {
     const { fetchMock } = renderTab();
 
-    fireEvent.click(getSourceCard(/^GitHub$/i));
+    fireEvent.click(getSourceButton(/^GitHub$/i));
     const hoverToggle = await screen.findByTitle(/On hover \(preview card\) is on/i);
     fireEvent.click(hoverToggle);
 
@@ -277,16 +334,16 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       const body = JSON.parse((patchCall?.[1] as RequestInit).body as string);
       expect(body).toEqual({
         plugins: {
-          hacker_news: { enabled: true, inline: true, hover: true },
-          github: { enabled: true, hover: false },
-          youtube: { enabled: true, hover: true },
-          twitter: { enabled: true, inline: true, hover: true },
+          hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+          github: { enabled: true, hover: false, palette: true },
+          youtube: { enabled: true, hover: true, palette: true },
+          twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       });
     });
   });
 
-  it('two quick toggles on the same source do NOT clobber each other (optimistic onMutate — plan 026 review fix)', async () => {
+  it('preserves both changes when two features are toggled quickly', async () => {
     // Regression for the read-modify-write race: without the optimistic cache
     // write in useUpdateSettings, both clicks would read the SAME stale
     // useSettings() snapshot and the second PATCH would drop the first's
@@ -296,13 +353,14 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     const { fetchMock } = renderTab({
       ...defaultSettings(),
       plugins: {
-        hacker_news: { enabled: true, inline: false, hover: false },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: true, inline: false, hover: false, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       },
     });
 
+    fireEvent.click(getSourceButton('Hacker News'));
     const inlineToggle = await screen.findByTitle(/Inline on the row is off/i);
     fireEvent.click(inlineToggle);
     const hoverToggle = await screen.findByTitle(/On hover \(preview card\) is off/i);
@@ -316,11 +374,16 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       // hover second) — proving the second click read the first's optimistic
       // update rather than the original stale snapshot.
       const last = patchBodies.at(-1);
-      expect(last?.plugins.hacker_news).toEqual({ enabled: true, inline: true, hover: true });
+      expect(last?.plugins.hacker_news).toEqual({
+        enabled: true,
+        inline: true,
+        hover: true,
+        palette: true,
+      });
     });
   });
 
-  it('feature toggles are DISABLED while settings are still loading (no clobber via LOADING_PLUGINS — plan 026 review fix)', async () => {
+  it('disables master and feature switches while settings load', async () => {
     // Regression for the loading-window clobber: during the initial GET the
     // tab renders against the all-on LOADING_PLUGINS placeholder; a click on a
     // feature toggle then would rebuild the PATCH from placeholder values and
@@ -336,14 +399,17 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
       </QueryClientProvider>,
     );
 
-    // HN's panel is open by default; its inline feature toggle exists but must
-    // be disabled while loading (matching the master toggle's load-gate). A
-    // disabled toggle's title is the generic "turn the source on first" form,
-    // so match on the "Inline on the row" label prefix (present in every title
-    // variant) rather than the "is on/off" copy.
+    fireEvent.click(getSourceButton('Hacker News'));
     const inlineToggle = await screen.findByTitle(/^Inline on the row/i);
     expect(inlineToggle).toHaveProperty('disabled', true);
 
+    for (const name of ['Hacker News', 'GitHub', 'YouTube', 'Twitter / X']) {
+      expect(screen.getByRole('switch', { name })).toHaveProperty('disabled', true);
+    }
+    expect(screen.getByRole('switch', { name: 'In the command palette' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     // A click while disabled must fire NO PATCH.
     fireEvent.click(inlineToggle);
     const patched = fetchMock.mock.calls.some(
@@ -356,10 +422,10 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     renderTab({
       ...defaultSettings(),
       plugins: {
-        hacker_news: { enabled: false, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       },
     });
 
@@ -367,23 +433,30 @@ describe('PluginsTab (plan 026 — logo grid + expand panel)', () => {
     // (shared by the master-off and loading cases) — wait for the settled
     // (disabled) render specifically so this doesn't assert against the
     // transient loading render.
+    fireEvent.click(getSourceButton('Hacker News'));
     const inlineToggle = await screen.findByTitle(/Inline on the row - unavailable/i);
     expect(inlineToggle).toHaveProperty('disabled', true);
     const hoverToggle = screen.getByTitle(/On hover \(preview card\) - unavailable/i);
     expect(hoverToggle).toHaveProperty('disabled', true);
+    expect(screen.getByRole('switch', { name: 'In the command palette' })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    expect(inlineToggle.closest('[data-disabled]')?.getAttribute('data-disabled')).toBe('true');
   });
 
   it('re-enabling a master-disabled source re-enables its feature toggles', async () => {
     renderTab({
       ...defaultSettings(),
       plugins: {
-        hacker_news: { enabled: false, inline: true, hover: true },
-        github: { enabled: true, hover: true },
-        youtube: { enabled: true, hover: true },
-        twitter: { enabled: true, inline: true, hover: true },
+        hacker_news: { enabled: false, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
       },
     });
 
+    fireEvent.click(getSourceButton('Hacker News'));
     const masterToggle = await screen.findByTitle(/Hacker News is off/i);
     fireEvent.click(masterToggle);
 
