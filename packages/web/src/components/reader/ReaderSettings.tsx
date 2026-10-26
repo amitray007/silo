@@ -1,4 +1,4 @@
-import { type ReactNode, useId, useState } from 'react';
+import { type ReactNode, useId } from 'react';
 import { useReaderWidth } from '../../lib/useReaderWidth';
 import { MenuPresence } from '../MenuPresence';
 import { MenuSurface } from '../MenuSurface';
@@ -72,8 +72,15 @@ function ReaderWidth() {
   );
 }
 
-export function ReaderSettings({ original }: { original: OriginalState | undefined }) {
-  const [open, setOpen] = useState(false);
+export function ReaderSettings({
+  original,
+  open,
+  setOpen,
+}: {
+  original: OriginalState | undefined;
+  open: boolean;
+  setOpen: (open: boolean) => void;
+}) {
   const id = useId();
   if (original && (original.theme !== 'dark' || !['direct', 'view'].includes(original.mode)))
     return null;
@@ -87,7 +94,7 @@ export function ReaderSettings({ original }: { original: OriginalState | undefin
         aria-expanded={open}
         aria-haspopup="dialog"
         aria-controls={open ? id : undefined}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen(!open)}
       >
         <ReaderIcon name="sliders" />
       </button>

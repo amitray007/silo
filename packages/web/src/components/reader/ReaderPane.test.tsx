@@ -1,8 +1,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { LinkJson } from '../../api/types';
 import { makeLink } from '../../test/fixtures';
 import { RowMenuProvider } from '../RowMenuContext';
 import { ReaderPane } from './ReaderPane';
@@ -11,13 +12,13 @@ import { useReaderActions } from './useReaderActions';
 const link = makeLink({ id: 'toolbar', extractedText: 'Saved article text.' });
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
-function Pane() {
+function Pane({ value = link }: { value?: LinkJson }) {
   const [tab, setTab] = useState<'reader' | 'original'>('reader');
-  const actions = useReaderActions(link, false, () => {});
+  const actions = useReaderActions(value, false, () => {});
   return (
     <ReaderPane
-      link={link}
-      selectedId={link.id}
+      link={value}
+      selectedId={value.id}
       tab={tab}
       setTab={setTab}
       close={() => {}}
@@ -40,21 +41,122 @@ function show() {
   );
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const view = render(
+  const tree = (value: LinkJson) => (
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <RowMenuProvider>
-          <Pane />
+          <Pane value={value} />
         </RowMenuProvider>
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   );
-  return { ...view, fetchMock };
+  const view = render(tree(link));
+  return { ...view, fetchMock, select: (value: LinkJson) => view.rerender(tree(value)) };
 }
 
 beforeEach(() => {
   localStorage.clear();
   document.documentElement.dataset.theme = 'dark';
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+    window.setTimeout(() => callback(0), 0),
+  );
+  vi.stubGlobal('cancelAnimationFrame', window.clearTimeout);
+});
+
+function scrollPane(container: HTMLElement) {
+  const scroller = container.querySelector('.silo-reader-scroll') as HTMLElement;
+  const head = container.querySelector('.silo-reader-head') as HTMLElement;
+  Object.defineProperties(scroller, {
+    scrollHeight: { value: 2000 },
+    clientHeight: { value: 600 },
+  });
+  const scroll = async (top: number) => {
+    await act(async () => {
+      fireEvent.scroll(scroller, { target: { scrollTop: top } });
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    });
+  };
+  return { scroller, head, scroll };
+}
+
+it('reveals on toolbar focus and stays shown until focus leaves', async () => {
+  const { container } = show();
+  const { head, scroll } = scrollPane(container);
+  await scroll(200);
+  expect(head.dataset.hidden).toBe('true');
+  act(() => screen.getByRole('button', { name: 'Close reader' }).focus());
+  expect(head.dataset.hidden).toBe('false');
+  await scroll(240);
+  expect(head.dataset.hidden).toBe('false');
+  act(() => (document.activeElement as HTMLElement).blur());
+  await scroll(260);
+  expect(head.dataset.hidden).toBe('true');
+});
+
+it.each(['More actions', 'View settings'])('pins the bar while %s is open', async (label) => {
+  const { container } = show();
+  const { head, scroll } = scrollPane(container);
+  await scroll(200);
+  fireEvent.click(screen.getByRole('button', { name: label }));
+  // Move focus out to prove the open menu itself pins the header.
+  act(() => (document.activeElement as HTMLElement).blur());
+  await scroll(240);
+  expect(head.dataset.hidden).toBe('false');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  act(() => (document.activeElement as HTMLElement).blur());
+  await scroll(260);
+  expect(head.dataset.hidden).toBe('true');
+});
+
+it('resets a hidden bar, scroll position, and open menus when the selected link changes', async () => {
+  const { container, select } = show();
+  const { head, scroll, scroller } = scrollPane(container);
+  await scroll(200);
+  expect(head.dataset.hidden).toBe('true');
+  select(makeLink({ id: 'next', title: 'Next article' }));
+  expect(head.dataset.hidden).toBe('false');
+  expect(scroller.scrollTop).toBe(0);
+  await scroll(100);
+  expect(head.dataset.hidden).toBe('true');
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
+  select(link);
+  expect(screen.queryByRole('menu')).toBeNull();
+  expect(head.dataset.hidden).toBe('false');
+});
+
+it('shows the bar when switching tabs and keeps it visible in Live', async () => {
+  const { container } = show();
+  const { head, scroll, scroller } = scrollPane(container);
+  await scroll(200);
+  fireEvent.click(screen.getByRole('tab', { name: 'Live' }));
+  expect(head.dataset.hidden).toBe('false');
+  expect(scroller.scrollTop).toBe(0);
+  await scroll(240);
+  expect(head.dataset.hidden).toBe('false');
+  fireEvent.click(screen.getByRole('tab', { name: 'Reader' }));
+  expect(head.dataset.hidden).toBe('false');
+  expect(scroller.scrollTop).toBe(0);
+});
+
+it('reveals in the top hover zone only on hover-capable devices', async () => {
+  const { container } = show();
+  const { head, scroll } = scrollPane(container);
+  const pane = screen.getByRole('region', { name: 'Link reader' });
+  await scroll(200);
+  fireEvent.pointerMove(pane, { clientY: 10 });
+  expect(head.dataset.hidden).toBe('true');
+  const media = window.matchMedia;
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    ...media(query),
+    matches: query === '(hover: hover) and (pointer: fine)',
+  }));
+  fireEvent.pointerMove(pane, { clientY: 10 });
+  expect(head.dataset.hidden).toBe('false');
+  await scroll(240);
+  expect(head.dataset.hidden).toBe('false');
+  fireEvent.pointerLeave(pane);
+  await scroll(260);
+  expect(head.dataset.hidden).toBe('true');
 });
 afterEach(() => {
   vi.unstubAllGlobals();

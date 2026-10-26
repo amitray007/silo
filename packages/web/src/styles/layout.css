@@ -344,6 +344,35 @@
   grid-template-columns: minmax(max-content, 1fr) auto minmax(max-content, 1fr);
   padding: 0 8px;
   gap: 8px;
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 21;
+  background: var(--bg);
+  transition:
+    transform 200ms var(--ease-out),
+    opacity 200ms var(--ease-out),
+    visibility 0s;
+}
+.silo-reader-head[data-hidden="true"] {
+  transform: translateY(-100%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition-delay: 0s, 0s, 200ms;
+}
+.silo-reader-head:focus-within {
+  transform: none;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-reader-head,
+  .silo-reader-head[data-hidden="true"] {
+    transform: none;
+    transition: none;
+  }
 }
 .silo-reader-tools {
   display: flex;
@@ -420,6 +449,8 @@
   flex: 1;
   min-height: 0;
   overscroll-behavior: contain;
+  padding-top: 44px;
+  scroll-padding-top: 44px;
 }
 .silo-reader {
   max-width: 700px;

@@ -3,6 +3,7 @@ import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { deriveTitleFromUrl } from '../../lib/url';
+import { useHideOnScroll } from '../../lib/useHideOnScroll';
 import { useReaderWidth } from '../../lib/useReaderWidth';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
@@ -82,14 +83,17 @@ function ReaderMore({
   trashed,
   link,
   original,
+  open,
+  setOpen,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
   link: LinkJson | undefined;
   original: OriginalState | undefined;
+  open: boolean;
+  setOpen: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
   return (
     <div className="silo-reader-more">
       <button
@@ -99,7 +103,7 @@ function ReaderMore({
         aria-expanded={open}
         aria-haspopup="true"
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen(!open)}
       >
         <ReaderIcon name="more" />
       </button>
@@ -290,6 +294,9 @@ export function ReaderPane({
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [openMenu, setOpenMenu] = useState<'more' | 'settings' | null>(null);
+  const [headerFocused, setHeaderFocused] = useState(false);
+  const [headerHovered, setHeaderHovered] = useState(false);
   const wasOpen = useRef(false);
   const wasFullWindow = useRef(fullWindow);
   useEffect(() => {
@@ -301,7 +308,20 @@ export function ReaderPane({
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset scroll when the content changes.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    setOpenMenu(null);
+    setHeaderHovered(false);
+    setHeaderFocused(
+      Boolean(
+        panelRef.current?.querySelector('.silo-reader-head')?.contains(document.activeElement),
+      ),
+    );
   }, [selectedId, tab]);
+  // Cross-origin Live iframes do not expose scroll, so their bar stays visible.
+  const hidden = useHideOnScroll(
+    scrollRef,
+    tab === 'reader' && Boolean(link) && !openMenu && !headerFocused && !headerHovered,
+    `${selectedId}-${tab}`,
+  );
 
   let content: ReactNode = (
     <div className="silo-empty-reader">
@@ -332,8 +352,29 @@ export function ReaderPane({
         />
       );
   return (
-    <section className="silo-readerpane" aria-label="Link reader" ref={panelRef} tabIndex={-1}>
-      <div className="silo-reader-head">
+    <section
+      className="silo-readerpane"
+      aria-label="Link reader"
+      ref={panelRef}
+      tabIndex={-1}
+      onPointerMove={(event) => {
+        if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+        const head = event.currentTarget.querySelector('.silo-reader-head');
+        setHeaderHovered(
+          event.clientY - event.currentTarget.getBoundingClientRect().top <= 40 ||
+            Boolean(head?.contains(event.target as Node)),
+        );
+      }}
+      onPointerLeave={() => setHeaderHovered(false)}
+    >
+      <div
+        className="silo-reader-head"
+        data-hidden={hidden}
+        onFocusCapture={() => setHeaderFocused(true)}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setHeaderFocused(false);
+        }}
+      >
         <div className="silo-reader-navigation" role="toolbar" aria-label="Reader navigation">
           <div className="silo-reader-tools">
             <IconButton name="close" label="Close reader" onClick={close} disabled={!selectedId} />
@@ -346,7 +387,12 @@ export function ReaderPane({
         </div>
         <div className="silo-reader-right">
           {link && (
-            <ReaderSettings key={`settings-${selectedId}-${tab}`} original={shownOriginal} />
+            <ReaderSettings
+              key={`settings-${selectedId}-${tab}`}
+              original={shownOriginal}
+              open={openMenu === 'settings'}
+              setOpen={(open) => setOpenMenu(open ? 'settings' : null)}
+            />
           )}
           {!phone && (
             <div className="silo-reader-inline-actions">
@@ -360,6 +406,8 @@ export function ReaderPane({
             trashed={trashed}
             link={link}
             original={shownOriginal}
+            open={openMenu === 'more'}
+            setOpen={(open) => setOpenMenu(open ? 'more' : null)}
           />
         </div>
       </div>
