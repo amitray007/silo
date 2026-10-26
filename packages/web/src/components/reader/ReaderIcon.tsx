@@ -16,7 +16,9 @@ const paths = {
   trash: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6',
   restore: 'M4 12a8 8 0 1 0 2-5M4 3v5h5',
   plus: 'M12 5v14M5 12h14',
-  sidebar: 'M4 3h16a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1ZM9 3v18',
+  // Rounded panel with a short inset rail, matching Shiori's sidebar glyph.
+  sidebar:
+    'M7.75 4.75h8.5a3 3 0 0 1 3 3v8.5a3 3 0 0 1-3 3h-8.5a3 3 0 0 1-3-3v-8.5a3 3 0 0 1 3-3ZM8.75 7.75v8.5',
   menu: 'M4 6h16M4 12h16M4 18h16',
   sun: 'M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
   moon: 'M20 15a9 9 0 0 1-11-11A9 9 0 1 0 20 15',
