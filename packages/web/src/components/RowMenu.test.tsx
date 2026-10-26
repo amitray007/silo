@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink } from '../test/fixtures';
 import { RowMenu } from './RowMenu';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
-import { SelectionProvider } from './SelectionContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -30,10 +29,8 @@ function renderMenu(overrides: Parameters<typeof makeLink>[0] = {}) {
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <MenuOpenProbe />
-          <RowMenu link={link} />
-        </SelectionProvider>
+        <MenuOpenProbe />
+        <RowMenu link={link} />
       </RowMenuProvider>
     </QueryClientProvider>,
   );
@@ -297,7 +294,6 @@ describe('RowMenu', () => {
       'Copy linkc',
       'Edite',
       'Tags1',
-      'Select',
       'Move to trash⌫',
     ]);
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Open original/ }));
@@ -323,9 +319,7 @@ describe('RowMenu', () => {
       <div onClick={outerHandler}>
         <QueryClientProvider client={queryClient}>
           <RowMenuProvider>
-            <SelectionProvider>
-              <RowMenu link={link} />
-            </SelectionProvider>
+            <RowMenu link={link} />
           </RowMenuProvider>
         </QueryClientProvider>
       </div>,

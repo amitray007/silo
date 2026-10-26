@@ -8,7 +8,6 @@ import { RowMenu } from './RowMenu';
 import { useRowMenu } from './RowMenuContext';
 import { RowPopover } from './RowPopover';
 import { useReaderSelection } from './reader/ReaderSelection';
-import { useLibrarySelection } from './SelectionContext';
 
 function isInlineSurfaceOn(source: SettingsMap['plugins']['hacker_news'] | undefined) {
   return (source?.enabled ?? true) && (source?.inline ?? true);
@@ -17,7 +16,6 @@ function isInlineSurfaceOn(source: SettingsMap['plugins']['hacker_news'] | undef
 export function LinkRow({ link }: { link: LinkJson }) {
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
-  const selection = useLibrarySelection();
   const reader = useReaderSelection();
   const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
   const { data: settings } = useSettings();
@@ -30,7 +28,6 @@ export function LinkRow({ link }: { link: LinkJson }) {
   return (
     <ListRow
       link={link}
-      selection={selection}
       busy={trash.isPending}
       error={trash.isError ? "Couldn't move this link to trash. Try again." : undefined}
       onRemove={() => trash.mutate()}

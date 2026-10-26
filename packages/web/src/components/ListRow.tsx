@@ -5,10 +5,8 @@ import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { useCompactLinks } from '../lib/useCompactLinks';
 import { Chip } from './Chip';
 import { MenuPresence } from './MenuPresence';
-import { RowSelectCheckbox } from './RowSelectCheckbox';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useReaderSelection } from './reader/ReaderSelection';
-import type { SelectionScope } from './SelectionContext';
 
 function RowNoteIcon({ notes, compact }: { notes: string | null; compact: boolean }) {
   if (!notes || !compact) return null;
@@ -19,10 +17,9 @@ function RowNoteIcon({ notes, compact }: { notes: string | null; compact: boolea
   );
 }
 
-/** Shared row geometry; Library and Trash retain their own actions and selection. */
+/** Shared row geometry; Library and Trash retain their own per-link actions. */
 export function ListRow({
   link,
-  selection,
   menuOpen,
   toggleMenu,
   menu,
@@ -32,11 +29,11 @@ export function ListRow({
   purge,
   children,
   onRemove,
+  onDelete,
   busy = false,
   error,
 }: {
   link: LinkJson;
-  selection: SelectionScope;
   menuOpen: boolean;
   toggleMenu: () => void;
   menu: (anchor: HTMLElement | null) => ReactNode;
@@ -46,6 +43,7 @@ export function ListRow({
   purge?: number;
   children?: ReactNode;
   onRemove: () => void;
+  onDelete?: () => void;
   busy?: boolean;
   error?: string | undefined;
 }) {
@@ -53,8 +51,6 @@ export function ListRow({
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [hovered, setHovered] = useState(false);
   const reader = useReaderSelection();
-  const selected = selection.isSelected(link.id);
-  const showCheck = hovered || menuOpen || selection.selected.length > 0;
   const domain = deriveDomain(link.url);
   const enter = (event: SyntheticEvent<HTMLAnchorElement>) => {
     setHovered(true);
@@ -76,7 +72,6 @@ export function ListRow({
         data-enriching={link.captureStatus === 'enriching'}
         tabIndex={reader?.selectedId && reader.selectedId !== link.id ? -1 : 0}
         data-active={reader?.selectedId === link.id}
-        data-trashed={purge !== undefined}
         aria-current={reader?.selectedId === link.id ? 'true' : undefined}
         onClick={(event) => {
           if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !reader) return;
@@ -92,16 +87,10 @@ export function ListRow({
           onMenu?.();
           toggleMenu();
         }}
-        style={selected ? { background: 'var(--sel)' } : undefined}
       >
         <span className="silo-row-titleline">
           <span className="silo-row-iconwrap">
-            <RowSelectCheckbox
-              visible={showCheck}
-              isSelected={selected}
-              onToggle={() => selection.toggle(link.id)}
-            />
-            {!showCheck && <Chip domain={domain} />}
+            <Chip domain={domain} />
           </span>
           <span className="silo-row-title">{link.title ?? deriveTitleFromUrl(link.url)}</span>
         </span>
@@ -146,6 +135,22 @@ export function ListRow({
           >
             <ReaderIcon name={purge === undefined ? 'trash' : 'restore'} />
           </button>
+          {onDelete && (
+            <button
+              type="button"
+              className="silo-reader-iconbtn"
+              aria-label="Delete forever"
+              title="Delete forever"
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onDelete();
+              }}
+            >
+              <ReaderIcon name="trash" />
+            </button>
+          )}
           <button
             type="button"
             className="silo-rowmore silo-reader-iconbtn"

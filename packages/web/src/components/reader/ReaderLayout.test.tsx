@@ -396,6 +396,37 @@ describe('reader selection and history', () => {
     },
   );
 
+  it('keeps favicons on hover and focus, with no multi-select controls', async () => {
+    const { container } = renderReader({ route: '/?link=a' });
+    await selected();
+    const row = container.querySelector<HTMLElement>('[data-link-id="a"]') as HTMLElement;
+    const favicon = row.querySelector('.silo-letter-chip');
+    expect(favicon).not.toBeNull();
+    fireEvent.mouseEnter(row);
+    fireEvent.focus(row);
+    expect(row.querySelector('.silo-letter-chip')).toBe(favicon);
+    expect(within(row).queryByRole('button', { name: /Select/ })).toBeNull();
+    fireEvent.click(within(row).getByRole('button', { name: 'Options' }));
+    expect(screen.queryByRole('menuitem', { name: /Select/ })).toBeNull();
+    expect(screen.getByRole('menuitem', { name: 'Move to trash' })).toBeDefined();
+  });
+
+  it.each(['metaKey', 'ctrlKey', 'shiftKey'])(
+    'preserves native %s clicks without changing reader selection',
+    async (modifier) => {
+      const { container } = renderReader({ route: '/?link=a' });
+      await selected();
+      const row = container.querySelector<HTMLElement>('[data-link-id="b"]') as HTMLElement;
+      expect(fireEvent.click(row, { [modifier]: true })).toBe(true);
+      expect(screen.getByTestId('url').textContent).toBe('/?link=a');
+      expect(row.getAttribute('data-active')).toBe('false');
+      expect(screen.queryByRole('button', { name: /Select/ })).toBeNull();
+      fireEvent.click(row);
+      await selected('Second link');
+      expect(screen.getByTestId('url').textContent).toBe('/?link=b');
+    },
+  );
+
   it('pushes URL selection, fetches row detail, and browser Back returns to the list', async () => {
     const { fetchMock, container } = renderReader();
     await selectFirst();
@@ -721,7 +752,6 @@ describe('reader keyboard and phone toolbar', () => {
       'Copy linkc',
       'Edite',
       'Tags',
-      'Select',
       'Move to trash⌫',
     ]);
     expect(document.activeElement).toBe(items[0]);
@@ -868,26 +898,6 @@ describe('review regressions', () => {
     },
   );
 
-  it('selects a surviving neighbor after bulk removal, skipping removed neighbors', async () => {
-    const c = makeLink({ id: 'c', title: 'Third link' });
-    const { container } = renderReader({ live: [a, b, c] });
-    await selectFirst();
-    for (const id of ['a', 'b']) {
-      const row = container.querySelector<HTMLElement>(`[data-link-id="${id}"]`);
-      fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
-      fireEvent.click(screen.getByRole('menuitem', { name: 'Select' }));
-    }
-    fireEvent.click(
-      within(container.querySelector('.silo-selection-dock') as HTMLElement).getByRole('button', {
-        name: 'Move to trash',
-      }),
-    );
-    await selected('Third link');
-    expect(screen.getByTestId('url').textContent).toBe('/?link=c');
-    fireEvent.click(screen.getByText('Browser back'));
-    await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
-  });
-
   it('keeps the row deletion confirmation trapped while the optimistic removal is pending', async () => {
     const { container, fetchMock } = renderReader({
       trash: [makeTrashLink(a), makeTrashLink(b)],
@@ -955,20 +965,14 @@ describe('review regressions', () => {
     expect((next as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('closes one layer per Escape: row menu, selection, reader', async () => {
+  it('closes one layer per Escape: row menu, reader', async () => {
     const { container } = renderReader({ route: '/?link=a' });
     await selected();
     const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
     const options = within(row as HTMLElement).getByRole('button', { name: 'Options' });
     fireEvent.click(options);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Select' }));
-    fireEvent.click(options);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(options.getAttribute('aria-expanded')).toBe('false');
-    expect(screen.getByText('1 selected')).toBeDefined();
-    expect(screen.getByTestId('url').textContent).toBe('/?link=a');
-    fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByText('1 selected')).toBeNull();
     expect(screen.getByTestId('url').textContent).toBe('/?link=a');
     fireEvent.keyDown(document, { key: 'Escape' });
     await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));

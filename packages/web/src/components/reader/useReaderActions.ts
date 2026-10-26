@@ -3,7 +3,6 @@ import { useDeleteNow, useRestoreLink, useTrashLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { isTextEntryElement } from '../../lib/usePasteCapture';
 import { useRowMenu } from '../RowMenuContext';
-import { useLibrarySelection, useTrashSelection } from '../SelectionContext';
 
 export function originalUrl(url: string): string | undefined {
   return /^https?:\/\//i.test(url) ? url : undefined;
@@ -18,8 +17,6 @@ export function useReaderActions(
   const trash = useTrashLink(id);
   const restore = useRestoreLink(id);
   const remove = useDeleteNow(id);
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
   const { openEdit } = useRowMenu();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notice, setNotice] = useState({ id, message: '' });
@@ -42,7 +39,6 @@ export function useReaderActions(
     const mutation = { trash, restore, delete: remove }[kind];
     mutation.mutate(undefined, {
       onSuccess: () => {
-        (trashed ? trashSelection : librarySelection).deselect([id]);
         onRemoved();
       },
       onError: (error) => setFeedback(error.message),
@@ -84,9 +80,6 @@ export function useReaderKeyboard({
   selected: boolean;
 }) {
   const { openMenuId } = useRowMenu();
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
-  const hasSelection = librarySelection.selected.length > 0 || trashSelection.selected.length > 0;
   const commands = useMemo(() => {
     const commands: Record<string, (() => void) | undefined> = {
       j: () => step(1),
@@ -109,7 +102,6 @@ export function useReaderKeyboard({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (ignoreReaderKey(event) || openMenuId !== null) return;
-      if (event.key === 'Escape' && hasSelection) return;
       const command = commands[event.key];
       if (!command) return;
       event.preventDefault();
@@ -118,7 +110,7 @@ export function useReaderKeyboard({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [commands, openMenuId, hasSelection]);
+  }, [commands, openMenuId]);
 }
 
 function ignoreReaderKey(event: KeyboardEvent) {

@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
-import { SelectionProvider } from '../components/SelectionContext';
 import { makeLink as link } from '../test/fixtures';
 import { TagView } from './TagView';
 
@@ -38,16 +37,14 @@ function renderTagView(tagName: string, fetchImpl: typeof fetch) {
   return render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <HoverPreviewProvider>
-            <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
-              <Routes>
-                <Route path="/" element={<div>landed on library</div>} />
-                <Route path="/tags/:name" element={<TagView />} />
-              </Routes>
-            </MemoryRouter>
-          </HoverPreviewProvider>
-        </SelectionProvider>
+        <HoverPreviewProvider>
+          <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
+            <Routes>
+              <Route path="/" element={<div>landed on library</div>} />
+              <Route path="/tags/:name" element={<TagView />} />
+            </Routes>
+          </MemoryRouter>
+        </HoverPreviewProvider>
       </RowMenuProvider>
     </QueryClientProvider>,
   );

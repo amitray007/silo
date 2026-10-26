@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
@@ -7,7 +7,6 @@ import * as hooks from '../api/hooks';
 import type { LinksResponse } from '../api/types';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
-import { SelectionProvider } from '../components/SelectionContext';
 import { bucketByDay } from '../lib/buckets';
 import { makeLink as link } from '../test/fixtures';
 import { LibraryView } from './LibraryView';
@@ -27,11 +26,9 @@ function renderLibraryView() {
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LibraryView />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LibraryView />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>
     </MemoryRouter>,
@@ -312,119 +309,5 @@ describe('LibraryView header (no paste box)', () => {
 
     // The title still renders (header didn't lose its heading).
     expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();
-  });
-});
-
-/**
- * Multi-select (plan 011, V3-5): the row hover checkbox and the Library
- * selection dock ("N selected · move to trash · clear · esc"). Uses the same
- * `mockUseInfiniteLinks` bypass as the suite above for the feed itself, with
- * `fetch` mocked only for what multi-select actually calls: `useCounts`
- * (the header) and the bulk-trash POST loop.
- */
-describe('LibraryView multi-select (plan 011, V3-5)', () => {
-  beforeEach(() => {
-    FakeIntersectionObserver.instances = [];
-    vi.stubGlobal('IntersectionObserver', FakeIntersectionObserver);
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockImplementation((input: RequestInfo | URL) => {
-        const url = String(input);
-        if (url === '/api/counts') {
-          return Promise.resolve(jsonResponse({ live: 2, trash: 0, purgeWindowDays: 30 }));
-        }
-        if (url.startsWith('/api/links/') && url.endsWith('/trash')) {
-          return Promise.resolve(jsonResponse({ link: link({ tags: [] }) }, 200));
-        }
-        throw new Error(`unexpected fetch: ${url}`);
-      }),
-    );
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.restoreAllMocks();
-  });
-
-  it('hovering a row reveals its checkbox; clicking it selects the row and shows the selection dock', () => {
-    const rowA = link({ id: 'a', title: 'Row A' });
-    const rowB = link({ id: 'b', title: 'Row B' });
-    mockUseInfiniteLinks({
-      data: { pages: [{ links: [rowA, rowB] } as LinksResponse], pageParams: [undefined] },
-    });
-    renderLibraryView();
-
-    const rowAAnchor = screen.getByText('Row A').closest('a') as HTMLElement;
-    expect(screen.queryByTitle('Select')).toBeNull();
-
-    fireEvent.mouseEnter(rowAAnchor);
-    const checkbox = screen.getByTitle('Select');
-    fireEvent.click(checkbox);
-
-    expect(screen.getByText('1 selected')).toBeDefined();
-    expect(screen.getByText('Move to trash')).toBeDefined();
-  });
-
-  it('once any row is selected, every row shows its checkbox (not just the hovered one)', () => {
-    const rowA = link({ id: 'a', title: 'Row A' });
-    const rowB = link({ id: 'b', title: 'Row B' });
-    mockUseInfiniteLinks({
-      data: { pages: [{ links: [rowA, rowB] } as LinksResponse], pageParams: [undefined] },
-    });
-    renderLibraryView();
-
-    fireEvent.mouseEnter(screen.getByText('Row A').closest('a') as HTMLElement);
-    fireEvent.click(screen.getByTitle('Select'));
-
-    // Both rows' checkboxes are now present, even though only Row A is hovered.
-    expect(screen.getAllByTitle('Select')).toHaveLength(2);
-  });
-
-  it('"move to trash" bulk-trashes every selected row and clears the selection', async () => {
-    const rowA = link({ id: 'a', title: 'Row A' });
-    const rowB = link({ id: 'b', title: 'Row B' });
-    mockUseInfiniteLinks({
-      data: { pages: [{ links: [rowA, rowB] } as LinksResponse], pageParams: [undefined] },
-    });
-    renderLibraryView();
-
-    fireEvent.mouseEnter(screen.getByText('Row A').closest('a') as HTMLElement);
-    fireEvent.click(screen.getByTitle('Select'));
-    fireEvent.mouseEnter(screen.getByText('Row B').closest('a') as HTMLElement);
-    fireEvent.click(screen.getAllByTitle('Select')[1] as HTMLElement);
-    expect(screen.getByText('2 selected')).toBeDefined();
-
-    fireEvent.click(screen.getByText('Move to trash'));
-
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        '/api/links/a/trash',
-        expect.objectContaining({ method: 'POST' }),
-      ),
-    );
-    await waitFor(() =>
-      expect(fetch).toHaveBeenCalledWith(
-        '/api/links/b/trash',
-        expect.objectContaining({ method: 'POST' }),
-      ),
-    );
-    await waitFor(() => expect(screen.queryByText('2 selected')).toBeNull());
-  });
-
-  it('"clear" empties the selection without calling any mutation', () => {
-    const rowA = link({ id: 'a', title: 'Row A' });
-    mockUseInfiniteLinks({
-      data: { pages: [{ links: [rowA] } as LinksResponse], pageParams: [undefined] },
-    });
-    renderLibraryView();
-
-    fireEvent.mouseEnter(screen.getByText('Row A').closest('a') as HTMLElement);
-    fireEvent.click(screen.getByTitle('Select'));
-    expect(screen.getByText('1 selected')).toBeDefined();
-
-    fireEvent.click(screen.getByText('Clear'));
-
-    expect(screen.queryByText('1 selected')).toBeNull();
-    expect(fetch).not.toHaveBeenCalledWith(expect.stringContaining('/trash'), expect.anything());
   });
 });

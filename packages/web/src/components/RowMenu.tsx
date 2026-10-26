@@ -6,7 +6,6 @@ import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
 import { useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
-import { useLibrarySelection } from './SelectionContext';
 import { TagPicker, useLinkTags } from './TagOptionsList';
 
 export function RowMenu({ link }: { link: LinkJson }) {
@@ -32,7 +31,6 @@ export function LinkMenuActions({
   busy?: boolean;
 }) {
   const { openEdit } = useRowMenu();
-  const selection = useLibrarySelection();
   const [tagsOpen, setTagsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const trash = useTrashLink(link.id);
@@ -128,15 +126,6 @@ export function LinkMenuActions({
           )}
         </MenuPresence>
       </div>
-      <MenuAction
-        icon={<ReaderIcon name="check" />}
-        onClick={() => {
-          selection.toggle(link.id);
-          closeMenu();
-        }}
-      >
-        {selection.isSelected(link.id) ? 'Deselect' : 'Select'}
-      </MenuAction>
       {link.captureStatus !== 'full' && (
         <MenuAction
           icon={<ReaderIcon name="refresh" />}
@@ -156,7 +145,6 @@ export function LinkMenuActions({
         disabled={busy}
         onClick={() => {
           closeMenu();
-          selection.deselect([link.id]);
           if (onTrash) onTrash();
           else trash.mutate();
         }}

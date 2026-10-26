@@ -383,7 +383,7 @@ export function useCaptureLink() {
 
 /**
  * The shared "settle" tail for every mutation below that doesn't optimistically
- * touch the cache itself (edit/trash/tag add/tag remove/retry/bulk-trash):
+ * touch the cache itself (edit/trash/tag add/tag remove/retry):
  * always invalidates `['links']` (covers every tag-scoped + untagged cache)
  * and `['link']` — a link's own fields always changed. `tags`/`counts` are
  * OPTED IN per mutation via `affects`, rather than blanket-invalidated, since
@@ -577,9 +577,8 @@ export function useSearchTrash(q: string) {
 
 /**
  * Removes `id` from every cached `trash` query's `links` array — the shared
- * optimistic-removal tail for `useRestoreLink`/`useDeleteNow`/the bulk trash
- * mutations below. Mirrors `removeOptimisticLink`'s by-id (not
- * whole-snapshot) approach for the same reason: two concurrent
+ * optimistic-removal tail for `useRestoreLink`/`useDeleteNow`. Mirrors
+ * `removeOptimisticLink`'s by-id approach for the same reason: two concurrent
  * restore/delete calls on different rows must not be able to clobber each
  * other's optimistic state.
  */
@@ -676,7 +675,7 @@ export function useDeleteNow(id: string) {
 }
 
 /**
- * The trash dock's "empty all" mutation (`DELETE /api/trash`, plan 011 V3-5)
+ * The Trash header's "Empty trash" mutation (`DELETE /api/trash`, plan 011 V3-5)
  * — matching v3's `emptyNow` (no confirm). No optimistic clear: the whole
  * trash list is about to disappear regardless of a race with anything else
  * touching it, so a plain invalidate-on-settle is simplest and correct here
@@ -708,78 +707,6 @@ export function useRetryCapture(id: string) {
     // A retry only resets this link's own captureStatus — never tag
     // membership or live/trash counts.
     onSettled: () => invalidateLinkQueries(queryClient),
-  });
-}
-
-/**
- * Fires `mutationFn` for every id in `ids` concurrently (`Promise.allSettled`
- * — a partial failure never aborts the others) and returns which ids
- * succeeded/failed. Shared by every bulk op below (bulk-trash from the
- * Library selection dock, bulk-restore/bulk-delete-now from the Trash
- * selection dock) so "loop the single-item endpoint, tolerate partial
- * failure" has exactly one implementation rather than four near-identical
- * copies (jscpd guards production src at 1.5%).
- */
-export async function runBulk(
-  ids: string[],
-  mutationFn: (id: string) => Promise<unknown>,
-): Promise<{ succeeded: string[]; failed: string[] }> {
-  const results = await Promise.allSettled(ids.map((id) => mutationFn(id)));
-  const succeeded: string[] = [];
-  const failed: string[] = [];
-  results.forEach((result, i) => {
-    const id = ids[i];
-    if (id === undefined) return;
-    (result.status === 'fulfilled' ? succeeded : failed).push(id);
-  });
-  return { succeeded, failed };
-}
-
-/**
- * The Library selection dock's "move to trash" bulk op (plan 011, V3-5) — no
- * bulk API exists, so this loops `POST /api/links/:id/trash` per id via
- * `runBulk` (concurrent, partial-failure-tolerant) and invalidates once at
- * the end rather than once per row (avoids N redundant refetches for an
- * N-item selection). Returns the same `{ succeeded, failed }` shape as
- * `runBulk` so the calling dock can report "3 of 5 moved to trash" on a
- * partial failure instead of failing silently.
- */
-export function useBulkTrash() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (ids: string[]) => runBulk(ids, (id) => apiPost(`/api/links/${id}/trash`, {})),
-    onSettled: () => {
-      // Each moved link drops its own tags' per-tag counts; `invalidateTrashQueries`
-      // below already covers `counts` (the live/trash tally moving), so only
-      // `tags` needs opting in here.
-      invalidateLinkQueries(queryClient, { tags: true });
-      invalidateTrashQueries(queryClient);
-    },
-  });
-}
-
-/** The Trash selection dock's "restore" bulk op — loops `POST /api/links/:id/restore` via `runBulk`; see `useBulkTrash`'s doc comment for the shared shape/rationale. */
-export function useBulkRestore() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (ids: string[]) => runBulk(ids, (id) => apiPost(`/api/links/${id}/restore`, {})),
-    onSettled: () => {
-      invalidateTrashQueries(queryClient);
-      queryClient.invalidateQueries({ queryKey: ['links'] });
-      queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
-    },
-  });
-}
-
-/** The Trash selection dock's "delete now" bulk op — loops `DELETE /api/trash/:id` via `runBulk`; see `useBulkTrash`'s doc comment for the shared shape/rationale. */
-export function useBulkDeleteNow() {
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: (ids: string[]) => runBulk(ids, (id) => apiDelete(`/api/trash/${id}`)),
-    onSettled: () => invalidateTrashQueries(queryClient),
   });
 }
 
@@ -927,9 +854,8 @@ export function useOAuthClients() {
  * The connected-apps list's "Revoke" mutation for ONE `cli_` client id
  * (`DELETE /api/access-tokens/oauth-clients/:clientId`, MCP OAuth Unit 4).
  * Revoking a deduped GROUP means calling this once per id in the group's
- * `clientIds[]` — callers fan out via `Promise.all`/`runBulk` rather than
- * this hook looping internally, mirroring how `useBulkTrash` et al. reuse a
- * single-item mutation for a multi-id action. Plain invalidate-on-success,
+ * `clientIds[]` — callers fan out via `Promise.all` rather than
+ * this hook looping internally. Plain invalidate-on-success,
  * same posture as `useRevokeAccessToken` (a deliberate, confirmed action off
  * a short list — not a hot path worth optimistic rollback complexity).
  */
@@ -950,7 +876,7 @@ export function useRevokeOAuthClient() {
  * /api/access-tokens/oauth-clients`, MCP OAuth Unit 4) — the collection-level
  * revoke, distinct from fanning out `useRevokeOAuthClient` over every group's
  * `clientIds` (this hits one endpoint that clears every OAuth client in a
- * single request, matching `useEmptyTrash`'s collection-delete shape).
+ * single request).
  */
 export function useRevokeAllOAuthClients() {
   const queryClient = useQueryClient();

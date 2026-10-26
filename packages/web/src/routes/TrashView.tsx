@@ -1,95 +1,15 @@
 import { useState } from 'react';
-import {
-  useBulkDeleteNow,
-  useBulkRestore,
-  useCounts,
-  useDeleteNow,
-  useEmptyTrash,
-  useTrashList,
-} from '../api/hooks';
+import { useCounts, useDeleteNow, useEmptyTrash, useTrashList } from '../api/hooks';
 import type { TrashLinkJson } from '../api/types';
 import { ContentHeader } from '../components';
 import { CenteredPanel } from '../components/CenteredPanel';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { DeleteForeverDialog } from '../components/DeleteForeverDialog';
-import {
-  DockAction,
-  DockIconAction,
-  DockRestoreIcon,
-  DockTrashIcon,
-  SelectionDock,
-} from '../components/Dock';
 import { TrashIcon } from '../components/NavIcons';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
-import { useTrashSelection } from '../components/SelectionContext';
 import { TrashDayGroup } from '../components/TrashDayGroup';
 import { bucketTrashByDay } from '../lib/buckets';
 import { LoadingState } from './shared/ListStates';
-
-/**
- * The trash selection dock (v3's `trSelActive`, `Silo-v3.html:296-305`) — "N
- * selected · restore · delete now · clear · esc". Bulk restore/delete-now
- * loop the single-item endpoints via `useBulkRestore`/`useBulkDeleteNow`
- * (`runBulk`, `api/hooks.ts`) since there's no bulk API; both clear the
- * batch's ids on settle — via `deselect(batch)`, NOT a whole `clear()`, so a
- * row the user selects WHILE the bulk op is still in flight isn't wiped out
- * with it (review fix). A partial failure just leaves that id in the trash
- * list, which the invalidate-driven refetch reconciles — see those hooks' doc
- * comments for why a plain settle-invalidate is enough here. Both actions are
- * disabled while their batch is pending so a double-click can't fire a second
- * overlapping batch against the same (possibly already-deleted) ids.
- */
-function TrashSelectionDock({ selectedIds, allIds }: { selectedIds: string[]; allIds: string[] }) {
-  const selection = useTrashSelection();
-  const bulkRestore = useBulkRestore();
-  const bulkDeleteNow = useBulkDeleteNow();
-  const [deleteBatch, setDeleteBatch] = useState<string[] | null>(null);
-  const busy = bulkRestore.isPending || bulkDeleteNow.isPending;
-
-  const handleRestore = () => {
-    if (busy) return;
-    const batch = selectedIds;
-    bulkRestore.mutate(batch, { onSettled: () => selection.deselect(batch) });
-  };
-
-  const handleDeleteNow = () => {
-    if (busy) return;
-    if (!deleteBatch) return;
-    const batch = deleteBatch;
-    bulkDeleteNow.mutate(batch, {
-      onSettled: () => {
-        selection.deselect(batch);
-        setDeleteBatch(null);
-      },
-    });
-  };
-
-  return (
-    <>
-      <SelectionDock selectedCount={selectedIds.length} onClear={selection.clear}>
-        <DockAction onClick={() => selection.selectAll(allIds)}>Select all</DockAction>
-        <DockIconAction onClick={handleRestore} icon={<DockRestoreIcon />} disabled={busy}>
-          Restore
-        </DockIconAction>
-        <DockIconAction
-          onClick={() => setDeleteBatch([...selectedIds])}
-          icon={<DockTrashIcon />}
-          disabled={busy}
-        >
-          Delete now
-        </DockIconAction>
-      </SelectionDock>
-      {deleteBatch && (
-        <DeleteForeverDialog
-          count={deleteBatch.length}
-          pending={bulkDeleteNow.isPending}
-          onConfirm={handleDeleteNow}
-          onClose={() => setDeleteBatch(null)}
-        />
-      )}
-    </>
-  );
-}
 
 function TrashEmptyNowButton() {
   const emptyTrash = useEmptyTrash();
@@ -231,23 +151,15 @@ function TrashBody({
   );
 }
 
-/** Trash keeps its list, bulk actions, and purge policy beside the shared reader. */
+/** Trash keeps its list, per-link actions, and purge policy beside the shared reader. */
 export function TrashView() {
   const { data: counts } = useCounts();
   const { data, isLoading, isError } = useTrashList();
-  const selection = useTrashSelection();
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const remove = useDeleteNow(deleteId ?? '');
 
   const links = data?.links ?? [];
   const purgeWindowDays = counts?.purgeWindowDays ?? 30;
-  const selectedIds = selection.selected;
-  const hasSelection = selectedIds.length > 0;
-
-  // Escape is handled centrally by `AppFrame`'s `RowMenuLayer` (closes the
-  // row `⋯` menu first if one is open, otherwise clears this scope's
-  // selection) — see that component's doc comment. No listener needed here.
-
   return (
     <ReaderLayout
       links={links}
@@ -283,14 +195,10 @@ export function TrashView() {
           onClose={() => setDeleteId(null)}
           onConfirm={() =>
             remove.mutate(undefined, {
-              onSuccess: () => selection.deselect([deleteId]),
               onSettled: () => setDeleteId(null),
             })
           }
         />
-      )}
-      {hasSelection && (
-        <TrashSelectionDock selectedIds={selectedIds} allIds={links.map((link) => link.id)} />
       )}
     </ReaderLayout>
   );

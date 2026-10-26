@@ -244,7 +244,7 @@
   align-items: center;
   gap: 10px;
   min-width: 0;
-  padding-right: 22px;
+  padding-right: 0;
 }
 .silo-row-title {
   flex: 1;
@@ -254,9 +254,6 @@
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-.silo-link-row[data-trashed="true"] .silo-row-title {
-  color: var(--mut);
 }
 .silo-row-meta {
   padding-left: 28px;
@@ -332,35 +329,7 @@
   white-space: nowrap;
   font-weight: 500;
 }
-.silo-trash-row-menu {
-  position: absolute;
-  z-index: 30;
-  top: calc(100% - 3px);
-  right: 8px;
-  width: 200px;
-  border: 1px solid transparent;
-  border-radius: 12px;
-  background: var(--bg2);
-  box-shadow: var(--elev-2);
-  padding: 6px;
-}
-.silo-trash-row-menu > * {
-  display: block;
-  width: 100%;
-  border: 0;
-  text-align: left;
-  padding: 8px 10px;
-  font: inherit;
-  color: var(--ink);
-  background: none;
-  border-radius: 6px;
-  text-decoration: none;
-  cursor: pointer;
-}
-.silo-selection-dock {
-  flex-wrap: wrap;
-  justify-content: center;
-}
+
 .silo-readerpane {
   flex: 1;
   min-width: 0;
@@ -728,8 +697,7 @@
     background: var(--sel);
   }
   .silo-reader-iconbtn:not(:disabled):hover,
-  .silo-reader-addnote:hover,
-  .silo-trash-row-menu > *:hover {
+  .silo-reader-addnote:hover {
     background: var(--hov);
     color: var(--ink);
   }
@@ -865,15 +833,15 @@
   background: var(--panel);
   color: var(--warn);
 }
-.silo-hint-line {
-  margin: 12px 12px 0;
-  color: var(--fnt);
-  font-size: 12.5px;
-}
 @media (hover: hover) and (pointer: fine) {
   .silo-empty-trash:hover {
     background: var(--hov);
   }
+}
+.silo-hint-line {
+  margin: 12px 12px 0;
+  color: var(--fnt);
+  font-size: 12.5px;
 }
 
 div.silo-reader-notecard {
@@ -1727,9 +1695,6 @@ div.silo-reader-notecard {
   display: none;
 }
 @media (max-width: 640px) {
-  .silo-selection-dock {
-    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
-  }
   .silo-collection .silo-menu-surface {
     max-height: calc(100dvh - 140px);
     overflow-y: auto;

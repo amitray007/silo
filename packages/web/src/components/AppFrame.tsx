@@ -10,7 +10,6 @@ import { HoverPreviewProvider } from './HoverPreviewContext';
 import { MobileBar } from './MobileBar';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
-import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
 import { SettingsProvider, useSettings } from './SettingsContext';
 import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
@@ -26,8 +25,6 @@ function RowMenuLayer({
   drawerOpen: boolean;
 }) {
   const { openMenuId, closeMenu, editingLink, editingFocus, closeEdit } = useRowMenu();
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
   const { open: settingsOpen } = useSettings();
   useEffect(() => {
     if (settingsOpen && editingLink) {
@@ -51,11 +48,7 @@ function RowMenuLayer({
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [openMenuId, closeMenu]);
   useEffect(() => {
-    const dismiss =
-      openMenuId !== null
-        ? closeMenu
-        : [librarySelection, trashSelection].find((scope) => scope.selected.length > 0)?.clear;
-    if (!dismiss) return;
+    if (openMenuId === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       if (
@@ -66,11 +59,11 @@ function RowMenuLayer({
         return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      dismiss();
+      closeMenu();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [openMenuId, closeMenu, librarySelection, trashSelection, palette.open, drawerOpen]);
+  }, [openMenuId, closeMenu, palette.open, drawerOpen]);
   return editingLink ? (
     <EditModal key={editingLink.id} link={editingLink} focus={editingFocus} />
   ) : null;
@@ -219,49 +212,47 @@ export function AppFrame() {
       <ThemeSettingsSync />
       <HoverPreviewProvider>
         <RowMenuProvider>
-          <SelectionProvider>
-            <div className="silo-frame" data-collapsed={collapsed}>
-              <div className="silo-band">
+          <div className="silo-frame" data-collapsed={collapsed}>
+            <div className="silo-band">
+              <button
+                type="button"
+                tabIndex={-1}
+                className="silo-scrim"
+                data-open={drawerOpen}
+                aria-hidden="true"
+                onClick={closeDrawer}
+              />
+              <Sidebar
+                id={DRAWER_ID}
+                ref={sidebarRef}
+                open={drawerOpen}
+                onNavigate={closeDrawer}
+                onOpenSearch={() => {
+                  closeDrawer();
+                  commandPalette.openPalette();
+                }}
+                onToggleSidebar={toggleSidebar}
+              />
+              <main className="silo-content" inert={drawerOpen}>
                 <button
+                  ref={menuButtonRef}
                   type="button"
-                  tabIndex={-1}
-                  className="silo-scrim"
-                  data-open={drawerOpen}
-                  aria-hidden="true"
-                  onClick={closeDrawer}
-                />
-                <Sidebar
-                  id={DRAWER_ID}
-                  ref={sidebarRef}
-                  open={drawerOpen}
-                  onNavigate={closeDrawer}
-                  onOpenSearch={() => {
-                    closeDrawer();
-                    commandPalette.openPalette();
-                  }}
-                  onToggleSidebar={toggleSidebar}
-                />
-                <main className="silo-content" inert={drawerOpen}>
-                  <button
-                    ref={menuButtonRef}
-                    type="button"
-                    className="silo-list-menu silo-reader-iconbtn"
-                    aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-                    aria-expanded={drawerOpen}
-                    aria-controls={DRAWER_ID}
-                    onClick={showSidebar}
-                  >
-                    <ReaderIcon name="menu" />
-                  </button>
-                  <Outlet context={{ showSidebar }} />
-                  <MobileBar onSearch={commandPalette.openPalette} />
-                </main>
-                <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
-              </div>
-              <CommandPalette palette={commandPalette} />
-              <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
+                  className="silo-list-menu silo-reader-iconbtn"
+                  aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+                  aria-expanded={drawerOpen}
+                  aria-controls={DRAWER_ID}
+                  onClick={showSidebar}
+                >
+                  <ReaderIcon name="menu" />
+                </button>
+                <Outlet context={{ showSidebar }} />
+                <MobileBar onSearch={commandPalette.openPalette} />
+              </main>
+              <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
             </div>
-          </SelectionProvider>
+            <CommandPalette palette={commandPalette} />
+            <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
+          </div>
         </RowMenuProvider>
       </HoverPreviewProvider>
     </SettingsProvider>

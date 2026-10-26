@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink } from '../test/fixtures';
 import { EditModal } from './EditModal';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
-import { SelectionProvider } from './SelectionContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -40,9 +39,7 @@ function renderModal(overrides: Parameters<typeof makeLink>[0] = {}) {
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <Harness link={link} />
-        </SelectionProvider>
+        <Harness link={link} />
       </RowMenuProvider>
     </QueryClientProvider>,
   );
@@ -304,9 +301,7 @@ describe('EditModal', () => {
     render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <Harness link={link} />
-          </SelectionProvider>
+          <Harness link={link} />
         </RowMenuProvider>
       </QueryClientProvider>,
     );

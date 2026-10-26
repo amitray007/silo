@@ -6,7 +6,6 @@ import { Chip } from './Chip';
 import { ModalHeader, ModalShell } from './ModalShell';
 import { useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
-import { useLibrarySelection } from './SelectionContext';
 import { TagTokenField, useLinkTags } from './TagOptionsList';
 
 export function EditModal({
@@ -17,7 +16,6 @@ export function EditModal({
   focus?: 'title' | 'note' | 'tags';
 }) {
   const { closeEdit } = useRowMenu();
-  const selection = useLibrarySelection();
   const [title, setTitle] = useState(link.title ?? '');
   const [description, setDescription] = useState(link.description ?? '');
   const [note, setNote] = useState(link.notes ?? '');
@@ -151,7 +149,6 @@ export function EditModal({
           onClick={() => {
             trash.mutate(undefined, {
               onSuccess: () => {
-                selection.deselect([link.id]);
                 closeEdit();
               },
               onError: () => setError("Couldn't move this link to trash. Try again."),

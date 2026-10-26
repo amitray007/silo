@@ -8,7 +8,6 @@ import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
 import { useRowMenu } from './RowMenuContext';
-import { useLibrarySelection, useTrashSelection } from './SelectionContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -17,25 +16,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/**
- * A stand-in outlet content for the Escape-coordination tests below — pokes
- * the real `useRowMenu`/`useLibrarySelection`/`useTrashSelection` contexts
- * `AppFrame` mounts (so this exercises the SAME `RowMenuLayer` production
- * code every real route runs through) without needing a full `LibraryView`/
- * `TrashView` render (those need mocked fetch responses for every hook they
- * call — this keeps the Escape-priority tests focused on just the
- * coordination logic).
- */
+/** Exercises menu and modal coordination through the real AppFrame. */
 function EscapeProbe() {
   const { openMenuId, toggleMenu, openEdit } = useRowMenu();
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
 
   return (
     <div>
       <span>menu: {openMenuId ?? 'none'}</span>
-      <span>library selected: {librarySelection.selected.length}</span>
-      <span>trash selected: {trashSelection.selected.length}</span>
       <button type="button" onClick={() => toggleMenu('row-1')}>
         open menu
       </button>
@@ -44,12 +31,6 @@ function EscapeProbe() {
         onClick={() => openEdit(makeLink({ id: 'edit-1', url: 'https://example.com/x' }))}
       >
         open edit
-      </button>
-      <button type="button" onClick={() => librarySelection.toggle('a')}>
-        select library row
-      </button>
-      <button type="button" onClick={() => trashSelection.toggle('b')}>
-        select trash row
       </button>
     </div>
   );
@@ -257,16 +238,8 @@ describe('AppFrame', () => {
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('false');
   });
 
-  /**
-   * Escape-priority coordination (plan 011, V3-5) — `RowMenuLayer`'s single
-   * document `keydown` listener must close an open row menu FIRST, and only
-   * fall through to clearing a selection scope when no menu is open. Drives
-   * this against the real `RowMenuProvider`/`SelectionProvider` +
-   * `RowMenuLayer` that `AppFrame` mounts (via `EscapeProbe`), not a
-   * hand-rolled reimplementation of the priority logic.
-   */
   describe('command palette mutual exclusion (review fix #1, plan 024)', () => {
-    /** Routes fetch by path so the palette's own hooks (useTags/useSearchLinks/useLinksByTag/useInfiniteLinks) get sane, empty responses instead of the counts-shaped default every other AppFrame test uses — needed here because these tests actually open the palette, not just probe row-menu/selection state. */
+    /** Routes fetch by path so the palette's own hooks (useTags/useSearchLinks/useLinksByTag/useInfiniteLinks) get sane, empty responses instead of the counts-shaped default every other AppFrame test uses — needed here because these tests actually open the palette, not just probe row-menu state. */
     /** The per-URL routing table for `mockAppFrameFetch`, split out purely to keep that function's cognitive complexity under the lint ceiling. */
     function respondToAppFrameUrl(url: string): Response {
       if (url.startsWith('/api/counts')) {
@@ -341,55 +314,11 @@ describe('AppFrame', () => {
     });
   });
 
-  describe('Escape priority (row menu > library selection > trash selection)', () => {
-    it('closes the row menu on the first Escape, leaving a concurrent library selection untouched', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('open menu'));
-      fireEvent.click(screen.getByText('select library row'));
-      expect(screen.getByText('menu: row-1')).toBeDefined();
-      expect(screen.getByText('library selected: 1')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.getByText('menu: none')).toBeDefined();
-      // The selection survives this Escape — it only closed the menu.
-      expect(screen.getByText('library selected: 1')).toBeDefined();
-    });
-
-    it('a second Escape (after the menu is already closed) clears the library selection', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('open menu'));
-      fireEvent.click(screen.getByText('select library row'));
-      fireEvent.keyDown(document, { key: 'Escape' }); // closes the menu
-      expect(screen.getByText('menu: none')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' }); // now clears the selection
-
-      expect(screen.getByText('library selected: 0')).toBeDefined();
-    });
-
-    it('with no menu open, Escape clears the library selection directly', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('select library row'));
-      expect(screen.getByText('library selected: 1')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.getByText('library selected: 0')).toBeDefined();
-    });
-
-    it('with no menu open and no library selection, Escape clears the trash selection', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('select trash row'));
-      expect(screen.getByText('trash selected: 1')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.getByText('trash selected: 0')).toBeDefined();
-    });
+  it('closes the row menu on Escape', () => {
+    renderAppFrame(['/probe']);
+    fireEvent.click(screen.getByText('open menu'));
+    expect(screen.getByText('menu: row-1')).toBeDefined();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByText('menu: none')).toBeDefined();
   });
 });

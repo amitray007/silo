@@ -451,45 +451,6 @@ select {
   }
 }
 
-/* Dock actions (clear/select all/empty all/restore/delete now/move to
-   trash) — previously flat text with no hover or press feedback at all
-   (design-review pass, emil-design-eng.md's "every interactive element needs
-   consistent hover/active states"). Color shift on hover uses plain `ease`
-   (the philosophy's prescribed curve for hover/color changes); press
-   feedback uses the shared strong ease-out on `transform` only. */
-.silo-dock-action {
-  border-radius: 6px;
-  transform: scale(1);
-  transition:
-    color 0.14s ease,
-    transform 0.12s var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .silo-dock-action:hover:not(:disabled) {
-    color: var(--ink);
-  }
-}
-
-.silo-dock-action:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-/* The row multi-select checkbox (Library + Trash rows) — a binary toggle
-   that had no press feedback at all (emil-design-eng.md: "buttons must feel
-   responsive"). Transform-only, GPU-friendly. */
-.silo-row-checkbox {
-  transform: scale(1);
-  transition:
-    transform 0.1s var(--ease-out),
-    background 0.14s ease,
-    border-color 0.14s ease;
-}
-
-.silo-row-checkbox:active {
-  transform: scale(0.9);
-}
-
 /* M1a (motion audit): the hover-revealed relative-time meta on `LinkRow`
    (e.g. "2h ago") previously SNAPPED in/out via a `{hovered && …}`
    conditional mount with no transition. It still conditionally mounts (the

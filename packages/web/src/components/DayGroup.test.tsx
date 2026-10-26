@@ -4,19 +4,16 @@ import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
-import { SelectionProvider } from '../components/SelectionContext';
 import { makeLink as link } from '../test/fixtures';
 import { DayGroup } from './DayGroup';
 
-/** `LinkRow` (rendered by `DayGroup`) reads `useRowMenu()` for its `⋯` button, `useLibrarySelection()` for its hover checkbox, and `useHoverPreview()` for the hover-preview trigger — every render needs a `RowMenuProvider`, a `SelectionProvider`, and a `HoverPreviewProvider` ancestor, and `RowMenu`'s tag hooks need a `QueryClientProvider`. */
+/** Rows need menu, hover-preview, and query providers. */
 function renderWithProviders(ui: ReactNode) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <HoverPreviewProvider>{ui}</HoverPreviewProvider>
-        </SelectionProvider>
+        <HoverPreviewProvider>{ui}</HoverPreviewProvider>
       </RowMenuProvider>
     </QueryClientProvider>,
   );

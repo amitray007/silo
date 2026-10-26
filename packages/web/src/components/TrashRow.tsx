@@ -6,24 +6,13 @@ import { MenuAction, MenuSurface } from './MenuSurface';
 import { useRowMenu } from './RowMenuContext';
 import { RowPopover } from './RowPopover';
 import { ReaderIcon } from './reader/ReaderIcon';
-import { useTrashSelection } from './SelectionContext';
 
 function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () => void }) {
   const restore = useRestoreLink(link.id);
-  const selection = useTrashSelection();
   const { closeMenu } = useRowMenu();
   const busy = restore.isPending;
   return (
     <MenuSurface className="silo-row-menu" link={link} onClose={closeMenu}>
-      <MenuAction
-        icon="✓"
-        onClick={() => {
-          selection.toggle(link.id);
-          closeMenu();
-        }}
-      >
-        {selection.isSelected(link.id) ? 'Deselect item' : 'Select item'}
-      </MenuAction>
       <MenuAction icon={<ReaderIcon name="external" />} href={link.url} onClick={closeMenu}>
         Open original
       </MenuAction>
@@ -40,7 +29,6 @@ function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () =>
         icon={<ReaderIcon name="restore" />}
         disabled={busy}
         onClick={() => {
-          selection.deselect([link.id]);
           restore.mutate(undefined, { onSuccess: closeMenu });
         }}
       >
@@ -63,17 +51,16 @@ export function TrashRow({
   purgeWindowDays: number;
   onDelete: (id: string) => void;
 }) {
-  const selection = useTrashSelection();
   const restore = useRestoreLink(link.id);
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
   return (
     <ListRow
       link={link}
-      selection={selection}
       busy={restore.isPending}
       error={restore.isError ? "Couldn't restore this link. Try again." : undefined}
       onRemove={() => restore.mutate()}
+      onDelete={() => onDelete(link.id)}
       purge={purgeCountdownDays(link.deletedAt, purgeWindowDays)}
       menuOpen={menuOpen}
       toggleMenu={() => toggleMenu(link.id)}

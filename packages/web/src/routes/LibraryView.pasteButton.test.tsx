@@ -4,7 +4,6 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
-import { SelectionProvider } from '../components/SelectionContext';
 import { LibraryView } from './LibraryView';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -21,11 +20,9 @@ function renderLibraryView() {
     <MemoryRouter>
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LibraryView />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LibraryView />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>
     </MemoryRouter>,

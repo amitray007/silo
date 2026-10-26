@@ -8,7 +8,6 @@ import { hackerNewsSourceData, makeLink, twitterSourceData } from '../test/fixtu
 import { HoverPreviewProvider } from './HoverPreviewContext';
 import { LinkRow } from './LinkRow';
 import { RowMenuProvider } from './RowMenuContext';
-import { SelectionProvider } from './SelectionContext';
 
 function link(overrides: Parameters<typeof makeLink>[0] = {}) {
   return makeLink({ url: 'https://www.example.com/a-post', title: 'A post', ...overrides });
@@ -16,10 +15,10 @@ function link(overrides: Parameters<typeof makeLink>[0] = {}) {
 
 /**
  * `LinkRow` reads `useRowMenu()` for its `⋯` button (plan 011, V3-4),
- * `useLibrarySelection()` for its hover checkbox (V3-5), `useHoverPreview()`
+ * `useHoverPreview()`
  * for the hover-preview trigger (V3-8), and `useSettings()` for the HN
  * inline-line plugin gate (plan 026) — every render needs a `RowMenuProvider`,
- * a `SelectionProvider`, and a `HoverPreviewProvider` ancestor; the `⋯` menu's
+ * a `HoverPreviewProvider` ancestor; the `⋯` menu's
  * tag hooks and `useSettings()` need a `QueryClientProvider` too.
  *
  * `plugins` seeds `queryKeys.settings()` in the cache so a test can exercise
@@ -40,9 +39,7 @@ function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins']) {
   return render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <HoverPreviewProvider>{ui}</HoverPreviewProvider>
-        </SelectionProvider>
+        <HoverPreviewProvider>{ui}</HoverPreviewProvider>
       </RowMenuProvider>
     </QueryClientProvider>,
   );
@@ -118,11 +115,9 @@ describe('LinkRow', () => {
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ captureStatus: 'bare' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ captureStatus: 'bare' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -170,11 +165,9 @@ describe('LinkRow', () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ notes: 'a comment' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ notes: 'a comment' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -183,11 +176,9 @@ describe('LinkRow', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ notes: null })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ notes: null })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -527,11 +518,9 @@ describe('LinkRow hover preview', () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ title: 'A post' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ title: 'A post' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -549,11 +538,9 @@ describe('LinkRow hover preview', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <div>row removed</div>
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <div>row removed</div>
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -567,11 +554,9 @@ describe('LinkRow hover preview', () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ title: 'A post' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ title: 'A post' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -584,11 +569,9 @@ describe('LinkRow hover preview', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <div>row removed</div>
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <div>row removed</div>
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
