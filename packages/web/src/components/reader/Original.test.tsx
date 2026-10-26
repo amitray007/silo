@@ -15,7 +15,7 @@ function Standalone({ link, showReader = () => {} }: { link: LinkJson; showReade
   return (
     <>
       <button type="button" onClick={() => state.refresh.mutate()}>
-        Refresh Live
+        Reload page
       </button>
       <button type="button" onClick={state.toggleDarkPage}>
         Toggle page theme
@@ -176,7 +176,7 @@ describe('Original mode order', () => {
     const { container, fetch } = show();
     await screen.findByTitle('Live page');
     const previous = container.querySelector('iframe');
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Live' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reload page' }));
     await waitFor(() =>
       expect(fetch).toHaveBeenCalledWith('/api/links/link-id/frame?fresh=1', expect.anything()),
     );
@@ -204,13 +204,13 @@ describe('Original mode order', () => {
     view.unmount();
     expect(signal?.aborted).toBe(true);
   });
-  it('follows a Refresh result that now requires silo view', async () => {
+  it('follows a Reload result that now requires silo view', async () => {
     const { container, fetch } = show('direct', link.url, 'text/html');
     await screen.findByTitle('Live page');
     fetch.mockResolvedValueOnce(
       new Response(JSON.stringify({ mode: 'view', contentType: 'text/html' })),
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Live' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Reload page' }));
     await screen.findByTitle('Silo view');
     expect(container.querySelector('iframe')?.getAttribute('src')).toContain(
       '/api/links/link-id/view',

@@ -1642,7 +1642,7 @@ div.silo-reader-notecard {
 .silo-readerpane {
   container-type: inline-size;
 }
-@container (max-width: 560px) {
+@container (max-width: 420px) {
   .silo-reader-inline-actions {
     display: none;
   }
@@ -1707,7 +1707,7 @@ div.silo-reader-notecard {
 
 .silo-reader-settings.silo-menu-surface {
   right: 0;
-  width: max-content;
+  width: 260px;
   padding: 12px;
 }
 .silo-reader-settings .silo-menu-grab {
@@ -1719,12 +1719,32 @@ div.silo-reader-notecard {
   font-weight: 500;
   color: var(--fnt);
 }
-.silo-reader-settings button[aria-checked="true"] {
+.silo-reader-settings-section + .silo-reader-settings-section {
+  margin-top: 16px;
+}
+.silo-reader-settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--ink);
+}
+.silo-reader-settings [role="radio"] {
+  padding-inline: 6px;
+}
+.silo-reader-settings-helper {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--fnt);
+}
+.silo-reader-settings [role="radio"][aria-checked="true"] {
   background: var(--segment-on);
   box-shadow: var(--segment-shadow);
   color: var(--ink);
 }
-.silo-reader-settings button[aria-checked="true"]:hover {
+.silo-reader-settings [role="radio"][aria-checked="true"]:hover {
   background: var(--segment-on);
   color: var(--ink);
 }

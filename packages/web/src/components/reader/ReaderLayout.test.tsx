@@ -696,7 +696,8 @@ describe('reader keyboard and phone toolbar', () => {
     await selected();
     fireEvent.click(toolbar.getByRole('button', { name: 'Copy link' }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(a.url));
-    fireEvent.click(toolbar.getByRole('button', { name: 'Edit' }));
+    fireEvent.click(toolbar.getByRole('button', { name: 'More actions' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Edit' }));
     expect(screen.getByRole('dialog', { name: 'Edit link' })).toBeDefined();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     fireEvent.click(toolbar.getByRole('button', { name: 'Move to trash' }));
@@ -749,9 +750,9 @@ describe('reader keyboard and phone toolbar', () => {
     expect(more.getAttribute('aria-expanded')).toBe('true');
     const items = screen.getAllByRole('menuitem');
     expect(items.map((item) => item.textContent)).toEqual([
+      'Edite',
       'Open originalo',
       'Copy linkc',
-      'Edite',
       'Tags',
       'Move to trash⌫',
     ]);
@@ -988,7 +989,7 @@ describe('review regressions', () => {
     expect(reader().getByText('Saved note')).toBeDefined();
     expect(reader().getByRole('link', { name: /#\s*mcp/ })).toBeDefined();
     fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
-    expect(reader().queryByRole('button', { name: 'Edit' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Edit' })).toBeNull();
     expect(reader().queryByRole('button', { name: 'Edit tags' })).toBeNull();
     expect(reader().getByText('Saved note').closest('button')).toBeNull();
     fireEvent.keyDown(document, { key: 'Escape' });
@@ -1101,9 +1102,17 @@ describe('review regressions', () => {
     expect(reader().queryByLabelText(/^Original mode/)).toBeNull();
     const groups = container.querySelectorAll('.silo-reader-inline-actions .silo-reader-tools');
     const tools = [...(groups[groups.length - 1]?.children ?? [])];
-    expect(tools.map((tool) => tool.getAttribute('aria-label')).slice(0, 2)).toEqual(
-      mode === 'player' ? ['Copy link', 'Edit'] : ['Copy link', 'Refresh Live'],
+    expect(tools.map((tool) => tool.getAttribute('aria-label'))).toEqual([
+      'Copy link',
+      'Open original',
+      'Move to trash',
+    ]);
+    fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
+    expect(screen.getAllByRole('menuitem')[0]?.textContent).toBe('Edite');
+    expect(screen.queryByRole('menuitem', { name: 'Reload page' }) !== null).toBe(
+      mode !== 'player',
     );
+    fireEvent.keyDown(document, { key: 'Escape' });
     if (mode === 'direct') {
       expect(reader().queryByRole('button', { name: 'Show silo view' })).toBeNull();
       if (url.includes('/pdf/'))
@@ -1168,11 +1177,11 @@ describe('responsive reader header', () => {
     expect(reader().queryByRole('button', { name: 'Copy link' })).toBeNull();
     expect(reader().queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(container.querySelector('.silo-reader-rbar')).toBeNull();
-    expect(reader().getByRole('button', { name: 'Reader settings' })).toBeDefined();
+    expect(reader().getByRole('button', { name: 'View settings' })).toBeDefined();
     fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     await screen.findByTitle('Live page');
     fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
-    for (const name of ['Copy link', 'Refresh Live', 'Edit', 'Open original', 'Move to trash']) {
+    for (const name of ['Copy link', 'Reload page', 'Edit', 'Open original', 'Move to trash']) {
       expect(screen.getByRole('menuitem', { name: new RegExp(name) })).toBeDefined();
     }
     fireEvent.click(screen.getByRole('menuitem', { name: /Copy link/ }));
@@ -1216,14 +1225,15 @@ it('opens phone tag management from the collection menu and restores focus on cl
 it('opens reader settings, persists widths, handles arrow keys, and returns focus on Escape', async () => {
   const { container } = renderReader();
   await screen.findByText('First link');
-  expect(reader().queryByRole('button', { name: 'Reader settings' })).toBeNull();
+  expect(reader().queryByRole('button', { name: 'View settings' })).toBeNull();
   await selectFirst();
   const article = container.querySelector('article.silo-reader');
   expect(article?.getAttribute('data-width')).toBe('medium');
-  const trigger = reader().getByRole('button', { name: 'Reader settings' });
+  const trigger = reader().getByRole('button', { name: 'View settings' });
   trigger.focus();
   fireEvent.click(trigger);
-  expect(screen.getByRole('dialog', { name: 'Reader settings' })).toBeDefined();
+  expect(screen.getByRole('dialog', { name: 'View settings' })).toBeDefined();
+  expect(screen.getByRole('region', { name: 'Reader' })).toBeDefined();
   expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Medium' }));
   for (const [label, value] of [
     ['Narrow', 'narrow'],
@@ -1243,49 +1253,50 @@ it('opens reader settings, persists widths, handles arrow keys, and returns focu
   expect(article?.getAttribute('data-width')).toBe('wide');
   fireEvent.keyDown(document, { key: 'Escape' });
   await waitFor(() => expect(document.activeElement).toBe(trigger));
-  expect(screen.queryByRole('dialog', { name: 'Reader settings' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'View settings' })).toBeNull();
   expect(article).toBe(container.querySelector('article.silo-reader'));
   fireEvent.click(trigger);
   fireEvent.mouseDown(document.body);
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Reader settings' })).toBeNull());
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'View settings' })).toBeNull());
   fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
-  await waitFor(() =>
-    expect(reader().queryByRole('button', { name: 'Reader settings' })).toBeNull(),
-  );
+  await waitFor(() => expect(reader().queryByRole('button', { name: 'View settings' })).toBeNull());
   expect(container.querySelector('.silo-original')?.hasAttribute('data-width')).toBe(false);
 });
 
-describe('Live page dark toolbar toggle', () => {
+describe('Live page view settings', () => {
   it.each(['direct', 'view'] as const)(
     'toggles %s pages and retains the site opt-out across selection',
     async (mode) => {
       renderReader({ route: '/?link=a', frameHint: { mode, darkTheme: false } });
       await selected();
-      expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+      expect(reader().queryByRole('switch', { name: 'Dark page' })).toBeNull();
       fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
       await screen.findByTitle(mode === 'direct' ? 'Live page' : 'Silo view');
-      expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+      expect(reader().queryByRole('switch', { name: 'Dark page' })).toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
-      const toggle = await reader().findByRole('button', { name: 'Dark page' });
-      expect(toggle.getAttribute('aria-pressed')).toBe('true');
-      const moon = toggle.querySelector('path')?.getAttribute('d');
+      fireEvent.click(await reader().findByRole('button', { name: 'View settings' }));
+      expect(screen.getByRole('region', { name: 'Live page' })).toBeDefined();
+      expect(screen.queryByRole('radiogroup', { name: 'Width' })).toBeNull();
+      expect(screen.getByText('Recolour this site to match silo.')).toBeDefined();
+      const toggle = screen.getByRole('switch', { name: 'Dark page' });
+      expect(toggle.getAttribute('aria-checked')).toBe('true');
       const frame = screen.getByTitle(
         mode === 'direct' ? 'Live page' : 'Silo view',
       ) as HTMLIFrameElement;
       fireEvent.click(toggle);
-      expect(toggle.getAttribute('aria-pressed')).toBe('false');
-      expect(toggle.querySelector('path')?.getAttribute('d')).not.toBe(moon);
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
       expect(frame.style.colorScheme).toBe('light');
       expect(localStorage.getItem('silo.lightPages')).toBe('["example.com"]');
       fireEvent.click(reader().getByRole('tab', { name: 'Reader' }));
-      expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+      expect(reader().queryByRole('switch', { name: 'Dark page' })).toBeNull();
       fireEvent.click(screen.getByText('Second link'));
       await selected('Second link');
       fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
-      const persisted = await reader().findByRole('button', { name: 'Dark page' });
-      expect(persisted.getAttribute('aria-pressed')).toBe('false');
+      fireEvent.click(await reader().findByRole('button', { name: 'View settings' }));
+      const persisted = screen.getByRole('switch', { name: 'Dark page' });
+      expect(persisted.getAttribute('aria-checked')).toBe('false');
       fireEvent.click(persisted);
-      expect(persisted.getAttribute('aria-pressed')).toBe('true');
+      expect(persisted.getAttribute('aria-checked')).toBe('true');
       expect(localStorage.getItem('silo.lightPages')).toBeNull();
     },
   );
@@ -1303,10 +1314,10 @@ describe('Live page dark toolbar toggle', () => {
         screen.queryByTitle(ready) ?? screen.queryByRole('button', { name: ready }),
       ).not.toBeNull(),
     );
-    expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+    expect(reader().queryByRole('button', { name: 'View settings' })).toBeNull();
   });
 
-  it('keeps the toggle visible in the phone toolbar', async () => {
+  it('keeps dark page settings reachable on phones and hides settings in Live light', async () => {
     const media = window.matchMedia;
     vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
       ...media(query),
@@ -1316,12 +1327,15 @@ describe('Live page dark toolbar toggle', () => {
     await selected();
     fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
     fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
-    const toggle = await reader().findByRole('button', { name: 'Dark page' });
-    expect(toggle.className).toBe('silo-reader-iconbtn');
+    fireEvent.click(await reader().findByRole('button', { name: 'View settings' }));
+    const toggle = screen.getByRole('switch', { name: 'Dark page' });
     fireEvent.click(toggle);
     expect((screen.getByTitle('Live page') as HTMLIFrameElement).style.colorScheme).toBe('light');
     fireEvent.click(screen.getByRole('button', { name: 'Light mode' }));
-    await waitFor(() => expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull());
+    await waitFor(() =>
+      expect(reader().queryByRole('button', { name: 'View settings' })).toBeNull(),
+    );
+    expect(screen.queryByRole('dialog', { name: 'View settings' })).toBeNull();
     expect((screen.getByTitle('Live page') as HTMLIFrameElement).style.colorScheme).toBe('');
   });
 });

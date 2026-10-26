@@ -48,53 +48,18 @@ function IconButton({
   );
 }
 
-function RefreshButton({ original }: { original: OriginalState | undefined }) {
-  if (!original || original.mode === 'player') return null;
-  return (
-    <IconButton
-      name="refresh"
-      label="Refresh Live"
-      onClick={() => original.refresh.mutate()}
-      disabled={original.preparing}
-    />
-  );
-}
-
-function DarkPageButton({ original }: { original: OriginalState | undefined }) {
-  if (original?.theme !== 'dark' || (original.mode !== 'direct' && original.mode !== 'view'))
-    return null;
-  return (
-    <button
-      type="button"
-      className="silo-reader-iconbtn"
-      aria-label="Dark page"
-      title="Dark page"
-      aria-pressed={original.darkPage}
-      onClick={original.toggleDarkPage}
-    >
-      <ReaderIcon name={original.darkPage ? 'moon' : 'sun'} />
-    </button>
-  );
-}
-
 function ReaderActions({
   actions,
   disabled,
   trashed,
-  original,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
-  original: OriginalState | undefined;
 }) {
   return (
     <div className="silo-reader-tools">
       <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
-      <RefreshButton original={original} />
-      {!trashed && (
-        <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={disabled} />
-      )}
       <IconButton
         name="external"
         label="Open original"
@@ -141,6 +106,18 @@ function ReaderMore({
       <MenuPresence>
         {open && (
           <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
+            {!trashed && (
+              <MenuAction
+                icon={<ReaderIcon name="edit" />}
+                shortcut="e"
+                onClick={() => {
+                  setOpen(false);
+                  actions.edit();
+                }}
+              >
+                Edit
+              </MenuAction>
+            )}
             {original && original.mode !== 'player' && (
               <MenuAction
                 icon={<ReaderIcon name="refresh" />}
@@ -150,8 +127,11 @@ function ReaderMore({
                   original.refresh.mutate();
                 }}
               >
-                Refresh Live
+                Reload page
               </MenuAction>
+            )}
+            {(!trashed || (original && original.mode !== 'player')) && (
+              <div className="silo-menu-separator" />
             )}
             {!trashed && link ? (
               <LinkMenuActions
@@ -159,6 +139,7 @@ function ReaderMore({
                 onClose={() => setOpen(false)}
                 onTrash={actions.trash}
                 onCopy={actions.copy}
+                showEdit={false}
                 busy={actions.busy}
               />
             ) : (
@@ -364,16 +345,12 @@ export function ReaderPane({
           <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
         </div>
         <div className="silo-reader-right">
-          <DarkPageButton original={shownOriginal} />
-          {tab === 'reader' && link && <ReaderSettings key={`settings-${selectedId}`} />}
+          {link && (
+            <ReaderSettings key={`settings-${selectedId}-${tab}`} original={shownOriginal} />
+          )}
           {!phone && (
             <div className="silo-reader-inline-actions">
-              <ReaderActions
-                actions={actions}
-                disabled={!link}
-                trashed={trashed}
-                original={shownOriginal}
-              />
+              <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
             </div>
           )}
           <ReaderMore

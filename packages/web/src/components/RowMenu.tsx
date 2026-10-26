@@ -23,12 +23,14 @@ export function LinkMenuActions({
   onTrash,
   onCopy,
   busy = false,
+  showEdit = true,
 }: {
   link: LinkJson;
   onClose: () => void;
   onTrash?: () => void;
   onCopy?: () => Promise<void>;
   busy?: boolean;
+  showEdit?: boolean;
 }) {
   const { openEdit } = useRowMenu();
   const [tagsOpen, setTagsOpen] = useState(false);
@@ -76,16 +78,18 @@ export function LinkMenuActions({
       >
         {copied ? 'Copied' : 'Copy link'}
       </MenuAction>
-      <MenuAction
-        icon={<ReaderIcon name="edit" />}
-        shortcut="e"
-        onClick={() => {
-          closeMenu();
-          openEdit(link);
-        }}
-      >
-        Edit
-      </MenuAction>
+      {showEdit && (
+        <MenuAction
+          icon={<ReaderIcon name="edit" />}
+          shortcut="e"
+          onClick={() => {
+            closeMenu();
+            openEdit(link);
+          }}
+        >
+          Edit
+        </MenuAction>
+      )}
       {/* biome-ignore lint/a11y/noStaticElementInteractions: hover supplements the native Tags button. */}
       <div
         className="silo-tags-anchor"
