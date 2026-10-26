@@ -1226,7 +1226,6 @@ div.silo-reader-notecard {
   min-height: 44px;
   padding: 0 8px 0 12px;
   justify-content: center;
-  --row-tools-room: 104px;
 }
 .silo-link-row[data-compact="true"] .silo-row-titleline {
   gap: 12px;
@@ -1235,13 +1234,10 @@ div.silo-reader-notecard {
 .silo-link-row[data-compact="true"] :is(.silo-row-meta, .silo-row-note, .silo-row-rich) {
   display: none;
 }
-/* Hover tools cover 104px from the row edge; the title reserves that room plus an 8px gap. */
-.silo-link-row {
-  --row-tools-room: 100px;
-}
+/* Hover tools sit over the title's end; a 40px ramp fades the text under them. */
 .silo-row-actions {
-  padding-left: 12px;
-  background: linear-gradient(to right, transparent, var(--row-hover) 12px);
+  padding-left: 48px;
+  background: linear-gradient(to right, transparent, var(--row-hover) 40px);
   display: flex;
   position: absolute;
   right: 8px;
@@ -1264,24 +1260,14 @@ div.silo-reader-notecard {
   opacity: 1;
   pointer-events: auto;
 }
-.silo-link-row:has(:where(.silo-row-actions) :focus-visible) .silo-row-titleline {
-  padding-right: var(--row-tools-room);
-}
 .silo-row-note-icon {
   position: absolute;
   right: 8px;
   top: 14px;
   color: var(--fnt);
 }
-.silo-link-row:has(:where(.silo-row-actions) :focus-visible) .silo-row-note-icon {
-  right: 112px;
-}
 .silo-link-row:has(.silo-row-note-icon) .silo-row-titleline {
   padding-right: 24px;
-}
-.silo-link-row:has(.silo-row-note-icon):has(:where(.silo-row-actions) :focus-visible)
-  .silo-row-titleline {
-  padding-right: calc(var(--row-tools-room) + 28px);
 }
 .silo-capture {
   position: relative;
@@ -1345,24 +1331,11 @@ div.silo-reader-notecard {
     opacity: 1;
     pointer-events: auto;
   }
-  .silo-link-row:hover .silo-row-titleline {
-    padding-right: var(--row-tools-room);
-  }
-  .silo-link-row:hover .silo-row-note-icon {
-    right: 112px;
-  }
-  .silo-link-row:has(.silo-row-note-icon):hover .silo-row-titleline {
-    padding-right: calc(var(--row-tools-room) + 28px);
-  }
 }
 @media (hover: none) {
   .silo-link-row .silo-row-actions {
     display: none;
     background: none;
-  }
-  .silo-link-row,
-  .silo-link-row[data-compact="true"] {
-    --row-tools-room: 0px;
   }
   .silo-link-row[data-compact="true"] .silo-row-titleline {
     padding-right: 0;
@@ -1680,7 +1653,7 @@ div.silo-reader-notecard {
 }
 
 .silo-link-row[data-active="true"] .silo-row-actions {
-  background: linear-gradient(to right, transparent, var(--sel) 12px);
+  background: linear-gradient(to right, transparent, var(--sel) 40px);
 }
 
 .silo-reader-body-column {

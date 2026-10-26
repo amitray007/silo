@@ -130,7 +130,7 @@ export function ListRow({
               window.open(link.url, '_blank', 'noopener,noreferrer');
             }}
           >
-            <ReaderIcon name="external" />
+            <ReaderIcon name="arrowUpRight" />
           </button>
           <button
             type="button"
