@@ -37,7 +37,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
                   disabled={membership.busy}
                   onClick={() => void membership.toggle(tag, true)}
                 >
-                  ×
+                  <ReaderIcon name="close" size={12} />
                 </button>
               )}
             </span>

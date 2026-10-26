@@ -585,19 +585,19 @@
 .silo-meta-tag {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  min-height: 24px;
-  padding: 0 9px;
+  min-height: 26px;
+  padding: 0 10px;
   border-radius: 999px;
   background: var(--hov);
   color: var(--mut);
-  font-size: 12.5px;
+  font-size: 13px;
   font-weight: 500;
+  line-height: 1;
   max-width: 100%;
 }
 .silo-meta-tag a {
   display: flex;
-  gap: 2px;
+  gap: 1px;
   align-items: center;
   text-decoration: none;
   color: inherit;
@@ -610,19 +610,36 @@
   color: var(--ink);
   background: var(--sel);
 }
+/* The remove control takes no room at rest, so idle chips stay balanced. */
 .silo-meta-tag button {
-  display: none;
+  display: grid;
+  place-items: center;
+  width: 0;
+  height: 18px;
+  overflow: hidden;
   border: 0;
+  border-radius: 999px;
   background: none;
-  color: var(--mut);
-  font: inherit;
-  width: 18px;
-  height: 20px;
+  color: var(--fnt);
   padding: 0;
   cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out);
+}
+.silo-meta-tag:is(:hover, :focus-within) {
+  padding-right: 4px;
 }
 .silo-meta-tag:is(:hover, :focus-within) button {
-  display: block;
+  width: 18px;
+  margin-left: 2px;
+  opacity: 1;
+}
+.silo-meta-tag button:hover {
+  color: var(--ink);
+  background: var(--icon-hover);
+}
+.silo-meta-tag button svg {
+  stroke-width: 2;
 }
 .silo-meta-tag-anchor {
   position: relative;
@@ -734,9 +751,9 @@ button.silo-note-text {
     min-height: 40px;
   }
   .silo-meta-tag button {
-    display: block;
     width: 40px;
     height: 40px;
+    opacity: 1;
   }
   .silo-meta-tag a {
     min-height: 40px;
