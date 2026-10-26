@@ -299,16 +299,32 @@
   background: var(--line);
   color: var(--ink);
 }
+/* Real favicon tile; the letter on a neutral tile appears only when a site has no icon. */
 .silo-letter-chip {
+  position: relative;
+  overflow: hidden;
   border-radius: 4px;
   flex: none;
   display: inline-grid;
   place-items: center;
   font-size: 10.5px;
-  font-weight: 600;
-  color: #fff;
-  background: var(--chip-color);
+  font-weight: 500;
+  color: var(--fnt);
   letter-spacing: -0.02em;
+}
+.silo-letter-chip[data-state="failed"] {
+  background: var(--bg2);
+  box-shadow: inset 0 0 0 0.5px var(--line-2);
+}
+.silo-letter-chip img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.silo-letter-chip[data-state="pending"] img {
+  opacity: 0;
 }
 .silo-capturing {
   color: var(--mark);
@@ -840,70 +856,6 @@
     --tags-flyout-right: 0px;
     --tags-flyout-top: calc(100% - 2px);
   }
-}
-
-.silo-letter-chip[data-tone="0"] {
-  --chip-color: var(--chip-0);
-}
-.silo-letter-chip[data-tone="1"] {
-  --chip-color: var(--chip-1);
-}
-.silo-letter-chip[data-tone="2"] {
-  --chip-color: var(--chip-2);
-}
-.silo-letter-chip[data-tone="3"] {
-  --chip-color: var(--chip-3);
-}
-.silo-letter-chip[data-tone="4"] {
-  --chip-color: var(--chip-4);
-}
-.silo-letter-chip[data-tone="5"] {
-  --chip-color: var(--chip-5);
-}
-.silo-letter-chip[data-tone="6"] {
-  --chip-color: var(--chip-6);
-}
-.silo-letter-chip[data-tone="7"] {
-  --chip-color: var(--chip-7);
-}
-.silo-letter-chip[data-domain="sqlite.org"] {
-  --chip-color: var(--chip-sqlite);
-}
-.silo-letter-chip[data-domain="x.com"] {
-  --chip-color: var(--chip-x);
-}
-.silo-letter-chip[data-domain="modelcontextprotocol.io"] {
-  --chip-color: var(--chip-mcp);
-}
-.silo-letter-chip[data-domain="inkandswitch.com"] {
-  --chip-color: var(--chip-inkandswitch);
-}
-.silo-letter-chip[data-domain="linear.app"] {
-  --chip-color: var(--chip-linear);
-}
-.silo-letter-chip[data-domain="github.com"] {
-  --chip-color: var(--chip-github);
-}
-.silo-letter-chip[data-domain="ciechanow.ski"] {
-  --chip-color: var(--chip-ciechanowski);
-}
-.silo-letter-chip[data-domain="simonwillison.net"] {
-  --chip-color: var(--chip-simon);
-}
-.silo-letter-chip[data-domain="maggieappleton.com"] {
-  --chip-color: var(--chip-maggie);
-}
-.silo-letter-chip[data-domain="youtube.com"] {
-  --chip-color: var(--chip-youtube);
-}
-.silo-letter-chip[data-domain="news.ycombinator.com"] {
-  --chip-color: var(--chip-hn);
-}
-.silo-letter-chip[data-domain="stripe.press"] {
-  --chip-color: var(--chip-stripe);
-}
-.silo-letter-chip[data-domain="paulgraham.com"] {
-  --chip-color: var(--chip-pg);
 }
 
 .silo-empty-trash {

@@ -84,13 +84,15 @@ describe('LinkRow', () => {
     expect(screen.getByText('A post').className).toBe('silo-row-title');
   });
 
-  it('keeps the local letter chip while enriching', () => {
-    renderRow(
+  it('keeps the favicon chip while enriching', () => {
+    const { container } = renderRow(
       <LinkRow
         link={link({ captureStatus: 'enriching', title: null, url: 'https://www.example.com/a' })}
       />,
     );
-    expect(screen.getByText('E')).toBeDefined();
+    expect(container.querySelector('.silo-letter-chip img')?.getAttribute('src')).toBe(
+      '/api/favicon?domain=example.com',
+    );
     expect(screen.queryByLabelText('enriching')).toBeNull();
     expect(screen.getByText('www.example.com/a')).toBeDefined();
     expect(screen.getByText('example.com')).toBeDefined();

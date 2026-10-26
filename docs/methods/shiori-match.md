@@ -26,8 +26,8 @@ weights, colors, spacing, radii, and shadows, not "similar".
 - The orange tile brand mark. Silo's features and routes (library, tags,
   trash, capture, edit, notes, retry, selection, settings tabs, MCP setup,
   tokens, OAuth clients, plugins, import/export). Live/Reader tabs.
-- Privacy: no third-party request per row. Keep local letter chips, styled as
-  shiori's favicons (20px, radius 4px).
+- Privacy: no third-party request per row from the browser. Real favicons
+  through silo's `/api/favicon` proxy, styled as shiori's (20px, radius 4px).
 - Do not copy shiori's AI features (chat box, Summarize, auto-tagging), feeds,
   favorites, archive, or Pro badges. Silo has no AI inside.
 

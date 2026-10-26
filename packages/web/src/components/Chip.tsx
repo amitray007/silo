@@ -1,3 +1,5 @@
+import { useState } from 'react';
+
 export function chipLetter(domain: string | null | undefined): string {
   const segment = (
     String(domain ?? '')
@@ -7,32 +9,36 @@ export function chipLetter(domain: string | null | undefined): string {
   return segment ? segment.charAt(0).toUpperCase() : '·';
 }
 
-const glyphs: Record<string, string> = {
-  'x.com': '𝕏',
-  'inkandswitch.com': 'I&',
-  'github.com': 'GH',
-  'simonwillison.net': 'SW',
-  'maggieappleton.com': 'MA',
-  'youtube.com': '▶',
-  'news.ycombinator.com': 'Y',
-  'paulgraham.com': 'PG',
-};
+type IconState = 'pending' | 'loaded' | 'failed';
 
-/** Local letter chips use the prototype's fixed source colors, with no requests. */
+/**
+ * The site's real favicon, served by silo's own `/api/favicon` proxy so the
+ * browser never calls a third party per row. While it loads the tile stays
+ * empty; a site with no icon shows its first letter on a quiet neutral tile.
+ */
 export function Chip({ domain, size = 20 }: { domain: string | null | undefined; size?: number }) {
   const host = String(domain ?? '')
     .replace(/^www\./i, '')
     .toLowerCase();
-  const tone = [...host].reduce((sum, letter) => sum + letter.charCodeAt(0), 0) % 8;
+  const [icon, setIcon] = useState<{ host: string; state: IconState }>({ host, state: 'pending' });
+  const state = icon.host === host ? icon.state : 'pending';
+  const shown = host && state !== 'failed' ? state : 'failed';
   return (
     <span
       className="silo-letter-chip"
-      data-tone={tone}
-      data-domain={host}
+      data-state={shown}
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      {glyphs[host] ?? chipLetter(host)}
+      {shown === 'failed' && chipLetter(host)}
+      {shown !== 'failed' && (
+        <img
+          src={`/api/favicon?domain=${encodeURIComponent(host)}`}
+          alt=""
+          onLoad={() => setIcon({ host, state: 'loaded' })}
+          onError={() => setIcon({ host, state: 'failed' })}
+        />
+      )}
     </span>
   );
 }
