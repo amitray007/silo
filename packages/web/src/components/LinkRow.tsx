@@ -19,10 +19,13 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const reader = useReaderSelection();
   const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
   const { data: settings } = useSettings();
+  const hoverEnabled = settings?.hoverPreview === true;
+  useEffect(() => {
+    if (hoverEnabled) return () => dismiss(link.id);
+  }, [hoverEnabled, dismiss, link.id]);
   useEffect(() => {
     if (menuOpen) scheduleHide(link.id);
   }, [menuOpen, scheduleHide, link.id]);
-  useEffect(() => () => dismiss(link.id), [dismiss, link.id]);
   const source = link.sourceData;
   const trash = useTrashLink(link.id);
   return (
@@ -41,7 +44,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
         )
       }
       onEnter={(event) => {
-        if (!menuOpen && reader?.selectedId !== link.id && isHoverCapable())
+        if (hoverEnabled && !menuOpen && reader?.selectedId !== link.id && isHoverCapable())
           scheduleShow(link, event.currentTarget.getBoundingClientRect());
       }}
       onLeave={() => scheduleHide(link.id)}

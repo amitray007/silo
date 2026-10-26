@@ -219,6 +219,8 @@ export type SettingsMap = {
   // `settingsSchema.linkPreviewImages`. When false, plain-link hover-preview
   // cards omit the captured og:image. Default true.
   linkPreviewImages: boolean;
+  /** List-row hover cards. Default false; independent of palette previews. */
+  hoverPreview: boolean;
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
     github: { enabled: boolean; hover: boolean; palette: boolean };

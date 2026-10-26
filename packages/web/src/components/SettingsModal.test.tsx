@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS = {
   trashPurgeDays: 30,
   mcpAccess: true,
   linkPreviewImages: true,
+  hoverPreview: false,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },

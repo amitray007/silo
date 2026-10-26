@@ -33,6 +33,7 @@ const settingsPatchBodySchema = z
     // (scalar boolean, default true) — gates whether the plain-link hover-preview
     // card shows the captured og:image.
     linkPreviewImages: z.boolean().optional(),
+    hoverPreview: z.boolean().optional(),
     // Plan 026: per-source objects (master `enabled` + the render features that
     // source supports). Mirrors `core`'s `settingsSchema.plugins` exactly —
     // including the `palette` flag (palette-rich-rows slice) that gates each

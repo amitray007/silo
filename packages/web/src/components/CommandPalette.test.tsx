@@ -91,6 +91,7 @@ function settingsWithPlugins(overrides: Partial<SettingsMap['plugins']> = {}): S
     trashPurgeDays: 30,
     mcpAccess: true,
     linkPreviewImages: true,
+    hoverPreview: false,
     plugins: {
       hacker_news: { enabled: true, inline: true, hover: true, palette: true },
       github: { enabled: true, hover: true, palette: true },

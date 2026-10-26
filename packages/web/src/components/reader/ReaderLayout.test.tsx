@@ -20,6 +20,7 @@ const settings: SettingsMap = {
   trashPurgeDays: 30,
   mcpAccess: true,
   linkPreviewImages: true,
+  hoverPreview: true,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },

@@ -32,6 +32,7 @@ function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins'], linkPre
       trashPurgeDays: 30,
       mcpAccess: true,
       linkPreviewImages,
+      hoverPreview: true,
       plugins,
     } satisfies SettingsMap);
   }
@@ -70,6 +71,29 @@ describe('HoverPreview', () => {
     renderPreview(makeLink({ title: null, url: 'https://example.com/some-post' }));
     expect(screen.getByText('example.com/some-post')).toBeDefined();
   });
+
+  it.each([
+    ['link', { kind: 'link' } as const],
+    ['HN', hackerNewsSourceData],
+    ['GitHub', githubSourceData],
+    ['YouTube', youtubeSourceData],
+    ['Twitter', twitterSourceData],
+  ])(
+    '%s card keeps the domain, time, and accessible Open link in the shared footer',
+    (_, sourceData) => {
+      renderPreview(
+        makeLink({ url: 'https://a-very-long-subdomain.geeksforgeeks.org/x', sourceData }),
+      );
+      const open = screen.getByRole('link', { name: 'Open' });
+      const footer = open.closest('.silo-preview-footer');
+      expect(footer?.querySelector('.silo-preview-domain')?.textContent).toBe(
+        'a-very-long-subdomain.geeksforgeeks.org',
+      );
+      expect(footer?.querySelector('.silo-preview-time')?.textContent).toMatch(/ago$/);
+      expect(footer?.querySelectorAll('a')).toHaveLength(1);
+      expect(open.querySelector('svg')).not.toBeNull();
+    },
+  );
 
   it('footer shows the derived domain (www. stripped)', () => {
     renderPreview(makeLink({ url: 'https://www.example.com/x' }));
@@ -623,6 +647,7 @@ describe('HoverPreview', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: true,
         plugins: allOn,
       } satisfies SettingsMap);
       const { rerender } = render(
@@ -675,6 +700,7 @@ describe('HoverPreview', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: true,
         plugins: allOn,
       } satisfies SettingsMap);
       const renderFor = (id: string) => (
@@ -714,6 +740,7 @@ describe('HoverPreview', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: true,
         plugins: allOn,
       } satisfies SettingsMap);
       const { rerender } = render(

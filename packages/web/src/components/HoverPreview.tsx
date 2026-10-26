@@ -735,36 +735,15 @@ export function HoverPreview({
         plugins={settings?.plugins}
         linkPreviewImages={settings?.linkPreviewImages}
       />
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 'var(--s2)',
-          padding: 'var(--s2-5) var(--s3-5) var(--s2-5)',
-          marginTop: 'var(--s2)',
-          borderTop: '1px solid var(--line)',
-          fontSize: 'var(--text-xs)',
-          color: 'var(--fnt)',
-        }}
-      >
-        <span>{domain}</span>
-        <span>·</span>
-        <span>{meta}</span>
-        <span style={{ flex: 1 }} />
-        <a
-          href={link.url}
-          target="_blank"
-          rel="noopener"
-          className="silo-edit-footer-btn silo-preview-open"
-          style={{
-            // Brightened from `--fnt` (direct user feedback): "Open" is
-            // this card's own primary affordance — the actual link-out
-            // action, not meta text like the domain/time beside it.
-            color: 'var(--mut)',
-            textDecoration: 'none',
-            fontWeight: 500,
-          }}
-        >
+      <div className="silo-preview-footer">
+        <span className="silo-preview-meta">
+          <span className="silo-preview-domain" title={domain}>
+            {domain}
+          </span>
+          <span aria-hidden="true">·</span>
+          <span className="silo-preview-time">{meta}</span>
+        </span>
+        <a href={link.url} target="_blank" rel="noopener" className="silo-preview-open">
           Open
           <ReaderIcon name="arrowUpRight" size={16} />
         </a>

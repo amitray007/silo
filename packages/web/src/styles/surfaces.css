@@ -1026,15 +1026,55 @@
 .silo-edit-footer-btn {
   background: var(--bg2);
 }
+.silo-preview-footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  padding: 4px 14px;
+  border-top: 0.5px solid var(--line);
+  color: var(--fnt);
+  font-size: 13px;
+  line-height: 20px;
+}
+.silo-preview-meta {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 4px;
+}
+.silo-preview-domain {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-preview-time {
+  flex-shrink: 0;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
 .silo-preview-open {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
   gap: 4px;
+  height: 28px;
+  padding: 0 4px;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--mut);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
 }
-.silo-preview-open svg {
-  width: 16px;
-  height: 16px;
-  stroke-width: 2;
+@media (hover: hover) and (pointer: fine) {
+  .silo-preview-open:hover {
+    background: var(--icon-hover);
+    color: var(--ink);
+  }
 }
 :root[data-theme="dark"] .silo-edit-footer-btn {
   background: var(--input-bg);
@@ -1203,7 +1243,8 @@
 .silo-plugin-feature {
   border-top: 0.5px solid var(--line);
 }
-.silo-plugin-feature[data-disabled="true"] .silo-plugin-copy {
+.silo-plugin-feature[data-disabled="true"] .silo-plugin-copy,
+.silo-plugin-silo-row[data-disabled="true"] .silo-plugin-copy {
   opacity: 0.5;
 }
 .silo-plugin-silo-row {

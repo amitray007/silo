@@ -133,6 +133,7 @@ function SiloSettingsSection({
   settings: SettingsMap | undefined;
   updateSettings: ReturnType<typeof useUpdateSettings>;
 }) {
+  const hoverPreview = settings?.hoverPreview ?? false;
   const linkPreviewImages = settings?.linkPreviewImages ?? true;
   const disabled = !settings || updateSettings.isPending;
 
@@ -141,6 +142,18 @@ function SiloSettingsSection({
       <h3 className="silo-plugin-section-label">Silo</h3>
       <div className="silo-plugin-silo-row">
         <div className="silo-plugin-copy">
+          <div className="silo-plugin-label">Hover previews</div>
+          <div className="silo-plugin-description">Show a preview card when you hover a link.</div>
+        </div>
+        <ToggleSwitch
+          on={hoverPreview}
+          disabled={disabled}
+          onToggle={() => updateSettings.mutate({ hoverPreview: !hoverPreview })}
+          label="Hover previews"
+        />
+      </div>
+      <div className="silo-plugin-silo-row" data-disabled={!hoverPreview || disabled}>
+        <div className="silo-plugin-copy">
           <div className="silo-plugin-label">Link preview images</div>
           <div className="silo-plugin-description">
             Show a page's preview image in the hover card.
@@ -148,7 +161,7 @@ function SiloSettingsSection({
         </div>
         <ToggleSwitch
           on={linkPreviewImages}
-          disabled={disabled}
+          disabled={!hoverPreview || disabled}
           onToggle={() => updateSettings.mutate({ linkPreviewImages: !linkPreviewImages })}
           label="Link preview images"
         />

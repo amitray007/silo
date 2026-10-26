@@ -16,6 +16,7 @@ function defaultSettings() {
     theme: 'system' as const,
     trashPurgeDays: 30 as const,
     linkPreviewImages: true,
+    hoverPreview: false,
     plugins: {
       hacker_news: { enabled: true, inline: true, hover: true, palette: true },
       github: { enabled: true, hover: true, palette: true },
@@ -471,20 +472,87 @@ describe('PluginsTab source disclosures', () => {
     expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
   });
 
+  describe('silo section (hover previews)', () => {
+    it('defaults off and disables and greys link preview images', async () => {
+      const { fetchMock } = renderTab();
+      const toggle = await screen.findByTitle(/Hover previews is off/i);
+      expect(toggle.getAttribute('aria-checked')).toBe('false');
+      const images = screen.getByRole('switch', { name: 'Link preview images' });
+      expect(images).toHaveProperty('disabled', true);
+      expect(images.closest('[data-disabled]')?.getAttribute('data-disabled')).toBe('true');
+      fireEvent.click(images);
+      expect(fetchMock.mock.calls.some((call) => call[1]?.method === 'PATCH')).toBe(false);
+      const rows = document.querySelectorAll('.silo-plugin-silo-row');
+      expect(rows[0]?.textContent).toContain('Hover previews');
+    });
+
+    it('writes only hoverPreview when enabled and enables the image switch', async () => {
+      const { fetchMock } = renderTab();
+      fireEvent.click(await screen.findByTitle(/Hover previews is off/i));
+      await screen.findByTitle(/Hover previews is on/i);
+      const patch = fetchMock.mock.calls.find((call) => call[1]?.method === 'PATCH');
+      expect(JSON.parse(patch?.[1]?.body as string)).toEqual({ hoverPreview: true });
+      expect(screen.getByRole('switch', { name: 'Link preview images' })).toHaveProperty(
+        'disabled',
+        false,
+      );
+    });
+
+    it('disables previews without changing the saved image preference', async () => {
+      const { fetchMock, getStore } = renderTab({ ...defaultSettings(), hoverPreview: true });
+      fireEvent.click(await screen.findByTitle(/Hover previews is on/i));
+      await screen.findByTitle(/Hover previews is off/i);
+      const patch = fetchMock.mock.calls.find((call) => call[1]?.method === 'PATCH');
+      expect(JSON.parse(patch?.[1]?.body as string)).toEqual({ hoverPreview: false });
+      expect(getStore().linkPreviewImages).toBe(true);
+      expect(screen.getByRole('switch', { name: 'Link preview images' })).toHaveProperty(
+        'disabled',
+        true,
+      );
+    });
+
+    it('disables both Silo switches while settings load', () => {
+      vi.stubGlobal('fetch', vi.fn().mockReturnValue(new Promise<Response>(() => {})));
+      render(
+        <QueryClientProvider client={new QueryClient()}>
+          <PluginsTab />
+        </QueryClientProvider>,
+      );
+      for (const name of ['Hover previews', 'Link preview images']) {
+        expect(screen.getByRole('switch', { name })).toHaveProperty('disabled', true);
+      }
+      expect(
+        screen.getByRole('switch', { name: 'Hover previews' }).getAttribute('aria-checked'),
+      ).toBe('false');
+    });
+
+    it('disables both Silo switches during a pending write', async () => {
+      const { fetchMock } = renderTab({ ...defaultSettings(), hoverPreview: true });
+      const toggle = await screen.findByTitle(/Hover previews is on/i);
+      fetchMock.mockImplementationOnce(() => new Promise<Response>(() => {}));
+      fireEvent.click(toggle);
+      await waitFor(() => {
+        for (const name of ['Hover previews', 'Link preview images']) {
+          expect(screen.getByRole('switch', { name })).toHaveProperty('disabled', true);
+        }
+      });
+    });
+  });
+
   describe('silo section (link preview images)', () => {
     it('renders the "Link preview images" toggle row', async () => {
-      renderTab();
+      renderTab({ ...defaultSettings(), hoverPreview: true });
       await waitFor(() => expect(screen.getByTitle(/Link preview images is on/i)).toBeDefined());
       expect(screen.getByText('Link preview images')).toBeDefined();
     });
 
     it('reflects settings.linkPreviewImages: false as an off toggle', async () => {
-      renderTab({ ...defaultSettings(), linkPreviewImages: false });
+      renderTab({ ...defaultSettings(), hoverPreview: true, linkPreviewImages: false });
       await waitFor(() => expect(screen.getByTitle(/Link preview images is off/i)).toBeDefined());
     });
 
     it('toggling it off calls updateSettings.mutate({ linkPreviewImages: false })', async () => {
-      const { fetchMock } = renderTab();
+      const { fetchMock } = renderTab({ ...defaultSettings(), hoverPreview: true });
 
       const toggle = await screen.findByTitle(/Link preview images is on/i);
       fireEvent.click(toggle);
@@ -500,7 +568,11 @@ describe('PluginsTab source disclosures', () => {
     });
 
     it('toggling it back on calls updateSettings.mutate({ linkPreviewImages: true })', async () => {
-      const { fetchMock } = renderTab({ ...defaultSettings(), linkPreviewImages: false });
+      const { fetchMock } = renderTab({
+        ...defaultSettings(),
+        hoverPreview: true,
+        linkPreviewImages: false,
+      });
 
       const toggle = await screen.findByTitle(/Link preview images is off/i);
       fireEvent.click(toggle);
