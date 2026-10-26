@@ -1259,12 +1259,12 @@ div.silo-reader-notecard {
   position: static;
   opacity: 1;
 }
-.silo-link-row:has(.silo-row-actions :focus-visible) .silo-row-actions,
+.silo-link-row:has(:where(.silo-row-actions) :focus-visible) .silo-row-actions,
 .silo-row-actions:has([aria-expanded="true"]) {
   opacity: 1;
   pointer-events: auto;
 }
-.silo-link-row:has(.silo-row-actions :focus-visible) .silo-row-titleline {
+.silo-link-row:has(:where(.silo-row-actions) :focus-visible) .silo-row-titleline {
   padding-right: var(--row-tools-room);
 }
 .silo-row-note-icon {
@@ -1273,13 +1273,14 @@ div.silo-reader-notecard {
   top: 14px;
   color: var(--fnt);
 }
-.silo-link-row:has(.silo-row-actions :focus-visible) .silo-row-note-icon {
+.silo-link-row:has(:where(.silo-row-actions) :focus-visible) .silo-row-note-icon {
   right: 112px;
 }
 .silo-link-row:has(.silo-row-note-icon) .silo-row-titleline {
   padding-right: 24px;
 }
-.silo-link-row:has(.silo-row-note-icon):has(.silo-row-actions :focus-visible) .silo-row-titleline {
+.silo-link-row:has(.silo-row-note-icon):has(:where(.silo-row-actions) :focus-visible)
+  .silo-row-titleline {
   padding-right: calc(var(--row-tools-room) + 28px);
 }
 .silo-capture {
