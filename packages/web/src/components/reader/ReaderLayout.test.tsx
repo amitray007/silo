@@ -194,6 +194,177 @@ afterEach(() => {
   localStorage.clear();
 });
 
+describe('list pane resizing', () => {
+  const divider = () => screen.getByRole('separator', { name: 'Resize link list' });
+  let paneWidth = 1200;
+  beforeEach(() => {
+    paneWidth = 1200;
+    // jsdom has no layout; give the three-pane row a desktop width so 720px fits beside the reader.
+    const measure = HTMLElement.prototype.getBoundingClientRect;
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      if (this.classList.contains('silo-three-pane')) return new DOMRect(240, 0, paneWidth, 900);
+      if (this.classList.contains('silo-listpane')) return new DOMRect(240, 0, 360, 900);
+      return measure.call(this);
+    });
+  });
+
+  it('caps the list so the reader keeps 420px in a narrow window', async () => {
+    paneWidth = 784;
+    localStorage.setItem('silo.listWidth', '700');
+    renderReader();
+    await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+    expect(divider().getAttribute('aria-valuenow')).toBe('364');
+    expect(divider().getAttribute('aria-valuemax')).toBe('364');
+    fireEvent.keyDown(divider(), { key: 'ArrowLeft' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('348');
+    fireEvent.keyDown(divider(), { key: 'End' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('364');
+  });
+
+  it('shows a keyboard accessible separator on desktop with the stored width', async () => {
+    localStorage.setItem('silo.listWidth', '500');
+    const { container } = renderReader();
+    await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+    expect(divider().getAttribute('aria-orientation')).toBe('vertical');
+    expect(divider().getAttribute('aria-valuemin')).toBe('280');
+    expect(divider().getAttribute('aria-valuemax')).toBe('720');
+    expect(divider().getAttribute('aria-valuenow')).toBe('500');
+    expect(divider().tabIndex).toBe(0);
+    expect(
+      container.querySelector<HTMLElement>('.silo-three-pane')?.style.getPropertyValue('--list-w'),
+    ).toBe('500px');
+  });
+
+  it('hides the separator in full-window reader mode without discarding the preference', async () => {
+    const media = window.matchMedia;
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...media(query),
+      matches: query === layoutMedia.fullWindowReader,
+    }));
+    localStorage.setItem('silo.listWidth', '600');
+    renderReader({ route: '/?link=a' });
+    await selected();
+    expect(screen.queryByRole('separator', { name: 'Resize link list' })).toBeNull();
+    expect(localStorage.getItem('silo.listWidth')).toBe('600');
+  });
+
+  it('changes the width by 16px and persists it with ArrowRight', async () => {
+    renderReader();
+    await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+    divider().focus();
+    fireEvent.keyDown(divider(), { key: 'ArrowRight' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('376');
+    expect(localStorage.getItem('silo.listWidth')).toBe('376');
+    fireEvent.keyDown(divider(), { key: 'ArrowLeft' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('360');
+  });
+
+  it('supports 64px shift steps and the Home and End bounds', async () => {
+    renderReader();
+    await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+    fireEvent.keyDown(divider(), { key: 'ArrowRight', shiftKey: true });
+    expect(divider().getAttribute('aria-valuenow')).toBe('424');
+    fireEvent.keyDown(divider(), { key: 'ArrowLeft', shiftKey: true });
+    expect(divider().getAttribute('aria-valuenow')).toBe('360');
+    fireEvent.keyDown(divider(), { key: 'Home' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('280');
+    fireEvent.keyDown(divider(), { key: 'ArrowLeft' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('280');
+    fireEvent.keyDown(divider(), { key: 'End' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('720');
+    fireEvent.keyDown(divider(), { key: 'ArrowRight' });
+    expect(divider().getAttribute('aria-valuenow')).toBe('720');
+  });
+
+  it.each(['Enter', 'double-click'])('resets to the default with %s', async (action) => {
+    localStorage.setItem('silo.listWidth', '500');
+    renderReader();
+    await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+    if (action === 'Enter') fireEvent.keyDown(divider(), { key: 'Enter' });
+    else fireEvent.doubleClick(divider());
+    expect(divider().getAttribute('aria-valuenow')).toBe('360');
+    expect(localStorage.getItem('silo.listWidth')).toBeNull();
+  });
+
+  it('keeps r/j/k shortcuts idle while focused and restores them outside the divider', async () => {
+    renderReader({ route: '/?link=a' });
+    await selected();
+    divider().focus();
+    for (const key of ['r', 'j', 'k']) {
+      fireEvent.keyDown(divider(), { key });
+      expect(screen.getByTestId('url').textContent).toBe('/?link=a');
+      expect(reader().getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe(
+        'true',
+      );
+    }
+    divider().blur();
+    fireEvent.keyDown(document, { key: 'j' });
+    await selected('Second link');
+    fireEvent.keyDown(document, { key: 'k' });
+    await selected();
+    fireEvent.keyDown(document, { key: 'r' });
+    expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe('true');
+  });
+
+  function preparePointerDrag() {
+    // jsdom has no PointerEvent or pointer capture; preserve pointer coordinates and IDs.
+    vi.stubGlobal(
+      'PointerEvent',
+      class extends MouseEvent {
+        readonly pointerId: number;
+        constructor(type: string, init: PointerEventInit = {}) {
+          super(type, init);
+          this.pointerId = init.pointerId ?? 1;
+        }
+      },
+    );
+    const handle = divider();
+    const capture = vi.fn();
+    const release = vi.fn();
+    Object.assign(handle, {
+      setPointerCapture: capture,
+      hasPointerCapture: () => true,
+      releasePointerCapture: release,
+    });
+    fireEvent.pointerDown(handle, { button: 0, pointerId: 1, clientX: 600 });
+    return { handle, capture, release };
+  }
+
+  it.each(['pointerUp', 'pointerCancel', 'lostPointerCapture'] as const)(
+    'drags relative to the list edge and clears drag state on %s',
+    async (finish) => {
+      renderReader();
+      await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+      const { handle, capture, release } = preparePointerDrag();
+      expect(capture).toHaveBeenCalledWith(1);
+      // A mouse drag must not focus the handle, or the global focus outline boxes it.
+      expect(document.activeElement).not.toBe(handle);
+      expect(document.documentElement.classList.contains('silo-list-resizing')).toBe(true);
+      fireEvent.pointerMove(handle, { pointerId: 2, clientX: 900 });
+      expect(handle.getAttribute('aria-valuenow')).toBe('360');
+      fireEvent.pointerMove(handle, { pointerId: 1, clientX: 740.4 });
+      expect(handle.getAttribute('aria-valuenow')).toBe('500');
+      expect(localStorage.getItem('silo.listWidth')).toBe('500');
+      fireEvent[finish](handle, { pointerId: 1 });
+      expect(release).toHaveBeenCalledWith(1);
+      expect(document.documentElement.classList.contains('silo-list-resizing')).toBe(false);
+      fireEvent.pointerMove(handle, { pointerId: 1, clientX: 800 });
+      expect(handle.getAttribute('aria-valuenow')).toBe('500');
+    },
+  );
+
+  it('cleans up the drag and pointer capture when unmounted', async () => {
+    const { unmount } = renderReader();
+    await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
+    const { release } = preparePointerDrag();
+    unmount();
+    expect(release).toHaveBeenCalledWith(1);
+    expect(document.documentElement.classList.contains('silo-list-resizing')).toBe(false);
+  });
+});
+
 describe('reader selection and history', () => {
   it.each(['/?link=a', '/tags/mcp?link=a', '/trash?link=a'])(
     'returns to the same reader URL after visiting Settings from %s',

@@ -1,8 +1,18 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
+import { useListWidth } from '../../lib/useListWidth';
 import { DeleteForeverDialog } from '../DeleteForeverDialog';
+import { ListPaneDivider } from './ListPaneDivider';
 import { ReaderPane } from './ReaderPane';
 import { ReaderSelectionContext } from './ReaderSelection';
 import { useReaderActions, useReaderKeyboard } from './useReaderActions';
@@ -29,6 +39,7 @@ export function ReaderLayout({
   fetchNextPage?: () => Promise<LinkJson[]>;
 }) {
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
+  const [listWidth] = useListWidth();
   const { selectedId, index, select, close, removed, step, advancing } = useReaderNavigation({
     links,
     loading,
@@ -85,7 +96,12 @@ export function ReaderLayout({
   const selection = useMemo(() => ({ selectedId, select }), [selectedId, select]);
   return (
     <ReaderSelectionContext.Provider value={selection}>
-      <div className="silo-three-pane" data-reader={Boolean(selectedId)} ref={rootRef}>
+      <div
+        className="silo-three-pane"
+        data-reader={Boolean(selectedId)}
+        ref={rootRef}
+        style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+      >
         <section
           tabIndex={-1}
           className="silo-listpane"
@@ -94,6 +110,7 @@ export function ReaderLayout({
         >
           {children}
         </section>
+        <ListPaneDivider width={listWidth} fullWindow={fullWindow} />
         <ReaderPane
           link={resolved ?? previous.current}
           selectedId={selectedId}
