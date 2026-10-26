@@ -638,7 +638,7 @@
   color: var(--ink);
   background: var(--icon-hover);
 }
-.silo-meta-tag button svg {
+.silo-meta-tag svg {
   stroke-width: 2;
 }
 .silo-meta-tag-anchor {
