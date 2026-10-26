@@ -6,9 +6,11 @@ import {
 } from '@silo/core';
 import { type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 import { PageCache } from './cache.js';
+import { addDarkPageStyle } from './dark-theme.js';
 import { ViewLimit } from './limit.js';
 import { allowsFraming } from './policy.js';
 import { TransformPool } from './pool.js';
+import type { StyledPage } from './stylesheets.js';
 import { pageTextLength } from './text.js';
 
 type Page = {
@@ -19,11 +21,13 @@ type Page = {
   html?: Buffer;
   reason?: string;
   textLength?: number;
+  cssDarkTheme?: boolean;
+  scriptDarkTheme?: boolean;
 };
 type Pending = { controller: AbortController; promise: Promise<Page>; users: number };
 type ViewerOptions = {
   fetch?: (url: string, signal: AbortSignal) => Promise<SafeFetchResult>;
-  transform?: (html: string, finalUrl: string, signal: AbortSignal) => Promise<string>;
+  transform?: (html: string, finalUrl: string, signal: AbortSignal) => Promise<StyledPage>;
   cacheBytes?: number;
   ttlMs?: number;
   waitMs?: number;
@@ -41,13 +45,32 @@ function hintFor(page: Page, origin: string): FrameHint {
     mime.startsWith('image/');
   if (!displayable)
     return { mode: 'none', reason: page.reason ?? 'unsupported-content', ...contentType };
-  if (allowsFraming(page, page.finalUrl, origin)) return { mode: 'direct', ...contentType };
+  const theme = page.cssDarkTheme === undefined ? {} : { darkTheme: page.cssDarkTheme };
+  const directTheme =
+    page.cssDarkTheme === undefined
+      ? {}
+      : { darkTheme: page.cssDarkTheme || page.scriptDarkTheme === true };
+  if (allowsFraming(page, page.finalUrl, origin))
+    return { mode: 'direct', ...contentType, ...directTheme };
   if (page.reason) return { mode: 'none', reason: page.reason, ...contentType };
   if (page.html && (page.textLength ?? 0) < 200)
     return { mode: 'none', reason: 'needs-script', ...contentType };
   return page.html
-    ? { mode: 'view', reason: 'framing-blocked', ...contentType }
+    ? { mode: 'view', reason: 'framing-blocked', ...contentType, ...theme }
     : { mode: 'none', reason: 'non-html-framing-blocked', ...contentType };
+}
+
+function preparePage({
+  html,
+  cssDarkTheme,
+  scriptDarkTheme,
+}: StyledPage): Pick<Page, 'html' | 'textLength' | 'cssDarkTheme' | 'scriptDarkTheme'> {
+  return {
+    cssDarkTheme,
+    scriptDarkTheme,
+    html: Buffer.from(cssDarkTheme ? html : addDarkPageStyle(html)),
+    textLength: pageTextLength(html),
+  };
 }
 
 /** One cache/fetch shared by /frame and /view. Policy is evaluated per caller origin. */
@@ -81,8 +104,7 @@ export function createPageViewer(options: ViewerOptions = {}): {
       if (mime === 'text/html' || mime === 'application/xhtml+xml') {
         try {
           const html = await transform(fetched.html, finalUrl, signal);
-          page.html = Buffer.from(html);
-          page.textLength = pageTextLength(html);
+          Object.assign(page, preparePage(html));
         } catch {
           signal.throwIfAborted();
           page.reason = 'transform-unavailable';

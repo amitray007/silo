@@ -15,6 +15,13 @@ it. Silo stores nothing for it, so the "not an archive" rule in
 **Rules:** `docs/rules/` (architecture, typescript, api-hono, db-drizzle,
 web-react, testing). `exactOptionalPropertyTypes` is on.
 
+Live detects native dark support from CSS rules whose selectors match the
+script-free page, dark color-scheme metadata, and dark media links. Direct frames
+also count inline scripts in the fetched HTML that mention `prefers-color-scheme`;
+view copies use only the CSS signal and get a media-gated invert style when it is
+absent. The “Dark page” toggle forces either frame light without reloading and
+stores opted-out hostnames in `silo.lightPages`; non-HTML hints omit `darkTheme`.
+
 ## QA set (binding)
 
 Test with real links, never the dummy `example.com` rows. The set lives in

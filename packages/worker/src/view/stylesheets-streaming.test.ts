@@ -74,7 +74,7 @@ describe('shared stylesheet streaming budget', () => {
           headers: { 'content-type': url.pathname === '/wrong.css' ? 'text/html' : 'text/css' },
         });
       });
-      const output = await inlinePageStyles(
+      const { html: output } = await inlinePageStyles(
         mode === 'imports'
           ? '<link rel="stylesheet" href="/root.css">'
           : '<link rel="stylesheet" href="/root.css"><link rel="stylesheet" href="/big.css"><link rel="stylesheet" href="/wrong.css"><link rel="stylesheet" href="/big2.css">',

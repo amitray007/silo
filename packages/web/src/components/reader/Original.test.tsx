@@ -1,8 +1,8 @@
 /// <reference types="node" />
 import { createServer } from 'node:http';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApiBaseUrl } from '../../api/client';
 import type { LinkJson } from '../../api/types';
 import { makeLink } from '../../test/fixtures';
@@ -17,6 +17,9 @@ function Standalone({ link, showReader = () => {} }: { link: LinkJson; showReade
       <button type="button" onClick={() => state.refresh.mutate()}>
         Refresh Live
       </button>
+      <button type="button" onClick={state.toggleDarkPage}>
+        Toggle page theme
+      </button>
       <Original link={link} state={state} showReader={showReader} />
     </>
   );
@@ -28,6 +31,7 @@ function show(
   url = link.url,
   contentType?: string,
   reason?: string,
+  darkTheme?: boolean,
 ) {
   const fetch = vi.fn(
     async (_url: string, init?: RequestInit) =>
@@ -37,7 +41,7 @@ function show(
           : JSON.stringify(
               mode === 'error'
                 ? { error: 'service_unavailable', message: 'Unavailable' }
-                : { mode, contentType, reason },
+                : { mode, contentType, reason, darkTheme },
             ),
         { status: mode === 'error' ? 503 : 200 },
       ),
@@ -54,7 +58,9 @@ function show(
   );
   return { ...rendered, fetch, client, showReader };
 }
+beforeEach(() => localStorage.clear());
 afterEach(() => {
+  localStorage.clear();
   setApiBaseUrl('');
   vi.unstubAllGlobals();
 });
@@ -251,5 +257,72 @@ describe('Live resilience', () => {
     expect(action.getAttribute('href')).toBe(link.url);
     expect(action.getAttribute('target')).toBe('_blank');
     expect(action.getAttribute('rel')).toBe('noopener noreferrer');
+  });
+});
+
+describe('Live page theme', () => {
+  it.each([
+    ['direct', false, 'invert(0.9) hue-rotate(180deg)'],
+    ['direct', true, ''],
+    ['direct', undefined, ''],
+    ['view', false, ''],
+    ['view', true, ''],
+  ] as const)(
+    'styles %s with native dark %s and toggles light without reloading',
+    async (mode, darkTheme, filter) => {
+      localStorage.setItem('silo-theme', 'dark');
+      const { fetch } = show(mode, link.url, 'text/html', undefined, darkTheme);
+      const frame = (await screen.findByTitle(
+        mode === 'direct' ? 'Live page' : 'Silo view',
+      )) as HTMLIFrameElement;
+      expect(frame.style.filter).toBe(filter);
+      expect(frame.style.backgroundColor).toBe(filter ? 'white' : '');
+      expect(frame.style.colorScheme).toBe('');
+      const requests = fetch.mock.calls.length;
+      fireEvent.click(screen.getByRole('button', { name: 'Toggle page theme' }));
+      expect(frame.style.colorScheme).toBe('light');
+      expect(frame.style.filter).toBe('');
+      expect(frame.style.backgroundColor).toBe('');
+      expect(screen.getByTitle(frame.title)).toBe(frame);
+      expect(fetch).toHaveBeenCalledTimes(requests);
+      expect(localStorage.getItem('silo.lightPages')).toBe('["publisher.test"]');
+      fireEvent.click(screen.getByRole('button', { name: 'Toggle page theme' }));
+      expect(frame.style.colorScheme).toBe('');
+      expect(frame.style.filter).toBe(filter);
+    },
+  );
+
+  it('removes all overrides when silo changes to light and restores them on dark', async () => {
+    localStorage.setItem('silo-theme', 'dark');
+    show('direct', link.url, 'text/html', undefined, false);
+    const frame = (await screen.findByTitle('Live page')) as HTMLIFrameElement;
+    expect(frame.style.filter).toContain('invert');
+    await act(async () => {
+      document.documentElement.dataset.theme = 'light';
+    });
+    expect(frame.style.filter).toBe('');
+    expect(frame.style.colorScheme).toBe('');
+    await act(async () => {
+      document.documentElement.dataset.theme = 'dark';
+    });
+    expect(frame.style.filter).toContain('invert');
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle page theme' }));
+    await act(async () => {
+      document.documentElement.dataset.theme = 'light';
+    });
+    expect(frame.style.colorScheme).toBe('');
+    await act(async () => {
+      document.documentElement.dataset.theme = 'dark';
+    });
+    expect(frame.style.colorScheme).toBe('light');
+  });
+
+  it('leaves embedded players unchanged even when their hostname is opted out', () => {
+    localStorage.setItem('silo-theme', 'dark');
+    localStorage.setItem('silo.lightPages', '["www.youtube.com"]');
+    const { container } = show('direct', 'https://www.youtube.com/watch?v=jNQXAC9IVRw');
+    const frame = container.querySelector('iframe');
+    expect(frame?.style.colorScheme).toBe('');
+    expect(frame?.style.filter).toBe('');
   });
 });

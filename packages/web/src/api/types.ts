@@ -313,4 +313,9 @@ export type OAuthClientsResponse = { clients: ConnectedOAuthClient[] };
  */
 export type AppConfig = { mcpUrl?: string };
 
-export type FrameHint = { mode: 'direct' | 'view' | 'none'; reason?: string; contentType?: string };
+export type FrameHint = {
+  mode: 'direct' | 'view' | 'none';
+  reason?: string;
+  contentType?: string;
+  darkTheme?: boolean;
+};

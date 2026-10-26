@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
+import { inlinePageStyles } from './stylesheets.js';
 import { createPageViewer } from './viewer.js';
 
 const viewers: ReturnType<typeof createPageViewer>[] = [];
@@ -13,7 +14,7 @@ const success = (extra = {}): SafeFetchResult => ({
 });
 function setup(options: Parameters<typeof createPageViewer>[0] = {}) {
   const fetch = vi.fn(async () => success());
-  const transform = vi.fn(async (html: string) => html);
+  const transform = vi.fn((html: string) => inlinePageStyles(html, 'https://publisher.test/'));
   const viewer = createPageViewer({ fetch, transform, ...options });
   viewers.push(viewer);
   const request = (id = 'a', origin = 'https://silo.test', signal = new AbortController().signal) =>
@@ -29,8 +30,8 @@ describe('page viewer shared fetch', () => {
     const { request, fetch, transform } = setup();
     const results = await Promise.all([request(), request(), request()]);
     expect(results[0]).toEqual({
-      frame: { mode: 'direct', contentType: 'text/html' },
-      html: '<h1>Page</h1>',
+      frame: { mode: 'direct', contentType: 'text/html', darkTheme: false },
+      html: expect.stringContaining('<h1>Page</h1>'),
     });
     expect(results.every((r) => r.html === results[0]?.html)).toBe(true);
     await request();
@@ -50,9 +51,9 @@ describe('page viewer shared fetch', () => {
         fresh: true,
       });
     const [a, b] = await Promise.all([fresh(), fresh()]);
-    expect(a.html).toBe('<p>Fresh</p>');
-    expect(b.html).toBe('<p>Fresh</p>');
-    expect((await request()).html).toBe('<p>Fresh</p>');
+    expect(a.html).toContain('<p>Fresh</p>');
+    expect(b.html).toContain('<p>Fresh</p>');
+    expect((await request()).html).toContain('<p>Fresh</p>');
     expect(fetch).toHaveBeenCalledTimes(2);
     await fresh();
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -81,10 +82,14 @@ describe('page viewer shared fetch', () => {
   it('uses needs-script for a thin transformed page, excluding page chrome', async () => {
     const { request } = setup({
       fetch: async () => success({ xFrameOptions: 'DENY' }),
-      transform: async () => `<html><body><nav>${'Navigation '.repeat(50)}</nav>
+      transform: async () =>
+        inlinePageStyles(
+          `<html><body><nav>${'Navigation '.repeat(50)}</nav>
         <header>${'Header '.repeat(50)}</header><aside>${'Sidebar '.repeat(50)}</aside>
         <footer>${'Footer '.repeat(50)}</footer><article>${'x'.repeat(50)}</article>
         <style>${'body{color:red}'.repeat(50)}</style></body></html>`,
+          'https://publisher.test/',
+        ),
     });
     expect((await request()).frame).toEqual({
       mode: 'none',
@@ -95,7 +100,8 @@ describe('page viewer shared fetch', () => {
   it('keeps a blocked page with exactly 200 article characters in view mode', async () => {
     const { request } = setup({
       fetch: async () => success({ xFrameOptions: 'DENY' }),
-      transform: async () => `<article>${'x'.repeat(200)}</article>`,
+      transform: async () =>
+        inlinePageStyles(`<article>${'x'.repeat(200)}</article>`, 'https://publisher.test/'),
     });
     expect((await request()).frame.mode).toBe('view');
   });
@@ -262,7 +268,7 @@ describe('page viewer cancellation and transform occupancy', () => {
     });
     const transform = vi.fn(async (html: string) => {
       await blocked;
-      return html;
+      return inlinePageStyles(html, 'https://publisher.test/');
     });
     const { request, fetch } = setup({ transform, waitMs: 30 });
     const a = request('a');
@@ -278,5 +284,89 @@ describe('page viewer cancellation and transform occupancy', () => {
     await Promise.all([a, b]);
     expect((await request('next')).frame.mode).toBe('direct');
     expect(fetch).toHaveBeenCalledTimes(3);
+  });
+});
+
+describe('page viewer dark theme hint and cached copy', () => {
+  it.each(['application/ld+json', 'application/json', 'importmap', 'speculationrules'])(
+    'keeps the dark page fallback for %s metadata in direct mode',
+    async (type) => {
+      const { request, fetch } = setup();
+      fetch.mockResolvedValue(
+        success({
+          html: `<script type="${type}">{"description":"prefers-color-scheme"}</script><article>${'Article text. '.repeat(30)}</article>`,
+        }),
+      );
+      const page = await request();
+      expect(page.frame).toEqual({ mode: 'direct', contentType: 'text/html', darkTheme: false });
+      expect(page.html).toContain('data-silo-dark-page');
+      expect(page.html).not.toContain('<script');
+    },
+  );
+  it.each([false, true])(
+    'keeps native dark support %s in both modes and cache hits',
+    async (darkTheme) => {
+      const html = `<html><head>${darkTheme ? '<style>@media (prefers-color-scheme: dark) {body {color:white}}</style>' : ''}</head><body><article>${'Article text. '.repeat(30)}</article></body></html>`;
+      const { request, fetch } = setup();
+      fetch.mockResolvedValue(
+        success({ html, contentSecurityPolicy: 'frame-ancestors https://silo.test' }),
+      );
+      const direct = await request();
+      const view = await request('a', 'https://blocked.test');
+      expect(direct.frame).toEqual({ mode: 'direct', contentType: 'text/html', darkTheme });
+      expect(view.frame).toEqual({
+        mode: 'view',
+        reason: 'framing-blocked',
+        contentType: 'text/html',
+        darkTheme,
+      });
+      expect(view.html).toBe(direct.html);
+      expect(view.html?.includes('data-silo-dark-page')).toBe(!darkTheme);
+      expect((await request()).frame.darkTheme).toBe(darkTheme);
+      expect(fetch).toHaveBeenCalledTimes(1);
+    },
+  );
+
+  it('uses the raw inline script signal only for direct framing, including cached policy changes', async () => {
+    const html = `<html><head><style>html.dark{color-scheme:dark}</style>
+      <script>if (matchMedia('(prefers-color-scheme: dark)').matches) document.documentElement.classList.add('dark');</script>
+      </head><body><article>${'Article text. '.repeat(30)}</article></body></html>`;
+    const { request, fetch } = setup();
+    fetch.mockResolvedValue(
+      success({ html, contentSecurityPolicy: 'frame-ancestors https://silo.test' }),
+    );
+    const direct = await request();
+    const view = await request('a', 'https://blocked.test');
+    expect(direct.frame).toEqual({ mode: 'direct', contentType: 'text/html', darkTheme: true });
+    expect(view.frame).toEqual({
+      mode: 'view',
+      reason: 'framing-blocked',
+      contentType: 'text/html',
+      darkTheme: false,
+    });
+    expect(view.html).toBe(direct.html);
+    expect(view.html).not.toContain('<script');
+    expect(view.html).toContain('data-silo-dark-page');
+    expect((await request()).frame.darkTheme).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('filters the Wikipedia day-class page in either mode', async () => {
+    const html = `<html class="skin-theme-clientpref-day"><head>
+      <style>@media (prefers-color-scheme: dark){html.skin-theme-clientpref-os{color:white}}</style>
+      </head><body><article>${'Article text. '.repeat(30)}</article></body></html>`;
+    const { request, fetch } = setup();
+    fetch.mockResolvedValue(
+      success({ html, contentSecurityPolicy: 'frame-ancestors https://silo.test' }),
+    );
+    expect((await request()).frame.darkTheme).toBe(false);
+    const view = await request('a', 'https://blocked.test');
+    expect(view.frame.darkTheme).toBe(false);
+    expect(view.html).toContain('data-silo-dark-page');
+  });
+
+  it('omits the hint for non-HTML documents', async () => {
+    const { request } = setup({ fetch: async () => success({ contentType: 'application/pdf' }) });
+    expect((await request()).frame).toEqual({ mode: 'direct', contentType: 'application/pdf' });
   });
 });

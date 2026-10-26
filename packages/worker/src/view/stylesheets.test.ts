@@ -25,7 +25,7 @@ describe('bounded server-side stylesheets', () => {
       'https://site.test/css/nested/b.css': '@im\\70ort "too-deep.css"; .b{background:url(b.png)}',
       'https://site.test/c.css': '.c{color:red}',
     });
-    const output = await inlinePageStyles(
+    const { html: output } = await inlinePageStyles(
       '<link rel="stylesheet" href="/css/a.css" media="print" crossorigin integrity="hash"><link rel="stylesheet" href="/c.css"><link rel="stylesheet" data-href="/inactive.css">',
       url,
       fetch,
@@ -41,14 +41,16 @@ describe('bounded server-side stylesheets', () => {
   });
   it('keeps links on fetch failure or non-CSS MIME', async () => {
     expect(
-      await inlinePageStyles('<link rel="stylesheet" href="/bad.css">', url, fetcher({})),
+      (await inlinePageStyles('<link rel="stylesheet" href="/bad.css">', url, fetcher({}))).html,
     ).toContain('<link');
     expect(
-      await inlinePageStyles(
-        '<link rel="stylesheet" href="/bad.css">',
-        url,
-        fetcher({ 'https://site.test/bad.css': '<script>x</script>' }, 'text/html'),
-      ),
+      (
+        await inlinePageStyles(
+          '<link rel="stylesheet" href="/bad.css">',
+          url,
+          fetcher({ 'https://site.test/bad.css': '<script>x</script>' }, 'text/html'),
+        )
+      ).html,
     ).toContain('<link');
   });
   it('caps sheets including imports and concurrency', async () => {
@@ -66,7 +68,7 @@ describe('bounded server-side stylesheets', () => {
         status: 200,
       };
     });
-    const output = await inlinePageStyles(
+    const { html: output } = await inlinePageStyles(
       Array.from({ length: 20 }, (_, i) => `<link rel="stylesheet" href="/${i}.css">`).join(''),
       url,
       fetch,
@@ -91,7 +93,11 @@ describe('bounded server-side stylesheets', () => {
       'https://site.test/a.css': '@import "b.css"; .a{color:red}',
       'https://site.test/b.css': `${nested} .b{color:blue}`,
     });
-    const output = await inlinePageStyles('<link rel="stylesheet" href="/a.css">', url, fetch);
+    const { html: output } = await inlinePageStyles(
+      '<link rel="stylesheet" href="/a.css">',
+      url,
+      fetch,
+    );
     expect(output).not.toMatch(/@import|next\.css|https:\/\/x/);
     expect(output).toContain('.a{color:red}');
     expect(fetch).toHaveBeenCalledTimes(2);
@@ -105,7 +111,11 @@ describe('bounded server-side stylesheets', () => {
       'https://site.test/a.css': `${rule} .a{color:red}`,
       'https://site.test/css/b.css': String.raw`.b{background:u\72l(../image\2e png)}`,
     });
-    const output = await inlinePageStyles('<link rel="stylesheet" href="/a.css">', url, fetch);
+    const { html: output } = await inlinePageStyles(
+      '<link rel="stylesheet" href="/a.css">',
+      url,
+      fetch,
+    );
     expect(output).toContain('https://site.test/image.png');
     expect(output).not.toContain('@import');
     expect(fetch).toHaveBeenCalledTimes(2);

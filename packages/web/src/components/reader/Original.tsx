@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { apiUrl } from '../../api/client';
 import type { LinkJson } from '../../api/types';
 import { FrameLoadNotice, PageSkeleton, useFrameLoading } from './ReaderLoading';
@@ -22,6 +23,13 @@ function fallbackReason(reason: string | undefined): string {
   return 'This content cannot be displayed here.';
 }
 
+function pageTheme(state: OriginalState): CSSProperties {
+  if (state.theme !== 'dark') return {};
+  if (!state.darkPage) return { colorScheme: 'light' };
+  if (state.mode !== 'direct' || state.darkTheme !== false) return {};
+  return { filter: 'invert(0.9) hue-rotate(180deg)', backgroundColor: 'white' };
+}
+
 function PageSurface({ link, state, showReader }: OriginalProps) {
   const { mode, preparing, reload } = state;
   const { loading, timedOut, onLoad } = useFrameLoading(`${link.id}-${link.url}-${reload}`, 0);
@@ -44,6 +52,7 @@ function PageSurface({ link, state, showReader }: OriginalProps) {
               ? apiUrl(`/api/links/${encodeURIComponent(link.id)}/view?reload=${reload}`)
               : (originalUrl(link.url) ?? '')
           }
+          style={pageTheme(state)}
           referrerPolicy="no-referrer"
           onLoad={onLoad}
         />

@@ -1,6 +1,6 @@
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
-import { type CssToken, cssImports, cssTokens } from './css-tokens.ts';
+import { type CssToken, cssImports, cssTokens } from './css-tokens.js';
 
 const TAGS = [
   'html',
@@ -316,7 +316,7 @@ export function sanitizePageDom(dom: JSDOM, finalUrl: string): string {
     if (
       node.localName === 'meta' &&
       !node.hasAttribute('charset') &&
-      node.getAttribute('name')?.toLowerCase() !== 'viewport'
+      !['viewport', 'color-scheme'].includes(node.getAttribute('name')?.toLowerCase() ?? '')
     )
       node.remove();
   });

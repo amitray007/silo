@@ -4,6 +4,7 @@ export type FrameHint = {
   mode: 'direct' | 'view' | 'none';
   reason?: string;
   contentType?: string;
+  darkTheme?: boolean;
 };
 
 export type PageView = { frame: FrameHint; html?: string };

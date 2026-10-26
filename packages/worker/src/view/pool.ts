@@ -1,4 +1,5 @@
 import { Worker } from 'node:worker_threads';
+import type { StyledPage } from './stylesheets.js';
 
 /** Two reusable threads. A timed-out/aborted thread is terminated before its slot is reused. */
 export class TransformPool {
@@ -10,14 +11,14 @@ export class TransformPool {
     private readonly entry = new URL('./transform-thread.mjs', import.meta.url),
   ) {}
 
-  async run(html: string, finalUrl: string, signal: AbortSignal): Promise<string> {
+  async run(html: string, finalUrl: string, signal: AbortSignal): Promise<StyledPage> {
     signal.throwIfAborted();
     const worker = this.acquire();
     worker.ref();
     this.workers.set(worker, true);
-    return new Promise<string>((resolve, reject) => {
+    return new Promise<StyledPage>((resolve, reject) => {
       let settled = false;
-      const finish = (error?: Error, output?: string) => {
+      const finish = (error?: Error, output?: StyledPage) => {
         if (settled) return;
         settled = true;
         clearTimeout(timer);
@@ -32,7 +33,8 @@ export class TransformPool {
         } else {
           this.workers.set(worker, false);
           worker.unref();
-          resolve(output ?? '');
+          if (output) resolve(output);
+          else reject(new Error('transform-failed'));
         }
       };
       const abort = () => finish(new Error('aborted'));
@@ -43,8 +45,17 @@ export class TransformPool {
       const onExit = () => finish(new Error('transform-exited'));
       worker.once('error', onError);
       worker.once('exit', onExit);
-      worker.once('message', (message: { html?: string; error?: string }) => {
-        if (typeof message.html === 'string') finish(undefined, message.html);
+      worker.once('message', (message: Partial<StyledPage>) => {
+        if (
+          typeof message.html === 'string' &&
+          typeof message.cssDarkTheme === 'boolean' &&
+          typeof message.scriptDarkTheme === 'boolean'
+        )
+          finish(undefined, {
+            html: message.html,
+            cssDarkTheme: message.cssDarkTheme,
+            scriptDarkTheme: message.scriptDarkTheme,
+          });
         else finish(new Error('transform-failed'));
       });
       worker.postMessage({ html, finalUrl });

@@ -3,6 +3,7 @@ import { useState, useSyncExternalStore } from 'react';
 import { apiGet, apiUrl } from '../../api/client';
 import { queryKeys, useFrameHint } from '../../api/hooks';
 import type { FrameHint, LinkJson } from '../../api/types';
+import { useLightPage } from '../../lib/useLightPage';
 import { embedFor } from './embedFor';
 import { originalUrl } from './useReaderActions';
 
@@ -15,6 +16,14 @@ function subscribeTheme(changed: () => void) {
   return () => observer.disconnect();
 }
 
+function pageHostname(url: string | undefined): string {
+  try {
+    return url ? new URL(url).hostname : '';
+  } catch {
+    return '';
+  }
+}
+
 function originalMode(embed: boolean, hinted: FrameHint['mode'] | undefined) {
   if (embed) return 'player' as const;
   return hinted === 'direct' || hinted === 'view' ? hinted : ('card' as const);
@@ -22,6 +31,8 @@ function originalMode(embed: boolean, hinted: FrameHint['mode'] | undefined) {
 
 export function useOriginal(link: LinkJson | undefined, active: boolean) {
   const theme = useSyncExternalStore(subscribeTheme, readTheme);
+  const url = link ? originalUrl(link.url) : undefined;
+  const [lightPage, setLightPage] = useLightPage(pageHostname(url));
   const client = useQueryClient();
   const embed = link ? embedFor(link.url, link.sourceData, theme) : undefined;
   const id = link?.id ?? '';
@@ -57,6 +68,10 @@ export function useOriginal(link: LinkJson | undefined, active: boolean) {
   const unavailable = mode === 'view' && !viewCheck.isFetching && viewCheck.data !== true;
   return {
     embed,
+    theme,
+    darkPage: !lightPage,
+    toggleDarkPage: () => setLightPage(!lightPage),
+    darkTheme: hint.data?.darkTheme,
     mode: unavailable ? ('card' as const) : mode,
     preparing,
     reason: hint.isError || unavailable ? 'fetch-error' : hint.data?.reason,

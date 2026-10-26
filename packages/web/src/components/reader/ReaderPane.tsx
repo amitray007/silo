@@ -60,6 +60,23 @@ function RefreshButton({ original }: { original: OriginalState | undefined }) {
   );
 }
 
+function DarkPageButton({ original }: { original: OriginalState | undefined }) {
+  if (original?.theme !== 'dark' || (original.mode !== 'direct' && original.mode !== 'view'))
+    return null;
+  return (
+    <button
+      type="button"
+      className="silo-reader-iconbtn"
+      aria-label="Dark page"
+      title="Dark page"
+      aria-pressed={original.darkPage}
+      onClick={original.toggleDarkPage}
+    >
+      <ReaderIcon name={original.darkPage ? 'moon' : 'sun'} />
+    </button>
+  );
+}
+
 function ReaderActions({
   actions,
   disabled,
@@ -335,6 +352,7 @@ export function ReaderPane({
           <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
         </div>
         <div className="silo-reader-right">
+          <DarkPageButton original={shownOriginal} />
           {tab === 'reader' && link && <ReaderSettings key={`settings-${selectedId}`} />}
           {!phone && (
             <div className="silo-reader-inline-actions">

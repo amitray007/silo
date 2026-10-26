@@ -3,7 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App';
-import type { LinkJson, SettingsMap, TrashLinkJson } from '../../api/types';
+import type { FrameHint, LinkJson, SettingsMap, TrashLinkJson } from '../../api/types';
 import { layoutMedia } from '../../lib/breakpoints';
 import {
   githubSourceData,
@@ -42,6 +42,21 @@ const b = makeLink({
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+function detailResponse(
+  path: string,
+  links: LinkJson[],
+  details: Record<string, { contentHtml: string | null; contentImageCount: number }>,
+) {
+  const link = links.find((link) => path === `/api/links/${link.id}`);
+  return link
+    ? json({ link: { ...link, contentHtml: null, contentImageCount: 0, ...details[link.id] } })
+    : json({ error: 'not_found', message: 'Unknown link' }, 404);
+}
+
+function frameResponse(link: LinkJson, hint: FrameHint | undefined) {
+  return json(hint ?? { mode: link.url.endsWith('.zip') ? 'none' : 'direct' });
+}
+
 function HistoryProbe() {
   const location = useLocation();
   const navigate = useNavigate();
@@ -68,6 +83,7 @@ function renderReader({
   trashCount,
   tagCount,
   pageSize = Infinity,
+  frameHint,
 }: {
   live?: LinkJson[];
   trash?: TrashLinkJson[];
@@ -78,6 +94,7 @@ function renderReader({
   trashCount?: number;
   tagCount?: number;
   pageSize?: number;
+  frameHint?: FrameHint;
 } = {}) {
   const state = { live: [...live], trash: [...trash], settings: { ...settings } };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -97,7 +114,7 @@ function renderReader({
       ...Object.fromEntries(
         [...state.live, ...extra].map((link) => [
           `/api/links/${link.id}/frame`,
-          () => json({ mode: link.url.endsWith('.zip') ? 'none' : 'direct' }),
+          () => frameResponse(link, frameHint),
         ]),
       ),
       '/api/trash': () => json({ links: state.trash }),
@@ -111,6 +128,7 @@ function renderReader({
       },
     };
     const read = reads[url.pathname];
+    if (method === 'HEAD') return new Response(null);
     if (method === 'GET' && read) return read();
     if (path === '/api/settings' && method === 'PATCH') {
       state.settings = { ...state.settings, ...JSON.parse(String(init?.body)) };
@@ -121,10 +139,7 @@ function renderReader({
       state.trash = state.trash.filter((link) => link.id !== path.split('/').at(-1));
       return new Response(null, { status: 204 });
     }
-    const link = [...state.live, ...extra].find((link) => path === `/api/links/${link.id}`);
-    return link
-      ? json({ link: { ...link, contentHtml: null, contentImageCount: 0, ...details[link.id] } })
-      : json({ error: 'not_found', message: 'Unknown link' }, 404);
+    return detailResponse(path, [...state.live, ...extra], details);
   });
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1233,4 +1248,75 @@ it('opens reader settings, persists widths, handles arrow keys, and returns focu
     expect(reader().queryByRole('button', { name: 'Reader settings' })).toBeNull(),
   );
   expect(container.querySelector('.silo-original')?.hasAttribute('data-width')).toBe(false);
+});
+
+describe('Live page dark toolbar toggle', () => {
+  it.each(['direct', 'view'] as const)(
+    'toggles %s pages and retains the site opt-out across selection',
+    async (mode) => {
+      renderReader({ route: '/?link=a', frameHint: { mode, darkTheme: false } });
+      await selected();
+      expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+      fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+      await screen.findByTitle(mode === 'direct' ? 'Live page' : 'Silo view');
+      expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
+      const toggle = await reader().findByRole('button', { name: 'Dark page' });
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+      const moon = toggle.querySelector('path')?.getAttribute('d');
+      const frame = screen.getByTitle(
+        mode === 'direct' ? 'Live page' : 'Silo view',
+      ) as HTMLIFrameElement;
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-pressed')).toBe('false');
+      expect(toggle.querySelector('path')?.getAttribute('d')).not.toBe(moon);
+      expect(frame.style.colorScheme).toBe('light');
+      expect(localStorage.getItem('silo.lightPages')).toBe('["example.com"]');
+      fireEvent.click(reader().getByRole('tab', { name: 'Reader' }));
+      expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+      fireEvent.click(screen.getByText('Second link'));
+      await selected('Second link');
+      fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+      const persisted = await reader().findByRole('button', { name: 'Dark page' });
+      expect(persisted.getAttribute('aria-pressed')).toBe('false');
+      fireEvent.click(persisted);
+      expect(persisted.getAttribute('aria-pressed')).toBe('true');
+      expect(localStorage.getItem('silo.lightPages')).toBeNull();
+    },
+  );
+
+  it.each([
+    ['https://youtube.com/watch?v=jNQXAC9IVRw', 'YouTube video'],
+    ['https://downloads.test/archive.zip', 'Show Reader'],
+  ])('hides the toggle for %s', async (url, ready) => {
+    renderReader({ live: [makeLink({ ...a, url })], route: '/?link=a' });
+    await selected();
+    fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+    await waitFor(() =>
+      expect(
+        screen.queryByTitle(ready) ?? screen.queryByRole('button', { name: ready }),
+      ).not.toBeNull(),
+    );
+    expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull();
+  });
+
+  it('keeps the toggle visible in the phone toolbar', async () => {
+    const media = window.matchMedia;
+    vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      ...media(query),
+      matches: query === layoutMedia.phone || query === layoutMedia.fullWindowReader,
+    }));
+    renderReader({ route: '/?link=a', frameHint: { mode: 'direct', darkTheme: true } });
+    await selected();
+    fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+    const toggle = await reader().findByRole('button', { name: 'Dark page' });
+    expect(toggle.className).toBe('silo-reader-iconbtn');
+    fireEvent.click(toggle);
+    expect((screen.getByTitle('Live page') as HTMLIFrameElement).style.colorScheme).toBe('light');
+    fireEvent.click(screen.getByRole('button', { name: 'Light mode' }));
+    await waitFor(() => expect(reader().queryByRole('button', { name: 'Dark page' })).toBeNull());
+    expect((screen.getByTitle('Live page') as HTMLIFrameElement).style.colorScheme).toBe('');
+  });
 });

@@ -2,10 +2,12 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import { BodyByteBudget } from '../fetch/body-budget.js';
 import { type SafeFetchOptions, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 import { cssImports, cssTokens, replaceCssImports } from './css-tokens.js';
+import { pageHasDarkScript, pageHasDarkTheme } from './dark-theme.js';
 import { resolveCss, sanitizePageDom } from './transform.js';
 
 const MAX_SHEETS = 15;
 const MAX_BYTES = 3 * 1024 * 1024;
+export type StyledPage = { html: string; cssDarkTheme: boolean; scriptDarkTheme: boolean };
 type FetchCss = (url: string, options: SafeFetchOptions) => Promise<SafeFetchResult>;
 
 function sheetUrl(raw: string, base: string): string | undefined {
@@ -23,7 +25,7 @@ export async function inlinePageStyles(
   finalUrl: string,
   fetchCss: FetchCss = safeFetch,
   signal = AbortSignal.timeout(1_500),
-): Promise<string> {
+): Promise<StyledPage> {
   const dom = new JSDOM(html, { url: finalUrl, virtualConsole: new VirtualConsole() });
   let sheets = 0;
   const bodyBudget = new BodyByteBudget(MAX_BYTES);
@@ -74,6 +76,7 @@ export async function inlinePageStyles(
 
   try {
     const document = dom.window.document;
+    const scriptDarkTheme = pageHasDarkScript(document);
     const links = Array.from(document.querySelectorAll('link[rel]')).filter((link) =>
       link.getAttribute('rel')?.toLowerCase().split(/\s+/).includes('stylesheet'),
     );
@@ -101,8 +104,16 @@ export async function inlinePageStyles(
         link.replaceWith(style);
       }),
     );
-    // Only activate already URL-rewritten, CSS-filtered styles after final DOM sanitization.
-    return sanitizePageDom(dom, finalUrl).replaceAll('<style type="text/silo-css"', '<style');
+    // Activate serialized CSS without making jsdom parse full fetched stylesheets.
+    const output = sanitizePageDom(dom, finalUrl).replaceAll(
+      '<style type="text/silo-css"',
+      '<style',
+    );
+    return {
+      html: output,
+      cssDarkTheme: pageHasDarkTheme(document),
+      scriptDarkTheme,
+    };
   } finally {
     dom.window.close();
   }
