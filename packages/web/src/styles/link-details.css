@@ -615,7 +615,7 @@
   display: grid;
   place-items: center;
   width: 0;
-  height: 18px;
+  height: 16px;
   overflow: hidden;
   border: 0;
   border-radius: 999px;
@@ -630,7 +630,7 @@
   padding-right: 4px;
 }
 .silo-meta-tag:is(:hover, :focus-within) button {
-  width: 18px;
+  width: 16px;
   margin-left: 2px;
   opacity: 1;
 }
@@ -638,8 +638,11 @@
   color: var(--ink);
   background: var(--icon-hover);
 }
+/* .silo-reader-icon pins icons to 16px; the chip needs a smaller, lighter glyph. */
 .silo-meta-tag svg {
-  stroke-width: 2;
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.5;
 }
 .silo-meta-tag-anchor {
   position: relative;
