@@ -5,7 +5,8 @@ const heroCard: CSSProperties = {
   borderRadius: 0,
   border: 0,
   borderTop: '0.5px solid var(--line)',
-  background: 'var(--bg)',
+  // Transparent: the Settings modal sits on --bg2, and --bg read as a dark inset.
+  background: 'transparent',
   padding: '14px 0',
   marginBottom: 8,
   overflow: 'hidden',
