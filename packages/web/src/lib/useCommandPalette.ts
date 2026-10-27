@@ -67,6 +67,7 @@ export function useCommandPalette() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (isTextEntryElement(event.target) || isTextEntryElement(document.activeElement)) return;
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === 'k') {
         event.preventDefault();
         openPalette();

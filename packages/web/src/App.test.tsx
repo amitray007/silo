@@ -37,6 +37,7 @@ describe('App routing', () => {
         if (url.includes('/api/auth/check')) {
           return Promise.resolve(jsonResponse({ authRequired: false }));
         }
+        if (url === '/api/tags') return Promise.resolve(jsonResponse({ tags: [] }));
         if (url.includes('/api/links') || url.includes('/api/trash')) {
           return Promise.resolve(jsonResponse({ links: [] }));
         }
@@ -51,8 +52,8 @@ describe('App routing', () => {
 
   it('renders the Library view (and its active nav item) at /', async () => {
     renderApp(['/']);
-    // Counts render in the sidebar; the content header remains just "Library".
-    await waitFor(() => expect(screen.getByText('128')).toBeDefined());
+    // Both the sidebar and list header show the server total.
+    await waitFor(() => expect(screen.getAllByText('128')).toHaveLength(2));
     await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
     expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();
     const libraryLink = screen.getByRole('link', { name: /library/i });
@@ -68,7 +69,9 @@ describe('App routing', () => {
 
   it('renders the tag-scoped Library view (title + empty state) at /tags/:name', async () => {
     renderApp(['/tags/mcp']);
-    await waitFor(() => expect(screen.getByText('# mcp')).toBeDefined());
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { name: '# mcp', level: 1 })).toBeDefined(),
+    );
     await waitFor(() => expect(screen.getByText('No links tagged # mcp yet.')).toBeDefined());
   });
 

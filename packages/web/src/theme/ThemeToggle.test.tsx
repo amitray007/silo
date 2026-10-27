@@ -92,7 +92,7 @@ describe('ThemeToggle', () => {
     expect(darkButton.getAttribute('aria-pressed')).toBe('true');
   });
 
-  it('never uses amber as the active background', () => {
+  it('uses the neutral hover token as the active background', () => {
     renderWithQuery(
       <ThemeProvider>
         <ThemeToggle />
@@ -100,7 +100,6 @@ describe('ThemeToggle', () => {
     );
     const active = screen.getByRole('button', { name: 'Light' });
     const bg = active.style.background;
-    expect(bg).not.toMatch(/#c98f2d|#d9a441|#a87514/i);
     expect(bg).toBe('var(--hov)');
   });
 

@@ -23,12 +23,10 @@ function renderWithProviders(ui: ReactNode) {
 }
 
 describe('DayGroup', () => {
-  it('renders the label in the Oat style', () => {
+  it('renders the label in the token style', () => {
     renderWithProviders(<DayGroup label="Today" links={[]} />);
     const label = screen.getByText('Today');
-    expect(label.style.fontSize).toBe('var(--text-sm)');
-    expect(label.style.fontWeight).toBe('500');
-    expect(label.style.color).toBe('var(--fnt)');
+    expect(label.className).toBe('silo-daylabel');
   });
 
   it('renders one LinkRow per link, in order', () => {

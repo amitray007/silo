@@ -11,28 +11,20 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 
 ## Layout (the frame)
 
-- **Full-bleed, centered, narrow band — NOT an app-in-a-card.** The app fills the
-  whole viewport (`--bg` ground). The sidebar + content sit as ONE centered band
-  (`AppFrame`), capped (~60rem) so equal empty gutters fall on both far sides on
-  wide windows. There is **no floating bordered/rounded card** around the app.
-  (The captured prototype's outer shell used a 62rem card; the product direction
-  overrides that — the card was a hero-shot artifact. Row/sidebar internals stay
-  faithful to the prototype; only the outer shell diverges.)
-- **The content list is a reading column** (~45rem / ~720px), centered in the
-  content region — rows never stretch edge-to-edge on a wide screen.
-- **Bounded on both sides.** The sidebar has a right border and the content region
-  a symmetric left/right wall, so the band reads as a contained column, not two
-  panes bleeding into the gutter.
-- **Mobile-first responsive, in CSS.** Layout lives in real CSS classes with
-  `@media` breakpoints (`base.css`) — NOT inline styles (inline can't do media
-  queries) and NOT a JS `useMediaQuery` branch (avoids hydration/first-paint
-  shift). On narrow viewports (≤ the mobile breakpoint) the sidebar becomes an
-  **off-canvas drawer** (a ☰ button + brand in a top bar slides it in as an
-  overlay; tap-outside / Escape dismiss; content goes full-width). The drawer is
-  keyboard-operable and focus-managed (see the a11y floor). Everything works with
-  a finger: tap targets ≥ ~40px, no hover-only affordances on touch.
-- Only the layout SHELL moves to CSS classes; leaf components keep their inline
-  token styles.
+- Follow `docs/design/prototypes/silo-redesign.src.html`: a full-bleed
+  sidebar, list, and reader. Remove the centered 60rem band in Unit 2.
+- Wide (>=1100px): dock the sidebar; show the roughly 380px list beside the
+  reader. `[` toggles the sidebar; persist that choice in localStorage.
+- Mid (720-1099px): show list and reader side by side. Open the sidebar as an
+  off-canvas drawer from the list header.
+- Narrow (<720px): show the list full-width. A selected link opens the reader
+  full-screen with Back and a bottom action toolbar. The sidebar is a drawer.
+- Use CSS media queries for layout, with no JavaScript layout branch for
+  first paint. The prototype's frame width maps to the app viewport.
+- Drawers support keyboard use, focus management, outside click, and Escape.
+  Touch targets are at least 40px; touch actions do not depend on hover.
+- Keep list ownership in LibraryView, TagView, and TrashView. Shared reader
+  components live in `src/components/reader/`.
 
 ## The bundling rule (load-bearing — ENFORCED)
 
@@ -53,11 +45,11 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
   client (`src/api/client.ts`). Structure query keys for later invalidation.
 - Components are **presentational + token-driven**: props in, data via hooks, no
   fetching inside leaf components. Function components, colocated `*.test.tsx`.
-- Style with the **Oat CSS custom properties** (`var(--ink)`, `var(--bg2)`, …) —
-  never a hardcoded hex. The tokens (`src/styles/tokens.css`) are the source of
+- Use **redesign CSS custom properties** (`var(--ink)`, `var(--bg2)`, etc.).
+  Do not hardcode hex values. The tokens (`src/styles/tokens.css`) are the source of
   truth, in both light and dark.
-- Fonts are **self-hosted** (`src/styles/fonts.css`, Geist 400/500) — no CDN, no
-  `fonts.googleapis.com`. No third-party fetch per row (letter-chips, not remote
+- Fonts are **self-hosted** (`src/styles/fonts.css`, Geist 400/500/600).
+  Do not use a CDN or `fonts.googleapis.com`. No third-party fetch per row (letter-chips, not remote
   favicons).
 - Surface API failures honestly: the client throws a typed `ApiError` (mirroring
   the API's `{ error, message, details }` envelope); hooks expose loading/error;
@@ -69,9 +61,9 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 - No workspace imports in browser code (see the bundling rule) — the gate rejects
   it, and `pg` in the bundle breaks the app.
 - No business logic in a component — it belongs in `core`, reached via the API.
-- No amber (`--mark`/`--markt`) as a control fill or chrome — amber is ONLY the
-  brand grain-dot and the status marks (`¶` note · `◆` claude · `◌` incomplete).
-  Active states are ink on a raised `--hov` background, never amber.
+- Keep primary buttons ink. Accent is allowed in the orange tile mark, the
+  prototype's Add link focus accents, and toast action text. Other active
+  states use ink on neutral hover/selection surfaces.
 - No status chrome on a healthy (`full`) link — **silence means complete**. Only
   a note/claude-added/incomplete link carries a mark.
 - No CDN/third-party asset (fonts, favicons, images) — silo is self-owned. A
@@ -79,8 +71,9 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 
 ## Accessibility & motion (floor)
 
-- Visible `:focus-visible` ring using `--ghost`/`--ink` — **never amber**. Real
-  `<a>`/`<button>` semantics; keyboard-operable nav.
+- Use a visible `:focus-visible` ring with `--ghost`/`--ink`. Keep it neutral
+  except for the prototype's Add link focus accents. Use real `<a>`/`<button>`
+  semantics and keyboard-operable navigation.
 - Respect `prefers-reduced-motion` (the base-CSS reset). Calm transitions
   (120–160ms). WCAG AA contrast in both themes.
 - The theme is applied **before first paint** via an inline script in
@@ -91,5 +84,5 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 
 - Vitest + `@testing-library/react` + jsdom. **Mock `fetch`** — web tests never
   hit a real API or a database (unlike the core/api/mcp integration suites).
-- Assert the design rules where checkable (no amber in active/chrome, correct
-  marks, letter-chip derivation) alongside behavior.
+- Assert design rules alongside behavior: ink primary buttons, neutral active
+  navigation, correct marks, and local letter chips.

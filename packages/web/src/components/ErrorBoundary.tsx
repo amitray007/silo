@@ -37,7 +37,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
       return (
         <CenteredPanel>
           <p
-            style={{ margin: 0, fontSize: 'var(--text-md)', fontWeight: 500, color: 'var(--ink)' }}
+            style={{ margin: 0, fontSize: 'var(--text-md)', fontWeight: 600, color: 'var(--ink)' }}
           >
             Something went wrong
           </p>
@@ -56,8 +56,8 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             onClick={() => window.location.reload()}
             style={{
               border: '1px solid var(--line)',
-              background: 'var(--bg2)',
-              color: 'var(--ink)',
+              background: 'var(--btn)',
+              color: 'var(--btn-ink)',
               borderRadius: '6px',
               padding: '6px 14px',
               fontSize: 'var(--text-base)',

@@ -397,6 +397,7 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     await screen.findByText('laptop cli');
 
     fireEvent.click(screen.getByRole('button', { name: 'Revoke' }));
+    expect(screen.getByRole('alertdialog', { name: 'Revoke laptop cli?' })).toBeDefined();
     const confirmBtn = await screen.findByRole('button', { name: 'Confirm revoke?' });
     fireEvent.click(confirmBtn);
 

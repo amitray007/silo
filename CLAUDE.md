@@ -99,7 +99,7 @@ automatic fix step**:
 
 ## Design fidelity
 
-Build against `docs/design/tokens.md` and the captured prototype. Binding design rules: Geist Sans (400/500 only), the warm "Oat" ramp in both themes, amber only as the Stack mark's top bar + status marks (never a button fill), the four marks (¶ note · ◆ added-by-claude · ◌ incomplete), "silence means complete" (healthy rows carry no status chrome). Privacy: no third-party calls per row (no Google favicon fetch) — silo is self-owned.
+Build against the "Redesign 2026-10" section in `docs/design/tokens.md` and `docs/design/prototypes/silo-redesign.src.html`. Use self-hosted Geist Sans 400/500/600, the prototype's neutral palette in both themes, and its orange tile mark. Use 600 where the prototype does. Accent may fill the mark and the prototype's Add link focus accents, and color toast actions; primary buttons stay ink. Healthy rows have no completion badge ("silence means complete"). Privacy: no third-party calls per row; use local letter chips and `/api/preview-image` for images. Silo is self-owned.
 
 ## User context
 

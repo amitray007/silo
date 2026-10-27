@@ -58,7 +58,7 @@ export function ContentFrame({
   fadeKey,
 }: {
   title: ReactNode;
-  count?: number;
+  count?: number | undefined;
   captureError?: string;
   headerSlot: ReactNode;
   children: ReactNode;

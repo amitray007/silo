@@ -48,7 +48,7 @@ export function useIntersectionPrefetch(
           stableCallback();
         }
       },
-      { rootMargin },
+      { root: node.closest('.silo-content-body'), rootMargin },
     );
     observer.observe(node);
 

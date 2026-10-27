@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ApiError } from '../api/client';
 import * as hooks from '../api/hooks';
@@ -23,15 +24,17 @@ function jsonResponse(body: unknown, status = 200): Response {
 function renderLibraryView() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={queryClient}>
-      <RowMenuProvider>
-        <SelectionProvider>
-          <HoverPreviewProvider>
-            <LibraryView />
-          </HoverPreviewProvider>
-        </SelectionProvider>
-      </RowMenuProvider>
-    </QueryClientProvider>,
+    <MemoryRouter>
+      <QueryClientProvider client={queryClient}>
+        <RowMenuProvider>
+          <SelectionProvider>
+            <HoverPreviewProvider>
+              <LibraryView />
+            </HoverPreviewProvider>
+          </SelectionProvider>
+        </RowMenuProvider>
+      </QueryClientProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -65,7 +68,7 @@ function mockUseInfiniteLinks(overrides: MockInfiniteLinksResult) {
     error: null,
     hasNextPage: false,
     isFetchingNextPage: false,
-    fetchNextPage: vi.fn(),
+    fetchNextPage: vi.fn().mockResolvedValue({ data: undefined }),
     ...overrides,
   } as ReturnType<typeof hooks.useInfiniteLinks>);
 }
@@ -130,7 +133,7 @@ describe('LibraryView', () => {
   });
 
   it('the load-more button calls fetchNextPage and page 2 appends once data updates', () => {
-    const fetchNextPage = vi.fn();
+    const fetchNextPage = vi.fn().mockResolvedValue({ data: undefined });
     const page1 = link({ id: 'p1', title: 'Page one' });
     mockUseInfiniteLinks({
       data: { pages: [{ links: [page1] } as LinksResponse], pageParams: [undefined] },
@@ -160,7 +163,7 @@ describe('LibraryView', () => {
   });
 
   it('the sentinel intersecting triggers fetchNextPage exactly once when eligible', () => {
-    const fetchNextPage = vi.fn();
+    const fetchNextPage = vi.fn().mockResolvedValue({ data: undefined });
     const page1 = link({ id: 'p1' });
     mockUseInfiniteLinks({
       data: { pages: [{ links: [page1] } as LinksResponse], pageParams: [undefined] },

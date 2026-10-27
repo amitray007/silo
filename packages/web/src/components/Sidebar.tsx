@@ -1,12 +1,14 @@
 import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router';
-import { useCounts, useTags } from '../api/hooks';
+import { useCounts, useTags, useUpdateSettings } from '../api/hooks';
 import type { TagCount } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { formatCount } from '../lib/formatCount';
-import { GrainDot } from './GrainDot';
+import { useTheme } from '../theme/ThemeProvider';
+import { BrandMark } from './BrandMark';
 import { LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon, TrashIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
+import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
 import { SidebarTags } from './SidebarTags';
 
@@ -185,6 +187,7 @@ interface SidebarProps {
   onNavigate?: () => void;
   /** Opens the command palette (plan 024) — the Search nav item's click handler. */
   onOpenSearch?: () => void;
+  onToggleSidebar?: () => void;
 }
 
 /**
@@ -223,10 +226,13 @@ interface SidebarProps {
  * (`tags` forced to `[]`) rather than crashing the sidebar.
  */
 export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar(
-  { id, open = false, onNavigate = noop, onOpenSearch = noop },
+  { id, open = false, onNavigate = noop, onOpenSearch = noop, onToggleSidebar = noop },
   ref,
 ) {
   const navigate = useNavigate();
+  const { theme, setTheme } = useTheme();
+  const updateSettings = useUpdateSettings();
+  const dark = theme === 'dark';
   const { data: counts } = useCounts();
   const { data: tagsData, isError: tagsErrored, isLoading: tagsLoading } = useTags();
   const { openSettings } = useSettings();
@@ -261,24 +267,32 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
       data-open={open}
       className="silo-sidebar"
     >
-      <a
-        href="/"
-        onClick={onBrandClick}
-        aria-label="silo home"
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 10,
-          padding: '4px 9px 16px',
-          textDecoration: 'none',
-          color: 'inherit',
-        }}
-      >
-        <GrainDot size={26} plate />
-        <span style={{ fontWeight: 500, fontSize: 'var(--text-lg)', letterSpacing: '-0.015em' }}>
-          silo
-        </span>
-      </a>
+      <div className="silo-sidebar-brandrow">
+        <a
+          href="/"
+          onClick={onBrandClick}
+          aria-label="silo home"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 9,
+            padding: 0,
+            textDecoration: 'none',
+            color: 'inherit',
+          }}
+        >
+          <BrandMark />
+          <span style={{ fontWeight: 600, fontSize: 16, letterSpacing: '-0.02em' }}>silo</span>
+        </a>
+        <button
+          type="button"
+          className="silo-reader-iconbtn"
+          aria-label={open ? 'Close sidebar' : 'Collapse sidebar'}
+          onClick={onToggleSidebar}
+        >
+          <ReaderIcon name={open ? 'close' : 'sidebar'} />
+        </button>
+      </div>
 
       <SidebarSearchItem onOpenSearch={onOpenSearch} />
 
@@ -306,7 +320,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         renderTagLink={(tag: TagCount) => (
           <NavItemLink
             key={tag.name}
-            to={`/tags/${tag.name}`}
+            to={`/tags/${encodeURIComponent(tag.name)}`}
             // The `#` sits in NavItem's 18px icon slot (not inline in the
             // label) so it aligns to the SAME left ledger column as the
             // Library/Trash nav icons above and the `+ New tag` glyph below —
@@ -323,6 +337,16 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
 
       <SidebarDivider />
 
+      <div className="silo-sidebar-grow" />
+      <NavItem
+        label={dark ? 'Light mode' : 'Dark mode'}
+        icon={<ReaderIcon name={dark ? 'sun' : 'moon'} />}
+        onClick={() => {
+          const next = dark ? 'light' : 'dark';
+          setTheme(next);
+          updateSettings.mutate({ theme: next });
+        }}
+      />
       <NavItemLink
         to="/settings"
         label="Settings"

@@ -1,215 +1,114 @@
 /**
- * Silo "Oat" design tokens.
- * Source of truth: docs/design/tokens.md + docs/design/app/Silo-v3.html (:root block),
- * with a user-directed polish pass (see docs/design/refs/*.png, the "Orpheus"
- * reference) that deepens dark mode toward a richer near-black with warmth
- * and keeps light mode's original Oat hex values untouched.
- * v3 also defines a `--desk` desktop-backdrop token (used by its floating
- * card shell) — we deliberately do NOT adopt it (plan 011 decision 1: we
- * keep the full-bleed frame, not v3's 80rem card).
- *
- * Theme mechanism: `data-theme="dark"` is set on <html> (see src/theme/).
- * Light is the default (:root with no attribute); dark overrides via
- * :root[data-theme="dark"] so both selectors match the same element.
+ * Redesign 2026-10: neutral palette from silo-redesign.src.html.
+ * Existing roles keep their names: bg2 = panel, mark = accent,
+ * markt = accent-ink, warn = danger, ease-out = ease.
+ * Light is the default; the pre-paint script sets data-theme on <html>.
  */
-
 :root {
-  --bg: #fbf7ef;
-  --bg2: #f1e9da;
-  --line: #ebe2d2;
-  --hov: #f1e9da;
+  --bg: #f6f6f5;
+  --bg2: #ffffff;
+  --line: #e6e6e4;
+  --line-2: #d6d6d3;
+  --hov: #f1f1ef;
+  --sel: #ebebe9;
+  --ink: #0c0c0b;
+  --mut: #5c5c59;
+  --fnt: #6e6e6e;
+  --ghost: var(--fnt);
+  --btn: #111110;
+  --btn-ink: #ffffff;
+  --accent-a: #ffb23f;
+  --accent-b: #ff6a13;
+  --mark: #f26b1d;
+  --markt: #b8480a;
+  --accent-soft: #fff1e6;
+  --warn: #d63a2f;
+  --solid-ink: #ffffff;
+  --logo-tile: #f6f6f5;
+  --logo-ink: #181818;
 
-  /* ─────────────────────────────────────────────────────────────────────
-     TEXT-TONE RAMP (a11y pass, finding B4 — reconciles the ramp's roles):
-       --ink   = titles / primary text.
-       --mut   = secondary text.
-       --fnt   ("faint") = tertiary text — meta, counts, placeholders,
-                 labels; tokens.md's "faint" role. The hex below (#736850 in
-                 light, #94856f in dark) is the source of truth for that
-                 role, not the token name.
-       --ghost = NON-TEXT ONLY. Borders, focus rings, icon/SVG strokes, and
-                 decorative glyphs (#, ◂, ▾, ✕, +). It clears the 3:1 UI-
-                 component contrast floor but NOT the 4.5:1 floor normal text
-                 needs (WCAG AA) — 4.00:1 on --bg / 3.54:1 on --bg2 in light
-                 mode. Any occurrence coloring text a user reads must use
-                 --fnt (5.14:1 on --bg / 4.55:1 on --bg2) instead.
-     ───────────────────────────────────────────────────────────────────── */
-  --ink: #211b11;
-  --mut: #6e6350;
-  --fnt: #736850;
-  --ghost: #857963;
-  --mark: #c98f2d;
-  --markt: #a87514;
-  --warn: #a8482d;
-  /* Brand-lockup plate (GrainDot plate variant). A DARK plate in BOTH themes,
-     mirroring the Mac app icon / .icns exactly — so the amber grain bar pops
-     and all three bars keep full contrast regardless of the app theme. The
-     dark tile reads cleanly on both the light `bg-2` and the dark sidebar.
-     (Not theme-inverted: a light plate washes out the amber.) */
-  --mark-plate: #201a15;
-  --mark-plate-ink: #f7efe4;
-  --mark-plate-edge: #201a15;
+  /* Local source-chip colors from the approved prototype. */
+  --chip-0: #e5484d;
+  --chip-1: #0091ff;
+  --chip-2: #30a46c;
+  --chip-3: #8e4ec6;
+  --chip-4: #f76b15;
+  --chip-5: #12a594;
+  --chip-6: #d6409f;
+  --chip-7: #3e63dd;
+  --chip-sqlite: #0f80cc;
+  --chip-x: #000;
+  --chip-mcp: #1f1f1f;
+  --chip-inkandswitch: #222;
+  --chip-linear: #5e6ad2;
+  --chip-github: #24292f;
+  --chip-ciechanowski: #1c1c1c;
+  --chip-simon: #6d5bd0;
+  --chip-maggie: #1aa092;
+  --chip-youtube: #ff0033;
+  --chip-hn: #ff6600;
+  --chip-stripe: #635bff;
+  --chip-pg: #9c8458;
 
-  /* Settings redesign (build brief, docs/design/refs/settings-reference.png):
-     a subtle hero-card tint + a resting/hover/active surface ramp for
-     Geist-quality buttons, plus a soft "badge" tone for calm chips (Plugins'
-     "soon"). Additive to the Oat ramp above — never replaces --bg/--bg2/--line
-     — so light mode keeps the same warm Oat identity, just with two more
-     semantic roles for this one surface. */
-  --hero-grad-from: #f4ecd9;
-  --hero-grad-to: #fbf7ef;
-  --hero-border: #e6dac0;
-  --surface-hover: #efe6d4;
-  --surface-active: #e9dec7;
-  --badge-bg: #f1e9da;
-  --badge-border: #e6dac0;
-  /* NOT --ghost (#857963) — that pairing only clears 3.54:1 against
-     --badge-bg, short of AA's 4.5:1 for normal text (Rams self-review,
-     redesign pass). --mut's hex clears 4.89:1 on the same background.
-     (Still true, and now the general rule: the later a11y pass reserves
-     --ghost for non-text uses only — see the TEXT-TONE RAMP note above.) */
-  --badge-ink: #6e6350;
+  /* Existing settings surfaces use the same neutral palette. */
+  --hero-grad-from: var(--hov);
+  --hero-grad-to: var(--bg);
+  --hero-border: var(--line-2);
+  --surface-hover: var(--hov);
+  --surface-active: var(--sel);
 
-  /* Motion (design-review pass, docs/design/skills/review-animations*.md):
-     shared strong custom easing curves — the built-in CSS keywords
-     (ease/ease-out) are too weak to feel intentional. One set of curves used
-     everywhere motion needs entering/exiting vs. on-screen-movement easing,
-     so every popover/menu/drawer in the app shares the same "hand". */
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* ─────────────────────────────────────────────────────────────────────
-     SCALES (design-audit conformance pass). Before this, every leaf
-     component hardcoded its own font-size / padding / tracking inline, so
-     22 near-identical font sizes and 23 padding magnitudes drifted across
-     the app. These tokens are the single source of truth; components
-     reference them so "the same role" is literally the same value and
-     drift becomes impossible to reintroduce. Theme-independent (sizes and
-     spacing don't change between light/dark), so they live only here.
-     ───────────────────────────────────────────────────────────────────── */
-
-  /* Type scale — 6 steps at the 16px root. Collapses the prior 22 sizes.
-     Hierarchy is meant to come from COLOR (the ink/mut/faint/ghost ramp),
-     not size — so this scale is deliberately short. */
-  --text-xs: 0.72rem; /* 11.5px — meta, counts, hints, day labels */
-  --text-sm: 0.8rem; /* 12.8px — secondary labels, settings descriptions */
-  --text-base: 0.875rem; /* 14px   — row titles + domain, body, most UI text */
-  --text-md: 0.95rem; /* 15.2px — brand wordmark, empty-state body */
-  --text-lg: 1.05rem; /* 16.8px — modal titles (h2), section headlines */
-  --text-xl: 1.15rem; /* 18.4px — the largest headline in use */
-
-  /* Line-height roles — headings want tight leading, body wants air. */
-  --lh-tight: 1.2; /* headings (h1/h2/empty-state titles) */
-  --lh-snug: 1.45; /* descriptions, notes, hover-preview copy */
-  --lh-body: 1.55; /* long-form body (matches the global default) */
-
-  /* Tracking — tokens.md mandates "tight tracking" for headlines; before
-     this only the wordmark obeyed it. Uppercase micro-labels get positive
-     tracking so they read as deliberate labels, not shrunk body. */
-  --tracking-tight: -0.01em; /* headlines, wordmark */
-  --tracking-label: 0.04em; /* uppercase eyebrow / section labels */
-
-  /* Spacing scale — 4px base, covers ~95% of the values already in use so
-     migration off the hardcoded px is mechanical (round each to nearest). */
-  --s-0-5: 2px; /* chip inner-y, subline top-pad */
-  --s1: 4px; /* tight chip/pill y, popover offset */
-  --s1-5: 6px; /* button/chip gap, small pill x */
-  --s2: 8px; /* body top-pad, gaps, pill x */
-  --s2-5: 10px; /* row y, nav x, gaps */
-  --s3: 12px; /* modal/card header y, gap-13 rounds here */
-  --s3-5: 14px; /* control x-pad, header y */
-  --s4: 16px; /* sidebar pad, section gap */
-  --s5: 20px; /* day-group top-gap, settings gaps */
-  --s6: 24px; /* modal x-pad */
-  --s7: 28px; /* content clamp max */
-  --s8: 32px; /* dock bottom offset */
-  --s10: 40px; /* empty-state y, min touch target */
-
-  /* Row content-inset — the horizontal grid the list shares. Equals the
-     favicon column so the day-group label, the header title, the row title,
-     the HN rich line, and the note all line up on ONE left edge instead of
-     several hand-guessed insets. Measured against the live row:
-     40px = 10 (row pad, --s2-5) + 18 (chip) + 12 (chip→title gap, --s3). */
+  /* Retained type and spacing roles for the existing components. */
+  --text-xs: 0.72rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.875rem;
+  --text-md: 0.95rem;
+  --text-lg: 1.05rem;
+  --text-xl: 1.15rem;
+  --lh-tight: 1.2;
+  --lh-snug: 1.45;
+  --tracking-tight: -0.01em;
+  --tracking-label: 0.04em;
+  --s-0-5: 2px;
+  --s1: 4px;
+  --s1-5: 6px;
+  --s2: 8px;
+  --s2-5: 10px;
+  --s3: 12px;
+  --s3-5: 14px;
+  --s4: 16px;
+  --s5: 20px;
+  --s6: 24px;
+  --s8: 32px;
+  --s10: 40px;
   --row-inset: 40px;
 
-  /* Elevation — one warm shadow family, tokenized so dark mode can tune it
-     independently. In LIGHT mode a soft warm-brown shadow reads as lift.
-     Overridden in dark (see below) toward black, because a warm-brown
-     shadow on a near-black ground has almost no luminance delta and modals
-     lose their float. `--scrim` is the modal/drawer backdrop wash. */
-  --elev-1: 0 1px 3px rgba(40, 30, 10, 0.12);
-  --elev-2: 0 12px 32px -18px rgba(40, 28, 8, 0.4);
-  --elev-3: 0 24px 60px -24px rgba(40, 28, 8, 0.42);
-  --scrim: rgba(24, 17, 7, 0.32);
-
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --elev-2: 0 1px 2px rgba(0, 0, 0, 0.05), 0 8px 24px -6px rgba(0, 0, 0, 0.14);
+  --elev-3: 0 2px 6px rgba(0, 0, 0, 0.06), 0 24px 64px -12px rgba(0, 0, 0, 0.28);
+  --scrim: rgba(12, 12, 11, 0.32);
   color-scheme: light;
 }
 
-/*
- * Dark mode, deepened toward the Orpheus reference (docs/design/refs/*.png):
- * a richer near-black ground (`--bg`) with warmth instead of v3's original
- * dark-brown `#1a1510`, a darker sidebar/well (`--bg2`) for more contrast
- * against `--bg`, softer low-contrast borders, and a warmer, more legible
- * `--ink`/`--mut` so the amber brand dot + marks pop against the deeper
- * ground. Same token NAMES/roles as light — only the dark hex values move.
- */
 :root[data-theme="dark"] {
-  /* Deep warm-black ground (user-picked from the dark-craft study). `--bg2`
-     is now the raised-SURFACE colour (the floating content panel below), one
-     warm step up from `--bg`, since the sidebar goes transparent-on-`--bg`. */
-  --bg: #0c0606;
-  --bg2: #17110b;
-  --line: #292219;
-  --hov: #201a13;
-  /* Primary text: brightened from the old warm cream #f1ddc5, which read
-     dull/beige next to a crisp reference (user feedback: "our white text
-     looks dull"). #f7efe4 is a near-white with only a whisper of Oat warmth
-     left — brighter luminance, so contrast on --bg/--bg2 only improves. */
-  --ink: #f7efe4;
-  /* Secondary text (domains, counts, meta) lifted a step too so the whole
-     ramp reads crisp rather than muddy, while staying clearly below --ink. */
-  --mut: #bcae98;
-  --fnt: #94856f;
-  --ghost: #85795f;
-  --mark: #dda54a;
-  --markt: #e0ab4f;
-  --warn: #d67e5c;
-  /* Same dark plate as light theme — the lockup tile is brand-fixed (matches
-     the app icon), not theme-inverted. A subtle hairline in dark mode keeps
-     the near-black tile from merging into the near-black sidebar. */
-  --mark-plate: #221c16;
-  --mark-plate-ink: #f7efe4;
-  --mark-plate-edge: #342c22;
-
-  /* Same additive roles as light mode above — deepened for the dark ground so
-     the hero card reads as a gentle lift off --bg (never a bright card), and
-     buttons get a visible-but-quiet hover/active step (learned from Geist's
-     gray-200/gray-300 hover/active convention: one step lighter each stage). */
-  --hero-grad-from: #201910;
-  --hero-grad-to: #14100c;
-  --hero-border: #322920;
-  --surface-hover: #221b12;
-  --surface-active: #2a2116;
-  --badge-bg: #201a13;
-  --badge-border: #322920;
-  --badge-ink: #ad9e89;
-
-  /* Elevation, deepened for the near-black ground (design-audit color pass):
-     a warm-brown shadow is near-invisible on #14100c, so dark leans on a
-     BLACKER shadow — the one place a near-black rgba is correct, since it's a
-     shadow object, never a fill. Raised surfaces additionally get a lighter
-     surface-step fill in components (the dark-UI convention: elevation reads
-     as lightening, not as shadow). Scrim goes deeper for the same reason. */
-  --elev-1: 0 1px 3px rgba(0, 0, 0, 0.4);
-  --elev-2: 0 12px 32px -16px rgba(0, 0, 0, 0.55);
-  --elev-3: 0 24px 60px -22px rgba(0, 0, 0, 0.6);
-  /* Deeper backdrop wash (was .55): the command palette + settings/edit
-     modals both read this token for their scrim, and the user wants the
-     surrounding app dimmed harder so the focused overlay clearly stands out.
-     .72 dims the background firmly while still hinting at the app underneath
-     (not a full black-out). */
-  --scrim: rgba(0, 0, 0, 0.72);
-
+  --bg: #0a0a0a;
+  --bg2: #111111;
+  --line: #222222;
+  --line-2: #2e2e2e;
+  --hov: #181818;
+  --sel: #1f1f1f;
+  --ink: #f3f3f2;
+  --mut: #a3a3a0;
+  --fnt: #818181;
+  --btn: #f3f3f2;
+  --btn-ink: #0a0a0a;
+  --accent-soft: #2a1709;
+  --markt: #ff9a52;
+  --elev-1: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --elev-2: 0 1px 2px rgba(0, 0, 0, 0.5), 0 8px 24px -6px rgba(0, 0, 0, 0.6);
+  --elev-3: 0 2px 6px rgba(0, 0, 0, 0.5), 0 24px 64px -12px rgba(0, 0, 0, 0.8);
+  --scrim: rgba(0, 0, 0, 0.6);
   color-scheme: dark;
 }

@@ -28,9 +28,9 @@ describe('Skeleton', () => {
     expect((container.firstChild as HTMLElement).getAttribute('aria-hidden')).toBe('true');
   });
 
-  it('runs the siloShimmer animation (stilled by prefers-reduced-motion via the global rule)', () => {
+  it('runs the siloPulse animation (stilled by prefers-reduced-motion via the global rule)', () => {
     const { container } = render(<Skeleton height={20} />);
-    expect((container.firstChild as HTMLElement).style.animation).toContain('siloShimmer');
+    expect((container.firstChild as HTMLElement).style.animation).toContain('siloPulse');
   });
 
   it('merges a caller-supplied style (e.g. marginBottom for stacked rows)', () => {

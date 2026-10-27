@@ -2,10 +2,11 @@ import type { CSSProperties, ReactNode } from 'react';
 
 const heroCard: CSSProperties = {
   position: 'relative',
-  borderRadius: 12,
-  border: '1px solid var(--hero-border)',
-  background: 'linear-gradient(160deg, var(--hero-grad-from), var(--hero-grad-to))',
-  padding: '20px 22px',
+  borderRadius: 0,
+  border: 0,
+  borderTop: '1px solid var(--line)',
+  background: 'var(--bg2)',
+  padding: '14px 0',
   marginBottom: 8,
   overflow: 'hidden',
 };
@@ -84,7 +85,7 @@ export function SettingsHero({
 }) {
   return (
     <div style={heroCard}>
-      <div style={heroHeaderRow}>
+      <div className="silo-settings-hero-header" style={heroHeaderRow}>
         <span style={heroIconWrap} aria-hidden="true">
           <svg width="15" height="15" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.3" />

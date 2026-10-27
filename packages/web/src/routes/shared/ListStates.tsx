@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { ApiError } from '../../api/client';
+import { BrandMark } from '../../components/BrandMark';
 import { CenteredPanel } from '../../components/CenteredPanel';
-import { GrainDot } from '../../components/GrainDot';
 import { Skeleton } from '../../components/Skeleton';
 
 /**
@@ -51,15 +51,19 @@ function SkeletonDayHeading() {
  */
 function SkeletonRow({ titleWidth }: { titleWidth: string }) {
   const rowStyle = {
-    padding: 'var(--s2-5)',
+    padding: '12px 18px',
+    minHeight: 68,
     display: 'flex',
     alignItems: 'center',
     gap: 'var(--s3)',
   };
   return (
     <div style={rowStyle}>
-      <Skeleton width={18} height={18} radius={4} />
-      <Skeleton height={14} width={titleWidth} radius={4} />
+      <Skeleton width={28} height={28} radius={8} />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <Skeleton height={14} width={titleWidth} radius={6} />
+        <Skeleton height={12} width="38%" radius={6} style={{ marginTop: 8 }} />
+      </div>
     </div>
   );
 }
@@ -92,7 +96,7 @@ export function LoadingState() {
   );
 }
 
-/** The design's richer empty state (`Silo-v2.html:96-103`) — the Stack mark + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
+/** The design's richer empty state (`Silo-v2.html:96-103`) — the orange tile mark + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
 export function EmptyState({ title, body }: { title: string; body: ReactNode }) {
   return (
     <CenteredPanel>
@@ -101,12 +105,12 @@ export function EmptyState({ title, body }: { title: string; body: ReactNode }) 
           pane, rather than a stray glyph floating in a large dark card (direct
           user feedback that the small bare mark "looked bad"). Sized up to 40
           so it holds the composition. */}
-      <GrainDot size={40} plate />
+      <BrandMark size={40} />
       <p
         style={{
           margin: '18px 0 0',
           fontSize: 'var(--text-lg)',
-          fontWeight: 500,
+          fontWeight: 600,
           color: 'var(--ink)',
           letterSpacing: 'var(--tracking-tight)',
           textWrap: 'balance',
@@ -138,7 +142,7 @@ export function ErrorState({ error }: { error: ApiError }) {
         style={{
           margin: 0,
           fontSize: 'var(--text-md)',
-          fontWeight: 500,
+          fontWeight: 600,
           color: 'var(--warn)',
           letterSpacing: 'var(--tracking-tight)',
           textWrap: 'balance',

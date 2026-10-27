@@ -124,6 +124,40 @@ describe('CommandPalette', () => {
     expect(container.textContent).toBe('');
   });
 
+  it('keeps footer hints when empty and applies the supported tag filter', async () => {
+    mockFetchByPath({ '/api/tags': { tags: [] }, '/api/links': { links: [] } });
+    await renderPalette();
+    pressCmdK();
+    expect(screen.getByText('Move')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
+    expect(screen.getByText('Close')).toBeDefined();
+    fireEvent.click(screen.getByRole('button', { name: '#tag' }));
+    expect(screen.getByRole('combobox')).toHaveProperty('value', '#');
+    expect(document.activeElement).toBe(screen.getByRole('combobox'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it.each(['#tag', 'Cancel'])('Enter on %s does not activate the selected result', async (name) => {
+    mockFetchByPath({
+      '/api/tags': { tags: [] },
+      '/api/links': { links: [makeLink({ title: 'Saved link' })] },
+    });
+    await renderPalette();
+    pressCmdK();
+    await waitFor(() =>
+      expect(optionRowFor('Saved link').getAttribute('aria-selected')).toBe('true'),
+    );
+    const button = screen.getByRole('button', { name });
+    button.focus();
+    fireEvent.keyDown(button, { key: 'Enter', code: 'Enter' });
+    expect(window.open).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeDefined();
+    fireEvent.click(button);
+    if (name === '#tag') expect(screen.getByRole('combobox')).toHaveProperty('value', '#');
+    else expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
   /**
    * Perf regression guard (dedupe-api-calls slice, unit 1): `CommandPalette`
    * is mounted PERMANENTLY at the app root (`AppFrame.tsx`), so if its data

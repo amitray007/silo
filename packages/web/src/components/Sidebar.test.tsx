@@ -174,7 +174,7 @@ describe('Sidebar', () => {
     expect(libraryLink.getAttribute('aria-current')).toBeNull();
   });
 
-  it('an active tag row gets the same filled --surface-active box as an active Library/Trash row', async () => {
+  it('an active tag row gets the same themed neutral state as Library/Trash', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
@@ -191,8 +191,8 @@ describe('Sidebar', () => {
     await waitFor(() => {
       const aiLink = screen.getByRole('link', { name: /ai/i });
       expect(aiLink.getAttribute('aria-current')).toBe('page');
-      expect(aiLink.style.background).toBe('var(--surface-active)');
-      expect(aiLink.style.boxShadow).toBe('var(--elev-1), inset 0 0 0 1px var(--line)');
+      expect(aiLink.getAttribute('data-active')).toBe('true');
+      expect(aiLink.className).toBe('silo-nav-item');
     });
     const designLink = screen.getByRole('link', { name: /design/i });
     expect(designLink.getAttribute('aria-current')).toBeNull();

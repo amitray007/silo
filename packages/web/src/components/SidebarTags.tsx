@@ -153,7 +153,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
             label, not a row. */}
         <p
           style={{
-            fontSize: 'var(--text-sm)',
+            fontSize: 'var(--sidebar-input-size, var(--text-sm))',
             fontWeight: 500,
             color: 'var(--mut)',
             margin: 0,
@@ -163,6 +163,15 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
           Tags
         </p>
         <span style={{ flex: 1 }} />
+        <button
+          type="button"
+          className="silo-reader-iconbtn"
+          aria-label="New tag"
+          title="New tag"
+          onClick={openNewTag}
+        >
+          +
+        </button>
         {/* The search icon shares the SAME right inset as the tag counts below
             it: the header container and the NavItem tag rows both use --s2-5
             right padding, and here the icon button carries NO negative margin
@@ -227,7 +236,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
             background: 'var(--bg)',
             color: 'var(--ink)',
             font: 'inherit',
-            fontSize: 'var(--text-sm)',
+            fontSize: 'var(--sidebar-input-size, var(--text-sm))',
             outline: 'none',
             width: 'calc(100% - 8px)',
             boxSizing: 'border-box',
@@ -270,7 +279,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
               background: 'var(--bg)',
               color: 'var(--ink)',
               font: 'inherit',
-              fontSize: 'var(--text-sm)',
+              fontSize: 'var(--sidebar-input-size, var(--text-sm))',
               outline: 'none',
               width: 'calc(100% - 8px)',
               boxSizing: 'border-box',
@@ -289,46 +298,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
             </p>
           )}
         </>
-      ) : (
-        <button
-          type="button"
-          onClick={openNewTag}
-          className="silo-sidebar-text-btn"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 'var(--s2-5)',
-            border: 0,
-            background: 'none',
-            fontFamily: 'inherit',
-            textAlign: 'left',
-            width: '100%',
-            boxSizing: 'border-box',
-            padding: '5px var(--s2-5)',
-            borderRadius: 8,
-            fontSize: 'var(--text-base)',
-            fontWeight: 400,
-            color: 'var(--ink)',
-            cursor: 'pointer',
-          }}
-        >
-          {/* `+` in the same 18px icon slot as the tag `#` and the nav icons,
-              so the whole Tags column shares one left ledger. Dim glyph
-              (--ghost), bright label — matching shiori. */}
-          <span
-            style={{
-              flex: 'none',
-              display: 'grid',
-              placeItems: 'center',
-              width: 18,
-              color: 'var(--ghost)',
-            }}
-          >
-            +
-          </span>
-          <span>New tag</span>
-        </button>
-      )}
+      ) : null}
     </div>
   );
 }

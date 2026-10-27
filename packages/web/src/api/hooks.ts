@@ -106,7 +106,19 @@ export function useTags() {
   });
 }
 
-/** The shape `useInfiniteLinks`'s cache holds — pages of `LinksResponse`, keyed by `queryKeys.links(filter)`. */
+/** Resolve a deep link only when its row is absent from loaded list pages. */
+export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
+  return useQuery({
+    queryKey: queryKeys.link(id ?? ''),
+    queryFn: () => apiGet<LinkResponse>(`/api/links/${encodeURIComponent(id ?? '')}`),
+    enabled: Boolean(id) && (options.enabled ?? true),
+    retry: false,
+    refetchInterval: (query) =>
+      query.state.data?.link.captureStatus === 'enriching' ? 1500 : false,
+  });
+}
+
+/** The paginated list cache, shared by query polling and optimistic writes. */
 type LinksInfiniteData = InfiniteData<LinksResponse>;
 
 /**

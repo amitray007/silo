@@ -27,11 +27,13 @@ export function HeaderActionButton({
   disabled = false,
   title,
   ariaLabel,
+  primary = false,
 }: {
   icon: ReactNode;
   label: ReactNode;
   onClick: () => HeaderActionResult | Promise<HeaderActionResult>;
   disabled?: boolean;
+  primary?: boolean;
   /** Native `title` tooltip — omitted by default. */
   title?: string;
   /** `aria-label` — omitted by default (falls back to the button's own visible text). */
@@ -52,18 +54,20 @@ export function HeaderActionButton({
         disabled={disabled}
         title={title}
         aria-label={ariaLabel}
-        className="silo-icon-btn-sm"
+        className={primary ? 'silo-icon-btn-sm silo-header-primary' : 'silo-icon-btn-sm'}
         style={{
           display: 'inline-flex',
           alignItems: 'center',
           gap: 'var(--s1-5)',
-          border: '1px solid var(--line)',
-          background: 'var(--bg2)',
-          borderRadius: 6,
-          padding: '6px 12px',
-          fontSize: 'var(--text-base)',
+          border: primary ? '1px solid transparent' : '1px solid var(--line)',
+          background: primary ? 'var(--btn)' : 'var(--bg2)',
+          borderRadius: 8,
+          height: 30,
+          fontWeight: 500,
+          padding: '0 12px',
+          fontSize: 13,
           fontFamily: 'inherit',
-          color: 'var(--ink)',
+          color: primary ? 'var(--btn-ink)' : 'var(--ink)',
           cursor: disabled ? 'default' : 'pointer',
           opacity: disabled ? 0.6 : 1,
         }}
@@ -75,21 +79,7 @@ export function HeaderActionButton({
         <span
           role={ok ? 'status' : 'alert'}
           aria-live={ok ? 'polite' : 'assertive'}
-          style={{
-            position: 'absolute',
-            top: '100%',
-            right: 0,
-            marginTop: 'var(--s1-5)',
-            padding: '6px 10px',
-            background: 'var(--bg2)',
-            border: '1px solid var(--line)',
-            borderRadius: 8,
-            boxShadow: 'var(--elev-2)',
-            fontSize: 'var(--text-sm)',
-            color: ok ? 'var(--ink)' : 'var(--warn)',
-            whiteSpace: 'nowrap',
-            zIndex: 1,
-          }}
+          className="silo-toast"
         >
           {message}
         </span>

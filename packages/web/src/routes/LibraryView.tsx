@@ -1,6 +1,7 @@
-import { useCaptureLink } from '../api/hooks';
+import { useCaptureLink, useCounts } from '../api/hooks';
 import { HeaderActionButton, type HeaderActionResult } from '../components/HeaderActionButton';
 import { AddIcon } from '../components/NavIcons';
+import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { looksLikeUrl } from '../lib/url';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
@@ -23,7 +24,7 @@ function LibraryEmptyState() {
               color: 'var(--fnt)',
             }}
           >
-            Claude can add links here too, once you connect it in Settings → API / MCP.
+            Claude can add links here too, once you connect it in Settings → Access.
           </span>
         </>
       }
@@ -93,7 +94,8 @@ export function PasteCaptureButton({ tags }: { tags?: string[] }) {
   return (
     <HeaderActionButton
       icon={<AddIcon />}
-      label="Add"
+      label={<span className="silo-add-label">Add link</span>}
+      primary
       onClick={handleClick}
       disabled={captureLink.isPending}
       title="Paste a link from the clipboard"
@@ -120,10 +122,19 @@ export function PasteCaptureButton({ tags }: { tags?: string[] }) {
  */
 export function LibraryView() {
   const view = useListView();
+  const { data: counts } = useCounts();
 
   return (
-    <ContentFrame title="Library" headerSlot={<PasteCaptureButton />}>
-      {ListBody(view, <LibraryEmptyState />)}
-    </ContentFrame>
+    <ReaderLayout
+      links={view.links}
+      loading={view.isLoading}
+      title="Library"
+      hasNextPage={Boolean(view.hasNextPage)}
+      fetchNextPage={view.fetchNextPage}
+    >
+      <ContentFrame title="Library" count={counts?.live} headerSlot={<PasteCaptureButton />}>
+        {ListBody(view, <LibraryEmptyState />)}
+      </ContentFrame>
+    </ReaderLayout>
   );
 }

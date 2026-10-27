@@ -3,10 +3,10 @@ import { describe, expect, it, vi } from 'vitest';
 import { NavItem } from './NavItem';
 
 describe('NavItem', () => {
-  it('renders an inactive item: ink text, background left to CSS (not inline)', () => {
+  it('renders an inactive item with muted text and CSS-owned background', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
-    expect(link.style.color).toBe('var(--ink)');
+    expect(link.style.color).toBe('var(--mut)');
     // The inactive case must NOT set an inline `background` (review fix,
     // CodeRabbit): inline styles always beat CSS regardless of specificity,
     // so an inline `background: transparent` here would silently defeat
@@ -18,19 +18,18 @@ describe('NavItem', () => {
     expect(link.getAttribute('aria-current')).toBeNull();
   });
 
-  it('renders an active item: ink on a filled --surface-active box with a hairline edge, never amber', () => {
+  it('marks an active item for the themed neutral surface', () => {
     render(<NavItem label="Library" href="/" active />);
     const link = screen.getByRole('link', { name: /library/i });
-    expect(link.style.color).toBe('var(--ink)');
     // Active = ink on a filled --surface-active box (the SAME family as the
     // hover pill's --hov/--surface-hover fill, one step further) with a
     // hairline --line inset edge + a subtle elevation shadow, so the active
     // row reads as a clearly highlighted BOX matching the hover-pill look —
     // NOT `var(--bg)` (invisible in dark mode: the sidebar sits transparent
     // directly on the app's own --bg ground) and NEVER amber.
-    expect(link.style.background).toBe('var(--surface-active)');
-    expect(link.style.boxShadow).not.toBe('none');
-    expect(link.style.boxShadow).toBe('var(--elev-1), inset 0 0 0 1px var(--line)');
+    expect(link.getAttribute('data-active')).toBe('true');
+    expect(link.style.color).toBe('var(--ink)');
+    expect(link.style.background).toBe('');
     expect(link.getAttribute('aria-current')).toBe('page');
     // assert no amber token anywhere in the active row's chrome
     expect(link.style.color).not.toContain('--mark');
@@ -88,24 +87,24 @@ describe('NavItem', () => {
     render(<NavItem label="Settings" href="/settings" variant="settings" />);
     const link = screen.getByRole('link', { name: /settings/i });
     expect(link.style.color).toBe('var(--mut)');
-    expect(link.style.fontWeight).toBe('400');
+    expect(link.style.fontWeight).toBe('500');
   });
 
-  it('the default variant is weight 500 with --ink inactive color and 7px var(--s2-5) padding (K3 token migration)', () => {
+  it('the default variant uses the prototype nav geometry', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
     expect(link.style.fontWeight).toBe('500');
-    expect(link.style.color).toBe('var(--ink)');
-    expect(link.style.padding).toBe('7px var(--s2-5)');
+    expect(link.style.color).toBe('var(--mut)');
+    expect(link.style.padding).toBe('0px 10px');
   });
 
-  it('the "tag" variant uses 7px var(--s2-5) padding (bumped to match nav rows)', () => {
+  it('the tag variant shares the nav padding', () => {
     render(<NavItem label="#ai" href="/tags/ai" variant="tag" />);
     const link = screen.getByRole('link', { name: /ai/i });
-    expect(link.style.padding).toBe('7px var(--s2-5)');
+    expect(link.style.padding).toBe('0px 10px');
   });
 
-  it('the "tag" variant uses a slightly tighter icon-to-label gap than main nav rows', () => {
+  it('the tag variant shares the nav icon gap', () => {
     render(
       <>
         <NavItem label="Library" href="/" icon={<span aria-hidden="true">#</span>} />
@@ -119,8 +118,8 @@ describe('NavItem', () => {
     );
     const library = screen.getByRole('link', { name: /library/i });
     const tag = screen.getByRole('link', { name: /ai/i });
-    expect(library.style.gap).toBe('var(--s2-5)');
-    expect(tag.style.gap).toBe('var(--s1-5)');
+    expect(library.style.gap).toBe('10px');
+    expect(tag.style.gap).toBe('10px');
   });
 
   describe('button mode (no href — plan 024, the Search row)', () => {
@@ -148,10 +147,10 @@ describe('NavItem', () => {
     it('renders byte-identical row chrome to the anchor form: same padding, font, icon slot', () => {
       render(<NavItem label="Search" icon={<svg aria-hidden="true" />} meta="/" />);
       const button = screen.getByRole('button', { name: /search/i });
-      expect(button.style.padding).toBe('7px var(--s2-5)');
+      expect(button.style.padding).toBe('0px 10px');
       expect(button.style.fontWeight).toBe('500');
-      expect(button.style.fontSize).toBe('var(--text-base)');
-      expect(button.style.color).toBe('var(--ink)');
+      expect(button.style.fontSize).toBe('');
+      expect(button.style.color).toBe('var(--mut)');
       expect(button.className).toContain('silo-nav-item');
       expect(button.querySelector('svg')).not.toBeNull();
       expect(screen.getByText('/')).toBeDefined();

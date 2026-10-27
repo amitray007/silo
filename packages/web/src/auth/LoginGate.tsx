@@ -1,5 +1,5 @@
 import { type FormEvent, useEffect, useId, useRef, useState } from 'react';
-import { GrainDot } from '../components/GrainDot';
+import { BrandMark } from '../components/BrandMark';
 import { type LoginResult, useAuth } from './AuthContext';
 
 type LoginFailure = Exclude<LoginResult, { kind: 'success' }>;
@@ -15,7 +15,7 @@ type LoginFailure = Exclude<LoginResult, { kind: 'success' }>;
  * A single password field for `SILO_APP_PASSWORD` — a human password,
  * separate from the machine `SILO_API_TOKEN` extensions/MCP use
  * (`docs/superpowers/specs/2026-07-11-web-auth-cookie-upgrade.md`). Design:
- * Oat tokens, Geist 400/500, the brand grain dot, a plain bordered `--bg2`
+ * Neutral tokens, self-hosted Geist, the orange tile mark, a plain bordered `--bg2`
  * submit button (amber stays a mark only, never a button fill, per
  * `docs/design/tokens.md`).
  */
@@ -63,36 +63,15 @@ export function LoginGate() {
   }
 
   return (
-    <div
-      style={{
-        minHeight: '100vh',
-        display: 'grid',
-        placeItems: 'center',
-        background: 'var(--bg)',
-        padding: 'var(--s6)',
-        boxSizing: 'border-box',
-      }}
-    >
-      <div
-        style={{
-          width: '100%',
-          maxWidth: '22rem',
-          border: '1px solid var(--line)',
-          borderRadius: 14,
-          background: 'var(--bg2)',
-          boxShadow: 'var(--elev-2)',
-          padding: 'var(--s6)',
-          boxSizing: 'border-box',
-          animation: 'siloIn .2s var(--ease-out)',
-        }}
-      >
+    <div className="silo-login">
+      <div className="silo-login-card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 'var(--s5)' }}>
-          <GrainDot size={16} />
+          <BrandMark />
           <span
             style={{
-              fontWeight: 500,
-              fontSize: 'var(--text-md)',
-              letterSpacing: 'var(--tracking-tight)',
+              fontWeight: 600,
+              fontSize: 16,
+              letterSpacing: '-0.02em',
               color: 'var(--ink)',
             }}
           >
@@ -100,6 +79,8 @@ export function LoginGate() {
           </span>
         </div>
 
+        <h1>Welcome to silo</h1>
+        <p className="silo-login-lead">Enter your password to open your library.</p>
         <form onSubmit={handleSubmit} noValidate>
           <label
             htmlFor={inputId}
@@ -107,8 +88,7 @@ export function LoginGate() {
               display: 'block',
               fontSize: 'var(--text-xs)',
               fontWeight: 500,
-              letterSpacing: 'var(--tracking-label)',
-              textTransform: 'uppercase',
+              letterSpacing: 'normal',
               color: 'var(--fnt)',
               marginBottom: 'var(--s2)',
             }}
@@ -131,12 +111,11 @@ export function LoginGate() {
               boxSizing: 'border-box',
               border: '1px solid var(--line)',
               borderRadius: 8,
-              background: 'var(--bg)',
+              background: 'var(--bg2)',
               color: 'var(--ink)',
               font: 'inherit',
               fontSize: 'var(--text-base)',
               padding: '9px 12px',
-              outline: 'none',
             }}
           />
 
@@ -182,11 +161,11 @@ export function LoginGate() {
               marginTop: 'var(--s5)',
               border: '1px solid var(--line)',
               borderRadius: 8,
-              background: 'var(--bg)',
-              color: 'var(--ink)',
+              background: 'var(--btn)',
+              color: 'var(--btn-ink)',
               fontFamily: 'inherit',
               fontSize: 'var(--text-base)',
-              fontWeight: 500,
+              fontWeight: 600,
               padding: '9px 12px',
               cursor: pending || value === '' ? 'default' : 'pointer',
               opacity: pending ? 0.7 : 1,

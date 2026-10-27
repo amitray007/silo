@@ -59,6 +59,17 @@ describe('useIntersectionPrefetch', () => {
     expect(onCallback).toHaveBeenCalledTimes(1);
   });
 
+  it('uses the scrolling list pane as the prefetch root', () => {
+    const { container } = render(
+      createElement(
+        'div',
+        { className: 'silo-content-body' },
+        createElement(Sentinel, { onCallback: vi.fn(), enabled: true }),
+      ),
+    );
+    expect(FakeIntersectionObserver.instances[0]?.options?.root).toBe(container.firstElementChild);
+  });
+
   it('does not call back on a non-intersecting entry', () => {
     const onCallback = vi.fn();
     render(createElement(Sentinel, { onCallback, enabled: true }));

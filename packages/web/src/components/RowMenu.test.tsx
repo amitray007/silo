@@ -56,7 +56,7 @@ describe('RowMenu', () => {
   it('renders every v3 menu item: tags row, open-in-new-tab, copy link, edit, move to trash', () => {
     renderMenu();
     expect(screen.getByText('Tags')).toBeDefined();
-    expect(screen.getByText('Open in new tab')).toBeDefined();
+    expect(screen.getByText('Open original')).toBeDefined();
     expect(screen.getByText('Copy link')).toBeDefined();
     expect(screen.getByText('Edit')).toBeDefined();
     expect(screen.getByText('Move to trash')).toBeDefined();
@@ -70,7 +70,7 @@ describe('RowMenu', () => {
 
   it('"open in new tab" is a real anchor to the link url', () => {
     renderMenu({ url: 'https://example.com/specific-path' });
-    const anchor = screen.getByText('Open in new tab').closest('a') as HTMLAnchorElement;
+    const anchor = screen.getByText('Open original').closest('a') as HTMLAnchorElement;
     expect(anchor.getAttribute('href')).toBe('https://example.com/specific-path');
     expect(anchor.getAttribute('target')).toBe('_blank');
     expect(anchor.getAttribute('rel')).toBe('noopener');
@@ -289,7 +289,7 @@ describe('RowMenu', () => {
   it('gives every action row a --hov background on hover, not just "tags" (review fix: menuItemStyle() was called with no argument for these rows)', () => {
     renderMenu();
 
-    const openRow = screen.getByText('Open in new tab').closest('a') as HTMLElement;
+    const openRow = screen.getByText('Open original').closest('a') as HTMLElement;
     expect(openRow.style.background).not.toBe('var(--hov)');
     fireEvent.mouseEnter(openRow);
     expect(openRow.style.background).toBe('var(--hov)');
