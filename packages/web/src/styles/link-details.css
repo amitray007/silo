@@ -838,10 +838,11 @@ button.silo-note-text {
   gap: 1px;
   box-shadow: var(--elev-2);
 }
-/* Rows keep their height inside the scrolling menu; long tag names end in an ellipsis. */
+/* The menu hugs its rows like Shiori's; long tag names end in an ellipsis at the cap. */
 .silo-collection .silo-menu-surface {
-  width: 240px;
-  max-width: calc(100vw - 24px);
+  width: max-content;
+  min-width: 160px;
+  max-width: min(280px, calc(100vw - 24px));
 }
 .silo-collection .silo-menu-item {
   flex: none;

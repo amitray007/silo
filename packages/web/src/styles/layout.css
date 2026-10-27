@@ -1688,10 +1688,10 @@ div.silo-reader-notecard {
   left: -8px;
   top: 36px;
   z-index: 20;
-  min-width: 200px;
 }
 .silo-collection-count {
   margin-left: auto;
+  padding-left: 16px;
   color: var(--ghost);
   font-size: 12px;
 }
