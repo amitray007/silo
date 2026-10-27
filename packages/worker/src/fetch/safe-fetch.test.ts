@@ -669,3 +669,40 @@ describe('safeFetch — final policy headers and client cancellation', () => {
     await bodyClosed;
   });
 });
+
+it('defaults to any content type in English while keeping the silo user agent', async () => {
+  let headers: IncomingMessage['headers'] = {};
+  handler = (req, res) => {
+    headers = req.headers;
+    res.writeHead(200, { 'content-type': 'text/html' });
+    res.end('<p>English article</p>');
+  };
+  const result = await safeFetch(`http://reader.test:${port}/article`, {
+    resolver: loopbackResolver(),
+    allowLoopbackForTests: true,
+  });
+  expect(result.ok).toBe(true);
+  expect(headers.accept).toBe('*/*');
+  expect(headers['accept-language']).toBe('en-US,en;q=0.9');
+  expect(headers['user-agent']).toContain('silo/');
+});
+
+it('sends the requested page accept header across redirects', async () => {
+  const received: string[] = [];
+  handler = (req, res) => {
+    received.push(req.headers.accept ?? '');
+    if (req.url === '/start') {
+      res.writeHead(302, { location: '/page' });
+      res.end();
+    } else {
+      res.end('<p>Page</p>');
+    }
+  };
+  const result = await safeFetch(`http://reader.test:${port}/start`, {
+    resolver: loopbackResolver(),
+    allowLoopbackForTests: true,
+    accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+  });
+  expect(result.ok).toBe(true);
+  expect(received).toEqual(Array(2).fill('text/html,application/xhtml+xml,*/*;q=0.8'));
+});

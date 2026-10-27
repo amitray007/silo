@@ -792,13 +792,19 @@
   line-height: inherit;
   background: none;
 }
+.silo-reader-prose math[display="block"] {
+  display: block;
+  margin: 16px 0;
+  overflow-x: auto;
+}
 .silo-reader-table {
   max-width: 100%;
   overflow-x: auto;
 }
 .silo-reader-prose table {
   border-collapse: collapse;
-  width: 100%;
+  width: max-content;
+  min-width: 100%;
   font-size: 14px;
 }
 .silo-reader-prose :is(th, td) {
@@ -807,6 +813,7 @@
   text-align: left;
   vertical-align: top;
   min-width: 100px;
+  max-width: 40ch;
 }
 .silo-reader-prose th {
   font-weight: 500;
@@ -817,6 +824,16 @@
   height: auto;
   margin: 12px auto;
   border-radius: 8px;
+}
+.silo-reader-prose img[data-inline="true"] {
+  display: inline;
+  margin: 0;
+  vertical-align: middle;
+  border-radius: 0;
+}
+.silo-reader-prose img[data-emoji="true"] {
+  height: 1.2em;
+  width: auto;
 }
 .silo-reader-prose :is(figcaption, caption) {
   color: var(--fnt);
@@ -922,6 +939,11 @@
 }
 .silo-reader-prose details[open] > summary {
   margin-bottom: 12px;
+}
+/* A heading inside the summary stays on the marker's line. */
+.silo-reader-prose summary > :is(h1, h2, h3, h4, h5, h6) {
+  display: inline;
+  margin: 0;
 }
 .silo-reader-prose img {
   opacity: 1;

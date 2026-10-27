@@ -83,10 +83,12 @@ export function ReaderContent({
   link,
   trashed = false,
   showLive,
+  topPlayerSrc,
 }: {
   link: LinkJson;
   trashed?: boolean;
   showLive?: () => void;
+  topPlayerSrc?: string | undefined;
 }) {
   const source = link.sourceData;
   // A trashed link has no live route, and an X post has no Reader. The stored text stands in
@@ -153,7 +155,7 @@ export function ReaderContent({
         (live.isLoading ? (
           <ReaderSkeleton />
         ) : prose ? (
-          <ReaderProse linkId={link.id} reader={prose} />
+          <ReaderProse linkId={link.id} reader={prose} topPlayerSrc={topPlayerSrc} />
         ) : (
           <Paragraphs link={link} />
         ))}

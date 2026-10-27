@@ -57,6 +57,9 @@ export const DEFAULT_TIMEOUT_MS = 10_000;
 
 const USER_AGENT = 'silo/0.1 (+https://github.com/amitray007/silo)';
 
+/** `accept` for callers that fetch a web page; other callers default to any type. */
+export const HTML_ACCEPT = 'text/html,application/xhtml+xml,*/*;q=0.8';
+
 /**
  * Runtime gate for the `allowLoopbackForTests` seam. The loopback bypass is
  * ONLY honored when the process is genuinely a test runner (Vitest sets
@@ -122,6 +125,7 @@ const defaultResolver: Resolver = (hostname) =>
   });
 
 export interface SafeFetchOptions {
+  accept?: string;
   signal?: AbortSignal;
   maxRedirects?: number;
   maxBodyBytes?: number;
@@ -279,6 +283,7 @@ function buildPinnedAgent(hostname: string, pinnedIp: string, family: number): A
 type HopOutcome = { kind: 'redirect'; nextUrl: string } | { kind: 'done'; result: SafeFetchResult };
 
 interface HopContext {
+  accept: string;
   resolver: Resolver;
   maxBodyBytes: number;
   bodyBudget: BodyByteBudget | undefined;
@@ -344,7 +349,7 @@ async function performHop(currentUrl: string, ctx: HopContext): Promise<HopOutco
  * torn down (in `performHop`'s finally) after we are done with the body.
  */
 async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Promise<HopOutcome> {
-  const response = await requestOnce(url, agent, ctx.controller);
+  const response = await requestOnce(url, agent, ctx.controller, ctx.accept);
 
   if (response.status >= 300 && response.status < 400) {
     return interpretRedirect(response, url, ctx.isLastHop);
@@ -420,6 +425,7 @@ async function requestOnce(
   url: URL,
   agent: Agent,
   controller: AbortController,
+  accept: string,
 ): Promise<UndiciResponse> {
   // Deliberately `undici`'s own `fetch`, NOT Node's global `fetch`. Node's
   // native fetch is built on its own internally-bundled undici, which is a
@@ -434,7 +440,11 @@ async function requestOnce(
     dispatcher: agent,
     redirect: 'manual',
     signal: controller.signal,
-    headers: { 'user-agent': USER_AGENT },
+    headers: {
+      'user-agent': USER_AGENT,
+      accept,
+      'accept-language': 'en-US,en;q=0.9',
+    },
   });
 }
 
@@ -471,6 +481,7 @@ export async function safeFetch(
     for (let hop = 0; hop <= maxRedirects; hop++) {
       const outcome = await performHop(currentUrl, {
         resolver,
+        accept: options.accept ?? '*/*',
         maxBodyBytes,
         bodyBudget: options.bodyBudget,
         controller,

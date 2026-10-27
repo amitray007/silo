@@ -186,11 +186,13 @@ function ReaderMore({
 }
 
 function ArticleBody({
+  topPlayerSrc,
   link,
   loading,
   trashed,
   showLive,
 }: {
+  topPlayerSrc?: string | undefined;
   link: LinkJson;
   loading: boolean;
   trashed: boolean;
@@ -199,7 +201,7 @@ function ArticleBody({
   return loading ? (
     <ReaderSkeleton />
   ) : (
-    <ReaderContent link={link} trashed={trashed} showLive={showLive} />
+    <ReaderContent link={link} trashed={trashed} showLive={showLive} topPlayerSrc={topPlayerSrc} />
   );
 }
 
@@ -259,7 +261,13 @@ function ReaderArticle({
       <ReaderMeta key={link.id} link={link} trashed={trashed} />
       <div className="silo-reader-body-column">
         <div className="silo-reader-body-wrap">
-          <ArticleBody link={link} loading={loading} trashed={trashed} showLive={showLive} />
+          <ArticleBody
+            link={link}
+            loading={loading}
+            trashed={trashed}
+            showLive={showLive}
+            topPlayerSrc={video?.src}
+          />
         </div>
       </div>
     </article>

@@ -1,6 +1,6 @@
 import { type SiteIconFinder, setSiteIconFinder } from '@silo/core';
 import { parseHTML } from 'linkedom';
-import { type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
+import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 
 const TTL_MS = 24 * 60 * 60 * 1000;
 const MAX_ENTRIES = 1000;
@@ -124,7 +124,12 @@ export function createSiteIconFinder(
   const fetch: Fetch =
     options.fetch ??
     ((url, { signal }) =>
-      safeFetch(url, { signal, maxBodyBytes: MAX_BODY_BYTES, timeoutMs: TIMEOUT_MS }));
+      safeFetch(url, {
+        accept: HTML_ACCEPT,
+        signal,
+        maxBodyBytes: MAX_BODY_BYTES,
+        timeoutMs: TIMEOUT_MS,
+      }));
   const now = options.now ?? Date.now;
   const cache = new Map<string, Entry>();
   const pending = new Map<string, Promise<readonly string[]>>();

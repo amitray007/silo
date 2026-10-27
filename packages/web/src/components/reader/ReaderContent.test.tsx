@@ -97,7 +97,7 @@ describe('Live Reader', () => {
   function show(
     respond: () => Response | Promise<Response>,
     link = stored,
-    props: { trashed?: boolean } = {},
+    props: { trashed?: boolean; topPlayerSrc?: string } = {},
   ) {
     const fetchMock = vi.fn(async (_input: RequestInfo | URL) => respond());
     vi.stubGlobal('fetch', fetchMock);
@@ -108,6 +108,25 @@ describe('Live Reader', () => {
     );
     return { ...view, fetchMock };
   }
+
+  it.each([false, true])(
+    'keeps the prose player unless a top player is rendered: %s',
+    async (top) => {
+      const src = 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw?enablejsapi=1';
+      const { container } = show(
+        () =>
+          json({
+            contentHtml:
+              '<p>Video body</p><figure data-silo-embed><a href="https://www.youtube.com/embed/jNQXAC9IVRw">www.youtube.com</a></figure>',
+            contentImages: [],
+          }),
+        makeLink({ url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw' }),
+        top ? { topPlayerSrc: src } : {},
+      );
+      await screen.findByText('Video body');
+      expect(container.querySelectorAll('iframe')).toHaveLength(top ? 0 : 1);
+    },
+  );
 
   it('shows the skeleton while loading, then the live prose with proxied images', async () => {
     const { container, fetchMock } = show(() => json(reader));

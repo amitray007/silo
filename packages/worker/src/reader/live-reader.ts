@@ -2,7 +2,7 @@ import { type LiveReader, type ReaderContent, setLiveReader } from '@silo/core';
 import { readerContentSchema } from '@silo/core/capture';
 import { type ExtractInput, type ExtractResult, extract } from '../extract/extract.js';
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
-import { type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
+import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 
 const HIT_TTL_MS = 10 * 60 * 1000;
 const MISS_TTL_MS = 2 * 60 * 1000;
@@ -45,7 +45,7 @@ async function buildReader(
 export function createLiveReader(
   options: { fetch?: Fetch; extract?: Extract; now?: () => number } = {},
 ): LiveReader & { clear: () => void } {
-  const fetch = options.fetch ?? safeFetch;
+  const fetch = options.fetch ?? ((url) => safeFetch(url, { accept: HTML_ACCEPT }));
   const run = options.extract ?? extract;
   const now = options.now ?? Date.now;
   const cache = new Map<string, Entry>();

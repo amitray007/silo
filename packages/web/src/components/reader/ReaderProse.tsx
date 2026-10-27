@@ -1,10 +1,94 @@
-import DOMPurify from 'dompurify';
+import createDOMPurify from 'dompurify';
 import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { LiveReaderJson } from '../../api/types';
+import { embedFor } from './embedFor';
 import { ImageViewer, type ViewerImage } from './ImageViewer';
+import { playerFrameAttributes } from './playerFrameAttributes';
 import { shapeProse } from './proseShape';
 
-function readerHtml(linkId: string, reader: LiveReaderJson): string {
+const MATH_TAGS = [
+  'math',
+  'mrow',
+  'mi',
+  'mn',
+  'mo',
+  'ms',
+  'mtext',
+  'mspace',
+  'msup',
+  'msub',
+  'msubsup',
+  'mfrac',
+  'msqrt',
+  'mroot',
+  'mover',
+  'munder',
+  'munderover',
+  'mtable',
+  'mtr',
+  'mtd',
+  'mstyle',
+  'mpadded',
+  'mphantom',
+  'menclose',
+  'semantics',
+  'annotation',
+];
+const MATH_ATTRS = [
+  'display',
+  'mathvariant',
+  'displaystyle',
+  'scriptlevel',
+  'stretchy',
+  'fence',
+  'separator',
+  'accent',
+  'accentunder',
+  'columnalign',
+  'rowalign',
+  'columnspan',
+  'rowspan',
+  'lspace',
+  'rspace',
+  'linethickness',
+  'notation',
+  'form',
+  'largeop',
+  'movablelimits',
+  'symmetric',
+  'minsize',
+  'maxsize',
+  'voffset',
+];
+const MATH_LENGTH_ATTRS = [
+  'linethickness',
+  'minsize',
+  'maxsize',
+  'voffset',
+  'width',
+  'height',
+  'depth',
+  'lspace',
+  'rspace',
+];
+
+function validMathAttribute(node: Element, name: string, value: string): boolean {
+  if (
+    ['width', 'height', 'depth'].includes(name) &&
+    !['mspace', 'mpadded'].includes(node.localName)
+  )
+    return false;
+  if (name === 'scriptlevel') return /^[0-3]$/.test(value);
+  if (name === 'notation') return /^[a-z]+(?: +[a-z]+)*$/.test(value);
+  if (MATH_LENGTH_ATTRS.includes(name))
+    return (
+      /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:em|ex|px|pt|%|mu)?$/.test(value) ||
+      (name === 'linethickness' && /^(?:thin|medium|thick)$/.test(value))
+    );
+  return MATH_ATTRS.includes(name);
+}
+
+function readerHtml(linkId: string, reader: LiveReaderJson, topPlayerSrc?: string): string {
   // Parse inertly before sanitizing: the API numbers every img, including duplicates.
   // Rewriting first keeps a removed image from shifting subsequent proxy indices.
   const template = document.createElement('template');
@@ -14,7 +98,27 @@ function readerHtml(linkId: string, reader: LiveReaderJson): string {
     else
       image.setAttribute('src', `/api/links/${encodeURIComponent(linkId)}/content-image/${index}`);
   });
-  const fragment = DOMPurify.sanitize(template.innerHTML, {
+  const purifier = createDOMPurify(window);
+  purifier.addHook('uponSanitizeAttribute', (node, data) => {
+    if (node.namespaceURI === 'http://www.w3.org/1998/Math/MathML') {
+      data.keepAttr = validMathAttribute(
+        node,
+        data.attrName,
+        node.getAttribute(data.attrName) ?? '',
+      );
+      return;
+    }
+    if (data.attrName === 'depth') data.keepAttr = false;
+    if (['width', 'height'].includes(data.attrName)) {
+      const value = node.getAttribute(data.attrName) ?? '';
+      data.keepAttr =
+        node.nodeName === 'IMG' &&
+        /^\d+$/.test(value) &&
+        Number(value) >= 1 &&
+        Number(value) <= 4000;
+    }
+  });
+  const fragment = purifier.sanitize(template.innerHTML, {
     ALLOWED_TAGS: [
       'article',
       'section',
@@ -72,6 +176,7 @@ function readerHtml(linkId: string, reader: LiveReaderJson): string {
       'summary',
       'colgroup',
       'col',
+      ...MATH_TAGS,
     ],
     ALLOWED_ATTR: [
       'id',
@@ -86,6 +191,11 @@ function readerHtml(linkId: string, reader: LiveReaderJson): string {
       'reversed',
       'open',
       'datetime',
+      'width',
+      'height',
+      'depth',
+      'data-silo-embed',
+      ...MATH_ATTRS,
     ],
     ALLOW_DATA_ATTR: false,
     ALLOW_ARIA_ATTR: false,
@@ -101,11 +211,13 @@ function readerHtml(linkId: string, reader: LiveReaderJson): string {
     anchor.setAttribute('target', '_blank');
     anchor.setAttribute('rel', 'noopener noreferrer');
   }
+  buildEmbeds(fragment, topPlayerSrc);
   // After the id and link filters: shaping adds silo-fn ids and in-page note links.
   shapeProse(fragment);
   for (const image of fragment.querySelectorAll('img')) {
     image.setAttribute('loading', 'lazy');
     image.setAttribute('data-loaded', 'false');
+    markDeclaredInline(image);
   }
   for (const table of fragment.querySelectorAll('table')) {
     const wrapper = document.createElement('div');
@@ -127,9 +239,37 @@ function readerHtml(linkId: string, reader: LiveReaderJson): string {
 /** Icons and spacer images stay inline; anything larger opens in the viewer. */
 const MIN_VIEWABLE = 64;
 
+const emojiSegments = new Intl.Segmenter(undefined, { granularity: 'grapheme' });
+
+function isEmoji(alt: string): boolean {
+  const value = alt.trim();
+  return (
+    /\p{Emoji_Presentation}|\p{Emoji}\uFE0F|[0-9#*]\uFE0F?\u20E3/u.test(value) &&
+    Array.from(emojiSegments.segment(value)).length === 1
+  );
+}
+
+function markDeclaredInline(image: HTMLImageElement): void {
+  const height = Number(image.getAttribute('height'));
+  const emoji = isEmoji(image.alt);
+  if (emoji) image.dataset.emoji = 'true';
+  if (emoji || (height >= 1 && height <= 32)) image.dataset.inline = 'true';
+}
+
 function markViewable(image: HTMLImageElement) {
   image.dataset.loaded = 'true';
-  if (Math.max(image.naturalWidth, image.naturalHeight) < MIN_VIEWABLE) return;
+  const height = Number(image.getAttribute('height'));
+  const emoji = isEmoji(image.alt);
+  if (emoji) image.dataset.emoji = 'true';
+  if (
+    image.dataset.inline === 'true' ||
+    emoji ||
+    Math.max(image.naturalWidth, image.naturalHeight) < MIN_VIEWABLE ||
+    (height > 0 && height <= 32)
+  ) {
+    image.dataset.inline = 'true';
+    return;
+  }
   image.dataset.viewable = 'true';
   image.tabIndex = 0;
   image.setAttribute('role', 'button');
@@ -147,8 +287,19 @@ function viewerImage(image: HTMLImageElement): ViewerImage {
   };
 }
 
-export function ReaderProse({ linkId, reader }: { linkId: string; reader: LiveReaderJson }) {
-  const html = useMemo(() => readerHtml(linkId, reader), [linkId, reader]);
+export function ReaderProse({
+  linkId,
+  reader,
+  topPlayerSrc,
+}: {
+  linkId: string;
+  reader: LiveReaderJson;
+  topPlayerSrc?: string | undefined;
+}) {
+  const html = useMemo(
+    () => readerHtml(linkId, reader, topPlayerSrc),
+    [linkId, reader, topPlayerSrc],
+  );
   const root = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<{ images: ViewerImage[]; index: number } | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: new sanitized HTML replaces image elements.
@@ -208,4 +359,37 @@ export function ReaderProse({ linkId, reader }: { linkId: string; reader: LiveRe
       )}
     </>
   );
+}
+
+function buildEmbeds(fragment: DocumentFragment, topPlayerSrc?: string): void {
+  for (const figure of fragment.querySelectorAll('figure[data-silo-embed]')) {
+    const href = figure.querySelector('a')?.getAttribute('href');
+    const embed = href ? embedFor(href, { kind: 'link' }) : undefined;
+    if (!embed) continue;
+    if (embed.src === topPlayerSrc) {
+      figure.remove();
+      continue;
+    }
+    const frame = document.createElement('iframe');
+    for (const [name, value] of Object.entries(playerFrameAttributes))
+      frame.setAttribute(name, value);
+    frame.setAttribute(
+      'sandbox',
+      'allow-scripts allow-same-origin allow-popups allow-presentation',
+    );
+    frame.src = embed.src;
+    frame.title = embed.title;
+    frame.dataset.provider = embed.provider;
+    frame.className = 'silo-reader-player';
+    frame.style.aspectRatio = embed.aspect;
+    if (embed.height) frame.style.height = `${embed.height}px`;
+    const caption = document.createElement('figcaption');
+    const anchor = document.createElement('a');
+    anchor.href = href ?? embed.src;
+    anchor.textContent = new URL(anchor.href).host;
+    anchor.target = '_blank';
+    anchor.rel = 'noopener noreferrer';
+    caption.append(anchor);
+    figure.replaceChildren(frame, caption);
+  }
 }

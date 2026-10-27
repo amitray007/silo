@@ -86,6 +86,12 @@ network isolation is the backstop; test both (below).
   routed requests and 20 MB fulfilled bytes, then abort the rest.
 - Settle: `goto` with `waitUntil: 'domcontentloaded'`, then wait until 800 ms
   pass with no routed request in flight, capped at 6 s after DOM ready.
+- Rendered image sizes: before Defuddle runs, set `width` and `height` on
+  each `img` to its rounded rendered box (`getBoundingClientRect`) when that
+  box is visible and smaller than the natural size. Publisher CSS often
+  shrinks a large source (Troy Hunt's 400x147 Spotify badge renders at about
+  134px wide); a static fetch never sees that CSS, so the Reader shows the
+  full natural size. The slice 1 sanitizer keeps these attributes.
 - Extraction in the page: inject the Defuddle UMD bundle
   (`defuddle/dist/index.js`, read once at startup) with `addScriptTag`, run
   `new Defuddle(document, { useAsync: false }).parse()` inside

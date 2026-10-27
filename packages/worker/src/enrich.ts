@@ -28,7 +28,7 @@ import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extra
 import { extract } from './extract/extract.js';
 import { extractYouTubeWatch } from './extract/youtube-watch.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
-import { safeFetch } from './fetch/safe-fetch.js';
+import { HTML_ACCEPT, safeFetch } from './fetch/safe-fetch.js';
 
 /** Injectable seams for testing — default to the real implementations. */
 export interface EnrichLinkDeps {
@@ -56,7 +56,7 @@ export interface EnrichLinkDeps {
 }
 
 const defaultDeps: EnrichLinkDeps = {
-  safeFetch,
+  safeFetch: (url) => safeFetch(url, { accept: HTML_ACCEPT }),
   extract,
   // Adapter, not just a re-export: the real `enrichSource` takes its fetch
   // deps as a 3rd positional param (its own injectable seam, for ITS unit

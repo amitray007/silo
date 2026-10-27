@@ -1,7 +1,7 @@
 import { type LinkTitleFetcher, setLinkTitleFetcher } from '@silo/core';
 import metascraper from 'metascraper';
 import metascraperTitle from 'metascraper-title';
-import { type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
+import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 
 const scraper = metascraper([metascraperTitle()]);
 
@@ -38,7 +38,12 @@ export function createLinkTitleFetcher(
   const fetch: Fetch =
     options.fetch ??
     ((url, { signal }) =>
-      safeFetch(url, { signal, maxBodyBytes: MAX_BODY_BYTES, timeoutMs: TIMEOUT_MS }));
+      safeFetch(url, {
+        accept: HTML_ACCEPT,
+        signal,
+        maxBodyBytes: MAX_BODY_BYTES,
+        timeoutMs: TIMEOUT_MS,
+      }));
   const now = options.now ?? Date.now;
   const cache = new Map<string, Entry>();
   const pending = new Map<string, Promise<string | null>>();

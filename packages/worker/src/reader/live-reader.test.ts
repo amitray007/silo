@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExtractResult } from '../extract/extract.js';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
+import * as safeFetchModule from '../fetch/safe-fetch.js';
 import { createLiveReader } from './live-reader.js';
 
 const MINUTE = 60 * 1000;
@@ -184,4 +185,17 @@ describe('live reader', () => {
     await reader(link, signal());
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+});
+
+it('requests HTML from the page fetcher by default', async () => {
+  const fetch = vi.spyOn(safeFetchModule, 'safeFetch').mockResolvedValue(page());
+  const reader = createLiveReader({ extract: withReader });
+  try {
+    expect(await reader(link, signal())).toEqual(content);
+    expect(fetch).toHaveBeenCalledWith(link.url, {
+      accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+    });
+  } finally {
+    fetch.mockRestore();
+  }
 });
