@@ -906,6 +906,15 @@
   flex-wrap: wrap;
   margin-top: 12px;
 }
+.silo-reader-posted {
+  display: block;
+  margin-top: 12px;
+  font-size: 12.5px;
+  color: var(--mut);
+}
+.silo-reader-posted + .silo-reader-stats {
+  margin-top: 6px;
+}
 .silo-reader-card {
   border: 1px solid var(--line);
   border-radius: 12px;
