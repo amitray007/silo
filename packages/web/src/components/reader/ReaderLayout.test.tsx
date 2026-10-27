@@ -898,6 +898,8 @@ describe('review regressions', () => {
   ] as const)(
     'shows the server total in the %s list header',
     async (route, title, counts, total) => {
+      // The switcher only shows while the sidebar is out of view.
+      localStorage.setItem('silo.sidebarCollapsed', 'true');
       renderReader({ route, ...counts, trash: [makeTrashLink(a)] });
       const heading = await screen.findByRole('heading', { level: 1, name: title });
       if (title === 'Library' || title === 'Trash') {
@@ -1224,7 +1226,14 @@ describe('responsive reader header', () => {
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(a.url));
   });
 
+  it('shows a plain Library title while the sidebar is open', async () => {
+    renderReader();
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Library' });
+    expect(within(heading).queryByRole('button')).toBeNull();
+  });
+
   it('keeps tags reachable from the Library collection menu', async () => {
+    localStorage.setItem('silo.sidebarCollapsed', 'true');
     renderReader();
     await screen.findByText('First link');
     fireEvent.click(screen.getByRole('button', { name: 'Library' }));

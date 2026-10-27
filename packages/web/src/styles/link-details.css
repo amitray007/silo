@@ -838,7 +838,13 @@ button.silo-note-text {
   gap: 1px;
   box-shadow: var(--elev-2);
 }
+/* Rows keep their height inside the scrolling menu; long tag names end in an ellipsis. */
+.silo-collection .silo-menu-surface {
+  width: 240px;
+  max-width: calc(100vw - 24px);
+}
 .silo-collection .silo-menu-item {
+  flex: none;
   min-height: 32px;
   height: auto;
   margin: 0;
@@ -849,6 +855,18 @@ button.silo-note-text {
   font-size: 13px;
   line-height: 19.5px;
   font-weight: 500;
+}
+.silo-collection .silo-menu-label {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 12px;
+}
+.silo-collection-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 .silo-collection .silo-menu-item:is(:focus, [aria-current="true"]) {
   box-shadow: var(--menu-highlight-shadow);

@@ -37,9 +37,11 @@ function CollectionTitle({ title }: { title: string }) {
   const [open, setOpen] = useState(false);
   const phone = useMediaQuery(layoutMedia.phone);
   const navigate = useNavigate();
-  const frame = useOutletContext<{ showSidebar: () => void } | undefined>();
+  const frame = useOutletContext<{ showSidebar: () => void; sidebarHidden: boolean } | undefined>();
   const { data: counts } = useCounts();
   const { data: tags } = useTags();
+  // The sidebar already lists Library, Trash and tags; the switcher is for when it is out of view.
+  if (frame && !frame.sidebarHidden && !phone) return <h1>{title}</h1>;
   return (
     <div className="silo-collection">
       <h1>
@@ -94,7 +96,9 @@ function CollectionTitle({ title }: { title: string }) {
                   navigate(`/tags/${encodeURIComponent(tag.name)}`);
                 }}
               >
-                {tag.name}
+                <span className="silo-collection-name" title={tag.name}>
+                  {tag.name}
+                </span>
                 <span className="silo-collection-count">{formatCount(tag.count)}</span>
               </MenuAction>
             ))}

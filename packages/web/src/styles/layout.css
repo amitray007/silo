@@ -45,9 +45,19 @@
   background: var(--sel);
   box-shadow: none;
 }
+/* Tags take the height the window can spare, keeping Settings in view. */
 .silo-tag-scroll {
-  max-height: 264px;
+  max-height: max(160px, calc(100dvh - 300px));
   overflow-y: auto;
+  --fade-top: 0px;
+  --fade-bottom: 0px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--fade-top),
+    #000 calc(100% - var(--fade-bottom)),
+    transparent 100%
+  );
   scrollbar-width: thin;
   scrollbar-color: var(--line-2) transparent;
 }
@@ -1544,6 +1554,12 @@ div.silo-reader-notecard {
   flex-direction: column;
   gap: 2px;
 }
+.silo-tag-scroll[data-more-above="true"] {
+  --fade-top: 20px;
+}
+.silo-tag-scroll[data-more-below="true"] {
+  --fade-bottom: 20px;
+}
 #silo-tag-list > .silo-nav-item {
   --nav-color: var(--ghost);
 }
@@ -1802,11 +1818,9 @@ div.silo-reader-notecard {
 .silo-content:has(.silo-three-pane[data-reader="true"]) .silo-mobile-bar {
   display: none;
 }
-@media (max-width: 640px) {
-  .silo-collection .silo-menu-surface {
-    max-height: calc(100dvh - 140px);
-    overflow-y: auto;
-  }
+.silo-collection .silo-menu-surface {
+  max-height: calc(100dvh - 140px);
+  overflow-y: auto;
 }
 
 .silo-reader-settings.silo-menu-surface {

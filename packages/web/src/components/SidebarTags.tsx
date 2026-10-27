@@ -1,6 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
+import { useScrollEdges } from '../lib/useScrollEdges';
 import { SearchIcon } from './NavIcons';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
@@ -77,6 +78,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
 
   const findInputRef = useRef<HTMLInputElement>(null);
   const newTagInputRef = useRef<HTMLInputElement>(null);
+  const tagScrollRef = useRef<HTMLDivElement>(null);
   const createTag = useCreateTag();
 
   // Focus the filter input the moment it opens (v3's `tagFindRef`/`onClick`
@@ -102,6 +104,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
   const visibleTags = trimmedQuery
     ? tags.filter((tag) => tag.name.toLowerCase().includes(trimmedQuery))
     : tags;
+  useScrollEdges(tagScrollRef, visibleTags.length);
 
   function openNewTag() {
     setNewTagOpen(true);
@@ -232,14 +235,14 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
             />
           )}
 
-          {/* The scrollable tag-list region (fix, direct user feedback): a fixed
-          `max-height` + soft custom scrollbar (`.silo-tag-scroll`, base.css) so a
+          {/* The scrollable tag-list region (fix, direct user feedback): a window-sized
+          `max-height`, edge fades, and a soft scrollbar (`.silo-tag-scroll`) so a
           long tag list scrolls in place instead of pushing Settings
           off-screen — every tag (or every filtered match) renders here, no
           truncation. While `useTags()` is still loading (`tags` is `[]`),
           skeleton tag rows render in its place instead of a flash of empty —
           the "Tags" header + find button above stay visible throughout. */}
-          <div className="silo-tag-scroll">
+          <div ref={tagScrollRef} className="silo-tag-scroll">
             {loading && tags.length === 0
               ? SKELETON_TAG_WIDTHS.map((width, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list

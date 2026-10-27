@@ -245,7 +245,7 @@ export function AppFrame() {
                 >
                   <ReaderIcon name="menu" />
                 </button>
-                <Outlet context={{ showSidebar }} />
+                <Outlet context={{ showSidebar, sidebarHidden: collapsed }} />
                 <MobileBar onSearch={commandPalette.openPalette} />
               </main>
               <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
