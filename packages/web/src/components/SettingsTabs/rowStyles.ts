@@ -19,14 +19,15 @@ export const settingsRow: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
   gap: 16,
-  padding: '14px 0',
+  padding: '16px 0',
+  borderBottom: '0.5px solid var(--line)',
   flexWrap: 'wrap',
 };
 
 /** The roomier row + the `--line` divider under it (every row except a tab's last). */
 export const settingsRowDivided: CSSProperties = {
   ...settingsRow,
-  borderBottom: '1px solid var(--line)',
+  borderBottom: '0.5px solid var(--line)',
 };
 
 /** A row's label line (the setting's name) — sentence case, matching the prototype. */
@@ -39,7 +40,7 @@ export const rowLabel: CSSProperties = {
 
 /** A row's muted description line under the label. */
 export const rowDesc: CSSProperties = {
-  fontSize: 'var(--text-sm)',
+  fontSize: 'var(--text-base)',
   color: 'var(--fnt)',
   marginTop: 3,
   lineHeight: 'var(--lh-snug)',

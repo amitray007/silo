@@ -1,6 +1,10 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
+import { useScrollEdges } from '../lib/useScrollEdges';
+import { SearchIcon } from './NavIcons';
+import { NavItem } from './NavItem';
+import { ReaderIcon } from './reader/ReaderIcon';
 import { Skeleton } from './Skeleton';
 
 /**
@@ -60,6 +64,13 @@ function SkeletonTagRow({ labelWidth }: { labelWidth: string }) {
  * match on `tagQ`) still narrows the list before it renders.
  */
 export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTagsProps) {
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      return localStorage.getItem('silo.tagsExpanded') !== 'false';
+    } catch {
+      return true;
+    }
+  });
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [newTagOpen, setNewTagOpen] = useState(false);
@@ -67,6 +78,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
 
   const findInputRef = useRef<HTMLInputElement>(null);
   const newTagInputRef = useRef<HTMLInputElement>(null);
+  const tagScrollRef = useRef<HTMLDivElement>(null);
   const createTag = useCreateTag();
 
   // Focus the filter input the moment it opens (v3's `tagFindRef`/`onClick`
@@ -92,6 +104,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
   const visibleTags = trimmedQuery
     ? tags.filter((tag) => tag.name.toLowerCase().includes(trimmedQuery))
     : tags;
+  useScrollEdges(tagScrollRef, visibleTags.length);
 
   function openNewTag() {
     setNewTagOpen(true);
@@ -129,49 +142,37 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
   }
 
   return (
-    <div>
-      {/* Top padding trimmed (18px → --s-0-5) per user feedback: the
-          SidebarDivider above the Tags section already provides the
-          separation, so the large top gap was redundant. */}
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          // Tighter header→first-row gap (bottom --s1-5 → --s1) to match
-          // shiori's compact Tags rhythm — the header sits closer to the tag
-          // rows it labels, reading as one group rather than a floating title.
-          // The left edge is nudged 3px past the row padding so "Tags"
-          // aligns with the visible start of the Trash icon stroke, not the
-          // invisible edge of the 18px icon slot.
-          padding: 'var(--s-0-5) var(--s2-5) var(--s1) calc(var(--s2-5) + 3px)',
-        }}
-      >
-        {/* Bumped 0.7rem → 0.8rem (direct user feedback: "too small vs the
-            search icon next to it") — the 16px icon dwarfed the old size;
-            0.8rem balances against it while staying a step below the
-            0.84rem row-text scale, so "Tags" still reads as a section
-            label, not a row. */}
-        <p
-          style={{
-            fontSize: 'var(--sidebar-input-size, var(--text-sm))',
-            fontWeight: 500,
-            color: 'var(--mut)',
-            margin: 0,
-            letterSpacing: '0.02em',
-          }}
-        >
-          Tags
-        </p>
+    <div className="silo-tags">
+      <div className="silo-tags-header">
+        <div className="silo-tags-title">
+          <button
+            type="button"
+            className="silo-tags-toggle"
+            aria-expanded={expanded}
+            aria-controls="silo-tag-list"
+            onClick={() => {
+              setExpanded(!expanded);
+              try {
+                localStorage.setItem('silo.tagsExpanded', String(!expanded));
+              } catch {
+                /* Storage may be unavailable. */
+              }
+            }}
+          >
+            <span className="silo-tags-label">Tags</span>
+            <svg
+              width="10"
+              height="10"
+              viewBox="0 0 10 10"
+              className="silo-section-caret"
+              data-expanded={expanded}
+              aria-hidden="true"
+            >
+              <path d="M1.5 3h7L5 7.5z" />
+            </svg>
+          </button>
+        </div>
         <span style={{ flex: 1 }} />
-        <button
-          type="button"
-          className="silo-reader-iconbtn"
-          aria-label="New tag"
-          title="New tag"
-          onClick={openNewTag}
-        >
-          +
-        </button>
         {/* The search icon shares the SAME right inset as the tag counts below
             it: the header container and the NavItem tag rows both use --s2-5
             right padding, and here the icon button carries NO negative margin
@@ -204,101 +205,100 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
               `⌕` Unicode glyph — that rendered undersized and inconsistent
               across platforms (user feedback: "too small … use a better
               search icon"). 16px, current stroke color. */}
-          <svg
-            width="16"
-            height="16"
-            viewBox="0 0 16 16"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <circle cx="7" cy="7" r="4.3" />
-            <path d="m10.3 10.3 3 3" />
-          </svg>
+          <SearchIcon />
         </button>
       </div>
 
-      {findOpen && (
-        <input
-          ref={findInputRef}
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Find tag"
-          className="silo-field"
-          style={{
-            margin: '0 4px 3px',
-            padding: '4px 8px',
-            border: '1px solid var(--line)',
-            borderRadius: 7,
-            background: 'var(--bg)',
-            color: 'var(--ink)',
-            font: 'inherit',
-            fontSize: 'var(--sidebar-input-size, var(--text-sm))',
-            outline: 'none',
-            width: 'calc(100% - 8px)',
-            boxSizing: 'border-box',
-            transition: 'border-color .15s ease',
-          }}
-        />
-      )}
+      {expanded && (
+        <div id="silo-tag-list">
+          {findOpen && (
+            <input
+              ref={findInputRef}
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Find tag"
+              className="silo-field"
+              style={{
+                margin: '0 4px 3px',
+                padding: '4px 8px',
+                border: '1px solid var(--line)',
+                borderRadius: 7,
+                background: 'var(--bg)',
+                color: 'var(--ink)',
+                font: 'inherit',
+                fontSize: 'var(--sidebar-input-size, var(--text-sm))',
+                outline: 'none',
+                width: 'calc(100% - 8px)',
+                boxSizing: 'border-box',
+                transition: 'border-color .15s ease',
+              }}
+            />
+          )}
 
-      {/* The scrollable tag-list region (fix, direct user feedback): a fixed
-          `max-height` + soft custom scrollbar (`.silo-tag-scroll`, base.css) so a
+          {/* The scrollable tag-list region (fix, direct user feedback): a window-sized
+          `max-height`, edge fades, and a soft scrollbar (`.silo-tag-scroll`) so a
           long tag list scrolls in place instead of pushing Settings
           off-screen — every tag (or every filtered match) renders here, no
           truncation. While `useTags()` is still loading (`tags` is `[]`),
           skeleton tag rows render in its place instead of a flash of empty —
           the "Tags" header + find button above stay visible throughout. */}
-      <div className="silo-tag-scroll">
-        {loading && tags.length === 0
-          ? SKELETON_TAG_WIDTHS.map((width, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
-              <SkeletonTagRow key={i} labelWidth={width} />
-            ))
-          : visibleTags.map((tag) => renderTagLink(tag))}
-      </div>
+          <div ref={tagScrollRef} className="silo-tag-scroll">
+            {loading && tags.length === 0
+              ? SKELETON_TAG_WIDTHS.map((width, i) => (
+                  // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
+                  <SkeletonTagRow key={i} labelWidth={width} />
+                ))
+              : visibleTags.map((tag) => renderTagLink(tag))}
+          </div>
 
-      {newTagOpen ? (
-        <>
-          <input
-            ref={newTagInputRef}
-            value={newTagValue}
-            onChange={(event) => setNewTagValue(event.target.value)}
-            onKeyDown={onNewTagKeyDown}
-            onBlur={closeNewTag}
-            placeholder="Tag name"
-            className="silo-field"
-            style={{
-              margin: '2px 4px',
-              padding: '4px 8px',
-              border: '1px solid var(--line)',
-              borderRadius: 7,
-              background: 'var(--bg)',
-              color: 'var(--ink)',
-              font: 'inherit',
-              fontSize: 'var(--sidebar-input-size, var(--text-sm))',
-              outline: 'none',
-              width: 'calc(100% - 8px)',
-              boxSizing: 'border-box',
-              transition: 'border-color .15s ease',
-            }}
-          />
-          {createTag.isError && (
-            <p
-              style={{
-                margin: '0 4px 3px',
-                fontSize: 'var(--text-xs)',
-                color: 'var(--warn)',
-              }}
-            >
-              Couldn't create — try again
-            </p>
+          {newTagOpen ? (
+            <>
+              <input
+                ref={newTagInputRef}
+                value={newTagValue}
+                onChange={(event) => setNewTagValue(event.target.value)}
+                onKeyDown={onNewTagKeyDown}
+                onBlur={closeNewTag}
+                placeholder="Tag name"
+                className="silo-field"
+                style={{
+                  margin: '2px 4px',
+                  padding: '4px 8px',
+                  border: '1px solid var(--line)',
+                  borderRadius: 7,
+                  background: 'var(--bg)',
+                  color: 'var(--ink)',
+                  font: 'inherit',
+                  fontSize: 'var(--sidebar-input-size, var(--text-sm))',
+                  outline: 'none',
+                  width: 'calc(100% - 8px)',
+                  boxSizing: 'border-box',
+                  transition: 'border-color .15s ease',
+                }}
+              />
+              {createTag.isError && (
+                <p
+                  style={{
+                    margin: '0 4px 3px',
+                    fontSize: 'var(--text-xs)',
+                    color: 'var(--warn)',
+                  }}
+                >
+                  Couldn't create - try again
+                </p>
+              )}
+            </>
+          ) : (
+            <NavItem
+              title="New tag"
+              variant="tag"
+              label={<span style={{ color: 'inherit' }}>New tag</span>}
+              icon={<ReaderIcon name="plus" />}
+              onClick={openNewTag}
+            />
           )}
-        </>
-      ) : null}
+        </div>
+      )}
     </div>
   );
 }

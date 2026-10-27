@@ -8,6 +8,7 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { EnrichLinkDeps } from './enrich.js';
 import type { ExtractResult } from './extract/extract.js';
+import { ReaderExtractionError } from './extract/reader-worker.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 
 /**
@@ -79,6 +80,45 @@ describeIfPg('enrichLink (integration)', () => {
     const link = await core.createLink({ url, sourceKind: 'link' });
     return link.id;
   }
+
+  it('stores a YouTube page description as text when no transcript is available', async () => {
+    const link = await core.createLink({
+      url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+      sourceKind: 'youtube',
+    });
+    const description = 'A short video at the zoo.';
+    await enrichMod.enrichLink(
+      link.id,
+      stubDeps(
+        {
+          ok: true,
+          html: '<html></html>',
+          contentType: 'text/html',
+          finalUrl: link.url,
+          status: 200,
+        },
+        { status: 'partial', description, text: 'About Privacy Terms footer' },
+      ),
+    );
+    expect((await core.getById(link.id))?.extractedText).toBe(description);
+  });
+
+  it('propagates Reader timeouts for pg-boss retry without recording a successful capture', async () => {
+    const id = await newLink('https://example.com/reader-timeout');
+    const deps = stubDeps({
+      ok: true,
+      html: '<p>Article.</p>',
+      contentType: 'text/html',
+      finalUrl: 'https://example.com/reader-timeout',
+      status: 200,
+    });
+    deps.extract = () => Promise.reject(new ReaderExtractionError('reader-timeout'));
+    await expect(enrichMod.enrichLink(id, deps)).rejects.toThrow('reader-timeout');
+    const link = await core.getById(id);
+    expect(link?.captureStatus).toBe('enriching');
+    expect(link?.extractedText).toBeNull();
+    expect(link?.contentHtml).toBeNull();
+  });
 
   it('fetch ok + extract full -> records full with metadata', async () => {
     const id = await newLink('https://example.com/full');
@@ -180,7 +220,7 @@ describeIfPg('enrichLink (integration)', () => {
 
   it('PROPAGATES an unexpected error (the pg-boss retry signal), not swallow it', async () => {
     // The resolve-vs-throw contract: an UNEXPECTED failure (here, extract
-    // throwing — it is contracted never-to-throw, so a throw is a real defect)
+    // throwing — either a retryable Reader failure or an unexpected defect)
     // must propagate so pg-boss retries + eventually dead-letters, rather than
     // being silently recorded as a degraded capture. The link is left untouched
     // at `enriching` so the retry re-runs cleanly.

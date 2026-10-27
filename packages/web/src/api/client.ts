@@ -171,8 +171,8 @@ async function apiFetch(path: string, init?: RequestInit): Promise<Response> {
  * the dev proxy target being down), so every caller (the query hooks) can
  * treat "the request failed" as one shape regardless of cause.
  */
-export async function apiGet<T>(path: string): Promise<T> {
-  return readJson<T>(await apiFetch(path));
+export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> {
+  return readJson<T>(await apiFetch(path, signal ? { signal } : undefined));
 }
 
 /**

@@ -6,7 +6,7 @@ describe('NavItem', () => {
   it('renders an inactive item with muted text and CSS-owned background', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
-    expect(link.style.color).toBe('var(--mut)');
+    expect(link.style.color).toBe('var(--nav-color, var(--mut))');
     // The inactive case must NOT set an inline `background` (review fix,
     // CodeRabbit): inline styles always beat CSS regardless of specificity,
     // so an inline `background: transparent` here would silently defeat
@@ -77,31 +77,31 @@ describe('NavItem', () => {
     expect(container.querySelector('svg')).toBeNull();
   });
 
-  it('the "tag" variant is weight 500 (bumped to match the Library/Trash nav rows)', () => {
+  it('the "tag" variant is weight 400 like the other nav rows', () => {
     render(<NavItem label="#ai" href="/tags/ai" variant="tag" />);
     const link = screen.getByRole('link', { name: /ai/i });
-    expect(link.style.fontWeight).toBe('500');
+    expect(link.style.fontWeight).toBe('400');
   });
 
   it('the "settings" variant uses --mut (not --ink) for its inactive color', () => {
     render(<NavItem label="Settings" href="/settings" variant="settings" />);
     const link = screen.getByRole('link', { name: /settings/i });
-    expect(link.style.color).toBe('var(--mut)');
-    expect(link.style.fontWeight).toBe('500');
+    expect(link.style.color).toBe('var(--nav-color, var(--mut))');
+    expect(link.style.fontWeight).toBe('400');
   });
 
   it('the default variant uses the prototype nav geometry', () => {
     render(<NavItem label="Library" href="/" />);
     const link = screen.getByRole('link', { name: /library/i });
-    expect(link.style.fontWeight).toBe('500');
-    expect(link.style.color).toBe('var(--mut)');
-    expect(link.style.padding).toBe('0px 10px');
+    expect(link.style.fontWeight).toBe('400');
+    expect(link.style.color).toBe('var(--nav-color, var(--mut))');
+    expect(link.style.padding).toBe('6px 8px');
   });
 
   it('the tag variant shares the nav padding', () => {
     render(<NavItem label="#ai" href="/tags/ai" variant="tag" />);
     const link = screen.getByRole('link', { name: /ai/i });
-    expect(link.style.padding).toBe('0px 10px');
+    expect(link.style.padding).toBe('6px 8px');
   });
 
   it('the tag variant shares the nav icon gap', () => {
@@ -118,8 +118,8 @@ describe('NavItem', () => {
     );
     const library = screen.getByRole('link', { name: /library/i });
     const tag = screen.getByRole('link', { name: /ai/i });
-    expect(library.style.gap).toBe('10px');
-    expect(tag.style.gap).toBe('10px');
+    expect(library.style.gap).toBe('8px');
+    expect(tag.style.gap).toBe('8px');
   });
 
   describe('button mode (no href — plan 024, the Search row)', () => {
@@ -147,10 +147,10 @@ describe('NavItem', () => {
     it('renders byte-identical row chrome to the anchor form: same padding, font, icon slot', () => {
       render(<NavItem label="Search" icon={<svg aria-hidden="true" />} meta="/" />);
       const button = screen.getByRole('button', { name: /search/i });
-      expect(button.style.padding).toBe('0px 10px');
-      expect(button.style.fontWeight).toBe('500');
+      expect(button.style.padding).toBe('6px 8px');
+      expect(button.style.fontWeight).toBe('400');
       expect(button.style.fontSize).toBe('');
-      expect(button.style.color).toBe('var(--mut)');
+      expect(button.style.color).toBe('var(--nav-color, var(--mut))');
       expect(button.className).toContain('silo-nav-item');
       expect(button.querySelector('svg')).not.toBeNull();
       expect(screen.getByText('/')).toBeDefined();

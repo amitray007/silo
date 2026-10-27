@@ -28,7 +28,16 @@ styles take precedence over the historical design notes below.
   `--panel`, `--mark` to `--accent`, `--markt` to `--accent-ink`, `--warn` to
   `--danger`, and `--ease-out` to `--ease`. `--ghost` uses the faint tone for
   non-text affordances. Settings surface aliases use the neutral ramp.
-- Elevation and scrims match the prototype in both themes. Existing type and
+- Elevation follows shiori.sh's shipped CSS (studied 2026-10-25): a 0.5px
+  `--ring` replaces the border on raised surfaces, which set their border
+  transparent, then two or three soft stacked drops. `--elev-1` is the control
+  shadow, `--elev-2` the menu shadow, and `--elev-3` the dialog shadow. Scrims
+  are light in light mode (`#f1f1ef` at 80%) and near-black in dark mode, both
+  with `--scrim-blur` (4px).
+- Reader prose follows shiori's prose rules: body in `--mut`, headings, links,
+  code, and bold in ink, list markers and captions in `--fnt`, bold at 500,
+  headings 26/21/18/16px, tables with row rules only.
+- Existing type and
   spacing scales remain for components until their redesign unit. Removed
   tokens: the old mark plate, badge colors, and unused motion/spacing roles.
 - Keep the pre-paint theme script and both themes. Healthy rows have no
@@ -100,3 +109,18 @@ The sections above are the original v2 design record. This section records where
 **Motion.** Emil-Kowalski-conformant: custom easing curves (`--ease-out/in-out/drawer`), transform+opacity only, origin-aware popovers, `@starting-style` entrances, universal `:active` press feedback, hover states gated behind `@media (hover:hover) and (pointer:fine)`, and `prefers-reduced-motion` that removes movement while keeping gentle opacity/color fades. Keyboard-initiated actions (⌘K, Escape) never animate. Route content and the row's hover-revealed meta fade in rather than snap.
 
 **Amber discipline holds:** `--mark`/`--markt` remain marks only (grain dot, ¶/◆/◌, the "keep" hint, active-tag dot) — never a button fill, border, active state, or focus ring. Focus rings use `--ghost`, never amber.
+
+## Shiori match 2026-10-25
+
+`docs/methods/shiori-match.md` supersedes the earlier visual values. The app uses self-hosted Inter Variable and Tailwind neutral oklch tones. All panes share `--bg`; menus and dialogs use `--bg2`. Dividers are 0.5px. Control, popup, and dialog shadows use `--elev-1`, `--elev-2`, and `--elev-3`.
+
+Body and nav use weight 400. Row titles, pane titles, section labels, menus, and buttons use 500. Reader titles and headings use 600. Monospace text uses `--font-mono`. No font files or external font requests are needed.
+
+`--ghost` is quaternary text: neutral 400 in light and neutral 600 in dark. Counts, day labels, and key hints intentionally use it to match Shiori. These labels fail WCAG AA contrast. This is an accepted reference trade-off, limited to those roles. Primary, secondary, and tertiary text retain separate tokens. The orange tile and local source chips preserve Silo's identity and privacy.
+
+
+## Shiori match pass 2, 2026-10-26
+
+Pass 2 in `docs/methods/shiori-match.md` overrides the earlier recipes. Inter Variable is self-hosted through `@fontsource-variable/inter` (OFL-1.1), at weights 400, 500, and 600. Reader body text is 16px with a 28px line height. Icons use a 20px box, a 24-unit viewBox, and a 1.5px rounded stroke.
+
+Row hover uses `--row-hover`; controls use `--icon-hover`. The reader segment chip uses `--segment-on` and the full control shadow. Dark inputs use neutral 800 and the low contrast shadow. Focus outlines use tertiary text at 2px with a 2px offset. Settings remains silo's modal with its own tabs and Compact links preference.

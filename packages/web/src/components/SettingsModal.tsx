@@ -22,7 +22,7 @@ function SettingsTabStrip({
   return (
     <div role="tablist" aria-label="Settings sections" className="silo-settings-tabs">
       <span className="silo-settings-nav-title">Settings</span>
-      {TABS.map((t) => {
+      {TABS.map((t, index) => {
         const active = t.key === tab;
         return (
           <button
@@ -32,6 +32,26 @@ function SettingsTabStrip({
             id={`settings-tab-${t.key}`}
             onClick={() => onSelect(t.key)}
             aria-selected={active}
+            aria-controls={`settings-panel-${tab}`}
+            tabIndex={active ? 0 : -1}
+            onKeyDown={(event) => {
+              if (
+                !['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(
+                  event.key,
+                )
+              )
+                return;
+              event.preventDefault();
+              const delta = ['ArrowDown', 'ArrowRight'].includes(event.key) ? 1 : -1;
+              let next = (index + delta + TABS.length) % TABS.length;
+              if (event.key === 'Home') next = 0;
+              if (event.key === 'End') next = TABS.length - 1;
+              const target = TABS[next];
+              if (target) {
+                onSelect(target.key);
+                document.getElementById(`settings-tab-${target.key}`)?.focus();
+              }
+            }}
             className="silo-settings-tab"
           >
             {t.name}
@@ -77,7 +97,12 @@ export function SettingsModal() {
     >
       <ModalHeader title="Settings" onClose={closeSettings} showCloseIcon />
       <SettingsTabStrip tab={tab} onSelect={setTab} />
-      <div className="silo-settings-panel" role="tabpanel" aria-labelledby={`settings-tab-${tab}`}>
+      <div
+        id={`settings-panel-${tab}`}
+        className="silo-settings-panel"
+        role="tabpanel"
+        aria-labelledby={`settings-tab-${tab}`}
+      >
         <h3>{TABS.find((entry) => entry.key === tab)?.name}</h3>
         <p className="silo-settings-lead">{TAB_DESCRIPTIONS[tab]}</p>
         <ActiveTabPanel tab={tab} />

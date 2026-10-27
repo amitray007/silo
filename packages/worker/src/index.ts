@@ -42,6 +42,9 @@ export {
   type SafeFetchResult,
   safeFetch,
 } from './fetch/safe-fetch.js';
+export { runReaderUpgrade } from './reader-upgrade.js';
+export { createLinkTitleFetcher, registerLinkTitles } from './titles/link-titles.js';
+export { registerPageViewer } from './view/viewer.js';
 // pg-boss queue (U5; moved to @silo/queue in plan 013): queue name/options,
 // the boss connection factory, and queue-setup helper now live in
 // `@silo/queue` (shared with `@silo/api` — see that package's index for the

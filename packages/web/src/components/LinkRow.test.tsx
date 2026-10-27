@@ -1,14 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen } from '@testing-library/react';
-import type { ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../api/hooks';
 import type { SettingsMap } from '../api/types';
 import { hackerNewsSourceData, makeLink, twitterSourceData } from '../test/fixtures';
-import { HoverPreviewProvider } from './HoverPreviewContext';
+import { HoverPreviewProvider, useHoverPreview } from './HoverPreviewContext';
 import { LinkRow } from './LinkRow';
 import { RowMenuProvider } from './RowMenuContext';
-import { SelectionProvider } from './SelectionContext';
 
 function link(overrides: Parameters<typeof makeLink>[0] = {}) {
   return makeLink({ url: 'https://www.example.com/a-post', title: 'A post', ...overrides });
@@ -16,36 +15,43 @@ function link(overrides: Parameters<typeof makeLink>[0] = {}) {
 
 /**
  * `LinkRow` reads `useRowMenu()` for its `⋯` button (plan 011, V3-4),
- * `useLibrarySelection()` for its hover checkbox (V3-5), `useHoverPreview()`
+ * `useHoverPreview()`
  * for the hover-preview trigger (V3-8), and `useSettings()` for the HN
  * inline-line plugin gate (plan 026) — every render needs a `RowMenuProvider`,
- * a `SelectionProvider`, and a `HoverPreviewProvider` ancestor; the `⋯` menu's
+ * a `HoverPreviewProvider` ancestor; the `⋯` menu's
  * tag hooks and `useSettings()` need a `QueryClientProvider` too.
  *
  * `plugins` seeds `queryKeys.settings()` in the cache so a test can exercise
  * the gate; when omitted, `useSettings()` stays in its loading state, which
  * exercises the `?? true` optimistic default (rich variant shows).
  */
-function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins']) {
+const DEFAULT_PLUGINS: SettingsMap['plugins'] = {
+  hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+  github: { enabled: true, hover: true, palette: true },
+  youtube: { enabled: true, hover: true, palette: true },
+  twitter: { enabled: true, inline: true, hover: true, palette: true },
+};
+
+function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins'], hoverPreview?: boolean) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  if (plugins) {
+  if (plugins || hoverPreview !== undefined) {
     queryClient.setQueryData(queryKeys.settings(), {
       theme: 'system',
       trashPurgeDays: 30,
       mcpAccess: true,
       linkPreviewImages: true,
-      plugins,
+      hoverPreview: hoverPreview ?? false,
+      plugins: plugins ?? DEFAULT_PLUGINS,
     } satisfies SettingsMap);
   }
-  return render(
+  const utils = render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <HoverPreviewProvider>{ui}</HoverPreviewProvider>
-        </SelectionProvider>
+        <HoverPreviewProvider>{ui}</HoverPreviewProvider>
       </RowMenuProvider>
     </QueryClientProvider>,
   );
+  return { ...utils, queryClient };
 }
 
 describe('LinkRow', () => {
@@ -77,20 +83,23 @@ describe('LinkRow', () => {
     expect(screen.queryByRole('img')).toBeNull();
   });
 
-  it('shows Capturing and the domain beneath an enriching title', () => {
-    renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
-    expect(screen.getByText('◌ Capturing')).toBeDefined();
+  it('announces Capturing only to screen readers beneath an enriching title', () => {
+    const { container } = renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
+    expect(screen.getByText('Capturing').className).toBe('silo-sr-only');
+    expect(container.querySelector('[data-enriching="true"]')).not.toBeNull();
     expect(screen.getByText('example.com')).toBeDefined();
     expect(screen.getByText('A post').className).toBe('silo-row-title');
   });
 
-  it('keeps the local letter chip while enriching', () => {
-    renderRow(
+  it('keeps the favicon chip while enriching', () => {
+    const { container } = renderRow(
       <LinkRow
         link={link({ captureStatus: 'enriching', title: null, url: 'https://www.example.com/a' })}
       />,
     );
-    expect(screen.getByText('E')).toBeDefined();
+    expect(container.querySelector('.silo-letter-chip img')?.getAttribute('src')).toBe(
+      '/api/favicon?domain=example.com',
+    );
     expect(screen.queryByLabelText('enriching')).toBeNull();
     expect(screen.getByText('www.example.com/a')).toBeDefined();
     expect(screen.getByText('example.com')).toBeDefined();
@@ -116,11 +125,9 @@ describe('LinkRow', () => {
         client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
       >
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ captureStatus: 'bare' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ captureStatus: 'bare' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -168,11 +175,9 @@ describe('LinkRow', () => {
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ notes: 'a comment' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ notes: 'a comment' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -181,11 +186,9 @@ describe('LinkRow', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ notes: null })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ notes: null })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -222,7 +225,7 @@ describe('LinkRow', () => {
   it('right-clicking anywhere on the row opens the same options menu, suppressing the browser context menu', () => {
     renderRow(<LinkRow link={link({ title: 'A post' })} />);
     const anchor = screen.getByRole('link', { name: /A post/ });
-    expect(screen.queryByText('Move to trash')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Move to trash' })).toBeNull();
 
     const event = fireEvent.contextMenu(anchor);
 
@@ -242,7 +245,7 @@ describe('LinkRow', () => {
     expect(screen.getByText('Move to trash')).toBeDefined();
 
     fireEvent.contextMenu(anchor);
-    expect(screen.queryByText('Move to trash')).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Move to trash' })).toBeNull();
   });
 
   it('renders the ▲points·comments rich line for a Hacker News link (plan 012 phase 2)', () => {
@@ -358,6 +361,9 @@ describe('LinkRow', () => {
  * `(hover: hover)` reads `true`, matching a real desktop mouse.
  */
 describe('LinkRow hover preview', () => {
+  function renderHoverRow(ui: ReactNode) {
+    return renderRow(ui, DEFAULT_PLUGINS, true);
+  }
   const originalMatchMedia = window.matchMedia;
 
   beforeEach(() => {
@@ -379,72 +385,142 @@ describe('LinkRow hover preview', () => {
     window.matchMedia = originalMatchMedia;
   });
 
+  it.each([false, undefined])(
+    'does not open or fetch a preview when hoverPreview is %s',
+    (enabled) => {
+      const fetchMock = vi.fn().mockReturnValue(new Promise<Response>(() => {}));
+      vi.stubGlobal('fetch', fetchMock);
+      try {
+        renderRow(
+          <LinkRow link={link({ imageUrl: 'https://example.com/cover.jpg' })} />,
+          undefined,
+          enabled,
+        );
+        const requestsBeforeHover = fetchMock.mock.calls.length;
+        fireEvent.mouseEnter(screen.getByRole('link'));
+        act(() => {
+          vi.advanceTimersByTime(1000);
+        });
+        expect(screen.queryByRole('link', { name: 'Open' })).toBeNull();
+        expect(document.querySelector('img[src*="preview-image"]')).toBeNull();
+        expect(fetchMock.mock.calls.length).toBe(requestsBeforeHover);
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    },
+  );
+
+  it.each([100, 200])('turning previews off after %sms cancels a pending or open card', (delay) => {
+    const { queryClient } = renderHoverRow(<LinkRow link={link()} />);
+    fireEvent.mouseEnter(screen.getByRole('link'));
+    act(() => {
+      vi.advanceTimersByTime(delay);
+    });
+    expect(screen.queryByRole('link', { name: 'Open' }) !== null).toBe(delay >= 160);
+    act(() => {
+      queryClient.setQueryData(queryKeys.settings(), { hoverPreview: false });
+    });
+    act(() => {
+      vi.advanceTimersByTime(1000);
+    });
+    expect(screen.queryByRole('link', { name: 'Open' })).toBeNull();
+  });
+
+  it('mounting a list row while previews are off does not cancel a palette preview', () => {
+    const paletteLink = link({ id: 'palette-link', title: 'Palette link' });
+    function Harness() {
+      const { scheduleShow } = useHoverPreview();
+      const [showRow, setShowRow] = useState(false);
+      return (
+        <>
+          <button type="button" onClick={() => scheduleShow(paletteLink, new DOMRect())}>
+            Palette preview
+          </button>
+          <button type="button" onClick={() => setShowRow(true)}>
+            Mount row
+          </button>
+          {showRow && <LinkRow link={paletteLink} />}
+        </>
+      );
+    }
+    renderRow(<Harness />, DEFAULT_PLUGINS, false);
+    fireEvent.click(screen.getByRole('button', { name: 'Palette preview' }));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Mount row' }));
+    act(() => {
+      vi.advanceTimersByTime(100);
+    });
+    expect(screen.getByRole('link', { name: 'Open' }).getAttribute('href')).toBe(paletteLink.url);
+  });
+
   it('shows the preview after the 160ms cold hover delay, not before', () => {
     // Cold delay: this is the FIRST hover (no preview open yet), so it uses
     // SHOW_DELAY_COLD_MS (160ms) — see HoverPreviewContext's warm/cold split.
-    renderRow(<LinkRow link={link({ title: 'Hover target' })} />);
+    renderHoverRow(<LinkRow link={link({ title: 'Hover target' })} />);
     const anchor = screen.getByRole('link', { name: /Hover target/ });
 
     fireEvent.mouseEnter(anchor);
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(159);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.getByText('Open ↗')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
   });
 
   it('hides the preview after the 140ms leave delay once the pointer leaves the row', () => {
-    renderRow(<LinkRow link={link()} />);
+    renderHoverRow(<LinkRow link={link()} />);
     const anchor = screen.getByRole('link');
 
     fireEvent.mouseEnter(anchor);
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    expect(screen.getByText('Open ↗')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
 
     fireEvent.mouseLeave(anchor);
     act(() => {
       vi.advanceTimersByTime(139);
     });
-    expect(screen.getByText('Open ↗')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
 
     act(() => {
       vi.advanceTimersByTime(1);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   it('a quick pass over the row (leave before the show delay elapses) never opens the preview', () => {
-    renderRow(<LinkRow link={link()} />);
+    renderHoverRow(<LinkRow link={link()} />);
     const anchor = screen.getByRole('link');
 
     fireEvent.mouseEnter(anchor);
     act(() => {
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(100);
     });
     fireEvent.mouseLeave(anchor);
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   it('moving from the row into the card cancels the pending hide (row→card handoff)', () => {
-    renderRow(<LinkRow link={link()} />);
+    renderHoverRow(<LinkRow link={link()} />);
     const anchor = screen.getByRole('link');
 
     fireEvent.mouseEnter(anchor);
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    const card = screen.getByText('Open ↗').closest('div[style*="position: fixed"]') as HTMLElement;
+    const card = screen.getByText('Open').closest('div[style*="position: fixed"]') as HTMLElement;
     expect(card).not.toBeNull();
 
     fireEvent.mouseLeave(anchor);
@@ -454,17 +530,17 @@ describe('LinkRow hover preview', () => {
     });
     // The hide that was scheduled on mouseLeave must have been cancelled by
     // entering the card — the preview stays open well past the hide delay.
-    expect(screen.getByText('Open ↗')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
 
     fireEvent.mouseLeave(card);
     act(() => {
       vi.advanceTimersByTime(140);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   it('is suppressed while this row’s ⋯ menu is open', () => {
-    renderRow(<LinkRow link={link({ title: 'A post' })} />);
+    renderHoverRow(<LinkRow link={link({ title: 'A post' })} />);
     fireEvent.click(screen.getByTitle('Options'));
     expect(screen.getByText('Move to trash')).toBeDefined();
 
@@ -472,18 +548,18 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   it('opening the ⋯ menu while the preview is already showing dismisses it (after the hide delay)', () => {
-    renderRow(<LinkRow link={link({ title: 'A post' })} />);
+    renderHoverRow(<LinkRow link={link({ title: 'A post' })} />);
     const anchor = screen.getByRole('link', { name: /A post/ });
 
     fireEvent.mouseEnter(anchor);
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    expect(screen.getByText('Open ↗')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
 
     fireEvent.click(screen.getByTitle('Options'));
     // The dismiss goes through the same `scheduleHide` path as a normal
@@ -492,7 +568,7 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(140);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   it('does not schedule a preview when the pointer is not hover-capable (coarse/touch)', () => {
@@ -507,12 +583,12 @@ describe('LinkRow hover preview', () => {
       dispatchEvent: () => false,
     })) as unknown as typeof matchMedia;
 
-    renderRow(<LinkRow link={link()} />);
+    renderHoverRow(<LinkRow link={link()} />);
     fireEvent.mouseEnter(screen.getByRole('link'));
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   // Review fix (ce-correctness + ce-julik-frontend-races): a row can vanish
@@ -522,14 +598,13 @@ describe('LinkRow hover preview', () => {
   // an orphaned show-timer or a stale-content card behind.
   it('cancels an already-open preview immediately when the row unmounts (no lingering stale card)', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(queryKeys.settings(), { hoverPreview: true });
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ title: 'A post' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ title: 'A post' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -538,7 +613,7 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(350);
     });
-    expect(screen.getByText('Open ↗')).toBeDefined();
+    expect(screen.getByText('Open')).toBeDefined();
 
     // Unmount the row WITHOUT firing mouseLeave first (simulates the row
     // disappearing out from under the pointer — e.g. trashed, or filtered
@@ -547,46 +622,41 @@ describe('LinkRow hover preview', () => {
     rerender(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <div>row removed</div>
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <div>row removed</div>
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
 
     // No hide delay to wait out — dismiss-on-unmount is immediate.
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 
   it('cancels a pending (not-yet-shown) preview when the row unmounts before the show delay elapses', () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    queryClient.setQueryData(queryKeys.settings(), { hoverPreview: true });
     const { rerender } = render(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <LinkRow link={link({ title: 'A post' })} />
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <LinkRow link={link({ title: 'A post' })} />
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
 
     fireEvent.mouseEnter(screen.getByRole('link', { name: /A post/ }));
     act(() => {
-      vi.advanceTimersByTime(200);
+      vi.advanceTimersByTime(100);
     });
 
     rerender(
       <QueryClientProvider client={queryClient}>
         <RowMenuProvider>
-          <SelectionProvider>
-            <HoverPreviewProvider>
-              <div>row removed</div>
-            </HoverPreviewProvider>
-          </SelectionProvider>
+          <HoverPreviewProvider>
+            <div>row removed</div>
+          </HoverPreviewProvider>
         </RowMenuProvider>
       </QueryClientProvider>,
     );
@@ -597,6 +667,6 @@ describe('LinkRow hover preview', () => {
     act(() => {
       vi.advanceTimersByTime(1000);
     });
-    expect(screen.queryByText('Open ↗')).toBeNull();
+    expect(screen.queryByText('Open')).toBeNull();
   });
 });

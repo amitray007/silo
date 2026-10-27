@@ -47,13 +47,14 @@ describe('App routing', () => {
   });
 
   afterEach(() => {
+    localStorage.removeItem('silo.sidebarCollapsed');
     vi.unstubAllGlobals();
   });
 
   it('renders the Library view (and its active nav item) at /', async () => {
     renderApp(['/']);
     // Both the sidebar and list header show the server total.
-    await waitFor(() => expect(screen.getAllByText('128')).toHaveLength(2));
+    await waitFor(() => expect(screen.getAllByText('128')).toHaveLength(1));
     await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
     expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();
     const libraryLink = screen.getByRole('link', { name: /library/i });
@@ -61,10 +62,15 @@ describe('App routing', () => {
   });
 
   it('renders the Trash view + active nav item at /trash', async () => {
+    // The Library/Trash switcher only shows while the sidebar is collapsed.
+    localStorage.setItem('silo.sidebarCollapsed', 'true');
     renderApp(['/trash']);
     await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
-    const trashLink = screen.getByRole('link', { name: /trash/i });
-    expect(trashLink.getAttribute('aria-current')).toBe('page');
+    fireEvent.click(
+      screen.getByRole('heading', { name: 'Trash' }).querySelector('button') as HTMLButtonElement,
+    );
+    expect(screen.getByRole('menuitem', { name: /Library/ })).toBeDefined();
+    expect(screen.getByRole('menuitem', { name: /Trash/ })).toBeDefined();
   });
 
   it('renders the tag-scoped Library view (title + empty state) at /tags/:name', async () => {
@@ -79,20 +85,34 @@ describe('App routing', () => {
     renderApp(['/settings']);
     // v3's Settings is a MODAL — landing on /settings opens it over an empty
     // route backdrop (the modal IS the settings surface).
-    await waitFor(() => expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined());
     // The modal's own content is present (a tab), not a stale "coming soon".
     expect(screen.getByRole('tab', { name: /preferences/i })).toBeDefined();
   });
 
+  it.each([
+    ['/settings?tab=prefs', 'Preferences'],
+    ['/settings/prefs', 'Preferences'],
+    ['/settings/import-export', 'Import & export'],
+    ['/settings/unknown', 'Plugins'],
+    ['/settings/preferences/legacy', 'Preferences'],
+  ])('resolves the Settings deep link %s', async (route, selectedTab) => {
+    renderApp([route]);
+    await screen.findByRole('dialog', { name: 'Settings' });
+    expect(screen.getByRole('tab', { name: selectedTab }).getAttribute('aria-selected')).toBe(
+      'true',
+    );
+  });
+
   it('closes the Settings modal when navigating away from /settings (no floating modal over the new route)', async () => {
     renderApp(['/settings']);
-    await waitFor(() => expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined());
+    await waitFor(() => expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined());
 
     // Click the Library nav item — leaving /settings unmounts SettingsView,
     // whose cleanup closes the modal.
-    fireEvent.click(screen.getByRole('link', { name: /library/i }));
+    fireEvent.click(screen.getByRole('link', { name: /silo home/i }));
 
-    await waitFor(() => expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull());
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull());
   });
 
   it('renders a calm not-found view for an unknown path', async () => {

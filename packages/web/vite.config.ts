@@ -20,7 +20,8 @@ export default defineConfig(({ command }) => ({
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8787',
-        changeOrigin: true,
+        // Keep the browser origin for /frame ancestor-policy checks.
+        changeOrigin: false,
       },
     },
   },

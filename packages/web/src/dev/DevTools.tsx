@@ -1,4 +1,5 @@
-import { lazy, Suspense } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { layoutMedia, useMediaQuery } from '../lib/breakpoints';
 
 /**
  * Dev-only visual-feedback toolbar (`agentation`) — a bottom-right widget for
@@ -9,13 +10,70 @@ import { lazy, Suspense } from 'react';
  */
 const Agentation = lazy(() => import('agentation').then((m) => ({ default: m.Agentation })));
 
+/** The dev tool exposes its launcher through its shadow-root button. */
+function FeedbackTools({ start }: { start: boolean }) {
+  const started = useRef(false);
+  useEffect(() => {
+    if (!start || started.current) return;
+    const observer = new MutationObserver(activate);
+    function activate() {
+      if (started.current) return;
+      const root = document.querySelector('agentation-toolbar')?.shadowRoot;
+      const button = root?.querySelector<HTMLButtonElement>(
+        'button[aria-label="Start feedback mode"]',
+      );
+      if (button) {
+        started.current = true;
+        button.click();
+        observer.disconnect();
+      } else if (root) {
+        observer.observe(root, { childList: true, subtree: true });
+      }
+    }
+    observer.observe(document.body, { childList: true, subtree: true });
+    activate();
+    return () => observer.disconnect();
+  }, [start]);
+  return <Agentation />;
+}
+
 export function DevTools() {
-  if (!import.meta.env.DEV) return null;
+  return import.meta.env.DEV ? <FeedbackController /> : null;
+}
+
+function FeedbackController() {
+  const phone = useMediaQuery(layoutMedia.phone);
+  const [requested, setRequested] = useState(false);
+  useEffect(() => {
+    const show = () => setRequested(true);
+    const hide = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setRequested(false);
+    };
+    const exit = (event: MouseEvent) => {
+      if (
+        event
+          .composedPath()
+          .some(
+            (target) => target instanceof Element && target.getAttribute('aria-label') === 'Exit',
+          )
+      )
+        setRequested(false);
+    };
+    window.addEventListener('click', exit, true);
+    window.addEventListener('silo:annotate', show);
+    window.addEventListener('keydown', hide);
+    return () => {
+      window.removeEventListener('click', exit, true);
+      window.removeEventListener('silo:annotate', show);
+      window.removeEventListener('keydown', hide);
+    };
+  }, []);
+  if (phone && !requested) return null;
   // Suspense with a null fallback: the toolbar simply appears once its chunk
   // loads; nothing to show meanwhile.
   return (
     <Suspense fallback={null}>
-      <Agentation />
+      <FeedbackTools start={phone && requested} />
     </Suspense>
   );
 }

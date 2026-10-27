@@ -16,12 +16,14 @@
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
-    "@mozilla/readability": "catalog:",
     "@silo/core": "workspace:*",
     "@silo/queue": "workspace:*",
+    "defuddle": "0.19.6",
+    "dompurify": "catalog:",
     "drizzle-orm": "catalog:",
     "ipaddr.js": "catalog:",
     "jsdom": "catalog:",
+    "linkedom": "^0.18.14",
     "metascraper": "catalog:",
     "metascraper-description": "catalog:",
     "metascraper-image": "catalog:",
@@ -30,7 +32,9 @@
     "metascraper-title": "catalog:",
     "metascraper-url": "catalog:",
     "pg-boss": "catalog:",
-    "undici": "catalog:"
+    "tsx": "catalog:",
+    "undici": "catalog:",
+    "zod": "catalog:"
   },
   "devDependencies": {
     "@silo/db": "workspace:*",
@@ -39,7 +43,6 @@
     "@types/node": "catalog:",
     "@types/pg": "catalog:",
     "pg": "catalog:",
-    "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

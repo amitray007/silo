@@ -35,6 +35,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       expect(await ops.getSetting('theme')).toBe('system');
       expect(await ops.getSetting('trashPurgeDays')).toBe(30);
       expect(await ops.getSetting('mcpAccess')).toBe(true);
+      expect(await ops.getSetting('hoverPreview')).toBe(false);
       expect(await ops.getSetting('plugins')).toEqual({
         hacker_news: { enabled: true, inline: true, hover: true, palette: true },
         github: { enabled: true, hover: true, palette: true },
@@ -50,6 +51,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: false,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -69,6 +71,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
     it('persists a valid trashPurgeDays and reads it back', async () => {
       await ops.setSetting('trashPurgeDays', 7);
       expect(await ops.getSetting('trashPurgeDays')).toBe(7);
+    });
+
+    it('persists hoverPreview on and off', async () => {
+      await ops.setSetting('hoverPreview', true);
+      expect(await ops.getSetting('hoverPreview')).toBe(true);
+      await ops.setSetting('hoverPreview', false);
+      expect(await ops.getSetting('hoverPreview')).toBe(false);
     });
 
     it('persists a valid mcpAccess and reads it back', async () => {
@@ -213,6 +222,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: false,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -246,6 +256,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         trashPurgeDays: 7,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: false,
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -283,6 +294,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         trashPurgeDays: 90,
         mcpAccess: false,
         linkPreviewImages: true,
+        hoverPreview: false,
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -295,6 +307,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         trashPurgeDays: 90,
         mcpAccess: false,
         linkPreviewImages: true,
+        hoverPreview: false,
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },

@@ -1,7 +1,7 @@
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 import type * as EnrichmentOps from './enrichment.js';
 import type * as LinksOps from './links.js';
@@ -580,6 +580,27 @@ describeIfPg('enrichment operations (integration)', () => {
   });
 
   describe('requestRetry', () => {
+    it('enqueues a retry in the same transaction and rolls back if enqueue fails', async () => {
+      const core = await import('@silo/core');
+      const link = await linksOps.createLink({
+        url: 'https://retry-enqueue.test',
+        sourceKind: 'link',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        expect((await enrichmentOps.requestRetry(link.id))?.captureStatus).toBe('enriching');
+        expect(enqueue).toHaveBeenCalledWith(expect.anything(), link.id);
+        await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+        enqueue.mockRejectedValueOnce(new Error('queue down'));
+        await expect(enrichmentOps.requestRetry(link.id)).rejects.toThrow('queue down');
+        expect((await linksOps.getById(link.id))?.captureStatus).toBe('partial');
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
     it('sets a partial link back to enriching and returns the link', async () => {
       const created = await linksOps.createLink({
         url: 'https://example.com/retry-partial',

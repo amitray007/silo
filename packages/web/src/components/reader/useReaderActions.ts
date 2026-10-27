@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDeleteNow, useRestoreLink, useTrashLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { isTextEntryElement } from '../../lib/usePasteCapture';
 import { useRowMenu } from '../RowMenuContext';
-import { useLibrarySelection, useTrashSelection } from '../SelectionContext';
+
+const FEEDBACK_MS = 2500;
 
 export function originalUrl(url: string): string | undefined {
   return /^https?:\/\//i.test(url) ? url : undefined;
@@ -15,16 +16,22 @@ export function useReaderActions(
   onRemoved: () => void,
 ) {
   const id = link?.id ?? '';
-  const trash = useTrashLink(id);
-  const restore = useRestoreLink(id);
-  const remove = useDeleteNow(id);
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
+  const currentId = useRef(id);
+  currentId.current = id;
+  const trash = useTrashLink();
+  const restore = useRestoreLink();
+  const remove = useDeleteNow();
   const { openEdit } = useRowMenu();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notice, setNotice] = useState({ id, message: '' });
   const feedback = notice.id === id ? notice.message : '';
   const setFeedback = (message: string) => setNotice({ id, message });
+  // Each new notice replaces the timer; unmount clears it.
+  useEffect(() => {
+    if (!notice.message) return;
+    const timer = setTimeout(() => setNotice({ id: notice.id, message: '' }), FEEDBACK_MS);
+    return () => clearTimeout(timer);
+  }, [notice]);
   const busy = trash.isPending || restore.isPending || remove.isPending;
 
   async function copy() {
@@ -40,10 +47,11 @@ export function useReaderActions(
   function act(kind: 'trash' | 'restore' | 'delete') {
     if (!link || busy) return;
     const mutation = { trash, restore, delete: remove }[kind];
-    mutation.mutate(undefined, {
+    const target = link.id;
+    mutation.mutate(target, {
+      // Step away only if the removed link is still the one on screen.
       onSuccess: () => {
-        (trashed ? trashSelection : librarySelection).deselect([id]);
-        onRemoved();
+        if (currentId.current === target) onRemoved();
       },
       onError: (error) => setFeedback(error.message),
       onSettled: () => setConfirmingDelete(false),
@@ -84,9 +92,6 @@ export function useReaderKeyboard({
   selected: boolean;
 }) {
   const { openMenuId } = useRowMenu();
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
-  const hasSelection = librarySelection.selected.length > 0 || trashSelection.selected.length > 0;
   const commands = useMemo(() => {
     const commands: Record<string, (() => void) | undefined> = {
       j: () => step(1),
@@ -109,7 +114,6 @@ export function useReaderKeyboard({
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (ignoreReaderKey(event) || openMenuId !== null) return;
-      if (event.key === 'Escape' && hasSelection) return;
       const command = commands[event.key];
       if (!command) return;
       event.preventDefault();
@@ -118,7 +122,7 @@ export function useReaderKeyboard({
     };
     document.addEventListener('keydown', onKey);
     return () => document.removeEventListener('keydown', onKey);
-  }, [commands, openMenuId, hasSelection]);
+  }, [commands, openMenuId]);
 }
 
 function ignoreReaderKey(event: KeyboardEvent) {

@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>silo - reader meta, edit link, menus and dialogs</title>
+<style>
+/*__FONTS__*/
+:root {
+  --bg: #f6f6f5; --panel: #ffffff; --line: #e6e6e4; --line-2: #d6d6d3;
+  --hov: #f1f1ef; --sel: #ebebe9;
+  --ink: #0c0c0b; --mut: #5c5c59; --fnt: #6e6e6e;
+  --btn: #111110; --btn-ink: #ffffff;
+  --accent-a: #ffb23f; --accent-b: #ff6a13; --accent: #f26b1d;
+  --accent-soft: #fff1e6; --accent-ink: #b8480a; --danger: #d63a2f; --danger-soft: #fdecea;
+  --scrim: rgba(12, 12, 11, 0.32); --stage: #e9e9e6;
+  --elev-1: 0 1px 2px rgba(0,0,0,.06);
+  --elev-2: 0 1px 2px rgba(0,0,0,.05), 0 8px 24px -6px rgba(0,0,0,.14);
+  --elev-3: 0 2px 6px rgba(0,0,0,.06), 0 24px 64px -12px rgba(0,0,0,.28);
+  --r-sm: 6px; --r: 8px; --r-lg: 12px; --r-xl: 16px;
+  --ease: cubic-bezier(0.23, 1, 0.32, 1);
+}
+[data-theme="dark"] {
+  --bg: #0a0a0a; --panel: #111111; --line: #222222; --line-2: #2e2e2e;
+  --hov: #181818; --sel: #1f1f1f;
+  --ink: #f3f3f2; --mut: #a3a3a0; --fnt: #818181;
+  --btn: #f3f3f2; --btn-ink: #0a0a0a;
+  --accent-soft: #2a1709; --accent-ink: #ff9a52; --danger-soft: #2a0f0d;
+  --scrim: rgba(0,0,0,.6); --stage: #050505;
+  --elev-1: 0 1px 2px rgba(0,0,0,.5);
+  --elev-2: 0 1px 2px rgba(0,0,0,.5), 0 8px 24px -6px rgba(0,0,0,.6);
+  --elev-3: 0 2px 6px rgba(0,0,0,.5), 0 24px 64px -12px rgba(0,0,0,.8);
+}
+* { box-sizing: border-box; margin: 0; }
+body { font-family: "Geist", ui-sans-serif, system-ui, sans-serif; background: var(--stage); color: var(--ink); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+button, input, textarea { font: inherit; color: inherit; background: none; border: 0; }
+button { cursor: pointer; }
+.ic { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+.kbd { font-size: 11px; color: var(--fnt); border: 1px solid var(--line); border-radius: 5px; padding: 0 5px; line-height: 17px; background: var(--panel); font-weight: 500; box-shadow: 0 1px 0 var(--line); }
+.btn { height: 32px; padding: 0 12px; border-radius: var(--r); font-weight: 500; font-size: 13px; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; transition: background .15s, transform .1s var(--ease); }
+.btn:active { transform: scale(.97); }
+.btn-primary { background: var(--btn); color: var(--btn-ink); box-shadow: var(--elev-1); }
+.btn-ghost { border: 1px solid var(--line); background: var(--panel); }
+.btn-ghost:hover { background: var(--hov); }
+.btn-quiet { color: var(--mut); }
+.btn-quiet:hover { background: var(--hov); color: var(--ink); }
+.btn-danger { background: var(--danger); color: #fff; }
+.btn-danger-quiet { color: var(--danger); }
+.btn-danger-quiet:hover { background: var(--danger-soft); }
+.btn .kbd { background: transparent; border-color: color-mix(in srgb, currentColor 30%, transparent); color: inherit; opacity: .75; box-shadow: none; }
+.iconbtn { width: 28px; height: 28px; border-radius: var(--r-sm); display: grid; place-items: center; color: var(--mut); }
+.iconbtn:hover { background: var(--hov); color: var(--ink); }
+.fav { width: 18px; height: 18px; border-radius: 5px; display: inline-grid; place-items: center; color: #fff; font-size: 10px; font-weight: 600; flex: none; }
+
+/* page */
+.top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 14px 28px; background: color-mix(in srgb, var(--stage) 88%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
+.top h1 { font-size: 15px; font-weight: 600; letter-spacing: -.01em; }
+.top .sp { flex: 1; }
+.top nav { display: flex; gap: 4px; }
+.top nav a { color: var(--mut); text-decoration: none; font-size: 13px; padding: 4px 10px; border-radius: 999px; }
+.top nav a:hover { background: var(--hov); color: var(--ink); }
+.wrap { max-width: 1320px; margin: 0 auto; padding: 32px 28px 80px; }
+section { margin-bottom: 64px; scroll-margin-top: 70px; }
+.sh { display: flex; align-items: baseline; gap: 12px; margin-bottom: 6px; }
+.sh h2 { font-size: 20px; font-weight: 600; letter-spacing: -.015em; }
+.sh .num { font-size: 12px; color: var(--fnt); font-weight: 500; }
+.lede { color: var(--mut); max-width: 760px; margin-bottom: 22px; }
+.opts { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 20px; }
+.opt { display: flex; flex-direction: column; gap: 10px; }
+.opt .lab { display: flex; align-items: center; gap: 8px; font-weight: 600; font-size: 13.5px; }
+.opt .lab .pill { font-size: 11px; font-weight: 600; padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-ink); }
+.opt .why { color: var(--mut); font-size: 12.5px; }
+.frame { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); box-shadow: var(--elev-1); overflow: hidden; position: relative; }
+
+/* reader mock */
+.rhead { display: flex; align-items: center; gap: 4px; padding: 8px 10px; border-bottom: 1px solid var(--line); }
+.rhead .sp { flex: 1; }
+.seg { display: inline-flex; background: var(--hov); border-radius: 8px; padding: 2px; }
+.seg button { font-size: 12.5px; font-weight: 500; padding: 3px 10px; border-radius: 6px; color: var(--mut); }
+.seg button.on { background: var(--panel); color: var(--ink); box-shadow: var(--elev-1); }
+.reader { padding: 28px 32px 32px; }
+.reader h3 { font-size: 24px; line-height: 1.2; font-weight: 600; letter-spacing: -.02em; margin-bottom: 10px; }
+.src { display: flex; align-items: center; gap: 7px; color: var(--mut); font-size: 13px; flex-wrap: wrap; }
+.src .dot { color: var(--line-2); }
+.body p { color: var(--ink); font-size: 15px; line-height: 1.7; margin-top: 14px; }
+.body p.f { color: var(--mut); }
+
+/* option A: meta strip */
+.meta-a { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 14px; }
+.tag { display: inline-flex; align-items: center; gap: 2px; height: 24px; padding: 0 9px; border-radius: 999px; background: var(--hov); color: var(--mut); font-size: 12.5px; font-weight: 500; }
+.tag b { color: var(--fnt); font-weight: 500; }
+.tag:hover { color: var(--ink); background: var(--sel); }
+.tag.add { background: transparent; border: 1px dashed var(--line-2); color: var(--fnt); padding: 0 8px 0 6px; }
+.tag.add:hover { border-style: solid; color: var(--ink); }
+.tag.add .ic { width: 13px; height: 13px; }
+.note-a { margin-top: 18px; border-left: 2px solid var(--accent); padding: 2px 0 2px 14px; }
+.note-a .h { font-size: 11.5px; font-weight: 600; color: var(--fnt); letter-spacing: .02em; display: flex; gap: 6px; align-items: center; }
+.note-a .t { font-size: 14px; color: var(--ink); margin-top: 3px; }
+.note-a.empty { border-left-color: var(--line-2); }
+.note-a.empty .t { color: var(--fnt); }
+.note-a textarea { width: 100%; resize: none; font-size: 14px; line-height: 1.55; outline: none; padding: 0; margin-top: 3px; min-height: 44px; }
+.note-a .foot { display: flex; gap: 8px; align-items: center; font-size: 11.5px; color: var(--fnt); margin-top: 4px; }
+
+/* option B: properties */
+.props { margin-top: 16px; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 6px 0; display: grid; grid-template-columns: 74px 1fr; row-gap: 2px; align-items: center; }
+.props .k { color: var(--fnt); font-size: 12.5px; display: flex; align-items: center; gap: 6px; }
+.props .k .ic { width: 14px; height: 14px; }
+.props .v { min-height: 32px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 4px 6px; border-radius: var(--r-sm); }
+.props .v:hover { background: var(--hov); }
+.props .v.ph { color: var(--fnt); }
+
+/* option C: actions under title */
+.chips { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+.chip { height: 28px; display: inline-flex; align-items: center; gap: 6px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--line); color: var(--mut); font-size: 12.5px; font-weight: 500; background: var(--panel); }
+.chip:hover { background: var(--hov); color: var(--ink); }
+.chip .ic { width: 14px; height: 14px; }
+.chip.on { color: var(--ink); }
+.note-c { margin-top: 14px; background: var(--accent-soft); color: var(--ink); border-radius: var(--r-lg); padding: 12px 14px; font-size: 14px; }
+.note-c .h { font-size: 11.5px; font-weight: 600; color: var(--accent-ink); margin-bottom: 2px; }
+
+/* edit modal mocks */
+.scrimbox { background: var(--scrim); padding: 36px 24px; display: grid; place-items: center; min-height: 560px; }
+.modal { width: 100%; max-width: 520px; background: var(--panel); border-radius: var(--r-xl); box-shadow: var(--elev-3); border: 1px solid var(--line); overflow: hidden; }
+.mhead { display: flex; align-items: center; gap: 10px; padding: 14px 16px 12px 18px; }
+.mhead .tt { font-size: 15px; font-weight: 600; flex: 1; }
+.mfoot { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-top: 1px solid var(--line); background: color-mix(in srgb, var(--hov) 55%, var(--panel)); }
+.mfoot .sp { flex: 1; }
+.urlcard { margin: 0 18px; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--bg); }
+.urlcard .u { flex: 1; min-width: 0; }
+.urlcard .u b { display: block; font-size: 12.5px; font-weight: 500; }
+.urlcard .u span { display: block; font-size: 12px; color: var(--fnt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.fields { padding: 14px 18px 18px; display: grid; gap: 14px; }
+.field label { display: flex; align-items: center; justify-content: space-between; font-size: 12px; font-weight: 500; color: var(--mut); margin-bottom: 6px; }
+.field label i { font-style: normal; color: var(--fnt); font-weight: 400; }
+.inp { width: 100%; border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); padding: 8px 10px; font-size: 14px; outline: none; transition: border-color .15s, box-shadow .15s; }
+.inp:focus, .inp.focus { border-color: var(--line-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent); }
+textarea.inp { resize: vertical; min-height: 64px; line-height: 1.5; }
+.titleinp { font-size: 18px; font-weight: 600; letter-spacing: -.01em; border: 0; padding: 2px 0; width: 100%; outline: none; }
+.tokens { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; border: 1px solid var(--line); border-radius: var(--r); padding: 5px 6px; min-height: 38px; position: relative; }
+.tokens.focus { border-color: var(--line-2); box-shadow: 0 0 0 3px color-mix(in srgb, var(--ink) 8%, transparent); }
+.tok { display: inline-flex; align-items: center; gap: 3px; height: 24px; padding: 0 4px 0 9px; border-radius: 999px; background: var(--hov); font-size: 12.5px; font-weight: 500; color: var(--ink); }
+.tok b { color: var(--fnt); font-weight: 500; }
+.tok button { width: 18px; height: 18px; border-radius: 999px; display: grid; place-items: center; color: var(--fnt); }
+.tok button:hover { background: var(--sel); color: var(--ink); }
+.tok button .ic { width: 11px; height: 11px; }
+.tokens input { flex: 1; min-width: 90px; outline: none; font-size: 13.5px; padding: 0 4px; }
+.sugg { position: absolute; left: -1px; right: -1px; top: calc(100% + 6px); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--elev-2); padding: 5px; z-index: 2; }
+.sugg .it { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border-radius: var(--r-sm); font-size: 13px; }
+.sugg .it.on { background: var(--hov); }
+.sugg .it .n { color: var(--fnt); margin-left: auto; font-size: 12px; }
+.sugg .it.create { color: var(--mut); }
+.seclabel { font-size: 11.5px; font-weight: 600; color: var(--fnt); letter-spacing: .02em; padding: 6px 8px 4px; }
+
+/* drawer option */
+.drawerbox { display: grid; grid-template-columns: 1fr 340px; min-height: 560px; background: var(--bg); }
+.drawerbox .behind { padding: 24px; opacity: .45; } .drawerbox .behind h3 { font-size: 17px !important; }
+.drawer { background: var(--panel); border-left: 1px solid var(--line); box-shadow: var(--elev-3); display: flex; flex-direction: column; }
+.drawer .fields { flex: 1; }
+
+/* inline-edit option */
+.inline-edit .titleinp { font-size: 24px; letter-spacing: -.02em; }
+.editable { border-radius: var(--r-sm); margin: 0 -6px; padding: 0 6px; transition: background .12s; }
+.editable:hover { background: var(--hov); }
+.savebar { position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px; background: var(--btn); color: var(--btn-ink); padding: 6px 6px 6px 14px; border-radius: 999px; box-shadow: var(--elev-3); font-size: 13px; }
+.savebar .btn { height: 28px; border-radius: 999px; }
+.savebar .btn-primary { background: var(--btn-ink); color: var(--btn); }
+.savebar .btn-quiet { color: color-mix(in srgb, var(--btn-ink) 70%, transparent); }
+
+/* menus */
+.stagebox { background: var(--bg); padding: 28px; min-height: 420px; position: relative; }
+.menu { width: 248px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--elev-2); padding: 5px; font-size: 13px; }
+.menu .it { display: flex; align-items: center; gap: 9px; height: 32px; padding: 0 8px; border-radius: var(--r-sm); color: var(--ink); width: 100%; text-align: left; }
+.menu .it .ic { color: var(--mut); width: 15px; height: 15px; }
+.menu .it .k { margin-left: auto; display: flex; gap: 3px; }
+.menu .it .k .kbd { box-shadow: none; }
+.menu .it.on, .menu .it:hover { background: var(--hov); }
+.menu .it.danger { color: var(--danger); }
+.menu .it.danger .ic { color: var(--danger); }
+.menu .it.danger:hover { background: var(--danger-soft); }
+.menu .sep { height: 1px; background: var(--line); margin: 5px -5px; }
+.menu .it .chev { margin-left: auto; color: var(--fnt); }
+.menu .search { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; border-bottom: 1px solid var(--line); margin: -5px -5px 5px; }
+.menu .search input { outline: none; font-size: 13px; flex: 1; }
+.cbx { width: 16px; height: 16px; border-radius: 5px; border: 1.5px solid var(--line-2); display: grid; place-items: center; flex: none; }
+.cbx.on { background: var(--btn); border-color: var(--btn); color: var(--btn-ink); }
+.cbx.on .ic { width: 11px; height: 11px; stroke-width: 2.2; }
+.menuhead { display: flex; align-items: center; gap: 8px; padding: 6px 8px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.menuhead .t { font-weight: 500; font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.menuhead .d { font-size: 11.5px; color: var(--fnt); }
+
+.confirm { width: 380px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-xl); box-shadow: var(--elev-3); padding: 20px; }
+.confirm .ico { width: 36px; height: 36px; border-radius: 10px; display: grid; place-items: center; background: var(--danger-soft); color: var(--danger); margin-bottom: 12px; }
+.confirm h4 { font-size: 15.5px; font-weight: 600; letter-spacing: -.01em; }
+.confirm p { color: var(--mut); font-size: 13.5px; margin-top: 4px; }
+.confirm .item { margin-top: 12px; display: flex; gap: 8px; align-items: center; padding: 8px 10px; background: var(--bg); border: 1px solid var(--line); border-radius: var(--r); font-size: 12.5px; }
+.confirm .item span { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.confirm .acts { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+
+.sheetphone { width: 360px; height: 640px; border-radius: 32px; border: 1px solid var(--line); background: var(--bg); overflow: hidden; position: relative; box-shadow: var(--elev-2); }
+.sheetphone .scr { position: absolute; inset: 0; background: var(--scrim); }
+.sheet { position: absolute; left: 0; right: 0; bottom: 0; background: var(--panel); border-radius: 20px 20px 0 0; padding: 8px 8px 22px; box-shadow: var(--elev-3); }
+.sheet .grab { width: 36px; height: 4px; border-radius: 4px; background: var(--line-2); margin: 2px auto 8px; }
+.sheet .it { height: 46px; font-size: 15px; }
+.sheet .menuhead { padding: 4px 12px 10px; }
+.toggle-theme { display: inline-flex; gap: 6px; align-items: center; }
+.notes { margin-top: 10px; display: grid; gap: 4px; }
+.notes li { color: var(--mut); font-size: 12.5px; margin-left: 16px; }
+.pick { margin-top: 12px; padding: 14px 16px; border: 1px dashed var(--line-2); border-radius: var(--r-lg); color: var(--mut); font-size: 13px; }
+.pick b { color: var(--ink); font-weight: 600; }
+</style>
+</head>
+<body>
+<div class="top">
+  <h1>silo · reader meta, edit link, menus and dialogs</h1>
+  <nav><a href="#meta">10 · Note and tags</a><a href="#edit">11 · Edit link</a><a href="#menus">9 · Menus and dialogs</a></nav>
+  <span class="sp"></span>
+  <button class="btn btn-ghost" id="theme">Dark mode</button>
+</div>
+<div class="wrap">
+
+<section id="meta">
+  <div class="sh"><span class="num">10</span><h2>Note and tags in the reader</h2></div>
+  <p class="lede">Today the reader shows “+ Add a note” and a lone “+” pill under the title. Three ways to make them belong. All three edit in place: no modal for a note or a tag.</p>
+  <div class="opts">
+    <div class="opt">
+      <div class="lab">A · Meta strip + margin note <span class="pill">Recommended</span></div>
+      <div class="frame">
+        <div class="rhead"><span class="seg"><button class="on">Reader</button><button>Original</button></span></div>
+        <div class="reader">
+          <h3>Things we learned about LLMs in 2024</h3>
+          <div class="src"><span class="fav" style="background:#6b4fd8">S</span>Simon Willison’s Weblog<span class="dot">•</span>31 Dec 2024<span class="dot">•</span>12 min read</div>
+          <div class="meta-a"><span class="tag"><b>#</b>ai</span><span class="tag"><b>#</b>llms</span><button class="tag add">ICON_PLUS Tag</button></div>
+          <div class="note-a"><div class="h">ICON_NOTE Note</div><div class="t">The “GPT-4 barrier” section is the one to reread before the team sync.</div></div>
+          <div class="body"><p>A lot has happened in the world of Large Language Models over the course of 2024. Here’s a review of things we figured out about the field…</p></div>
+        </div>
+      </div>
+      <p class="why">Tags sit in one row with the source; “+ Tag” opens a small search-or-create popover. The note reads like a margin annotation with an orange rule. Click it to edit in place; it saves on blur. With no note, the rule is grey and says “Add a note…”.</p>
+      <div class="frame" style="margin-top:4px">
+        <div class="reader" style="padding:18px 32px 20px">
+          <div class="meta-a" style="margin-top:0"><span class="tag"><b>#</b>ai</span><button class="tag add">ICON_PLUS Tag</button></div>
+          <div class="note-a empty"><div class="h">ICON_NOTE Note</div><textarea placeholder="Add a note…">Why I kept this: the cost section</textarea><div class="foot"><span class="kbd">esc</span> cancel <span class="kbd">⌘↵</span> save · saves when you click away</div></div>
+        </div>
+      </div>
+      <p class="why">Editing state: the note becomes a borderless text area in place.</p>
+    </div>
+
+    <div class="opt">
+      <div class="lab">B · Properties block</div>
+      <div class="frame">
+        <div class="rhead"><span class="seg"><button class="on">Reader</button><button>Original</button></span></div>
+        <div class="reader">
+          <h3>Things we learned about LLMs in 2024</h3>
+          <div class="src"><span class="fav" style="background:#6b4fd8">S</span>Simon Willison’s Weblog<span class="dot">•</span>31 Dec 2024</div>
+          <div class="props">
+            <div class="k">ICON_HASH Tags</div><div class="v"><span class="tag"><b>#</b>ai</span><span class="tag"><b>#</b>llms</span><span style="color:var(--fnt);font-size:12.5px">+ Add</span></div>
+            <div class="k">ICON_NOTE Note</div><div class="v">The “GPT-4 barrier” section is the one to reread.</div>
+            <div class="k">ICON_LINK Saved</div><div class="v" style="color:var(--mut)">Today at 09:12 · by you</div>
+          </div>
+          <div class="body"><p>A lot has happened in the world of Large Language Models over the course of 2024…</p></div>
+        </div>
+      </div>
+      <p class="why">A labelled block, like Notion page properties. Clear and scannable, and it has room for more fields later (saved by, capture source). It costs more vertical space before the article starts.</p>
+    </div>
+
+    <div class="opt">
+      <div class="lab">C · Action chips, note as a callout</div>
+      <div class="frame">
+        <div class="rhead"><span class="seg"><button class="on">Reader</button><button>Original</button></span></div>
+        <div class="reader">
+          <h3>Things we learned about LLMs in 2024</h3>
+          <div class="src"><span class="fav" style="background:#6b4fd8">S</span>Simon Willison’s Weblog<span class="dot">•</span>31 Dec 2024</div>
+          <div class="chips"><button class="chip on">ICON_HASH ai, llms</button><button class="chip">ICON_NOTE Add note</button></div>
+          <div class="body"><p>A lot has happened in the world of Large Language Models over the course of 2024…</p></div>
+        </div>
+      </div>
+      <div class="frame" style="margin-top:4px"><div class="reader" style="padding:18px 32px 20px">
+        <div class="chips" style="margin-top:0"><button class="chip on">ICON_HASH ai, llms</button><button class="chip on">ICON_NOTE Note</button></div>
+        <div class="note-c"><div class="h">Note</div>The “GPT-4 barrier” section is the one to reread before the team sync.</div>
+      </div></div>
+      <p class="why">Two quiet chips keep the header minimal; a written note shows as a soft orange callout. Tags are less visible at a glance.</p>
+    </div>
+  </div>
+</section>
+
+<section id="edit">
+  <div class="sh"><span class="num">11</span><h2>Edit link</h2></div>
+  <p class="lede">Shared improvements in every option: the URL shown as a card you can copy or open, the title as the hero field, tags as a token field with search-or-create, a character hint on the note, “Move to trash” as a quiet danger action, and ⌘↵ on the Save button.</p>
+  <div class="opts">
+    <div class="opt">
+      <div class="lab">A · Focused dialog <span class="pill">Recommended</span></div>
+      <div class="frame"><div class="scrimbox">
+        <div class="modal">
+          <div class="mhead"><span class="tt">Edit link</span><button class="iconbtn" aria-label="Close">ICON_X</button></div>
+          <div class="urlcard"><span class="fav" style="background:#6b4fd8">S</span><div class="u"><b>simonwillison.net</b><span>https://simonwillison.net/2024/Dec/31/llms-in-2024/</span></div><button class="iconbtn" title="Copy">ICON_COPY</button><button class="iconbtn" title="Open">ICON_EXT</button></div>
+          <div class="fields">
+            <div class="field"><label>Title</label><input class="inp" value="Things we learned about LLMs in 2024" /></div>
+            <div class="field"><label>Tags</label>
+              <div class="tokens focus"><span class="tok"><b>#</b>ai<button>ICON_X</button></span><span class="tok"><b>#</b>llms<button>ICON_X</button></span><input value="res" />
+                <div class="sugg"><div class="seclabel">Tags</div><div class="it on">ICON_HASH research <span class="n">14</span></div><div class="it">ICON_HASH resources <span class="n">3</span></div><div class="it create">ICON_PLUS Create “res”</div></div>
+              </div>
+            </div>
+            <div class="field"><label>Note <i>Why you kept it · 42 / 2000</i></label><textarea class="inp">The “GPT-4 barrier” section is the one to reread.</textarea></div>
+            <div class="field"><label>Description <i>From the page</i></label><textarea class="inp" style="min-height:52px;color:var(--mut)">A review of things we figured out about the field in the past twelve months…</textarea></div>
+          </div>
+          <div class="mfoot"><button class="btn btn-danger-quiet">ICON_TRASH Move to trash</button><span class="sp"></span><button class="btn btn-quiet">Cancel</button><button class="btn btn-primary">Save <span class="kbd">⌘↵</span></button></div>
+        </div>
+      </div></div>
+      <p class="why">One centered dialog, ordered by how often you edit each field: title, tags, note, then description. It becomes a bottom sheet on phones.</p>
+    </div>
+
+    <div class="opt">
+      <div class="lab">B · Side panel over the reader</div>
+      <div class="frame"><div class="drawerbox">
+        <div class="behind"><h3 style="font-size:22px;font-weight:600">Things we learned about LLMs in 2024</h3><p style="margin-top:12px;color:var(--mut)">A lot has happened in the world of Large Language Models…</p></div>
+        <div class="drawer">
+          <div class="mhead"><span class="tt">Edit link</span><button class="iconbtn">ICON_X</button></div>
+          <div class="urlcard"><span class="fav" style="background:#6b4fd8">S</span><div class="u"><b>simonwillison.net</b><span>/2024/Dec/31/llms-in-2024/</span></div><button class="iconbtn">ICON_COPY</button></div>
+          <div class="fields">
+            <div class="field"><label>Title</label><textarea class="inp" style="min-height:52px">Things we learned about LLMs in 2024</textarea></div>
+            <div class="field"><label>Tags</label><div class="tokens"><span class="tok"><b>#</b>ai<button>ICON_X</button></span><span class="tok"><b>#</b>llms<button>ICON_X</button></span><input placeholder="Add tag" /></div></div>
+            <div class="field"><label>Note</label><textarea class="inp">The “GPT-4 barrier” section is the one to reread.</textarea></div>
+            <div class="field"><label>Description</label><textarea class="inp" style="color:var(--mut)">A review of things we figured out…</textarea></div>
+          </div>
+          <div class="mfoot"><button class="btn btn-danger-quiet">ICON_TRASH</button><span class="sp"></span><button class="btn btn-quiet">Cancel</button><button class="btn btn-primary">Save <span class="kbd">⌘↵</span></button></div>
+        </div>
+      </div></div>
+      <p class="why">Slides in from the right and keeps the article visible, so you can copy a line into the note. It takes the reader’s space while open.</p>
+    </div>
+
+    <div class="opt">
+      <div class="lab">C · No dialog: edit in the reader</div>
+      <div class="frame inline-edit" style="min-height:560px">
+        <div class="rhead"><span class="seg"><button class="on">Reader</button><button>Original</button></span></div>
+        <div class="reader">
+          <div class="editable"><input class="titleinp inp focus" style="border:1px solid var(--line-2);border-radius:8px;padding:4px 8px;margin-left:-8px" value="Things we learned about LLMs in 2024" /></div>
+          <div class="src" style="margin-top:10px"><span class="fav" style="background:#6b4fd8">S</span>Simon Willison’s Weblog<span class="dot">•</span>31 Dec 2024</div>
+          <div class="meta-a"><span class="tag"><b>#</b>ai</span><span class="tag"><b>#</b>llms</span><button class="tag add">ICON_PLUS Tag</button></div>
+          <div class="note-a"><div class="h">ICON_NOTE Note</div><div class="t">The “GPT-4 barrier” section is the one to reread.</div></div>
+          <div class="body"><p>A lot has happened in the world of Large Language Models over the course of 2024…</p></div>
+        </div>
+        <div class="savebar">Unsaved title <button class="btn btn-quiet">Discard</button><button class="btn btn-primary">Save</button></div>
+      </div>
+      <p class="why">Pressing <span class="kbd">e</span> makes the title editable where it is; tags and note already edit in place (option A above). The description moves to the ⋯ menu. This is the fewest steps, but there is no single place to review all fields.</p>
+    </div>
+  </div>
+</section>
+
+<section id="menus">
+  <div class="sh"><span class="num">9</span><h2>Menus and dialogs</h2></div>
+  <p class="lede">One system for every option box and dialog: a 12px radius, 32px rows (46px on phones), icons in a fixed column, shortcuts right-aligned, danger actions last and red, and a header that names what you act on. On phones every menu becomes a bottom sheet.</p>
+  <div class="opts">
+    <div class="opt">
+      <div class="lab">Row menu</div>
+      <div class="frame"><div class="stagebox">
+        <div class="menu" style="width:236px">
+          <div class="menuhead"><span class="fav" style="background:#6b4fd8">S</span><div style="min-width:0"><div class="t">Things we learned about LLMs in 2024</div><div class="d">simonwillison.net</div></div></div>
+          <button class="it on">ICON_EXT Open original <span class="k"><span class="kbd">O</span></span></button>
+          <button class="it">ICON_COPY Copy link <span class="k"><span class="kbd">C</span></span></button>
+          <button class="it">ICON_EDIT Edit <span class="k"><span class="kbd">E</span></span></button>
+          <button class="it">ICON_HASH Tags <span class="chev">›</span></button>
+          <button class="it">ICON_CHECK Select</button>
+          <div class="sep"></div>
+          <button class="it danger">ICON_TRASH Move to trash <span class="k"><span class="kbd">⌫</span></span></button>
+        </div>
+        <div class="menu" style="position:absolute;left:214px;top:176px;width:190px">
+          <div class="search">ICON_SEARCH<input placeholder="Find or create tag" /></div>
+          <button class="it"><span class="cbx on">ICON_CHECK</span>ai</button>
+          <button class="it"><span class="cbx on">ICON_CHECK</span>llms</button>
+          <button class="it"><span class="cbx"></span>research</button>
+          <button class="it"><span class="cbx"></span>to-read</button>
+        </div>
+      </div></div>
+    </div>
+    <div class="opt">
+      <div class="lab">Confirm dialog</div>
+      <div class="frame"><div class="scrimbox" style="min-height:420px">
+        <div class="confirm">
+          <div class="ico">ICON_TRASH</div>
+          <h4>Delete this link forever?</h4>
+          <p>It leaves the trash and can’t be restored. Its note and tags go with it.</p>
+          <div class="item"><span class="fav" style="background:#2d7ff9">M</span><span>Microservices · martinfowler.com</span></div>
+          <div class="acts"><button class="btn btn-ghost">Cancel</button><button class="btn btn-danger">Delete forever</button></div>
+        </div>
+      </div></div>
+    </div>
+    <div class="opt">
+      <div class="lab">On a phone: bottom sheet</div>
+      <div class="frame"><div class="stagebox" style="display:grid;place-items:center">
+        <div class="sheetphone"><div class="scr"></div>
+          <div class="sheet menu" style="width:auto;border:0;border-radius:20px 20px 0 0">
+            <div class="grab"></div>
+            <div class="menuhead"><span class="fav" style="background:#6b4fd8">S</span><div style="min-width:0"><div class="t">Things we learned about LLMs in 2024</div><div class="d">simonwillison.net</div></div></div>
+            <button class="it">ICON_EXT Open original</button>
+            <button class="it">ICON_COPY Copy link</button>
+            <button class="it">ICON_EDIT Edit</button>
+            <button class="it">ICON_HASH Tags <span class="chev">›</span></button>
+            <div class="sep"></div>
+            <button class="it danger">ICON_TRASH Move to trash</button>
+          </div>
+        </div>
+      </div></div>
+    </div>
+  </div>
+  <div class="pick">Reply with your picks, for example <b>10-A, 11-A, menus as shown</b>, plus any changes. Comments on this page work too.</div>
+</section>
+</div>
+<script>
+const I = {
+  PLUS: '<svg class="ic" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></svg>',
+  NOTE: '<svg class="ic" viewBox="0 0 16 16" style="width:13px;height:13px"><path d="M3 3.5h10M3 7h10M3 10.5h6"/></svg>',
+  HASH: '<svg class="ic" viewBox="0 0 16 16"><path d="M6 2.5 5 13.5M11 2.5l-1 11M2.5 6h11M2 10.5h11"/></svg>',
+  LINK: '<svg class="ic" viewBox="0 0 16 16"><path d="M6.5 9.5l3-3M7 4.5l1-1a2.8 2.8 0 0 1 4 4l-1 1M9 11.5l-1 1a2.8 2.8 0 0 1-4-4l1-1"/></svg>',
+  X: '<svg class="ic" viewBox="0 0 16 16"><path d="M4 4l8 8M12 4l-8 8"/></svg>',
+  COPY: '<svg class="ic" viewBox="0 0 16 16"><rect x="5" y="5" width="8.5" height="8.5" rx="1.5"/><path d="M11 5V3.5A1 1 0 0 0 10 2.5H3.5a1 1 0 0 0-1 1V10a1 1 0 0 0 1 1H5"/></svg>',
+  EXT: '<svg class="ic" viewBox="0 0 16 16"><path d="M9 2.5h4.5V7M13.5 2.5 7 9M11.5 9.5v4h-9v-9h4"/></svg>',
+  EDIT: '<svg class="ic" viewBox="0 0 16 16"><path d="M10.5 2.5l3 3L6 13H3v-3z"/></svg>',
+  TRASH: '<svg class="ic" viewBox="0 0 16 16"><path d="M2.5 4h11M6 4V2.5h4V4M4 4l.7 9.5h6.6L12 4"/></svg>',
+  CHECK: '<svg class="ic" viewBox="0 0 16 16"><path d="M3.5 8.5 6.5 11.5 12.5 4.5"/></svg>',
+  SEARCH: '<svg class="ic" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg>',
+};
+document.body.innerHTML = document.body.innerHTML.replace(/ICON_([A-Z]+)/g, (m, k) => I[k] || m);
+const btn = document.getElementById('theme');
+btn.addEventListener('click', () => {
+  const d = document.documentElement.dataset.theme === 'dark';
+  document.documentElement.dataset.theme = d ? 'light' : 'dark';
+  btn.textContent = d ? 'Dark mode' : 'Light mode';
+});
+</script>
+</body>
+</html>

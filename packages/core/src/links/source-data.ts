@@ -56,8 +56,10 @@ const hackerNewsSourceData = z
  * this is jsonb sourced from an EXTERNAL system (X, via Field Theory's
  * scrape), so no unbounded string/array can reach storage.
  *
- * RENDERER SAFETY (ce-security review SEC-2 — forward-looking, nothing renders
- * these fields yet): `text`/`authorName`/`authorHandle` are free-form external
+ * RENDERER SAFETY (ce-security review SEC-2): Reader renders `text` as a JSX
+ * text child and `mediaUrls`/`thumbnailUrl` only through the API's
+ * `/source-media` proxy, which accepts https URLs on X's media hosts and never
+ * hands the browser the raw URL. `text`/`authorName`/`authorHandle` are free-form external
  * strings, and `authorAvatarUrl`/`mediaUrls`/`externalLinks` are external URLs
  * validated here only for LENGTH, not scheme. Whoever builds the future
  * twitter card MUST treat them as untrusted: HTML-escape the text fields on
@@ -164,7 +166,15 @@ const githubSourceData = z
 const youtubeSourceData = z
   .object({
     kind: z.literal('youtube'),
+    videoId: z
+      .string()
+      .regex(/^[A-Za-z0-9_-]{11}$/)
+      .optional(),
     channel: z.string().min(1).max(256),
+    duration: z.number().int().nonnegative().max(100_000_000).optional(),
+    views: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER).optional(),
+    publishedAt: z.string().max(64).optional(),
+    keywords: z.array(z.string().max(500)).max(100).optional(),
     thumbnailUrl: z.string().min(1).max(2000),
   })
   .strict();

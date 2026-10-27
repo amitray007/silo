@@ -1,3 +1,4 @@
+import '@fontsource-variable/inter';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -7,6 +8,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { DevTools } from './dev/DevTools';
 import './styles/base.css';
 import './styles/surfaces.css';
+import './styles/link-details.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
 const queryClient = new QueryClient({

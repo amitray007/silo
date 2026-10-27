@@ -1,35 +1,5 @@
-/**
- * Static-first extraction — given already-fetched, already-decoded HTML,
- * produce structured metadata + readable text + a capture-status
- * classification, WITHOUT a browser (see
- * docs/plans/2026-07-04-002-feat-enrichment-worker-plan.md, U3 + R7/R8/R9/R10
- * + the "Capture status mapping" diagram).
- *
- * Three static tiers, tried in preference order (metascraper and Readability
- * actually run concurrently — see `extract()` — since neither depends on the
- * other's output; embedded-json is a conditional third pass, only run when
- * Readability's text comes back thin):
- *  1. metascraper — reads the OG/Twitter-card/JSON-LD/meta tags publishers
- *     already ship for link unfurls (title/description/image/siteName).
- *  2. Readability (over a script-disabled jsdom DOM) — the readable article
- *     text, for pages with real server-rendered prose.
- *  3. embedded-json — when Readability text is thin/absent, a best-effort
- *     recovery from `__NEXT_DATA__` / `__NUXT__` blobs (see
- *     embedded-json.ts), squeezing more from SPAs without rendering.
- *
- * SECURITY: the jsdom document is constructed with scripts and remote
- * resources DISABLED (the default — `runScripts` / `resources` are never
- * set). Untrusted, attacker-influenced HTML must never execute in this
- * process; see the "inert scripts" test in extract.test.ts.
- *
- * Charset: the `html` string passed in is already decoded by U2's
- * `safeFetch` (per `Content-Type` charset, else UTF-8) — this module does
- * NOT re-decode. Non-UTF-8 `<meta charset>`-only bodies are a documented,
- * deferred limitation (see the plan's Scope Boundaries).
- */
-
-import { isProbablyReaderable, Readability } from '@mozilla/readability';
-import { JSDOM, VirtualConsole } from 'jsdom';
+/** Static metadata and readable content, with isolated, retryable Reader extraction. */
+import type { ReaderContent } from '@silo/core';
 import metascraper from 'metascraper';
 import metascraperDescription from 'metascraper-description';
 import metascraperImage from 'metascraper-image';
@@ -37,8 +7,9 @@ import metascraperLogo from 'metascraper-logo';
 import metascraperPublisher from 'metascraper-publisher';
 import metascraperTitle from 'metascraper-title';
 import metascraperUrl from 'metascraper-url';
-import { recoverEmbeddedJson } from './embedded-json.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
+import type { PageContent } from './reader-page.js';
+import { extractPage } from './reader-worker.js';
 
 // PRIVACY: deliberately does NOT include `metascraper-logo-favicon` — it
 // performs a third-party favicon fetch per row, which violates silo's
@@ -92,16 +63,13 @@ export interface ExtractResult {
   siteName?: string;
   text?: string;
   status: CaptureStatus;
+  reader?: ReaderContent;
 }
 
 export interface ExtractInput {
   url: string;
   html: string;
   contentType: string | undefined;
-}
-
-function normalizeWhitespace(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
 }
 
 /** `text/html; charset=utf-8` -> `text/html`. Compares case-insensitively. */
@@ -116,7 +84,7 @@ function isHtmlContentType(contentType: string | undefined): boolean {
   return mimeType !== undefined && HTML_CONTENT_TYPES.includes(mimeType);
 }
 
-type MetascraperFields = Omit<ExtractResult, 'status' | 'text'>;
+type MetascraperFields = Omit<ExtractResult, 'status' | 'text' | 'reader'>;
 
 /**
  * Run metascraper and map its fields onto ExtractResult's naming
@@ -150,59 +118,6 @@ function hostnameOf(url: string): string | undefined {
   } catch {
     return undefined;
   }
-}
-
-/**
- * Build the VirtualConsole extractReadableText's jsdom DOM is constructed
- * with. Exported so extract.test.ts can exercise the REAL production
- * listener directly (emitting a jsdomError through it) rather than a copy
- * that merely claims to be wired "the same way" — a regression in this
- * listener would otherwise go uncaught by that test.
- *
- * jsdom's default virtual console forwards internal `jsdomError` events
- * (including CSS-parser failures) straight to `console.error`. jsdom's CSS
- * parser (rrweb-cssom) chokes on some modern CSS constructs (e.g. nested
- * selectors) and emits "Could not parse CSS stylesheet" for pages that use
- * them — a real-world example is the TypeScript docs site. This is purely
- * cosmetic noise: jsdom never needs the CSS to build the DOM, and
- * Readability only reads text/DOM structure, never styles. Suppress only
- * that specific message; forward every other jsdom-internal error to the
- * real console so genuine problems stay visible.
- */
-export function buildExtractVirtualConsole(): VirtualConsole {
-  const virtualConsole = new VirtualConsole();
-  virtualConsole.on('jsdomError', (error) => {
-    if (error.message === 'Could not parse CSS stylesheet') return;
-    console.error(error);
-  });
-  return virtualConsole;
-}
-
-/**
- * Run Readability over a script-and-remote-resource-disabled jsdom DOM.
- * Returns the trimmed/normalized text (or undefined if Readability found
- * nothing / the DOM is not "readerable"), plus the DOM itself (reused by the
- * embedded-JSON tier so the HTML is only parsed once).
- */
-function extractReadableText(url: string, html: string): { dom: JSDOM; text: string | undefined } {
-  const virtualConsole = buildExtractVirtualConsole();
-
-  // No `runScripts` / `resources` option set — this is jsdom's default and
-  // means embedded <script> tags are parsed into the DOM but NEVER
-  // executed, and no remote resource (image, stylesheet, subresource
-  // script) is fetched. This is load-bearing: `html` is untrusted,
-  // attacker-influenced content. `virtualConsole` above only filters logging
-  // output and does not affect this security property.
-  const dom = new JSDOM(html, { url, virtualConsole });
-
-  if (!isProbablyReaderable(dom.window.document)) {
-    return { dom, text: undefined };
-  }
-
-  const article = new Readability(dom.window.document).parse();
-  const rawText = article?.textContent;
-  const text = rawText ? normalizeWhitespace(rawText) : undefined;
-  return { dom, text: text && text.length > 0 ? text : undefined };
 }
 
 /** SPA/JS-wall heuristic over the raw HTML string (cheap, no DOM needed). */
@@ -251,33 +166,6 @@ function buildResult(fields: MetascraperFields, text: string | undefined): Extra
 }
 
 /**
- * Tier 3: when Readability text is thin/absent, try to recover more from an
- * embedded `__NEXT_DATA__`/`__NUXT__` blob, and fold any recovered fields
- * into `fields`/`text` without clobbering what metascraper/Readability
- * already found (first-good-source-wins).
- */
-function applyEmbeddedJsonRecovery(
-  dom: JSDOM,
-  fields: MetascraperFields,
-  text: string | undefined,
-): string | undefined {
-  const recovered = recoverEmbeddedJson(dom);
-  if (!recovered) {
-    return text;
-  }
-  if ((recovered.text?.length ?? 0) > (text?.length ?? 0)) {
-    text = recovered.text;
-  }
-  if (fields.title === undefined && recovered.title !== undefined) {
-    fields.title = recovered.title;
-  }
-  if (fields.description === undefined && recovered.description !== undefined) {
-    fields.description = recovered.description;
-  }
-  return text;
-}
-
-/**
  * JS-wall heuristic: when text is still thin AND no usable metadata was
  * found AND the raw HTML shows SPA-shell markers, that's a strong signal of
  * a JS-walled page — classify explicitly as `partial` even though
@@ -293,17 +181,11 @@ function isJsWalled(fields: MetascraperFields, text: string | undefined, html: s
   );
 }
 
-/**
- * Extract structured metadata + readable text from already-fetched HTML, and
- * classify the result's capture status. Never throws for malformed/hostile
- * HTML — jsdom and Readability are both defensive parsers, and metascraper's
- * rules degrade to `undefined` fields rather than throwing; any genuinely
- * unexpected error here is a real defect, not an "expected" degraded case.
- */
 export async function extract(input: ExtractInput): Promise<ExtractResult> {
   const { url, html, contentType } = input;
 
-  // Guard the "never throws" contract: `new JSDOM(html, { url })` and
+  // Invalid input degrades to bare; infrastructure/parser timeouts remain retryable.
+  // `new JSDOM(html, { url })` and
   // metascraper both throw on an unparseable `url`. The real caller (U5) feeds
   // safeFetch's already-validated finalUrl, so this is defense in depth — an
   // invalid URL degrades to `bare` rather than throwing.
@@ -317,27 +199,33 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
     return { status: 'bare' };
   }
 
-  // `extractReadableText` is synchronous CPU work (jsdom parse + Readability),
-  // not I/O — running it before awaiting `runMetascraper` (rather than
-  // wrapping it in `Promise.all`) is the honest shape: there is no real
-  // concurrency to buy here, since JS is single-threaded and the parse must
-  // complete before this function can do anything else regardless.
-  const { dom, text: readableText } = extractReadableText(url, html);
+  // A Reader failure falls back to metadata only, so a page that always fails still settles
+  // (retry only counts recorded attempts). reader-upgrade can rebuild Reader content later.
   const fields = await runMetascraper(url, html);
-
-  let text = readableText;
-  if ((text?.length ?? 0) < FULL_TEXT_THRESHOLD) {
-    text = applyEmbeddedJsonRecovery(dom, fields, text);
+  try {
+    const page = await extractPage(
+      html,
+      url,
+      fields.description ? { description: fields.description } : {},
+    );
+    return pageResult(fields, page, html);
+  } catch (error) {
+    console.warn(
+      '[reader] extraction unavailable',
+      error instanceof Error ? error.message : 'reader-failed',
+    );
+    return buildResult(fields, undefined);
   }
+}
 
-  const result = buildResult(fields, text);
-  // A JS-walled shell with no usable metadata would otherwise classify as
-  // `bare`; the SPA markers are evidence there IS content (just client-rendered
-  // and unreachable statically), so force `partial` — but keep every field that
-  // WAS extracted (e.g. an og:image / og:site_name present on the shell) rather
-  // than dropping them.
-  if (result.status === 'bare' && isJsWalled(fields, text, html)) {
-    result.status = 'partial';
-  }
+function pageResult(fields: MetascraperFields, page: PageContent, html: string): ExtractResult {
+  if ((fields.title === undefined || page.videoDescription) && page.title)
+    fields.title = page.title;
+  if (fields.description === undefined && page.description) fields.description = page.description;
+  const result = buildResult(fields, page.text);
+  if (page.challenge) return result;
+  if (page.videoDescription) result.status = 'partial';
+  if (page.reader) result.reader = page.reader;
+  if (result.status === 'bare' && isJsWalled(fields, page.text, html)) result.status = 'partial';
   return result;
 }

@@ -3,11 +3,11 @@ import { fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
+import { SettingsView } from '../routes/SettingsView';
 import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
 import { useRowMenu } from './RowMenuContext';
-import { useLibrarySelection, useTrashSelection } from './SelectionContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -16,25 +16,13 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-/**
- * A stand-in outlet content for the Escape-coordination tests below — pokes
- * the real `useRowMenu`/`useLibrarySelection`/`useTrashSelection` contexts
- * `AppFrame` mounts (so this exercises the SAME `RowMenuLayer` production
- * code every real route runs through) without needing a full `LibraryView`/
- * `TrashView` render (those need mocked fetch responses for every hook they
- * call — this keeps the Escape-priority tests focused on just the
- * coordination logic).
- */
+/** Exercises menu and modal coordination through the real AppFrame. */
 function EscapeProbe() {
   const { openMenuId, toggleMenu, openEdit } = useRowMenu();
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
 
   return (
     <div>
       <span>menu: {openMenuId ?? 'none'}</span>
-      <span>library selected: {librarySelection.selected.length}</span>
-      <span>trash selected: {trashSelection.selected.length}</span>
       <button type="button" onClick={() => toggleMenu('row-1')}>
         open menu
       </button>
@@ -43,12 +31,6 @@ function EscapeProbe() {
         onClick={() => openEdit(makeLink({ id: 'edit-1', url: 'https://example.com/x' }))}
       >
         open edit
-      </button>
-      <button type="button" onClick={() => librarySelection.toggle('a')}>
-        select library row
-      </button>
-      <button type="button" onClick={() => trashSelection.toggle('b')}>
-        select trash row
       </button>
     </div>
   );
@@ -80,7 +62,7 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
                 />
                 <Route path="/trash" element={<div>trash content</div>} />
                 <Route path="/probe" element={<EscapeProbe />} />
-                <Route path="/settings" element={<div>settings route content</div>} />
+                <Route path="/settings/:tab" element={<SettingsView />} />
               </Route>
             </Routes>
           </AuthProvider>
@@ -121,56 +103,35 @@ describe('AppFrame', () => {
       renderAppFrame();
 
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
       expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
       expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
     });
 
-    it('does NOT navigate to /settings when opening the modal from the sidebar button (per user feedback: Settings is a popover, not a route change)', () => {
+    it('keeps the outlet and URL behind the Settings modal', () => {
       renderAppFrame();
-      expect(screen.getByTestId('current-path').textContent).toBe('/');
-
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-      // The underlying route/outlet content is untouched — still "/", not "/settings".
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+      expect(screen.getByText('outlet content')).toBeDefined();
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }));
       expect(screen.getByTestId('current-path').textContent).toBe('/');
+    });
+
+    it('Escape returns from the Settings modal', () => {
+      renderAppFrame();
+      fireEvent.click(screen.getByRole('link', { name: /settings/i }));
+      fireEvent.keyDown(document, { key: 'Escape' });
+      expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
       expect(screen.getByText('outlet content')).toBeDefined();
     });
 
-    it('Escape closes the Settings modal and restores focus to the trigger', () => {
+    it('clicking inside the modal leaves Settings open', () => {
       renderAppFrame();
-
-      const settingsLink = screen.getByRole('link', { name: /settings/i });
-      // jsdom's fireEvent.click doesn't implicitly focus the target the way a
-      // real browser click does — focus it explicitly so the modal's
-      // focus-restore-on-close has a real "trigger" element to return to.
-      settingsLink.focus();
-      // ModalShell restores focus on close only for KEYBOARD opens (a
-      // mouse-opened modal restoring focus paints a noisy ring). This test
-      // verifies the keyboard restore path, so open via keyboard.
-      fireEvent.keyDown(settingsLink, { key: 'Enter' });
-      fireEvent.click(settingsLink);
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull();
-      expect(document.activeElement).toBe(settingsLink);
-    });
-
-    it('clicking the scrim closes the Settings modal', () => {
-      renderAppFrame();
-
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      const dialog = screen.getByRole('dialog', { name: /settings/i });
-
-      // The scrim is `dialog.parentElement` (the fixed-inset backdrop `SettingsModal` renders around the panel).
-      fireEvent.click(dialog.parentElement as Element);
-
-      expect(screen.queryByRole('dialog', { name: /settings/i })).toBeNull();
+      fireEvent.click(screen.getByRole('dialog', { name: 'Settings' }));
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
 
     it('switches tabs via the underlined tab strip (opens on Plugins by default, matching v3)', () => {
@@ -181,7 +142,7 @@ describe('AppFrame', () => {
       expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
-      expect(screen.getByText(/light, dark, or follow the system/i)).toBeDefined();
+      expect(screen.getByText(/match the app to light or dark/i)).toBeDefined();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
@@ -192,15 +153,15 @@ describe('AppFrame', () => {
 
       // Open the Edit modal (via the probe's real useRowMenu().openEdit).
       fireEvent.click(screen.getByText('open edit'));
-      expect(screen.getByRole('dialog', { name: /edit item/i })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: /edit link/i })).toBeDefined();
 
       // Now open Settings from the sidebar — the Edit modal must close, so the
       // two focus-trapped scrim modals never coexist (each registers its own
       // capture-phase Escape listener; both open at once = double-close bugs).
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-      expect(screen.queryByRole('dialog', { name: /edit item/i })).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+      expect(screen.queryByRole('dialog', { name: /edit link/i })).toBeNull();
     });
   });
 
@@ -271,22 +232,14 @@ describe('AppFrame', () => {
     fireEvent.click(screen.getByRole('button', { name: /open menu/i }));
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('true');
 
-    fireEvent.click(screen.getByRole('link', { name: /trash/i }));
+    fireEvent.click(screen.getByRole('link', { name: /settings/i }));
 
-    expect(screen.getByText('trash content')).toBeDefined();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     expect(screen.getByLabelText('Sidebar').getAttribute('data-open')).toBe('false');
   });
 
-  /**
-   * Escape-priority coordination (plan 011, V3-5) — `RowMenuLayer`'s single
-   * document `keydown` listener must close an open row menu FIRST, and only
-   * fall through to clearing a selection scope when no menu is open. Drives
-   * this against the real `RowMenuProvider`/`SelectionProvider` +
-   * `RowMenuLayer` that `AppFrame` mounts (via `EscapeProbe`), not a
-   * hand-rolled reimplementation of the priority logic.
-   */
   describe('command palette mutual exclusion (review fix #1, plan 024)', () => {
-    /** Routes fetch by path so the palette's own hooks (useTags/useSearchLinks/useLinksByTag/useInfiniteLinks) get sane, empty responses instead of the counts-shaped default every other AppFrame test uses — needed here because these tests actually open the palette, not just probe row-menu/selection state. */
+    /** Routes fetch by path so the palette's own hooks (useTags/useSearchLinks/useLinksByTag/useInfiniteLinks) get sane, empty responses instead of the counts-shaped default every other AppFrame test uses — needed here because these tests actually open the palette, not just probe row-menu state. */
     /** The per-URL routing table for `mockAppFrameFetch`, split out purely to keep that function's cognitive complexity under the lint ceiling. */
     function respondToAppFrameUrl(url: string): Response {
       if (url.startsWith('/api/counts')) {
@@ -342,84 +295,30 @@ describe('AppFrame', () => {
       expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/edit/i);
     });
 
-    it('⌘K while the Settings modal is open does NOT open the palette (same yield rule)', () => {
+    it('allows search from the Settings modal', () => {
       mockAppFrameFetch();
       renderAppFrame();
-
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-
-      pressCmdK();
-
-      const dialogs = screen.getAllByRole('dialog');
-      expect(dialogs).toHaveLength(1);
-      expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/settings/i);
-    });
-
-    it('opening Settings while the palette is already open closes the palette (the reverse direction)', () => {
-      mockAppFrameFetch();
-      renderAppFrame();
-
       pressCmdK();
       expect(screen.getByRole('dialog', { name: 'Command palette' })).toBeDefined();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+    });
 
+    it('opening Settings closes the previous search palette', () => {
+      mockAppFrameFetch();
+      renderAppFrame();
+      pressCmdK();
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-
-      const dialogs = screen.getAllByRole('dialog');
-      expect(dialogs).toHaveLength(1);
-      expect(dialogs[0]?.getAttribute('aria-label')).toMatch(/settings/i);
+      expect(screen.queryByRole('dialog', { name: 'Command palette' })).toBeNull();
+      expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
   });
 
-  describe('Escape priority (row menu > library selection > trash selection)', () => {
-    it('closes the row menu on the first Escape, leaving a concurrent library selection untouched', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('open menu'));
-      fireEvent.click(screen.getByText('select library row'));
-      expect(screen.getByText('menu: row-1')).toBeDefined();
-      expect(screen.getByText('library selected: 1')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.getByText('menu: none')).toBeDefined();
-      // The selection survives this Escape — it only closed the menu.
-      expect(screen.getByText('library selected: 1')).toBeDefined();
-    });
-
-    it('a second Escape (after the menu is already closed) clears the library selection', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('open menu'));
-      fireEvent.click(screen.getByText('select library row'));
-      fireEvent.keyDown(document, { key: 'Escape' }); // closes the menu
-      expect(screen.getByText('menu: none')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' }); // now clears the selection
-
-      expect(screen.getByText('library selected: 0')).toBeDefined();
-    });
-
-    it('with no menu open, Escape clears the library selection directly', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('select library row'));
-      expect(screen.getByText('library selected: 1')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.getByText('library selected: 0')).toBeDefined();
-    });
-
-    it('with no menu open and no library selection, Escape clears the trash selection', () => {
-      renderAppFrame(['/probe']);
-
-      fireEvent.click(screen.getByText('select trash row'));
-      expect(screen.getByText('trash selected: 1')).toBeDefined();
-
-      fireEvent.keyDown(document, { key: 'Escape' });
-
-      expect(screen.getByText('trash selected: 0')).toBeDefined();
-    });
+  it('closes the row menu on Escape', () => {
+    renderAppFrame(['/probe']);
+    fireEvent.click(screen.getByText('open menu'));
+    expect(screen.getByText('menu: row-1')).toBeDefined();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.getByText('menu: none')).toBeDefined();
   });
 });

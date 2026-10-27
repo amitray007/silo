@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "turbo run build",
-    "predev": "pnpm db:migrate || echo '[silo] db:migrate skipped (is Postgres up? run pnpm db:up) — starting dev anyway'",
+    "predev": "pnpm db:migrate || echo '[silo] db:migrate skipped (is Postgres up? run pnpm db:up) \u2014 starting dev anyway'",
     "dev": "turbo run dev",
     "check-types": "turbo run check-types",
     "lint": "biome check .",
@@ -22,7 +22,9 @@
     "db:down": "docker compose down",
     "db:migrate": "pnpm --filter @silo/db run db:migrate",
     "start": "pnpm --filter @silo/app run start",
-    "prepare": "lefthook install"
+    "prepare": "lefthook install",
+    "test:view-sandbox": "pnpm --filter @silo/worker exec tsx ../../scripts/test-view-sandbox.mjs",
+    "check:live": "node scripts/check-live.mjs"
   },
   "devDependencies": {
     "@biomejs/biome": "catalog:",
@@ -30,6 +32,7 @@
     "jscpd": "catalog:",
     "knip": "catalog:",
     "lefthook": "catalog:",
+    "playwright": "1.64.1",
     "turbo": "2.11.3"
   },
   "pnpm": {

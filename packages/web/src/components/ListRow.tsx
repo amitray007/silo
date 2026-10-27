@@ -2,15 +2,24 @@ import { type ReactNode, type SyntheticEvent, useRef, useState } from 'react';
 import type { LinkJson } from '../api/types';
 import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
+import { useCompactLinks } from '../lib/useCompactLinks';
 import { Chip } from './Chip';
-import { RowSelectCheckbox } from './RowSelectCheckbox';
+import { MenuPresence } from './MenuPresence';
+import { ReaderIcon } from './reader/ReaderIcon';
 import { useReaderSelection } from './reader/ReaderSelection';
-import type { SelectionScope } from './SelectionContext';
 
-/** Shared row geometry; Library and Trash retain their own actions and selection. */
+function RowNoteIcon({ notes, compact }: { notes: string | null; compact: boolean }) {
+  if (!notes || !compact) return null;
+  return (
+    <span className="silo-row-note-icon" title="Has note">
+      <ReaderIcon name="note" />
+    </span>
+  );
+}
+
+/** Shared row geometry; Library and Trash retain their own per-link actions. */
 export function ListRow({
   link,
-  selection,
   menuOpen,
   toggleMenu,
   menu,
@@ -19,9 +28,12 @@ export function ListRow({
   onMenu,
   purge,
   children,
+  onRemove,
+  onDelete,
+  busy = false,
+  error,
 }: {
   link: LinkJson;
-  selection: SelectionScope;
   menuOpen: boolean;
   toggleMenu: () => void;
   menu: (anchor: HTMLElement | null) => ReactNode;
@@ -30,12 +42,15 @@ export function ListRow({
   onMenu?: () => void;
   purge?: number;
   children?: ReactNode;
+  onRemove: () => void;
+  onDelete?: () => void;
+  busy?: boolean;
+  error?: string | undefined;
 }) {
+  const [compact] = useCompactLinks();
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [hovered, setHovered] = useState(false);
   const reader = useReaderSelection();
-  const selected = selection.isSelected(link.id);
-  const showCheck = hovered || menuOpen || selection.selected.length > 0;
   const domain = deriveDomain(link.url);
   const enter = (event: SyntheticEvent<HTMLAnchorElement>) => {
     setHovered(true);
@@ -53,9 +68,10 @@ export function ListRow({
         rel="noopener"
         className="silo-link-row"
         data-link-id={link.id}
+        data-compact={compact}
+        data-enriching={link.captureStatus === 'enriching'}
         tabIndex={reader?.selectedId && reader.selectedId !== link.id ? -1 : 0}
         data-active={reader?.selectedId === link.id}
-        data-trashed={purge !== undefined}
         aria-current={reader?.selectedId === link.id ? 'true' : undefined}
         onClick={(event) => {
           if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey || !reader) return;
@@ -71,23 +87,17 @@ export function ListRow({
           onMenu?.();
           toggleMenu();
         }}
-        style={selected ? { background: 'var(--sel)' } : undefined}
       >
         <span className="silo-row-titleline">
-          <RowSelectCheckbox
-            visible={showCheck}
-            isSelected={selected}
-            onToggle={() => selection.toggle(link.id)}
-          />
-          {!showCheck && <Chip domain={domain} />}
+          <span className="silo-row-iconwrap">
+            <Chip domain={domain} />
+          </span>
           <span className="silo-row-title">{link.title ?? deriveTitleFromUrl(link.url)}</span>
         </span>
         <span className="silo-row-meta">
           <span>{domain}</span>
           {hovered && <span className="silo-row-time">{relativeTimeFromNow(link.createdAt)}</span>}
-          {link.captureStatus === 'enriching' && (
-            <span className="silo-capturing">◌ Capturing</span>
-          )}
+          {link.captureStatus === 'enriching' && <span className="silo-sr-only">Capturing</span>}
           {purge !== undefined && (
             <span className="silo-row-purge" title={`Auto-deletes in ${purge} days`}>
               Purges in {purge} days
@@ -96,25 +106,76 @@ export function ListRow({
         </span>
         {children}
         {link.notes && <span className="silo-row-note">"{link.notes}"</span>}
-        <button
-          type="button"
-          className="silo-rowmore silo-reader-iconbtn"
-          title="Options"
-          aria-label="Options"
-          aria-haspopup="true"
-          aria-expanded={menuOpen}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onMenu?.();
-            toggleMenu();
-          }}
-        >
-          ⋯
-        </button>
+        <RowNoteIcon notes={link.notes} compact={compact} />
+        <span className="silo-row-actions">
+          <button
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label="Open original"
+            title="Open original"
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              window.open(link.url, '_blank', 'noopener,noreferrer');
+            }}
+          >
+            <ReaderIcon name="arrowUpRight" />
+          </button>
+          <button
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label={purge === undefined ? 'Move to trash' : 'Restore'}
+            title={purge === undefined ? 'Move to trash' : 'Restore'}
+            disabled={busy}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onRemove();
+            }}
+          >
+            <ReaderIcon name={purge === undefined ? 'trash' : 'restore'} />
+          </button>
+          {onDelete && (
+            <button
+              type="button"
+              className="silo-reader-iconbtn"
+              aria-label="Delete forever"
+              title="Delete forever"
+              disabled={busy}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                onDelete();
+              }}
+            >
+              <ReaderIcon name="trash" />
+            </button>
+          )}
+          <button
+            type="button"
+            className="silo-rowmore silo-reader-iconbtn"
+            title="Options"
+            aria-label="Options"
+            aria-haspopup="true"
+            aria-expanded={menuOpen}
+            onMouseDown={(event) => event.stopPropagation()}
+            onClick={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              onMenu?.();
+              toggleMenu();
+            }}
+          >
+            <ReaderIcon name="more" />
+          </button>
+        </span>
       </a>
-      {menu(anchorRef.current)}
+      {error && (
+        <span className="silo-toast" role="alert">
+          {error}
+        </span>
+      )}
+      <MenuPresence>{menu(anchorRef.current)}</MenuPresence>
     </span>
   );
 }

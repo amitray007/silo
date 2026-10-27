@@ -4,8 +4,9 @@ const heroCard: CSSProperties = {
   position: 'relative',
   borderRadius: 0,
   border: 0,
-  borderTop: '1px solid var(--line)',
-  background: 'var(--bg2)',
+  borderTop: '0.5px solid var(--line)',
+  // Transparent: the Settings modal sits on --bg2, and --bg read as a dark inset.
+  background: 'transparent',
   padding: '14px 0',
   marginBottom: 8,
   overflow: 'hidden',
@@ -37,7 +38,7 @@ const heroHeaderRow: CSSProperties = {
 
 const heroDesc: CSSProperties = {
   margin: 0,
-  fontSize: 'var(--text-sm)',
+  fontSize: 'var(--text-base)',
   color: 'var(--fnt)',
   lineHeight: 1.55,
   maxWidth: '34rem',

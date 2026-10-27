@@ -1,55 +1,68 @@
-import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
+import {
+  createContext,
+  type ReactNode,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { useLocation, useNavigate } from 'react-router';
 
 export type SettingsTab = 'plugins' | 'prefs' | 'import' | 'access';
-
+const SETTINGS_TABS = [
+  { key: 'plugins', path: 'plugins' },
+  { key: 'prefs', path: 'preferences' },
+  { key: 'import', path: 'import-export' },
+  { key: 'access', path: 'access' },
+] as const;
+export function parseSettingsTab(value: string | undefined): SettingsTab | undefined {
+  return SETTINGS_TABS.find((tab) => tab.path === value || tab.key === value)?.key;
+}
 interface SettingsContextValue {
-  /** Whether the Settings modal is open (v3's `settingsOpen`). */
   open: boolean;
-  /** Which tab is active (v3's `tab`) — only meaningful while `open`. */
   tab: SettingsTab;
-  /** Opens the modal, optionally jumping straight to a tab (defaults to staying on whatever tab was last active — v3 always reopens on `plugins` since it never persists `tab` across a close, but we keep the last tab so the `/settings` route and the sidebar button behave identically whichever one is used). */
   openSettings: (tab?: SettingsTab) => void;
-  /** Closes the modal without resetting `tab` (matches v3's `closeSettings`, which never touches `tab`). */
   closeSettings: () => void;
-  /** Switches tabs while the modal is open. */
   setTab: (tab: SettingsTab) => void;
 }
-
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
-/**
- * Settings modal open-state (plan 011, V3-7) — lifted to ONE provider
- * (mounted in `AppFrame`, alongside `RowMenuProvider`/`SelectionProvider`) so
- * both the sidebar's Settings button AND the `/settings` route can open the
- * SAME modal instance without either owning the other's state. Mirrors
- * `RowMenuContext`'s shape/rationale: a single source of truth prevents two
- * independent "is settings open" booleans from drifting.
- *
- * `tab` defaults to `'plugins'` (v3's initial `this.state.tab`).
- */
+/** Modal state preserves the list and reader URL when Settings opens. */
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<SettingsTab>('plugins');
-
-  const openSettings = useCallback((nextTab?: SettingsTab) => {
+  const location = useLocation();
+  const navigate = useNavigate();
+  const previousPath = useRef(location.pathname);
+  const openSettings = useCallback((next?: SettingsTab) => {
     setOpen(true);
-    if (nextTab) setTab(nextTab);
+    if (next) setTab(next);
   }, []);
-
   const closeSettings = useCallback(() => setOpen(false), []);
-
+  useEffect(() => {
+    if (previousPath.current !== location.pathname) {
+      previousPath.current = location.pathname;
+      setOpen(false);
+    }
+    const next = parseSettingsTab(location.state?.settingsTab);
+    if (next) {
+      openSettings(next);
+      navigate(`${location.pathname}${location.search}${location.hash}`, {
+        replace: true,
+        state: null,
+      });
+    }
+  }, [location.pathname, location.search, location.hash, location.state, navigate, openSettings]);
   const value = useMemo(
     () => ({ open, tab, openSettings, closeSettings, setTab }),
     [open, tab, openSettings, closeSettings],
   );
-
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }
-
 export function useSettings(): SettingsContextValue {
-  const context = useContext(SettingsContext);
-  if (!context) {
-    throw new Error('useSettings must be used within a SettingsProvider');
-  }
-  return context;
+  const value = useContext(SettingsContext);
+  if (!value) throw new Error('useSettings must be used within a SettingsProvider');
+  return value;
 }

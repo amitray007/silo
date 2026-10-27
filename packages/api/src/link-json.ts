@@ -1,5 +1,6 @@
 import type {
   CaptureSource,
+  LinkSummaryWithTags,
   LinkWithTags,
   LinkWithTextWindow,
   ListResultRow,
@@ -92,6 +93,17 @@ function shapeSourceData(raw: unknown): SourceData {
   return parsed.data;
 }
 
+export type LinkDetailJson = LinkJson & { contentHtml: string | null; contentImageCount: number };
+
+/** Reader HTML and image count are available only on the detail read path. */
+export function toLinkDetailJson(link: LinkWithTags): LinkDetailJson {
+  return {
+    ...toLinkJson(link),
+    contentHtml: link.contentHtml,
+    contentImageCount: link.contentImages?.length ?? 0,
+  };
+}
+
 /** `LinkJson` plus `deletedAt` — the Trash screen's shape (`GET /api/trash`). */
 export type TrashLinkJson = LinkJson & { deletedAt: string };
 
@@ -109,7 +121,7 @@ export type SearchResultJson = LinkJson & { rank: number };
  * payload can never reach the response unvalidated. Dates are serialized to
  * ISO strings (`Date#toISOString`) since HTTP/JSON has no native date type.
  */
-export function toLinkJson(link: LinkWithTags): LinkJson {
+export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
   /* jscpd:ignore-start — this field-by-field whitelist necessarily resembles the
      MCP adapter's `link-shape.ts`. The duplication is DELIBERATE and required by
      the architecture boundary: `@silo/api` may not import `@silo/mcp-server` (a
@@ -147,7 +159,7 @@ export function toLinkJson(link: LinkWithTags): LinkJson {
  * `Date | null` (it's nullable for live links), so the null case is handled
  * explicitly rather than asserted away.
  */
-export function toTrashLinkJson(link: LinkWithTags): TrashLinkJson {
+export function toTrashLinkJson(link: LinkSummaryWithTags): TrashLinkJson {
   return {
     ...toLinkJson(link),
     deletedAt: link.deletedAt ? link.deletedAt.toISOString() : '',
@@ -192,7 +204,7 @@ export function toSnippetSearchResultJson(link: SearchResultRow): SnippetSearchR
 }
 
 /** `toLinkJson` plus a search `rank` (`GET /api/links/search`'s per-result score). */
-export function toSearchResultJson(link: LinkWithTags, rank: number): SearchResultJson {
+export function toSearchResultJson(link: LinkSummaryWithTags, rank: number): SearchResultJson {
   return { ...toLinkJson(link), rank };
 }
 
@@ -206,11 +218,11 @@ export function toSearchResultJson(link: LinkWithTags, rank: number): SearchResu
  * it received. Mirrors `packages/mcp/server/src/tools/get-link.ts`'s
  * `GetLinkStructuredContent`'s identical `extractedTextLength` field.
  */
-export type LinkWithTextWindowJson = LinkJson & { extractedTextLength: number };
+export type LinkWithTextWindowJson = LinkDetailJson & { extractedTextLength: number };
 
 /** Builds the windowed-detail shape — `toLinkJson` plus `extractedTextLength`. */
 export function toLinkWithTextWindowJson(link: LinkWithTextWindow): LinkWithTextWindowJson {
-  return { ...toLinkJson(link), extractedTextLength: link.extractedTextLength };
+  return { ...toLinkDetailJson(link), extractedTextLength: link.extractedTextLength };
 }
 
 /**
@@ -224,7 +236,10 @@ export function toLinkWithTextWindowJson(link: LinkWithTextWindow): LinkWithText
 export type TrashSearchResultJson = TrashLinkJson & { rank: number };
 
 /** Builds a `TrashSearchResultJson` — `toTrashLinkJson` (whitelist + `deletedAt`) plus the search `rank`. Used by `GET /api/trash/search`. */
-export function toTrashSearchResultJson(link: LinkWithTags, rank: number): TrashSearchResultJson {
+export function toTrashSearchResultJson(
+  link: LinkSummaryWithTags,
+  rank: number,
+): TrashSearchResultJson {
   return { ...toTrashLinkJson(link), rank };
 }
 
@@ -243,7 +258,7 @@ export type TrashSnippetSearchResultJson = SnippetLinkJson & { deletedAt: string
 
 /**
  * Builds a `TrashSnippetSearchResultJson` from a `SearchResultRow` —
- * `SearchResultRow` is `Omit<LinkWithTags, 'extractedText'> & {...}`, so it
+ * `SearchResultRow` is `Omit<LinkSummaryWithTags, 'extractedText'> & {...}`, so it
  * still carries `deletedAt` (only `extractedText` is omitted); `searchTrash`
  * only ever returns trashed rows, so `deletedAt` is always non-null in
  * practice here, but the fallback to `''` mirrors `toTrashLinkJson`'s

@@ -10,12 +10,15 @@ import { generalTokenAuth } from './general-auth.js';
 import { registerAccessTokenRoutes } from './routes/access-tokens.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConfigRoutes } from './routes/config.js';
+import { registerContentImageRoutes } from './routes/content-image.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
+import { registerLinksSavedRoutes } from './routes/links-saved.js';
+import { registerLinksTitlesRoutes } from './routes/links-titles.js';
 import { registerLinksWriteRoutes } from './routes/links-write.js';
 import { registerLoginRoutes } from './routes/login.js';
 import { registerOAuthAuthorizeRoutes } from './routes/oauth/authorize.js';
@@ -23,8 +26,10 @@ import { oauthCorsMiddleware } from './routes/oauth/oauth-cors.js';
 import { registerOAuthRegisterRoutes } from './routes/oauth/register.js';
 import { registerOAuthTokenRoutes } from './routes/oauth/token.js';
 import { registerOAuthWellKnownRoutes } from './routes/oauth/well-known.js';
+import { registerPageViewHeaders, registerPageViewRoutes } from './routes/page-view.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
 import { registerSettingsRoutes } from './routes/settings.js';
+import { registerSourceMediaRoutes } from './routes/source-media.js';
 import { registerTagsRoutes } from './routes/tags.js';
 import { registerTrashRoutes } from './routes/trash.js';
 
@@ -218,8 +223,11 @@ export function createApp(): Hono {
   // own always-closed gate (`ingest-auth.ts`) runs INSIDE its route handler,
   // independent of and in addition to this optional general gate.
   api.use('*', corsMiddleware());
+  registerPageViewHeaders(api);
   api.use('*', generalTokenAuth);
   registerLinksRoutes(api);
+  registerLinksSavedRoutes(api);
+  registerLinksTitlesRoutes(api);
   registerLinksWriteRoutes(api);
   registerIngestRoutes(api);
   registerTrashRoutes(api);
@@ -227,6 +235,9 @@ export function createApp(): Hono {
   registerCountsRoutes(api);
   registerFaviconRoutes(api);
   registerPreviewImageRoutes(api);
+  registerContentImageRoutes(api);
+  registerSourceMediaRoutes(api);
+  registerPageViewRoutes(api);
   registerSettingsRoutes(api);
   registerExportRoutes(api);
   registerImportRoutes(api);

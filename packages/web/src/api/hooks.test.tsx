@@ -6,11 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink, makeTrashLink } from '../test/fixtures';
 import {
   queryKeys,
-  runBulk,
   useAddTag,
-  useBulkDeleteNow,
-  useBulkRestore,
-  useBulkTrash,
   useCaptureLink,
   useCounts,
   useCreateTag,
@@ -738,10 +734,10 @@ describe('useTrashLink', () => {
       jsonResponse({ link: makeLink({ id: '1', tags: [] }) }, 200),
     );
 
-    const { result } = renderHook(() => useTrashLink('1'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/trash', {
@@ -761,10 +757,10 @@ describe('useTrashLink', () => {
 
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
 
-    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     await waitFor(() => {
@@ -782,10 +778,10 @@ describe('useTrashLink', () => {
       jsonResponse({ error: 'not_found', message: 'gone' }, 404),
     );
 
-    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync().catch(() => {});
+      await result.current.mutateAsync('target').catch(() => {});
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -819,10 +815,10 @@ describe('useTrashLink', () => {
         }),
     );
 
-    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     // Wait for the optimistic removal to land (onMutate has run).
@@ -855,10 +851,10 @@ describe('useTrashLink', () => {
       jsonResponse({ link: makeLink({ id: '1', tags: [] }) }, 200),
     );
 
-    const { result } = renderHook(() => useTrashLink('1'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
@@ -1059,10 +1055,10 @@ describe('useRestoreLink', () => {
       jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
     );
 
-    const { result } = renderHook(() => useRestoreLink('1'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/restore', {
@@ -1082,10 +1078,10 @@ describe('useRestoreLink', () => {
 
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
 
-    const { result } = renderHook(() => useRestoreLink('target'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     await waitFor(() => {
@@ -1103,10 +1099,10 @@ describe('useRestoreLink', () => {
       jsonResponse({ error: 'not_found', message: 'gone' }, 404),
     );
 
-    const { result } = renderHook(() => useRestoreLink('target'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync().catch(() => {});
+      await result.current.mutateAsync('target').catch(() => {});
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -1121,10 +1117,10 @@ describe('useRestoreLink', () => {
       jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
     );
 
-    const { result } = renderHook(() => useRestoreLink('1'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
@@ -1156,10 +1152,10 @@ describe('useDeleteNow', () => {
     const { DeleteWrapper } = makeWrapper();
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    const { result } = renderHook(() => useDeleteNow('1'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/trash/1', {
@@ -1176,10 +1172,10 @@ describe('useDeleteNow', () => {
 
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
 
-    const { result } = renderHook(() => useDeleteNow('target'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     await waitFor(() => {
@@ -1197,10 +1193,10 @@ describe('useDeleteNow', () => {
       jsonResponse({ error: 'not_found', message: 'gone' }, 404),
     );
 
-    const { result } = renderHook(() => useDeleteNow('target'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync().catch(() => {});
+      await result.current.mutateAsync('target').catch(() => {});
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -1213,10 +1209,10 @@ describe('useDeleteNow', () => {
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    const { result } = renderHook(() => useDeleteNow('1'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
@@ -1309,186 +1305,5 @@ describe('useRetryCapture', () => {
     expect(invalidatedKeys).toContainEqual(['link']);
     expect(invalidatedKeys).not.toContainEqual(queryKeys.counts());
     expect(invalidatedKeys).not.toContainEqual(queryKeys.tags());
-  });
-});
-
-describe('runBulk', () => {
-  it('fires every id concurrently and reports all as succeeded when every call resolves', async () => {
-    const mutationFn = vi.fn().mockResolvedValue(undefined);
-    const result = await runBulk(['a', 'b', 'c'], mutationFn);
-
-    expect(mutationFn).toHaveBeenCalledTimes(3);
-    expect(result.succeeded.sort()).toEqual(['a', 'b', 'c']);
-    expect(result.failed).toEqual([]);
-  });
-
-  it('tolerates a partial failure — one rejected id does not abort the others', async () => {
-    const mutationFn = vi.fn().mockImplementation((id: string) => {
-      if (id === 'bad') return Promise.reject(new Error('nope'));
-      return Promise.resolve(undefined);
-    });
-
-    const result = await runBulk(['good1', 'bad', 'good2'], mutationFn);
-
-    expect(result.succeeded.sort()).toEqual(['good1', 'good2']);
-    expect(result.failed).toEqual(['bad']);
-  });
-
-  it('returns empty succeeded/failed for an empty id list (no-op)', async () => {
-    const mutationFn = vi.fn();
-    const result = await runBulk([], mutationFn);
-
-    expect(mutationFn).not.toHaveBeenCalled();
-    expect(result).toEqual({ succeeded: [], failed: [] });
-  });
-});
-
-describe('useBulkTrash', () => {
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('loops POST /api/links/:id/trash for every selected id', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    function BulkWrapper({ children }: { children: ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    }
-    vi.mocked(fetch).mockResolvedValue(jsonResponse({ link: makeLink({ tags: [] }) }, 200));
-
-    const { result } = renderHook(() => useBulkTrash(), { wrapper: BulkWrapper });
-
-    await act(async () => {
-      await result.current.mutateAsync(['a', 'b']);
-    });
-
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/links/a/trash',
-      expect.objectContaining({ method: 'POST' }),
-    );
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/links/b/trash',
-      expect.objectContaining({ method: 'POST' }),
-    );
-  });
-
-  it("invalidates links/trash/counts/tags once at the end, not once per id (each moved link drops its own tags' counts AND the live/trash tally)", async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    function BulkWrapper({ children }: { children: ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    }
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-    vi.mocked(fetch).mockResolvedValue(jsonResponse({ link: makeLink({ tags: [] }) }, 200));
-
-    const { result } = renderHook(() => useBulkTrash(), { wrapper: BulkWrapper });
-
-    await act(async () => {
-      await result.current.mutateAsync(['a', 'b', 'c']);
-    });
-
-    const trashInvalidateCalls = invalidateSpy.mock.calls.filter(
-      (call) => JSON.stringify(call[0]?.queryKey) === JSON.stringify(queryKeys.trash()),
-    );
-    expect(trashInvalidateCalls).toHaveLength(1);
-
-    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
-    expect(invalidatedKeys).toContainEqual(['links']);
-    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
-    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
-    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
-  });
-
-  it('a partial failure still resolves — the mutation does not reject overall', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    function BulkWrapper({ children }: { children: ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    }
-    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
-      const url = String(input);
-      if (url === '/api/links/bad/trash') {
-        return Promise.resolve(jsonResponse({ error: 'not_found', message: 'gone' }, 404));
-      }
-      return Promise.resolve(jsonResponse({ link: makeLink({ tags: [] }) }, 200));
-    });
-
-    const { result } = renderHook(() => useBulkTrash(), { wrapper: BulkWrapper });
-
-    let outcome: { succeeded: string[]; failed: string[] } | undefined;
-    await act(async () => {
-      outcome = await result.current.mutateAsync(['good', 'bad']);
-    });
-
-    expect(outcome?.succeeded).toEqual(['good']);
-    expect(outcome?.failed).toEqual(['bad']);
-    await waitFor(() => expect(result.current.isSuccess).toBe(true));
-  });
-});
-
-describe('useBulkRestore / useBulkDeleteNow', () => {
-  beforeEach(() => {
-    vi.stubGlobal('fetch', vi.fn());
-  });
-
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  it('useBulkRestore loops POST /api/links/:id/restore and invalidates trash/links/counts/tags', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    function RestoreBulkWrapper({ children }: { children: ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    }
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-    vi.mocked(fetch).mockResolvedValue(
-      jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
-    );
-
-    const { result } = renderHook(() => useBulkRestore(), { wrapper: RestoreBulkWrapper });
-
-    await act(async () => {
-      await result.current.mutateAsync(['a', 'b']);
-    });
-
-    expect(fetch).toHaveBeenCalledWith(
-      '/api/links/a/restore',
-      expect.objectContaining({ method: 'POST' }),
-    );
-    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
-    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
-    expect(invalidatedKeys).toContainEqual(['links']);
-    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
-    expect(invalidatedKeys).toContainEqual(queryKeys.tags());
-  });
-
-  it('useBulkDeleteNow loops DELETE /api/trash/:id and invalidates trash/counts', async () => {
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    function DeleteBulkWrapper({ children }: { children: ReactNode }) {
-      return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
-    }
-    const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
-    vi.mocked(fetch).mockResolvedValue(new Response(null, { status: 204 }));
-
-    const { result } = renderHook(() => useBulkDeleteNow(), { wrapper: DeleteBulkWrapper });
-
-    await act(async () => {
-      await result.current.mutateAsync(['a', 'b']);
-    });
-
-    expect(fetch).toHaveBeenCalledWith('/api/trash/a', {
-      method: 'DELETE',
-      headers: { 'X-Silo-CSRF': '1' },
-      credentials: 'include',
-    });
-    expect(fetch).toHaveBeenCalledWith('/api/trash/b', {
-      method: 'DELETE',
-      headers: { 'X-Silo-CSRF': '1' },
-      credentials: 'include',
-    });
-    const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
-    expect(invalidatedKeys).toContainEqual(queryKeys.trash());
-    expect(invalidatedKeys).toContainEqual(queryKeys.counts());
   });
 });

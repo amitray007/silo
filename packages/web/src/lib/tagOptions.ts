@@ -1,7 +1,7 @@
 import type { TagCount } from '../api/types';
 
 /** One row in a tag fly-out's option list (the row `⋯` menu's tags fly-out and the edit modal's tags picker share this shape — v3's `tagOpts`/`efTagOpts`). */
-export interface TagOption {
+interface TagOption {
   name: string;
   /** Whether this tag is currently assigned to the link the fly-out is open for. */
   active: boolean;

@@ -1,24 +1,12 @@
 import type { CSSProperties, SVGProps } from 'react';
 import type { PluginSource } from '../../lib/pluginSettings';
 
-/**
- * The 4 brand logos used by the Plugins grid (plan 026 U4) — self-hosted,
- * zero-runtime-network inline SVGs (honors the "no third-party calls per
- * row" design rule; see this repo's `CLAUDE.md`). Each accepts
- * `SVGProps<SVGSVGElement>` and spreads them onto the root `<svg>` so
- * `PluginLogo` below can pass `width`/`height`/`className` through without
- * any component needing its own redundant size props (and so Biome's
- * `noUnusedFunctionParameters` never flags an unused prop). Each carries a
- * `<title>` (not just `aria-hidden`) since these are meaningful brand marks
- * inside an interactive card/panel, not purely decorative chrome — satisfies
- * Biome's `noSvgWithoutTitle`.
- */
-
-/** Hacker News' mark is Y Combinator's orange square + white "Y" — HN itself has no separate bundled logo, so the source card uses YC's mark (the plan's locked asset list). */
+// Inline brand marks keep source rows independent of third-party requests.
 function YCombinatorLogo(props: SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" width={props.width ?? 24} height={props.height ?? 24} {...props}>
       <title>Hacker News (Y Combinator)</title>
+      <path fill="#FFF" d="M0 0h24v24H0z" />
       <path
         fill="#F0652F"
         d="M0 24V0h24v24H0zM6.951 5.896l4.112 7.708v5.064h1.583v-4.972l4.148-7.799h-1.749l-2.457 4.875c-.372.745-.688 1.434-.688 1.434s-.297-.708-.651-1.434L8.831 5.896h-1.88z"
@@ -64,22 +52,7 @@ function XLogo(props: SVGProps<SVGSVGElement>) {
   );
 }
 
-/**
- * Every grid source key — now a plain alias of `PluginSource`
- * (`hacker_news`/`github`/`youtube`/`twitter`, plan 026's twitter un-parking).
- * Kept as its own named type (rather than importing `PluginSource` directly at
- * every call site) so this file's logo-mapping code reads self-contained.
- */
 export type LogoSource = PluginSource;
-
-/**
- * Whether a source's brand mark carries its own color (YC orange, YouTube
- * red+white) or is a dark monochrome mark (`GitHub #181717`, X black) that
- * needs a light circular backing to read on the dark Oat surface — the
- * plan's locked tiling rule ("real logo with circular white background or
- * color flowing based on the logo").
- */
-const DARK_MONOCHROME_SOURCES: ReadonlySet<LogoSource> = new Set(['github', 'twitter']);
 
 const LOGO_BY_SOURCE: Record<LogoSource, (props: SVGProps<SVGSVGElement>) => React.JSX.Element> = {
   hacker_news: YCombinatorLogo,
@@ -92,35 +65,22 @@ const tileBase: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  borderRadius: '50%',
+  borderRadius: 6,
+  overflow: 'hidden',
+  background: 'var(--bg2)',
+  color: 'var(--ink)',
+  boxShadow: 'inset 0 0 0 0.5px var(--line)',
   flex: 'none',
 };
 
-/** Brand marks use a neutral light tile for monochrome visibility in both themes. */
-export function PluginLogo({ source, size = 44 }: { source: LogoSource; size?: number }) {
+/** All sources share a rounded tile; monochrome marks follow the theme. */
+export function PluginLogo({ source, size = 28 }: { source: LogoSource; size?: number }) {
   const Logo = LOGO_BY_SOURCE[source];
-  const isDarkMonochrome = DARK_MONOCHROME_SOURCES.has(source);
-  const logoSize = Math.round(size * 0.55);
+  const logoSize = source === 'hacker_news' ? size : Math.round(size * 0.64);
 
   return (
-    <span
-      // Decorative in every call site here — always paired with adjacent
-      // visible text (a card title / panel header name), so the SVG's own
-      // `<title>` (present for standalone a11y/lint reasons — see this
-      // file's top doc comment) must NOT leak into an ancestor button's
-      // accessible-name computation (an interactive `<button>` wrapping this
-      // would otherwise get its name doubled, e.g. "GitHub GitHub").
-      aria-hidden="true"
-      style={{
-        ...tileBase,
-        width: size,
-        height: size,
-        background: isDarkMonochrome ? 'var(--logo-tile)' : 'var(--bg2)',
-        color: isDarkMonochrome ? 'var(--logo-ink)' : undefined,
-        border: isDarkMonochrome ? 'none' : '1px solid var(--line)',
-      }}
-    >
-      <Logo width={logoSize} height={logoSize} />
+    <span aria-hidden="true" style={{ ...tileBase, width: size, height: size }}>
+      <Logo width={logoSize} height={source === 'youtube' ? (logoSize * 180) / 256 : logoSize} />
     </span>
   );
 }

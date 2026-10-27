@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 import { Chip, chipLetter } from './Chip';
 
@@ -22,19 +22,35 @@ describe('chipLetter', () => {
 });
 
 describe('Chip', () => {
-  it('renders the derived letter', () => {
-    render(<Chip domain="tbray.org" />);
-    expect(screen.getByText('T')).toBeDefined();
+  it('loads the real favicon through the silo proxy, hidden until it decodes', () => {
+    const { container } = render(<Chip domain="www.TBray.org" />);
+    const img = container.querySelector('img');
+    expect(img?.getAttribute('src')).toBe('/api/favicon?domain=tbray.org');
+    expect(container.firstElementChild?.getAttribute('data-state')).toBe('pending');
+    expect(screen.queryByText('T')).toBeNull();
+    fireEvent.load(img as HTMLImageElement);
+    expect(container.firstElementChild?.getAttribute('data-state')).toBe('loaded');
   });
 
-  it('uses a local letter chip with no image request', () => {
+  it('shows the letter on a neutral tile when the site has no icon', () => {
     const { container } = render(<Chip domain="tbray.org" />);
-    expect(screen.getByText('T').className).toBe('silo-letter-chip');
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
     expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('T').getAttribute('data-state')).toBe('failed');
+  });
+
+  it('requests a new icon when the domain changes', () => {
+    const { container, rerender } = render(<Chip domain="tbray.org" />);
+    fireEvent.error(container.querySelector('img') as HTMLImageElement);
+    rerender(<Chip domain="github.com" />);
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      '/api/favicon?domain=github.com',
+    );
   });
 
   it('renders no favicon img when there is no domain', () => {
     const { container } = render(<Chip domain={null} />);
     expect(container.querySelector('img')).toBeNull();
+    expect(screen.getByText('·')).toBeDefined();
   });
 });

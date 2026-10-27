@@ -3,7 +3,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
-import { buildExtractVirtualConsole, extract } from './extract.js';
+import { extract } from './extract.js';
+import { buildExtractVirtualConsole } from './reader-page.js';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__');
 
@@ -137,7 +138,7 @@ describe('extract — null/short inputs classify without throwing', () => {
 describe('extract — security: jsdom does not execute scripts', () => {
   it('constructs the DOM the same way extract.ts does, and the inline script never runs', () => {
     // This is the load-bearing proof: construct a JSDOM exactly the way
-    // `extractReadableText` in extract.ts does (`new JSDOM(html, { url })`,
+    // `extractPageContent` in extract.ts does (`new JSDOM(html, { url })`,
     // no `runScripts`/`resources` option), and assert directly against
     // jsdom's OWN `window`/`document` — not against metascraper's output.
     // metascraper parses the raw HTML string with its own independent
@@ -271,7 +272,7 @@ describe('extract — jsdom CSS-parse noise is suppressed', () => {
     // OWN default virtual console (no fix applied) before this fixture was
     // committed: it deterministically logs exactly "Could not parse CSS
     // stylesheet" to console.error. This is cosmetic noise (see the
-    // `virtualConsole` comment in extractReadableText) — the DOM and
+    // `virtualConsole` comment in extractPageContent) — the DOM and
     // readable text extract fine regardless — so extract() must not let it
     // reach the worker's stderr.
     const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -301,7 +302,7 @@ describe('extract — jsdom CSS-parse noise is suppressed', () => {
     // Guard against an overly broad fix (e.g. suppressing ALL `jsdomError`s
     // rather than only the specific CSS-parse message). Builds the REAL
     // production `VirtualConsole` via `buildExtractVirtualConsole` — the
-    // exact listener extractReadableText wires up, not a copy that merely
+    // exact listener extractPageContent wires up, not a copy that merely
     // claims to be wired "the same way" — then emits a real `jsdomError`
     // event through jsdom's own EventEmitter-based API (not a reimplemented
     // predicate called directly) with a message OTHER than "Could not parse
@@ -335,4 +336,167 @@ describe('extract — never throws (contract)', () => {
       }),
     ).resolves.toEqual({ status: 'bare' });
   });
+});
+
+describe('Reader extraction', () => {
+  it('recovers an article in a table layout and retains its formatting', async () => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: `<table><tr><td><h1>Great work</h1><font>${'<p>Finding good problems takes curiosity and persistence. <em>Follow your interest.</em></p>'.repeat(12)}</font></td></tr></table>`,
+    });
+    expect(result.status).toBe('full');
+    expect(result.text).toContain('Finding good problems');
+    expect(result.reader?.contentHtml).toContain('<em>Follow your interest.</em>');
+  });
+
+  it('keeps lazy images as absolute ordered targets', async () => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: `<article><h1>Photo story</h1>${'<p>A useful article about looking at the natural world and recording observations.</p>'.repeat(8)}<img src="/placeholder.gif" data-src="../photo.jpg" data-srcset="/large.jpg 2x"><img data-lazy-src="/second.png"></article>`,
+    });
+    expect(result.reader?.contentImages).toEqual([
+      'https://journal.example.com/photo.jpg',
+      'https://journal.example.com/second.png',
+    ]);
+    expect(result.reader?.contentHtml).not.toContain('srcset');
+  });
+
+  it('keeps short content without a readerability precheck', async () => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: '<main><h2>Short note</h2><p>Read this small note.</p></main>',
+    });
+    expect(result.text).toContain('Read this small note.');
+    expect(result.reader?.contentHtml).toContain('Read this small note.');
+  });
+});
+
+it('uses YouTube meta description instead of page chrome when there is no transcript', async () => {
+  const result = await extract({
+    url: 'https://www.youtube.com/watch?v=jNQXAC9IVRw',
+    contentType: 'text/html',
+    html: '<meta name="description" content="A video at the zoo &amp; its animals."><body><p>About Press Copyright Privacy</p></body>',
+  });
+  expect(result.text).toBe('A video at the zoo & its animals.');
+  expect(result.reader?.contentHtml).toBe('<p>A video at the zoo &amp; its animals.</p>');
+});
+
+describe('Reader recovery and image URL normalization', () => {
+  it('replaces a loading shell and its images when embedded JSON wins', async () => {
+    const text = 'Recovered article with <literal markup> & real prose. '.repeat(30);
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      contentType: 'text/html',
+      html: `<main><p>Loading...</p><img src="/spinner.png"></main><script id="__NEXT_DATA__" type="application/json">${JSON.stringify({ props: { pageProps: { content: text } } })}</script>`,
+    });
+    expect(result.text).toContain('Recovered article');
+    expect(result.reader?.contentHtml).toContain('Recovered article');
+    expect(result.reader?.contentHtml).not.toContain('Loading...');
+    expect(result.reader?.contentImages).toEqual([]);
+    expect(result.reader?.contentHtml).not.toContain('<literal');
+  });
+
+  it.each([
+    ['https://cdn.example.org/assets/', 'https://cdn.example.org/assets/photo.jpg'],
+    ['/assets/', 'https://journal.example.org/assets/photo.jpg'],
+    ['javascript:alert(1)', 'https://journal.example.org/articles/photo.jpg'],
+    ['data:text/html,base', 'https://journal.example.org/articles/photo.jpg'],
+  ])('resolves relative images against the supported document base %s', async (base, expected) => {
+    const result = await extract({
+      url: 'https://journal.example.org/articles/final',
+      contentType: 'text/html',
+      html: `<head><base href="${base}"></head><article><p>Article content.</p><img src="photo.jpg"></article>`,
+    });
+    expect(result.reader?.contentImages).toEqual([expected]);
+  });
+
+  it('keeps srcset-only and lazy-srcset-only images using their largest candidate', async () => {
+    const result = await extract({
+      url: 'https://journal.example.org/articles/final',
+      contentType: 'text/html',
+      html: '<base href="https://cdn.example.org/"><article><p>Article content.</p><img srcset="small.jpg 400w, large.jpg 1200w, medium.jpg 800w"><img data-srcset="normal.png 1x, retina.png 2x"><img src="chosen.png" srcset="other.png 3x"></article>',
+    });
+    expect(result.reader?.contentImages).toEqual([
+      'https://cdn.example.org/large.jpg',
+      'https://cdn.example.org/retina.png',
+      'https://cdn.example.org/chosen.png',
+    ]);
+  });
+});
+
+describe('challenge screens', () => {
+  it('keeps Vimeo metadata without article text, HTML or embedded JSON recovery', async () => {
+    const result = await extract({
+      url: 'https://vimeo.com/76979871',
+      html: fixture('challenge-vimeo.html'),
+      contentType: 'text/html',
+    });
+    expect(result.title).toBe('The New Vimeo Player (You Know, For Videos)');
+    expect(result.description).toBe('Vimeo video preview');
+    expect(result.imageUrl).toBe('https://i.vimeocdn.com/video/poster.jpg');
+    expect(result.status).toBe('partial');
+    expect(result.text).toBeUndefined();
+    expect(result.reader).toBeUndefined();
+  });
+
+  it.each([
+    '<title>Just a moment...</title><p>Waiting...</p>',
+    '<h1>Verify you are human</h1>',
+    '<div>Verify you are human</div>',
+    '<p>Checking if the site connection is secure...</p>',
+    '<p>Enable JavaScript and cookies to continue</p>',
+    '<script src="https://geo.captcha-delivery.com/captcha/"></script><p>Access denied</p>',
+    '<div id="px-captcha"></div><p>Press &amp; Hold to confirm you are a human</p>',
+    '<h1>Pardon Our Interruption</h1><p>Unusual activity detected</p>',
+    '<p>Please enable JS and disable any ad blocker</p>',
+  ])('discards challenge copy: %s', async (body) => {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      html: `<html><head><meta property="og:title" content="Saved metadata"></head><body>${body}</body></html>`,
+      contentType: 'text/html',
+    });
+    expect(result.text).toBeUndefined();
+    expect(result.reader).toBeUndefined();
+    expect(result.title).toBeDefined();
+  });
+
+  it('keeps an article about bot protection with ordinary Cloudflare scripts', async () => {
+    const html = `<article><h1>How bot protection works</h1><p>${'Cloudflare, DataDome and PerimeterX provide challenge pages. '.repeat(150)}</p></article><script src="https://challenges.cloudflare.com/turnstile/v0/api.js"></script>`;
+    const result = await extract({ url: URL_UNDER_TEST, html, contentType: 'text/html' });
+    expect(result.status).toBe('full');
+    expect(result.text).toContain('Cloudflare, DataDome and PerimeterX');
+    expect(result.reader?.contentHtml).toContain('Cloudflare, DataDome and PerimeterX');
+  });
+});
+
+it('gives the YouTube player title precedence over metascraper title', async () => {
+  const player = {
+    videoDetails: {
+      videoId: 'abcdefghijk',
+      title: 'Player title',
+      shortDescription: 'Player description.',
+    },
+  };
+  const result = await extract({
+    url: 'https://www.youtube.com/watch?v=abcdefghijk',
+    contentType: 'text/html',
+    html: `<title>Page title</title><meta property="og:title" content="Generic metadata title"><script>var ytInitialPlayerResponse = ${JSON.stringify(player)};</script>`,
+  });
+  expect(result.title).toBe('Player title');
+  expect(result.text).toBe('Player description.');
+  expect(result.status).toBe('partial');
+});
+
+it('lets a metadata-free challenge verdict win over SPA shell markers', async () => {
+  const result = await extract({
+    url: URL_UNDER_TEST,
+    contentType: 'text/html',
+    html: '<div>Please enable JS and disable any ad blocker</div><div id="root"></div>',
+  });
+  expect(result).toMatchObject({ status: 'bare' });
+  expect(result.text).toBeUndefined();
+  expect(result.reader).toBeUndefined();
 });

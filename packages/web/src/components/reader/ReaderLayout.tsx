@@ -1,7 +1,18 @@
-import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type CSSProperties,
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import { useLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
+import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
+import { useListWidth } from '../../lib/useListWidth';
 import { DeleteForeverDialog } from '../DeleteForeverDialog';
+import { ListPaneDivider } from './ListPaneDivider';
 import { ReaderPane } from './ReaderPane';
 import { ReaderSelectionContext } from './ReaderSelection';
 import { useReaderActions, useReaderKeyboard } from './useReaderActions';
@@ -27,6 +38,8 @@ export function ReaderLayout({
   hasNextPage?: boolean;
   fetchNextPage?: () => Promise<LinkJson[]>;
 }) {
+  const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
+  const [listWidth] = useListWidth();
   const { selectedId, index, select, close, removed, step, advancing } = useReaderNavigation({
     links,
     loading,
@@ -34,12 +47,10 @@ export function ReaderLayout({
     fetchNextPage,
   });
   const listed = links[index];
-  const seen = useRef(new Set<string>());
-  for (const link of links) seen.current.add(link.id);
   const detail = useLink(selectedId ?? undefined, {
-    enabled: !trashed && !loading && !listed && !seen.current.has(selectedId ?? ''),
+    enabled: !trashed && !loading,
   });
-  const resolved = listed ?? (trashed ? undefined : detail.data?.link);
+  const resolved = trashed ? listed : (detail.data?.link ?? listed);
   const previous = useRef<LinkJson | undefined>(undefined);
   if (resolved) previous.current = resolved;
   if (previous.current?.id !== selectedId) previous.current = undefined;
@@ -72,7 +83,7 @@ export function ReaderLayout({
       (row ?? rootRef.current?.querySelector<HTMLElement>('.silo-listpane'))?.focus();
     }
     const activeRow = document.activeElement?.closest('.silo-link-row');
-    if (selectedId && activeRow && !matchMedia('(max-width: 719px)').matches) {
+    if (selectedId && activeRow && !matchMedia(layoutMedia.fullWindowReader).matches) {
       rootRef.current
         ?.querySelector<HTMLElement>(`[data-link-id="${CSS.escape(selectedId)}"]`)
         ?.focus();
@@ -85,10 +96,21 @@ export function ReaderLayout({
   const selection = useMemo(() => ({ selectedId, select }), [selectedId, select]);
   return (
     <ReaderSelectionContext.Provider value={selection}>
-      <div className="silo-three-pane" data-reader={Boolean(selectedId)} ref={rootRef}>
-        <section tabIndex={-1} className="silo-listpane" aria-label={`${title} links`}>
+      <div
+        className="silo-three-pane"
+        data-reader={Boolean(selectedId)}
+        ref={rootRef}
+        style={{ '--list-w': `${listWidth}px` } as CSSProperties}
+      >
+        <section
+          tabIndex={-1}
+          className="silo-listpane"
+          aria-label={`${title} links`}
+          inert={fullWindow && Boolean(selectedId)}
+        >
           {children}
         </section>
+        <ListPaneDivider width={listWidth} fullWindow={fullWindow} />
         <ReaderPane
           link={resolved ?? previous.current}
           selectedId={selectedId}
@@ -101,18 +123,24 @@ export function ReaderLayout({
           actions={actions}
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
-          title={title}
           loading={Boolean(selectedId) && (loading || detail.isFetching)}
         />
-        <ReaderDeleteDialog actions={actions} />
+        <ReaderDeleteDialog actions={actions} link={resolved ?? previous.current} />
       </div>
     </ReaderSelectionContext.Provider>
   );
 }
 
-function ReaderDeleteDialog({ actions }: { actions: ReturnType<typeof useReaderActions> }) {
+function ReaderDeleteDialog({
+  actions,
+  link,
+}: {
+  actions: ReturnType<typeof useReaderActions>;
+  link: LinkJson | undefined;
+}) {
   return actions.confirmingDelete ? (
     <DeleteForeverDialog
+      link={link}
       pending={actions.busy}
       onConfirm={actions.confirmDelete}
       onClose={actions.cancelDelete}

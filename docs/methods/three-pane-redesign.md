@@ -95,8 +95,10 @@ before the first edit). `exactOptionalPropertyTypes` is on.
    tag create/delete/rename flows, theme sync with settings, plugins tab,
    preferences, import/export, access tokens, OAuth clients, MCP setup dialog,
    auth gate, error boundary, dev tools.
-10. **Privacy holds:** no third-party request per row. Letter chips, not
-    remote favicons. Images only through `/api/preview-image`.
+10. **Privacy holds:** no third-party request per row from the browser.
+    Real favicons through silo's `/api/favicon` proxy (2026-10-26: the
+    letter-only chips were reverted on request); a letter on a neutral tile
+    only when a site has no icon. Images only through `/api/preview-image`.
 
 ## Units (one commit each; the lead reviews between units)
 

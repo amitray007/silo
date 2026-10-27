@@ -99,7 +99,7 @@ automatic fix step**:
 
 ## Design fidelity
 
-Build against the "Redesign 2026-10" section in `docs/design/tokens.md` and `docs/design/prototypes/silo-redesign.src.html`. Use self-hosted Geist Sans 400/500/600, the prototype's neutral palette in both themes, and its orange tile mark. Use 600 where the prototype does. Accent may fill the mark and the prototype's Add link focus accents, and color toast actions; primary buttons stay ink. Healthy rows have no completion badge ("silence means complete"). Privacy: no third-party calls per row; use local letter chips and `/api/preview-image` for images. Silo is self-owned.
+Build against `docs/methods/shiori-match.md` and the "Shiori match 2026-10-25" section in `docs/design/tokens.md`. Use self-hosted Inter Variable everywhere, neutral oklch palette, measured shadows, and orange tile mark. Body and nav use 400; titles, controls, and labels use 500; reader headings use 600. Primary buttons stay ink. Healthy rows have no completion badge. Keep local letter chips and `/api/preview-image` for images; no third-party calls per row.
 
 ## User context
 

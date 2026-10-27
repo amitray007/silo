@@ -1,0 +1,984 @@
+/* Approved reader meta, focused edit, and shared menu system. */
+.silo-related {
+  margin-top: 52px;
+}
+.silo-related-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 40px;
+  padding: 0;
+  margin-bottom: 16px;
+  border: 0;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.silo-related-caret {
+  flex: none;
+  color: var(--ghost);
+  transition: transform 140ms;
+}
+.silo-related-caret[data-open="false"] {
+  transform: rotate(-90deg);
+}
+.silo-related-line {
+  flex: 1;
+  border-top: 0.5px solid var(--line);
+}
+.silo-related-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.silo-related-row {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0 0 12px;
+  border-radius: 8px;
+}
+.silo-related-row:hover {
+  background: var(--row-hover);
+}
+.silo-related-link {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  min-height: 44px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.silo-related-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px 0;
+}
+.silo-related-title,
+.silo-related-linktext {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.silo-related-title {
+  font-size: 15px;
+  font-weight: 500;
+}
+.silo-related-linktext {
+  color: var(--fnt);
+  font-size: 13px;
+}
+.silo-related-action {
+  display: flex;
+  align-items: center;
+  flex: none;
+  min-width: 44px;
+  color: var(--fnt);
+  font-size: 12px;
+}
+.silo-related-bookmark {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  min-width: 44px;
+  min-height: 44px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  cursor: pointer;
+}
+.silo-related-bookmark:hover {
+  color: var(--ink);
+}
+.silo-related-bookmark:disabled {
+  cursor: default;
+}
+.silo-related-bookmark[aria-busy="true"] {
+  opacity: 0.5;
+}
+.silo-menu-surface {
+  width: 248px;
+  padding: 6px 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--bg2);
+  box-shadow: var(--menu-shadow);
+  color: var(--ink);
+  font-size: 16px;
+  line-height: 24px;
+}
+.silo-row-menu-portal {
+  width: 236px;
+}
+.silo-menu-grab {
+  display: none;
+}
+.silo-menu-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px 8px;
+  margin-bottom: 4px;
+  border-bottom: 1px solid var(--line);
+}
+.silo-menu-heading > div {
+  min-width: 0;
+}
+.silo-menu-title {
+  font-size: 12.5px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-menu-domain {
+  font-size: 11.5px;
+  color: var(--fnt);
+}
+.silo-menu-item {
+  height: 32px;
+  min-height: 32px;
+  gap: 10px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  font-weight: 400;
+  margin: 0 6px;
+  width: calc(100% - 12px);
+  line-height: 20px;
+  background: none;
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+}
+.silo-menu-icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 20px;
+  height: 20px;
+  color: inherit;
+}
+.silo-menu-icon svg {
+  width: 20px;
+  height: 20px;
+}
+.silo-menu-shortcut {
+  margin-left: auto;
+}
+.silo-menu-item kbd {
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  padding: 0 5px;
+  font: inherit;
+  line-height: 17px;
+  font-size: 11px;
+  color: var(--fnt);
+}
+.silo-menu-item:is(:hover, :focus, .is-current),
+.silo-menu-item[aria-current="true"] {
+  background: var(--menu-highlight);
+}
+.silo-menu-item:focus-visible {
+  outline: 1px solid var(--line-2);
+  outline-offset: -1px;
+}
+.silo-menu-danger,
+.silo-menu-danger .silo-menu-icon {
+  color: var(--warn);
+}
+.silo-menu-danger:is(:hover, :focus-visible) {
+  background: var(--danger-soft);
+}
+.silo-menu-item:disabled {
+  color: var(--fnt);
+  cursor: default;
+  opacity: 0.6;
+}
+.silo-menu-separator {
+  height: 0.5px;
+  margin: 6px 0;
+  background: var(--line);
+}
+.silo-menu-chevron {
+  margin-left: auto;
+  color: var(--fnt);
+}
+.silo-tags-anchor {
+  position: relative;
+}
+.silo-tag-picker {
+  width: 190px;
+  max-height: min(440px, 70dvh);
+  overflow-y: auto;
+}
+.silo-tag-search {
+  padding: 6px 8px 8px;
+  border-bottom: 1px solid var(--line);
+  margin: -5px -5px 5px;
+}
+.silo-tag-search input {
+  width: 100%;
+  font-size: 13px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  padding: 0;
+  min-height: 24px;
+}
+.silo-tag-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  flex: none;
+  font-size: 11px;
+}
+.silo-tag-checkbox.is-checked {
+  background: var(--btn);
+  border-color: var(--btn);
+  color: var(--btn-ink);
+}
+.silo-tag-option > span:nth-child(2) {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-tag-count {
+  margin-left: auto;
+  font-size: 12px;
+  color: var(--fnt);
+}
+.silo-tag-more {
+  font-size: 11.5px;
+  color: var(--fnt);
+  padding: 6px 8px;
+}
+.silo-modal-header {
+  padding: 28px 28px 0;
+}
+.silo-modal-header h2 {
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 18px;
+  letter-spacing: -0.2px;
+}
+.silo-modal-footer {
+  padding: 0 28px 28px;
+  border: 0;
+  background: none;
+}
+.silo-modal-footer .silo-footer-spacer {
+  flex: 1;
+}
+.silo-edit-footer-btn,
+.silo-edit-save-btn,
+.silo-confirm-btn {
+  min-height: 32px;
+}
+.silo-quiet-danger {
+  color: var(--warn);
+  border-color: transparent;
+}
+.silo-quiet-danger:hover {
+  background: var(--danger-soft);
+}
+.silo-url-card {
+  margin: 16px 28px 0;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg);
+}
+.silo-url-text {
+  flex: 1;
+  min-width: 0;
+}
+.silo-url-text b {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 500;
+}
+.silo-url-text span {
+  display: block;
+  font-size: 12px;
+  color: var(--fnt);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-url-card .silo-reader-iconbtn {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  text-decoration: none;
+}
+.silo-edit-fields {
+  padding: 16px 28px;
+  display: grid;
+  gap: 16px;
+  overflow: visible;
+}
+.silo-edit-field label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--mut);
+  margin-bottom: 6px;
+  gap: 8px;
+}
+
+.silo-edit-field > .silo-field {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--input-bg);
+  box-shadow: var(--input-shadow);
+  color: var(--ink);
+  padding: 8px 12px;
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+}
+.silo-edit-field textarea {
+  resize: vertical;
+  min-height: 80px;
+  line-height: 1.5;
+}
+.silo-edit-description > textarea {
+  color: var(--mut);
+}
+.silo-tag-token-group {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  position: relative;
+}
+.silo-tag-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 5px 6px;
+  min-height: 38px;
+}
+.silo-tag-tokens:focus-within {
+  border-color: var(--line-2);
+  box-shadow: 0 0 0 3px var(--hov);
+}
+.silo-tag-token {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  min-height: 24px;
+  padding: 0 4px 0 9px;
+  border-radius: 999px;
+  background: var(--hov);
+  font-size: 12.5px;
+  font-weight: 500;
+  min-width: 0;
+  max-width: 100%;
+}
+.silo-tag-token > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-tag-token b {
+  color: var(--fnt);
+  font-weight: 500;
+}
+.silo-tag-token button {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  flex: none;
+  border: 0;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  color: var(--fnt);
+  background: none;
+  cursor: pointer;
+}
+.silo-tag-token button:hover {
+  background: var(--sel);
+  color: var(--ink);
+}
+.silo-tag-tokens input {
+  flex: 1;
+  width: 90px;
+  min-width: 90px;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+  padding: 0 4px;
+}
+.silo-tag-suggestions {
+  position: absolute;
+  left: -1px;
+  right: -1px;
+  top: calc(100% + 6px);
+  background: var(--bg2);
+  border: 1px solid transparent;
+  border-radius: 12px;
+  box-shadow: var(--elev-2);
+  padding: 5px;
+  z-index: 2;
+}
+.silo-confirm-content {
+  padding: 28px 28px 0;
+}
+.silo-confirm-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: grid;
+  place-items: center;
+  background: var(--danger-soft);
+  color: var(--warn);
+  margin-bottom: 12px;
+}
+.silo-confirm-content h2 {
+  margin: 0;
+  font-size: 18px;
+  line-height: 18px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+}
+.silo-confirm-content p {
+  margin: 4px 0 0;
+  color: var(--mut);
+  font-size: 13.5px;
+}
+.silo-confirm-item {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 10px;
+  background: var(--bg);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+.silo-confirm-item > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-confirm-item .silo-menu-heading {
+  border: 0;
+  padding: 0;
+  margin: 0;
+}
+
+.silo-confirm-layer .silo-modal-footer {
+  padding: 16px 28px 28px;
+  border: 0;
+  background: none;
+}
+.silo-palette-row {
+  border-radius: 8px;
+  min-height: 32px;
+}
+.silo-reader-more-menu {
+  width: 248px;
+  z-index: 38;
+}
+@media (max-width: 640px) {
+  .silo-menu-sheet-layer {
+    position: fixed;
+    inset: 0;
+    z-index: 65;
+    display: flex;
+    align-items: flex-end;
+  }
+  .silo-menu-scrim {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: var(--scrim);
+    backdrop-filter: var(--scrim-blur);
+    -webkit-backdrop-filter: var(--scrim-blur);
+  }
+  .silo-menu-sheet-layer > .silo-menu-surface {
+    position: relative;
+    inset: auto;
+    width: 100%;
+    max-height: 85dvh;
+    overflow: auto;
+    border-radius: 20px 20px 0 0;
+    padding: 8px 8px calc(22px + env(safe-area-inset-bottom, 0px));
+    animation: siloSheetIn 0.24s var(--ease-drawer);
+  }
+  .silo-menu-grab {
+    display: block;
+    width: 36px;
+    height: 4px;
+    border-radius: 4px;
+    background: var(--line-2);
+    margin: 2px auto 8px;
+  }
+  .silo-menu-heading {
+    padding: 4px 12px 10px;
+  }
+  .silo-menu-item {
+    height: 46px;
+    min-height: 46px;
+    font-size: 15px;
+  }
+  .silo-tag-search input {
+    min-height: 40px;
+  }
+  .silo-url-card .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+  }
+  .silo-tag-token button {
+    width: 40px;
+    height: 40px;
+  }
+  .silo-modal-footer > button {
+    min-height: 44px;
+    font-size: 13px;
+    padding: 0 8px;
+  }
+  .silo-modal-footer .silo-quiet-danger {
+    flex: 1.4;
+  }
+  .silo-edit-field label {
+    flex-wrap: wrap;
+  }
+  .silo-tag-suggestions {
+    max-height: 220px;
+    overflow: auto;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-menu-sheet-layer > .silo-menu-surface,
+  .silo-menu-item {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* Reader option A: meta strip and margin annotation. */
+.silo-meta-strip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+.silo-meta-tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 26px;
+  padding: 0 10px;
+  border-radius: 999px;
+  background: var(--hov);
+  color: var(--mut);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1;
+  max-width: 100%;
+}
+.silo-meta-tag a {
+  display: flex;
+  gap: 1px;
+  align-items: center;
+  text-decoration: none;
+  color: inherit;
+  overflow-wrap: anywhere;
+}
+.silo-meta-tag a span {
+  color: var(--fnt);
+}
+.silo-meta-tag:hover {
+  color: var(--ink);
+  background: var(--sel);
+}
+/* The remove control takes no room at rest, so idle chips stay balanced. */
+.silo-meta-tag button {
+  display: grid;
+  place-items: center;
+  width: 0;
+  height: 16px;
+  overflow: hidden;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--fnt);
+  padding: 0;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s var(--ease-out);
+}
+.silo-meta-tag:is(:hover, :focus-within) {
+  padding-right: 4px;
+}
+.silo-meta-tag:is(:hover, :focus-within) button {
+  width: 16px;
+  margin-left: 2px;
+  opacity: 1;
+}
+.silo-meta-tag button:hover {
+  color: var(--ink);
+  background: var(--icon-hover);
+}
+/* .silo-reader-icon pins icons to 16px; the chip needs a smaller, lighter glyph. */
+.silo-meta-tag svg {
+  width: 10px;
+  height: 10px;
+  stroke-width: 2.5;
+}
+.silo-meta-tag-anchor {
+  position: relative;
+}
+.silo-meta-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  height: 24px;
+  border-radius: 999px;
+  background: transparent;
+  border: 1px dashed var(--line-2);
+  color: var(--fnt);
+  padding: 0 8px 0 6px;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.silo-meta-add:hover {
+  border-style: solid;
+  color: var(--ink);
+}
+.silo-meta-add svg {
+  width: 13px;
+  height: 13px;
+}
+.silo-strip-picker {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
+  z-index: 38;
+}
+.silo-margin-note {
+  margin: 32px 0;
+  border: 0;
+  background: var(--hov);
+  border-radius: 16px;
+  padding: 12px 16px;
+}
+.silo-margin-note.is-empty {
+  border-color: var(--line-2);
+}
+.silo-note-label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--fnt);
+  letter-spacing: normal;
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.silo-note-label svg {
+  width: 14px;
+  height: 14px;
+}
+.silo-note-text {
+  display: block;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--mut);
+  margin-top: 4px;
+  border: 0;
+  padding: 0;
+  background: none;
+  width: 100%;
+}
+button.silo-note-text {
+  cursor: text;
+}
+.silo-margin-note.is-empty .silo-note-text {
+  color: var(--fnt);
+}
+.silo-margin-note textarea {
+  display: block;
+  width: 100%;
+  resize: none;
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.75;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  padding: 0;
+  margin-top: 3px;
+  min-height: 44px;
+  overflow: hidden;
+}
+.silo-margin-note textarea:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+.silo-margin-note:has(textarea:focus-visible) {
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
+}
+.silo-note-hint {
+  font-size: 11.5px;
+  color: var(--fnt);
+  margin-top: 4px;
+}
+@media (max-width: 640px) {
+  .silo-meta-tag,
+  .silo-meta-add {
+    min-height: 40px;
+  }
+  .silo-meta-tag button {
+    width: 40px;
+    height: 40px;
+    opacity: 1;
+  }
+  .silo-meta-tag a {
+    min-height: 40px;
+  }
+  button.silo-note-text {
+    min-height: 40px;
+  }
+}
+
+.silo-edit-field label span {
+  font-weight: 400;
+  color: var(--fnt);
+}
+
+.silo-confirm-item:has(.silo-menu-heading) > svg {
+  display: none;
+}
+
+@media (min-width: 641px) {
+  .silo-modal-layer-sheet {
+    align-items: center;
+    padding: 16px;
+  }
+}
+
+.silo-menu-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+  min-width: 0;
+}
+.silo-menu-presence {
+  display: contents;
+}
+.silo-menu-surface {
+  min-width: 160px;
+}
+.silo-popover {
+  transform: scale(1);
+  opacity: 1;
+  transition:
+    transform 150ms cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 150ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.silo-popover[data-closing="true"],
+.silo-menu-presence[data-closing="true"] > .silo-popover {
+  transform: scale(0.95);
+  opacity: 0;
+  transition-duration: 100ms;
+  transition-timing-function: ease-in;
+  pointer-events: none;
+}
+@starting-style {
+  .silo-popover {
+    transform: scale(0.95);
+    opacity: 0;
+  }
+}
+
+/* Collection menus use the compact recipe; context menus use the roomy recipe. */
+.silo-collection .silo-menu-surface {
+  display: flex;
+  flex-direction: column;
+  padding: 4px;
+  gap: 1px;
+  box-shadow: var(--elev-2);
+}
+/* Rows keep their height inside the scrolling menu; long tag names end in an ellipsis. */
+.silo-collection .silo-menu-surface {
+  width: 240px;
+  max-width: calc(100vw - 24px);
+}
+.silo-collection .silo-menu-item {
+  flex: none;
+  min-height: 32px;
+  height: auto;
+  margin: 0;
+  width: 100%;
+  border-radius: 5px;
+  padding: 6px 12px;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 19.5px;
+  font-weight: 500;
+}
+.silo-collection .silo-menu-label {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  gap: 12px;
+}
+.silo-collection-name {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.silo-collection .silo-menu-item:is(:focus, [aria-current="true"]) {
+  box-shadow: var(--menu-highlight-shadow);
+}
+.silo-menu-surface > .silo-menu-heading {
+  display: none;
+}
+.silo-menu-item kbd {
+  border: 0;
+  padding: 0;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+.silo-modal-panel:not(.silo-modal-panel-settings) {
+  position: relative;
+  border-radius: 16px;
+  width: min(var(--modal-width), 90vw);
+  max-height: calc(100dvh - 32px);
+}
+.silo-modal-header .silo-settings-close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  border: 0;
+}
+.silo-modal-header .silo-settings-close:hover {
+  background: var(--icon-hover);
+}
+.silo-modal-header .silo-settings-close svg {
+  width: 20px;
+  height: 20px;
+}
+:root[data-theme="dark"] .silo-edit-field > .silo-field {
+  border: 0;
+}
+.silo-edit-field label {
+  font-size: 14px;
+  line-height: 20px;
+}
+
+.silo-menu-icon {
+  color: var(--menu-icon);
+}
+.silo-menu-item {
+  text-align: start;
+}
+.silo-modal-header h2 {
+  flex: 1;
+  text-align: left;
+}
+.silo-dialog-content {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 28px;
+}
+.silo-dialog-content .silo-modal-header {
+  padding: 0;
+}
+.silo-dialog-content .silo-url-card {
+  margin: 16px 0 0;
+}
+.silo-dialog-content .silo-edit-fields {
+  padding: 16px 0;
+}
+.silo-dialog-content .silo-modal-footer {
+  padding: 0;
+}
+.silo-dialog-content .silo-confirm-content {
+  padding: 0;
+}
+.silo-dialog-content .silo-confirm-content + .silo-modal-footer {
+  padding-top: 16px;
+}
+.silo-dialog-content .silo-modal-body {
+  padding: 16px 0 0;
+}
+.silo-edit-field textarea {
+  min-height: 80px;
+  resize: none;
+}
+.silo-dialog-content .silo-settings-close {
+  font-size: 16px;
+  font-weight: 500;
+  line-height: 24px;
+  gap: 6px;
+  padding: 0;
+}
+
+@media (min-width: 641px) {
+  .silo-row-menu-portal,
+  .silo-row-menu-portal .silo-menu-surface,
+  .silo-reader-more-menu {
+    width: max-content;
+  }
+}
+
+.silo-edit-field > .silo-field:focus-visible,
+.silo-capture-form input:focus-visible,
+.silo-tag-tokens:focus-within {
+  outline: none;
+  border-color: var(--toggle-on);
+  box-shadow:
+    var(--input-shadow),
+    0 0 0 2px color-mix(in oklch, var(--toggle-on) 20%, transparent);
+}
+.silo-tag-tokens {
+  background: var(--input-bg);
+  box-shadow: var(--input-shadow);
+}
+:root[data-theme="dark"] .silo-tag-tokens,
+:root[data-theme="dark"] .silo-capture-form input {
+  border: 0;
+}

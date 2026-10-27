@@ -1,4 +1,3 @@
-@import "./fonts.css";
 @import "./tokens.css";
 @import "./layout.css";
 
@@ -7,6 +6,7 @@
 *::before,
 *::after {
   box-sizing: border-box;
+  font-family: "Inter Variable", Inter, sans-serif;
 }
 
 html,
@@ -16,23 +16,14 @@ body {
 }
 
 body {
-  font-family: "Geist", system-ui, sans-serif;
-  /* Bumped from v3's 15px (build brief "global scale + dark mode" pass) —
-     the Orpheus reference (docs/design/refs/*.png) reads larger/roomier
-     throughout; every rem-based leaf style scales up proportionally with
-     this root without individually touching each component. */
+  font-family: "Inter Variable", Inter, sans-serif;
   font-size: 16px;
-  line-height: 1.55;
+  line-height: 1.5;
   background: var(--bg);
   color: var(--ink);
-  /* Typography-craft pass: Geist ships tabular figures, so this one
-     root-level declaration gives every changing number in the app (points/
-     comments, countdowns, counts, "N found"/"N selected", tag counts) fixed
-     digit widths without 10 separate inline edits — it only affects digit
-     glyphs, so the wordmark/prose are unaffected. */
-  font-variant-numeric: tabular-nums;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  font-variant-numeric: normal;
+  -webkit-font-smoothing: auto;
+  -moz-osx-font-smoothing: auto;
   transition:
     background 0.16s ease,
     color 0.16s ease;
@@ -57,7 +48,7 @@ button:focus-visible,
 input:focus-visible,
 textarea:focus-visible,
 [tabindex]:focus-visible {
-  outline: 2px solid var(--ghost);
+  outline: 2px solid var(--fnt);
   outline-offset: 2px;
 }
 
@@ -292,7 +283,7 @@ select {
   z-index: 45;
   min-width: 100%;
   padding: 4px;
-  border: 1px solid var(--line);
+  border: 1px solid transparent;
   border-radius: 10px;
   background: var(--bg);
   box-shadow: var(--elev-2);
@@ -460,45 +451,6 @@ select {
   }
 }
 
-/* Dock actions (clear/select all/empty all/restore/delete now/move to
-   trash) — previously flat text with no hover or press feedback at all
-   (design-review pass, emil-design-eng.md's "every interactive element needs
-   consistent hover/active states"). Color shift on hover uses plain `ease`
-   (the philosophy's prescribed curve for hover/color changes); press
-   feedback uses the shared strong ease-out on `transform` only. */
-.silo-dock-action {
-  border-radius: 6px;
-  transform: scale(1);
-  transition:
-    color 0.14s ease,
-    transform 0.12s var(--ease-out);
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .silo-dock-action:hover:not(:disabled) {
-    color: var(--ink);
-  }
-}
-
-.silo-dock-action:active:not(:disabled) {
-  transform: scale(0.97);
-}
-
-/* The row multi-select checkbox (Library + Trash rows) — a binary toggle
-   that had no press feedback at all (emil-design-eng.md: "buttons must feel
-   responsive"). Transform-only, GPU-friendly. */
-.silo-row-checkbox {
-  transform: scale(1);
-  transition:
-    transform 0.1s var(--ease-out),
-    background 0.14s ease,
-    border-color 0.14s ease;
-}
-
-.silo-row-checkbox:active {
-  transform: scale(0.9);
-}
-
 /* M1a (motion audit): the hover-revealed relative-time meta on `LinkRow`
    (e.g. "2h ago") previously SNAPPED in/out via a `{hovered && …}`
    conditional mount with no transition. It still conditionally mounts (the
@@ -601,7 +553,7 @@ select {
      `inherit` here makes both element types size their row exactly the
      same for the same padding, closing that gap structurally rather than
      leaving it to whichever element type a given row happens to render as. */
-  line-height: inherit;
+  line-height: 20px;
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -809,7 +761,7 @@ select {
 @keyframes siloIn {
   from {
     opacity: 0;
-    transform: translateY(4px) scale(0.98);
+    transform: scale(0.96);
   }
   to {
     opacity: 1;
@@ -866,7 +818,7 @@ select {
 
   @starting-style {
     opacity: 0;
-    transform: scale(0.96) translateY(-2px);
+    transform: scale(0.95);
   }
 }
 

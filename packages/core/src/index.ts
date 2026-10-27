@@ -67,6 +67,7 @@ export {
   TOKEN_PREFIX_LEN,
   verifyAccessToken,
 } from './auth/tokens.js';
+export { READER_HTML_MAX_BYTES, type ReaderContent } from './capture.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
 // of the single-id write ops above, modeled on `import.ts`'s sequential-
 // bulk-with-per-item-results pattern (see bulk.ts's module doc comment).
@@ -152,6 +153,7 @@ export type {
   GetByIdOptions,
   Link,
   LinkCounts,
+  LinkSummaryWithTags,
   LinkWithTags,
   LinkWithTextWindow,
   ListFilter,
@@ -185,9 +187,14 @@ export {
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
+export {
+  findReaderUpgradeCandidates,
+  recordReaderUpgrade,
+} from './links/reader.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
 // over a link's own tags + title terms — see related.ts's doc comment.
 export { findRelated } from './links/related.js';
+export { findSavedUrls } from './links/saved.js';
 // Capture-source provenance (capture-source slice): the closed value set +
 // type for `CreateLinkInput.source` / `Link.source` — the SURFACE a link was
 // captured through, orthogonal to `addedBy`. Single source of truth,
@@ -210,6 +217,7 @@ export { findStrandedEnriching } from './links/sweep.js';
 // counts, e.g. "ai 23" — see tags.ts for the zero-count/ordering decisions.
 export type { TagCount } from './links/tags.js';
 export { createTag, deleteTag, listTagsWithCounts } from './links/tags.js';
+export { type LinkTitleFetcher, linkTitles, setLinkTitleFetcher } from './links/titles.js';
 // Trash reads + counts (plan 007, C2): listTrash is the ONE read in this
 // package deliberately NOT scoped through `whereLive` — see trash.ts's doc
 // comment for why it's quarantined in its own module. getCounts/countLive/
@@ -231,7 +239,19 @@ export {
   listTrash,
   searchTrash,
 } from './links/trash.js';
-
+export {
+  type FrameHint,
+  type PageView,
+  type PageViewer,
+  PageViewerUnavailableError,
+  setPageViewer,
+  viewPage,
+} from './links/view.js';
+export {
+  addViewScrollScript,
+  VIEW_SCROLL_SCRIPT,
+  VIEW_SCROLL_SCRIPT_HASH,
+} from './links/view-scroll.js';
 // Settings persistence (plan 016): a single-user key -> value store —
 // theme/trash-purge-cycle/plugin-toggle settings the web Settings modal
 // reads + writes. Appended as its own minimal block (this barrel is shared

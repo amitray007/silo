@@ -43,6 +43,8 @@ const settingsSchema = {
    * a link with no captured image simply shows no image regardless.
    */
   linkPreviewImages: z.boolean(),
+  /** Show preview cards on list-row hover. Off by default; palette previews are separate. */
+  hoverPreview: z.boolean(),
   /**
    * Enricher-kind -> per-feature toggles (plan 026). Keys mirror the
    * source-kinds `@silo/core`'s enrichment path knows about
@@ -109,6 +111,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
   trashPurgeDays: 30,
   mcpAccess: true,
   linkPreviewImages: true,
+  hoverPreview: false,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },
     github: { enabled: true, hover: true, palette: true },

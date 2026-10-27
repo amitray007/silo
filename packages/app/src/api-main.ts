@@ -1,6 +1,11 @@
 import { serve } from '@hono/node-server';
 import { createApp } from '@silo/api';
-import { startWorker, type WorkerHandle } from '@silo/worker';
+import {
+  registerLinkTitles,
+  registerPageViewer,
+  startWorker,
+  type WorkerHandle,
+} from '@silo/worker';
 
 /**
  * `@silo/app`'s api-role entrypoint (deployable-silo design, Unit 2) — the
@@ -98,6 +103,8 @@ async function main(): Promise<void> {
   // `packages/api/src/main.ts`'s `startEnqueuer()` and this package's own
   // `main.ts`: the enqueue seam must be live before the first request that
   // could create a link, so no capture can race ahead of it.
+  const viewer = registerPageViewer();
+  const titles = registerLinkTitles();
   const worker = await startWorkerOrDegrade();
 
   const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
@@ -125,6 +132,8 @@ async function main(): Promise<void> {
         exitCode = 1;
       }
       try {
+        titles.close();
+        await viewer.close();
         await worker?.stop();
       } catch (error: unknown) {
         console.error('[silo/app:api] error stopping worker:', error);

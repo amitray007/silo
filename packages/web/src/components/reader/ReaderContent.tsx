@@ -1,6 +1,13 @@
 import { useRetryCapture } from '../../api/hooks';
-import type { LinkJson } from '../../api/types';
+import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
+import { formatTweetDate, parseTweetDate } from '../../lib/tweetDate';
+import { embedFor } from './embedFor';
+import { ReaderIcon } from './ReaderIcon';
+import { ReaderSkeleton } from './ReaderLoading';
+import { ReaderProse } from './ReaderProse';
+import { RelatedLinks } from './RelatedLinks';
+import { TweetMedia } from './TweetMedia';
 
 function Paragraphs({ link }: { link: LinkJson }) {
   const text = link.extractedText?.trim() || link.description?.trim();
@@ -32,51 +39,102 @@ function RetryCapture({ id }: { id: string }) {
   );
 }
 
-function NoCapturedText({ link }: { link: LinkJson }) {
+/** Capture skips non-HTML bodies, so a PDF link never has Reader text. */
+function looksLikePdf(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return /\.pdf$/i.test(pathname) || /^\/pdf\//i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => void }) {
+  const retryable = link.captureStatus === 'partial' || link.captureStatus === 'bare';
+  const reason = looksLikePdf(link.url)
+    ? 'This link is a PDF. Silo saves its details but does not read PDF text yet.'
+    : 'Silo saved this link but could not read text from the page.';
   return (
-    <div className="silo-reader-retry">
-      <p>No text was captured for this page.</p>
-      <a className="silo-reader-btn" href={link.url} target="_blank" rel="noopener noreferrer">
-        Open original
-      </a>
-      {(link.captureStatus === 'partial' || link.captureStatus === 'bare') && (
-        <RetryCapture id={link.id} />
+    <section className="silo-reader-empty" aria-labelledby={`silo-reader-empty-${link.id}`}>
+      <span className="silo-reader-empty-icon">
+        <ReaderIcon name="page" />
+      </span>
+      <h3 id={`silo-reader-empty-${link.id}`}>No text to read</h3>
+      <p>
+        {reason}
+        {showLive && ' Try the live page instead.'}
+      </p>
+      <div className="silo-reader-empty-actions">
+        {showLive && (
+          <button type="button" className="silo-reader-btn" onClick={showLive}>
+            Show live page
+          </button>
+        )}
+        {retryable && <RetryCapture id={link.id} />}
+        <a className="silo-reader-btn" href={link.url} target="_blank" rel="noopener noreferrer">
+          <ReaderIcon name="arrowUpRight" size={16} />
+          Open original
+        </a>
+      </div>
+    </section>
+  );
+}
+
+type TweetSource = Extract<LinkJson['sourceData'], { kind: 'twitter' }>;
+
+function TweetCard({ linkId, source }: { linkId: string; source: TweetSource }) {
+  const posted = parseTweetDate(source.postedAt);
+  return (
+    <div className="silo-reader-tweet">
+      <div className="silo-reader-who">
+        <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
+      </div>
+      <p>{source.text}</p>
+      {source.mediaUrls && (
+        <TweetMedia
+          key={linkId}
+          linkId={linkId}
+          mediaUrls={source.mediaUrls}
+          hasPoster={Boolean(source.thumbnailUrl)}
+        />
       )}
+      {posted && (
+        <time
+          className="silo-reader-posted"
+          dateTime={posted.toISOString()}
+          title={posted.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}
+        >
+          {formatTweetDate(posted)}
+        </time>
+      )}
+      <div className="silo-reader-stats">
+        <span>{source.likes} likes</span>
+        <span>{source.reposts} reposts</span>
+        <span>{source.replies} replies</span>
+      </div>
     </div>
   );
 }
 
-export function ReaderContent({ link }: { link: LinkJson }) {
-  if (link.captureStatus === 'enriching')
-    return (
-      <div role="status" aria-label="Capturing page">
-        {[92, 84, 88, 60].map((width) => (
-          <div key={width} className="silo-reader-skeleton" style={{ width: `${width}%` }} />
-        ))}
-        <p className="silo-reader-hint">
-          ◌ Fetching the page text and metadata. This view fills in when capture finishes.
-        </p>
-      </div>
-    );
+export function ReaderContent({
+  link,
+  trashed = false,
+  showLive,
+}: {
+  link: LinkJson | LinkDetailJson;
+  trashed?: boolean;
+  showLive?: () => void;
+}) {
+  if (link.captureStatus === 'enriching') return <ReaderSkeleton label="Capturing page" />;
 
   const source = link.sourceData;
-  if (source.kind === 'twitter')
-    return (
-      <div className="silo-reader-tweet">
-        <div className="silo-reader-who">
-          <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
-        </div>
-        <p>{source.text}</p>
-        <div className="silo-reader-stats">
-          <span>{source.likes} likes</span>
-          <span>{source.reposts} reposts</span>
-          <span>{source.replies} replies</span>
-        </div>
-      </div>
-    );
-
+  const embed = embedFor(link.url, source);
+  const video = embed?.video;
+  const prose = 'contentHtml' in link && link.contentHtml !== null;
   return (
     <>
+      {source.kind === 'twitter' && <TweetCard linkId={link.id} source={source} />}
+
       {source.kind === 'hacker_news' && (
         <div className="silo-reader-card">
           <div>
@@ -110,19 +168,27 @@ export function ReaderContent({ link }: { link: LinkJson }) {
       )}
       {source.kind === 'youtube' && (
         <figure className="silo-reader-video">
-          <img
-            src={previewImageUrl(link.id)}
-            alt="Video thumbnail"
-            loading="lazy"
-            onError={(event) => {
-              event.currentTarget.hidden = true;
-            }}
-          />
-          <figcaption>{source.channel}</figcaption>
+          {!video && (
+            <img
+              src={previewImageUrl(link.id)}
+              alt="Video thumbnail"
+              loading="lazy"
+              onError={(event) => {
+                event.currentTarget.hidden = true;
+              }}
+            />
+          )}
         </figure>
       )}
-      <Paragraphs link={link} />
-      {!link.extractedText?.trim() && !link.description?.trim() && <NoCapturedText link={link} />}
+      {source.kind !== 'twitter' &&
+        (prose && 'contentHtml' in link ? <ReaderProse link={link} /> : <Paragraphs link={link} />)}
+      {!prose &&
+        source.kind !== 'twitter' &&
+        !link.extractedText?.trim() &&
+        !link.description?.trim() && (
+          <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
+        )}
+      <RelatedLinks link={link} trashed={trashed} />
     </>
   );
 }

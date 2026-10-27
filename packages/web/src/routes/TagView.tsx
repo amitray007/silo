@@ -4,8 +4,8 @@ import { useDeleteTag, useTags } from '../api/hooks';
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { HeaderActionButton } from '../components/HeaderActionButton';
 import { TrashIcon } from '../components/NavIcons';
+import { PasteCaptureButton } from '../components/PasteCaptureButton';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
-import { PasteCaptureButton } from './LibraryView';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
@@ -42,6 +42,7 @@ function DeleteTagButton({ tag }: { tag: string }) {
       {confirming && (
         <ConfirmDialog
           title="Delete tag?"
+          item={`#${tag}`}
           action="Delete tag"
           actionLabel="Confirm deleting this tag"
           pending={deleteTag.isPending}

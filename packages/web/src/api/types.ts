@@ -67,9 +67,9 @@ export type SourceData =
       mediaUrls?: string[];
       externalLinks?: string[];
       /** The tweet's own media thumbnail (video poster / photo), set by the
-       * live FxEmbed enricher when present — served through
-       * `/api/preview-image` (never rendered as a raw `twimg.com` `<img
-       * src>`). See `packages/core/src/links/source-data.ts`'s doc comment. */
+       * live FxEmbed enricher when present. Like `mediaUrls`, it is served
+       * through silo (`/api/preview-image`, `/source-media/poster`) and never
+       * rendered as a raw `twimg.com` URL. See `packages/core/src/links/source-data.ts`. */
       thumbnailUrl?: string;
     }
   | {
@@ -81,7 +81,16 @@ export type SourceData =
       language?: string;
       languagePct?: number;
     }
-  | { kind: 'youtube'; channel: string; thumbnailUrl: string };
+  | {
+      kind: 'youtube';
+      channel: string;
+      thumbnailUrl: string;
+      videoId?: string;
+      duration?: number;
+      views?: number;
+      publishedAt?: string;
+      keywords?: string[];
+    };
 
 /**
  * Mirrors `LinkJson` in `packages/api/src/link-json.ts` — the whitelisted,
@@ -106,6 +115,9 @@ export type LinkJson = {
   createdAt: string;
   updatedAt: string;
 };
+
+/** Detail-only Reader fields, mirroring the API's LinkDetailJson. */
+export type LinkDetailJson = LinkJson & { contentHtml: string | null; contentImageCount: number };
 
 /** `LinkJson` plus `deletedAt` (ISO string) — `GET /api/trash`'s per-row shape. */
 export type TrashLinkJson = LinkJson & { deletedAt: string };
@@ -135,7 +147,7 @@ export type TrashSearchResultJson = TrashLinkJson & { rank: number };
 export type TrashSearchResponse = { results: TrashSearchResultJson[]; nextCursor?: string };
 
 /** `GET /api/links/:id` response envelope. */
-export type LinkResponse = { link: LinkJson };
+export type LinkResponse = { link: LinkDetailJson };
 
 /**
  * `POST /api/links/:id/restore` response envelope — mirrors
@@ -207,6 +219,8 @@ export type SettingsMap = {
   // `settingsSchema.linkPreviewImages`. When false, plain-link hover-preview
   // cards omit the captured og:image. Default true.
   linkPreviewImages: boolean;
+  /** List-row hover cards. Default false; independent of palette previews. */
+  hoverPreview: boolean;
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
     github: { enabled: boolean; hover: boolean; palette: boolean };
@@ -300,3 +314,14 @@ export type OAuthClientsResponse = { clients: ConnectedOAuthClient[] };
  * (operator override > derived `mcp.<hostname>` > localhost dev default).
  */
 export type AppConfig = { mcpUrl?: string };
+
+export type FrameHint = {
+  mode: 'direct' | 'view' | 'none';
+  reason?: string;
+  contentType?: string;
+  darkTheme?: boolean;
+};
+
+export type SavedLinksResponse = { saved: string[] };
+/** Titles keyed by URL; a missing URL means no usable title was found. */
+export type LinkTitlesResponse = { titles: Record<string, string> };

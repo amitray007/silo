@@ -73,18 +73,9 @@ export function useCommandPalette() {
         openPalette();
         return;
       }
-      // `/` opens the palette too (the sidebar's own hint), but must never
-      // steal the keystroke while the user is typing into a real text field
-      // (the omnibar, the edit modal, a tag input, ...) — checked against
-      // BOTH the event target and the currently-focused element, mirroring
-      // `usePasteCapture`'s own dual check (some browsers report a
-      // document-level listener's `target` differently than
-      // `document.activeElement`).
-      if (
-        event.key === '/' &&
-        !isTextEntryElement(event.target) &&
-        !isTextEntryElement(document.activeElement)
-      ) {
+      // `/` opens the palette too (the sidebar's own hint). The text-entry
+      // guard above keeps it from stealing the keystroke in a real field.
+      if (event.key === '/') {
         event.preventDefault();
         openPalette();
       }

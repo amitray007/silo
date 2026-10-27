@@ -2,59 +2,43 @@ import { useRestoreLink } from '../api/hooks';
 import type { TrashLinkJson } from '../api/types';
 import { purgeCountdownDays } from '../lib/buckets';
 import { ListRow } from './ListRow';
+import { MenuAction, MenuSurface } from './MenuSurface';
 import { useRowMenu } from './RowMenuContext';
 import { RowPopover } from './RowPopover';
-import { useTrashSelection } from './SelectionContext';
+import { ReaderIcon } from './reader/ReaderIcon';
 
 function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () => void }) {
-  const restore = useRestoreLink(link.id);
-  const selection = useTrashSelection();
+  const restore = useRestoreLink();
   const { closeMenu } = useRowMenu();
   const busy = restore.isPending;
   return (
-    <div
-      className="silo-trash-row-menu"
-      role="menu"
-      onMouseDown={(event) => event.stopPropagation()}
-    >
-      <button
-        type="button"
-        role="menuitem"
-        onClick={() => {
-          selection.toggle(link.id);
-          closeMenu();
-        }}
-      >
-        {selection.isSelected(link.id) ? 'Deselect item' : 'Select item'}
-      </button>
-      <a role="menuitem" href={link.url} target="_blank" rel="noopener noreferrer">
+    <MenuSurface className="silo-row-menu" link={link} onClose={closeMenu}>
+      <MenuAction icon={<ReaderIcon name="external" />} href={link.url} onClick={closeMenu}>
         Open original
-      </a>
-      <button
-        type="button"
-        role="menuitem"
+      </MenuAction>
+      <MenuAction
+        icon={<ReaderIcon name="copy" />}
         onClick={() => {
           navigator.clipboard?.writeText(link.url).catch(() => {});
           closeMenu();
         }}
       >
         Copy link
-      </button>
-      <button
-        type="button"
-        role="menuitem"
+      </MenuAction>
+      <MenuAction
+        icon={<ReaderIcon name="restore" />}
         disabled={busy}
         onClick={() => {
-          selection.deselect([link.id]);
-          restore.mutate(undefined, { onSuccess: closeMenu });
+          restore.mutate(link.id, { onSuccess: closeMenu });
         }}
       >
         Restore
-      </button>
-      <button type="button" role="menuitem" disabled={busy} onClick={onDelete}>
+      </MenuAction>
+      <div className="silo-menu-separator" />
+      <MenuAction icon={<ReaderIcon name="trash" />} danger disabled={busy} onClick={onDelete}>
         Delete now
-      </button>
-    </div>
+      </MenuAction>
+    </MenuSurface>
   );
 }
 
@@ -67,13 +51,16 @@ export function TrashRow({
   purgeWindowDays: number;
   onDelete: (id: string) => void;
 }) {
-  const selection = useTrashSelection();
+  const restore = useRestoreLink();
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
   return (
     <ListRow
       link={link}
-      selection={selection}
+      busy={restore.isPending}
+      error={restore.isError ? "Couldn't restore this link. Try again." : undefined}
+      onRemove={() => restore.mutate(link.id)}
+      onDelete={() => onDelete(link.id)}
       purge={purgeCountdownDays(link.deletedAt, purgeWindowDays)}
       menuOpen={menuOpen}
       toggleMenu={() => toggleMenu(link.id)}

@@ -4,7 +4,6 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HoverPreviewProvider } from '../components/HoverPreviewContext';
 import { RowMenuProvider } from '../components/RowMenuContext';
-import { SelectionProvider } from '../components/SelectionContext';
 import { makeLink as link } from '../test/fixtures';
 import { TagView } from './TagView';
 
@@ -38,16 +37,14 @@ function renderTagView(tagName: string, fetchImpl: typeof fetch) {
   return render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <HoverPreviewProvider>
-            <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
-              <Routes>
-                <Route path="/" element={<div>landed on library</div>} />
-                <Route path="/tags/:name" element={<TagView />} />
-              </Routes>
-            </MemoryRouter>
-          </HoverPreviewProvider>
-        </SelectionProvider>
+        <HoverPreviewProvider>
+          <MemoryRouter initialEntries={[`/tags/${tagName}`]}>
+            <Routes>
+              <Route path="/" element={<div>landed on library</div>} />
+              <Route path="/tags/:name" element={<TagView />} />
+            </Routes>
+          </MemoryRouter>
+        </HoverPreviewProvider>
       </RowMenuProvider>
     </QueryClientProvider>,
   );
@@ -179,8 +176,9 @@ describe('TagView', () => {
 
     renderTagView('mcp', fetchImpl);
 
-    const button = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const button = await screen.findByRole('button', { name: 'Add link' });
     fireEvent.click(button);
+    fireEvent.click(screen.getByRole('button', { name: 'Paste from clipboard' }));
 
     await waitFor(() =>
       expect(fetchImpl).toHaveBeenCalledWith(
@@ -233,7 +231,7 @@ describe('TagView', () => {
     // the visible gap between "Delete" and "Add" via the header's own
     // `gap: 13`.
     const deleteButton = await screen.findByRole('button', { name: 'Delete this tag' });
-    const addButton = await screen.findByRole('button', { name: 'Add a link from the clipboard' });
+    const addButton = await screen.findByRole('button', { name: 'Add link' });
     const deleteWrapper = deleteButton.parentElement;
     const addWrapper = addButton.parentElement;
     expect(deleteWrapper?.parentElement).toBe(addWrapper?.parentElement);

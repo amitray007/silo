@@ -3,7 +3,7 @@ import { desc } from 'drizzle-orm';
 import { stringify as stringifyYaml } from 'yaml';
 import type { Link } from './executor.js';
 import { whereLive } from './live.js';
-import { hydrateTags, type LinkWithTags } from './pagination.js';
+import { hydrateTags, type LinkSummaryWithTags, listColumns } from './pagination.js';
 
 /** The three export output formats (design spec: full-library snapshot). */
 export type ExportFormat = 'json' | 'yaml' | 'csv';
@@ -61,7 +61,7 @@ type ExportedLink = {
  * lifecycle columns (`deletedAt`, `searchVector`, `enrichAttempts`) — not
  * user data worth round-tripping. Timestamps render as ISO strings.
  */
-function toExportedLink(link: LinkWithTags): ExportedLink {
+function toExportedLink(link: LinkSummaryWithTags): ExportedLink {
   return {
     id: link.id,
     url: link.url,
@@ -207,7 +207,7 @@ export async function exportLinks(opts?: { format?: ExportFormat }): Promise<Exp
   }
 
   const rows = await db
-    .select()
+    .select(listColumns)
     .from(links)
     .where(whereLive())
     .orderBy(desc(links.createdAt), desc(links.id));

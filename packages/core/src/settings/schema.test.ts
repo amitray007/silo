@@ -237,3 +237,17 @@ describe('plugins schema validation (via parseSettingValue)', () => {
     });
   });
 });
+
+describe('hoverPreview schema and default', () => {
+  it('defaults to off', () => {
+    expect(SETTINGS_DEFAULTS.hoverPreview).toBe(false);
+  });
+
+  it.each([true, false])('accepts %s', (value) => {
+    expect(parseSettingValue('hoverPreview', value)).toBe(value);
+  });
+
+  it.each(['true', 1, null, undefined, {}])('rejects non-boolean %j', (value) => {
+    expect(() => parseSettingValue('hoverPreview', value)).toThrow();
+  });
+});

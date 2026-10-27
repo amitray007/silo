@@ -1,6 +1,8 @@
 import { db, links } from '@silo/db';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { readerContentSchema } from '../capture.js';
+import { enqueueEnrichment } from './enqueue.js';
 import type { Link } from './links.js';
 import { whereLive } from './live.js';
 import { sourceDataSchema } from './source-data.js';
@@ -68,6 +70,7 @@ export const enrichmentResultSchema = z.object({
   siteName: z.string().max(FIELD_MAX.siteName).optional(),
   text: z.string().max(FIELD_MAX.text).optional(),
   status: enrichmentStatus,
+  reader: readerContentSchema.optional(),
   /**
    * The per-source enricher's result (HN points/comments, GitHub repo stats,
    * YouTube channel+thumbnail — source-data/rich-previews slice, plan 012).
@@ -198,6 +201,7 @@ export async function recordEnrichment(
       imageUrl: sql`coalesce(${parsed.imageUrl ?? null}, ${links.imageUrl})`,
       siteName: sql`coalesce(${parsed.siteName ?? null}, ${links.siteName})`,
       extractedText: sql`coalesce(${parsed.text ?? null}, ${links.extractedText})`,
+      ...(parsed.reader ?? {}),
       captureStatus: parsed.status,
       sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
       sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,
@@ -225,9 +229,9 @@ const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
 /**
  * Reset a LIVE, retryable link back to `enriching`, for a user-triggered retry
  * of a `partial`/`bare` capture — or to re-kick a link stranded at `enriching`
- * (plan R12). Core only resets the status column and returns the link (setting
- * it dirty so a fresh enqueue can pick it up); actually re-enqueueing the job
- * is the worker/queue's job (U5) — core stays db-only with no queue dependency.
+ * (plan R12). Core resets the status and calls the registered enqueuer in the same
+ * transaction, so a successful retry cannot strand a link without a job.
+ * The worker/queue implementation remains behind the core enqueue port.
  *
  * Excludes `full` (terminal) so a good capture can't be downgraded by a
  * re-fetch. Live-scoped via `whereLive`: a trashed link is never resurrected.
@@ -239,13 +243,15 @@ const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
  * count a prior failing streak left behind.
  */
 export async function requestRetry(linkId: string): Promise<Link | null> {
-  const [updated] = await db
-    .update(links)
-    .set({ captureStatus: 'enriching', enrichAttempts: 0 })
-    .where(whereLive(eq(links.id, linkId), inArray(links.captureStatus, RETRYABLE_STATUSES)))
-    .returning();
-
-  return updated ?? null;
+  return db.transaction(async (tx) => {
+    const [updated] = await tx
+      .update(links)
+      .set({ captureStatus: 'enriching', enrichAttempts: 0 })
+      .where(whereLive(eq(links.id, linkId), inArray(links.captureStatus, RETRYABLE_STATUSES)))
+      .returning();
+    if (updated) await enqueueEnrichment(tx, linkId);
+    return updated ?? null;
+  });
 }
 
 /**

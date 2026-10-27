@@ -4,7 +4,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink } from '../test/fixtures';
 import { RowMenu } from './RowMenu';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
-import { SelectionProvider } from './SelectionContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -30,10 +29,8 @@ function renderMenu(overrides: Parameters<typeof makeLink>[0] = {}) {
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <RowMenuProvider>
-        <SelectionProvider>
-          <MenuOpenProbe />
-          <RowMenu link={link} />
-        </SelectionProvider>
+        <MenuOpenProbe />
+        <RowMenu link={link} />
       </RowMenuProvider>
     </QueryClientProvider>,
   );
@@ -73,7 +70,7 @@ describe('RowMenu', () => {
     const anchor = screen.getByText('Open original').closest('a') as HTMLAnchorElement;
     expect(anchor.getAttribute('href')).toBe('https://example.com/specific-path');
     expect(anchor.getAttribute('target')).toBe('_blank');
-    expect(anchor.getAttribute('rel')).toBe('noopener');
+    expect(anchor.getAttribute('rel')).toBe('noopener noreferrer');
   });
 
   it('copy link writes the url to the clipboard and shows a "copied" state that resets', async () => {
@@ -142,7 +139,7 @@ describe('RowMenu', () => {
   it('opening the tags fly-out (hover or click) shows the find-tag input and toggle list', () => {
     renderMenu({ tags: ['mcp'] });
     fireEvent.click(screen.getByText('Tags'));
-    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+    expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();
     // 'mcp' appears once in the trigger row's count area's sibling list item too.
     expect(screen.getAllByText('mcp').length).toBeGreaterThan(0);
   });
@@ -171,19 +168,21 @@ describe('RowMenu', () => {
     const trigger = screen.getByText('Tags').closest('button') as HTMLButtonElement;
     const wrapper = trigger.parentElement as HTMLElement;
     fireEvent.click(trigger);
-    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+    expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();
 
     // Pointer leaves the trigger wrapper (schedules a delayed close)...
     fireEvent.mouseLeave(wrapper);
     // ...then lands on the fly-out itself before the close delay elapses —
     // this must cancel the pending close, not let it fire.
-    const flyout = screen.getByPlaceholderText('Find tag').closest('.silo-popover') as HTMLElement;
+    const flyout = screen
+      .getByPlaceholderText('Find or create tag')
+      .closest('.silo-popover') as HTMLElement;
     fireEvent.mouseEnter(flyout);
 
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+    expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();
     vi.useRealTimers();
   });
 
@@ -194,7 +193,7 @@ describe('RowMenu', () => {
     const trigger = screen.getByText('Tags').closest('button') as HTMLButtonElement;
     const wrapper = trigger.parentElement as HTMLElement;
     fireEvent.click(trigger);
-    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+    expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();
 
     fireEvent.mouseLeave(wrapper);
 
@@ -202,14 +201,14 @@ describe('RowMenu', () => {
     act(() => {
       vi.advanceTimersByTime(100);
     });
-    expect(screen.getByPlaceholderText('Find tag')).toBeDefined();
+    expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();
 
     // Past the delay with neither the wrapper nor the fly-out re-entered:
     // now it closes.
     act(() => {
       vi.advanceTimersByTime(100);
     });
-    expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Find or create tag' })).toBeNull();
     vi.useRealTimers();
   });
 
@@ -220,7 +219,9 @@ describe('RowMenu', () => {
     const trigger = screen.getByText('Tags').closest('button') as HTMLButtonElement;
     const wrapper = trigger.parentElement as HTMLElement;
     fireEvent.click(trigger);
-    const flyout = screen.getByPlaceholderText('Find tag').closest('.silo-popover') as HTMLElement;
+    const flyout = screen
+      .getByPlaceholderText('Find or create tag')
+      .closest('.silo-popover') as HTMLElement;
 
     // Pointer travels wrapper -> fly-out (the real handoff path), then
     // eventually leaves the fly-out itself for good — `TagsFlyout`'s own
@@ -232,7 +233,7 @@ describe('RowMenu', () => {
     act(() => {
       vi.advanceTimersByTime(200);
     });
-    expect(screen.queryByPlaceholderText('Find tag')).toBeNull();
+    expect(screen.queryByRole('textbox', { name: 'Find or create tag' })).toBeNull();
     vi.useRealTimers();
   });
 
@@ -286,27 +287,26 @@ describe('RowMenu', () => {
     );
   });
 
-  it('gives every action row a --hov background on hover, not just "tags" (review fix: menuItemStyle() was called with no argument for these rows)', () => {
+  it('navigates action rows with arrows and puts the danger action last', () => {
     renderMenu();
-
-    const openRow = screen.getByText('Open original').closest('a') as HTMLElement;
-    expect(openRow.style.background).not.toBe('var(--hov)');
-    fireEvent.mouseEnter(openRow);
-    expect(openRow.style.background).toBe('var(--hov)');
-    fireEvent.mouseLeave(openRow);
-    expect(openRow.style.background).not.toBe('var(--hov)');
-
-    const copyRow = screen.getByText('Copy link').closest('button') as HTMLElement;
-    fireEvent.mouseEnter(copyRow);
-    expect(copyRow.style.background).toBe('var(--hov)');
-
-    const editRow = screen.getByText('Edit').closest('button') as HTMLElement;
-    fireEvent.mouseEnter(editRow);
-    expect(editRow.style.background).toBe('var(--hov)');
-
-    const trashRow = screen.getByText('Move to trash').closest('button') as HTMLElement;
-    fireEvent.mouseEnter(trashRow);
-    expect(trashRow.style.background).toBe('var(--hov)');
+    expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
+      'Open originalo',
+      'Copy linkc',
+      'Edite',
+      'Tags1',
+      'Move to trash⌫',
+    ]);
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Open original/ }));
+    const copy = screen.getByRole('menuitem', { name: 'Copy link' });
+    copy.focus();
+    fireEvent.keyDown(copy, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Edit' }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' });
+    const danger = screen.getByRole('menuitem', { name: 'Move to trash' });
+    expect(document.activeElement).toBe(danger);
+    expect(danger.classList.contains('silo-menu-danger')).toBe(true);
+    fireEvent.keyDown(danger, { key: 'Home' });
+    expect(document.activeElement?.textContent).toContain('Open original');
   });
 
   it('stops mousedown/click propagation so a click inside the popover never bubbles up (no row navigation)', () => {
@@ -319,9 +319,7 @@ describe('RowMenu', () => {
       <div onClick={outerHandler}>
         <QueryClientProvider client={queryClient}>
           <RowMenuProvider>
-            <SelectionProvider>
-              <RowMenu link={link} />
-            </SelectionProvider>
+            <RowMenu link={link} />
           </RowMenuProvider>
         </QueryClientProvider>
       </div>,
@@ -329,5 +327,32 @@ describe('RowMenu', () => {
 
     fireEvent.click(screen.getByText('Copy link'));
     expect(outerHandler).not.toHaveBeenCalled();
+  });
+  it('opens phone tags on click and keeps the sheet open when the pointer leaves the trigger', () => {
+    const media = vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+      matches: query === '(max-width: 640px)',
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    }));
+    vi.useFakeTimers();
+    renderMenu();
+    const tags = screen.getByText('Tags').closest('button') as HTMLButtonElement;
+    fireEvent.mouseEnter(tags.parentElement as HTMLElement);
+    expect(screen.queryByRole('textbox', { name: 'Find or create tag' })).toBeNull();
+    fireEvent.click(tags);
+    fireEvent.mouseLeave(tags.parentElement as HTMLElement);
+    expect(screen.getByPlaceholderText('Find or create tag')).toBeDefined();
+    fireEvent.mouseLeave(
+      screen.getByPlaceholderText('Find or create tag').closest('.silo-tag-picker') as HTMLElement,
+    );
+    act(() => vi.advanceTimersByTime(200));
+    expect(screen.getAllByRole('menu')).toHaveLength(2);
+    vi.useRealTimers();
+    media.mockRestore();
   });
 });

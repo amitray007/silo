@@ -1,13 +1,27 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
+import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
-import { relativeTimeFromNow } from '../../lib/relativeTime';
-import { deriveDomain, deriveTitleFromUrl } from '../../lib/url';
-import { Chip } from '../Chip';
+import { deriveTitleFromUrl } from '../../lib/url';
+import { useHideOnScroll } from '../../lib/useHideOnScroll';
+import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
+import { useHideWhileReading } from '../../lib/useHideWhileReading';
+import { useReaderWidth } from '../../lib/useReaderWidth';
+import { MenuPresence } from '../MenuPresence';
+import { MenuAction, MenuSurface } from '../MenuSurface';
+import { LinkMenuActions } from '../RowMenu';
+import { embedFor } from './embedFor';
+import { Original } from './Original';
 import { ReaderContent } from './ReaderContent';
 import { ReaderIcon } from './ReaderIcon';
-import { originalUrl, type useReaderActions } from './useReaderActions';
+import { ReaderSkeleton } from './ReaderLoading';
+import { ReaderMeta } from './ReaderMeta';
+import { ReaderPlayer } from './ReaderPlayer';
+import { ReaderSegment } from './ReaderSegment';
+import { ReaderSettings } from './ReaderSettings';
+import { type OriginalState, useOriginal } from './useOriginal';
+import type { useReaderActions } from './useReaderActions';
+import { seekChapter, YouTubeStats } from './YouTubeDetails';
 
 type Actions = ReturnType<typeof useReaderActions>;
 type Tab = 'reader' | 'original';
@@ -49,9 +63,6 @@ function ReaderActions({
   return (
     <div className="silo-reader-tools">
       <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
-      {!trashed && (
-        <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={disabled} />
-      )}
       <IconButton
         name="external"
         label="Open original"
@@ -72,35 +83,21 @@ function ReaderMore({
   actions,
   disabled,
   trashed,
+  link,
+  original,
+  open,
+  setOpen,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
+  link: LinkJson | undefined;
+  original: OriginalState | undefined;
+  open: boolean;
+  setOpen: (open: boolean) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!open) return;
-    const pointer = (event: MouseEvent) => {
-      if (!ref.current?.contains(event.target as Node)) setOpen(false);
-    };
-    const keyboard = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        setOpen(false);
-        ref.current?.querySelector('button')?.focus();
-      }
-    };
-    document.addEventListener('mousedown', pointer);
-    document.addEventListener('keydown', keyboard, true);
-    return () => {
-      document.removeEventListener('mousedown', pointer);
-      document.removeEventListener('keydown', keyboard, true);
-    };
-  }, [open]);
   return (
-    <div className="silo-reader-more" ref={ref}>
+    <div className="silo-reader-more">
       <button
         type="button"
         className="silo-reader-iconbtn"
@@ -108,45 +105,101 @@ function ReaderMore({
         aria-expanded={open}
         aria-haspopup="true"
         disabled={disabled}
-        onClick={() => setOpen((current) => !current)}
+        onClick={() => setOpen(!open)}
       >
-        ⋯
+        <ReaderIcon name="more" />
       </button>
-      {open && (
-        <div className="silo-reader-more-menu" data-reader-menu>
-          <ReaderActions actions={actions} disabled={disabled} trashed={trashed} />
-        </div>
-      )}
+      <MenuPresence>
+        {open && (
+          <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
+            {!trashed && (
+              <MenuAction
+                icon={<ReaderIcon name="edit" />}
+                shortcut="e"
+                onClick={() => {
+                  setOpen(false);
+                  actions.edit();
+                }}
+              >
+                Edit
+              </MenuAction>
+            )}
+            {original && original.mode !== 'player' && (
+              <MenuAction
+                icon={<ReaderIcon name="refresh" />}
+                disabled={original.preparing}
+                onClick={() => {
+                  setOpen(false);
+                  if (link) original.refresh.mutate(link.id);
+                }}
+              >
+                Reload page
+              </MenuAction>
+            )}
+            {(!trashed || (original && original.mode !== 'player')) && (
+              <div className="silo-menu-separator" />
+            )}
+            {!trashed && link ? (
+              <LinkMenuActions
+                link={link}
+                onClose={() => setOpen(false)}
+                onTrash={actions.trash}
+                onCopy={actions.copy}
+                showEdit={false}
+                busy={actions.busy}
+              />
+            ) : (
+              <>
+                <MenuAction
+                  icon={<ReaderIcon name="external" />}
+                  shortcut="o"
+                  onClick={() => {
+                    setOpen(false);
+                    actions.open();
+                  }}
+                >
+                  Open original
+                </MenuAction>
+                <MenuAction icon={<ReaderIcon name="copy" />} shortcut="c" onClick={actions.copy}>
+                  Copy link
+                </MenuAction>
+                <div className="silo-menu-separator" />
+                <MenuAction
+                  icon={<ReaderIcon name={trashed ? 'restore' : 'trash'} />}
+                  danger={!trashed}
+                  disabled={actions.busy}
+                  onClick={() => {
+                    setOpen(false);
+                    if (trashed) actions.restore();
+                    else actions.trash();
+                  }}
+                >
+                  {trashed ? 'Restore' : 'Move to trash'}
+                </MenuAction>
+              </>
+            )}
+          </MenuSurface>
+        )}
+      </MenuPresence>
     </div>
   );
 }
 
-function Original({ link }: { link: LinkJson }) {
-  const url = originalUrl(link.url);
-  return (
-    <div className="silo-original">
-      <div className="silo-original-bar">
-        <span title={link.url}>{link.url}</span>
-        {url && (
-          <a className="silo-reader-btn" href={url} target="_blank" rel="noopener noreferrer">
-            Open in new tab <ReaderIcon name="external" />
-          </a>
-        )}
-      </div>
-      <p className="silo-original-hint">
-        Blank page? Some sites block embedding. Open it in a new tab.
-      </p>
-      {url && (
-        <iframe
-          title="Original page"
-          className="silo-original-frame"
-          src={url}
-          sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-          referrerPolicy="no-referrer"
-          loading="lazy"
-        />
-      )}
-    </div>
+function ArticleBody({
+  link,
+  loading,
+  trashed,
+  showLive,
+}: {
+  link: LinkJson;
+  loading: boolean;
+  trashed: boolean;
+  showLive: () => void;
+}) {
+  return loading && !('contentHtml' in link) ? (
+    <ReaderSkeleton />
+  ) : (
+    <ReaderContent link={link} trashed={trashed} showLive={showLive} />
   );
 }
 
@@ -155,16 +208,27 @@ function ReaderArticle({
   actions,
   trashed,
   purgeWindowDays,
+  loading,
+  showLive,
 }: {
   link: LinkJson;
   actions: Actions;
   trashed: boolean;
   purgeWindowDays: number;
+  loading: boolean;
+  showLive: () => void;
 }) {
-  const domain = deriveDomain(link.url);
+  const [width] = useReaderWidth();
+  const embed = embedFor(link.url, link.sourceData);
+  const video = embed?.video ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
   return (
-    <article className="silo-reader">
+    // biome-ignore lint/a11y/useKeyWithClickEvents: delegated native anchor clicks also fire on Enter.
+    <article
+      className="silo-reader"
+      data-width={width}
+      onClick={(event) => seekChapter(event, video)}
+    >
       {trashed && (
         <div className="silo-reader-trashnote">
           <ReaderIcon name="trash" />
@@ -189,59 +253,69 @@ function ReaderArticle({
           </div>
         </div>
       )}
+      {video && <ReaderPlayer embed={video} url={link.url} />}
       <h2>{link.title ?? deriveTitleFromUrl(link.url)}</h2>
-      <div className="silo-reader-source">
-        <Chip domain={domain} size={20} />
-        <span>{link.siteName || domain}</span>
-        <span className="silo-reader-dot">•</span>
-        <span>{relativeTimeFromNow(link.createdAt)}</span>
-        {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
-        {link.captureStatus === 'enriching' && <span className="silo-capturing">◌ Capturing</span>}
+      <YouTubeStats source={link.sourceData} />
+      <ReaderMeta key={link.id} link={link} trashed={trashed} />
+      <div className="silo-reader-body-column">
+        <div className="silo-reader-body-wrap">
+          <ArticleBody link={link} loading={loading} trashed={trashed} showLive={showLive} />
+        </div>
       </div>
-      {trashed ? (
-        link.notes && (
-          <div className="silo-reader-notecard">
-            <span>¶ Note</span>
-            <span>{link.notes}</span>
-          </div>
-        )
-      ) : link.notes ? (
-        <button
-          type="button"
-          className="silo-reader-notecard"
-          onClick={() => actions.edit('note')}
-          title="Edit note"
-        >
-          <span>¶ Note</span>
-          <span>{link.notes}</span>
-        </button>
-      ) : (
-        <button type="button" className="silo-reader-addnote" onClick={() => actions.edit('note')}>
-          <ReaderIcon name="plus" />
-          Add a note
-        </button>
-      )}
-      <div className="silo-reader-tags">
-        {link.tags.map((tag) => (
-          <Link className="silo-reader-tag" to={`/tags/${encodeURIComponent(tag)}`} key={tag}>
-            <span>#</span>
-            {tag}
-          </Link>
-        ))}
-        {!trashed && (
-          <button
-            type="button"
-            className="silo-reader-tag"
-            aria-label="Edit tags"
-            onClick={() => actions.edit('tags')}
-          >
-            <ReaderIcon name="plus" />
-          </button>
-        )}
-      </div>
-      <ReaderContent link={link} />
     </article>
   );
+}
+
+type LiveHead = 'hidden' | 'shown' | undefined;
+
+/**
+ * Keyboard focus pins the header so focused controls stay visible. A mouse
+ * click on a header control (the Reader/Live tabs) leaves focus there too, but
+ * that must not stop the header from hiding while you read.
+ */
+function keyboardFocus(element: Element | null): boolean {
+  try {
+    return element?.matches(':focus-visible') ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Reader and Live's Silo view copy hide the header on the same scroll distances.
+ * Pages loaded straight from their site hide their scroll, so those use the pointer.
+ * `liveHead` stays unset until Live first hides, so opening Live does not animate.
+ */
+function useHeadHidden({
+  panelRef,
+  scrollRef,
+  tab,
+  free,
+  mode,
+  resetKey,
+}: {
+  panelRef: RefObject<HTMLElement | null>;
+  scrollRef: RefObject<HTMLElement | null>;
+  tab: Tab;
+  free: boolean;
+  mode: OriginalState['mode'] | undefined;
+  resetKey: string;
+}): { hidden: boolean; liveHead: LiveHead } {
+  const live = tab === 'original' && free;
+  const scrolledAway = useHideOnScroll(scrollRef, tab === 'reader' && free, resetKey);
+  const resting = useHideWhileReading(panelRef, live && mode === 'direct', resetKey);
+  const viewScrolled = useHideOnViewScroll(panelRef, live && mode === 'view', resetKey);
+  const liveHidden = resting || viewScrolled;
+  const [moved, setMoved] = useState<string | null>(null);
+  useEffect(() => {
+    if (liveHidden) setMoved(resetKey);
+    // Leaving Live forgets the slide, so returning to the same article opens still.
+    else if (tab !== 'original') setMoved(null);
+  }, [liveHidden, resetKey, tab]);
+  let liveHead: LiveHead;
+  if (liveHidden) liveHead = 'hidden';
+  else if (moved === resetKey) liveHead = 'shown';
+  return { hidden: scrolledAway || liveHidden, liveHead };
 }
 
 export function ReaderPane({
@@ -256,7 +330,6 @@ export function ReaderPane({
   actions,
   trashed,
   purgeWindowDays,
-  title,
   loading,
 }: {
   link: LinkJson | undefined;
@@ -270,22 +343,45 @@ export function ReaderPane({
   actions: Actions;
   trashed: boolean;
   purgeWindowDays: number;
-  title: string;
   loading: boolean;
 }) {
+  const phone = useMediaQuery(layoutMedia.phone);
+  const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
+  const original = useOriginal(link, tab === 'original');
+  const shownOriginal = tab === 'original' && link ? original : undefined;
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [openMenu, setOpenMenu] = useState<'more' | 'settings' | null>(null);
+  const [headerFocused, setHeaderFocused] = useState(false);
+  const [headerHovered, setHeaderHovered] = useState(false);
   const wasOpen = useRef(false);
+  const wasFullWindow = useRef(fullWindow);
   useEffect(() => {
-    if (selectedId && !wasOpen.current && matchMedia('(max-width: 719px)').matches)
+    if (selectedId && fullWindow && (!wasOpen.current || !wasFullWindow.current))
       panelRef.current?.focus();
     wasOpen.current = Boolean(selectedId);
-  }, [selectedId]);
+    wasFullWindow.current = fullWindow;
+  }, [selectedId, fullWindow]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: reset scroll when the content changes.
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
+    setOpenMenu(null);
+    setHeaderHovered(false);
+    const active = document.activeElement;
+    setHeaderFocused(
+      Boolean(panelRef.current?.querySelector('.silo-reader-head')?.contains(active)) &&
+        keyboardFocus(active),
+    );
   }, [selectedId, tab]);
+  const { hidden, liveHead } = useHeadHidden({
+    panelRef,
+    scrollRef,
+    tab,
+    free: Boolean(link) && !openMenu && !headerFocused && !headerHovered,
+    mode: shownOriginal?.mode,
+    resetKey: `${selectedId}-${tab}`,
+  });
 
   let content: ReactNode = (
     <div className="silo-empty-reader">
@@ -305,85 +401,102 @@ export function ReaderPane({
   if (link)
     content =
       tab === 'original' ? (
-        <Original link={link} />
+        <Original key={link.id} link={link} state={original} showReader={() => setTab('reader')} />
       ) : (
         <ReaderArticle
           link={link}
           actions={actions}
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
+          loading={loading}
+          showLive={() => setTab('original')}
         />
       );
   return (
-    <section className="silo-readerpane" aria-label="Link reader" ref={panelRef} tabIndex={-1}>
-      <div className="silo-reader-head">
-        <div className="silo-reader-desktop">
+    <section
+      className="silo-readerpane"
+      aria-label="Link reader"
+      ref={panelRef}
+      tabIndex={-1}
+      onPointerMove={(event) => {
+        if (!matchMedia('(hover: hover) and (pointer: fine)').matches) return;
+        const head = event.currentTarget.querySelector('.silo-reader-head');
+        setHeaderHovered(
+          event.clientY - event.currentTarget.getBoundingClientRect().top <= 40 ||
+            Boolean(head?.contains(event.target as Node)),
+        );
+      }}
+      onPointerLeave={() => setHeaderHovered(false)}
+      onPointerOver={(event) => {
+        // Moves inside the iframe never reach this document, so entering it ends header hover.
+        if (event.target instanceof HTMLIFrameElement) setHeaderHovered(false);
+      }}
+    >
+      {liveHead === 'hidden' && <div className="silo-reader-reveal" aria-hidden="true" />}
+      <div
+        className="silo-reader-head"
+        data-hidden={hidden}
+        onFocusCapture={(event) => setHeaderFocused(keyboardFocus(event.target))}
+        onBlurCapture={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget)) setHeaderFocused(false);
+        }}
+      >
+        <div className="silo-reader-navigation" role="toolbar" aria-label="Reader navigation">
           <div className="silo-reader-tools">
             <IconButton name="close" label="Close reader" onClick={close} disabled={!selectedId} />
             <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
             <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
           </div>
         </div>
-        <button type="button" className="silo-reader-back" onClick={close}>
-          <ReaderIcon name="back" />
-          {title}
-        </button>
-        <div className="silo-reader-segment" role="tablist" aria-label="Link view">
-          {(['reader', 'original'] as const).map((value) => (
-            <button
-              type="button"
-              role="tab"
-              id={`${id}-${value}`}
-              aria-controls={`${id}-panel`}
-              key={value}
-              aria-selected={tab === value}
-              disabled={!link}
-              onClick={() => setTab(value)}
-              onKeyDown={(event) => {
-                if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
-                  event.preventDefault();
-                  const next = value === 'reader' ? 'original' : 'reader';
-                  setTab(next);
-                  document.getElementById(`${id}-${next}`)?.focus();
-                }
-              }}
-            >
-              {value === 'reader' ? 'Reader' : 'Original'}
-            </button>
-          ))}
+        <div className="silo-reader-viewtools">
+          <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
         </div>
-        <div className="silo-reader-desktop">
-          <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
+        <div className="silo-reader-right">
+          {link && (
+            <ReaderSettings
+              key={`settings-${selectedId}-${tab}`}
+              original={shownOriginal}
+              open={openMenu === 'settings'}
+              setOpen={(open) => setOpenMenu(open ? 'settings' : null)}
+            />
+          )}
+          {!phone && (
+            <div className="silo-reader-inline-actions">
+              <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
+            </div>
+          )}
+          <ReaderMore
+            key={selectedId}
+            actions={actions}
+            disabled={!link}
+            trashed={trashed}
+            link={link}
+            original={shownOriginal}
+            open={openMenu === 'more'}
+            setOpen={(open) => setOpenMenu(open ? 'more' : null)}
+          />
         </div>
-        <ReaderMore key={selectedId} actions={actions} disabled={!link} trashed={trashed} />
       </div>
       {actions.feedback && (
         <div className="silo-toast" role="status">
           {actions.feedback}
         </div>
       )}
+      {shownOriginal?.refresh.isError && (
+        <div className="silo-toast" role="alert">
+          Refresh failed
+        </div>
+      )}
       <div
         className="silo-reader-scroll"
+        data-original={tab === 'original'}
+        data-head={liveHead}
         ref={scrollRef}
         role="tabpanel"
         id={`${id}-panel`}
         aria-labelledby={`${id}-${tab}`}
       >
         {content}
-      </div>
-      <div className="silo-reader-rbar" role="toolbar" aria-label="Reader actions">
-        <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
-        <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
-        <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={!link} />
-        {!trashed && (
-          <IconButton name="edit" label="Edit" onClick={() => actions.edit()} disabled={!link} />
-        )}
-        <IconButton
-          name={trashed ? 'restore' : 'trash'}
-          label={trashed ? 'Restore' : 'Move to trash'}
-          onClick={trashed ? actions.restore : actions.trash}
-          disabled={!link || actions.busy}
-        />
       </div>
     </section>
   );

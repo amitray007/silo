@@ -7,11 +7,10 @@
  * Contract (plan R11 / Risks): this function RESOLVES on every *expected*
  * degraded-capture outcome — a blocked/dead/timed-out/oversized fetch, or a
  * thin/JS-walled/non-HTML extraction — by recording a terminal `partial`/
- * `bare` status and returning normally. It THROWS only for a genuinely
- * unexpected failure (e.g. `getById`/`recordEnrichment` itself throwing —
- * a real infra/db problem), which is exactly the signal pg-boss's
- * `work()` needs to retry with backoff and eventually dead-letter (see
- * `worker.ts`). A degraded capture is not a bug; an unreachable database is.
+ * `bare` status and returning normally. Reader thread timeouts/failures and
+ * unexpected failures (such as `getById`/`recordEnrichment` throwing)
+ * propagate so pg-boss retries with backoff and eventually dead-letters the
+ * job (see `worker.ts`).
  */
 
 import type { SettingsMap, SourceData } from '@silo/core';
@@ -27,6 +26,7 @@ import {
 import { enrichSource } from './enrich-source/index.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
+import { extractYouTubeWatch } from './extract/youtube-watch.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 import { safeFetch } from './fetch/safe-fetch.js';
 
@@ -226,7 +226,7 @@ export async function enrichLink(
 
   const enabledPlugins = await deps.getPluginsSetting().catch(() => SETTINGS_DEFAULTS.plugins);
 
-  const [fetchResult, sourceData] = await Promise.all([
+  const [fetchResult, enrichedSource] = await Promise.all([
     deps.safeFetch(link.url),
     // Defense in depth (reliability review): `enrichSource` is already
     // contracted never to throw (its dispatcher wraps everything in a
@@ -237,6 +237,12 @@ export async function enrichLink(
     // and failing the whole `enrichLink` job.
     deps.enrichSource(link.sourceKind, link.url, enabledPlugins).catch(() => undefined),
   ]);
+
+  const youtube =
+    fetchResult.ok && link.sourceKind === 'youtube'
+      ? extractYouTubeWatch(fetchResult.html, fetchResult.finalUrl)
+      : undefined;
+  const sourceData = youtube?.sourceData ?? enrichedSource;
 
   // A confirmed 404/410 (plan 025 U4): the target genuinely no longer exists,
   // not merely unreachable/blocked/slow — silently trash it and stop. This is
@@ -266,6 +272,12 @@ export async function enrichLink(
     }),
     sourceData,
   );
+
+  if (link.sourceKind === 'youtube') {
+    extracted.text = youtube?.text ?? extracted.description ?? '';
+    if (youtube?.reader) extracted.reader = youtube.reader;
+    extracted.status = 'partial';
+  }
 
   await recordThenMaybeSettle(linkId, { ...extracted, ...(sourceData ? { sourceData } : {}) });
 }

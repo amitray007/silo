@@ -13,12 +13,17 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 
 - Follow `docs/design/prototypes/silo-redesign.src.html`: a full-bleed
   sidebar, list, and reader. Remove the centered 60rem band in Unit 2.
-- Wide (>=1100px): dock the sidebar; show the roughly 380px list beside the
-  reader. `[` toggles the sidebar; persist that choice in localStorage.
-- Mid (720-1099px): show list and reader side by side. Open the sidebar as an
-  off-canvas drawer from the list header.
-- Narrow (<720px): show the list full-width. A selected link opens the reader
-  full-screen with Back and a bottom action toolbar. The sidebar is a drawer.
+- The breakpoints live in `packages/web/src/lib/breakpoints.ts` and mirror
+  `layout.css`. Change both together.
+- Reader pane (from 1024px): show sidebar, list, and reader side by side. The
+  list is 360px by default and resizable from 280px to 720px (persisted in
+  localStorage); the reader keeps at least 420px.
+- Docked sidebar (from 641px): the sidebar sits beside the list. `[` toggles it;
+  persist that choice in localStorage. Below 1024px a selected link opens the
+  reader over the whole window, with Back.
+- Phone (640px and below): show the list full-width. A selected link opens the
+  reader full-screen with Back and a bottom action toolbar. The sidebar is a
+  drawer opened from the list header.
 - Use CSS media queries for layout, with no JavaScript layout branch for
   first paint. The prototype's frame width maps to the app viewport.
 - Drawers support keyboard use, focus management, outside click, and Escape.
@@ -48,7 +53,7 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 - Use **redesign CSS custom properties** (`var(--ink)`, `var(--bg2)`, etc.).
   Do not hardcode hex values. The tokens (`src/styles/tokens.css`) are the source of
   truth, in both light and dark.
-- Fonts are **self-hosted** (`src/styles/fonts.css`, Geist 400/500/600).
+- Fonts use self-hosted Inter Variable from `@fontsource-variable/inter` in `src/styles/base.css`.
   Do not use a CDN or `fonts.googleapis.com`. No third-party fetch per row (letter-chips, not remote
   favicons).
 - Surface API failures honestly: the client throws a typed `ApiError` (mirroring

@@ -24,6 +24,7 @@ type SettingsBody = {
   trashPurgeDays: 7 | 30 | 90;
   mcpAccess: boolean;
   linkPreviewImages: boolean;
+  hoverPreview: boolean;
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
     github: { enabled: boolean; hover: boolean; palette: boolean };
@@ -56,6 +57,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       trashPurgeDays: 30,
       mcpAccess: true,
       linkPreviewImages: true,
+      hoverPreview: false,
       plugins: {
         hacker_news: { enabled: true, inline: true, hover: true, palette: true },
         github: { enabled: true, hover: true, palette: true },
@@ -71,9 +73,10 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       string,
       unknown
     >;
-    // Top-level: exactly the four allowlisted keys, nothing else (e.g. no
+    // Top-level: exactly the allowlisted keys, nothing else (e.g. no
     // stray internal/db-row field like `updatedAt` could leak through).
     expect(Object.keys(body).sort()).toEqual([
+      'hoverPreview',
       'linkPreviewImages',
       'mcpAccess',
       'plugins',
@@ -85,6 +88,21 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     // miss a leaked/extra key nested inside `plugins`.
     const plugins = body.plugins as Record<string, unknown>;
     expect(Object.keys(plugins).sort()).toEqual(['github', 'hacker_news', 'twitter', 'youtube']);
+  });
+
+  it.each([true, false])('PATCH hoverPreview %s persists and GET reflects it', async (value) => {
+    const { app } = harness.mod();
+    const response = await patchSettings(app, { hoverPreview: value });
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as SettingsBody).hoverPreview).toBe(value);
+    expect((await expectOk<SettingsBody>(app, '/api/settings')).hoverPreview).toBe(value);
+  });
+
+  it.each(['true', 1, null])('PATCH rejects non-boolean hoverPreview %j', async (value) => {
+    const { app } = harness.mod();
+    const response = await patchSettings(app, { hoverPreview: value });
+    expect(response.status).toBe(400);
+    expect(((await response.json()) as ErrorEnvelope).error).toBe('validation_error');
   });
 
   it('PATCH theme persists and is reflected by a subsequent GET', async () => {

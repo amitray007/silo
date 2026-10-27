@@ -32,6 +32,7 @@ function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins'], linkPre
       trashPurgeDays: 30,
       mcpAccess: true,
       linkPreviewImages,
+      hoverPreview: true,
       plugins,
     } satisfies SettingsMap);
   }
@@ -71,6 +72,29 @@ describe('HoverPreview', () => {
     expect(screen.getByText('example.com/some-post')).toBeDefined();
   });
 
+  it.each([
+    ['link', { kind: 'link' } as const],
+    ['HN', hackerNewsSourceData],
+    ['GitHub', githubSourceData],
+    ['YouTube', youtubeSourceData],
+    ['Twitter', twitterSourceData],
+  ])(
+    '%s card keeps the domain, time, and accessible Open link in the shared footer',
+    (_, sourceData) => {
+      renderPreview(
+        makeLink({ url: 'https://a-very-long-subdomain.geeksforgeeks.org/x', sourceData }),
+      );
+      const open = screen.getByRole('link', { name: 'Open' });
+      const footer = open.closest('.silo-preview-footer');
+      expect(footer?.querySelector('.silo-preview-domain')?.textContent).toBe(
+        'a-very-long-subdomain.geeksforgeeks.org',
+      );
+      expect(footer?.querySelector('.silo-preview-time')?.textContent).toMatch(/ago$/);
+      expect(footer?.querySelectorAll('a')).toHaveLength(1);
+      expect(open.querySelector('svg')).not.toBeNull();
+    },
+  );
+
   it('footer shows the derived domain (www. stripped)', () => {
     renderPreview(makeLink({ url: 'https://www.example.com/x' }));
     expect(screen.getByText('example.com')).toBeDefined();
@@ -88,9 +112,9 @@ describe('HoverPreview', () => {
     }
   });
 
-  it('the footer "Open ↗" is a real anchor with the correct href/target/rel', () => {
+  it('the footer "Open" is a real anchor with the correct href/target/rel', () => {
     renderPreview(makeLink({ url: 'https://example.com/x' }));
-    const anchor = screen.getByRole('link', { name: 'Open ↗' }) as HTMLAnchorElement;
+    const anchor = screen.getByRole('link', { name: 'Open' }) as HTMLAnchorElement;
     expect(anchor.getAttribute('href')).toBe('https://example.com/x');
     expect(anchor.getAttribute('target')).toBe('_blank');
     expect(anchor.getAttribute('rel')).toBe('noopener');
@@ -159,7 +183,7 @@ describe('HoverPreview', () => {
       expect(screen.getByText('Show HN: I built a thing')).toBeDefined();
       expect(screen.getByText('▲ 342 points')).toBeDefined();
       expect(screen.getByText('128 comments')).toBeDefined();
-      expect(screen.getByRole('link', { name: 'Open ↗' })).toBeDefined();
+      expect(screen.getByRole('link', { name: 'Open' })).toBeDefined();
     });
 
     it('renders the GitHub variant: title/description, stats row, and a language bar+name', () => {
@@ -281,7 +305,7 @@ describe('HoverPreview', () => {
       expect(screen.getByText('512')).toBeDefined();
       expect(screen.getByText('48')).toBeDefined();
       expect(screen.getByText('23')).toBeDefined();
-      expect(screen.getByRole('link', { name: 'Open ↗' })).toBeDefined();
+      expect(screen.getByRole('link', { name: 'Open' })).toBeDefined();
     });
 
     it('does NOT render the redundant page-title header ("Amit Ray on X") — only the author line + tweet text', () => {
@@ -309,7 +333,10 @@ describe('HoverPreview', () => {
       );
       // Three matched inline SVGs (14x14, same stroke/viewBox), no emoji glyph.
       const svgs = Array.from(document.querySelectorAll('svg')).filter(
-        (svg) => svg.getAttribute('width') === '14' && svg.getAttribute('height') === '14',
+        (svg) =>
+          svg.getAttribute('width') === '14' &&
+          svg.getAttribute('height') === '14' &&
+          !svg.closest('a'),
       );
       expect(svgs).toHaveLength(3);
       for (const svg of svgs) {
@@ -620,6 +647,7 @@ describe('HoverPreview', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: true,
         plugins: allOn,
       } satisfies SettingsMap);
       const { rerender } = render(
@@ -672,6 +700,7 @@ describe('HoverPreview', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: true,
         plugins: allOn,
       } satisfies SettingsMap);
       const renderFor = (id: string) => (
@@ -711,6 +740,7 @@ describe('HoverPreview', () => {
         trashPurgeDays: 30,
         mcpAccess: true,
         linkPreviewImages: true,
+        hoverPreview: true,
         plugins: allOn,
       } satisfies SettingsMap);
       const { rerender } = render(

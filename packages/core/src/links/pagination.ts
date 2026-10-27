@@ -1,9 +1,26 @@
-import { linkTags, tags } from '@silo/db';
-import { eq, inArray } from 'drizzle-orm';
+import { links, linkTags, tags } from '@silo/db';
+import { eq, getTableColumns, inArray } from 'drizzle-orm';
 import type { Executor, Link } from './executor.js';
 
 /** A `Link` with its tag names attached, sorted for stable output. */
 export type LinkWithTags = Link & { tags: string[] };
+
+/**
+ * A `Link` without the Reader payload. `contentHtml` (up to 1 MB) and
+ * `contentImages` are read only by the detail and media routes, never by list,
+ * search, trash or export reads.
+ */
+export type LinkSummary = Omit<Link, 'contentHtml' | 'contentImages'>;
+export type LinkSummaryWithTags = LinkSummary & { tags: string[] };
+
+const {
+  contentHtml: _contentHtml,
+  contentImages: _contentImages,
+  ...summaryColumns
+} = getTableColumns(links);
+
+/** Every `links` column except the Reader payload: the select list for bulk row reads. */
+export const listColumns: { [K in keyof LinkSummary]: (typeof summaryColumns)[K] } = summaryColumns;
 
 /** Shared page-request shape for `list`/`search`. */
 export type PageParams = {
@@ -231,7 +248,10 @@ export function decodeSearchCursor(cursor: string): { offset: number } {
  * Input order is preserved in the output. Empty input short-circuits without
  * querying.
  */
-export async function hydrateTags(exec: Executor, rows: Link[]): Promise<LinkWithTags[]> {
+export async function hydrateTags<T extends { id: string }>(
+  exec: Executor,
+  rows: T[],
+): Promise<(T & { tags: string[] })[]> {
   if (rows.length === 0) return [];
 
   const ids = rows.map((row) => row.id);

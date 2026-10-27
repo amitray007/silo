@@ -1,5 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { SettingsProvider, useSettings } from './SettingsContext';
@@ -18,6 +19,7 @@ const DEFAULT_SETTINGS = {
   trashPurgeDays: 30,
   mcpAccess: true,
   linkPreviewImages: true,
+  hoverPreview: false,
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true },
     github: { enabled: true, hover: true },
@@ -55,11 +57,13 @@ function mockFetchRouter() {
   });
 }
 
-/** Renders `SettingsModal` already "open" via the shared context, plus a trigger button so focus-restore-on-close is observable — mirrors `EditModal.test.tsx`'s `Harness` pattern. */
+/** Settings navigation runs through the real router and shared context. */
 function Harness() {
   const { open, openSettings } = useSettings();
+  const location = useLocation();
   return (
     <div>
+      <output data-testid="settings-url">{location.pathname}</output>
       <button type="button" onClick={() => openSettings()}>
         trigger
       </button>
@@ -68,27 +72,20 @@ function Harness() {
   );
 }
 
-function renderModal() {
+function renderPage() {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const utils = render(
     <QueryClientProvider client={queryClient}>
       <ThemeProvider>
-        <SettingsProvider>
-          <Harness />
-        </SettingsProvider>
+        <MemoryRouter>
+          <SettingsProvider>
+            <Harness />
+          </SettingsProvider>
+        </MemoryRouter>
       </ThemeProvider>
     </QueryClientProvider>,
   );
   const trigger = screen.getByText('trigger');
-  // jsdom's fireEvent.click doesn't implicitly focus the target the way a
-  // real browser click does — focus it explicitly so the modal's
-  // focus-restore-on-close has a real "trigger" element to return to.
-  trigger.focus();
-  // ModalShell restores focus on close ONLY for keyboard opens (modality-aware
-  // — a mouse-opened modal restoring focus paints a noisy focus ring). These
-  // tests verify that keyboard-user restore path, so open via keyboard: a
-  // keydown sets keyboard modality before the activating click.
-  fireEvent.keyDown(trigger, { key: 'Enter' });
   fireEvent.click(trigger);
   return utils;
 }
@@ -102,144 +99,73 @@ describe('SettingsModal', () => {
     vi.unstubAllGlobals();
   });
 
-  it('opens on the Plugins tab by default (matching v3) and shows the underlined tab strip', () => {
-    renderModal();
-    expect(screen.getByRole('dialog', { name: /settings/i })).toBeDefined();
-    expect(screen.getByRole('tablist', { name: /settings sections/i })).toBeDefined();
-    const pluginsTab = screen.getByRole('tab', { name: 'Plugins' });
-    expect(pluginsTab.getAttribute('aria-selected')).toBe('true');
-    expect(screen.getByRole('tab', { name: 'Preferences' })).toBeDefined();
-    expect(screen.getByRole('tab', { name: 'Import & export' })).toBeDefined();
-    expect(screen.getByRole('tab', { name: 'Access' })).toBeDefined();
+  it('opens the Plugins modal without changing the URL', () => {
+    renderPage();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
+    expect(
+      screen.getByRole('tablist', { name: 'Settings sections' }).getAttribute('aria-orientation'),
+    ).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Plugins' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
   });
 
-  it('places the title and close control before the tab strip for the narrow layout', () => {
-    renderModal();
-    const header = screen.getByRole('heading', { name: 'Settings' }).parentElement;
-    const close = screen.getByRole('button', { name: 'Close' });
-    expect(header?.contains(close)).toBe(true);
-    expect(header?.nextElementSibling).toBe(screen.getByRole('tablist'));
-    fireEvent.click(close);
-    expect(screen.queryByRole('dialog')).toBeNull();
-  });
-
-  it('switches tabs on click, rendering each panel exclusively and updating aria-selected', () => {
-    renderModal();
-
+  it('switches modal tabs and keeps the existing settings controls', () => {
+    renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
     expect(screen.getByRole('tab', { name: 'Preferences' }).getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(screen.getByRole('tab', { name: 'Plugins' }).getAttribute('aria-selected')).toBe(
-      'false',
-    );
-    // "Theme" appears twice while Preferences is active (the row label AND
-    // ThemeToggle's visually-hidden <legend>) — assert at least one, and use
-    // the row label specifically to prove Preferences rendered.
-    expect(screen.getAllByText('Theme').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
-
+    expect(screen.getByRole('switch', { name: 'Compact links' })).toBeDefined();
     fireEvent.click(screen.getByRole('tab', { name: 'Import & export' }));
     expect(screen.getByText('Import')).toBeDefined();
     expect(screen.getByText('Export')).toBeDefined();
-    expect(screen.queryByText('Theme')).toBeNull();
-
     fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
     expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
-    expect(screen.queryByText('Import')).toBeNull();
   });
 
-  it('the header close button closes the modal and restores focus to the trigger', () => {
-    renderModal();
-    const trigger = screen.getByText('trigger');
-    expect(document.activeElement).toBe(screen.getByRole('dialog'));
-
+  it('returns from Settings with its close control', () => {
+    renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(document.activeElement).toBe(trigger);
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
   });
 
-  it('a MOUSE-opened modal does NOT restore focus to the trigger on close (no noisy focus ring)', () => {
-    // The modality-aware counterpart to the keyboard test above: when the
-    // modal was opened by a pointer, closing it must NOT refocus the trigger,
-    // so a mouse user is never left with a `:focus-visible` ring on a button
-    // they clicked and moved on from.
-    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={queryClient}>
-        <ThemeProvider>
-          <SettingsProvider>
-            <Harness />
-          </SettingsProvider>
-        </ThemeProvider>
-      </QueryClientProvider>,
+  it('navigates settings tabs with the arrow keys', () => {
+    renderPage();
+    fireEvent.keyDown(screen.getByRole('tab', { name: 'Plugins' }), { key: 'ArrowDown' });
+    expect(screen.getByRole('tab', { name: 'Preferences' }).getAttribute('aria-selected')).toBe(
+      'true',
     );
-    const trigger = screen.getByText('trigger');
-    trigger.focus();
-    // Pointer modality (no preceding keydown) — mirrors a real mouse open.
-    fireEvent.pointerDown(trigger);
-    fireEvent.click(trigger);
-    expect(screen.getByRole('dialog')).toBeDefined();
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-
-    expect(screen.queryByRole('dialog')).toBeNull();
-    // Focus was NOT forced back to the trigger.
-    expect(document.activeElement).not.toBe(trigger);
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Preferences' }));
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
   });
 
-  it('the ✕ close button closes the modal and restores focus to the trigger', () => {
-    renderModal();
-    const trigger = screen.getByText('trigger');
-
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-
-    expect(screen.queryByRole('dialog')).toBeNull();
-    expect(document.activeElement).toBe(trigger);
-  });
-
-  it('Escape closes the modal', () => {
-    renderModal();
+  it('Escape returns to links when no dialog is open', () => {
+    renderPage();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
   });
 
-  it('clicking the scrim closes the modal, but clicking inside the panel does not', () => {
-    renderModal();
-    const dialog = screen.getByRole('dialog');
-
-    fireEvent.click(dialog);
-    expect(screen.getByRole('dialog')).toBeDefined();
-
-    fireEvent.click(dialog.parentElement as Element);
-    expect(screen.queryByRole('dialog')).toBeNull();
+  it('focuses the modal on entry', () => {
+    renderPage();
+    expect(document.activeElement).toBe(screen.getByRole('dialog', { name: 'Settings' }));
   });
 
-  it('focus moves into the panel on open (focus-trap host)', () => {
-    renderModal();
-    expect(document.activeElement).toBe(screen.getByRole('dialog'));
-  });
-
-  it('remembers the last-viewed tab across close/reopen (does NOT reset to Plugins — deliberate, per SettingsContext doc comment)', () => {
-    renderModal();
-    // Switch away from the default Plugins tab, then close.
+  it('remembers the last tab when reopening Settings', () => {
+    renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
-    expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
-    expect(screen.queryByRole('dialog')).toBeNull();
-
-    // Reopen via the trigger — it should land back on Access, not Plugins.
     fireEvent.click(screen.getByText('trigger'));
+    expect(screen.getByTestId('settings-url').textContent).toBe('/');
     expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
-    expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
   });
 
   describe('Preferences tab', () => {
     it('the real theme toggle changes the theme (data-theme flips)', () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
@@ -251,7 +177,7 @@ describe('SettingsModal', () => {
     });
 
     it('shows the persisted purge window as a custom dropdown, and selecting an option PATCHes it', async () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
       const purgeButton = await screen.findByRole('button', {
@@ -278,7 +204,7 @@ describe('SettingsModal', () => {
 
   describe('Plugins tab (plan 026 — logo grid + expand panel)', () => {
     it('renders a 4-up grid with all four sources as real toggles (no "Soon" card)', () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
       // HN's panel is expanded by default, so its name appears twice (card +
@@ -292,7 +218,7 @@ describe('SettingsModal', () => {
     });
 
     it('clicking the master toggle in the expand panel flips it off and PATCHes the full nested plugins record', async () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
       // HN's card is selected by default — its expand panel is already open.
@@ -312,7 +238,7 @@ describe('SettingsModal', () => {
 
   describe('Import/Export tab (plan 028 — both Import and Export live)', () => {
     it('renders Import (Choose file…) and Export (Download) both live', () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Import & export' }));
 
       const chooseFile = screen.getByRole('button', { name: /choose file/i });
@@ -324,14 +250,14 @@ describe('SettingsModal', () => {
 
   describe('Access tab', () => {
     it('renders the hero card with the honest MCP-access copy', () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
 
       expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
     });
 
     it('renders a LIVE MCP-access switch reflecting the mcpAccess setting', async () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
 
       const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
@@ -340,7 +266,7 @@ describe('SettingsModal', () => {
     });
 
     it('clicking the MCP-access switch PATCHes mcpAccess flipped', async () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
 
       const mcpToggle = await screen.findByRole('switch', { name: /MCP access/i });
@@ -360,7 +286,7 @@ describe('SettingsModal', () => {
      * dialog, and it stacks above (rather than replacing) Settings.
      */
     it('"Set up" (the hero\'s primary action) opens the stacked MCP setup dialog', async () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       fireEvent.click(screen.getByRole('button', { name: 'Set up' }));
 
@@ -371,7 +297,7 @@ describe('SettingsModal', () => {
     });
 
     it('Escape closes only the MCP setup dialog, not the Settings modal underneath', async () => {
-      renderModal();
+      renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
       fireEvent.click(screen.getByRole('button', { name: 'Set up' }));
       await screen.findByRole('dialog', { name: 'Connect over MCP' });

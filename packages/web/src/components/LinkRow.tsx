@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useSettings } from '../api/hooks';
+import { useSettings, useTrashLink } from '../api/hooks';
 import type { LinkJson, SettingsMap } from '../api/types';
 import { isHoverCapable } from '../lib/pointer';
 import { useHoverPreview } from './HoverPreviewContext';
@@ -8,7 +8,6 @@ import { RowMenu } from './RowMenu';
 import { useRowMenu } from './RowMenuContext';
 import { RowPopover } from './RowPopover';
 import { useReaderSelection } from './reader/ReaderSelection';
-import { useLibrarySelection } from './SelectionContext';
 
 function isInlineSurfaceOn(source: SettingsMap['plugins']['hacker_news'] | undefined) {
   return (source?.enabled ?? true) && (source?.inline ?? true);
@@ -17,19 +16,24 @@ function isInlineSurfaceOn(source: SettingsMap['plugins']['hacker_news'] | undef
 export function LinkRow({ link }: { link: LinkJson }) {
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
-  const selection = useLibrarySelection();
   const reader = useReaderSelection();
   const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
   const { data: settings } = useSettings();
+  const hoverEnabled = settings?.hoverPreview === true;
+  useEffect(() => {
+    if (hoverEnabled) return () => dismiss(link.id);
+  }, [hoverEnabled, dismiss, link.id]);
   useEffect(() => {
     if (menuOpen) scheduleHide(link.id);
   }, [menuOpen, scheduleHide, link.id]);
-  useEffect(() => () => dismiss(link.id), [dismiss, link.id]);
   const source = link.sourceData;
+  const trash = useTrashLink();
   return (
     <ListRow
       link={link}
-      selection={selection}
+      busy={trash.isPending}
+      error={trash.isError ? "Couldn't move this link to trash. Try again." : undefined}
+      onRemove={() => trash.mutate(link.id)}
       menuOpen={menuOpen}
       toggleMenu={() => toggleMenu(link.id)}
       menu={(anchor) =>
@@ -40,7 +44,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
         )
       }
       onEnter={(event) => {
-        if (!menuOpen && reader?.selectedId !== link.id && isHoverCapable())
+        if (hoverEnabled && !menuOpen && reader?.selectedId !== link.id && isHoverCapable())
           scheduleShow(link, event.currentTarget.getBoundingClientRect());
       }}
       onLeave={() => scheduleHide(link.id)}

@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation, useMatch } from 'react-router';
+import { layoutMedia } from '../lib/breakpoints';
 import { useCommandPalette } from '../lib/useCommandPalette';
 import { isTextEntryElement, usePasteCapture } from '../lib/usePasteCapture';
 import { ThemeSettingsSync } from '../theme/ThemeSettingsSync';
 import { CommandPalette } from './CommandPalette';
 import { EditModal } from './EditModal';
 import { HoverPreviewProvider } from './HoverPreviewContext';
+import { MobileBar } from './MobileBar';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
-import { SelectionProvider, useLibrarySelection, useTrashSelection } from './SelectionContext';
 import { SettingsProvider, useSettings } from './SettingsContext';
 import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
@@ -24,8 +25,6 @@ function RowMenuLayer({
   drawerOpen: boolean;
 }) {
   const { openMenuId, closeMenu, editingLink, editingFocus, closeEdit } = useRowMenu();
-  const librarySelection = useLibrarySelection();
-  const trashSelection = useTrashSelection();
   const { open: settingsOpen } = useSettings();
   useEffect(() => {
     if (settingsOpen && editingLink) {
@@ -33,10 +32,10 @@ function RowMenuLayer({
     }
   }, [settingsOpen, editingLink, closeEdit]);
   useEffect(() => {
-    if ((settingsOpen || editingLink) && palette.open) {
+    if (editingLink && palette.open) {
       palette.closePalette();
     }
-  }, [settingsOpen, editingLink, palette.open, palette.closePalette]);
+  }, [editingLink, palette.open, palette.closePalette]);
   useEffect(() => {
     if ((palette.open || drawerOpen) && openMenuId !== null) {
       closeMenu();
@@ -49,11 +48,7 @@ function RowMenuLayer({
     return () => document.removeEventListener('mousedown', onMouseDown);
   }, [openMenuId, closeMenu]);
   useEffect(() => {
-    const dismiss =
-      openMenuId !== null
-        ? closeMenu
-        : [librarySelection, trashSelection].find((scope) => scope.selected.length > 0)?.clear;
-    if (!dismiss) return;
+    if (openMenuId === null) return;
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || event.defaultPrevented) return;
       if (
@@ -64,18 +59,31 @@ function RowMenuLayer({
         return;
       event.preventDefault();
       event.stopImmediatePropagation();
-      dismiss();
+      closeMenu();
     };
     document.addEventListener('keydown', onKeyDown);
     return () => document.removeEventListener('keydown', onKeyDown);
-  }, [openMenuId, closeMenu, librarySelection, trashSelection, palette.open, drawerOpen]);
+  }, [openMenuId, closeMenu, palette.open, drawerOpen]);
   return editingLink ? (
     <EditModal key={editingLink.id} link={editingLink} focus={editingFocus} />
   ) : null;
 }
 
-function SettingsLayer() {
+function SettingsLayer({
+  palette,
+  closeDrawer,
+}: {
+  palette: ReturnType<typeof useCommandPalette>;
+  closeDrawer: () => void;
+}) {
   const { open } = useSettings();
+  const { closeMenu } = useRowMenu();
+  useEffect(() => {
+    if (!open) return;
+    palette.closePalette();
+    closeMenu();
+    closeDrawer();
+  }, [open, palette.closePalette, closeMenu, closeDrawer]);
   return open ? <SettingsModal /> : null;
 }
 
@@ -100,7 +108,7 @@ export function AppFrame() {
   const commandPalette = useCommandPalette();
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const toggleSidebar = useCallback(() => {
-    if (!matchMedia('(min-width: 1100px)').matches) {
+    if (!matchMedia(layoutMedia.sidebar).matches) {
       closeDrawer();
       return;
     }
@@ -119,7 +127,7 @@ export function AppFrame() {
       closeDrawer();
       return;
     }
-    if (matchMedia('(min-width: 1100px)').matches) {
+    if (matchMedia(layoutMedia.sidebar).matches) {
       toggleSidebar();
       return;
     }
@@ -130,10 +138,11 @@ export function AppFrame() {
     if (previousPath.current !== location.pathname) {
       previousPath.current = location.pathname;
       setDrawerOpen(false);
+      commandPalette.closePalette();
     }
-  }, [location.pathname]);
+  }, [location.pathname, commandPalette.closePalette]);
   useEffect(() => {
-    const wide = matchMedia('(min-width: 1100px)');
+    const wide = matchMedia(layoutMedia.sidebar);
     const onChange = () => setDrawerOpen(false);
     wide.addEventListener('change', onChange);
     return () => wide.removeEventListener('change', onChange);
@@ -152,7 +161,7 @@ export function AppFrame() {
         return;
       if (event.key === '[') {
         event.preventDefault();
-        if (matchMedia('(min-width: 1100px)').matches) toggleSidebar();
+        if (matchMedia(layoutMedia.sidebar).matches) toggleSidebar();
         else setDrawerOpen((open) => !open);
       }
       if (event.key === 'n') {
@@ -166,7 +175,10 @@ export function AppFrame() {
   useEffect(() => {
     if (!drawerOpen) {
       if (drawerWasOpen.current && !document.querySelector('[role="dialog"], [role="alertdialog"]'))
-        menuButtonRef.current?.focus();
+        (matchMedia(layoutMedia.phone).matches
+          ? document.querySelector<HTMLElement>('.silo-collection-trigger')
+          : menuButtonRef.current
+        )?.focus();
       drawerWasOpen.current = false;
       return;
     }
@@ -200,48 +212,47 @@ export function AppFrame() {
       <ThemeSettingsSync />
       <HoverPreviewProvider>
         <RowMenuProvider>
-          <SelectionProvider>
-            <div className="silo-frame" data-collapsed={collapsed}>
-              <div className="silo-band">
+          <div className="silo-frame" data-collapsed={collapsed}>
+            <div className="silo-band">
+              <button
+                type="button"
+                tabIndex={-1}
+                className="silo-scrim"
+                data-open={drawerOpen}
+                aria-hidden="true"
+                onClick={closeDrawer}
+              />
+              <Sidebar
+                id={DRAWER_ID}
+                ref={sidebarRef}
+                open={drawerOpen}
+                onNavigate={closeDrawer}
+                onOpenSearch={() => {
+                  closeDrawer();
+                  commandPalette.openPalette();
+                }}
+                onToggleSidebar={toggleSidebar}
+              />
+              <main className="silo-content" inert={drawerOpen}>
                 <button
+                  ref={menuButtonRef}
                   type="button"
-                  tabIndex={-1}
-                  className="silo-scrim"
-                  data-open={drawerOpen}
-                  aria-hidden="true"
-                  onClick={closeDrawer}
-                />
-                <Sidebar
-                  id={DRAWER_ID}
-                  ref={sidebarRef}
-                  open={drawerOpen}
-                  onNavigate={closeDrawer}
-                  onOpenSearch={() => {
-                    closeDrawer();
-                    commandPalette.openPalette();
-                  }}
-                  onToggleSidebar={toggleSidebar}
-                />
-                <main className="silo-content" inert={drawerOpen}>
-                  <button
-                    ref={menuButtonRef}
-                    type="button"
-                    className="silo-list-menu silo-reader-iconbtn"
-                    aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-                    aria-expanded={drawerOpen}
-                    aria-controls={DRAWER_ID}
-                    onClick={showSidebar}
-                  >
-                    <ReaderIcon name="menu" />
-                  </button>
-                  <Outlet />
-                </main>
-                <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
-              </div>
-              <SettingsLayer />
-              <CommandPalette palette={commandPalette} />
+                  className="silo-list-menu silo-reader-iconbtn"
+                  aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+                  aria-expanded={drawerOpen}
+                  aria-controls={DRAWER_ID}
+                  onClick={showSidebar}
+                >
+                  <ReaderIcon name="menu" />
+                </button>
+                <Outlet context={{ showSidebar, sidebarHidden: collapsed }} />
+                <MobileBar onSearch={commandPalette.openPalette} />
+              </main>
+              <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
             </div>
-          </SelectionProvider>
+            <CommandPalette palette={commandPalette} />
+            <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
+          </div>
         </RowMenuProvider>
       </HoverPreviewProvider>
     </SettingsProvider>
