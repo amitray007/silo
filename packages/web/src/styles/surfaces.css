@@ -736,6 +736,11 @@
   text-underline-offset: 2px;
   text-decoration: underline;
 }
+/* Footnote back-links read as a quiet mark, as in shiori.sh. */
+.silo-reader-prose a[title="return to article"] {
+  color: var(--fnt);
+  text-decoration: none;
+}
 .silo-reader-prose a:hover {
   text-decoration-color: currentColor;
 }

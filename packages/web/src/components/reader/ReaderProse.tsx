@@ -90,7 +90,6 @@ function readerHtml(link: LinkDetailJson): string {
     ALLOW_ARIA_ATTR: false,
     RETURN_DOM_FRAGMENT: true,
   });
-  shapeProse(fragment);
   for (const node of fragment.querySelectorAll('[id]')) {
     if (!/^silo-fn-[1-9]\d*$/.test(node.id)) node.removeAttribute('id');
   }
@@ -101,6 +100,8 @@ function readerHtml(link: LinkDetailJson): string {
     anchor.setAttribute('target', '_blank');
     anchor.setAttribute('rel', 'noopener noreferrer');
   }
+  // After the id and link filters: shaping adds silo-fn ids and in-page note links.
+  shapeProse(fragment);
   for (const image of fragment.querySelectorAll('img')) {
     image.setAttribute('loading', 'lazy');
     image.setAttribute('data-loaded', 'false');
