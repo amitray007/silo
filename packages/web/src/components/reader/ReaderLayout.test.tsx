@@ -3,7 +3,13 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { MemoryRouter, useLocation, useNavigate } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../../App';
-import type { FrameHint, LinkJson, SettingsMap, TrashLinkJson } from '../../api/types';
+import type {
+  FrameHint,
+  LinkJson,
+  LiveReaderJson,
+  SettingsMap,
+  TrashLinkJson,
+} from '../../api/types';
 import { layoutMedia } from '../../lib/breakpoints';
 import {
   githubSourceData,
@@ -43,15 +49,15 @@ const b = makeLink({
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
-function detailResponse(
-  path: string,
-  links: LinkJson[],
-  details: Record<string, { contentHtml: string | null; contentImageCount: number }>,
-) {
+function detailResponse(path: string, links: LinkJson[]) {
   const link = links.find((link) => path === `/api/links/${link.id}`);
-  return link
-    ? json({ link: { ...link, contentHtml: null, contentImageCount: 0, ...details[link.id] } })
-    : json({ error: 'not_found', message: 'Unknown link' }, 404);
+  return link ? json({ link }) : json({ error: 'not_found', message: 'Unknown link' }, 404);
+}
+
+/** The live Reader route: a configured Reader, or 404 for a page with none. */
+function readerResponse(path: string, readers: Record<string, LiveReaderJson>) {
+  const reader = readers[path.split('/')[3] ?? ''];
+  return reader ? json(reader) : json({ error: 'not_found', message: 'No Reader content' }, 404);
 }
 
 function frameResponse(link: LinkJson, hint: FrameHint | undefined) {
@@ -78,7 +84,7 @@ function renderReader({
   live = [a, b],
   trash = [],
   extra = [],
-  details = {},
+  readers = {},
   route = '/',
   liveCount,
   trashCount,
@@ -89,7 +95,7 @@ function renderReader({
   live?: LinkJson[];
   trash?: TrashLinkJson[];
   extra?: LinkJson[];
-  details?: Record<string, { contentHtml: string | null; contentImageCount: number }>;
+  readers?: Record<string, LiveReaderJson>;
   route?: string;
   liveCount?: number;
   trashCount?: number;
@@ -113,9 +119,12 @@ function renderReader({
           purgeWindowDays: 30,
         }),
       ...Object.fromEntries(
-        [...state.live, ...extra].map((link) => [
-          `/api/links/${link.id}/frame`,
-          () => frameResponse(link, frameHint),
+        [...state.live, ...extra].flatMap((link) => [
+          [`/api/links/${link.id}/frame`, () => frameResponse(link, frameHint)],
+          [
+            `/api/links/${link.id}/reader`,
+            () => readerResponse(`/api/links/${link.id}/reader`, readers),
+          ],
         ]),
       ),
       '/api/trash': () => json({ links: state.trash }),
@@ -140,7 +149,7 @@ function renderReader({
       state.trash = state.trash.filter((link) => link.id !== path.split('/').at(-1));
       return new Response(null, { status: 204 });
     }
-    return detailResponse(path, [...state.live, ...extra], details);
+    return detailResponse(path, [...state.live, ...extra]);
   });
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1051,20 +1060,21 @@ describe('review regressions', () => {
     fireEvent.keyDown(original, { key: 'ArrowLeft' });
     expect(document.activeElement).toBe(tab);
   });
-  it('loads detail prose for a listed row, sanitizes it, and preserves API image indices', async () => {
+  it('loads live Reader prose for a listed row, sanitizes it, and preserves API image indices', async () => {
     const { container, fetchMock } = renderReader({
       route: '/?link=a',
-      details: {
+      readers: {
         a: {
           contentHtml:
             '<h1>Article heading</h1><p style="color:red" onclick="bad()">Safe prose <a href="javascript:alert(1)">bad link</a><a href="https://react.dev">React docs</a></p><script>alert(1)</script><img src="https://cdn.test/a.png" onerror="bad()"><img src="https://cdn.test/a.png"><img src="https://cdn.test/extra.png"><pre><code>const a = 1;</code></pre><table><caption>Values</caption><tbody><tr><td>A</td></tr></tbody></table>',
-          contentImageCount: 2,
+          contentImages: ['https://cdn.test/a.png', 'https://cdn.test/a.png'],
         },
       },
     });
     await selected();
     await waitFor(() => expect(screen.getByText('Article heading')).toBeDefined());
     expect(fetchMock).toHaveBeenCalledWith('/api/links/a', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/links/a/reader', expect.any(Object));
     const prose = container.querySelector('.silo-reader-prose');
     expect(prose?.querySelector('script, [style], [onclick], [onerror]')).toBeNull();
     expect(prose?.querySelector('a')?.getAttribute('href')).toBeNull();
@@ -1171,7 +1181,7 @@ describe('review regressions', () => {
     expect(reader().getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(reader().getByText('First paragraph.')).toBeDefined();
+    expect(await reader().findByText('First paragraph.')).toBeDefined();
   });
 
   it('shows one tweet card in Reader and only its themed embed in Original', async () => {

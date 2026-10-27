@@ -88,7 +88,7 @@ describe('apiGet', () => {
     const trashLink: TrashLinkJson = { ...linkFixture, deletedAt: '2026-07-02T00:00:00.000Z' };
     const trashResponse: TrashResponse = { links: [trashLink] };
     const linkResponse: LinkResponse = {
-      link: { ...linkFixture, contentHtml: null, contentImageCount: 0 },
+      link: linkFixture,
     };
 
     vi.mocked(fetch)
@@ -312,7 +312,7 @@ describe('apiPatch / apiDelete', () => {
 
   it('apiPatch PATCHes the body as JSON and returns the typed response', async () => {
     const linkResponse: LinkResponse = {
-      link: { ...linkFixture, contentHtml: null, contentImageCount: 0 },
+      link: linkFixture,
     };
     vi.mocked(fetch).mockResolvedValueOnce(jsonResponse(linkResponse, 200));
 

@@ -1,9 +1,9 @@
-import { useRetryCapture } from '../../api/hooks';
-import type { LinkDetailJson, LinkJson } from '../../api/types';
+import { useLiveReader, useRetryCapture } from '../../api/hooks';
+import type { LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
-import { ReaderSkeleton } from './ReaderLoading';
+import { PreparingReader, ReaderSkeleton } from './ReaderLoading';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
 import { TweetCard } from './TweetCard';
@@ -84,16 +84,22 @@ export function ReaderContent({
   trashed = false,
   showLive,
 }: {
-  link: LinkJson | LinkDetailJson;
+  link: LinkJson;
   trashed?: boolean;
   showLive?: () => void;
 }) {
+  const source = link.sourceData;
+  // A trashed link has no live route, and an X post has no Reader. The stored text stands in
+  // whenever the live Reader is absent or fails.
+  const live = useLiveReader(
+    link.id,
+    !trashed && link.captureStatus !== 'enriching' && source.kind !== 'twitter',
+  );
   if (link.captureStatus === 'enriching') return <ReaderSkeleton label="Capturing page" />;
 
-  const source = link.sourceData;
   const embed = embedFor(link.url, source);
   const video = embed?.video;
-  const prose = 'contentHtml' in link && link.contentHtml !== null;
+  const prose = live.data;
   return (
     <>
       {source.kind === 'twitter' && <TweetCard linkId={link.id} source={source} />}
@@ -144,14 +150,21 @@ export function ReaderContent({
         </figure>
       )}
       {source.kind !== 'twitter' &&
-        (prose && 'contentHtml' in link ? <ReaderProse link={link} /> : <Paragraphs link={link} />)}
+        (live.isLoading ? (
+          <PreparingReader />
+        ) : prose ? (
+          <ReaderProse linkId={link.id} reader={prose} />
+        ) : (
+          <Paragraphs link={link} />
+        ))}
       {!prose &&
+        !live.isLoading &&
         source.kind !== 'twitter' &&
         !link.extractedText?.trim() &&
         !link.description?.trim() && (
           <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
         )}
-      <RelatedLinks link={link} trashed={trashed} />
+      <RelatedLinks link={link} html={prose?.contentHtml} trashed={trashed} />
     </>
   );
 }

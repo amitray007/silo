@@ -1,12 +1,11 @@
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LinkDetailJson } from '../link-json.js';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
 vi.mock('../ssrf-safe-image-fetch.js', () => ({ fetchImageSafely: vi.fn() }));
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 
-describeIfPg('Reader API (Postgres)', () => {
+describeIfPg('Reader content-image API (Postgres)', () => {
   const harness = setupPgHarness('silo_reader_api_test', async () => {
     const core = await import('@silo/core');
     const { createApp } = await import('../app.js');
@@ -15,38 +14,35 @@ describeIfPg('Reader API (Postgres)', () => {
   });
   beforeEach(() => harness.mod().fetchImageSafely.mockReset());
 
+  const content = {
+    contentHtml: '<p>Reader<img src="https://cdn.example.org/photo.png"></p>',
+    contentImages: ['https://cdn.example.org/photo.png'],
+  };
+  const liveReader = vi.fn(async () => content as typeof content | undefined);
+  beforeEach(() => {
+    liveReader.mockReset();
+    liveReader.mockResolvedValue(content);
+    harness.mod().core.setLiveReader(liveReader);
+  });
+  afterEach(() => harness.mod().core.setLiveReader(undefined));
+
   async function capture(slug: string) {
     const { core } = harness.mod();
-    const created = await core.createLink({
+    return core.createLink({
       url: `https://example.org/${slug}`,
       sourceKind: 'link',
       tags: ['reader'],
     });
-    await core.recordEnrichment(created.id, {
-      status: 'full',
-      text: 'Reader text',
-      reader: {
-        contentHtml: '<p>Reader<img src="https://cdn.example.org/photo.png"></p>',
-        contentImages: ['https://cdn.example.org/photo.png'],
-      },
-    });
-    return created;
   }
 
-  it('returns HTML and image count only in detail, including windowed detail', async () => {
+  it('sends no Reader HTML or image data in any link JSON', async () => {
     const { app } = harness.mod();
     const link = await capture('detail');
-    for (const suffix of ['', '?textOffset=0&textLimit=4']) {
-      const response = await app.request(`/api/links/${link.id}${suffix}`);
-      expect(response.status).toBe(200);
-      const { link: detail } = (await response.json()) as { link: LinkDetailJson };
-      expect(detail.contentHtml).toContain('<p>Reader');
-      expect(detail.contentImageCount).toBe(1);
-      expect(detail).not.toHaveProperty('contentImages');
-    }
     for (const path of [
+      `/api/links/${link.id}`,
+      `/api/links/${link.id}?textOffset=0&textLimit=4`,
       '/api/links',
-      '/api/links/search?q=Reader',
+      '/api/links/search?q=detail',
       `/api/links/${link.id}/related`,
     ]) {
       const response = await app.request(path);
@@ -56,9 +52,10 @@ describeIfPg('Reader API (Postgres)', () => {
       expect(payload).not.toContain('contentImageCount');
       expect(payload).not.toContain('contentImages');
     }
+    expect(liveReader).not.toHaveBeenCalled();
   });
 
-  it('fetches only the stored index target and serves raster bytes with nosniff', async () => {
+  it('fetches only the live Reader index target and serves raster bytes with nosniff', async () => {
     const { app, fetchImageSafely } = harness.mod();
     const link = await capture('image');
     fetchImageSafely.mockResolvedValue({
@@ -75,6 +72,28 @@ describeIfPg('Reader API (Postgres)', () => {
     expect(response.headers.get('cache-control')).toBe('private, no-store');
     expect([...new Uint8Array(await response.arrayBuffer())]).toEqual([1, 2]);
     expect(fetchImageSafely).toHaveBeenCalledWith('https://cdn.example.org/photo.png');
+    expect(liveReader).toHaveBeenCalledWith(
+      { id: link.id, url: 'https://example.org/image', sourceKind: 'link' },
+      expect.any(AbortSignal),
+    );
+  });
+
+  it('is 404 without fetching when the page has no live Reader', async () => {
+    const { app, fetchImageSafely } = harness.mod();
+    const link = await capture('no-reader');
+    liveReader.mockResolvedValue(undefined);
+    expect((await app.request(`/api/links/${link.id}/content-image/0`)).status).toBe(404);
+    expect(fetchImageSafely).not.toHaveBeenCalled();
+  });
+
+  it('is 404 for a link that does not exist', async () => {
+    const { app, fetchImageSafely } = harness.mod();
+    const response = await app.request(
+      '/api/links/6f1c1b0e-6f55-4d1c-9a55-1b0f4a3d2e10/content-image/0',
+    );
+    expect(response.status).toBe(404);
+    expect(liveReader).not.toHaveBeenCalled();
+    expect(fetchImageSafely).not.toHaveBeenCalled();
   });
 
   it('rejects out-of-range, invalid and trashed targets without fetching', async () => {

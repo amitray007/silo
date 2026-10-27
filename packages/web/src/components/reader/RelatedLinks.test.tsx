@@ -1,7 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { LinkDetailJson } from '../../api/types';
 import { makeLink } from '../../test/fixtures';
 import { ReaderContent } from './ReaderContent';
 
@@ -16,15 +15,22 @@ const json = (body: unknown, status = 200) =>
 let saved: string[];
 let titles: Record<string, string>;
 let captureResponse: () => Promise<Response>;
+let liveHtml: string | null;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   localStorage.clear();
   saved = [];
   titles = {};
+  liveHtml = html;
   captureResponse = async () => json({ link: makeLink({ url: firstUrl }), deduped: false }, 201);
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
+    if (path.endsWith('/reader')) {
+      return liveHtml === null
+        ? json({ error: 'not_found', message: 'No Reader content' }, 404)
+        : json({ contentHtml: liveHtml, contentImages: [] });
+    }
     if (path === '/api/links/saved') return json({ saved });
     if (path === '/api/links/titles') return json({ titles });
     if (path === '/api/links') {
@@ -47,24 +53,24 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-function renderArticle(overrides: Partial<LinkDetailJson> = {}, trashed = false) {
+/** Renders the article and waits for the live Reader request to settle. */
+async function renderArticle(options: { html?: string | null; trashed?: boolean } = {}) {
+  if (options.html !== undefined) liveHtml = options.html;
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  const link = {
-    ...makeLink({ url: 'https://article.test/story' }),
-    contentHtml: html,
-    contentImageCount: 0,
-    ...overrides,
-  };
-  return {
-    client,
-    ...render(
-      <QueryClientProvider client={client}>
-        <ReaderContent link={link} trashed={trashed} />
-      </QueryClientProvider>,
-    ),
-  };
+  const link = makeLink({ url: 'https://article.test/story' });
+  const view = render(
+    <QueryClientProvider client={client}>
+      <ReaderContent link={link} trashed={options.trashed ?? false} />
+    </QueryClientProvider>,
+  );
+  if (!options.trashed) {
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Loading article' })).toBeNull(),
+    );
+  }
+  return { client, ...view };
 }
 
 function section() {
@@ -81,7 +87,7 @@ async function saveButton() {
 describe('Related links in Reader', () => {
   it('shows the real page title with the author link text beneath it', async () => {
     titles = { [firstUrl]: 'The First Article: A Guide', [secondUrl]: 'reference guide' };
-    renderArticle();
+    await renderArticle();
     await within(section()).findByText('The First Article: A Guide');
     expect(within(section()).getByText('First article').className).toBe('silo-related-linktext');
     // A page title that only differs in case or punctuation adds no second line.
@@ -93,7 +99,7 @@ describe('Related links in Reader', () => {
 
   it('does not fetch titles while the list is collapsed', async () => {
     localStorage.setItem('silo.relatedLinksOpen', 'false');
-    renderArticle();
+    await renderArticle();
     await waitFor(() =>
       expect(fetchMock.mock.calls.some(([path]) => path === '/api/links/saved')).toBe(true),
     );
@@ -101,7 +107,7 @@ describe('Related links in Reader', () => {
   });
 
   it('renders article rows with safe new-tab links and local favicon tiles', async () => {
-    renderArticle();
+    await renderArticle();
     expect(screen.getByText('Article body')).toBeTruthy();
     const links = within(section()).getAllByRole('link');
     expect(links.map((link) => link.getAttribute('href'))).toEqual([firstUrl, secondUrl]);
@@ -123,21 +129,39 @@ describe('Related links in Reader', () => {
 
   it.each([null, '', '<p>No links</p>', '<a href="#part">Footnote</a>'])(
     'hides the section and makes no lookup for content %j',
-    (contentHtml) => {
-      renderArticle({ contentHtml });
+    async (contentHtml) => {
+      await renderArticle({ html: contentHtml });
       expect(screen.queryByRole('region', { name: 'Related links' })).toBeNull();
-      expect(fetchMock).not.toHaveBeenCalled();
+      expect(fetchMock.mock.calls.every(([path]) => String(path).endsWith('/reader'))).toBe(true);
     },
   );
 
-  it('hides the section for trashed articles', () => {
-    renderArticle({}, true);
+  it('shows no section while the Reader loads, and none when the page has no Reader', async () => {
+    let release: (response: Response) => void = () => {};
+    fetchMock.mockImplementationOnce(() => new Promise((resolve) => (release = resolve)));
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ReaderContent link={makeLink({ url: 'https://article.test/story' })} />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole('status', { name: 'Loading article' })).toBeTruthy();
+    expect(screen.queryByRole('region', { name: 'Related links' })).toBeNull();
+    await act(async () => {
+      release(json({ error: 'not_found', message: 'No Reader content' }, 404));
+    });
+    expect(screen.queryByRole('region', { name: 'Related links' })).toBeNull();
+    expect(fetchMock.mock.calls.every(([path]) => String(path).endsWith('/reader'))).toBe(true);
+  });
+
+  it('hides the section for trashed articles', async () => {
+    await renderArticle({ trashed: true });
     expect(screen.queryByRole('region', { name: 'Related links' })).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it('starts expanded, persists collapse across remounts, and responds to storage changes', async () => {
-    const view = renderArticle();
+    const view = await renderArticle();
     const header = within(section()).getByRole('button', { name: 'Related links' });
     expect(header.getAttribute('aria-expanded')).toBe('true');
     expect(document.getElementById(header.getAttribute('aria-controls') ?? '')?.tagName).toBe('UL');
@@ -146,7 +170,7 @@ describe('Related links in Reader', () => {
     expect(localStorage.getItem('silo.relatedLinksOpen')).toBe('false');
     expect(within(section()).queryByRole('link')).toBeNull();
     view.unmount();
-    renderArticle();
+    await renderArticle();
     expect(
       within(section())
         .getByRole('button', { name: 'Related links' })
@@ -162,7 +186,7 @@ describe('Related links in Reader', () => {
 
   it('hides the bookmark for already-saved links while keeping their rows', async () => {
     saved = [firstUrl];
-    renderArticle();
+    await renderArticle();
     await waitFor(() =>
       expect(within(section()).getAllByRole('button', { name: 'Save link' })).toHaveLength(1),
     );
@@ -177,7 +201,7 @@ describe('Related links in Reader', () => {
       new Promise((resolve) => {
         resolveCapture = resolve;
       });
-    const view = renderArticle();
+    const view = await renderArticle();
     const button = await saveButton();
     fireEvent.click(button);
     await waitFor(() => expect(button.getAttribute('aria-busy')).toBe('true'));
@@ -199,7 +223,7 @@ describe('Related links in Reader', () => {
     );
     expect(window.location.pathname).toBe('/');
     view.unmount();
-    renderArticle();
+    await renderArticle();
     await waitFor(() =>
       expect(within(section()).getAllByRole('button', { name: 'Save link' })).toHaveLength(1),
     );
@@ -208,7 +232,7 @@ describe('Related links in Reader', () => {
 
   it('treats a deduped capture as saved and removes confirmation after a short delay', async () => {
     captureResponse = async () => json({ link: makeLink({ url: firstUrl }), deduped: true }, 201);
-    renderArticle();
+    await renderArticle();
     fireEvent.click(await saveButton());
     await within(section()).findByRole('button', { name: 'Saved' });
     await waitFor(
@@ -220,7 +244,7 @@ describe('Related links in Reader', () => {
 
   it('shows inline failure and retries without navigating', async () => {
     captureResponse = async () => json({ error: 'internal_error', message: 'Capture failed' }, 500);
-    renderArticle();
+    await renderArticle();
     fireEvent.click(await saveButton());
     expect((await within(section()).findByRole('alert')).textContent).toBe("Couldn't save");
     expect(within(section()).getByText('Retry')).toBeTruthy();

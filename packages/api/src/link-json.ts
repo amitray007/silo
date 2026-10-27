@@ -1,7 +1,6 @@
 import type {
   CaptureSource,
   LinkSummaryWithTags,
-  LinkWithTags,
   LinkWithTextWindow,
   ListResultRow,
   SearchResultRow,
@@ -91,17 +90,6 @@ function shapeSourceData(raw: unknown): SourceData {
     return { kind: 'link' };
   }
   return parsed.data;
-}
-
-export type LinkDetailJson = LinkJson & { contentHtml: string | null; contentImageCount: number };
-
-/** Reader HTML and image count are available only on the detail read path. */
-export function toLinkDetailJson(link: LinkWithTags): LinkDetailJson {
-  return {
-    ...toLinkJson(link),
-    contentHtml: link.contentHtml,
-    contentImageCount: link.contentImages?.length ?? 0,
-  };
 }
 
 /** `LinkJson` plus `deletedAt` — the Trash screen's shape (`GET /api/trash`). */
@@ -218,11 +206,11 @@ export function toSearchResultJson(link: LinkSummaryWithTags, rank: number): Sea
  * it received. Mirrors `packages/mcp/server/src/tools/get-link.ts`'s
  * `GetLinkStructuredContent`'s identical `extractedTextLength` field.
  */
-export type LinkWithTextWindowJson = LinkDetailJson & { extractedTextLength: number };
+export type LinkWithTextWindowJson = LinkJson & { extractedTextLength: number };
 
 /** Builds the windowed-detail shape — `toLinkJson` plus `extractedTextLength`. */
 export function toLinkWithTextWindowJson(link: LinkWithTextWindow): LinkWithTextWindowJson {
-  return { ...toLinkDetailJson(link), extractedTextLength: link.extractedTextLength };
+  return { ...toLinkJson(link), extractedTextLength: link.extractedTextLength };
 }
 
 /**

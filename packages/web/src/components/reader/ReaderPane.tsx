@@ -196,7 +196,7 @@ function ArticleBody({
   trashed: boolean;
   showLive: () => void;
 }) {
-  return loading && !('contentHtml' in link) ? (
+  return loading ? (
     <ReaderSkeleton />
   ) : (
     <ReaderContent link={link} trashed={trashed} showLive={showLive} />

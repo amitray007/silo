@@ -42,7 +42,7 @@ export {
   type SafeFetchResult,
   safeFetch,
 } from './fetch/safe-fetch.js';
-export { runReaderUpgrade } from './reader-upgrade.js';
+export { createLiveReader, registerLiveReader } from './reader/live-reader.js';
 export { createLinkTitleFetcher, registerLinkTitles } from './titles/link-titles.js';
 export { createSiteIconFinder, registerSiteIcons } from './titles/site-icon.js';
 export { registerPageViewer } from './view/viewer.js';

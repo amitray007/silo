@@ -200,7 +200,7 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
   }
 
   // A Reader failure falls back to metadata only, so a page that always fails still settles
-  // (retry only counts recorded attempts). reader-upgrade can rebuild Reader content later.
+  // (retry only counts recorded attempts). The Reader HTML is built live when a link opens.
   const fields = await runMetascraper(url, html);
   try {
     const page = await extractPage(

@@ -182,15 +182,12 @@ export {
   softDelete,
   willDedupCapture,
 } from './links/links.js';
+export { type LiveReader, readLive, setLiveReader } from './links/live-reader.js';
 // Trash purge (U5): bounded, batched, unscheduled — see purgeTrash's doc
 // comment for the batching/termination argument. Scheduling (pg-boss) is a
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
-export {
-  findReaderUpgradeCandidates,
-  recordReaderUpgrade,
-} from './links/reader.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
 // over a link's own tags + title terms — see related.ts's doc comment.
 export { findRelated } from './links/related.js';

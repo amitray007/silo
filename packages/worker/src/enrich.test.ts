@@ -148,6 +148,33 @@ describeIfPg('enrichLink (integration)', () => {
     expect(link?.extractedText).toBe('x'.repeat(400));
   });
 
+  it('records the extracted text but never the Reader HTML', async () => {
+    const id = await newLink('https://example.com/no-reader-html');
+    await enrichMod.enrichLink(
+      id,
+      stubDeps(
+        {
+          ok: true,
+          html: '<html></html>',
+          contentType: 'text/html',
+          finalUrl: 'https://example.com/no-reader-html',
+          status: 200,
+        },
+        {
+          title: 'T',
+          text: 'y'.repeat(400),
+          status: 'full',
+          reader: { contentHtml: '<p>Formatted</p>', contentImages: ['https://cdn.test/a.png'] },
+        },
+      ),
+    );
+    const link = await core.getById(id);
+    expect(link?.captureStatus).toBe('full');
+    expect(link?.extractedText).toBe('y'.repeat(400));
+    expect(link?.contentHtml).toBeNull();
+    expect(link?.contentImages).toBeNull();
+  });
+
   it('fetch ok + extract partial (JS-wall) -> records partial', async () => {
     const id = await newLink('https://example.com/partial');
     await enrichMod.enrichLink(

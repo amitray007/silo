@@ -135,8 +135,12 @@ export type LinkJson = {
   updatedAt: string;
 };
 
-/** Detail-only Reader fields, mirroring the API's LinkDetailJson. */
-export type LinkDetailJson = LinkJson & { contentHtml: string | null; contentImageCount: number };
+/**
+ * `GET /api/links/:id/reader` -- the formatted Reader built live from the page.
+ * `contentImages` is in document order; the Reader loads image `n` through
+ * `/api/links/:id/content-image/n`.
+ */
+export type LiveReaderJson = { contentHtml: string; contentImages: string[] };
 
 /** `LinkJson` plus `deletedAt` (ISO string) — `GET /api/trash`'s per-row shape. */
 export type TrashLinkJson = LinkJson & { deletedAt: string };
@@ -166,7 +170,7 @@ export type TrashSearchResultJson = TrashLinkJson & { rank: number };
 export type TrashSearchResponse = { results: TrashSearchResultJson[]; nextCursor?: string };
 
 /** `GET /api/links/:id` response envelope. */
-export type LinkResponse = { link: LinkDetailJson };
+export type LinkResponse = { link: LinkJson };
 
 /**
  * `POST /api/links/:id/restore` response envelope — mirrors

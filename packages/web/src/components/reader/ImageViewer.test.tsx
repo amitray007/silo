@@ -1,6 +1,5 @@
 import { act, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { makeLink } from '../../test/fixtures';
 import { ReaderProse } from './ReaderProse';
 
 const html =
@@ -26,7 +25,10 @@ afterEach(() => vi.restoreAllMocks());
 
 function show() {
   const view = render(
-    <ReaderProse link={{ ...makeLink(), contentHtml: html, contentImageCount: 3 }} />,
+    <ReaderProse
+      linkId="viewer"
+      reader={{ contentHtml: html, contentImages: ['/a', '/b', '/c'] }}
+    />,
   );
   const images = [...view.container.querySelectorAll('img')];
   return { ...view, images };

@@ -117,6 +117,7 @@ whitelist — no route ever returns a raw `LinkWithTags`.
 | `/links`                           | GET    | 200 `{links, nextCursor?}` | —                | filters: `tag`, `status`; paginated                                 |
 | `/links/search`                    | GET    | 200 `{results, nextCursor?}` | —              | `q` required; each result carries `rank`                            |
 | `/links/:id`                       | GET    | 200 `{link}`     | 404 `not_found`            | live-scoped                                                          |
+| `/links/:id/reader`                | GET    | 200 `{contentHtml, contentImages}` | 404 `not_found` | live-scoped; built from the live page via `readLive` (worker-cached), never stored; 404 also when the page has no Reader content |
 | `/trash`                           | GET    | 200 `{links, nextCursor?}` | —                | NOT live-scoped (C2 `listTrash`); each link carries `deletedAt`      |
 | `/tags`                            | GET    | 200 `{tags}`    | —                           | `listTagsWithCounts` — sidebar tag list                              |
 | `/counts`                          | GET    | 200 `{live, trash, purgeWindowDays}` | —     | `purgeWindowDays` is the read-only `PURGE_WINDOW_DAYS` constant (C4) |

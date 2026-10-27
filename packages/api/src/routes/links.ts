@@ -3,7 +3,7 @@ import { countLinks, findRelated, getById, list, search } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import {
-  toLinkDetailJson,
+  toLinkJson,
   toLinkWithTextWindowJson,
   toSnippetLinkJson,
   toSnippetSearchResultJson,
@@ -161,7 +161,7 @@ export function registerLinksRoutes(app: Hono): void {
     // `{ link }` (not a bare link) so a single link has the SAME envelope on the
     // read path as on every write path (PATCH/capture/tag/trash/restore/retry all
     // return `{ link }`) — a client uses one unwrap for the resource, not per-verb.
-    return c.json({ link: toLinkDetailJson(link) });
+    return c.json({ link: toLinkJson(link) });
   });
 
   /**

@@ -1,6 +1,6 @@
 import { useEffect, useId, useMemo, useState } from 'react';
 import { useCaptureLink, useLinkTitles, useSavedLinks } from '../../api/hooks';
-import type { LinkDetailJson, LinkJson } from '../../api/types';
+import type { LinkJson } from '../../api/types';
 import { extractRelatedLinks, type RelatedLink } from '../../lib/relatedLinks';
 import { useRelatedLinksOpen } from '../../lib/useRelatedLinksOpen';
 import { Chip } from '../Chip';
@@ -120,14 +120,16 @@ function RelatedLinksList({ links }: { links: RelatedLink[] }) {
   );
 }
 
+/** Outbound links from the live Reader HTML; nothing renders until it has loaded. */
 export function RelatedLinks({
   link,
+  html,
   trashed = false,
 }: {
-  link: LinkJson | LinkDetailJson;
+  link: LinkJson;
+  html: string | undefined;
   trashed?: boolean;
 }) {
-  const html = 'contentHtml' in link ? link.contentHtml : null;
   const inTrash = trashed || ('deletedAt' in link && typeof link.deletedAt === 'string');
   const links = useMemo(
     () => (html && !inTrash ? extractRelatedLinks(html, link.url) : []),

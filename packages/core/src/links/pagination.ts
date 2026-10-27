@@ -6,9 +6,9 @@ import type { Executor, Link } from './executor.js';
 export type LinkWithTags = Link & { tags: string[] };
 
 /**
- * A `Link` without the Reader payload. `contentHtml` (up to 1 MB) and
- * `contentImages` are read only by the detail and media routes, never by list,
- * search, trash or export reads.
+ * A `Link` without the legacy Reader columns. Nothing writes `contentHtml` (up to
+ * 1 MB) or `contentImages` any more: the Reader is built live. Old rows may still
+ * hold them, so list, search, trash and export reads skip them.
  */
 export type LinkSummary = Omit<Link, 'contentHtml' | 'contentImages'>;
 export type LinkSummaryWithTags = LinkSummary & { tags: string[] };

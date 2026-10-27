@@ -1,18 +1,18 @@
 import DOMPurify from 'dompurify';
 import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
-import type { LinkDetailJson } from '../../api/types';
+import type { LiveReaderJson } from '../../api/types';
 import { ImageViewer, type ViewerImage } from './ImageViewer';
 import { shapeProse } from './proseShape';
 
-function readerHtml(link: LinkDetailJson): string {
-  // Parse inertly before sanitizing: the API numbers every stored img, including duplicates.
+function readerHtml(linkId: string, reader: LiveReaderJson): string {
+  // Parse inertly before sanitizing: the API numbers every img, including duplicates.
   // Rewriting first keeps a removed image from shifting subsequent proxy indices.
   const template = document.createElement('template');
-  template.innerHTML = link.contentHtml ?? '';
+  template.innerHTML = reader.contentHtml;
   template.content.querySelectorAll('img').forEach((image, index) => {
-    if (index >= link.contentImageCount || !image.getAttribute('src')) image.remove();
+    if (index >= reader.contentImages.length || !image.getAttribute('src')) image.remove();
     else
-      image.setAttribute('src', `/api/links/${encodeURIComponent(link.id)}/content-image/${index}`);
+      image.setAttribute('src', `/api/links/${encodeURIComponent(linkId)}/content-image/${index}`);
   });
   const fragment = DOMPurify.sanitize(template.innerHTML, {
     ALLOWED_TAGS: [
@@ -147,8 +147,8 @@ function viewerImage(image: HTMLImageElement): ViewerImage {
   };
 }
 
-export function ReaderProse({ link }: { link: LinkDetailJson }) {
-  const html = useMemo(() => readerHtml(link), [link]);
+export function ReaderProse({ linkId, reader }: { linkId: string; reader: LiveReaderJson }) {
+  const html = useMemo(() => readerHtml(linkId, reader), [linkId, reader]);
   const root = useRef<HTMLDivElement>(null);
   const [viewer, setViewer] = useState<{ images: ViewerImage[]; index: number } | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: new sanitized HTML replaces image elements.

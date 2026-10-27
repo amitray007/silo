@@ -28,7 +28,7 @@ function outboundUrl(href: string, articleUrl: string): URL | null {
   }
 }
 
-/** Read only stored article anchors. Parsing never inserts HTML into the live document. */
+/** Read only the live Reader's anchors. Parsing never inserts HTML into the live document. */
 export function extractRelatedLinks(contentHtml: string, articleUrl: string): RelatedLink[] {
   const document = new DOMParser().parseFromString(contentHtml, 'text/html');
   const seen = new Set<string>();

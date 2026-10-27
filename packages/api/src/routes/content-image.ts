@@ -1,8 +1,8 @@
-import { getById } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { allowedImageContentType, imageResponse } from '../image-response.js';
 import { fetchImageSafely } from '../ssrf-safe-image-fetch.js';
+import { loadReader } from './reader.js';
 
 const imageParams = z.object({
   id: z.uuid(),
@@ -12,8 +12,8 @@ const imageParams = z.object({
 export function registerContentImageRoutes(app: Hono): void {
   app.get('/links/:id/content-image/:index', async (c) => {
     const { id, index } = imageParams.parse(c.req.param());
-    const link = await getById(id);
-    const target = link?.contentImages?.[index];
+    const reader = await loadReader(id, c.req.raw.signal);
+    const target = reader?.contentImages[index];
     if (!target)
       return c.json({ error: 'not_found', message: 'No Reader image at this index' }, 404);
     const result = await fetchImageSafely(target);
@@ -22,7 +22,7 @@ export function registerContentImageRoutes(app: Hono): void {
       return c.json({ error: 'not_found', message: 'Reader image unavailable' }, 404);
     }
     const response = imageResponse(result.bytes, contentType);
-    // Index targets can change after recapture. Do not cache one version under another's URL.
+    // The live page can change between reads. Do not cache one version under another's URL.
     response.headers.set('Cache-Control', 'private, no-store');
     return response;
   });

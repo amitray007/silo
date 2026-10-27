@@ -1,6 +1,6 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeLink, twitterSourceData } from '../../test/fixtures';
 import { ReaderContent } from './ReaderContent';
 
@@ -75,5 +75,126 @@ describe('TweetCard', () => {
   it('leaves the line out when the date is missing or unreadable', () => {
     expect(renderPost().container.querySelector('time')).toBeNull();
     expect(renderPost('soon').container.querySelector('time')).toBeNull();
+  });
+});
+
+describe('Live Reader', () => {
+  const reader = {
+    contentHtml: '<h2>Live heading</h2><p>Live body</p><img src="https://cdn.test/a.png">',
+    contentImages: ['https://cdn.test/a.png'],
+  };
+  const json = (body: unknown, status = 200) =>
+    new Response(JSON.stringify(body), {
+      status,
+      headers: { 'content-type': 'application/json' },
+    });
+  const stored = makeLink({ extractedText: 'Stored first.\n\nStored second.' });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  function show(
+    respond: () => Response | Promise<Response>,
+    link = stored,
+    props: { trashed?: boolean } = {},
+  ) {
+    const fetchMock = vi.fn(async (_input: RequestInfo | URL) => respond());
+    vi.stubGlobal('fetch', fetchMock);
+    const view = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ReaderContent link={link} {...props} />
+      </QueryClientProvider>,
+    );
+    return { ...view, fetchMock };
+  }
+
+  it('shows the skeleton while loading, then the live prose with proxied images', async () => {
+    const { container, fetchMock } = show(() => json(reader));
+    expect(screen.getByRole('status', { name: 'Loading article' })).toBeDefined();
+    expect(screen.queryByText('Stored first.')).toBeNull();
+    await screen.findByText('Live body');
+    expect(screen.queryByRole('status', { name: 'Loading article' })).toBeNull();
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(`/api/links/${stored.id}/reader`);
+    expect(container.querySelector('img')?.getAttribute('src')).toBe(
+      `/api/links/${stored.id}/content-image/0`,
+    );
+    expect(screen.queryByText('Stored first.')).toBeNull();
+  });
+
+  it('adds a polite status line only after 600 ms, and drops it when the Reader arrives', async () => {
+    vi.useFakeTimers();
+    let release: (response: Response) => void = () => {};
+    const { container } = show(() => new Promise<Response>((resolve) => (release = resolve)));
+    const status = () => container.querySelector('.silo-reader-preparing');
+    expect(status()?.getAttribute('aria-live')).toBe('polite');
+    expect(status()?.textContent).toBe('');
+    await act(() => vi.advanceTimersByTimeAsync(599));
+    expect(status()?.textContent).toBe('');
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(status()?.textContent).toBe('Preparing reader view…');
+    expect(screen.getByRole('status', { name: 'Loading article' })).toBeDefined();
+    await act(async () => {
+      release(json(reader));
+      await vi.advanceTimersByTimeAsync(10);
+    });
+    expect(screen.getByText('Live body')).toBeDefined();
+    expect(status()).toBeNull();
+  });
+
+  it('never shows the status line when the Reader is quick', async () => {
+    vi.useFakeTimers();
+    const { container } = show(() => json(reader));
+    await act(() => vi.advanceTimersByTimeAsync(10));
+    expect(screen.getByText('Live body')).toBeDefined();
+    await act(() => vi.advanceTimersByTimeAsync(2000));
+    expect(container.querySelector('.silo-reader-preparing')).toBeNull();
+  });
+
+  it.each([
+    ['404', () => json({ error: 'not_found', message: 'No Reader content' }, 404)],
+    ['500', () => json({ error: 'internal_error', message: 'Boom' }, 500)],
+    ['network failure', () => Promise.reject(new TypeError('offline'))],
+  ])('falls back to the stored text on %s', async (_name, respond) => {
+    const { container } = show(respond);
+    await screen.findByText('Stored first.');
+    expect(screen.getByText('Stored second.')).toBeDefined();
+    expect(container.querySelector('.silo-reader-prose')).toBeNull();
+    expect(container.querySelector('.silo-reader-preparing')).toBeNull();
+  });
+
+  it('shows the no-text state when the Reader is missing and nothing is stored', async () => {
+    show(
+      () => json({ error: 'not_found', message: 'No Reader content' }, 404),
+      makeLink({ extractedText: null, description: null }),
+    );
+    expect(screen.queryByText('No text to read')).toBeNull();
+    await screen.findByText('No text to read');
+  });
+
+  it('does not show the no-text state when the live Reader has content', async () => {
+    show(() => json(reader), makeLink({ extractedText: null, description: null }));
+    await screen.findByText('Live body');
+    expect(screen.queryByText('No text to read')).toBeNull();
+  });
+
+  it('does not ask for a Reader for an X post or a trashed link', async () => {
+    const post = makeLink({
+      url: 'https://x.com/amitray007/status/1',
+      sourceData: twitterSourceData,
+    });
+    const first = show(() => json(reader), post);
+    first.unmount();
+    const second = show(() => json(reader), stored, { trashed: true });
+    expect(second.fetchMock).not.toHaveBeenCalled();
+    expect(first.fetchMock).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.getByText('Stored first.')).toBeDefined());
+  });
+
+  it('shows only the capturing skeleton while the link is still enriching', () => {
+    const { fetchMock } = show(() => json(reader), makeLink({ captureStatus: 'enriching' }));
+    expect(screen.getByRole('status', { name: 'Capturing page' })).toBeDefined();
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

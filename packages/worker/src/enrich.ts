@@ -294,9 +294,11 @@ export async function enrichLink(
 
   if (link.sourceKind === 'youtube') {
     extracted.text = youtube?.text ?? extracted.description ?? '';
-    if (youtube?.reader) extracted.reader = youtube.reader;
     extracted.status = 'partial';
   }
 
-  await recordThenMaybeSettle(linkId, { ...extracted, ...(sourceData ? { sourceData } : {}) });
+  // The formatted Reader HTML is built live when a link opens. Capture keeps only
+  // metadata and the extracted text, which search and MCP read.
+  const { reader: _reader, ...stored } = extracted;
+  await recordThenMaybeSettle(linkId, { ...stored, ...(sourceData ? { sourceData } : {}) });
 }

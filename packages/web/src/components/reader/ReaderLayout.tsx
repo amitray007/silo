@@ -18,6 +18,11 @@ import { ReaderSelectionContext } from './ReaderSelection';
 import { useReaderActions, useReaderKeyboard } from './useReaderActions';
 import { useReaderNavigation } from './useReaderNavigation';
 
+/** The first load of a link's detail. A refetch keeps showing the loaded article. */
+function awaitingDetail(detail: { isFetching: boolean; data: unknown }): boolean {
+  return detail.isFetching && !detail.data;
+}
+
 /** Each route supplies its loaded pages. The reader never owns a second list. */
 export function ReaderLayout({
   links,
@@ -123,7 +128,7 @@ export function ReaderLayout({
           actions={actions}
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
-          loading={Boolean(selectedId) && (loading || detail.isFetching)}
+          loading={Boolean(selectedId) && (loading || awaitingDetail(detail))}
         />
         <ReaderDeleteDialog actions={actions} link={resolved ?? previous.current} />
       </div>

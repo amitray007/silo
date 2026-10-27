@@ -20,6 +20,7 @@ import type {
   LinkResponse,
   LinksResponse,
   LinkTitlesResponse,
+  LiveReaderJson,
   OAuthClientsResponse,
   RestoreResponse,
   SavedLinksResponse,
@@ -60,6 +61,7 @@ export const queryKeys = {
   },
   frame: (id: string) => ['frame', id] as const,
   link: (id: string) => ['link', id] as const,
+  liveReader: (id: string) => ['live-reader', id] as const,
   savedLinks: (urls: readonly string[]) => ['saved-links', urls] as const,
   linkTitles: (urls: readonly string[]) => ['link-titles', urls] as const,
   /**
@@ -131,7 +133,25 @@ export function useLinkTitles(urls: readonly string[], enabled: boolean) {
   });
 }
 
-/** Fetch one link's detail, including its Reader HTML, for the open reader. Polls while the link is still enriching. */
+/**
+ * The formatted Reader for an open link, built live from its page. The server
+ * caches it for ten minutes, so the browser keeps it as long. A 404 (no Reader
+ * content) or any failure is final for the visit: the caller falls back to the
+ * stored text.
+ */
+export function useLiveReader(linkId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.liveReader(linkId),
+    queryFn: ({ signal }) =>
+      apiGet<LiveReaderJson>(`/api/links/${encodeURIComponent(linkId)}/reader`, signal),
+    enabled,
+    staleTime: 10 * 60 * 1000,
+    refetchOnWindowFocus: false,
+    retry: false,
+  });
+}
+
+/** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.link(id ?? ''),
