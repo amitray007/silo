@@ -895,6 +895,17 @@
 .silo-reader-who strong {
   font-weight: 600;
 }
+.silo-reader-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex: none;
+  object-fit: cover;
+  background: var(--bg2);
+}
+.silo-reader-avatar[hidden] {
+  display: none;
+}
 .silo-reader-who span {
   color: var(--fnt);
 }

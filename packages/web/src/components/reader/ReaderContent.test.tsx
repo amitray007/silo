@@ -54,6 +54,24 @@ describe('TweetCard', () => {
     vi.restoreAllMocks();
   });
 
+  it("shows the author's picture through silo's proxy, never X directly", () => {
+    const link = makeLink({
+      url: 'https://x.com/amitray007/status/1',
+      sourceData: {
+        ...twitterSourceData,
+        authorAvatarUrl: 'https://pbs.twimg.com/profile_images/1/face_200x200.jpg',
+      },
+    });
+    const { container } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <ReaderContent link={link} />
+      </QueryClientProvider>,
+    );
+    const avatar = container.querySelector('img.silo-reader-avatar');
+    expect(avatar?.getAttribute('src')).toBe(`/api/links/${link.id}/source-media/avatar`);
+    expect(renderPost().container.querySelector('img.silo-reader-avatar')).toBeNull();
+  });
+
   it('leaves the line out when the date is missing or unreadable', () => {
     expect(renderPost().container.querySelector('time')).toBeNull();
     expect(renderPost('soon').container.querySelector('time')).toBeNull();
