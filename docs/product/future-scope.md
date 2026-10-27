@@ -42,3 +42,16 @@ Silo's binding rule is *any action a user can take, an agent can also take*. The
   The rendered Reader currently runs as `pwuser` with the sandbox disabled.
   Its dead proxy and internal production network restrict traffic but do not
   isolate a compromised browser process.
+
+### Reader on bot-walled sites
+
+- **Capture the rendered page from the user's own browser** (extension sends
+  the page HTML). Medium, NYT, realpython and Ars refuse both silo's fetch
+  and headless Chrome (403/405, tested 2026-10-28), so only the user's
+  logged-in browser can read them. Needs a decision on storing page HTML
+  sent by the client.
+- **Load images in the rendered page for exact sizes.** The browser path
+  blocks images to save bandwidth, so an image sized only by publisher CSS
+  (Troy Hunt's 400x147 Spotify badge, about 134px on the site) still shows
+  at its natural size. Allowing images within the byte budget would fix it
+  at the cost of slower renders.
