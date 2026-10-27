@@ -418,6 +418,41 @@ describeIfPg('enrichLink (integration)', () => {
       expect(link?.imageUrl).toBe('https://abs.twimg.com/errors/logo46x38.png');
     });
 
+    it('stores the saved post first, then the thread, as extracted text', async () => {
+      const id = await newLink('https://x.com/someone/status/789');
+      const twitterPlugins = {
+        hacker_news: { enabled: true, inline: true, hover: true, palette: true },
+        github: { enabled: true, hover: true, palette: true },
+        youtube: { enabled: true, hover: true, palette: true },
+        twitter: { enabled: true, inline: true, hover: true, palette: true },
+      };
+      await enrichMod.enrichLink(id, {
+        safeFetch: () => Promise.resolve(okTwitterFetch),
+        extract: () => Promise.resolve({ status: 'partial', title: 'Someone on X' }),
+        enrichSource: () =>
+          Promise.resolve({
+            kind: 'twitter',
+            text: 'the saved middle post',
+            authorHandle: 'someone',
+            authorName: 'Someone',
+            likes: 1,
+            reposts: 0,
+            replies: 0,
+            quotes: 0,
+            bookmarks: 0,
+            threadBefore: [{ id: '1', text: 'opening post about zebrafish' }],
+            threadAfter: [{ id: '3', text: 'closing post' }],
+          }),
+        getPluginsSetting: () => Promise.resolve(twitterPlugins),
+      });
+      const link = await core.getById(id);
+      expect(link?.extractedText).toBe(
+        'the saved middle post\n\nopening post about zebrafish\n\nclosing post',
+      );
+      const found = await core.search('zebrafish');
+      expect(found.results.map((result) => result.id)).toContain(id);
+    });
+
     it('does not apply the override for a non-twitter sourceData kind', async () => {
       const id = await newLink('https://news.ycombinator.com/item?id=999');
       await enrichMod.enrichLink(id, {

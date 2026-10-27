@@ -205,7 +205,7 @@ export { CAPTURE_SOURCES } from './links/source.js';
 // Per-source `source_data` validation (U3): the Zod discriminated union
 // keyed on `source_kind`, and its inferred type.
 export type { SourceData } from './links/source-data.js';
-export { sourceDataSchema } from './links/source-data.js';
+export { sourceDataSchema, THREAD_SIDE_MAX, twitterThreadPostSchema } from './links/source-data.js';
 // Stranded-enriching sweep (scheduling-jobs slice): a live-scoped, bounded
 // FIND for links stuck at capture_status='enriching' past a staleness
 // window. Core exposes the find only — re-enqueueing (via requestRetry) is

@@ -911,11 +911,28 @@
 }
 .silo-reader-stats {
   display: flex;
-  gap: 12px;
+  justify-content: space-between;
+  margin: 12px 0 0;
+  padding: 0 4px;
+  list-style: none;
+  font-size: 13px;
+  color: var(--fnt);
+  font-variant-numeric: tabular-nums;
+}
+.silo-reader-stats[data-compact] {
+  max-width: 300px;
+  margin-top: 8px;
+  padding: 0;
   font-size: 12.5px;
-  color: var(--mut);
-  flex-wrap: wrap;
-  margin-top: 12px;
+}
+.silo-post-stat {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+.silo-post-stat svg {
+  flex: none;
 }
 .silo-reader-posted {
   display: block;
@@ -923,8 +940,70 @@
   font-size: 12.5px;
   color: var(--mut);
 }
-.silo-reader-posted + .silo-reader-stats {
+.silo-reader-posted + .silo-reader-stats[data-compact] {
   margin-top: 6px;
+}
+.silo-post-link {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 2px;
+  overflow-wrap: anywhere;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-post-link:hover {
+    text-decoration-color: currentColor;
+  }
+}
+/* A thread reads like X's: avatars in a left rail joined by a hairline, content on the right. */
+.silo-reader-thread-label {
+  margin-bottom: 8px;
+  font-size: 12.5px;
+  color: var(--fnt);
+}
+.silo-reader-thread {
+  list-style: none;
+  margin-top: 0;
+}
+.silo-thread-post {
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr);
+  column-gap: 12px;
+}
+.silo-thread-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+.silo-thread-line {
+  flex: 1;
+  width: 2px;
+  margin: 4px 0;
+  border-radius: 1px;
+  background: var(--line);
+}
+.silo-thread-body {
+  min-width: 0;
+}
+.silo-thread-post:not(:last-child) > .silo-thread-body {
+  padding-bottom: 18px;
+}
+.silo-thread-post .silo-reader-who {
+  margin-bottom: 2px;
+}
+.silo-thread-saved {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 12px;
+  color: var(--fnt);
+}
+.silo-thread-post[data-dim] {
+  color: var(--mut);
+}
+.silo-thread-post:not([data-saved]) .silo-reader-posted {
+  margin-top: 8px;
+  font-size: 12px;
+  color: var(--fnt);
 }
 .silo-reader-card {
   border: 1px solid var(--line);
