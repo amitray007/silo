@@ -790,7 +790,8 @@
   background: transparent;
   cursor: pointer;
 }
-.silo-player-seek::-webkit-slider-runnable-track {
+.silo-player-seek::-webkit-slider-runnable-track,
+.silo-player-level::-webkit-slider-runnable-track {
   height: 4px;
   border-radius: 999px;
   background: linear-gradient(
@@ -800,7 +801,8 @@
     rgb(255 255 255 / 0.2) var(--buffered)
   );
 }
-.silo-player-seek::-moz-range-track {
+.silo-player-seek::-moz-range-track,
+.silo-player-level::-moz-range-track {
   height: 4px;
   border-radius: 999px;
   background: linear-gradient(
@@ -810,7 +812,8 @@
     rgb(255 255 255 / 0.2) var(--buffered)
   );
 }
-.silo-player-seek::-webkit-slider-thumb {
+.silo-player-seek::-webkit-slider-thumb,
+.silo-player-level::-webkit-slider-thumb {
   width: 12px;
   height: 12px;
   margin-top: -4px;
@@ -818,15 +821,41 @@
   background: #fff;
   appearance: none;
 }
-.silo-player-seek::-moz-range-thumb {
+.silo-player-seek::-moz-range-thumb,
+.silo-player-level::-moz-range-thumb {
   width: 12px;
   height: 12px;
   border: 0;
   border-radius: 999px;
   background: #fff;
 }
+/* The volume track opens beside the speaker on hover or keyboard focus. */
+.silo-player-volume {
+  display: flex;
+  align-items: center;
+  flex: none;
+}
+.silo-player-level {
+  width: 0;
+  height: 18px;
+  margin: 0;
+  opacity: 0;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+  transition:
+    width 160ms var(--ease-out),
+    margin 160ms var(--ease-out),
+    opacity 160ms ease;
+}
+.silo-player-volume:is(:hover, :focus-within) .silo-player-level {
+  width: 72px;
+  margin: 0 6px 0 2px;
+  opacity: 1;
+}
 @media (max-width: 640px) {
-  .silo-player-speed {
+  .silo-player-speed,
+  .silo-player-level {
     display: none;
   }
 }

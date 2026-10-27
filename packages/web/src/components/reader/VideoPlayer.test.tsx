@@ -72,4 +72,33 @@ describe('VideoPlayer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Try again' }));
     expect(video.load).toHaveBeenCalled();
   });
+
+  it('sets, remembers and nudges the volume', () => {
+    localStorage.removeItem('silo.playerVolume');
+    const { video, container } = show();
+    fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+    const level = screen.getByRole('slider', { name: 'Volume' });
+    fireEvent.change(level, { target: { value: '0.4' } });
+    expect(video.volume).toBe(0.4);
+    expect(localStorage.getItem('silo.playerVolume')).toBe('0.4');
+    const figure = container.querySelector('figure') as HTMLElement;
+    fireEvent.keyDown(figure, { key: 'ArrowUp' });
+    expect(video.volume).toBe(0.5);
+    fireEvent.change(level, { target: { value: '0' } });
+    expect(video.muted).toBe(true);
+    // Browsers fire volumechange here; jsdom does not.
+    act(() => video.dispatchEvent(new Event('volumechange')));
+    // Unmuting from zero restores a usable level instead of silence.
+    fireEvent.click(screen.getByRole('button', { name: 'Unmute' }));
+    expect(video.muted).toBe(false);
+    expect(video.volume).toBe(0.5);
+    localStorage.removeItem('silo.playerVolume');
+  });
+
+  it('starts at the remembered volume', () => {
+    localStorage.setItem('silo.playerVolume', '0.3');
+    const { video } = show();
+    expect(video.volume).toBe(0.3);
+    localStorage.removeItem('silo.playerVolume');
+  });
 });

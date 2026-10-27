@@ -10,6 +10,18 @@ import {
 const SPEEDS = [1, 1.5, 2] as const;
 const IDLE_MS = 2200;
 const SEEK_STEP = 5;
+const VOLUME_STEP = 0.1;
+/** The last volume carries to the next video, like most players. */
+const VOLUME_KEY = 'silo.playerVolume';
+
+function savedVolume(): number {
+  try {
+    const saved = Number(localStorage.getItem(VOLUME_KEY));
+    return localStorage.getItem(VOLUME_KEY) !== null && saved >= 0 && saved <= 1 ? saved : 1;
+  } catch {
+    return 1;
+  }
+}
 
 function clock(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return '0:00';
@@ -25,6 +37,7 @@ const paths = {
   pause: 'M7 5h3.5v14H7zM13.5 5H17v14h-3.5z',
   sound: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6M18 6.5a7.5 7.5 0 0 1 0 11',
   muted: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM16 9.5l5 5M21 9.5l-5 5',
+  quiet: 'M4 9.5h3.5L12 5.5v13l-4.5-4H4zM15.5 9a4 4 0 0 1 0 6',
   expand: 'M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5',
   shrink: 'M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5',
 } as const;
@@ -48,6 +61,66 @@ function Icon({ name }: { name: keyof typeof paths }) {
   );
 }
 
+function applyVolume(video: HTMLVideoElement | null, level: number) {
+  if (!video) return;
+  const next = Math.min(1, Math.max(0, Math.round(level * 100) / 100));
+  video.volume = next;
+  video.muted = next === 0;
+  try {
+    localStorage.setItem(VOLUME_KEY, String(next));
+  } catch {
+    /* Storage may be unavailable. */
+  }
+}
+
+function nudgeVolume(video: HTMLVideoElement | null, delta: number) {
+  if (video) applyVolume(video, (video.muted ? 0 : video.volume) + delta);
+}
+
+function toggleMute(video: HTMLVideoElement | null) {
+  if (!video) return;
+  // Unmuting from a zero level brings back a usable volume rather than silence.
+  if (video.muted && video.volume === 0) applyVolume(video, 0.5);
+  else video.muted = !video.muted;
+}
+
+/** Speaker button with a level track that opens on hover or keyboard focus. */
+function VolumeControl({
+  video,
+  muted,
+  volume,
+}: {
+  video: HTMLVideoElement | null;
+  muted: boolean;
+  volume: number;
+}) {
+  const level = muted ? 0 : volume;
+  return (
+    <div className="silo-player-volume">
+      <button
+        type="button"
+        className="silo-player-button"
+        aria-label={muted ? 'Unmute' : 'Mute'}
+        onClick={() => toggleMute(video)}
+      >
+        <Icon name={level === 0 ? 'muted' : level < 0.5 ? 'quiet' : 'sound'} />
+      </button>
+      <input
+        className="silo-player-level"
+        type="range"
+        min={0}
+        max={1}
+        step={0.05}
+        value={level}
+        aria-label="Volume"
+        aria-valuetext={`${Math.round(level * 100)}%`}
+        style={{ '--progress': `${level * 100}%`, '--buffered': '0%' } as CSSProperties}
+        onChange={(event) => applyVolume(video, Number(event.currentTarget.value))}
+      />
+    </div>
+  );
+}
+
 type State = {
   playing: boolean;
   started: boolean;
@@ -57,6 +130,7 @@ type State = {
   duration: number;
   buffered: number;
   muted: boolean;
+  volume: number;
   speed: number;
   fullscreen: boolean;
   ratio: number;
@@ -71,6 +145,7 @@ const INITIAL: State = {
   duration: 0,
   buffered: 0,
   muted: false,
+  volume: 1,
   speed: 1,
   fullscreen: false,
   ratio: 16 / 9,
@@ -89,6 +164,7 @@ function useMediaState(video: HTMLVideoElement | null) {
         duration: Number.isFinite(video.duration) ? video.duration : current.duration,
         buffered: video.buffered.length ? video.buffered.end(video.buffered.length - 1) : 0,
         muted: video.muted,
+        volume: video.volume,
         speed: video.playbackRate,
         ...patch,
       }));
@@ -160,6 +236,9 @@ export function VideoPlayer({
   const [video, setVideo] = useState<HTMLVideoElement | null>(null);
   const shell = useRef<HTMLElement>(null);
   const state = useMediaState(video);
+  useEffect(() => {
+    if (video) video.volume = savedVolume();
+  }, [video]);
   const { idle, wake } = useIdle(state.playing);
 
   const toggle = () => {
@@ -169,9 +248,6 @@ export function VideoPlayer({
   };
   const seek = (time: number) => {
     if (video) video.currentTime = Math.min(Math.max(0, time), video.duration || 0);
-  };
-  const mute = () => {
-    if (video) video.muted = !video.muted;
   };
   const cycleSpeed = () => {
     if (!video) return;
@@ -197,9 +273,11 @@ export function VideoPlayer({
   const keys: Record<string, () => void> = {
     ' ': toggle,
     k: toggle,
+    ArrowUp: () => nudgeVolume(video, VOLUME_STEP),
+    ArrowDown: () => nudgeVolume(video, -VOLUME_STEP),
     ArrowLeft: () => seek((video?.currentTime ?? 0) - SEEK_STEP),
     ArrowRight: () => seek((video?.currentTime ?? 0) + SEEK_STEP),
-    m: mute,
+    m: () => toggleMute(video),
     f: fullscreen,
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -295,14 +373,7 @@ export function VideoPlayer({
           >
             {state.speed}x
           </button>
-          <button
-            type="button"
-            className="silo-player-button"
-            aria-label={state.muted ? 'Unmute' : 'Mute'}
-            onClick={mute}
-          >
-            <Icon name={state.muted ? 'muted' : 'sound'} />
-          </button>
+          <VolumeControl video={video} muted={state.muted} volume={state.volume} />
           <button
             type="button"
             className="silo-player-button"
