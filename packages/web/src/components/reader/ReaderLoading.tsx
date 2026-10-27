@@ -2,12 +2,22 @@ import { useEffect, useState } from 'react';
 import { deriveDomain } from '../../lib/url';
 import { Chip } from '../Chip';
 
+const articleParagraphs = [
+  [97, 92, 95, 64],
+  [94, 98, 89, 96, 52],
+  [91, 86, 70],
+];
+
+/** Article-shaped lines with a moving sheen; the label is for screen readers only. */
 export function ReaderSkeleton({ label = 'Loading article' }: { label?: string }) {
   return (
     <div className="silo-reader-loading" role="status" aria-label={label}>
-      <span className="silo-reader-hint">{label === 'Loading article' ? '' : label}</span>
-      {[92, 84, 88, 60].map((width) => (
-        <div key={width} className="silo-reader-skeleton" style={{ width: `${width}%` }} />
+      {articleParagraphs.map((lines) => (
+        <div key={lines.join('-')} className="silo-reader-skeleton-paragraph" aria-hidden="true">
+          {lines.map((width) => (
+            <div key={width} className="silo-reader-skeleton" style={{ width: `${width}%` }} />
+          ))}
+        </div>
       ))}
     </div>
   );

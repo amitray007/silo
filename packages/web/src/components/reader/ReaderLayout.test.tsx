@@ -503,7 +503,9 @@ describe('reader content', () => {
       route: '/?link=a',
     });
     await selected();
-    expect(reader().getByRole('status', { name: 'Capturing page' })).toBeDefined();
+    const capturing = reader().getByRole('status', { name: 'Capturing page' });
+    expect(capturing.textContent).toBe('');
+    expect(capturing.querySelectorAll('.silo-reader-skeleton').length).toBeGreaterThan(4);
     expect(reader().getByText('◆ Added by Claude')).toBeDefined();
     expect(reader().getByText('Capturing').className).toBe('silo-sr-only');
     expect(document.querySelector('.silo-reader-source[data-capturing]')).not.toBeNull();

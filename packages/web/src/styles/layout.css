@@ -667,11 +667,6 @@
 .silo-reader-danger {
   color: var(--warn);
 }
-.silo-reader-hint {
-  color: var(--fnt);
-  font-size: 13px;
-  margin-top: 16px;
-}
 /* No Reader text: a quiet centered state that points to the live page. */
 .silo-reader-empty {
   display: flex;
@@ -720,12 +715,17 @@
   color: var(--warn);
   font-size: 13px;
 }
+/* Same sheen as Live's page skeleton, so both modes load alike. */
 .silo-reader-skeleton {
   height: 12px;
   border-radius: 6px;
-  background: var(--hov);
-  margin: 10px 0;
-  animation: siloPulse 1.6s ease-in-out infinite;
+  margin: 16px 0;
+  background: linear-gradient(90deg, var(--hov) 30%, var(--sel) 50%, var(--hov) 70%);
+  background-size: 200% 100%;
+  animation: siloShimmer 1.8s ease-in-out infinite;
+}
+.silo-reader-skeleton-paragraph {
+  margin-bottom: 32px;
 }
 .silo-reader-feedback {
   padding: 8px 16px;

@@ -3,6 +3,7 @@ import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
+import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
 
@@ -86,17 +87,7 @@ export function ReaderContent({
   trashed?: boolean;
   showLive?: () => void;
 }) {
-  if (link.captureStatus === 'enriching')
-    return (
-      <div role="status" aria-label="Capturing page">
-        {[92, 84, 88, 60].map((width) => (
-          <div key={width} className="silo-reader-skeleton" style={{ width: `${width}%` }} />
-        ))}
-        <p className="silo-reader-hint">
-          ◌ Fetching the page text and metadata. This view fills in when capture finishes.
-        </p>
-      </div>
-    );
+  if (link.captureStatus === 'enriching') return <ReaderSkeleton label="Capturing page" />;
 
   const source = link.sourceData;
   const embed = embedFor(link.url, source);
