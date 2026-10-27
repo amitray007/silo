@@ -614,7 +614,8 @@
   height: 100%;
   object-fit: cover;
 }
-.silo-tweet-media:not([data-count="1"]) :is(.silo-tweet-photo, .silo-tweet-gif, .silo-tweet-video) {
+.silo-tweet-media:not([data-count="1"])
+  :is(.silo-tweet-photo, .silo-tweet-gif, .silo-tweet-video, .silo-player) {
   aspect-ratio: 16 / 10;
 }
 .silo-tweet-media[data-count="3"] > :first-child {
@@ -625,6 +626,209 @@
   max-height: 560px;
   object-fit: contain;
   background: #000;
+}
+/* Post video player: native video with a quiet poster state and a slim control bar. */
+.silo-player {
+  position: relative;
+  display: block;
+  width: 100%;
+  margin: 0;
+  aspect-ratio: var(--player-ratio, 16 / 9);
+  max-height: 560px;
+  background: #000;
+  color: #fff;
+  overflow: hidden;
+  outline: none;
+}
+.silo-player[data-fullscreen="true"] {
+  max-height: none;
+}
+.silo-player video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  cursor: pointer;
+}
+.silo-player[data-idle="true"],
+.silo-player[data-idle="true"] video {
+  cursor: none;
+}
+.silo-player-start {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  border: 0;
+  border-radius: 999px;
+  background: rgb(0 0 0 / 0.55);
+  color: #fff;
+  backdrop-filter: blur(8px);
+  cursor: pointer;
+  transition:
+    transform 160ms var(--ease-out),
+    background 160ms ease;
+}
+.silo-player-start svg {
+  width: 26px;
+  height: 26px;
+  margin-left: 3px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-player-start:hover {
+    background: rgb(0 0 0 / 0.72);
+    transform: scale(1.05);
+  }
+}
+.silo-player-length {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.65);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.silo-player-spinner {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 34px;
+  height: 34px;
+  margin: -17px 0 0 -17px;
+  border: 3px solid rgb(255 255 255 / 0.25);
+  border-top-color: #fff;
+  border-radius: 999px;
+  animation: siloSpin 0.8s linear infinite;
+  pointer-events: none;
+}
+.silo-player-error {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgb(0 0 0 / 0.7);
+  font-size: 14px;
+}
+.silo-player-error button {
+  padding: 6px 12px;
+  border: 1px solid rgb(255 255 255 / 0.3);
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.silo-player-bar {
+  position: absolute;
+  inset: auto 0 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 28px 8px 6px;
+  background: linear-gradient(to top, rgb(0 0 0 / 0.7), transparent);
+  transition: opacity 200ms ease;
+}
+.silo-player[data-idle="true"] .silo-player-bar {
+  opacity: 0;
+}
+.silo-player:focus-within .silo-player-bar {
+  opacity: 1;
+}
+.silo-player-button,
+.silo-player-speed {
+  display: grid;
+  place-items: center;
+  flex: none;
+  height: 32px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+.silo-player-button {
+  width: 32px;
+}
+.silo-player-speed {
+  min-width: 36px;
+  padding: 0 6px;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+@media (hover: hover) and (pointer: fine) {
+  :is(.silo-player-button, .silo-player-speed):hover {
+    background: rgb(255 255 255 / 0.16);
+  }
+}
+.silo-player :is(button, input):focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+.silo-player-time {
+  flex: none;
+  padding: 0 6px;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.silo-player-seek {
+  flex: 1;
+  min-width: 40px;
+  height: 18px;
+  margin: 0 6px;
+  appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+.silo-player-seek::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #fff var(--progress),
+    rgb(255 255 255 / 0.45) var(--progress) var(--buffered),
+    rgb(255 255 255 / 0.2) var(--buffered)
+  );
+}
+.silo-player-seek::-moz-range-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(
+    to right,
+    #fff var(--progress),
+    rgb(255 255 255 / 0.45) var(--progress) var(--buffered),
+    rgb(255 255 255 / 0.2) var(--buffered)
+  );
+}
+.silo-player-seek::-webkit-slider-thumb {
+  width: 12px;
+  height: 12px;
+  margin-top: -4px;
+  border-radius: 999px;
+  background: #fff;
+  appearance: none;
+}
+.silo-player-seek::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 999px;
+  background: #fff;
+}
+@media (max-width: 640px) {
+  .silo-player-speed {
+    display: none;
+  }
 }
 .silo-tweet-gif {
   position: relative;

@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { apiUrl } from '../../api/client';
 import { useMediaQuery } from '../../lib/breakpoints';
 import { ImageViewer } from './ImageViewer';
+import { VideoPlayer } from './VideoPlayer';
 
 type Item = { index: number; kind: 'photo' | 'video' | 'gif' };
 
@@ -95,16 +96,11 @@ export function TweetMedia({
         ) : item.kind === 'gif' ? (
           <TweetGif key={item.index} src={source(item.index)} />
         ) : (
-          // biome-ignore lint/a11y/useMediaCaption: X serves no caption tracks for post video.
-          <video
+          <VideoPlayer
             key={item.index}
-            className="silo-tweet-video"
             src={source(item.index)}
             poster={position === 0 && hasPoster ? source('poster') : undefined}
-            preload="none"
-            controls
-            playsInline
-            aria-label="Video from the post"
+            label="Video from the post"
           />
         ),
       )}

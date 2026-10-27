@@ -33,9 +33,9 @@ describe('TweetMedia', () => {
     );
     const [video, gif] = [...container.querySelectorAll('video')];
     expect(video?.getAttribute('poster')).toBe('/api/links/post/source-media/poster');
-    expect(video?.hasAttribute('controls')).toBe(true);
-    expect(video?.getAttribute('preload')).toBe('none');
-    expect(video?.getAttribute('aria-label')).toBe('Video from the post');
+    expect(video?.getAttribute('preload')).toBe('metadata');
+    expect(video?.closest('figure')?.getAttribute('aria-label')).toBe('Video from the post');
+    expect(screen.getByRole('button', { name: 'Play video' })).toBeDefined();
     expect(gif?.hasAttribute('controls')).toBe(false);
     expect(gif?.hasAttribute('loop')).toBe(true);
     expect((gif as HTMLVideoElement).muted).toBe(true);
