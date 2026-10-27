@@ -65,8 +65,13 @@ handler in the worker receives each request and:
   an SSRF-checked fetch that reuses `safe-fetch.ts` (IP rules, pinned DNS,
   redirect re-checks, per-response byte cap 5 MB) and fulfills the route with
   the result, forwarding only `content-type` and the body;
-- forwards the page's method and body for xhr/fetch; drops cookies,
-  `authorization` and any request to a blocked address.
+- fetches only `GET` requests; any other method is aborted, so silo never
+  sends a POST, PUT or DELETE to a third-party site on a page's behalf.
+  Cookies and `authorization` are never sent, and a blocked address is
+  aborted.
+- navigates to the page's final URL from the static fetch, so relative URLs
+  resolve against the right base. Redirects of subresources are followed by
+  the SSRF-checked fetch, which fulfills the final response.
 
 Context options: `javaScriptEnabled: true`, `serviceWorkers: 'block'`,
 `acceptDownloads: false`, `bypassCSP: false`, no storage state, locale
@@ -117,7 +122,11 @@ Search text follows the chosen Reader. Record the choice in a debug log line
 with both lengths.
 
 `READER_VERSION` goes to `2` when this lands, so the backfill re-renders
-stored links.
+stored links (subject to the slice 2 six-hour retry cooldown).
+
+Capture (`enrichLink`), refresh and backfill already share
+`select-reader.ts`; the rendered path plugs in beside it so all three make
+the same choice. The live path stays static.
 
 ## Verification
 
