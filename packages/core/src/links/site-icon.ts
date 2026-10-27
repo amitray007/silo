@@ -1,5 +1,5 @@
 /** Process-local port. Only the composition root registers the worker implementation. */
-export type SiteIconFinder = (domain: string, signal: AbortSignal) => Promise<string | undefined>;
+export type SiteIconFinder = (domain: string, signal: AbortSignal) => Promise<readonly string[]>;
 
 let finder: SiteIconFinder | undefined;
 
@@ -8,13 +8,13 @@ export function setSiteIconFinder(next: SiteIconFinder | undefined): void {
 }
 
 /**
- * The absolute URL of a site's own icon, read from its home page. Undefined
- * means the site declares no usable icon or could not be reached. No finder
- * (tests, CLI) returns undefined.
+ * A site's own icon URLs, best first, read from its home page. The caller tries
+ * them in order because a declared icon can still fail to load. Empty means the
+ * site could not be reached; no finder (tests, CLI) returns none.
  */
-export async function findSiteIcon(
+export async function findSiteIcons(
   domain: string,
   signal: AbortSignal,
-): Promise<string | undefined> {
-  return finder ? finder(domain, signal) : undefined;
+): Promise<readonly string[]> {
+  return finder ? finder(domain, signal) : [];
 }

@@ -171,7 +171,7 @@ describe('GET /api/favicon (unit)', () => {
 
     it('Google 404 then a site icon -> serves the site icon with nosniff', async () => {
       global.fetch = googleMiss();
-      const finder = vi.fn(async () => 'https://site.example/fav.png');
+      const finder = vi.fn(async () => ['https://site.example/fav.png']);
       setSiteIconFinder(finder);
       const imageFetch = await mockedImageFetch();
       const bytes = new Uint8Array([7, 7, 7]);
@@ -196,7 +196,7 @@ describe('GET /api/favicon (unit)', () => {
 
     it('Google network error also falls back to the site icon', async () => {
       global.fetch = vi.fn().mockRejectedValue(new Error('down')) as unknown as typeof fetch;
-      setSiteIconFinder(async () => 'https://site.example/fav.ico');
+      setSiteIconFinder(async () => ['https://site.example/fav.ico']);
       const imageFetch = await mockedImageFetch();
       imageFetch.mockResolvedValue({
         ok: true,
@@ -211,7 +211,7 @@ describe('GET /api/favicon (unit)', () => {
 
     it('Google 404 and no site icon -> 404, and the miss is cached', async () => {
       global.fetch = googleMiss();
-      const finder = vi.fn(async () => undefined);
+      const finder = vi.fn(async (): Promise<string[]> => []);
       setSiteIconFinder(finder);
       const imageFetch = await mockedImageFetch();
 
@@ -230,7 +230,7 @@ describe('GET /api/favicon (unit)', () => {
       vi.useFakeTimers({ toFake: ['Date'] });
       try {
         global.fetch = googleMiss();
-        const finder = vi.fn(async () => undefined);
+        const finder = vi.fn(async (): Promise<string[]> => []);
         setSiteIconFinder(finder);
         await app.request('/api/favicon?domain=retry.example');
         vi.setSystemTime(Date.now() + 61 * 60 * 1000);
@@ -243,7 +243,7 @@ describe('GET /api/favicon (unit)', () => {
 
     it('refuses a site icon whose content type is not an allowed image', async () => {
       global.fetch = googleMiss();
-      setSiteIconFinder(async () => 'https://site.example/evil');
+      setSiteIconFinder(async () => ['https://site.example/evil']);
       const imageFetch = await mockedImageFetch();
       for (const contentType of ['text/html', 'image/svg+xml']) {
         resetFaviconCache();
@@ -253,9 +253,41 @@ describe('GET /api/favicon (unit)', () => {
       }
     });
 
+    it('tries the next candidate and serves a real SVG icon sandboxed', async () => {
+      global.fetch = googleMiss();
+      setSiteIconFinder(async () => [
+        'https://site.example/favicon.ico',
+        'https://site.example/favicon.svg',
+      ]);
+      const imageFetch = await mockedImageFetch();
+      const svg = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>');
+      imageFetch
+        .mockResolvedValueOnce({ ok: true, bytes: new Uint8Array([60]), contentType: 'text/html' })
+        .mockResolvedValueOnce({ ok: true, bytes: svg, contentType: 'image/svg+xml' });
+
+      const res = await app.request('/api/favicon?domain=site.example');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/svg+xml');
+      expect(res.headers.get('content-security-policy')).toContain('sandbox');
+      expect(res.headers.get('content-security-policy')).toContain("default-src 'none'");
+      expect(res.headers.get('content-disposition')).toMatch(/^attachment/);
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(imageFetch).toHaveBeenCalledTimes(2);
+    });
+
+    it('refuses an oversized SVG', async () => {
+      global.fetch = googleMiss();
+      setSiteIconFinder(async () => ['https://site.example/favicon.svg']);
+      const imageFetch = await mockedImageFetch();
+      const big = new TextEncoder().encode(`<svg>${' '.repeat(70 * 1024)}</svg>`);
+      imageFetch.mockResolvedValue({ ok: true, bytes: big, contentType: 'image/svg+xml' });
+      const res = await app.request('/api/favicon?domain=site.example');
+      expect(res.status).toBe(404);
+    });
+
     it('a failed site image fetch -> 404', async () => {
       global.fetch = googleMiss();
-      setSiteIconFinder(async () => 'https://site.example/fav.png');
+      setSiteIconFinder(async () => ['https://site.example/fav.png']);
       const imageFetch = await mockedImageFetch();
       imageFetch.mockResolvedValue({ ok: false });
 
@@ -270,7 +302,7 @@ describe('GET /api/favicon (unit)', () => {
           headers: { 'content-type': 'image/png' },
         }),
       ) as unknown as typeof fetch;
-      const finder = vi.fn(async () => 'https://site.example/fav.png');
+      const finder = vi.fn(async () => ['https://site.example/fav.png']);
       setSiteIconFinder(finder);
 
       const res = await app.request('/api/favicon?domain=google-knows.example');

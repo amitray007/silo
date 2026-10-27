@@ -14,14 +14,19 @@ const WANTED_SIZE = 32;
 const UNKNOWN_SIZE_DISTANCE = 8;
 
 type Fetch = (url: string, options: { signal: AbortSignal }) => Promise<SafeFetchResult>;
-type Entry = { icon: string | null; expires: number };
+type Entry = { icons: readonly string[]; expires: number };
 type Candidate = { url: string; format: number; distance: number; order: number };
 
-/** 0 for a raster format a browser tab can show, 1 when the format is unknown, undefined for SVG. */
-function formatRank(href: string, type: string): number | undefined {
+/** True for an SVG icon. The favicon route serves SVG only as a last resort, with a sandbox. */
+function isSvg(href: string, type: string): boolean {
+  const extension = /\.([a-z0-9]+)(?:[?#].*)?$/i.exec(href)?.[1]?.toLowerCase();
+  return type.toLowerCase().includes('svg') || extension === 'svg';
+}
+
+/** 0 for a raster format a browser tab can show, 1 when the format is unknown. */
+function formatRank(href: string, type: string): number {
   const declared = type.trim().toLowerCase();
   const extension = /\.([a-z0-9]+)(?:[?#].*)?$/i.exec(href)?.[1]?.toLowerCase();
-  if (declared.includes('svg') || extension === 'svg') return undefined;
   if (/(png|icon|gif|webp)/.test(declared)) return 0;
   if (extension && ['png', 'ico', 'gif', 'webp'].includes(extension)) return 0;
   return 1;
@@ -43,60 +48,74 @@ function absoluteHttpUrl(href: string, base: string): string | undefined {
   }
 }
 
-/** The best link whose rel contains `token`, or undefined when none is usable. */
-function bestLink(links: Iterable<Element>, token: string, base: string): string | undefined {
-  const candidates: Candidate[] = [];
+/** Links whose rel contains `token`, split into raster icons (best first) and SVG icons. */
+function rankLinks(
+  links: Iterable<Element>,
+  token: string,
+  base: string,
+): { raster: string[]; svg: string[] } {
+  const raster: Candidate[] = [];
+  const svg: string[] = [];
   let order = 0;
   for (const link of links) {
     const rels = (link.getAttribute('rel') ?? '').toLowerCase().split(/\s+/);
     const href = link.getAttribute('href')?.trim();
     if (!href || !rels.includes(token)) continue;
     const url = absoluteHttpUrl(href, base);
-    const format = formatRank(href, link.getAttribute('type') ?? '');
-    if (url && format !== undefined) {
-      candidates.push({
+    if (!url) continue;
+    const type = link.getAttribute('type') ?? '';
+    if (isSvg(href, type)) svg.push(url);
+    else
+      raster.push({
         url,
-        format,
+        format: formatRank(href, type),
         distance: sizeDistance(link.getAttribute('sizes') ?? ''),
         order: order++,
       });
-    }
   }
-  candidates.sort((a, b) => a.format - b.format || a.distance - b.distance || a.order - b.order);
-  return candidates[0]?.url;
+  raster.sort((a, b) => a.format - b.format || a.distance - b.distance || a.order - b.order);
+  return { raster: raster.map((candidate) => candidate.url), svg };
 }
 
-function pickIcon(html: string, finalUrl: string): string {
+/** Raster icons, then apple-touch icons, then `/favicon.ico`, then SVG icons, without repeats. */
+function pickIcons(html: string, finalUrl: string): string[] {
   const end = html.search(/<\/head\s*>/i);
   const head = html.slice(0, end === -1 ? HEAD_BYTES : Math.min(end, HEAD_BYTES));
   const { document } = parseHTML(head);
   const links = [...document.querySelectorAll('link[rel]')];
-  return (
-    bestLink(links, 'icon', finalUrl) ??
-    bestLink(links, 'apple-touch-icon', finalUrl) ??
-    bestLink(links, 'apple-touch-icon-precomposed', finalUrl) ??
-    new URL('/favicon.ico', finalUrl).href
-  );
+  const icons = rankLinks(links, 'icon', finalUrl);
+  const touch = rankLinks(links, 'apple-touch-icon', finalUrl);
+  const precomposed = rankLinks(links, 'apple-touch-icon-precomposed', finalUrl);
+  return [
+    ...new Set([
+      ...icons.raster,
+      ...touch.raster,
+      ...precomposed.raster,
+      new URL('/favicon.ico', finalUrl).href,
+      ...icons.svg,
+      ...touch.svg,
+    ]),
+  ];
 }
 
-async function readIcon(domain: string, fetch: Fetch, signal: AbortSignal): Promise<string | null> {
+async function readIcons(domain: string, fetch: Fetch, signal: AbortSignal): Promise<string[]> {
   const page = await fetch(`https://${domain}/`, { signal });
   if (!page.ok) {
     // A site that refuses its home page may still serve the conventional icon path.
     const refused = page.reason === 'http-error' || page.reason === 'not-found';
-    return refused ? `https://${domain}/favicon.ico` : null;
+    return refused ? [`https://${domain}/favicon.ico`] : [];
   }
   if (!/html/i.test(page.contentType ?? 'text/html')) {
-    return new URL('/favicon.ico', page.finalUrl).href;
+    return [new URL('/favicon.ico', page.finalUrl).href];
   }
-  return pickIcon(page.html, page.finalUrl);
+  return pickIcons(page.html, page.finalUrl);
 }
 
 /**
- * Finds a site's own icon URL for domains the favicon proxy's first source does
- * not know. Reads the home page through the SSRF-safe fetcher, prefers a
- * declared icon link, then an apple-touch-icon, then `/favicon.ico` on the
- * final origin. Results (including misses) stay in memory for a day, and
+ * Finds a site's own icon URLs, best first, for domains the favicon proxy's
+ * first source does not know. Reads the home page through the SSRF-safe fetcher:
+ * declared raster icons, then apple-touch-icons, then `/favicon.ico` on the
+ * final origin, then SVG icons. Results (including misses) stay in memory for a day, and
  * overlapping lookups for one domain share a single fetch.
  */
 export function createSiteIconFinder(
@@ -108,25 +127,25 @@ export function createSiteIconFinder(
       safeFetch(url, { signal, maxBodyBytes: MAX_BODY_BYTES, timeoutMs: TIMEOUT_MS }));
   const now = options.now ?? Date.now;
   const cache = new Map<string, Entry>();
-  const pending = new Map<string, Promise<string | null>>();
+  const pending = new Map<string, Promise<readonly string[]>>();
 
-  const remember = (domain: string, icon: string | null) => {
+  const remember = (domain: string, icons: readonly string[]) => {
     cache.delete(domain);
-    cache.set(domain, { icon, expires: now() + TTL_MS });
+    cache.set(domain, { icons, expires: now() + TTL_MS });
     if (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
   };
 
   /** The shared fetch ignores every caller's signal: safeFetch bounds it with TIMEOUT_MS. */
-  const lookup = (domain: string): Promise<string | null> => {
+  const lookup = (domain: string): Promise<readonly string[]> => {
     const hit = cache.get(domain);
-    if (hit && hit.expires > now()) return Promise.resolve(hit.icon);
+    if (hit && hit.expires > now()) return Promise.resolve(hit.icons);
     const running = pending.get(domain);
     if (running) return running;
-    const work = readIcon(domain, fetch, new AbortController().signal)
-      .catch(() => null)
-      .then((icon) => {
-        remember(domain, icon);
-        return icon;
+    const work = readIcons(domain, fetch, new AbortController().signal)
+      .catch((): string[] => [])
+      .then((icons) => {
+        remember(domain, icons);
+        return icons;
       })
       .finally(() => pending.delete(domain));
     pending.set(domain, work);
@@ -134,12 +153,12 @@ export function createSiteIconFinder(
   };
 
   const find: SiteIconFinder = (domain, signal) => {
-    if (signal.aborted) return Promise.resolve(undefined);
+    if (signal.aborted) return Promise.resolve([]);
     return new Promise((resolve) => {
-      const stop = () => resolve(undefined);
+      const stop = () => resolve([]);
       signal.addEventListener('abort', stop, { once: true });
       lookup(domain.toLowerCase())
-        .then((icon) => resolve(icon ?? undefined))
+        .then(resolve)
         .finally(() => signal.removeEventListener('abort', stop));
     });
   };
