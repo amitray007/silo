@@ -3,6 +3,7 @@ import { createApp } from '@silo/api';
 import {
   registerLinkTitles,
   registerPageViewer,
+  registerSiteIcons,
   startWorker,
   type WorkerHandle,
 } from '@silo/worker';
@@ -105,6 +106,7 @@ async function main(): Promise<void> {
   // could create a link, so no capture can race ahead of it.
   const viewer = registerPageViewer();
   const titles = registerLinkTitles();
+  const siteIcons = registerSiteIcons();
   const worker = await startWorkerOrDegrade();
 
   const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
@@ -133,6 +135,7 @@ async function main(): Promise<void> {
       }
       try {
         titles.close();
+        siteIcons.close();
         await viewer.close();
         await worker?.stop();
       } catch (error: unknown) {

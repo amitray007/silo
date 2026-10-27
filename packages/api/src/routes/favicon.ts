@@ -1,5 +1,8 @@
+import { findSiteIcon } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
+import { allowedImageContentType, imageResponse } from '../image-response.js';
+import { fetchImageSafely } from '../ssrf-safe-image-fetch.js';
 
 /**
  * `GET /api/favicon?domain=` — the privacy-preserving favicon proxy (plan
@@ -9,46 +12,49 @@ import { z } from 'zod';
  * is the one place that boundary is allowed to be crossed, and it's crossed
  * server-side, not from the client.
  *
- * SSRF safety — the whole reason this route is safe: the upstream URL this
- * handler fetches is ALWAYS `https://www.google.com/s2/favicons?domain=...` —
- * the fetched HOST is a hardcoded literal, never derived from the request.
- * `domain` only ever becomes a query-string VALUE handed to Google's own s2
- * favicon service, which resolves and fetches the target site on Google's
- * infrastructure, not silo's. There is no code path here that turns
- * user-controlled input into a fetch *host* — no `fetch(`https://${domain}/favicon.ico`)`
- * — so the usual SSRF surface (input steering a request at localhost/an
- * internal IP/a cloud metadata endpoint) does not exist for this handler. The
- * `domain` Zod schema below still rejects obvious junk (empty, absurdly long,
- * containing a scheme/slash/whitespace) so malformed input fails fast with a
- * 400 rather than round-tripping to Google for a value that could never be a
- * real hostname anyway — that's input hygiene, not the SSRF guard itself.
+ * Sources, in order: Google's s2 service, then the site's own icon. Google
+ * answers 404 with a placeholder for domains it does not know, so the fallback
+ * asks the worker's `findSiteIcon` port for the icon URL a site's home page
+ * declares, then fetches the image itself.
+ *
+ * SSRF safety: the Google fetch targets a hardcoded host; `domain` only becomes
+ * a query-string VALUE there. The site fallback does turn the domain into a
+ * fetch host, but never directly. The worker reads the home page with its
+ * SSRF-safe fetcher (scheme allowlist, DNS classification, pinned connection,
+ * re-validated redirects), and the icon image goes through `fetchImageSafely`
+ * (same gate, no redirects, byte cap). Only an allowlisted raster image type is
+ * served, with `nosniff`. The `domain` Zod schema below still rejects obvious
+ * junk (empty, absurdly long, containing a scheme/slash/whitespace) with a 400.
  *
  * Caching: an in-memory `Map<domain, CacheEntry>`, bounded to
  * `MAX_CACHE_ENTRIES` (oldest inserted evicted first — a `Map` preserves
  * insertion order, so `.keys().next().value` is always the oldest) with a
- * `CACHE_TTL_MS` (24h) staleness check. A single-process in-memory cache is
+ * `CACHE_TTL_MS` (24h) staleness check. A domain with no icon is cached too,
+ * for a shorter `MISS_TTL_MS` (1h), so it does not hit Google or the site on
+ * every request. A single-process in-memory cache is
  * sufficient here — `@silo/api`'s v1 deployment shape is one local process
  * (see `api-hono.md`'s "Auth" section: localhost, single-user) — no shared
  * cache store is needed.
  */
 
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+/** A domain with no icon is retried sooner than a found one, in case the site adds one. */
+const MISS_TTL_MS = 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
 const UPSTREAM_TIMEOUT_MS = 4000;
+const SITE_LOOKUP_TIMEOUT_MS = 8000;
 const FAVICON_SIZE = 32;
 
-type CacheEntry = {
-  bytes: Uint8Array;
-  contentType: string;
-  ts: number;
-};
+type Icon = { bytes: Uint8Array; contentType: string };
+/** `icon` is undefined when neither Google nor the site has one. */
+type CacheEntry = { icon: Icon | undefined; ts: number };
 
 const cache = new Map<string, CacheEntry>();
 
 function cacheGet(domain: string): CacheEntry | undefined {
   const entry = cache.get(domain);
   if (!entry) return undefined;
-  if (Date.now() - entry.ts > CACHE_TTL_MS) {
+  if (Date.now() - entry.ts > (entry.icon ? CACHE_TTL_MS : MISS_TTL_MS)) {
     cache.delete(domain);
     return undefined;
   }
@@ -94,6 +100,45 @@ async function fetchWithTimeout(input: string): Promise<Response> {
   }
 }
 
+/** Google's s2 service. The fetched HOST is always google.com; `domain` only parameterizes the query. */
+async function iconFromGoogle(domain: string): Promise<Icon | undefined> {
+  const upstreamUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${FAVICON_SIZE}`;
+  try {
+    const upstream = await fetchWithTimeout(upstreamUrl);
+    if (!upstream.ok || !upstream.body) return undefined;
+    const contentType = allowedImageContentType(
+      upstream.headers.get('content-type') ?? 'image/png',
+    );
+    if (!contentType) return undefined;
+    return { bytes: new Uint8Array(await upstream.arrayBuffer()), contentType };
+  } catch {
+    // Timeout, DNS failure, network error: the caller moves on to the next source.
+    return undefined;
+  }
+}
+
+/**
+ * The site's own icon, for domains Google does not know. The icon URL comes from
+ * the worker's SSRF-safe page reader, and the image is fetched through the
+ * SSRF-safe image fetcher, so no request host is ever taken straight from input.
+ */
+async function iconFromSite(domain: string): Promise<Icon | undefined> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), SITE_LOOKUP_TIMEOUT_MS);
+  try {
+    const iconUrl = await findSiteIcon(domain, controller.signal);
+    if (!iconUrl) return undefined;
+    const image = await fetchImageSafely(iconUrl);
+    if (!image.ok) return undefined;
+    const contentType = allowedImageContentType(image.contentType);
+    return contentType ? { bytes: image.bytes, contentType } : undefined;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export function registerFaviconRoutes(app: Hono): void {
   app.get('/favicon', async (c) => {
     const parsed = domainQuerySchema.safeParse({ domain: c.req.query('domain') });
@@ -109,45 +154,18 @@ export function registerFaviconRoutes(app: Hono): void {
     }
     const { domain } = parsed.data;
 
-    const cached = cacheGet(domain);
-    if (cached) {
-      return new Response(new Uint8Array(cached.bytes), {
-        status: 200,
-        headers: {
-          'Content-Type': cached.contentType,
-          'Cache-Control': 'public, max-age=86400',
-        },
-      });
+    let entry = cacheGet(domain);
+    if (!entry) {
+      // Never leak the upstream cause to the client. The web falls back to the
+      // letter chip on a 404.
+      const icon = (await iconFromGoogle(domain)) ?? (await iconFromSite(domain));
+      entry = { icon, ts: Date.now() };
+      cacheSet(domain, entry);
     }
-
-    // The fetched HOST is always google.com (see the doc comment above) —
-    // `domain` only ever parameterizes the query string.
-    const upstreamUrl = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=${FAVICON_SIZE}`;
-
-    let upstream: Response;
-    try {
-      upstream = await fetchWithTimeout(upstreamUrl);
-    } catch {
-      // Timeout, DNS failure, network error — never leak the cause to the
-      // client. The web falls back to the letter chip on a 404.
+    if (!entry.icon) {
       return c.json({ error: 'not_found', message: 'Favicon unavailable' }, 404);
     }
-
-    if (!upstream.ok || !upstream.body) {
-      return c.json({ error: 'not_found', message: 'Favicon unavailable' }, 404);
-    }
-
-    const contentType = upstream.headers.get('content-type') ?? 'image/png';
-    const bytes = new Uint8Array(await upstream.arrayBuffer());
-    cacheSet(domain, { bytes, contentType, ts: Date.now() });
-
-    return new Response(bytes, {
-      status: 200,
-      headers: {
-        'Content-Type': contentType,
-        'Cache-Control': 'public, max-age=86400',
-      },
-    });
+    return imageResponse(entry.icon.bytes, entry.icon.contentType);
   });
 }
 
