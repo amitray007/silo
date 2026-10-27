@@ -6,7 +6,8 @@ import { fetchImageSafely, openStreamSafely } from '../ssrf-safe-image-fetch.js'
 
 /**
  * `GET /api/links/:id/source-media/:index` serves an X post's own captured
- * photos and videos (`sourceData.mediaUrls`, and `poster` for its video still)
+ * photos and videos (`sourceData.mediaUrls`, `poster` for its video still, and
+ * `avatar` for the author's profile picture)
  * so the browser never calls X's media hosts. Like `content-image`, the client
  * names only a link and an index; the URL comes from storage, must be on X's
  * media hosts, and still goes through the SSRF-safe fetch. Videos stream with
@@ -20,6 +21,7 @@ const params = z.object({
   id: z.uuid(),
   index: z.union([
     z.literal('poster'),
+    z.literal('avatar'),
     z
       .string()
       .regex(/^\d{1,2}$/)
@@ -29,11 +31,16 @@ const params = z.object({
 
 type Target = { url: string; video: boolean };
 
-function mediaTarget(sourceData: unknown, index: number | 'poster'): Target | undefined {
+function mediaTarget(sourceData: unknown, index: number | 'poster' | 'avatar'): Target | undefined {
   const parsed = sourceDataSchema.safeParse(sourceData);
   if (!parsed.success || parsed.data.kind !== 'twitter') return undefined;
   const data = parsed.data;
-  const raw = index === 'poster' ? data.thumbnailUrl : data.mediaUrls?.[index];
+  const raw =
+    index === 'poster'
+      ? data.thumbnailUrl
+      : index === 'avatar'
+        ? data.authorAvatarUrl
+        : data.mediaUrls?.[index];
   if (!raw) return undefined;
   try {
     const url = new URL(raw);

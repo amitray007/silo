@@ -1,3 +1,4 @@
+import { apiUrl } from '../../api/client';
 import { useRetryCapture } from '../../api/hooks';
 import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
@@ -87,6 +88,20 @@ function TweetCard({ linkId, source }: { linkId: string; source: TweetSource }) 
   return (
     <div className="silo-reader-tweet">
       <div className="silo-reader-who">
+        {source.authorAvatarUrl && (
+          // silo's own proxy serves the stored picture, so the browser never calls X.
+          <img
+            key={linkId}
+            className="silo-reader-avatar"
+            src={apiUrl(`/api/links/${encodeURIComponent(linkId)}/source-media/avatar`)}
+            alt=""
+            width={36}
+            height={36}
+            onError={(event) => {
+              event.currentTarget.hidden = true;
+            }}
+          />
+        )}
         <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
       </div>
       <p>{source.text}</p>

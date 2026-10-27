@@ -11,6 +11,7 @@ const describeIfPg = postgresReachable() ? describe : describe.skip;
 const photo = 'https://pbs.twimg.com/media/photo.jpg';
 const video = 'https://video.twimg.com/amplify_video/1/vid/avc1/1280x720/clip.mp4';
 const poster = 'https://pbs.twimg.com/amplify_video_thumb/1/img/poster.jpg';
+const avatar = 'https://pbs.twimg.com/profile_images/1/face_200x200.jpg';
 
 describeIfPg('X post media proxy (Postgres)', () => {
   const harness = setupPgHarness('silo_source_media_test', async () => {
@@ -45,11 +46,12 @@ describeIfPg('X post media proxy (Postgres)', () => {
         bookmarks: 0,
         mediaUrls,
         thumbnailUrl: poster,
+        authorAvatarUrl: avatar,
       },
     });
   }
 
-  it('serves a stored photo and the video poster as images', async () => {
+  it('serves a stored photo, the video poster and the author avatar as images', async () => {
     const { app, fetchImageSafely } = harness.mod();
     fetchImageSafely.mockResolvedValue({
       ok: true,
@@ -64,6 +66,9 @@ describeIfPg('X post media proxy (Postgres)', () => {
     expect(fetchImageSafely).toHaveBeenLastCalledWith(photo);
     await app.request(`/api/links/${link.id}/source-media/poster`);
     expect(fetchImageSafely).toHaveBeenLastCalledWith(poster);
+    const face = await app.request(`/api/links/${link.id}/source-media/avatar`);
+    expect(face.status).toBe(200);
+    expect(fetchImageSafely).toHaveBeenLastCalledWith(avatar);
   });
 
   it('streams video with the client range and upstream range headers', async () => {
