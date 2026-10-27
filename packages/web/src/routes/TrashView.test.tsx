@@ -171,7 +171,7 @@ describe('TrashView', () => {
     },
   );
 
-  it('shows the purge hint without bulk controls', async () => {
+  it('lists trashed links without a purge hint or bulk controls', async () => {
     const link = trashLink({ id: '1', title: 'One', url: 'https://example.com/1' });
     const fetchImpl = vi.fn().mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -185,7 +185,7 @@ describe('TrashView', () => {
     renderTrashView(fetchImpl);
 
     await waitFor(() => expect(screen.getByText('One')).toBeDefined());
-    expect(screen.getByText(/auto-empties after 30 days/)).toBeDefined();
+    expect(screen.queryByText(/auto-empties after 30 days/)).toBeNull();
     expect(screen.queryByText('Select all')).toBeNull();
   });
 

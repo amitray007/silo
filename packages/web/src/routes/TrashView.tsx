@@ -173,11 +173,6 @@ export function TrashView() {
       </ContentHeader>
       <div className="silo-content-body">
         <div className="silo-content-col silo-route-fade">
-          {links.length > 0 && (
-            <p className="silo-hint-line">
-              Deleted links keep their text - auto-empties after {purgeWindowDays} days
-            </p>
-          )}
           <TrashBody
             loading={isLoading}
             isError={isError}
