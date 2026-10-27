@@ -1,20 +1,30 @@
 import { useEffect, useId, useMemo, useState } from 'react';
-import { useCaptureLink, useSavedLinks } from '../../api/hooks';
+import { useCaptureLink, useLinkTitles, useSavedLinks } from '../../api/hooks';
 import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { extractRelatedLinks, type RelatedLink } from '../../lib/relatedLinks';
 import { useRelatedLinksOpen } from '../../lib/useRelatedLinksOpen';
 import { Chip } from '../Chip';
 import { ReaderIcon } from './ReaderIcon';
 
+function sameWords(a: string, b: string): boolean {
+  const words = (text: string) => text.toLowerCase().replace(/\W+/g, ' ').trim();
+  return words(a) === words(b);
+}
+
 function RelatedLinkRow({
   link,
+  pageTitle,
   saved,
   checking,
 }: {
   link: RelatedLink;
+  pageTitle: string | undefined;
   saved: boolean;
   checking: boolean;
 }) {
+  const title = pageTitle ?? link.title;
+  // The author's link text stays visible when the page calls itself something else.
+  const linkText = pageTitle && !sameWords(pageTitle, link.title) ? link.title : undefined;
   const capture = useCaptureLink();
   const [showConfirmation, setShowConfirmation] = useState(true);
   useEffect(() => {
@@ -34,8 +44,11 @@ function RelatedLinkRow({
         onClick={(event) => event.stopPropagation()}
       >
         <Chip domain={link.hostname} size={20} />
-        <span className="silo-related-title" title={link.title}>
-          {link.title}
+        <span className="silo-related-text">
+          <span className="silo-related-title" title={title}>
+            {title}
+          </span>
+          {linkText && <span className="silo-related-linktext">{linkText}</span>}
         </span>
       </a>
       <div className="silo-related-action">
@@ -68,6 +81,7 @@ function RelatedLinksList({ links }: { links: RelatedLink[] }) {
   const id = useId();
   const urls = useMemo(() => links.map((link) => link.url), [links]);
   const lookup = useSavedLinks(urls);
+  const titles = useLinkTitles(urls, open).data?.titles;
   const saved = new Set(lookup.data?.saved);
   return (
     <section className="silo-related" aria-label="Related links">
@@ -96,6 +110,7 @@ function RelatedLinksList({ links }: { links: RelatedLink[] }) {
           <RelatedLinkRow
             key={link.url}
             link={link}
+            pageTitle={titles?.[link.url]}
             saved={saved.has(link.url)}
             checking={lookup.isPending}
           />

@@ -26,8 +26,14 @@ stores opted-out hostnames in `silo.lightPages`; non-HTML hints omit `darkTheme`
 
 Related links appear below Reader articles with stored `contentHtml`, except in
 trash. The section lists the first 20 unique outbound HTTP(S) URLs in article
-order, with anchor text or a hostname/path fallback and proxy favicons. It never
-fetches linked pages. Its expanded state is stored in `silo.relatedLinksOpen`.
+order with proxy favicons. Each row starts with the anchor text (or a
+hostname/path fallback). While the section is open, `POST /api/links/titles`
+asks silo's server for the real page titles: it fetches up to 20 linked pages
+through the SSRF-safe fetcher (4 at a time, 2 MB, 8 s), reads the title from the
+head, and caches each result in memory for a day, failures included. The browser
+never contacts the linked sites. A row then shows the page title, with the
+anchor text beneath when it says something different. Its expanded state is
+stored in `silo.relatedLinksOpen`.
 A live canonical-URL lookup hides save buttons for links already in the Library.
 Saving uses normal capture without tags, shows pending and filled states, and
 offers an inline retry on failure. Each row opens its URL in a new tab.

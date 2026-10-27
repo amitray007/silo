@@ -55,12 +55,25 @@
   color: var(--ink);
   text-decoration: none;
 }
-.silo-related-title {
+.silo-related-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  padding: 6px 0;
+}
+.silo-related-title,
+.silo-related-linktext {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+.silo-related-title {
   font-size: 15px;
   font-weight: 500;
+}
+.silo-related-linktext {
+  color: var(--fnt);
+  font-size: 13px;
 }
 .silo-related-action {
   display: flex;

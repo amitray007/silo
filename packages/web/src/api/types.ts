@@ -323,3 +323,5 @@ export type FrameHint = {
 };
 
 export type SavedLinksResponse = { saved: string[] };
+/** Titles keyed by URL; a missing URL means no usable title was found. */
+export type LinkTitlesResponse = { titles: Record<string, string> };

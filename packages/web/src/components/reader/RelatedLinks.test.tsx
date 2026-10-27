@@ -14,16 +14,19 @@ const json = (body: unknown, status = 200) =>
     headers: { 'content-type': 'application/json' },
   });
 let saved: string[];
+let titles: Record<string, string>;
 let captureResponse: () => Promise<Response>;
 let fetchMock: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   localStorage.clear();
   saved = [];
+  titles = {};
   captureResponse = async () => json({ link: makeLink({ url: firstUrl }), deduped: false }, 201);
   fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
     if (path === '/api/links/saved') return json({ saved });
+    if (path === '/api/links/titles') return json({ titles });
     if (path === '/api/links') {
       const response = await captureResponse();
       if (response.ok) {
@@ -76,6 +79,27 @@ async function saveButton() {
 }
 
 describe('Related links in Reader', () => {
+  it('shows the real page title with the author link text beneath it', async () => {
+    titles = { [firstUrl]: 'The First Article: A Guide', [secondUrl]: 'reference guide' };
+    renderArticle();
+    await within(section()).findByText('The First Article: A Guide');
+    expect(within(section()).getByText('First article').className).toBe('silo-related-linktext');
+    // A page title that only differs in case or punctuation adds no second line.
+    expect(within(section()).getByText('reference guide').className).toBe('silo-related-title');
+    expect(within(section()).queryByText('Reference guide')).toBeNull();
+    const request = fetchMock.mock.calls.find(([path]) => path === '/api/links/titles');
+    expect(JSON.parse(String(request?.[1]?.body))).toEqual({ urls: [firstUrl, secondUrl] });
+  });
+
+  it('does not fetch titles while the list is collapsed', async () => {
+    localStorage.setItem('silo.relatedLinksOpen', 'false');
+    renderArticle();
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.some(([path]) => path === '/api/links/saved')).toBe(true),
+    );
+    expect(fetchMock.mock.calls.some(([path]) => path === '/api/links/titles')).toBe(false);
+  });
+
   it('renders article rows with safe new-tab links and local favicon tiles', async () => {
     renderArticle();
     expect(screen.getByText('Article body')).toBeTruthy();

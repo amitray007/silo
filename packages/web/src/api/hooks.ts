@@ -19,6 +19,7 @@ import type {
   LinkJson,
   LinkResponse,
   LinksResponse,
+  LinkTitlesResponse,
   OAuthClientsResponse,
   RestoreResponse,
   SavedLinksResponse,
@@ -60,6 +61,7 @@ export const queryKeys = {
   frame: (id: string) => ['frame', id] as const,
   link: (id: string) => ['link', id] as const,
   savedLinks: (urls: readonly string[]) => ['saved-links', urls] as const,
+  linkTitles: (urls: readonly string[]) => ['link-titles', urls] as const,
   /**
    * `tag` (optional, command-center search plan 024) is folded into the key
    * so a `q`-only search and the SAME `q` scoped to a tag never collide in
@@ -115,6 +117,17 @@ export function useSavedLinks(urls: readonly string[]) {
     queryKey: queryKeys.savedLinks(urls),
     queryFn: () => apiPost<SavedLinksResponse>('/api/links/saved', { urls }),
     enabled: urls.length > 0,
+  });
+}
+
+/** Real page titles for an article's outbound links, fetched by silo's server. */
+export function useLinkTitles(urls: readonly string[], enabled: boolean) {
+  return useQuery({
+    queryKey: queryKeys.linkTitles(urls),
+    queryFn: () => apiPost<LinkTitlesResponse>('/api/links/titles', { urls }),
+    enabled: enabled && urls.length > 0,
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
   });
 }
 
