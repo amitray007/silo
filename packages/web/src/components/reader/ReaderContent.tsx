@@ -3,7 +3,7 @@ import type { LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
-import { PreparingReader, ReaderSkeleton } from './ReaderLoading';
+import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
 import { TweetCard } from './TweetCard';
@@ -151,7 +151,7 @@ export function ReaderContent({
       )}
       {source.kind !== 'twitter' &&
         (live.isLoading ? (
-          <PreparingReader />
+          <ReaderSkeleton />
         ) : prose ? (
           <ReaderProse linkId={link.id} reader={prose} />
         ) : (

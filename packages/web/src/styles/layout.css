@@ -1439,15 +1439,6 @@ div.silo-reader-notecard {
 .silo-reader .silo-reader-loading {
   padding: 8px 0;
 }
-.silo-reader-preparing {
-  margin: 0;
-  padding: 8px 0 0;
-  text-align: center;
-  font-size: 13px;
-  line-height: 1.4;
-  min-height: 1.4em;
-  color: var(--mut);
-}
 
 .silo-player-surface > iframe {
   margin: 0;

@@ -23,30 +23,6 @@ export function ReaderSkeleton({ label = 'Loading article' }: { label?: string }
   );
 }
 
-/** How long the live Reader may take before a status line says so. */
-const PREPARING_DELAY_MS = 600;
-
-/**
- * The live Reader is being built from the page: the article skeleton at once, and a quiet
- * status line once the wait is noticeable. The live region is always mounted so a screen
- * reader announces the text when it appears.
- */
-export function PreparingReader() {
-  const [slow, setSlow] = useState(false);
-  useEffect(() => {
-    const timer = setTimeout(() => setSlow(true), PREPARING_DELAY_MS);
-    return () => clearTimeout(timer);
-  }, []);
-  return (
-    <>
-      <p className="silo-reader-preparing" aria-live="polite">
-        {slow ? 'Preparing reader view…' : ''}
-      </p>
-      <ReaderSkeleton />
-    </>
-  );
-}
-
 const pageParagraphs = [
   [96, 91, 98, 62],
   [94, 88, 97, 70],

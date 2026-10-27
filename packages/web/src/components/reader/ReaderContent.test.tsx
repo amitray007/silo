@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { makeLink, twitterSourceData } from '../../test/fixtures';
 import { ReaderContent } from './ReaderContent';
@@ -91,7 +91,6 @@ describe('Live Reader', () => {
   const stored = makeLink({ extractedText: 'Stored first.\n\nStored second.' });
 
   afterEach(() => {
-    vi.useRealTimers();
     vi.unstubAllGlobals();
   });
 
@@ -123,35 +122,6 @@ describe('Live Reader', () => {
     expect(screen.queryByText('Stored first.')).toBeNull();
   });
 
-  it('adds a polite status line only after 600 ms, and drops it when the Reader arrives', async () => {
-    vi.useFakeTimers();
-    let release: (response: Response) => void = () => {};
-    const { container } = show(() => new Promise<Response>((resolve) => (release = resolve)));
-    const status = () => container.querySelector('.silo-reader-preparing');
-    expect(status()?.getAttribute('aria-live')).toBe('polite');
-    expect(status()?.textContent).toBe('');
-    await act(() => vi.advanceTimersByTimeAsync(599));
-    expect(status()?.textContent).toBe('');
-    await act(() => vi.advanceTimersByTimeAsync(1));
-    expect(status()?.textContent).toBe('Preparing reader view…');
-    expect(screen.getByRole('status', { name: 'Loading article' })).toBeDefined();
-    await act(async () => {
-      release(json(reader));
-      await vi.advanceTimersByTimeAsync(10);
-    });
-    expect(screen.getByText('Live body')).toBeDefined();
-    expect(status()).toBeNull();
-  });
-
-  it('never shows the status line when the Reader is quick', async () => {
-    vi.useFakeTimers();
-    const { container } = show(() => json(reader));
-    await act(() => vi.advanceTimersByTimeAsync(10));
-    expect(screen.getByText('Live body')).toBeDefined();
-    await act(() => vi.advanceTimersByTimeAsync(2000));
-    expect(container.querySelector('.silo-reader-preparing')).toBeNull();
-  });
-
   it.each([
     ['404', () => json({ error: 'not_found', message: 'No Reader content' }, 404)],
     ['500', () => json({ error: 'internal_error', message: 'Boom' }, 500)],
@@ -161,7 +131,6 @@ describe('Live Reader', () => {
     await screen.findByText('Stored first.');
     expect(screen.getByText('Stored second.')).toBeDefined();
     expect(container.querySelector('.silo-reader-prose')).toBeNull();
-    expect(container.querySelector('.silo-reader-preparing')).toBeNull();
   });
 
   it('shows the no-text state when the Reader is missing and nothing is stored', async () => {
