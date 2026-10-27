@@ -99,7 +99,7 @@ export function LoadingState() {
 /** The design's richer empty state (`Silo-v2.html:96-103`) — the orange tile mark + a caller-supplied headline/body, so `LibraryView`'s "Nothing kept yet." and `TagView`'s "No links tagged #x yet." share one shell. */
 export function EmptyState({ title, body }: { title: string; body: ReactNode }) {
   return (
-    <CenteredPanel>
+    <CenteredPanel empty>
       {/* The PLATED brand mark (not the bare bars): the tile gives the mark a
           container so it reads as an intentional logo anchoring the empty
           pane, rather than a stray glyph floating in a large dark card (direct

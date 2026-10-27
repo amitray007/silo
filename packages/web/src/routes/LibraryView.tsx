@@ -8,26 +8,7 @@ import { useListView } from './shared/useListView';
 
 /** `/`'s empty state copy — "nothing kept yet at all" (distinct from `TagView`'s per-tag empty copy). */
 function LibraryEmptyState() {
-  return (
-    <EmptyState
-      title="Nothing kept yet."
-      body={
-        <>
-          Paste a link anywhere on this page — it's saved the moment it lands.
-          <span
-            style={{
-              display: 'block',
-              marginTop: 14,
-              fontSize: '0.9em',
-              color: 'var(--fnt)',
-            }}
-          >
-            Claude can add links here too, once you connect it in Settings → Access.
-          </span>
-        </>
-      }
-    />
-  );
+  return <EmptyState title="Nothing saved yet" body="Paste a link anywhere to save it." />;
 }
 
 /**

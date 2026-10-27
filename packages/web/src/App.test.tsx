@@ -55,7 +55,7 @@ describe('App routing', () => {
     renderApp(['/']);
     // Both the sidebar and list header show the server total.
     await waitFor(() => expect(screen.getAllByText('128')).toHaveLength(1));
-    await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Nothing saved yet')).toBeDefined());
     expect(screen.getByRole('heading', { name: 'Library' })).toBeDefined();
     const libraryLink = screen.getByRole('link', { name: /library/i });
     expect(libraryLink.getAttribute('aria-current')).toBe('page');
@@ -78,7 +78,7 @@ describe('App routing', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: '# mcp', level: 1 })).toBeDefined(),
     );
-    await waitFor(() => expect(screen.getByText('No links tagged # mcp yet.')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('No links tagged #mcp')).toBeDefined());
   });
 
   it('renders the Settings view at /settings', async () => {

@@ -7,6 +7,17 @@ import type { ReactNode } from 'react';
  * chrome-free column (`Silo-v2.html:96-103`) — pulled out once so the
  * padding/alignment doesn't drift between them.
  */
-export function CenteredPanel({ children }: { children: ReactNode }) {
-  return <div className="silo-centered-panel">{children}</div>;
+export function CenteredPanel({
+  children,
+  empty = false,
+}: {
+  children: ReactNode;
+  empty?: boolean;
+}) {
+  // An empty list state also centers vertically in the pane (see `.silo-empty-state`).
+  return (
+    <div className={empty ? 'silo-centered-panel silo-empty-state' : 'silo-centered-panel'}>
+      {children}
+    </div>
+  );
 }

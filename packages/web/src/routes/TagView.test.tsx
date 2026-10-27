@@ -97,7 +97,7 @@ describe('TagView', () => {
 
     renderTagView('empty-tag', fetchImpl);
 
-    await waitFor(() => expect(screen.getByText('No links tagged # empty-tag yet.')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('No links tagged #empty-tag')).toBeDefined());
   });
 
   it('renders no search/paste input in the tag page header (bugfix: redundant search box removed)', async () => {

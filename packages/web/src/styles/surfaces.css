@@ -458,6 +458,20 @@
 .silo-centered-panel > :first-child {
   font-weight: 600;
 }
+/* An empty list state sits in the middle of the pane, a little above center. */
+.silo-content-body:has(> .silo-content-col > .silo-empty-state) {
+  display: flex;
+  flex-direction: column;
+}
+.silo-content-body:has(> .silo-content-col > .silo-empty-state) > .silo-content-col {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+.silo-empty-state {
+  padding-bottom: 12vh;
+}
 
 .silo-login {
   min-height: 100dvh;

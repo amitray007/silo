@@ -54,7 +54,7 @@ function TrashEmptyNowButton() {
  */
 function TrashEmptyState({ purgeWindowDays }: { purgeWindowDays: number }) {
   return (
-    <CenteredPanel>
+    <CenteredPanel empty>
       <span style={{ color: 'var(--fnt)', display: 'inline-flex' }}>
         <TrashIcon size={26} stroke="currentColor" />
       </span>
@@ -80,7 +80,7 @@ function TrashEmptyState({ purgeWindowDays }: { purgeWindowDays: number }) {
           textWrap: 'pretty',
         }}
       >
-        Deleted links land here and keep their text. They auto-empty after {purgeWindowDays} days.
+        Deleted links stay here for {purgeWindowDays} days.
       </p>
     </CenteredPanel>
   );

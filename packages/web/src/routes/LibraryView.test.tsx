@@ -92,7 +92,7 @@ describe('LibraryView', () => {
       data: { pages: [{ links: [] } as LinksResponse], pageParams: [undefined] },
     });
     renderLibraryView();
-    expect(screen.getByText('Nothing kept yet.')).toBeDefined();
+    expect(screen.getByText('Nothing saved yet')).toBeDefined();
   });
 
   it('shows a calm inline error using the ApiError message', () => {
@@ -298,7 +298,7 @@ describe('LibraryView header (no paste box)', () => {
     });
 
     renderLibraryView();
-    await waitFor(() => expect(screen.getByText('Nothing kept yet.')).toBeDefined());
+    await waitFor(() => expect(screen.getByText('Nothing saved yet')).toBeDefined());
 
     // The header box is gone entirely — no hint text, no input. The ONLY
     // header button now is the paste-capture affordance (added below the
