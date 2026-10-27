@@ -1,5 +1,6 @@
 import { type RefObject, useEffect, useState } from 'react';
 import { flushSync } from 'react-dom';
+import { scrollDirection } from './scrollDirection';
 
 /** Keep the header steady through jitter, overscroll, and content changes. */
 export function useHideOnScroll(
@@ -14,35 +15,22 @@ export function useHideOnScroll(
     setHidden(false);
     const scroller = scrollRef.current;
     if (!enabled || !scroller) return;
-    let previous = scroller.scrollTop;
-    let travel = 0;
+    const direction = scrollDirection(scroller.scrollTop);
     let frame = 0;
     const update = () => {
       frame = 0;
-      const maximum = Math.max(0, scroller.scrollHeight - scroller.clientHeight);
-      const top = Math.min(maximum, Math.max(0, scroller.scrollTop));
-      const delta = top - previous;
-      previous = top;
-      if (top <= 48 || maximum === 0) {
-        travel = 0;
-        setHidden(false);
-        return;
-      }
-      if (delta === 0) return;
-      // Tiny reversals count toward net travel rather than restarting the run.
-      travel =
-        Math.sign(delta) === Math.sign(travel) || Math.abs(delta) <= 2 ? travel + delta : delta;
-      if (Math.abs(travel) >= 8) {
-        setHidden(travel > 0);
-        travel = 0;
-      }
+      const next = direction.update(
+        scroller.scrollTop,
+        scroller.scrollHeight - scroller.clientHeight,
+      );
+      if (next !== undefined) setHidden(next);
     };
     const scroll = () => {
       if (!frame) frame = requestAnimationFrame(update);
     };
     const keyboard = (event: KeyboardEvent) => {
       if (event.key !== 'Tab') return;
-      travel = 0;
+      direction.sync(scroller.scrollTop);
       // Reveal before the browser chooses the next focus target, including Shift+Tab.
       flushSync(() => setHidden(false));
     };

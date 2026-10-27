@@ -1013,11 +1013,11 @@ div.silo-reader-notecard {
     transform: translateY(-44px);
   }
 }
-/* A thin strip over the page top brings the hidden Live header back. */
+/* The page top brings the hidden Live header back, matching Reader's 40px hover zone. */
 .silo-reader-reveal {
   position: absolute;
   inset: 0 0 auto;
-  height: 10px;
+  height: 40px;
   z-index: 22;
 }
 .silo-reader-viewtools {

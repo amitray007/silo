@@ -5,9 +5,11 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium, firefox, webkit } from 'playwright';
 import { PAGE_VIEW_HEADERS } from '../packages/api/src/page-view-headers.ts';
+import { addViewScrollScript } from '../packages/core/src/links/view-scroll.ts';
 import { transformPage } from '../packages/worker/src/view/transform.ts';
 
-const sandbox = 'allow-popups allow-popups-to-escape-sandbox';
+// Scripts run only silo's hash-pinned scroll reporter; no allow-same-origin keeps the origin opaque.
+const sandbox = 'allow-scripts allow-popups allow-popups-to-escape-sandbox';
 const probes = [];
 let origin;
 const server = createServer((req, res) => {
@@ -16,7 +18,7 @@ const server = createServer((req, res) => {
   if (path === '/parent') {
     res.setHeader('Content-Type', 'text/html');
     res.end(
-      `<script>localStorage.setItem('silo-secret', 'private')</script><iframe title="view" sandbox="${sandbox}" src="/view"></iframe>`,
+      `<script>localStorage.setItem('silo-secret', 'private');window.reports=[];addEventListener('message',(e)=>reports.push(e.data))</script><iframe title="view" sandbox="${sandbox}" src="/view"></iframe>`,
     );
   } else if (path === '/popup') {
     res.setHeader('Content-Type', 'text/html');
@@ -25,8 +27,9 @@ const server = createServer((req, res) => {
     res.writeHead(200, { ...PAGE_VIEW_HEADERS, 'Content-Type': 'text/html; charset=utf-8' });
     const html = `<h1>Sandbox proof</h1><script>window.ran=true;fetch('/probe-script')</script>
       <img src="/probe-image" onerror="window.handlerRan=true">
-      <a href="/popup">Open ordinary page</a><form action="/probe-form"><input type="submit"></form>`;
-    res.end(path === '/raw' ? html : transformPage(html, `${origin}/view`));
+      <a href="/popup">Open ordinary page</a><form action="/probe-form"><input type="submit"></form>
+      <div style="height:3000px"></div>`;
+    res.end(path === '/raw' ? html : addViewScrollScript(transformPage(html, `${origin}/view`)));
   } else {
     res.writeHead(200, { 'Content-Type': 'image/png' });
     res.end(
@@ -104,6 +107,11 @@ try {
       const frame = page.frames().find((frame) => frame.url() === `${origin}/view`);
       assert.ok(frame, 'silo view iframe loaded');
       await checkIsolation(frame, true);
+      // Positive control: the pinned reporter runs and reports scroll to the parent.
+      await frame.evaluate(() => scrollTo(0, 500));
+      await page.waitForFunction(() =>
+        window.reports.some((report) => report.type === 'silo:view-scroll' && report.top === 500),
+      );
       // A real click must open an ordinary unsandboxed page, without an opener.
       const popupReady = context.waitForEvent('page');
       await frame.getByRole('link', { name: 'Open ordinary page' }).click();
@@ -124,7 +132,7 @@ try {
         false,
       );
       console.log(
-        `${name}: PASS - no script, cookies, storage, parent DOM or fetch; popup escapes with no opener; top-level isolated`,
+        `${name}: PASS - only the pinned reporter runs; no page script, cookies, storage, parent DOM or fetch; popup escapes with no opener; top-level isolated`,
       );
       await context.close();
     } finally {

@@ -1,4 +1,5 @@
 import {
+  addViewScrollScript,
   type FrameHint,
   type PageViewer,
   PageViewerUnavailableError,
@@ -68,7 +69,7 @@ function preparePage({
   return {
     cssDarkTheme,
     scriptDarkTheme,
-    html: Buffer.from(cssDarkTheme ? html : addDarkPageStyle(html)),
+    html: Buffer.from(addViewScrollScript(cssDarkTheme ? html : addDarkPageStyle(html))),
     textLength: pageTextLength(html),
   };
 }

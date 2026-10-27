@@ -4,6 +4,7 @@ import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { deriveTitleFromUrl } from '../../lib/url';
 import { useHideOnScroll } from '../../lib/useHideOnScroll';
+import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
 import { useHideWhileReading } from '../../lib/useHideWhileReading';
 import { useReaderWidth } from '../../lib/useReaderWidth';
 import { MenuPresence } from '../MenuPresence';
@@ -265,28 +266,43 @@ function ReaderArticle({
   );
 }
 
-/** Reader hides the header on scroll; Live iframes hide their scroll, so Live uses the pointer. */
+type LiveHead = 'hidden' | 'shown' | undefined;
+
+/**
+ * Reader and Live's Silo view copy hide the header on the same scroll distances.
+ * Pages loaded straight from their site hide their scroll, so those use the pointer.
+ * `liveHead` stays unset until Live first hides, so opening Live does not animate.
+ */
 function useHeadHidden({
   panelRef,
   scrollRef,
   tab,
   free,
-  framed,
+  mode,
   resetKey,
 }: {
   panelRef: RefObject<HTMLElement | null>;
   scrollRef: RefObject<HTMLElement | null>;
   tab: Tab;
   free: boolean;
-  framed: boolean;
+  mode: OriginalState['mode'] | undefined;
   resetKey: string;
-}) {
+}): { hidden: boolean; liveHead: LiveHead } {
+  const live = tab === 'original' && free;
   const scrolledAway = useHideOnScroll(scrollRef, tab === 'reader' && free, resetKey);
-  const live = useHideWhileReading(panelRef, tab === 'original' && free && framed, resetKey);
-  return {
-    hidden: scrolledAway || live === 'hidden',
-    liveHead: tab === 'original' && live !== 'idle' ? live : undefined,
-  };
+  const resting = useHideWhileReading(panelRef, live && mode === 'direct', resetKey);
+  const viewScrolled = useHideOnViewScroll(panelRef, live && mode === 'view', resetKey);
+  const liveHidden = resting || viewScrolled;
+  const [moved, setMoved] = useState<string | null>(null);
+  useEffect(() => {
+    if (liveHidden) setMoved(resetKey);
+    // Leaving Live forgets the slide, so returning to the same article opens still.
+    else if (tab !== 'original') setMoved(null);
+  }, [liveHidden, resetKey, tab]);
+  let liveHead: LiveHead;
+  if (liveHidden) liveHead = 'hidden';
+  else if (moved === resetKey) liveHead = 'shown';
+  return { hidden: scrolledAway || liveHidden, liveHead };
 }
 
 export function ReaderPane({
@@ -350,7 +366,7 @@ export function ReaderPane({
     scrollRef,
     tab,
     free: Boolean(link) && !openMenu && !headerFocused && !headerHovered,
-    framed: shownOriginal?.mode === 'direct' || shownOriginal?.mode === 'view',
+    mode: shownOriginal?.mode,
     resetKey: `${selectedId}-${tab}`,
   });
 

@@ -5,11 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
 const describeIfPg = postgresReachable() ? describe : describe.skip;
+// Core's view-scroll test checks the hash against the script text.
 const CSP =
-  "sandbox allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; img-src * data:; style-src * 'unsafe-inline'; font-src * data:; media-src *; frame-ancestors 'self'";
+  "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none'; script-src 'HASH'; connect-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; img-src * data:; style-src * 'unsafe-inline'; font-src * data:; media-src *; frame-ancestors 'self'";
 
 function expectSecurityHeaders(response: Response) {
-  expect(response.headers.get('content-security-policy')).toBe(CSP);
+  const csp = response.headers.get('content-security-policy') ?? '';
+  expect(csp.replace(/'sha256-[A-Za-z0-9+/]{43}='/, "'HASH'")).toBe(CSP);
   expect(response.headers.get('x-content-type-options')).toBe('nosniff');
   expect(response.headers.get('referrer-policy')).toBe('no-referrer');
   expect(response.headers.get('cache-control')).toBe('private, no-store');

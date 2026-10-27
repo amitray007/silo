@@ -32,16 +32,16 @@ function show(enabled = true) {
 
 it('hides after the pointer rests on the page frame and shows on return', () => {
   const { result, frame, head, rest } = show();
-  expect(result.current).toBe('idle');
+  expect(result.current).toBe(false);
   fireEvent.pointerOver(frame);
   act(() => vi.advanceTimersByTime(699));
-  expect(result.current).toBe('idle');
+  expect(result.current).toBe(false);
   act(() => vi.advanceTimersByTime(1));
-  expect(result.current).toBe('hidden');
+  expect(result.current).toBe(true);
   fireEvent.pointerOver(head);
-  expect(result.current).toBe('shown');
+  expect(result.current).toBe(false);
   rest();
-  expect(result.current).toBe('hidden');
+  expect(result.current).toBe(true);
 });
 
 it('cancels a pending hide when the pointer leaves the frame first', () => {
@@ -50,17 +50,17 @@ it('cancels a pending hide when the pointer leaves the frame first', () => {
   act(() => vi.advanceTimersByTime(400));
   fireEvent.pointerOver(head);
   act(() => vi.advanceTimersByTime(700));
-  expect(result.current).toBe('idle');
+  expect(result.current).toBe(false);
 });
 
 it('stays shown while disabled and resets for a new article', () => {
   const { result, rerender, rest } = show(false);
   rest();
-  expect(result.current).toBe('idle');
+  expect(result.current).toBe(false);
   rerender({ enabled: true, key: 'article-original' });
-  expect(result.current).toBe('hidden');
+  expect(result.current).toBe(true);
   rerender({ enabled: true, key: 'next-original' });
-  expect(result.current).toBe('idle');
+  expect(result.current).toBe(false);
 });
 
 it('ignores frames outside the panel', () => {
@@ -69,5 +69,5 @@ it('ignores frames outside the panel', () => {
   document.body.append(other);
   fireEvent.pointerOver(other);
   act(() => vi.advanceTimersByTime(700));
-  expect(result.current).toBe('idle');
+  expect(result.current).toBe(false);
 });

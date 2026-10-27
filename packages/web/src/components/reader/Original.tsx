@@ -43,7 +43,8 @@ function PageSurface({ link, state, showReader }: OriginalProps) {
           title={mode === 'view' ? 'Silo view' : 'Live page'}
           sandbox={
             mode === 'view'
-              ? 'allow-popups allow-popups-to-escape-sandbox'
+              ? // Scripts here run only silo's hash-pinned scroll reporter, on an opaque origin.
+                'allow-scripts allow-popups allow-popups-to-escape-sandbox'
               : 'allow-scripts allow-same-origin allow-forms allow-popups allow-popups-to-escape-sandbox allow-presentation'
           }
           className="silo-original-frame"

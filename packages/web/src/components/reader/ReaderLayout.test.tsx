@@ -1297,6 +1297,36 @@ it('opens reader settings, persists widths, handles arrow keys, and returns focu
   expect(container.querySelector('.silo-original')?.hasAttribute('data-width')).toBe(false);
 });
 
+describe('Live header on scroll', () => {
+  it('hides on Silo view scroll and reopens Live without replaying the slide', async () => {
+    const { container } = renderReader({ route: '/?link=a', frameHint: { mode: 'view' } });
+    await selected();
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+    const frame = (await screen.findByTitle('Silo view')) as HTMLIFrameElement;
+    const head = container.querySelector('.silo-reader-head');
+    const scroll = container.querySelector('.silo-reader-scroll');
+    const report = (top: number) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'silo:view-scroll', top, max: 4000, scroller: 1 },
+            source: frame.contentWindow,
+          }),
+        );
+      });
+    report(0);
+    report(500);
+    expect(head?.getAttribute('data-hidden')).toBe('true');
+    expect(scroll?.getAttribute('data-head')).toBe('hidden');
+    fireEvent.click(reader().getByRole('tab', { name: 'Reader' }));
+    expect(head?.getAttribute('data-hidden')).toBe('false');
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+    await screen.findByTitle('Silo view');
+    expect(head?.getAttribute('data-hidden')).toBe('false');
+    expect(scroll?.hasAttribute('data-head')).toBe(false);
+  });
+});
+
 describe('Live page view settings', () => {
   it.each(['direct', 'view'] as const)(
     'toggles %s pages and retains the site opt-out across selection',

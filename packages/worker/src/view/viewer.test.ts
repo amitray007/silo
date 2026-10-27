@@ -1,7 +1,15 @@
+import { VIEW_SCROLL_SCRIPT } from '@silo/core';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
 import { inlinePageStyles } from './stylesheets.js';
 import { createPageViewer } from './viewer.js';
+
+/** Page scripts stay stripped; only silo's hash-pinned scroll reporter remains. */
+function pageScripts(html: string | undefined) {
+  const reporter = `<script data-silo-view-scroll>${VIEW_SCROLL_SCRIPT}</script>`;
+  expect(html?.split(reporter)).toHaveLength(2);
+  return html?.replace(reporter, '');
+}
 
 const viewers: ReturnType<typeof createPageViewer>[] = [];
 const success = (extra = {}): SafeFetchResult => ({
@@ -300,7 +308,7 @@ describe('page viewer dark theme hint and cached copy', () => {
       const page = await request();
       expect(page.frame).toEqual({ mode: 'direct', contentType: 'text/html', darkTheme: false });
       expect(page.html).toContain('data-silo-dark-page');
-      expect(page.html).not.toContain('<script');
+      expect(pageScripts(page.html)).not.toContain('<script');
     },
   );
   it.each([false, true])(
@@ -345,7 +353,7 @@ describe('page viewer dark theme hint and cached copy', () => {
       darkTheme: false,
     });
     expect(view.html).toBe(direct.html);
-    expect(view.html).not.toContain('<script');
+    expect(pageScripts(view.html)).not.toContain('<script');
     expect(view.html).toContain('data-silo-dark-page');
     expect((await request()).frame.darkTheme).toBe(true);
     expect(fetch).toHaveBeenCalledTimes(1);

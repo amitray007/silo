@@ -90,8 +90,9 @@ describe('Original mode order', () => {
   it('uses silo view for blocked framing', async () => {
     const { container, fetch } = show('view');
     await waitFor(() => expect(screen.getByTitle('Silo view')).toBeDefined());
+    // Scripts plus same-origin would let the copy lift its own sandbox.
     expect(container.querySelector('iframe')?.getAttribute('sandbox')).toBe(
-      'allow-popups allow-popups-to-escape-sandbox',
+      'allow-scripts allow-popups allow-popups-to-escape-sandbox',
     );
     expect(container.querySelector('iframe')?.getAttribute('referrerpolicy')).toBe('no-referrer');
     expect(fetch).toHaveBeenCalledWith(

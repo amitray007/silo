@@ -91,24 +91,31 @@ per-URL table: capture status, text length, Reader result, Original mode.
      `ping`, `download`, and any URL that is not `http(s):` or `data:` (images
      only). Anchors get absolute `http(s)` URLs, `target="_blank"` and
      `rel="noopener noreferrer"`.
+   - **Scroll reporter:** after sanitizing, silo adds one script of its own
+     (`packages/core/src/links/view-scroll.ts`). It posts the page's scroll
+     position to the parent so the reader bar hides on scroll, as in Reader.
+     It is the only script allowed to run.
    - **Response headers:** `Content-Security-Policy: sandbox
-     allow-popups allow-popups-to-escape-sandbox; default-src 'none';
-     script-src 'none'; connect-src 'none'; object-src 'none'; frame-src 'none';
+     allow-scripts allow-popups allow-popups-to-escape-sandbox; default-src 'none';
+     script-src 'sha256-<reporter hash>'; connect-src 'none'; object-src 'none'; frame-src 'none';
      form-action 'none'; base-uri 'none'; img-src * data:; style-src *
      'unsafe-inline'; font-src * data:; media-src *; frame-ancestors 'self'`,
      plus `X-Content-Type-Options: nosniff`, `Referrer-Policy: no-referrer`,
      `Cache-Control: private, no-store`.
-   - **Web iframe:** `sandbox="allow-popups allow-popups-to-escape-sandbox"`
-     (no `allow-scripts`, `allow-same-origin` or `allow-forms`).
+   - **Web iframe:** `sandbox="allow-scripts allow-popups allow-popups-to-escape-sandbox"`
+     (no `allow-same-origin` or `allow-forms`). Never add `allow-same-origin`:
+     with scripts on, it would let the copy lift its own sandbox.
    - **What this guarantees, stated precisely:** the served page cannot run
-     script and cannot read silo's cookies, storage or DOM, even when opened
-     top-level. It can still make plain GET requests for CSS, images and fonts
+     its own script. Only silo's reporter runs, pinned by hash, on an opaque
+     origin. Nothing in the copy can read silo's cookies, storage or DOM, even
+     when opened top-level. It can still make plain GET requests for CSS, images and fonts
      to any host, and links it opens in a new tab are ordinary pages. Silo's
      unsafe API calls stay protected by the CSRF header. Stylesheets and
      images load live from the original site; that is the price of seeing the
      real look, and it only happens when you open Original.
-   - **Cross-browser proof:** run the sandbox tests (no script, no cookie
-     access, no `fetch`, popups, top-level open) in Chromium, Firefox and
+   - **Cross-browser proof:** run `pnpm test:view-sandbox` (only the
+     reporter runs, no page script, no cookie access, no `fetch`, popups,
+     top-level open) in Chromium, Firefox and
      WebKit (Playwright).
 3. **Reader content.**
    - Capture keeps Defuddle's article HTML. It is sanitized server-side

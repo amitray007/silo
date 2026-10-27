@@ -23,7 +23,7 @@
     "db:migrate": "pnpm --filter @silo/db run db:migrate",
     "start": "pnpm --filter @silo/app run start",
     "prepare": "lefthook install",
-    "test:view-sandbox": "node scripts/test-view-sandbox.mjs",
+    "test:view-sandbox": "pnpm --filter @silo/worker exec tsx ../../scripts/test-view-sandbox.mjs",
     "check:live": "node scripts/check-live.mjs"
   },
   "devDependencies": {
