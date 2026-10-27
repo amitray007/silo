@@ -85,13 +85,16 @@ function pressCmdK() {
  * not an empty stub) — tests override just the one plugin's `palette`
  * field under test via `plugins` deep-merge-by-key.
  */
-function settingsWithPlugins(overrides: Partial<SettingsMap['plugins']> = {}): SettingsMap {
+function settingsWithPlugins(
+  overrides: Partial<SettingsMap['plugins']> = {},
+  hoverPreview = true,
+): SettingsMap {
   return {
     theme: 'system',
     trashPurgeDays: 30,
     mcpAccess: true,
     linkPreviewImages: true,
-    hoverPreview: false,
+    hoverPreview,
     plugins: {
       hacker_news: { enabled: true, inline: true, hover: true, palette: true },
       github: { enabled: true, hover: true, palette: true },
@@ -1020,6 +1023,30 @@ describe('CommandPalette', () => {
       expect(document.querySelector('.silo-popover')).not.toBeNull();
     });
 
+    it('keeps the card closed on hover when Hover previews is off', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({}, false),
+        '/api/links/search': {
+          results: [{ ...makeLink({ id: 'hov0', title: 'Hover off' }), rank: 1 }],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'hover' } });
+      await waitFor(() => expect(screen.getByText('Hover off')).toBeDefined(), { timeout: 2000 });
+      await act(async () => {
+        await Promise.resolve();
+      });
+      const row = optionRowFor('Hover off');
+      fireEvent.mouseEnter(row.firstElementChild as HTMLElement);
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+      expect(document.querySelector('.silo-popover')).toBeNull();
+    });
+
     it('hovering a twitter row with palette:false never opens the hover card', async () => {
       mockFetchByPath({
         '/api/tags': { tags: [] },
@@ -1139,6 +1166,31 @@ describe('CommandPalette', () => {
       });
 
       expect(document.querySelector('.silo-popover')).not.toBeNull();
+    });
+
+    it('keeps the card closed during keyboard navigation when Hover previews is off', async () => {
+      mockFetchByPath({
+        '/api/tags': { tags: [] },
+        '/api/settings': settingsWithPlugins({}, false),
+        '/api/links/search': {
+          results: [
+            {
+              ...makeLink({ id: 'kb0', title: 'Quiet tweet', sourceData: twitterSourceData }),
+              rank: 1,
+            },
+          ],
+        },
+      });
+      await renderPalette();
+      pressCmdK();
+      const input = await screen.findByRole('combobox');
+      fireEvent.change(input, { target: { value: 'quiet' } });
+      await waitFor(() => expect(screen.getByText('Quiet tweet')).toBeDefined(), { timeout: 2000 });
+      expect(optionRowFor('Quiet tweet').getAttribute('aria-selected')).toBe('true');
+      await act(async () => {
+        vi.advanceTimersByTime(350);
+      });
+      expect(document.querySelector('.silo-popover')).toBeNull();
     });
 
     it('does NOT open the hover card on a coarse/touch pointer (isHoverCapable() false) even for an enabled twitter row', async () => {

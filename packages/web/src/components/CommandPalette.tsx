@@ -129,7 +129,9 @@ function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
   const handleEnter = () => {
     const rect = rowRef.current?.getBoundingClientRect();
     if (!rect) return;
-    scheduleShow(link, rect, { suppress: !surfaceOn || !isHoverCapable() });
+    scheduleShow(link, rect, {
+      suppress: settings?.hoverPreview !== true || !surfaceOn || !isHoverCapable(),
+    });
   };
   const handleLeave = () => scheduleHide(link.id);
   useEffect(() => () => dismiss(link.id), [dismiss, link.id]);
@@ -641,6 +643,7 @@ function usePaletteKeyboardHover(
   results: readonly CommandPaletteResult[],
   panelRef: React.RefObject<HTMLDivElement | null>,
   plugins: SettingsMap['plugins'] | undefined,
+  previewOn: boolean,
 ): [string, (value: string) => void] {
   const { scheduleShow, dismissAll } = useHoverPreview();
   const [activeValue, setActiveValue] = useState('');
@@ -657,6 +660,7 @@ function usePaletteKeyboardHover(
     const result = activeValue ? resultByValue.get(activeValue) : undefined;
     // No enabled link row to preview → dismiss any showing/pending card.
     if (
+      !previewOn ||
       result?.kind !== 'link' ||
       !palettePluginOn(result.link.sourceData.kind, plugins) ||
       // Touch/coarse-pointer: no hover affordance (mirrors the mouse path's own
@@ -676,7 +680,7 @@ function usePaletteKeyboardHover(
     );
     if (!node) return; // not yet in the DOM this tick; a later change re-runs
     scheduleShow(result.link, node.getBoundingClientRect());
-  }, [activeValue, resultByValue, plugins, panelRef, scheduleShow, dismissAll]);
+  }, [activeValue, resultByValue, plugins, previewOn, panelRef, scheduleShow, dismissAll]);
 
   return [activeValue, setActiveValue];
 }
@@ -706,6 +710,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
     results,
     panelRef,
     settings?.plugins,
+    settings?.hoverPreview === true,
   );
 
   // Type-to-refocus (user-requested): "if I'm between navigation and start
