@@ -51,6 +51,25 @@ describe('TweetMedia', () => {
     );
   });
 
+  it('names a thread post in every proxy path, including the video still', () => {
+    const { container } = render(
+      <TweetMedia
+        linkId="post"
+        mediaUrls={[media[1] as string, media[0] as string]}
+        hasPoster
+        scope="after-2"
+      />,
+    );
+    const sources = [...container.querySelectorAll('img, video')].map((node) => [
+      node.getAttribute('src'),
+      node.getAttribute('poster'),
+    ]);
+    expect(sources).toEqual([
+      ['/api/links/post/source-media/after-2-0', '/api/links/post/source-media/after-2-poster'],
+      ['/api/links/post/source-media/after-2-1', null],
+    ]);
+  });
+
   it('renders nothing when no item is on X media hosts', () => {
     const { container } = render(
       <TweetMedia linkId="post" mediaUrls={['https://evil.test/a.jpg']} hasPoster={false} />,

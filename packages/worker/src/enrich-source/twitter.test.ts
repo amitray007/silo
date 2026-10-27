@@ -60,6 +60,13 @@ describe('enrichTwitter', () => {
     });
   });
 
+  it('keeps a long post by clipping its text to the stored limit', async () => {
+    const result = await enrichTwitter('1234567890123456789', () =>
+      Promise.resolve(okResult(fxEmbedEnvelope({ text: 'a'.repeat(6000) }))),
+    );
+    expect(result?.text).toHaveLength(4000);
+  });
+
   it('degrades to undefined on a non-200 `code` (deleted/not-found tweet)', async () => {
     const result = await enrichTwitter('999', () =>
       Promise.resolve(okResult({ code: 404, message: 'Not Found' })),
@@ -276,6 +283,198 @@ describe('enrichTwitter', () => {
       );
       expect(result?.thumbnailUrl).toBeUndefined();
       expect(result?.kind).toBe('twitter');
+    });
+  });
+
+  describe('author thread (/2/thread)', () => {
+    const THREAD = 'https://api.fxtwitter.com/2/thread/';
+    const STATUS = 'https://api.fxtwitter.com/status/';
+
+    /** A v2 post: note `reposts` (not `retweets`) and the `created_at` string. */
+    function post(id: string, handle: string, extra: Record<string, unknown> = {}) {
+      return {
+        id,
+        text: `post ${id}`,
+        author: { screen_name: handle, name: handle.toUpperCase() },
+        replies: 1,
+        reposts: 2,
+        likes: 3,
+        bookmarks: 4,
+        quotes: 5,
+        created_at: `Fri Oct 23 18:24:0${id} +0000 2026`,
+        ...extra,
+      };
+    }
+
+    function threadEnvelope(savedId: string, posts: unknown[]) {
+      const saved = (posts as { id: string }[]).find((item) => item.id === savedId);
+      return { code: 200, status: saved, author: {}, thread: posts };
+    }
+
+    /** Answers by path and records every url asked for. */
+    function router(routes: Record<string, unknown>) {
+      const calls: string[] = [];
+      const fetchFn = (url: string): Promise<SafeFetchResult> => {
+        calls.push(url);
+        const body = routes[url.startsWith(THREAD) ? THREAD : STATUS];
+        return Promise.resolve(
+          body === undefined ? { ok: false, reason: 'timeout' } : okResult(body),
+        );
+      };
+      return { calls, fetchFn };
+    }
+
+    it('maps the saved post from `status` exactly like the plain call', async () => {
+      const { fetchFn, calls } = router({
+        [THREAD]: threadEnvelope('1', [post('1', 'dev')]),
+      });
+      const result = await enrichTwitter('1', fetchFn);
+      expect(calls).toEqual([`${THREAD}1`]);
+      expect(result).toEqual({
+        kind: 'twitter',
+        text: 'post 1',
+        authorHandle: 'dev',
+        authorName: 'DEV',
+        likes: 3,
+        reposts: 2,
+        replies: 1,
+        quotes: 5,
+        bookmarks: 4,
+        postedAt: 'Fri Oct 23 18:24:01 +0000 2026',
+      });
+    });
+
+    it('splits a middle post into threadBefore and threadAfter, in order', async () => {
+      const posts = ['1', '2', '3', '4', '5'].map((id) => post(id, 'dev'));
+      const { fetchFn } = router({ [THREAD]: threadEnvelope('3', posts) });
+      const result = await enrichTwitter('3', fetchFn);
+      expect(result?.text).toBe('post 3');
+      expect(result?.threadBefore?.map((item) => item.id)).toEqual(['1', '2']);
+      expect(result?.threadAfter?.map((item) => item.id)).toEqual(['4', '5']);
+      expect(result?.threadAfter?.[0]).toEqual({
+        id: '4',
+        text: 'post 4',
+        postedAt: 'Fri Oct 23 18:24:04 +0000 2026',
+        likes: 3,
+        reposts: 2,
+        replies: 1,
+      });
+    });
+
+    it('omits a side that has no posts (first post: no threadBefore)', async () => {
+      const posts = ['1', '2'].map((id) => post(id, 'dev'));
+      const { fetchFn } = router({ [THREAD]: threadEnvelope('1', posts) });
+      const result = await enrichTwitter('1', fetchFn);
+      expect(result?.threadBefore).toBeUndefined();
+      expect(result?.threadAfter?.map((item) => item.id)).toEqual(['2']);
+    });
+
+    it('drops posts by other authors and keeps the saved post out of both sides', async () => {
+      const posts = [
+        post('1', 'dev'),
+        post('2', 'someoneelse'),
+        post('3', 'DEV'),
+        post('4', 'dev'),
+        post('5', 'dev'),
+        post('4', 'dev'),
+      ];
+      const { fetchFn } = router({ [THREAD]: threadEnvelope('3', posts) });
+      const result = await enrichTwitter('3', fetchFn);
+      expect(result?.threadBefore?.map((item) => item.id)).toEqual(['1']);
+      expect(result?.threadAfter?.map((item) => item.id)).toEqual(['4', '5']);
+    });
+
+    it('keeps the posts nearest the saved post when a side passes the cap', async () => {
+      const ids = Array.from({ length: 61 }, (_, i) => String(i + 1));
+      const posts = ids.map((id) => post(id, 'dev'));
+      const { fetchFn } = router({ [THREAD]: threadEnvelope('31', posts) });
+      const result = await enrichTwitter('31', fetchFn);
+      expect(result?.threadBefore).toHaveLength(25);
+      expect(result?.threadBefore?.[0]?.id).toBe('6');
+      expect(result?.threadBefore?.at(-1)?.id).toBe('30');
+      expect(result?.threadAfter).toHaveLength(25);
+      expect(result?.threadAfter?.[0]?.id).toBe('32');
+      expect(result?.threadAfter?.at(-1)?.id).toBe('56');
+    });
+
+    it('maps thread post media like the saved post and bounds its text', async () => {
+      const posts = [
+        post('1', 'dev'),
+        post('2', 'dev', {
+          text: 'x'.repeat(4_500),
+          media: {
+            all: [
+              {
+                type: 'video',
+                url: 'https://video.twimg.com/amplify_video/9/vid/a.mp4',
+                thumbnail_url: 'https://pbs.twimg.com/amplify_video_thumb/9/img/a.jpg',
+              },
+              { type: 'photo', url: 'https://pbs.twimg.com/media/p.jpg' },
+            ],
+          },
+        }),
+      ];
+      const { fetchFn } = router({ [THREAD]: threadEnvelope('1', posts) });
+      const result = await enrichTwitter('1', fetchFn);
+      const [second] = result?.threadAfter ?? [];
+      expect(second?.text).toHaveLength(4_000);
+      expect(second?.mediaUrls).toEqual([
+        'https://video.twimg.com/amplify_video/9/vid/a.mp4',
+        'https://pbs.twimg.com/media/p.jpg',
+      ]);
+      expect(second?.thumbnailUrl).toBe('https://pbs.twimg.com/amplify_video_thumb/9/img/a.jpg');
+    });
+
+    it('does not split an emoji when it cuts long thread text', async () => {
+      const text = `${'x'.repeat(3_999)}\u{1F600}`;
+      const posts = [post('1', 'dev'), post('2', 'dev', { text })];
+      const { fetchFn } = router({ [THREAD]: threadEnvelope('1', posts) });
+      const result = await enrichTwitter('1', fetchFn);
+      expect(result?.threadAfter?.[0]?.text).toBe('x'.repeat(3_999));
+    });
+
+    it('skips a thread post that does not fit the stored shape and keeps the rest', async () => {
+      const posts = [post('1', 'dev'), post('2', 'dev', { id: 'not-a-number' }), post('3', 'dev')];
+      const { fetchFn } = router({ [THREAD]: threadEnvelope('1', posts) });
+      const result = await enrichTwitter('1', fetchFn);
+      expect(result?.threadAfter?.map((item) => item.id)).toEqual(['3']);
+    });
+
+    it('stores no thread when the saved post is missing from the chain', async () => {
+      const envelope = { ...threadEnvelope('1', [post('1', 'dev')]), thread: [post('7', 'dev')] };
+      const { fetchFn } = router({ [THREAD]: envelope });
+      const result = await enrichTwitter('1', fetchFn);
+      expect(result?.text).toBe('post 1');
+      expect(result?.threadBefore).toBeUndefined();
+      expect(result?.threadAfter).toBeUndefined();
+    });
+
+    it('falls back to /status when the thread call fails', async () => {
+      const { fetchFn, calls } = router({ [STATUS]: fxEmbedEnvelope() });
+      const result = await enrichTwitter('1234567890123456789', fetchFn);
+      expect(calls).toEqual([`${THREAD}1234567890123456789`, `${STATUS}1234567890123456789`]);
+      expect(result).toMatchObject({
+        kind: 'twitter',
+        text: 'Good review of Grok 4.5',
+        reposts: 722,
+      });
+      expect(result?.threadBefore).toBeUndefined();
+      expect(result?.threadAfter).toBeUndefined();
+    });
+
+    it('falls back to /status when the thread call answers a non-200 code or no status', async () => {
+      for (const broken of [{ code: 500 }, { code: 200, thread: [] }, { code: 200, status: 'x' }]) {
+        const { fetchFn, calls } = router({ [THREAD]: broken, [STATUS]: fxEmbedEnvelope() });
+        const result = await enrichTwitter('1234567890123456789', fetchFn);
+        expect(calls).toHaveLength(2);
+        expect(result?.text).toBe('Good review of Grok 4.5');
+      }
+    });
+
+    it('returns undefined when both calls fail', async () => {
+      const { fetchFn, calls } = router({});
+      expect(await enrichTwitter('1', fetchFn)).toBeUndefined();
+      expect(calls).toHaveLength(2);
     });
   });
 });

@@ -1,3 +1,4 @@
+import type { SourceData } from '@silo/core';
 import { getById, sourceDataSchema } from '@silo/core';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
@@ -6,41 +7,81 @@ import { fetchImageSafely, openStreamSafely } from '../ssrf-safe-image-fetch.js'
 
 /**
  * `GET /api/links/:id/source-media/:index` serves an X post's own captured
- * photos and videos (`sourceData.mediaUrls`, `poster` for its video still, and
- * `avatar` for the author's profile picture)
- * so the browser never calls X's media hosts. Like `content-image`, the client
- * names only a link and an index; the URL comes from storage, must be on X's
- * media hosts, and still goes through the SSRF-safe fetch. Videos stream with
- * Range passthrough so the player can seek without downloading the whole file.
+ * photos and videos so the browser never calls X's media hosts. Like
+ * `content-image`, the client names only a link and an index; the URL comes
+ * from storage, must be on X's media hosts, and still goes through the
+ * SSRF-safe fetch. Videos stream with Range passthrough so the player can seek
+ * without downloading the whole file.
+ *
+ * The `:index` forms:
+ *   `3`            the saved post's 4th media item (`mediaUrls[3]`)
+ *   `poster`       the saved post's video still (`thumbnailUrl`)
+ *   `avatar`       the author's profile picture (`authorAvatarUrl`)
+ *   `after-2-1`    media item 1 of the 3rd post in `threadAfter`
+ *   `before-0-3`   media item 3 of the 1st post in `threadBefore`
+ *   `after-2-poster` / `before-0-poster`   that thread post's video still
+ * Post and media numbers are 1 or 2 digits with no sign or leading text, so
+ * nothing else reaches the lookup.
  */
 const MEDIA_HOSTS: ReadonlySet<string> = new Set(['pbs.twimg.com', 'video.twimg.com']);
 const VIDEO_TYPES: ReadonlySet<string> = new Set(['video/mp4', 'video/webm']);
 const RANGE = /^bytes=(?:\d+-\d*|-\d+)$/;
+const THREAD_INDEX = /^(before|after)-(\d{1,2})-(\d{1,2}|poster)$/;
+
+type MediaRef =
+  | { kind: 'media'; index: number }
+  | { kind: 'poster' }
+  | { kind: 'avatar' }
+  | { kind: 'thread'; side: 'before' | 'after'; post: number; media: number | 'poster' };
+
+function parseIndex(raw: string): MediaRef | undefined {
+  if (raw === 'poster' || raw === 'avatar') return { kind: raw };
+  if (/^\d{1,2}$/.test(raw)) return { kind: 'media', index: Number(raw) };
+  const match = THREAD_INDEX.exec(raw);
+  if (!match) return undefined;
+  const [, side, post, media] = match;
+  if ((side !== 'before' && side !== 'after') || post === undefined || media === undefined)
+    return undefined;
+  return {
+    kind: 'thread',
+    side,
+    post: Number(post),
+    media: media === 'poster' ? 'poster' : Number(media),
+  };
+}
 
 const params = z.object({
   id: z.uuid(),
-  index: z.union([
-    z.literal('poster'),
-    z.literal('avatar'),
-    z
-      .string()
-      .regex(/^\d{1,2}$/)
-      .transform(Number),
-  ]),
+  index: z.string().transform((raw, ctx) => {
+    const ref = parseIndex(raw);
+    if (!ref) ctx.addIssue({ code: 'custom', message: 'Invalid media index' });
+    return ref ?? z.NEVER;
+  }),
 });
 
 type Target = { url: string; video: boolean };
+type TwitterData = Extract<SourceData, { kind: 'twitter' }>;
 
-function mediaTarget(sourceData: unknown, index: number | 'poster' | 'avatar'): Target | undefined {
+function storedUrl(data: TwitterData, ref: MediaRef): string | undefined {
+  switch (ref.kind) {
+    case 'poster':
+      return data.thumbnailUrl;
+    case 'avatar':
+      return data.authorAvatarUrl;
+    case 'media':
+      return data.mediaUrls?.[ref.index];
+    case 'thread': {
+      const post = (ref.side === 'before' ? data.threadBefore : data.threadAfter)?.[ref.post];
+      if (!post) return undefined;
+      return ref.media === 'poster' ? post.thumbnailUrl : post.mediaUrls?.[ref.media];
+    }
+  }
+}
+
+function mediaTarget(sourceData: unknown, ref: MediaRef): Target | undefined {
   const parsed = sourceDataSchema.safeParse(sourceData);
   if (!parsed.success || parsed.data.kind !== 'twitter') return undefined;
-  const data = parsed.data;
-  const raw =
-    index === 'poster'
-      ? data.thumbnailUrl
-      : index === 'avatar'
-        ? data.authorAvatarUrl
-        : data.mediaUrls?.[index];
+  const raw = storedUrl(parsed.data, ref);
   if (!raw) return undefined;
   try {
     const url = new URL(raw);

@@ -28,6 +28,19 @@ export type AddedBy = 'user' | 'agent';
  */
 export type CaptureSource = 'web' | 'mcp' | 'cli' | 'raycast' | 'chrome' | 'ingest' | 'unknown';
 
+/** One post of an X author's own thread, stored beside the saved post. */
+type TweetThreadPost = {
+  id: string;
+  text: string;
+  postedAt?: string;
+  likes?: number;
+  reposts?: number;
+  replies?: number;
+  mediaUrls?: string[];
+  /** The post's video still or first photo. */
+  thumbnailUrl?: string;
+};
+
 /**
  * Web's OWN copy of the API's `sourceData` union — mirrors
  * `@silo/core`'s `SourceData` (`packages/core/src/links/source-data.ts`)
@@ -71,6 +84,12 @@ export type SourceData =
        * through silo (`/api/preview-image`, `/source-media/poster`) and never
        * rendered as a raw `twimg.com` URL. See `packages/core/src/links/source-data.ts`. */
       thumbnailUrl?: string;
+      /** The author's own thread around the saved post, in thread order: the
+       * posts before it and the posts after it, all by the same author. Absent
+       * when the post is not part of a thread or was captured before threads
+       * were stored. Media is served through `/source-media/{before|after}-N-M`. */
+      threadBefore?: TweetThreadPost[];
+      threadAfter?: TweetThreadPost[];
     }
   | {
       kind: 'github';

@@ -167,6 +167,22 @@ function withTwitterThumbnailOverride(
 }
 
 /**
+ * An X post's own text for the link's extracted text, so search and MCP find
+ * it. x.com serves a JavaScript shell, so the page itself yields no post text.
+ * The saved post comes first, then the author's earlier thread posts, then the
+ * later ones, in thread order. Empty for other sources and for empty posts.
+ */
+function twitterTextFields(sourceData: SourceData | undefined): { text?: string } {
+  if (sourceData?.kind !== 'twitter') return {};
+  const posts = [sourceData, ...(sourceData.threadBefore ?? []), ...(sourceData.threadAfter ?? [])];
+  const text = posts
+    .map((post) => post.text)
+    .filter((part) => part.length > 0)
+    .join('\n\n');
+  return text.length > 0 ? { text } : {};
+}
+
+/**
  * Run the enrichment pipeline for `linkId`: fetch -> extract -> record.
  *
  * If the link no longer exists (deleted between enqueue and processing —
@@ -243,6 +259,7 @@ export async function enrichLink(
       ? extractYouTubeWatch(fetchResult.html, fetchResult.finalUrl)
       : undefined;
   const sourceData = youtube?.sourceData ?? enrichedSource;
+  const postText = twitterTextFields(sourceData);
 
   // A confirmed 404/410 (plan 025 U4): the target genuinely no longer exists,
   // not merely unreachable/blocked/slow — silently trash it and stop. This is
@@ -259,6 +276,7 @@ export async function enrichLink(
   if (!fetchResult.ok) {
     await recordThenMaybeSettle(linkId, {
       status: mapSafeFetchFailureToStatus(fetchResult.reason),
+      ...postText,
       ...(sourceData ? { sourceData } : {}),
     });
     return;
@@ -272,6 +290,7 @@ export async function enrichLink(
     }),
     sourceData,
   );
+  Object.assign(extracted, postText);
 
   if (link.sourceKind === 'youtube') {
     extracted.text = youtube?.text ?? extracted.description ?? '';
