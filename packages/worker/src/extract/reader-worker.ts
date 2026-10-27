@@ -1,7 +1,7 @@
 import { Worker } from 'node:worker_threads';
 import type { PageContent } from './reader-page.js';
 
-type PageRequest = { html: string; url: string; description?: string };
+type PageRequest = { html: string; url: string; description?: string; operation?: 'sanitize' };
 type Reply = { ready?: boolean; result?: PageContent };
 
 /** Rejecting extraction lets the existing pg-boss retry/backoff and DLQ handle failures. */
@@ -19,11 +19,21 @@ export class ReaderPool {
   ) {}
 
   run(html: string, url: string, description?: string): Promise<PageContent> {
+    return this.enqueue({ html, url, ...(description ? { description } : {}) });
+  }
+
+  sanitize(html: string, url: string, signal: AbortSignal): Promise<PageContent> {
+    return this.enqueue({ html, url, operation: 'sanitize' }, signal);
+  }
+
+  private enqueue(request: PageRequest, signal?: AbortSignal): Promise<PageContent> {
     const job = this.tail.then(async () => {
+      signal?.throwIfAborted();
       if (this.closed) throw new ReaderExtractionError('reader-closed');
       const worker = this.worker ?? (await this.start());
+      signal?.throwIfAborted();
       worker.ref();
-      return this.exchange(worker, { html, url, ...(description ? { description } : {}) });
+      return this.exchange(worker, request, signal);
     });
     // One rejected page must not block later queued pages or leave an unhandled rejection.
     this.tail = job.then(
@@ -54,7 +64,11 @@ export class ReaderPool {
     return worker;
   }
 
-  private exchange(worker: Worker, request?: PageRequest): Promise<PageContent> {
+  private exchange(
+    worker: Worker,
+    request?: PageRequest,
+    signal?: AbortSignal,
+  ): Promise<PageContent> {
     return new Promise((resolve, reject) => {
       const phase = request ? 'reader' : 'reader-startup';
       const timeoutMs = request
@@ -68,6 +82,7 @@ export class ReaderPool {
         worker.off('message', onMessage);
         worker.off('error', onError);
         worker.off('exit', onExit);
+        signal?.removeEventListener('abort', onAbort);
         this.cancelActive = undefined;
         if (error) void this.terminate(worker).then(() => reject(error), reject);
         else {
@@ -82,6 +97,7 @@ export class ReaderPool {
       };
       const onError = () => finish(new ReaderExtractionError(`${phase}-failed`));
       const onExit = () => finish(new ReaderExtractionError(`${phase}-exited`));
+      const onAbort = () => finish(new ReaderExtractionError('reader-cancelled'));
       const timer = setTimeout(
         () => finish(new ReaderExtractionError(`${phase}-timeout`)),
         timeoutMs,
@@ -90,7 +106,9 @@ export class ReaderPool {
       worker.once('message', onMessage);
       worker.once('error', onError);
       worker.once('exit', onExit);
-      if (request) worker.postMessage(request);
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
+      else if (request) worker.postMessage(request);
     });
   }
 
@@ -122,4 +140,14 @@ export async function closeReaderPool(): Promise<void> {
   const current = pool;
   pool = undefined;
   await current?.close();
+}
+
+/** Shares the warm CPU thread, including termination on the browser's hard deadline. */
+export function sanitizeRenderedPage(
+  html: string,
+  url: string,
+  signal: AbortSignal,
+): Promise<PageContent> {
+  pool ??= new ReaderPool();
+  return pool.sanitize(html, url, signal);
 }

@@ -35,3 +35,10 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 Silo's binding rule is *any action a user can take, an agent can also take*. These are places that rule is currently broken — a human can do it in the web UI but no MCP tool exposes it. Recorded here (surfaced by the agent-native review, 2026-07-12) to close as a deliberate slice, not built ad-hoc:
 - **`refresh_reader` MCP tool** - expose the stored Reader refresh action already available in the web menu and HTTP API.
 - **Permanent delete over MCP** — `core.hardDelete(id)` (one trashed link) and `core.emptyTrash()` (all trashed links) exist and are exposed over HTTP (`DELETE /api/trash/:id`, `DELETE /api/trash`) and used by the web Trash view, but there is **no MCP tool** for either. So a human can permanently delete via the web, an agent cannot. Closing it means adding `hard_delete_link` and/or `empty_trash` MCP tools. **Design carefully — these are PERMANENT/irreversible**: strong "irreversible, trashed-only" tool descriptions, keep core's trashed-only guard, and consider whether the bulk `empty_trash` should stay human-only while the agent gets only the targeted `hard_delete_link` (a deliberate is-this-safe-for-an-agent decision, not an automatic parity fill).
+
+### Browser process isolation
+
+- Enable Chromium sandbox + Playwright seccomp profile, verified under Docker.
+  The rendered Reader currently runs as `pwuser` with the sandbox disabled.
+  Its dead proxy and internal production network restrict traffic but do not
+  isolate a compromised browser process.

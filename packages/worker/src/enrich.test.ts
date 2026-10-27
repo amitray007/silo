@@ -177,6 +177,48 @@ describeIfPg('enrichLink (integration)', () => {
     });
   });
 
+  it('capture and refresh store the same rendered Reader and search text on the real database', async () => {
+    const browser = await import('./browser/reader.js');
+    const rendered = { contentHtml: '<p>Rendered body</p>', contentImages: [] };
+    const text = 'Rendered article prose. '.repeat(30).trim();
+    vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://browser.invalid/');
+    const render = vi.spyOn(browser, 'renderReader').mockResolvedValue({ reader: rendered, text });
+    const id = await newLink('https://example.org/rendered-parity');
+    const page = {
+      ok: true as const,
+      html: '<main></main>',
+      contentType: 'text/html',
+      finalUrl: 'https://final.example.org/article',
+      status: 200,
+    };
+    const extracted: ExtractResult = {
+      title: 'Script built',
+      status: 'partial',
+      text: 'Thin shell',
+    };
+    try {
+      await enrichMod.enrichLink(id, stubDeps(page, extracted));
+      expect(await core.getStoredReader(id)).toMatchObject(rendered);
+      expect(await core.getById(id)).toMatchObject({ extractedText: text, captureStatus: 'full' });
+      const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+      core.setReaderRefresher(
+        createReaderRefresher(() => {}, {
+          fetch: async () => page,
+          extract: async () => extracted,
+        }),
+      );
+      expect(await core.refreshReader(id)).toMatchObject({ status: 'reader', reader: rendered });
+      expect((await core.getById(id))?.extractedText).toBe(text);
+      expect(render).toHaveBeenCalledTimes(2);
+      expect(render).toHaveBeenNthCalledWith(1, page.finalUrl, expect.any(AbortSignal));
+      expect(render).toHaveBeenNthCalledWith(2, page.finalUrl, expect.any(AbortSignal));
+    } finally {
+      core.setReaderRefresher(undefined);
+      render.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+
   it('fetch ok + extract partial (JS-wall) -> records partial', async () => {
     const id = await newLink('https://example.com/partial');
     await enrichMod.enrichLink(
@@ -736,6 +778,63 @@ describeIfPg('enrichLink (integration)', () => {
       expect(link?.captureStatus).toBe('bare');
       expect(link?.title).toBe('https://example.com/permanently-500s');
     });
+  });
+  it('upgrades partial capture status when rendering supplies full text and passes the render deadline', async () => {
+    const browser = await import('./browser/reader.js');
+    const renderedReader = { contentHtml: '<p>Rendered content</p>', contentImages: [] };
+    const render = vi
+      .spyOn(browser, 'renderReader')
+      .mockResolvedValue({ reader: renderedReader, text: 'useful '.repeat(100) });
+    vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://configured/');
+    try {
+      const id = await newLink('https://example.com/rendered-partial');
+      await enrichMod.enrichLink(
+        id,
+        stubDeps(
+          {
+            ok: true,
+            html: '',
+            contentType: 'text/html',
+            finalUrl: 'https://example.com/final',
+            status: 200,
+          },
+          { status: 'partial', text: 'Static shell' },
+        ),
+      );
+      expect((await core.getById(id))?.captureStatus).toBe('full');
+      expect(await core.getStoredReader(id)).toMatchObject(renderedReader);
+      expect(render).toHaveBeenCalledWith('https://example.com/final', expect.any(AbortSignal));
+      expect(render.mock.calls[0]?.[1]?.aborted).toBe(false);
+    } finally {
+      render.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+  it('capture and refresh do not render explicit non-HTML MIME', async () => {
+    const browser = await import('./browser/reader.js');
+    const render = vi.spyOn(browser, 'renderReader');
+    vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://configured/');
+    try {
+      const id = await newLink('https://example.com/document.pdf');
+      const page = {
+        ok: true as const,
+        html: '%PDF',
+        contentType: 'application/pdf',
+        finalUrl: 'https://example.com/document.pdf',
+        status: 200,
+      };
+      await enrichMod.enrichLink(id, stubDeps(page, { status: 'bare' }));
+      const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+      const refresh = createReaderRefresher(() => {}, {
+        fetch: async () => page,
+        extract: async () => ({ status: 'bare' }),
+      });
+      await refresh({ id, url: page.finalUrl, sourceKind: 'link' }, new AbortController().signal);
+      expect(render).not.toHaveBeenCalled();
+    } finally {
+      render.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
   describe('stored Reader capture and refresh parity', () => {
     const reader = { contentHtml: '<p>Extracted body</p>', contentImages: [] };

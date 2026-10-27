@@ -637,6 +637,9 @@ importers:
       pg-boss:
         specifier: 'catalog:'
         version: 12.34.0
+      playwright-core:
+        specifier: 1.64.1
+        version: 1.64.1
       tsx:
         specifier: 'catalog:'
         version: 4.23.15

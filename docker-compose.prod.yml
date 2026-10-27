@@ -17,6 +17,21 @@
 # if unset) so a misconfigured deploy fails loudly instead of running insecure.
 
 services:
+  browser:
+    # Install the pinned server while building; this container has no egress at runtime.
+    image: silo-browser:1.64.1
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: browser
+    profiles: ['browser']
+    restart: unless-stopped
+    init: true
+    shm_size: 1gb
+    mem_limit: 2g
+    networks:
+      - browser
+
   postgres:
     # pgvector, NOT plain postgres: migration 0000 runs `CREATE EXTENSION vector`
     # (packages/db/drizzle/0000_enable-extensions.sql). Same image CI + local dev
@@ -92,6 +107,7 @@ services:
       SILO_PUBLIC_API_URL: ${SILO_PUBLIC_API_URL:-}
       SILO_TRASH_PURGE_DAYS: ${SILO_TRASH_PURGE_DAYS:-}
       SILO_ENRICHING_STALE_MINUTES: ${SILO_ENRICHING_STALE_MINUTES:-}
+      SILO_BROWSER_WS_ENDPOINT: ${SILO_BROWSER_WS_ENDPOINT:-}
     # Migrate (idempotent) then serve via the @silo/app composition-root
     # entrypoint (web + API + in-process worker — api-main.ts). `sh -c` so both
     # run in one container. Use `pnpm --filter … run start:api` (a package
@@ -111,6 +127,7 @@ services:
       - '${API_PORT:-8787}:8787'
     networks:
       - silo
+      - browser
 
   mcp:
     # The HTTP MCP listener ONLY (packages/app/src/mcp-http-main.ts) — NOT the
@@ -170,3 +187,5 @@ volumes:
 
 networks:
   silo:
+  browser:
+    internal: true

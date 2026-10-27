@@ -348,3 +348,20 @@ function splitEmbedParagraphs(fragment: DocumentFragment): void {
       if (!part.textContent?.trim() && !part.querySelector('img, math, figure, br')) part.remove();
   }
 }
+
+/** Runs in the terminable Reader thread, so untrusted rendered HTML cannot block a deadline. */
+export function sanitizeRenderedContent(
+  html: string,
+  url: string,
+): { reader?: ReaderContent; text?: string } {
+  const dom = new JSDOM('', { url, virtualConsole: new VirtualConsole() });
+  try {
+    const reader = sanitizeReaderContent(html, url, dom);
+    if (!reader) return {};
+    const container = dom.window.document.createElement('div');
+    container.innerHTML = reader.contentHtml;
+    return { reader, text: (container.textContent ?? '').replace(/\s+/g, ' ').trim() };
+  } finally {
+    dom.window.close();
+  }
+}

@@ -220,3 +220,20 @@ it('does not repopulate an invalidated link from an older in-flight read', async
   expect(await reader(link, signal())).toEqual(fresh);
   expect(run).toHaveBeenCalledTimes(2);
 });
+
+it('keeps live Reader static even when stored rendering is configured', async () => {
+  const browser = await import('../browser/reader.js');
+  vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://browser.invalid/');
+  const render = vi.spyOn(browser, 'renderReader').mockResolvedValue({
+    reader: { contentHtml: '<p>Rendered</p>', contentImages: [] },
+    text: 'Rendered',
+  });
+  try {
+    const live = createLiveReader({ fetch: async () => page(), extract: withReader });
+    expect(await live(link, signal())).toEqual(content);
+    expect(render).not.toHaveBeenCalled();
+  } finally {
+    render.mockRestore();
+    vi.unstubAllEnvs();
+  }
+});

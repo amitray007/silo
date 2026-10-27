@@ -27,7 +27,11 @@ export function createReaderRefresher(
       contentType: page.contentType,
     });
     if (signal.aborted) return { status: 'fetch_failed' };
-    const result = selectReader(link.sourceKind, extracted, youtube);
+    const result = await selectReader(link.sourceKind, extracted, youtube, {
+      url: page.finalUrl,
+      contentType: page.contentType,
+      signal,
+    });
     if (result.status !== 'reader') return result;
     const parsed = readerContentSchema.safeParse(result.reader);
     if (!parsed.success) return { status: 'fetch_failed' };

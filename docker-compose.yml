@@ -12,6 +12,23 @@
 #   pnpm db:migrate   # apply migrations
 #   pnpm start        # run the turnkey `silo` process
 services:
+  browser:
+    # Local port publishing needs a normal bridge network. The launcher blocks direct traffic.
+    image: silo-browser:1.64.1
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: browser
+    profiles: ['browser']
+    ports:
+      - '127.0.0.1:3000:3000'
+    restart: unless-stopped
+    init: true
+    shm_size: 1gb
+    mem_limit: 2g
+    networks:
+      - browser
+
   postgres:
     image: pgvector/pgvector:pg18
     container_name: silo-postgres
@@ -31,3 +48,7 @@ services:
 
 volumes:
   silo-pgdata:
+
+networks:
+  browser:
+    driver: bridge

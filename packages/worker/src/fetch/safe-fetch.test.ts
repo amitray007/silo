@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { Resolver } from './safe-fetch.js';
-import { safeFetch } from './safe-fetch.js';
+import { safeFetch, safeFetchBytes } from './safe-fetch.js';
 
 /**
  * Test seams used below — both are narrow, explicit, opt-in, and default
@@ -705,4 +705,111 @@ it('sends the requested page accept header across redirects', async () => {
   });
   expect(result.ok).toBe(true);
   expect(received).toEqual(Array(2).fill('text/html,application/xhtml+xml,*/*;q=0.8'));
+});
+
+describe('safeFetchBytes browser response contract', () => {
+  it('preserves binary response bytes and a terminal 404 without changing page-fetch errors', async () => {
+    handler = (req, res) => {
+      expect(req.method).toBe('GET');
+      expect(req.headers.cookie).toBeUndefined();
+      expect(req.headers.authorization).toBeUndefined();
+      res.writeHead(404, {
+        'content-type': 'application/octet-stream',
+        'set-cookie': 'secret=value',
+      });
+      res.end(Buffer.from([0, 255, 128, 1]));
+    };
+    const url = `http://fixture.test:${port}/binary`;
+    const options = { resolver: loopbackResolver(), allowLoopbackForTests: true };
+    expect(await safeFetchBytes(url, options)).toEqual({
+      ok: true,
+      bytes: new Uint8Array([0, 255, 128, 1]),
+      status: 404,
+      contentType: 'application/octet-stream',
+      finalUrl: url,
+    });
+    expect(await safeFetch(url, options)).toEqual({
+      ok: false,
+      reason: 'not-found',
+      detail: '404',
+    });
+  });
+  it('rechecks a browser resource redirect and blocks a metadata destination', async () => {
+    handler = (_req, res) => {
+      res.writeHead(302, { location: 'http://169.254.169.254/latest/meta-data' });
+      res.end();
+    };
+    const result = await safeFetchBytes(`http://fixture.test:${port}/`, {
+      allowLoopbackForTests: true,
+      resolver: async (host) => [
+        { address: host === 'fixture.test' ? '127.0.0.1' : '169.254.169.254', family: 4 },
+      ],
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'blocked-ip' });
+  });
+});
+
+describe('browser proxy status and profile compatibility', () => {
+  it.each([307, 308])(
+    'follows %s while preserving its controlled profile at every hop',
+    async (status) => {
+      const headers: IncomingMessage['headers'][] = [];
+      handler = (req, res) => {
+        headers.push(req.headers);
+        if (req.url === '/start') res.writeHead(status, { location: '/end' });
+        else res.writeHead(200, { 'content-type': 'text/css' });
+        res.end('body');
+      };
+      const result = await safeFetchBytes(`http://fixture.test:${port}/start`, {
+        resolver: loopbackResolver(),
+        allowLoopbackForTests: true,
+        userAgent: 'controlled-browser',
+        accept: 'text/css,*/*;q=0.1',
+      });
+      expect(result).toMatchObject({
+        ok: true,
+        status: 200,
+        finalUrl: `http://fixture.test:${port}/end`,
+      });
+      expect(headers).toHaveLength(2);
+      for (const header of headers) {
+        expect(header['user-agent']).toBe('controlled-browser');
+        expect(header.accept).toBe('text/css,*/*;q=0.1');
+        expect(header.cookie).toBeUndefined();
+        expect(header.authorization).toBeUndefined();
+      }
+    },
+  );
+  it.each([300, 304, 500])('returns terminal %s to the browser', async (status) => {
+    handler = (_req, res) => {
+      res.writeHead(status, { location: '/never-follow' });
+      res.end('body');
+    };
+    expect(
+      await safeFetchBytes(`http://fixture.test:${port}/`, {
+        resolver: loopbackResolver(),
+        allowLoopbackForTests: true,
+      }),
+    ).toMatchObject({ ok: true, status });
+  });
+  it.each([300, 500])('keeps ordinary safeFetch behavior for %s', async (status) => {
+    let userAgent: string | undefined;
+    handler = (req, res) => {
+      userAgent = req.headers['user-agent'];
+      res.writeHead(status);
+      res.end('body');
+    };
+    expect(
+      await safeFetch(`http://fixture.test:${port}/`, {
+        resolver: loopbackResolver(),
+        allowLoopbackForTests: true,
+        userAgent: 'must-not-change-default',
+      }),
+    ).toMatchObject({
+      ok: false,
+      reason: 'http-error',
+      detail: status === 300 ? 'redirect-without-location:300' : '500',
+    });
+    expect(userAgent).toContain('silo/');
+  });
 });

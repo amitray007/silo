@@ -1,0 +1,1 @@
+ALTER TABLE "links" ADD COLUMN "reader_render_pending" boolean;

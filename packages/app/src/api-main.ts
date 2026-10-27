@@ -1,6 +1,7 @@
 import { serve } from '@hono/node-server';
 import { createApp } from '@silo/api';
 import {
+  closeBrowserReader,
   registerLinkTitles,
   registerLiveReader,
   registerPageViewer,
@@ -143,6 +144,13 @@ async function main(): Promise<void> {
         await worker?.stop();
       } catch (error: unknown) {
         console.error('[silo/app:api] error stopping worker:', error);
+        exitCode = 1;
+      }
+      try {
+        // Refresh can render even if startup degraded before a worker handle existed.
+        await closeBrowserReader();
+      } catch (error: unknown) {
+        console.error('[silo/app:api] error closing browser:', error);
         exitCode = 1;
       }
       process.exit(exitCode);

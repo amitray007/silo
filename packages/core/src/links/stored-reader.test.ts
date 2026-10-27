@@ -176,6 +176,81 @@ describeIfPg('stored Reader (Postgres)', () => {
     expect((await core.getById(link.id))?.extractedText).toBe('New fallback text');
   });
 
+  it('leaves the new render-pending column null on untouched rows', async () => {
+    expect((await raw((await saved('nullable')).id))?.readerRenderPending).toBeNull();
+  });
+  it('stores unavailable static fallback as current and readable, retries after cooldown, then clears pending', async () => {
+    const {
+      core,
+      database: { db, links },
+    } = harness.mod();
+    const link = await saved('pending');
+    await core.recordEnrichment(link.id, { status: 'full' });
+    await core.recordReader(link.id, { status: 'reader', reader, renderPending: true }, new Date());
+    expect(await core.getStoredReader(link.id)).toMatchObject(reader);
+    expect(await raw(link.id)).toMatchObject({
+      readerVersion: core.READER_VERSION,
+      readerRenderPending: true,
+    });
+    const run = vi.fn(async () => ({ status: 'reader' as const, reader }));
+    expect(await core.runReaderBackfill(run)).toEqual({ found: 0, refreshed: 0 });
+    const old = new Date(Date.now() - 6 * 60 * 60 * 1000 - 1000);
+    await db.update(links).set({ readerCapturedAt: old }).where(eq(links.id, link.id));
+    expect(await core.runReaderBackfill(run)).toEqual({ found: 1, refreshed: 1 });
+    expect(run).toHaveBeenCalledOnce();
+    expect((await raw(link.id))?.readerRenderPending).toBe(false);
+  });
+  it('applies the cooldown to fetch failures of current pending rows', async () => {
+    const {
+      core,
+      database: { db, links },
+    } = harness.mod();
+    const link = await saved('pending-fetch-failure');
+    await core.recordEnrichment(link.id, { status: 'full' });
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, renderPending: true },
+      new Date(2020, 0, 1),
+    );
+    const run = vi.fn(async () => ({ status: 'fetch_failed' as const }));
+    expect(await core.runReaderBackfill(run)).toEqual({ found: 1, refreshed: 0 });
+    expect(await raw(link.id)).toMatchObject({
+      readerRenderPending: true,
+      contentHtml: reader.contentHtml,
+    });
+    expect((await raw(link.id))?.readerCapturedAt?.getTime()).toBeGreaterThan(Date.now() - 10_000);
+    expect(await core.runReaderBackfill(run)).toEqual({ found: 0, refreshed: 0 });
+    // An older completion must not clear a newer pending state.
+    const before = await raw(link.id);
+    await core.recordReader(link.id, { status: 'reader', reader }, new Date(2019, 0, 1));
+    expect(await raw(link.id)).toEqual(before);
+    await db.update(links).set({ readerCapturedAt: null }).where(eq(links.id, link.id));
+  });
+  it('clears pending on a deliberate static no-reader choice while preserving a good Reader', async () => {
+    const { core } = harness.mod();
+    const link = await saved('clear-pending');
+    await core.recordReader(link.id, { status: 'reader', reader, renderPending: true }, new Date());
+    await core.recordReader(link.id, { status: 'no_reader' }, new Date());
+    expect(await core.getStoredReader(link.id)).toMatchObject(reader);
+    expect((await raw(link.id))?.readerRenderPending).toBe(false);
+  });
+  it('does not restore pending when an older fallback finishes after a deliberate static choice', async () => {
+    const { core } = harness.mod();
+    const link = await saved('pending-order');
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, renderPending: true },
+      new Date(2020, 0, 1),
+    );
+    await core.recordReader(link.id, { status: 'no_reader' }, new Date(2020, 0, 3));
+    const before = await raw(link.id);
+    await core.recordReader(
+      link.id,
+      { status: 'reader', reader, renderPending: true },
+      new Date(2020, 0, 2),
+    );
+    expect(await raw(link.id)).toEqual(before);
+  });
   it('selects only eligible backfill rows, nulls first then oldest, at most 20', async () => {
     const {
       core,

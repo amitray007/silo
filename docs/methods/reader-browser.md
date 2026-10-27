@@ -38,26 +38,33 @@ enrichLink / refresh / backfill (worker, Node)
 
 ## Browser service
 
-- Image `mcr.microsoft.com/playwright:v1.64.1-noble`, command
-  `npx -y playwright@1.64.1 run-server --port 3000 --host 0.0.0.0`. The
+- Image `mcr.microsoft.com/playwright:v1.64.1-noble`, launcher
+  `node /opt/silo-browser/server.mjs` (the shared `browser/server.mjs`). The
   version must equal the `playwright-core` client version; pin both, and keep
   them equal to the root `playwright` dev dependency.
 - Prod compose: a `browser` service on a new network with `internal: true`,
   joined only by `browser` and `api`. The container has no route to the
-  internet or the LAN. Memory limit 1 GB, `restart: unless-stopped`,
+  internet or the LAN. Provisional memory limit 2 GB, `restart: unless-stopped`,
   `init: true`, `shm_size: 1gb`.
 - Local compose: the same service under a `browser` profile. Without Docker,
-  `pnpm exec playwright run-server --port 3000` works for development.
+  `pnpm --filter @silo/worker exec node src/browser/server.mjs` uses the same
+  hardened launch for development. Local compose uses a normal bridge network
+  for its published loopback port. The fixed WebSocket path is `/silo-browser`.
 - The worker connects with `chromium.connect(SILO_BROWSER_WS_ENDPOINT)`. When
   the variable is unset, everything runs as today. Document the variable in
   `.env.example` and `docs/deploy.md`.
 - Add `playwright-core` (Apache-2.0) to `@silo/worker` dependencies. It is the
   client only; it downloads no browser.
 
+The launcher runs as `pwuser`, with non-proxied WebRTC UDP disabled and a dead
+proxy (`http://127.0.0.1:9`, bypass `<-loopback>`) for traffic outside HTTP routes.
+Chromium sandbox + Playwright seccomp profile remain parked until verified under
+Docker; see `docs/deploy.md` for the residual risk and memory measurement rules.
+
 ## Network: the worker fetches everything
 
-Chromium never makes a network request of its own. A `context.route('**/*')`
-handler in the worker receives each request and:
+The dead proxy blocks requests that escape routing. A `context.route('**/*')`
+handler in the worker receives page HTTP requests and:
 
 - aborts non-http(s) schemes, and resource types `image`, `media`, `font`,
   `websocket`, `eventsource`, `manifest`, `other`;
@@ -98,11 +105,11 @@ network isolation is the backstop; test both (below).
   134px wide); a static fetch never sees that CSS, so the Reader shows the
   full natural size. The slice 1 sanitizer keeps these attributes.
 - Extraction in the page: inject the Defuddle UMD bundle
-  (`defuddle/dist/index.js`, read once at startup) with `addScriptTag`, run
+  (`defuddle/dist/index.js`, read once at startup) with `page.evaluate` (including under meta CSP), run
   `new Defuddle(document, { useAsync: false }).parse()` inside
   `page.evaluate`, and return `{ content, wordCount }` only. Cap the returned
   string at 4 MB before sanitizing.
-- Reconnect if the browser connection drops; after 3 consecutive render
+- Reconnect if the browser connection drops; after 3 consecutive infrastructure
   failures, skip rendering for 5 minutes (circuit breaker) and use the static
   path, logging once.
 
@@ -133,8 +140,8 @@ the same choice. The live path stays static.
 - Unit tests with a fake browser port: routing decisions (scheme, type,
   blocked IP), budget enforcement, choice rules, circuit breaker, static
   fallback when unset.
-- Integration test against a real `playwright run-server` started by the
-  test (skip when Chromium is missing, like the Postgres tests): a local
+- Integration test against a real hardened launcher started by the
+  test (skip when Chromium is missing unless `CI_REQUIRE_BROWSER=1`): a local
   fixture site whose article is built by a script renders through the route
   handler; a fixture that requests `http://127.0.0.1:<port>` and
   `http://169.254.169.254/` gets those requests blocked, asserted on the
@@ -146,3 +153,19 @@ the same choice. The live path stays static.
 - Gate: `pnpm turbo run check-types test` and `pnpm quality`; build the prod
   image and `docker compose -f docker-compose.prod.yml config` to validate
   the compose file.
+
+## Review corrections
+
+- Render only HTML or missing MIME headers. Pass capture/refresh MIME to the selector.
+- For unloaded images, save exact alt states, clear alt, read all boxes, write
+  positive width and height, then restore alt. Keep the loaded-image shrink rule.
+- Start the 800 ms quiet window after DOM readiness. Use a fixed Chrome request
+  profile across redirects; never copy publisher headers.
+- Count only infrastructure errors toward the breaker. After five minutes, admit
+  one trial; its infrastructure failure reopens immediately.
+- Store unavailable static fallback at the current version with nullable
+  `reader_render_pending = true` (migration 0018, no backfill). Retry pending rows
+  after the six-hour cooldown; successful render or deliberate static clears it.
+- Bound queue depth to ten, cancel queued callers immediately, and give capture a
+  60-second queue/render signal. Bound context/browser cleanup and close the
+  browser reader before the extraction pool.

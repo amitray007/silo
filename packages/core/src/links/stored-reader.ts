@@ -5,8 +5,8 @@ import { FIELD_MAX } from './enrichment.js';
 import { whereLive } from './live.js';
 
 export type ReaderExtraction =
-  | { status: 'reader'; reader: ReaderContent; text?: string }
-  | { status: 'no_reader'; text?: string }
+  | { status: 'reader'; reader: ReaderContent; text?: string; renderPending?: boolean }
+  | { status: 'no_reader'; text?: string; renderPending?: boolean }
   | { status: 'fetch_failed' };
 type ReaderLink = { id: string; url: string; sourceKind: string };
 export type ReaderRefresher = (link: ReaderLink, signal: AbortSignal) => Promise<ReaderExtraction>;
@@ -49,29 +49,15 @@ export async function recordReader(
     return null;
   }
   const reader = parsed?.data ?? null;
-  const text = result.text?.trim();
   const [row] = await db
     .update(links)
-    .set({
-      contentHtml: reader?.contentHtml ?? null,
-      contentImages: reader?.contentImages ?? null,
-      readerVersion: READER_VERSION,
-      readerCapturedAt: fetchedAt,
-      ...(text
-        ? { extractedText: text.slice(0, FIELD_MAX.text).replace(/[\uD800-\uDBFF]$/, '') }
-        : {}),
-      // Reader maintenance must not change the link's metadata edit timestamp.
-      updatedAt: sql`${links.updatedAt}`,
-    })
+    .set(readerUpdate(result, reader, fetchedAt))
     .where(
       whereLive(
         and(
           eq(links.id, id),
           ne(links.sourceKind, 'twitter'),
           sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} <= ${fetchedAt})`,
-          reader
-            ? undefined
-            : sql`(${links.readerVersion} is distinct from ${READER_VERSION} or ${links.contentHtml} is null)`,
         ),
       ),
     )
@@ -81,6 +67,37 @@ export async function recordReader(
     contentHtml: row.contentHtml,
     contentImages: row.contentImages ?? [],
     capturedAt: row.readerCapturedAt?.toISOString() ?? null,
+  };
+}
+
+function readerUpdate(
+  result: Exclude<ReaderExtraction, { status: 'fetch_failed' }>,
+  reader: ReaderContent | null,
+  fetchedAt: Date,
+) {
+  const text = result.text?.trim();
+  const keepCurrent = sql`${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null`;
+  return {
+    contentHtml:
+      reader?.contentHtml ?? sql`case when ${keepCurrent} then ${links.contentHtml} else null end`,
+    contentImages:
+      reader?.contentImages ??
+      sql`case when ${keepCurrent} then ${links.contentImages} else null end`,
+    readerVersion: READER_VERSION,
+    readerCapturedAt:
+      reader || result.renderPending
+        ? fetchedAt
+        : sql`case when ${keepCurrent} and ${links.readerRenderPending} is not true then ${links.readerCapturedAt} else ${fetchedAt}::timestamptz end`,
+    readerRenderPending: result.renderPending ?? false,
+    ...(text
+      ? {
+          extractedText: reader
+            ? text.slice(0, FIELD_MAX.text).replace(/[\uD800-\uDBFF]$/, '')
+            : sql`case when ${keepCurrent} then ${links.extractedText} else ${text.slice(0, FIELD_MAX.text).replace(/[\uD800-\uDBFF]$/, '')} end`,
+        }
+      : {}),
+    // Reader maintenance must not change the link's metadata edit timestamp.
+    updatedAt: sql`${links.updatedAt}`,
   };
 }
 
@@ -190,7 +207,11 @@ export async function runReaderBackfill(
     .where(
       whereLive(
         and(
-          or(sql`${links.readerVersion} is null`, ne(links.readerVersion, READER_VERSION)),
+          or(
+            sql`${links.readerVersion} is null`,
+            ne(links.readerVersion, READER_VERSION),
+            eq(links.readerRenderPending, true),
+          ),
           sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} < now() - interval '6 hours')`,
           ne(links.captureStatus, 'enriching'),
           ne(links.sourceKind, 'twitter'),
@@ -214,7 +235,10 @@ export async function runReaderBackfill(
             whereLive(
               and(
                 eq(links.id, link.id),
-                sql`${links.readerVersion} is distinct from ${READER_VERSION}`,
+                or(
+                  sql`${links.readerVersion} is distinct from ${READER_VERSION}`,
+                  eq(links.readerRenderPending, true),
+                ),
                 sql`(${links.readerCapturedAt} is null or ${links.readerCapturedAt} <= ${fetchedAt})`,
               ),
             ),

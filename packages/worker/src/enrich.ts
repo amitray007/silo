@@ -13,7 +13,7 @@
  * job (see `worker.ts`).
  */
 
-import type { SettingsMap, SourceData } from '@silo/core';
+import type { ReaderExtraction, SettingsMap, SourceData } from '@silo/core';
 import {
   ENRICH_ATTEMPT_CAP,
   getById,
@@ -27,6 +27,7 @@ import {
 import { enrichSource } from './enrich-source/index.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
+import { FULL_TEXT_THRESHOLD } from './extract/extract-constants.js';
 import { extractYouTubeWatch } from './extract/youtube-watch.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 import { HTML_ACCEPT, safeFetch } from './fetch/safe-fetch.js';
@@ -296,7 +297,12 @@ export async function enrichLink(
   );
   Object.assign(extracted, postText);
 
-  const selected = selectReader(link.sourceKind, extracted, youtube);
+  const selected = await selectReader(link.sourceKind, extracted, youtube, {
+    url: fetchResult.finalUrl,
+    contentType: fetchResult.contentType,
+    signal: AbortSignal.timeout(60_000),
+  });
+  updateRenderedStatus(extracted, selected);
   if (link.sourceKind === 'youtube') extracted.status = 'partial';
   if (link.sourceKind !== 'twitter') await recordReader(linkId, selected, fetchedAt);
   const { reader: _reader, readerFailed: _readerFailed, text, ...stored } = extracted;
@@ -306,4 +312,9 @@ export async function enrichLink(
     ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
     ...(sourceData ? { sourceData } : {}),
   });
+}
+
+function updateRenderedStatus(extracted: ExtractResult, selected: ReaderExtraction): void {
+  if (selected.status === 'reader' && selected.reader !== extracted.reader)
+    extracted.status = (selected.text?.length ?? 0) >= FULL_TEXT_THRESHOLD ? 'full' : 'partial';
 }

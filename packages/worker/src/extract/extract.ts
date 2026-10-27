@@ -74,7 +74,7 @@ export interface ExtractInput {
 }
 
 /** `text/html; charset=utf-8` -> `text/html`. Compares case-insensitively. */
-function isHtmlContentType(contentType: string | undefined): boolean {
+export function isHtmlContentType(contentType: string | undefined): boolean {
   if (!contentType) {
     // No Content-Type header at all — proceed and let extraction try; a
     // missing header is common enough (some servers omit it) that treating

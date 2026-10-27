@@ -3,7 +3,7 @@ import { z } from 'zod';
 
 export { detectSource } from './links/detect-source.js';
 
-export const READER_VERSION = 1;
+export const READER_VERSION = 2;
 
 export const READER_HTML_MAX_BYTES = 1024 * 1024;
 
