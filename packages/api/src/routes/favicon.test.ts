@@ -1,3 +1,4 @@
+import { setSiteIconFinder } from '@silo/core';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 /**
@@ -16,6 +17,10 @@ beforeAll(() => {
   process.env.DATABASE_URL ??= 'postgres://localhost:5432/silo_placeholder';
 });
 
+// The site-icon fallback fetches through the SSRF-safe image fetcher, which has its
+// own dedicated tests; here it is mocked at the module boundary.
+vi.mock('../ssrf-safe-image-fetch.js', () => ({ fetchImageSafely: vi.fn() }));
+
 describe('GET /api/favicon (unit)', () => {
   let app: Awaited<ReturnType<typeof import('../app.js').createApp>>;
   let resetFaviconCache: () => void;
@@ -33,6 +38,7 @@ describe('GET /api/favicon (unit)', () => {
   });
 
   afterEach(() => {
+    setSiteIconFinder(undefined);
     global.fetch = originalFetch;
     vi.restoreAllMocks();
   });
@@ -150,5 +156,126 @@ describe('GET /api/favicon (unit)', () => {
     await app.request('/api/favicon?domain=domain-one.example');
     await app.request('/api/favicon?domain=domain-two.example');
     expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  describe('site icon fallback', () => {
+    const googleMiss = () =>
+      vi.fn().mockResolvedValue(new Response(null, { status: 404 })) as unknown as typeof fetch;
+
+    async function mockedImageFetch() {
+      const { fetchImageSafely } = await import('../ssrf-safe-image-fetch.js');
+      const mock = vi.mocked(fetchImageSafely);
+      mock.mockReset();
+      return mock;
+    }
+
+    it('Google 404 then a site icon -> serves the site icon with nosniff', async () => {
+      global.fetch = googleMiss();
+      const finder = vi.fn(async () => 'https://site.example/fav.png');
+      setSiteIconFinder(finder);
+      const imageFetch = await mockedImageFetch();
+      const bytes = new Uint8Array([7, 7, 7]);
+      imageFetch.mockResolvedValue({ ok: true, bytes, contentType: 'image/png; charset=binary' });
+
+      const res = await app.request('/api/favicon?domain=site.example');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/png');
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff');
+      expect(res.headers.get('cache-control')).toContain('max-age=86400');
+      expect(Array.from(new Uint8Array(await res.arrayBuffer()))).toEqual([7, 7, 7]);
+      expect(finder).toHaveBeenCalledWith('site.example', expect.any(AbortSignal));
+      expect(imageFetch).toHaveBeenCalledWith('https://site.example/fav.png');
+
+      // The found icon is cached: no further Google, finder or image fetch.
+      const again = await app.request('/api/favicon?domain=site.example');
+      expect(again.status).toBe(200);
+      expect(finder).toHaveBeenCalledTimes(1);
+      expect(imageFetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+    });
+
+    it('Google network error also falls back to the site icon', async () => {
+      global.fetch = vi.fn().mockRejectedValue(new Error('down')) as unknown as typeof fetch;
+      setSiteIconFinder(async () => 'https://site.example/fav.ico');
+      const imageFetch = await mockedImageFetch();
+      imageFetch.mockResolvedValue({
+        ok: true,
+        bytes: new Uint8Array([1]),
+        contentType: 'image/x-icon',
+      });
+
+      const res = await app.request('/api/favicon?domain=site.example');
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toBe('image/x-icon');
+    });
+
+    it('Google 404 and no site icon -> 404, and the miss is cached', async () => {
+      global.fetch = googleMiss();
+      const finder = vi.fn(async () => undefined);
+      setSiteIconFinder(finder);
+      const imageFetch = await mockedImageFetch();
+
+      const first = await app.request('/api/favicon?domain=none.example');
+      expect(first.status).toBe(404);
+      expect(((await first.json()) as { error: string }).error).toBe('not_found');
+      const second = await app.request('/api/favicon?domain=none.example');
+      expect(second.status).toBe(404);
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(finder).toHaveBeenCalledTimes(1);
+      expect(imageFetch).not.toHaveBeenCalled();
+    });
+
+    it('a cached miss expires after an hour', async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        global.fetch = googleMiss();
+        const finder = vi.fn(async () => undefined);
+        setSiteIconFinder(finder);
+        await app.request('/api/favicon?domain=retry.example');
+        vi.setSystemTime(Date.now() + 61 * 60 * 1000);
+        await app.request('/api/favicon?domain=retry.example');
+        expect(finder).toHaveBeenCalledTimes(2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('refuses a site icon whose content type is not an allowed image', async () => {
+      global.fetch = googleMiss();
+      setSiteIconFinder(async () => 'https://site.example/evil');
+      const imageFetch = await mockedImageFetch();
+      for (const contentType of ['text/html', 'image/svg+xml']) {
+        resetFaviconCache();
+        imageFetch.mockResolvedValue({ ok: true, bytes: new Uint8Array([1]), contentType });
+        const res = await app.request('/api/favicon?domain=site.example');
+        expect(res.status).toBe(404);
+      }
+    });
+
+    it('a failed site image fetch -> 404', async () => {
+      global.fetch = googleMiss();
+      setSiteIconFinder(async () => 'https://site.example/fav.png');
+      const imageFetch = await mockedImageFetch();
+      imageFetch.mockResolvedValue({ ok: false });
+
+      const res = await app.request('/api/favicon?domain=site.example');
+      expect(res.status).toBe(404);
+    });
+
+    it('does not call the site fallback when Google has the icon', async () => {
+      global.fetch = vi.fn().mockResolvedValue(
+        new Response(new Uint8Array([5]), {
+          status: 200,
+          headers: { 'content-type': 'image/png' },
+        }),
+      ) as unknown as typeof fetch;
+      const finder = vi.fn(async () => 'https://site.example/fav.png');
+      setSiteIconFinder(finder);
+
+      const res = await app.request('/api/favicon?domain=google-knows.example');
+      expect(res.status).toBe(200);
+      expect(finder).not.toHaveBeenCalled();
+    });
   });
 });

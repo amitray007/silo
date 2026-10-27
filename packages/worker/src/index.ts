@@ -44,6 +44,7 @@ export {
 } from './fetch/safe-fetch.js';
 export { runReaderUpgrade } from './reader-upgrade.js';
 export { createLinkTitleFetcher, registerLinkTitles } from './titles/link-titles.js';
+export { createSiteIconFinder, registerSiteIcons } from './titles/site-icon.js';
 export { registerPageViewer } from './view/viewer.js';
 // pg-boss queue (U5; moved to @silo/queue in plan 013): queue name/options,
 // the boss connection factory, and queue-setup helper now live in
