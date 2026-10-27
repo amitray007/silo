@@ -1,9 +1,10 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { deriveTitleFromUrl } from '../../lib/url';
 import { useHideOnScroll } from '../../lib/useHideOnScroll';
+import { useHideWhileReading } from '../../lib/useHideWhileReading';
 import { useReaderWidth } from '../../lib/useReaderWidth';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
@@ -264,6 +265,30 @@ function ReaderArticle({
   );
 }
 
+/** Reader hides the header on scroll; Live iframes hide their scroll, so Live uses the pointer. */
+function useHeadHidden({
+  panelRef,
+  scrollRef,
+  tab,
+  free,
+  framed,
+  resetKey,
+}: {
+  panelRef: RefObject<HTMLElement | null>;
+  scrollRef: RefObject<HTMLElement | null>;
+  tab: Tab;
+  free: boolean;
+  framed: boolean;
+  resetKey: string;
+}) {
+  const scrolledAway = useHideOnScroll(scrollRef, tab === 'reader' && free, resetKey);
+  const live = useHideWhileReading(panelRef, tab === 'original' && free && framed, resetKey);
+  return {
+    hidden: scrolledAway || live === 'hidden',
+    liveHead: tab === 'original' && live !== 'idle' ? live : undefined,
+  };
+}
+
 export function ReaderPane({
   link,
   selectedId,
@@ -320,12 +345,14 @@ export function ReaderPane({
       ),
     );
   }, [selectedId, tab]);
-  // Cross-origin Live iframes do not expose scroll, so their bar stays visible.
-  const hidden = useHideOnScroll(
+  const { hidden, liveHead } = useHeadHidden({
+    panelRef,
     scrollRef,
-    tab === 'reader' && Boolean(link) && !openMenu && !headerFocused && !headerHovered,
-    `${selectedId}-${tab}`,
-  );
+    tab,
+    free: Boolean(link) && !openMenu && !headerFocused && !headerHovered,
+    framed: shownOriginal?.mode === 'direct' || shownOriginal?.mode === 'view',
+    resetKey: `${selectedId}-${tab}`,
+  });
 
   let content: ReactNode = (
     <div className="silo-empty-reader">
@@ -371,7 +398,12 @@ export function ReaderPane({
         );
       }}
       onPointerLeave={() => setHeaderHovered(false)}
+      onPointerOver={(event) => {
+        // Moves inside the iframe never reach this document, so entering it ends header hover.
+        if (event.target instanceof HTMLIFrameElement) setHeaderHovered(false);
+      }}
     >
+      {liveHead === 'hidden' && <div className="silo-reader-reveal" aria-hidden="true" />}
       <div
         className="silo-reader-head"
         data-hidden={hidden}
@@ -429,6 +461,7 @@ export function ReaderPane({
       <div
         className="silo-reader-scroll"
         data-original={tab === 'original'}
+        data-head={liveHead}
         ref={scrollRef}
         role="tabpanel"
         id={`${id}-panel`}

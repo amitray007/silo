@@ -992,6 +992,34 @@ div.silo-reader-notecard {
   display: flex;
   flex-direction: column;
 }
+/* Live gives the page the header's room while it is hidden. The page jumps once
+   and the animation slides it from its old spot, so the iframe resizes one time. */
+.silo-reader-scroll[data-head="hidden"] {
+  padding-top: 0;
+}
+.silo-reader-scroll[data-head="hidden"] > * {
+  animation: siloLiveUp 200ms var(--ease-out);
+}
+.silo-reader-scroll[data-head="shown"] > * {
+  animation: siloLiveDown 200ms var(--ease-out);
+}
+@keyframes siloLiveUp {
+  from {
+    transform: translateY(44px);
+  }
+}
+@keyframes siloLiveDown {
+  from {
+    transform: translateY(-44px);
+  }
+}
+/* A thin strip over the page top brings the hidden Live header back. */
+.silo-reader-reveal {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 10px;
+  z-index: 22;
+}
 .silo-reader-viewtools {
   display: flex;
   align-items: center;
