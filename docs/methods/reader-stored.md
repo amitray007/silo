@@ -70,8 +70,9 @@ watch-page Reader the capture path already builds.
 
 ## Read path (performance)
 
-- `GET /api/links/:id/reader` first runs one query that selects only
-  `content_html`, `content_images` and `reader_version` for a live link. A
+- `GET /api/links/:id/reader` first runs one primary-key query that selects
+  only `content_html`, `content_images`, `reader_version` and
+  `reader_captured_at` for a live link. A
   current stored Reader returns at once. Otherwise it calls the unchanged
   `readLive`.
 - `GET /api/links/:id/content-image/:index` reads the image list the same way
