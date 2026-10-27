@@ -1,6 +1,7 @@
 import DOMPurify from 'dompurify';
 import { useEffect, useMemo, useRef } from 'react';
 import type { LinkDetailJson } from '../../api/types';
+import { shapeProse } from './proseShape';
 
 function readerHtml(link: LinkDetailJson): string {
   // Parse inertly before sanitizing: the API numbers every stored img, including duplicates.
@@ -89,6 +90,7 @@ function readerHtml(link: LinkDetailJson): string {
     ALLOW_ARIA_ATTR: false,
     RETURN_DOM_FRAGMENT: true,
   });
+  shapeProse(fragment);
   for (const node of fragment.querySelectorAll('[id]')) {
     if (!/^silo-fn-[1-9]\d*$/.test(node.id)) node.removeAttribute('id');
   }

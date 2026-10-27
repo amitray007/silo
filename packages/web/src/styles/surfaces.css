@@ -702,7 +702,7 @@
   font-size: 14px;
   letter-spacing: 0.02em;
 }
-.silo-reader-prose :is(p, ul, ol, dl, pre, figure, blockquote, .silo-reader-table) {
+.silo-reader-prose :is(p, ul, ol, dl, pre, figure, .silo-reader-table) {
   margin: 0 0 16px;
 }
 .silo-reader-prose :is(ul, ol) {
@@ -714,10 +714,23 @@
 .silo-reader-prose li > :is(ul, ol) {
   margin-bottom: 0;
 }
+/* After Tailwind Typography, which shiori.sh's reader uses: italic, inset, curly quotes. */
 .silo-reader-prose blockquote {
-  border-left: 3px solid var(--line-2);
-  padding-left: 18px;
+  margin: 1.6em 0;
+  border-left: 0.25em solid var(--line-2);
+  padding-left: 1em;
   color: var(--mut);
+  font-style: italic;
+  quotes: "“" "”" "‘" "’";
+}
+.silo-reader-prose blockquote > :first-child {
+  margin-top: 0;
+}
+.silo-reader-prose blockquote:not([data-quoted]) > p:first-of-type::before {
+  content: open-quote;
+}
+.silo-reader-prose blockquote:not([data-quoted]) > p:last-of-type::after {
+  content: close-quote;
 }
 .silo-reader-prose a {
   text-underline-offset: 2px;
