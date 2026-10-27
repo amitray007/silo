@@ -12,7 +12,6 @@ import {
   encodeListCursor,
   hydrateTags,
   type LinkSummaryWithTags,
-  type LinkWithTags,
   listColumns,
   type PageParams,
 } from './pagination.js';
@@ -518,7 +517,7 @@ export type GetByIdOptions = {
  * (an agent) can tell there's more text beyond the window it received and
  * decide whether to request a later offset.
  */
-export type LinkWithTextWindow = LinkWithTags & { extractedTextLength: number };
+export type LinkWithTextWindow = LinkSummaryWithTags & { extractedTextLength: number };
 
 /**
  * Character-slice `text` to `[offset, offset + limit)`. An out-of-range
@@ -539,9 +538,9 @@ function sliceTextWindow(text: string, window: TextWindowOptions): string {
 /**
  * Fetch a single live link by id, or `null` if it doesn't exist or is
  * trashed. `opts.textWindow` (agent-navigation slice U2) is ADDITIVE and
- * OPT-IN: omitted, this is byte-for-byte the prior behavior (full
- * `extractedText`, no `extractedTextLength` field) — every existing caller
- * is unaffected. When given, `extractedText` is replaced by the requested
+ * OPT-IN: omitted, this returns full `extractedText` without an
+ * `extractedTextLength` field. Reader payload columns are always omitted.
+ * When given, `extractedText` is replaced by the requested
  * character slice and `extractedTextLength` reports the full text's length
  * so the caller knows how much more there is.
  */
@@ -549,12 +548,19 @@ export async function getById(
   id: string,
   opts: GetByIdOptions & { textWindow: TextWindowOptions },
 ): Promise<LinkWithTextWindow | null>;
-export async function getById(id: string, opts?: GetByIdOptions): Promise<LinkWithTags | null>;
 export async function getById(
   id: string,
   opts?: GetByIdOptions,
-): Promise<LinkWithTags | LinkWithTextWindow | null> {
-  const row = await getRawById(id);
+): Promise<LinkSummaryWithTags | null>;
+export async function getById(
+  id: string,
+  opts?: GetByIdOptions,
+): Promise<LinkSummaryWithTags | LinkWithTextWindow | null> {
+  const [row] = await db
+    .select(listColumns)
+    .from(links)
+    .where(whereLive(eq(links.id, id)))
+    .limit(1);
   if (!row) return null;
   const [hydrated] = await hydrateTags(db, [row]);
   if (!hydrated) return null;

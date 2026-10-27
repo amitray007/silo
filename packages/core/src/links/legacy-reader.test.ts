@@ -10,7 +10,7 @@ describeIfPg('Legacy Reader columns (Postgres)', () => {
     database: await import('@silo/db'),
   }));
 
-  it('enrichment never writes Reader HTML', async () => {
+  it('metadata enrichment does not write Reader HTML', async () => {
     const { core } = harness.mod();
     const created = await core.createLink({ url: 'https://example.org/new', sourceKind: 'link' });
     const updated = await core.recordEnrichment(created.id, { status: 'full', text: 'Body' });
@@ -34,7 +34,7 @@ describeIfPg('Legacy Reader columns (Postgres)', () => {
     const found = (await core.search('heavy')).results[0];
     const trashed = (await core.listTrash()).links[0];
     const trashFound = (await core.searchTrash('gone')).results[0];
-    for (const row of [listed, found, trashed, trashFound]) {
+    for (const row of [listed, found, trashed, trashFound, await core.getById(live.id)]) {
       expect(row).toBeDefined();
       expect(row).not.toHaveProperty('contentHtml');
       expect(row).not.toHaveProperty('contentImages');

@@ -151,6 +151,20 @@ export function useLiveReader(linkId: string, enabled: boolean) {
   });
 }
 
+/** Manual Reader refresh updates the open Reader without polling. */
+export function useRefreshReader(linkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<LiveReaderJson>(`/api/links/${encodeURIComponent(linkId)}/reader/refresh`, {}),
+    onSuccess: async (reader) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.liveReader(linkId) });
+      queryClient.setQueryData(queryKeys.liveReader(linkId), reader);
+      queryClient.invalidateQueries({ queryKey: queryKeys.link(linkId) });
+    },
+  });
+}
+
 /** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
   return useQuery({

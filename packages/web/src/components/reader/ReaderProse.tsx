@@ -88,7 +88,11 @@ function validMathAttribute(node: Element, name: string, value: string): boolean
   return MATH_ATTRS.includes(name);
 }
 
-function readerHtml(linkId: string, reader: LiveReaderJson, topPlayerSrc?: string): string {
+function readerHtml(
+  linkId: string,
+  reader: Pick<LiveReaderJson, 'contentHtml' | 'contentImages'>,
+  topPlayerSrc?: string,
+): string {
   // Parse inertly before sanitizing: the API numbers every img, including duplicates.
   // Rewriting first keeps a removed image from shifting subsequent proxy indices.
   const template = document.createElement('template');
@@ -293,7 +297,7 @@ export function ReaderProse({
   topPlayerSrc,
 }: {
   linkId: string;
-  reader: LiveReaderJson;
+  reader: Pick<LiveReaderJson, 'contentHtml' | 'contentImages'>;
   topPlayerSrc?: string | undefined;
 }) {
   const html = useMemo(

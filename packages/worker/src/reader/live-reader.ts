@@ -1,8 +1,9 @@
-import { type LiveReader, type ReaderContent, setLiveReader } from '@silo/core';
+import { type LiveReader, type ReaderContent, setLiveReader, setReaderRefresher } from '@silo/core';
 import { readerContentSchema } from '@silo/core/capture';
 import { type ExtractInput, type ExtractResult, extract } from '../extract/extract.js';
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
 import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
+import { createReaderRefresher } from './refresh-reader.js';
 
 const HIT_TTL_MS = 10 * 60 * 1000;
 const MISS_TTL_MS = 2 * 60 * 1000;
@@ -44,7 +45,7 @@ async function buildReader(
  */
 export function createLiveReader(
   options: { fetch?: Fetch; extract?: Extract; now?: () => number } = {},
-): LiveReader & { clear: () => void } {
+): LiveReader & { clear: (id?: string) => void } {
   const fetch = options.fetch ?? ((url) => safeFetch(url, { accept: HTML_ACCEPT }));
   const run = options.extract ?? extract;
   const now = options.now ?? Date.now;
@@ -65,10 +66,12 @@ export function createLiveReader(
     const work = buildReader(link, fetch, run)
       .catch(() => undefined)
       .then((content) => {
-        remember(link.id, link.url, content);
+        if (pending.get(link.id) === work) remember(link.id, link.url, content);
         return content;
       })
-      .finally(() => pending.delete(link.id));
+      .finally(() => {
+        if (pending.get(link.id) === work) pending.delete(link.id);
+      });
     pending.set(link.id, work);
     return work;
   };
@@ -84,16 +87,35 @@ export function createLiveReader(
         .finally(() => signal.removeEventListener('abort', stop));
     });
   };
-  return Object.assign(read, { clear: () => cache.clear() });
+  return Object.assign(read, {
+    clear: (id?: string) => {
+      if (id === undefined) {
+        cache.clear();
+        pending.clear();
+      } else {
+        cache.delete(id);
+        pending.delete(id);
+      }
+    },
+  });
+}
+
+let registeredReader: ReturnType<typeof createLiveReader> | undefined;
+export function invalidateLiveReader(id: string): void {
+  registeredReader?.clear(id);
 }
 
 /** Registration must run in the HTTP process, beside the page viewer. */
 export function registerLiveReader(): { close: () => void } {
   const reader = createLiveReader();
+  registeredReader = reader;
   setLiveReader(reader);
+  setReaderRefresher(createReaderRefresher((id) => reader.clear(id)));
   return {
     close: () => {
+      registeredReader = undefined;
       setLiveReader(undefined);
+      setReaderRefresher(undefined);
       reader.clear();
     },
   };

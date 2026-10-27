@@ -38,6 +38,26 @@ function moveMenuFocus(event: React.KeyboardEvent<HTMLElement>) {
   rows[index]?.focus({ preventScroll: true });
 }
 
+function refreshShortcut(event: React.KeyboardEvent<HTMLElement>): void {
+  if (
+    event.key.toLowerCase() !== 'r' ||
+    event.metaKey ||
+    event.ctrlKey ||
+    event.altKey ||
+    event.shiftKey
+  )
+    return;
+  if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement)
+    return;
+  const refresh = event.currentTarget.querySelector<HTMLButtonElement>(
+    'button[data-shortcut="r"]:not(:disabled)',
+  );
+  if (!refresh) return;
+  event.preventDefault();
+  event.stopPropagation();
+  refresh.click();
+}
+
 export function MenuSurface({
   children,
   className = '',
@@ -120,6 +140,7 @@ export function MenuSurface({
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
       onKeyDown={(event) => {
+        refreshShortcut(event);
         moveMenuFocus(event);
         if (event.key === 'Escape') {
           event.preventDefault();
@@ -214,6 +235,7 @@ export function MenuAction({
       className={className}
       onClick={onClick}
       disabled={disabled}
+      data-shortcut={shortcut}
       title={title}
       aria-current={pressed ? 'true' : undefined}
     >

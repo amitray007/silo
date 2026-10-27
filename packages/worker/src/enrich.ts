@@ -19,6 +19,7 @@ import {
   getById,
   getSetting,
   recordEnrichment,
+  recordReader,
   SETTINGS_DEFAULTS,
   settleGiveUp,
   softDelete,
@@ -29,6 +30,7 @@ import { extract } from './extract/extract.js';
 import { extractYouTubeWatch } from './extract/youtube-watch.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 import { HTML_ACCEPT, safeFetch } from './fetch/safe-fetch.js';
+import { selectReader } from './reader/select-reader.js';
 
 /** Injectable seams for testing — default to the real implementations. */
 export interface EnrichLinkDeps {
@@ -231,6 +233,7 @@ function twitterTextFields(sourceData: SourceData | undefined): { text?: string 
  * to the default, so the only failure this guards against is the read
  * itself throwing (e.g. the database being briefly unreachable).
  */
+
 export async function enrichLink(
   linkId: string,
   deps: EnrichLinkDeps = defaultDeps,
@@ -242,6 +245,7 @@ export async function enrichLink(
 
   const enabledPlugins = await deps.getPluginsSetting().catch(() => SETTINGS_DEFAULTS.plugins);
 
+  const fetchedAt = new Date();
   const [fetchResult, enrichedSource] = await Promise.all([
     deps.safeFetch(link.url),
     // Defense in depth (reliability review): `enrichSource` is already
@@ -292,13 +296,14 @@ export async function enrichLink(
   );
   Object.assign(extracted, postText);
 
-  if (link.sourceKind === 'youtube') {
-    extracted.text = youtube?.text ?? extracted.description ?? '';
-    extracted.status = 'partial';
-  }
-
-  // The formatted Reader HTML is built live when a link opens. Capture keeps only
-  // metadata and the extracted text, which search and MCP read.
-  const { reader: _reader, ...stored } = extracted;
-  await recordThenMaybeSettle(linkId, { ...stored, ...(sourceData ? { sourceData } : {}) });
+  const selected = selectReader(link.sourceKind, extracted, youtube);
+  if (link.sourceKind === 'youtube') extracted.status = 'partial';
+  if (link.sourceKind !== 'twitter') await recordReader(linkId, selected, fetchedAt);
+  const { reader: _reader, readerFailed: _readerFailed, text, ...stored } = extracted;
+  // Reader writes own search text, including empty results and rejected older captures.
+  await recordThenMaybeSettle(linkId, {
+    ...stored,
+    ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
+    ...(sourceData ? { sourceData } : {}),
+  });
 }

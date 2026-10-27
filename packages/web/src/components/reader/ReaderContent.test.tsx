@@ -128,6 +128,17 @@ describe('Live Reader', () => {
     },
   );
 
+  it('shows Saved with the existing relative time helper only for stored Reader', async () => {
+    const capturedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
+    const view = show(() => json({ ...reader, capturedAt }));
+    const saved = await screen.findByText('Saved 2h ago');
+    expect(saved.getAttribute('dateTime')).toBe(capturedAt);
+    view.unmount();
+    show(() => json({ ...reader, capturedAt: null }));
+    await screen.findByText('Live body');
+    expect(screen.queryByText(/Saved /)).toBeNull();
+  });
+
   it('shows the skeleton while loading, then the live prose with proxied images', async () => {
     const { container, fetchMock } = show(() => json(reader));
     expect(screen.getByRole('status', { name: 'Loading article' })).toBeDefined();

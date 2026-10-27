@@ -5,6 +5,7 @@ import { JSDOM } from 'jsdom';
 import { describe, expect, it, vi } from 'vitest';
 import { extract } from './extract.js';
 import { buildExtractVirtualConsole } from './reader-page.js';
+import * as readerWorker from './reader-worker.js';
 
 const FIXTURES_DIR = join(dirname(fileURLToPath(import.meta.url)), '__fixtures__');
 
@@ -460,6 +461,7 @@ describe('challenge screens', () => {
     });
     expect(result.text).toBeUndefined();
     expect(result.reader).toBeUndefined();
+    expect(result.readerFailed).toBe(true);
     expect(result.title).toBeDefined();
   });
 
@@ -499,4 +501,22 @@ it('lets a metadata-free challenge verdict win over SPA shell markers', async ()
   expect(result).toMatchObject({ status: 'bare' });
   expect(result.text).toBeUndefined();
   expect(result.reader).toBeUndefined();
+});
+
+it('flags a reader-thread failure while keeping page metadata', async () => {
+  const run = vi.spyOn(readerWorker, 'extractPage').mockRejectedValue(new Error('reader-timeout'));
+  const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const result = await extract({
+      url: URL_UNDER_TEST,
+      html: '<title>Saved metadata</title>',
+      contentType: 'text/html',
+    });
+    expect(result).toMatchObject({ title: 'Saved metadata', readerFailed: true });
+    expect(result.reader).toBeUndefined();
+    expect(result.text).toBeUndefined();
+  } finally {
+    run.mockRestore();
+    log.mockRestore();
+  }
 });

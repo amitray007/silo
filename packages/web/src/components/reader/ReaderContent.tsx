@@ -1,6 +1,7 @@
 import { useLiveReader, useRetryCapture } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
+import { relativeTimeFromNow } from '../../lib/relativeTime';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
@@ -76,6 +77,15 @@ function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => v
         </a>
       </div>
     </section>
+  );
+}
+
+function SavedReader({ capturedAt }: { capturedAt: string | null | undefined }) {
+  if (!capturedAt) return null;
+  return (
+    <footer className="silo-reader-saved">
+      <time dateTime={capturedAt}>Saved {relativeTimeFromNow(capturedAt)}</time>
+    </footer>
   );
 }
 
@@ -166,6 +176,7 @@ export function ReaderContent({
         !link.description?.trim() && (
           <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
         )}
+      <SavedReader capturedAt={prose?.capturedAt} />
       <RelatedLinks link={link} html={prose?.contentHtml} trashed={trashed} />
     </>
   );

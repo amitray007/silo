@@ -26,7 +26,7 @@ Migration `0017` adds two nullable columns to `links`:
 
 - `reader_version integer`: the pipeline version that produced the stored
   Reader state.
-- `reader_captured_at timestamptz`: when that state was written.
+- `reader_captured_at timestamptz`: when the page used for the stored state was fetched.
 
 `READER_VERSION` (a constant in `@silo/core/capture`, starting at `1`) names
 the current pipeline. Bump it when extraction or sanitizing changes in a way
@@ -47,11 +47,11 @@ assertion that list, search, trash and export never return the columns stays.
 
 ## Write rules (data quality)
 
-One core function, `recordReader(linkId, result)`, owns every Reader write,
+One core function, `recordReader(linkId, result, fetchedAt)`, owns every Reader write,
 through `whereLive` so a trashed link is never written:
 
 1. Extraction produced a Reader: write `content_html`, `content_images`,
-   `reader_version = READER_VERSION`, `reader_captured_at = now()`.
+   `reader_version = READER_VERSION`, `reader_captured_at = fetchedAt`.
 2. The fetch succeeded but extraction found no Reader: if the row already has
    a current-version Reader, keep it (a transient bad page must not wipe a good
    Reader). Otherwise write nulls with the current version and time, so the
@@ -64,6 +64,10 @@ already computes; no second fetch or parse. Refresh and backfill also update
 `extracted_text` when the new text is non-empty, so search and MCP match the
 Reader the user sees. They never touch title, description, image, site name or
 tags: a refresh must not overwrite the user's edits.
+
+All Reader and search-text updates use one atomic predicate: the existing
+`reader_captured_at` must be null or no later than the fetch-start time.
+A rejected older refresh returns the newer stored Reader that won.
 
 Twitter links are skipped everywhere (no Reader, as today). YouTube stores the
 watch-page Reader the capture path already builds.
@@ -92,7 +96,8 @@ watch-page Reader the capture path already builds.
 - Responses: `200` with the new Reader JSON; `422 { error: 'no_reader' }` when
   the page has no Reader (rule 2 applied); `502 { error: 'fetch_failed' }` when
   the fetch failed (nothing written). A trashed or missing link is `404`.
-  Twitter is `422`.
+  Twitter is `422`. Without a registered worker refresher, return
+  `503 { error: 'refresh_unavailable' }`.
 - The live cache entry for that link is cleared on success so the two paths
   never disagree.
 - Concurrent refreshes of one link share one run (coalesce by link id, like
@@ -106,19 +111,26 @@ oldest `reader_captured_at` first (nulls first), where `reader_version` is null
 or not current, `capture_status` is not `enriching`, and `source_kind` is not
 `twitter`. It processes them one at a time through the same function refresh
 uses, then stops. On a fetch failure the backfill sets only
-`reader_captured_at = now()` and leaves the version stale, so a permanently
+`reader_captured_at = fetchedAt` and leaves the version stale, so a permanently
 blocked link moves to the back of the queue instead of holding its head.
 Refresh does not stamp on failure (rule 3).
 
+Candidates must also have `reader_captured_at is null` or
+`reader_captured_at < now() - interval '6 hours'`. A failed link is retried
+at most four times per day. Each link is isolated: a write failure is logged
+with its id and the batch continues. Job cancellation stops the active fetch
+and prevents further processing or failure stamps.
+
 Cost: 20 pages per 5 minutes is at most 240 fetches per hour, serialized
-through the existing single reader thread.
+through the existing single reader thread; each failing link costs at most
+four fetches per day.
 
 ## Web
 
 - `LinkMenuActions` gets "Refresh reader" after "Copy link", hidden for
   Twitter and trashed links. While pending the label reads "Refreshing…" and
   the item is disabled. On success, set the `live-reader` query data from the
-  response. On `422` or `502`, show the result in the same way the menu shows
+  response. On `422`, `502` or `503`, show the result in the same way the menu shows
   other action errors (find and reuse it; add no new toast system). Keyboard
   shortcut: `r` if free in this menu; check existing shortcuts first.
 - The Reader footer shows "Saved {relative time}" when `capturedAt` is set,

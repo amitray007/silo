@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { LinkWithTags, LinkWithTextWindow } from '@silo/core';
+import type { LinkSummaryWithTags, LinkWithTextWindow } from '@silo/core';
 import { getById, getByIds } from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
@@ -74,7 +74,7 @@ type GetLinkOutputStructuredContent = GetLinkStructuredContent & { results?: Get
 /**
  * Builds `structuredContent` from the shared whitelist pick
  * (`toBaseLinkContent`) plus `found: true` — never a spread of raw
- * `LinkWithTags`. This makes the leak (`searchVector`/`canonicalUrl`/
+ * `LinkSummaryWithTags`. This makes the leak (`searchVector`/`canonicalUrl`/
  * `deletedAt`) structurally impossible: adding a field requires a conscious
  * edit to `./link-shape.js`, not an accidental one from a new DB column.
  *
@@ -82,7 +82,9 @@ type GetLinkOutputStructuredContent = GetLinkStructuredContent & { results?: Get
  * shape, `LinkWithTextWindow`), it's included in the result — see
  * `getLinkOutputShape`'s doc comment.
  */
-function toStructuredContent(link: LinkWithTags | LinkWithTextWindow): GetLinkStructuredContent {
+function toStructuredContent(
+  link: LinkSummaryWithTags | LinkWithTextWindow,
+): GetLinkStructuredContent {
   const base = { found: true as const, ...toBaseLinkContent(link) };
   return 'extractedTextLength' in link
     ? { ...base, extractedTextLength: link.extractedTextLength }
@@ -97,7 +99,7 @@ function toStructuredContent(link: LinkWithTags | LinkWithTextWindow): GetLinkSt
  * ...toBaseLinkContent(link) }`) only to avoid TS's "specified more than
  * once" duplicate-key flag on the object literal.
  */
-function toBatchResult(id: string, link: LinkWithTags | null): GetLinkBatchResult {
+function toBatchResult(id: string, link: LinkSummaryWithTags | null): GetLinkBatchResult {
   if (!link) return { id, found: false };
   return { ...toBaseLinkContent(link), found: true };
 }
@@ -111,7 +113,7 @@ function toBatchResult(id: string, link: LinkWithTags | null): GetLinkBatchResul
  * can be arbitrarily large); only its presence/length is noted, with the
  * full text left to `structuredContent`.
  */
-function toTextSummary(link: LinkWithTags | LinkWithTextWindow): string {
+function toTextSummary(link: LinkSummaryWithTags | LinkWithTextWindow): string {
   const windowNote =
     'extractedTextLength' in link
       ? `showing a ${link.extractedText?.length ?? 0}-char window of ${link.extractedTextLength} total chars`

@@ -1,6 +1,7 @@
 import { db, links } from '@silo/db';
 import { eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
+import { READER_VERSION } from '../capture.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Link } from './links.js';
 import { whereLive } from './live.js';
@@ -198,7 +199,10 @@ export async function recordEnrichment(
       description: sql`coalesce(${parsed.description ?? null}, ${links.description})`,
       imageUrl: sql`coalesce(${parsed.imageUrl ?? null}, ${links.imageUrl})`,
       siteName: sql`coalesce(${parsed.siteName ?? null}, ${links.siteName})`,
-      extractedText: sql`coalesce(${parsed.text ?? null}, ${links.extractedText})`,
+      // recordReader writes matching text atomically. A later transient capture
+      // miss must not replace that text while its current Reader is retained.
+      extractedText: sql`case when ${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null
+        then ${links.extractedText} else coalesce(${parsed.text ?? null}, ${links.extractedText}) end`,
       captureStatus: parsed.status,
       sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
       sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,

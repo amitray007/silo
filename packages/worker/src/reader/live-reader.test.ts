@@ -199,3 +199,24 @@ it('requests HTML from the page fetcher by default', async () => {
     fetch.mockRestore();
   }
 });
+
+it('does not repopulate an invalidated link from an older in-flight read', async () => {
+  let finish: ((value: ExtractResult) => void) | undefined;
+  const old = new Promise<ExtractResult>((resolve) => {
+    finish = resolve;
+  });
+  const fresh = { contentHtml: '<p>Fresh</p>', contentImages: [] };
+  const run = vi
+    .fn()
+    .mockImplementationOnce(() => old)
+    .mockResolvedValue({ status: 'full', reader: fresh });
+  const reader = createLiveReader({ fetch: async () => page(), extract: run });
+  const pending = reader(link, signal());
+  await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+  reader.clear(link.id);
+  expect(await reader(link, signal())).toEqual(fresh);
+  finish?.({ status: 'full', reader: content });
+  expect(await pending).toEqual(content);
+  expect(await reader(link, signal())).toEqual(fresh);
+  expect(run).toHaveBeenCalledTimes(2);
+});

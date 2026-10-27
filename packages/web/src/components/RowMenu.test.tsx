@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink } from '../test/fixtures';
+import { MenuSurface } from './MenuSurface';
 import { RowMenu } from './RowMenu';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 
@@ -57,6 +58,112 @@ describe('RowMenu', () => {
     expect(screen.getByText('Copy link')).toBeDefined();
     expect(screen.getByText('Edit')).toBeDefined();
     expect(screen.getByText('Move to trash')).toBeDefined();
+  });
+
+  it('hides Refresh reader for Twitter and trash', () => {
+    const tweet = renderMenu({ sourceKind: 'twitter' });
+    expect(screen.queryByText('Refresh reader')).toBeNull();
+    tweet.unmount();
+    const trash = { title: 'Trashed', deletedAt: new Date().toISOString() };
+    renderMenu(trash);
+    expect(screen.queryByText('Refresh reader')).toBeNull();
+  });
+
+  it('shows a pending disabled label and updates the Reader query on success', async () => {
+    let finish: ((response: Response) => void) | undefined;
+    const pending = new Promise<Response>((resolve) => {
+      finish = resolve;
+    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        url.endsWith('/reader/refresh') ? pending : Promise.resolve(jsonResponse({ tags: [] })),
+      ),
+    );
+    const { queryClient } = renderMenu();
+    const reader = {
+      contentHtml: '<p>Refreshed</p>',
+      contentImages: [],
+      capturedAt: '2026-10-01T00:00:00.000Z',
+    };
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Link actions' }), { key: 'r' });
+    await waitFor(() =>
+      expect(screen.getByText('Refreshing…').closest('button')?.disabled).toBe(true),
+    );
+    fireEvent.keyDown(screen.getByRole('menu', { name: 'Link actions' }), { key: 'r' });
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/reader/refresh')),
+    ).toHaveLength(1);
+    finish?.(jsonResponse(reader));
+    await waitFor(() => expect(queryClient.getQueryData(['live-reader', 'row-1'])).toEqual(reader));
+    expect(screen.getByText('Refresh reader')).toBeDefined();
+  });
+
+  it.each(['metaKey', 'ctrlKey', 'altKey', 'shiftKey'])(
+    'ignores modified refresh shortcut: %s',
+    (modifier) => {
+      renderMenu();
+      fireEvent.keyDown(screen.getByRole('menu', { name: 'Link actions' }), {
+        key: 'r',
+        [modifier]: true,
+      });
+      expect(
+        vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/reader/refresh')),
+      ).toHaveLength(0);
+    },
+  );
+  it('ignores the refresh shortcut in a text input', async () => {
+    renderMenu();
+    fireEvent.click(screen.getByText('Tags'));
+    const input = await screen.findByPlaceholderText('Find or create tag');
+    fireEvent.keyDown(input, { key: 'r' });
+    expect(
+      vi.mocked(fetch).mock.calls.filter(([url]) => String(url).endsWith('/reader/refresh')),
+    ).toHaveLength(0);
+  });
+  it('ignores the refresh shortcut in a textarea', () => {
+    const refresh = vi.fn();
+    render(
+      <MenuSurface onClose={() => {}}>
+        <textarea aria-label="Note" />
+        <button type="button" data-shortcut="r" onClick={refresh}>
+          Refresh
+        </button>
+      </MenuSurface>,
+    );
+    fireEvent.keyDown(screen.getByRole('textbox', { name: 'Note' }), { key: 'r' });
+    expect(refresh).not.toHaveBeenCalled();
+    fireEvent.keyDown(screen.getByRole('button', { name: 'Refresh' }), { key: 'r' });
+    expect(refresh).toHaveBeenCalledOnce();
+  });
+  it.each([422, 502, 503])('shows the existing action error surface for %s', async (status) => {
+    const error = new Map([
+      [422, 'no_reader'],
+      [502, 'fetch_failed'],
+      [503, 'refresh_unavailable'],
+    ]).get(status);
+    const message =
+      status === 503
+        ? 'Reader refresh needs the worker running in this process.'
+        : 'Reader could not be refreshed.';
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((url: string) =>
+        Promise.resolve(
+          url.endsWith('/reader/refresh')
+            ? jsonResponse({ error, message }, status)
+            : jsonResponse({ tags: [] }),
+        ),
+      ),
+    );
+    renderMenu();
+    fireEvent.click(screen.getByText('Refresh reader'));
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      status === 503
+        ? 'Reader refresh needs the worker running in this process.'
+        : 'Reader could not be refreshed.',
+    );
+    expect(screen.getByText('Refresh reader').closest('button')?.disabled).toBe(false);
   });
 
   it('shows the assigned tag count next to "Tags"', () => {
@@ -292,6 +399,7 @@ describe('RowMenu', () => {
     expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
       'Open originalo',
       'Copy linkc',
+      'Refresh readerr',
       'Edite',
       'Tags1',
       'Move to trash⌫',
@@ -300,7 +408,7 @@ describe('RowMenu', () => {
     const copy = screen.getByRole('menuitem', { name: 'Copy link' });
     copy.focus();
     fireEvent.keyDown(copy, { key: 'ArrowDown' });
-    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Edit' }));
+    expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: 'Refresh reader' }));
     fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' });
     const danger = screen.getByRole('menuitem', { name: 'Move to trash' });
     expect(document.activeElement).toBe(danger);

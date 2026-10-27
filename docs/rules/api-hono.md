@@ -117,7 +117,8 @@ whitelist — no route ever returns a raw `LinkWithTags`.
 | `/links`                           | GET    | 200 `{links, nextCursor?}` | —                | filters: `tag`, `status`; paginated                                 |
 | `/links/search`                    | GET    | 200 `{results, nextCursor?}` | —              | `q` required; each result carries `rank`                            |
 | `/links/:id`                       | GET    | 200 `{link}`     | 404 `not_found`            | live-scoped                                                          |
-| `/links/:id/reader`                | GET    | 200 `{contentHtml, contentImages}` | 404 `not_found` | live-scoped; built from the live page via `readLive` (worker-cached), never stored; 404 also when the page has no Reader content |
+| `/links/:id/reader`                | GET    | 200 `{contentHtml, contentImages, capturedAt}` | 404 `not_found` | live-scoped; stored-first with worker-cached live fallback; `capturedAt` is an ISO timestamp or null; 404 also when the page has no Reader content |
+| `/links/:id/reader/refresh` | POST | 200 `{contentHtml, contentImages, capturedAt}` | 404 `not_found`; 422 `no_reader` (including Twitter); 502 `fetch_failed`; 503 `refresh_unavailable` | live-scoped; 45 s deadline; CSRF header required when sessions are on |
 | `/trash`                           | GET    | 200 `{links, nextCursor?}` | —                | NOT live-scoped (C2 `listTrash`); each link carries `deletedAt`      |
 | `/tags`                            | GET    | 200 `{tags}`    | —                           | `listTagsWithCounts` — sidebar tag list                              |
 | `/counts`                          | GET    | 200 `{live, trash, purgeWindowDays}` | —     | `purgeWindowDays` is the read-only `PURGE_WINDOW_DAYS` constant (C4) |
