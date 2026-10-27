@@ -11,6 +11,7 @@ const describeIfPg = postgresReachable() ? describe : describe.skip;
 const photo = 'https://pbs.twimg.com/media/photo.jpg';
 const video = 'https://video.twimg.com/amplify_video/1/vid/avc1/1280x720/clip.mp4';
 const poster = 'https://pbs.twimg.com/amplify_video_thumb/1/img/poster.jpg';
+const avatar = 'https://pbs.twimg.com/profile_images/1/face_200x200.jpg';
 
 describeIfPg('X post media proxy (Postgres)', () => {
   const harness = setupPgHarness('silo_source_media_test', async () => {
@@ -45,11 +46,12 @@ describeIfPg('X post media proxy (Postgres)', () => {
         bookmarks: 0,
         mediaUrls,
         thumbnailUrl: poster,
+        authorAvatarUrl: avatar,
       },
     });
   }
 
-  it('serves a stored photo and the video poster as images', async () => {
+  it('serves a stored photo, the video poster and the author avatar as images', async () => {
     const { app, fetchImageSafely } = harness.mod();
     fetchImageSafely.mockResolvedValue({
       ok: true,
@@ -64,6 +66,9 @@ describeIfPg('X post media proxy (Postgres)', () => {
     expect(fetchImageSafely).toHaveBeenLastCalledWith(photo);
     await app.request(`/api/links/${link.id}/source-media/poster`);
     expect(fetchImageSafely).toHaveBeenLastCalledWith(poster);
+    const face = await app.request(`/api/links/${link.id}/source-media/avatar`);
+    expect(face.status).toBe(200);
+    expect(fetchImageSafely).toHaveBeenLastCalledWith(avatar);
   });
 
   it('streams video with the client range and upstream range headers', async () => {
@@ -153,5 +158,132 @@ describeIfPg('X post media proxy (Postgres)', () => {
     const head = await app.request(`/api/links/${link.id}/source-media/0`, { method: 'HEAD' });
     expect(head.status).toBe(405);
     expect(openStreamSafely).not.toHaveBeenCalled();
+  });
+
+  describe('thread post media', () => {
+    const afterPhoto = 'https://pbs.twimg.com/media/after-photo.jpg';
+    const afterVideo = 'https://video.twimg.com/amplify_video/2/vid/avc1/1280x720/after.mp4';
+    const afterStill = 'https://pbs.twimg.com/amplify_video_thumb/2/img/after.jpg';
+    const beforePhoto = 'https://pbs.twimg.com/media/before-photo.jpg';
+
+    async function thread() {
+      return harness.mod().core.createLink({
+        url: `https://x.com/someone/status/9${Date.now()}`,
+        sourceKind: 'twitter',
+        sourceData: {
+          kind: 'twitter',
+          text: 'Saved post',
+          authorHandle: 'someone',
+          authorName: 'Someone',
+          likes: 1,
+          reposts: 0,
+          replies: 0,
+          quotes: 0,
+          bookmarks: 0,
+          mediaUrls: [photo],
+          threadBefore: [{ id: '1', text: 'first', mediaUrls: [beforePhoto] }],
+          threadAfter: [
+            { id: '3', text: 'no media' },
+            {
+              id: '4',
+              text: 'clip',
+              mediaUrls: [afterPhoto, afterVideo],
+              thumbnailUrl: afterStill,
+            },
+          ],
+        },
+      });
+    }
+
+    it('serves a thread photo and video still from the post they belong to', async () => {
+      const { app, fetchImageSafely } = harness.mod();
+      fetchImageSafely.mockResolvedValue({
+        ok: true,
+        bytes: new Uint8Array([1]),
+        contentType: 'image/jpeg',
+      });
+      const link = await thread();
+      expect((await app.request(`/api/links/${link.id}/source-media/after-1-0`)).status).toBe(200);
+      expect(fetchImageSafely).toHaveBeenLastCalledWith(afterPhoto);
+      expect((await app.request(`/api/links/${link.id}/source-media/after-1-poster`)).status).toBe(
+        200,
+      );
+      expect(fetchImageSafely).toHaveBeenLastCalledWith(afterStill);
+      expect((await app.request(`/api/links/${link.id}/source-media/before-0-0`)).status).toBe(200);
+      expect(fetchImageSafely).toHaveBeenLastCalledWith(beforePhoto);
+    });
+
+    it('streams a thread video through the same range path', async () => {
+      const { app, openStreamSafely } = harness.mod();
+      const upstream = new Response(new Uint8Array([7]), {
+        status: 206,
+        headers: { 'content-type': 'video/mp4', 'content-range': 'bytes 0-0/9' },
+      });
+      openStreamSafely.mockResolvedValue({
+        ok: true,
+        close: vi.fn(async () => {}),
+        body: upstream.body,
+        response: upstream as never,
+      });
+      const link = await thread();
+      const response = await app.request(`/api/links/${link.id}/source-media/after-1-1`, {
+        headers: { range: 'bytes=0-0' },
+      });
+      expect(response.status).toBe(206);
+      expect(openStreamSafely).toHaveBeenCalledWith(
+        afterVideo,
+        expect.objectContaining({ headers: { 'accept-encoding': 'identity', range: 'bytes=0-0' } }),
+      );
+    });
+
+    it('answers 404 for a post, media item or poster that does not exist', async () => {
+      const { app, fetchImageSafely, openStreamSafely } = harness.mod();
+      const link = await thread();
+      for (const index of [
+        'after-2-0',
+        'after-99-0',
+        'after-1-2',
+        'after-0-0',
+        'after-0-poster',
+        'before-1-0',
+        'before-0-1',
+        'before-0-poster',
+      ]) {
+        const response = await app.request(`/api/links/${link.id}/source-media/${index}`);
+        expect(response.status, index).toBe(404);
+      }
+      expect(fetchImageSafely).not.toHaveBeenCalled();
+      expect(openStreamSafely).not.toHaveBeenCalled();
+    });
+
+    it('answers 404 for thread media on a post that has no thread', async () => {
+      const link = await post([photo]);
+      const response = await harness
+        .mod()
+        .app.request(`/api/links/${link.id}/source-media/after-0-0`);
+      expect(response.status).toBe(404);
+    });
+
+    it('rejects malformed thread indexes with 400', async () => {
+      const { app } = harness.mod();
+      const link = await thread();
+      for (const index of [
+        'after-1',
+        'after--1-0',
+        'after-1-0-0',
+        'after-100-0',
+        'after-1-100',
+        'middle-0-0',
+        'After-0-0',
+        'after-a-0',
+        'after-1-avatar',
+        'before-0-0%00',
+        'after-1-0.5',
+        'before-%2e%2e-0',
+      ]) {
+        const response = await app.request(`/api/links/${link.id}/source-media/${index}`);
+        expect(response.status, index).toBe(400);
+      }
+    });
   });
 });

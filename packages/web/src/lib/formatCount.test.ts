@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { formatCount } from './formatCount';
+import { formatCount, formatPostCount } from './formatCount';
 
 describe('formatCount', () => {
   it('shows numbers below 1000 as-is', () => {
@@ -28,5 +28,18 @@ describe('formatCount', () => {
     expect(formatCount(-5)).toBe('-5');
     expect(formatCount(Number.NaN)).toBe('NaN');
     expect(formatCount(Number.POSITIVE_INFINITY)).toBe('Infinity');
+  });
+});
+
+describe('formatPostCount', () => {
+  it('writes counts the way X does, truncating', () => {
+    expect(formatPostCount(0)).toBe('0');
+    expect(formatPostCount(999)).toBe('999');
+    expect(formatPostCount(1000)).toBe('1K');
+    expect(formatPostCount(2189)).toBe('2.1K');
+    expect(formatPostCount(2999)).toBe('2.9K');
+    expect(formatPostCount(15_600)).toBe('15.6K');
+    expect(formatPostCount(123_456)).toBe('123K');
+    expect(formatPostCount(1_450_000)).toBe('1.4M');
   });
 });

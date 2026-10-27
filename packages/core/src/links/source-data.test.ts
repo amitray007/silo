@@ -427,4 +427,65 @@ describe('sourceDataSchema', () => {
       expect(result.success).toBe(false);
     });
   });
+
+  describe('twitter thread fields', () => {
+    const base = {
+      kind: 'twitter',
+      text: 'second post',
+      authorHandle: 'dev',
+      authorName: 'Dev',
+      likes: 1,
+      reposts: 0,
+      replies: 0,
+      quotes: 0,
+      bookmarks: 0,
+    };
+    const post = { id: '2113698001889927608', text: 'first post' };
+
+    it('still accepts stored data that has no thread fields', () => {
+      expect(sourceDataSchema.safeParse(base).success).toBe(true);
+    });
+
+    it('accepts threadBefore and threadAfter with every optional post field', () => {
+      const full = {
+        ...post,
+        postedAt: 'Fri Oct 23 18:24:08 +0000 2026',
+        likes: 3,
+        reposts: 1,
+        replies: 0,
+        mediaUrls: ['https://pbs.twimg.com/media/a.jpg'],
+        thumbnailUrl: 'https://pbs.twimg.com/media/a.jpg',
+      };
+      const result = sourceDataSchema.safeParse({
+        ...base,
+        threadBefore: [full],
+        threadAfter: [post, { id: '2', text: '' }],
+      });
+      expect(result.success).toBe(true);
+      if (result.success && result.data.kind === 'twitter') {
+        expect(result.data.threadBefore).toEqual([full]);
+        expect(result.data.threadAfter).toHaveLength(2);
+      }
+    });
+
+    it('rejects more than 25 posts on either side', () => {
+      const many = Array.from({ length: 26 }, (_, i) => ({ id: String(i + 1), text: 't' }));
+      expect(sourceDataSchema.safeParse({ ...base, threadBefore: many }).success).toBe(false);
+      expect(sourceDataSchema.safeParse({ ...base, threadAfter: many }).success).toBe(false);
+    });
+
+    it('rejects unknown keys, a non-numeric id and oversized fields on a thread post', () => {
+      const bad = (extra: Record<string, unknown>) =>
+        sourceDataSchema.safeParse({ ...base, threadAfter: [{ ...post, ...extra }] }).success;
+      expect(bad({ authorHandle: 'dev' })).toBe(false);
+      expect(bad({ id: 'abc' })).toBe(false);
+      expect(bad({ text: 'x'.repeat(4_001) })).toBe(false);
+      expect(bad({ postedAt: 'x'.repeat(65) })).toBe(false);
+      expect(bad({ likes: -1 })).toBe(false);
+      expect(
+        bad({ mediaUrls: Array.from({ length: 65 }, () => 'https://pbs.twimg.com/a.jpg') }),
+      ).toBe(false);
+      expect(bad({ thumbnailUrl: 'h'.repeat(2_001) })).toBe(false);
+    });
+  });
 });

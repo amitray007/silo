@@ -1,13 +1,12 @@
 import { useRetryCapture } from '../../api/hooks';
 import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
-import { formatTweetDate, parseTweetDate } from '../../lib/tweetDate';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
-import { TweetMedia } from './TweetMedia';
+import { TweetCard } from './TweetCard';
 
 function Paragraphs({ link }: { link: LinkJson }) {
   const text = link.extractedText?.trim() || link.description?.trim();
@@ -77,42 +76,6 @@ function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => v
         </a>
       </div>
     </section>
-  );
-}
-
-type TweetSource = Extract<LinkJson['sourceData'], { kind: 'twitter' }>;
-
-function TweetCard({ linkId, source }: { linkId: string; source: TweetSource }) {
-  const posted = parseTweetDate(source.postedAt);
-  return (
-    <div className="silo-reader-tweet">
-      <div className="silo-reader-who">
-        <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
-      </div>
-      <p>{source.text}</p>
-      {source.mediaUrls && (
-        <TweetMedia
-          key={linkId}
-          linkId={linkId}
-          mediaUrls={source.mediaUrls}
-          hasPoster={Boolean(source.thumbnailUrl)}
-        />
-      )}
-      {posted && (
-        <time
-          className="silo-reader-posted"
-          dateTime={posted.toISOString()}
-          title={posted.toLocaleString(undefined, { dateStyle: 'full', timeStyle: 'short' })}
-        >
-          {formatTweetDate(posted)}
-        </time>
-      )}
-      <div className="silo-reader-stats">
-        <span>{source.likes} likes</span>
-        <span>{source.reposts} reposts</span>
-        <span>{source.replies} replies</span>
-      </div>
-    </div>
   );
 }
 

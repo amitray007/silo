@@ -80,6 +80,34 @@ const hackerNewsSourceData = z
  * continuity per the plan, with `reposts`/`quotes`/`bookmarks` added
  * alongside to carry FT's full `engagement` object.
  */
+
+/**
+ * One post of the author's own thread (a self-reply chain), stored next to the
+ * saved post as `threadBefore` / `threadAfter`. Display data only, bounded like
+ * the saved post's fields. Name, handle and avatar are not repeated: every
+ * stored thread post is by the saved post's author. `text` may be empty so a
+ * media-only post keeps its place in the chain.
+ */
+export const twitterThreadPostSchema = z
+  .object({
+    /** The post's numeric X id. */
+    id: z.string().regex(/^\d{1,32}$/),
+    text: z.string().max(4_000),
+    /** Raw `created_at`, stored as given like the saved post's `postedAt`. */
+    postedAt: z.string().min(1).max(64).optional(),
+    likes: z.number().int().nonnegative().max(10_000_000_000).optional(),
+    reposts: z.number().int().nonnegative().max(10_000_000_000).optional(),
+    replies: z.number().int().nonnegative().max(10_000_000_000).optional(),
+    /** Same rules and limits as the saved post's `mediaUrls`. */
+    mediaUrls: z.array(z.string().min(1).max(2_000)).max(64).optional(),
+    /** The post's video still or first photo, like the saved post's `thumbnailUrl`. */
+    thumbnailUrl: z.string().min(1).max(2_000).optional(),
+  })
+  .strict();
+
+/** The most posts kept on each side of the saved post. */
+export const THREAD_SIDE_MAX = 25;
+
 const twitterSourceData = z
   .object({
     kind: z.literal('twitter'),
@@ -129,6 +157,14 @@ const twitterSourceData = z
      * that path) — only the live enricher sets it.
      */
     thumbnailUrl: z.string().min(1).max(2_000).optional(),
+    /**
+     * The author's own thread, set by the live enricher from FxTwitter's
+     * `/2/thread/{id}` call: the posts before and after the saved post, in
+     * thread order, all by the same author. Absent on captures made before
+     * threads were stored and on posts that are not part of a thread.
+     */
+    threadBefore: z.array(twitterThreadPostSchema).max(THREAD_SIDE_MAX).optional(),
+    threadAfter: z.array(twitterThreadPostSchema).max(THREAD_SIDE_MAX).optional(),
   })
   .strict();
 

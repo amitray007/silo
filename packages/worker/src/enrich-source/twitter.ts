@@ -1,8 +1,13 @@
 /**
  * Twitter/X enricher — fetches the unauthed, keyless FxEmbed endpoint
- * (`GET https://api.fxtwitter.com/status/{id}`, no API key/token) and maps
+ * (`GET https://api.fxtwitter.com/2/thread/{id}`, no API key/token) and maps
  * its response onto the `twitter` `SourceData` variant (live-enrichment
- * slice). Unlike the `silo ingest x` CLI's pre-extracted, trusted payload
+ * slice). The thread call returns the requested post as `status` plus the
+ * author's whole self-reply chain as `thread`; the other posts of that chain
+ * are stored as `threadBefore` / `threadAfter`. When the thread call fails for
+ * any reason, the enricher falls back to the plain
+ * `GET https://api.fxtwitter.com/status/{id}` call so a capture is never worse
+ * than before threads existed. Unlike the `silo ingest x` CLI's pre-extracted, trusted payload
  * (see `source-data.ts`'s `twitterSourceData` doc comment for that history),
  * this enricher fetches the tweet itself server-side — no CLI/bookmark-
  * export step required to get a rich Twitter card.
@@ -14,12 +19,13 @@
  * YouTube enrichers: a broken FxEmbed must leave a plain, working link,
  * never crash a capture.
  *
- * Field mapping (FxEmbed's `tweet` -> silo's `twitter` SourceData):
+ * Field mapping (FxEmbed's `status` / `tweet` -> silo's `twitter` SourceData):
  *   text                  -> text
  *   author.screen_name    -> authorHandle
  *   author.name           -> authorName
  *   author.avatar_url     -> authorAvatarUrl (optional)
- *   retweets              -> reposts        (NAME CHANGE — FxEmbed calls it "retweets")
+ *   reposts | retweets   -> reposts        (the v2 thread call says "reposts", the
+ *                            plain status call says "retweets")
  *   likes                 -> likes
  *   replies               -> replies
  *   quotes                -> quotes
@@ -45,13 +51,18 @@
  *                            generic X-logo) og:image `imageUrl` with this
  *                            when present — see that module's doc comment.)
  *
+ *   thread[] (same author, minus the saved post) -> threadBefore / threadAfter
+ *                            (id, text, created_at -> postedAt, likes, reposts,
+ *                            replies, media -> mediaUrls / thumbnailUrl; up to
+ *                            THREAD_SIDE_MAX per side, nearest to the saved post)
+ *
  * `text`/`authorHandle`/`authorName` are REQUIRED by the schema (min length
  * 1) — a response missing any of them degrades to `undefined` rather than
  * saving a half-populated twitter card.
  */
 
 import type { SourceData } from '@silo/core';
-import { sourceDataSchema } from '@silo/core';
+import { sourceDataSchema, THREAD_SIDE_MAX, twitterThreadPostSchema } from '@silo/core';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
 import { fetchJsonObject } from './fetch-json.js';
 
@@ -80,6 +91,9 @@ interface FxEmbedTweet {
   text?: unknown;
   author?: unknown;
   replies?: unknown;
+  /** The v2 thread call names the repost count `reposts`. */
+  reposts?: unknown;
+  /** The plain status call names it `retweets`. */
   retweets?: unknown;
   likes?: unknown;
   bookmarks?: unknown;
@@ -90,14 +104,25 @@ interface FxEmbedTweet {
   media?: unknown;
 }
 
-/** The FxEmbed envelope: `{ code, message, tweet }`. */
+/** The status envelope: `{ code, message, tweet }`. */
 interface FxEmbedResponse {
   code?: unknown;
   tweet?: unknown;
 }
 
+/** The v2 thread envelope: `{ code, status, author, thread }`. */
+interface FxEmbedThreadResponse {
+  code?: unknown;
+  status?: unknown;
+  thread?: unknown;
+}
+
 function statusUrl(tweetId: string): string {
   return `https://api.fxtwitter.com/status/${encodeURIComponent(tweetId)}`;
+}
+
+function threadUrl(tweetId: string): string {
+  return `https://api.fxtwitter.com/2/thread/${encodeURIComponent(tweetId)}`;
 }
 
 /** A non-negative integer count, coerced from FxEmbed's number — `undefined` when absent/not a valid number (mirrors the schema's own `.int().nonnegative()` guard, checked here so a bad count degrades the WHOLE candidate via schema-fail rather than silently becoming `NaN`/negative). */
@@ -215,13 +240,126 @@ function optionalFields(tweet: FxEmbedTweet, author: FxEmbedAuthor | undefined) 
   return fields;
 }
 
+type ThreadPost = NonNullable<TwitterSourceData['threadBefore']>[number];
+
+/** Cuts text to `max` UTF-16 units without leaving half of a surrogate pair, which Postgres jsonb rejects. */
+function clampText(text: string, max: number): string {
+  if (text.length <= max) return text;
+  const last = text.charCodeAt(max - 1);
+  return text.slice(0, last >= 0xd800 && last <= 0xdbff ? max - 1 : max);
+}
+
+function asObject(value: unknown): Record<string, unknown> | undefined {
+  return value !== null && typeof value === 'object'
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function screenNameOf(tweet: Record<string, unknown>): string | undefined {
+  const name = asObject(tweet.author)?.screen_name;
+  return typeof name === 'string' ? name.toLowerCase() : undefined;
+}
+
+/** One post of the thread, or `undefined` when it does not fit the stored shape. */
+function toThreadPost(tweet: Record<string, unknown>): ThreadPost | undefined {
+  const fields: Record<string, unknown> = {
+    id: tweet.id,
+    text: typeof tweet.text === 'string' ? clampText(tweet.text, 4_000) : undefined,
+    likes: toCount(tweet.likes),
+    reposts: toCount(tweet.reposts ?? tweet.retweets),
+    replies: toCount(tweet.replies),
+  };
+  if (typeof tweet.created_at === 'string' && tweet.created_at.length > 0) {
+    fields.postedAt = tweet.created_at;
+  }
+  const mediaUrls = extractMediaUrls(tweet.media);
+  if (mediaUrls) fields.mediaUrls = mediaUrls;
+  const thumbnailUrl = extractThumbnailUrl(tweet.media);
+  if (thumbnailUrl) fields.thumbnailUrl = thumbnailUrl;
+  const parsed = twitterThreadPostSchema.safeParse(fields);
+  return parsed.success ? parsed.data : undefined;
+}
+
+/** Same-author posts of `items` that fit the stored shape, each id once and never the saved post. */
+function sameAuthorPosts(items: unknown[], handle: string, seen: Set<string>): ThreadPost[] {
+  const posts: ThreadPost[] = [];
+  for (const item of items) {
+    const tweet = asObject(item);
+    if (!tweet || screenNameOf(tweet) !== handle) continue;
+    const post = toThreadPost(tweet);
+    if (!post || seen.has(post.id)) continue;
+    seen.add(post.id);
+    posts.push(post);
+  }
+  return posts;
+}
+
 /**
- * Fetch + shape a tweet's `SourceData` via FxEmbed. `fetchFn` is the
- * SSRF-safe fetcher — injected so tests can stub it without a real network
- * call (and so production always goes through `safeFetch`, since
- * api.fxtwitter.com is an external host like GitHub's/YouTube's APIs).
+ * Splits the author's chain around the saved post. A chain that does not
+ * contain the saved post yields no thread rather than a guessed order.
  */
-export async function enrichTwitter(
+function threadFields(thread: unknown, statusId: string, handle: string): Record<string, unknown> {
+  if (!Array.isArray(thread)) return {};
+  const at = thread.findIndex((item) => asObject(item)?.id === statusId);
+  if (at < 0) return {};
+  const seen = new Set<string>([statusId]);
+  const owner = handle.toLowerCase();
+  const before = sameAuthorPosts(thread.slice(0, at), owner, seen).slice(-THREAD_SIDE_MAX);
+  const after = sameAuthorPosts(thread.slice(at + 1), owner, seen).slice(0, THREAD_SIDE_MAX);
+  return {
+    ...(before.length > 0 ? { threadBefore: before } : {}),
+    ...(after.length > 0 ? { threadAfter: after } : {}),
+  };
+}
+
+/** Maps one post object (`tweet` or `status`) onto the stored candidate, before validation. */
+function tweetCandidate(tweet: FxEmbedTweet): Record<string, unknown> {
+  const author =
+    tweet.author !== null && typeof tweet.author === 'object'
+      ? (tweet.author as FxEmbedAuthor)
+      : undefined;
+  return {
+    kind: 'twitter',
+    text: typeof tweet.text === 'string' ? clampText(tweet.text, 4_000) : tweet.text,
+    authorHandle: author?.screen_name,
+    authorName: author?.name,
+    likes: toCount(tweet.likes),
+    reposts: toCount(tweet.reposts ?? tweet.retweets),
+    replies: toCount(tweet.replies),
+    quotes: toCount(tweet.quotes),
+    bookmarks: toCount(tweet.bookmarks),
+    ...optionalFields(tweet, author),
+  };
+}
+
+function shape(candidate: Record<string, unknown>): TwitterSourceData | undefined {
+  const shaped = sourceDataSchema.safeParse(candidate);
+  return shaped.success && shaped.data.kind === 'twitter' ? shaped.data : undefined;
+}
+
+/** The thread call: the saved post as `status` plus the author's chain as `thread`. */
+async function fromThread(
+  tweetId: string,
+  fetchFn: (url: string) => Promise<SafeFetchResult>,
+): Promise<TwitterSourceData | undefined> {
+  const parsed = await fetchJsonObject(threadUrl(tweetId), fetchFn);
+  if (parsed === undefined) return undefined;
+  const envelope = parsed as FxEmbedThreadResponse;
+  if (envelope.code !== 200) return undefined;
+  const status = asObject(envelope.status);
+  if (!status) return undefined;
+
+  const candidate = tweetCandidate(status as FxEmbedTweet);
+  const statusId = typeof status.id === 'string' ? status.id : tweetId;
+  const handle = typeof candidate.authorHandle === 'string' ? candidate.authorHandle : undefined;
+  return shape({
+    ...candidate,
+    ...(handle ? threadFields(envelope.thread, statusId, handle) : {}),
+  });
+}
+
+/** The plain status call, used on its own when the thread call gave nothing usable. */
+async function fromStatus(
   tweetId: string,
   fetchFn: (url: string) => Promise<SafeFetchResult>,
 ): Promise<TwitterSourceData | undefined> {
@@ -230,27 +368,21 @@ export async function enrichTwitter(
 
   const envelope = parsed as FxEmbedResponse;
   if (envelope.code !== 200) return undefined;
-  if (envelope.tweet === null || typeof envelope.tweet !== 'object') return undefined;
+  const tweet = asObject(envelope.tweet);
+  if (!tweet) return undefined;
+  return shape(tweetCandidate(tweet as FxEmbedTweet));
+}
 
-  const tweet = envelope.tweet as FxEmbedTweet;
-  const author =
-    tweet.author !== null && typeof tweet.author === 'object'
-      ? (tweet.author as FxEmbedAuthor)
-      : undefined;
-
-  const candidate: Record<string, unknown> = {
-    kind: 'twitter',
-    text: tweet.text,
-    authorHandle: author?.screen_name,
-    authorName: author?.name,
-    likes: toCount(tweet.likes),
-    reposts: toCount(tweet.retweets),
-    replies: toCount(tweet.replies),
-    quotes: toCount(tweet.quotes),
-    bookmarks: toCount(tweet.bookmarks),
-    ...optionalFields(tweet, author),
-  };
-
-  const shaped = sourceDataSchema.safeParse(candidate);
-  return shaped.success && shaped.data.kind === 'twitter' ? shaped.data : undefined;
+/**
+ * Fetch + shape a tweet's `SourceData` via FxEmbed. `fetchFn` is the
+ * SSRF-safe fetcher — injected so tests can stub it without a real network
+ * call (and so production always goes through `safeFetch`, since
+ * api.fxtwitter.com is an external host like GitHub's/YouTube's APIs).
+ * Tries the thread call first and falls back to the plain status call.
+ */
+export async function enrichTwitter(
+  tweetId: string,
+  fetchFn: (url: string) => Promise<SafeFetchResult>,
+): Promise<TwitterSourceData | undefined> {
+  return (await fromThread(tweetId, fetchFn)) ?? (await fromStatus(tweetId, fetchFn));
 }

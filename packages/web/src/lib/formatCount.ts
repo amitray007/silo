@@ -20,3 +20,15 @@ export function formatCount(n: number): string {
   const rounded = value.toFixed(1).replace(/\.0$/, '');
   return `${rounded}${suffix}`;
 }
+
+/**
+ * Counts the way X writes them: `999`, `2.1K`, `10K`, `1.4M`. X truncates rather
+ * than rounds (2,189 is `2.1K`), and keeps one decimal only below 100K / 100M.
+ */
+export function formatPostCount(n: number): string {
+  if (!Number.isFinite(n) || n < 0) return String(n);
+  if (n < 1000) return String(n);
+  const [value, suffix] = n < 1_000_000 ? [n / 1000, 'K'] : [n / 1_000_000, 'M'];
+  const shown = value < 100 ? Math.floor(value * 10) / 10 : Math.floor(value);
+  return `${shown}${suffix}`;
+}

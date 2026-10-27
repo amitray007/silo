@@ -60,20 +60,26 @@ function TweetGif({ src }: { src: string }) {
 /**
  * An X post's photos and videos, served by silo's own `/source-media` proxy so
  * the browser never calls X. Photos open in the image viewer; videos load only
- * when played; GIFs loop silently like they do on X.
+ * when played; GIFs loop silently like they do on X. `scope` points the same
+ * layout at one post of the author's thread.
  */
 export function TweetMedia({
   linkId,
   mediaUrls,
   hasPoster,
+  scope,
 }: {
   linkId: string;
   mediaUrls: readonly string[];
   hasPoster: boolean;
+  /** Names a thread post for the proxy (`after-2`, `before-0`); the saved post needs none. */
+  scope?: string;
 }) {
   const [viewing, setViewing] = useState<number | null>(null);
   const source = (index: number | 'poster') =>
-    apiUrl(`/api/links/${encodeURIComponent(linkId)}/source-media/${index}`);
+    apiUrl(
+      `/api/links/${encodeURIComponent(linkId)}/source-media/${scope ? `${scope}-` : ''}${index}`,
+    );
   const items = mediaUrls
     .map((url, index) => ({ index, kind: mediaKind(url) }))
     .filter((item): item is Item => item.kind !== undefined)
