@@ -1298,6 +1298,48 @@ it('opens reader settings, persists widths, handles arrow keys, and returns focu
 });
 
 describe('Live header on scroll', () => {
+  async function liveView() {
+    const { container } = renderReader({ route: '/?link=a', frameHint: { mode: 'view' } });
+    await selected();
+    const tab = reader().getByRole('tab', { name: 'Live' });
+    fireEvent.click(tab);
+    const frame = (await screen.findByTitle('Silo view')) as HTMLIFrameElement;
+    const report = (top: number) =>
+      act(() => {
+        window.dispatchEvent(
+          new MessageEvent('message', {
+            data: { type: 'silo:view-scroll', top, max: 4000, scroller: 1 },
+            source: frame.contentWindow,
+          }),
+        );
+      });
+    return { head: container.querySelector('.silo-reader-head'), tab, report };
+  }
+
+  it('still hides after a mouse click leaves focus on the Live tab', async () => {
+    const { head, tab, report } = await liveView();
+    act(() => tab.focus());
+    report(0);
+    report(500);
+    expect(head?.getAttribute('data-hidden')).toBe('true');
+  });
+
+  it('stays pinned while a header control has keyboard focus', async () => {
+    const { head, tab, report } = await liveView();
+    const matches = Element.prototype.matches;
+    vi.spyOn(Element.prototype, 'matches').mockImplementation(function (
+      this: Element,
+      selector: string,
+    ) {
+      return selector === ':focus-visible' ? this === tab : matches.call(this, selector);
+    });
+    act(() => tab.focus());
+    report(0);
+    report(500);
+    expect(head?.getAttribute('data-hidden')).toBe('false');
+    vi.restoreAllMocks();
+  });
+
   it('hides on Silo view scroll and reopens Live without replaying the slide', async () => {
     const { container } = renderReader({ route: '/?link=a', frameHint: { mode: 'view' } });
     await selected();

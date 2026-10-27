@@ -358,7 +358,7 @@
   pointer-events: none;
   transition-delay: 0s, 0s, 200ms;
 }
-.silo-reader-head:focus-within {
+.silo-reader-head:has(:focus-visible) {
   transform: none;
   opacity: 1;
   visibility: visible;

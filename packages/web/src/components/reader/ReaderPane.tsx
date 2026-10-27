@@ -269,6 +269,19 @@ function ReaderArticle({
 type LiveHead = 'hidden' | 'shown' | undefined;
 
 /**
+ * Keyboard focus pins the header so focused controls stay visible. A mouse
+ * click on a header control (the Reader/Live tabs) leaves focus there too, but
+ * that must not stop the header from hiding while you read.
+ */
+function keyboardFocus(element: Element | null): boolean {
+  try {
+    return element?.matches(':focus-visible') ?? false;
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Reader and Live's Silo view copy hide the header on the same scroll distances.
  * Pages loaded straight from their site hide their scroll, so those use the pointer.
  * `liveHead` stays unset until Live first hides, so opening Live does not animate.
@@ -355,10 +368,10 @@ export function ReaderPane({
     if (scrollRef.current) scrollRef.current.scrollTop = 0;
     setOpenMenu(null);
     setHeaderHovered(false);
+    const active = document.activeElement;
     setHeaderFocused(
-      Boolean(
-        panelRef.current?.querySelector('.silo-reader-head')?.contains(document.activeElement),
-      ),
+      Boolean(panelRef.current?.querySelector('.silo-reader-head')?.contains(active)) &&
+        keyboardFocus(active),
     );
   }, [selectedId, tab]);
   const { hidden, liveHead } = useHeadHidden({
@@ -423,7 +436,7 @@ export function ReaderPane({
       <div
         className="silo-reader-head"
         data-hidden={hidden}
-        onFocusCapture={() => setHeaderFocused(true)}
+        onFocusCapture={(event) => setHeaderFocused(keyboardFocus(event.target))}
         onBlurCapture={(event) => {
           if (!event.currentTarget.contains(event.relatedTarget)) setHeaderFocused(false);
         }}
