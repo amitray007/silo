@@ -525,6 +525,38 @@ describe('reader content', () => {
       );
     },
   );
+  it('offers the live page when a PDF has no Reader text', async () => {
+    renderReader({
+      live: [
+        makeLink({
+          ...a,
+          url: 'https://arxiv.org/pdf/1706.03762',
+          captureStatus: 'partial',
+          extractedText: null,
+          description: null,
+        }),
+      ],
+      route: '/?link=a',
+    });
+    await selected();
+    expect(reader().getByRole('heading', { name: 'No text to read' })).toBeDefined();
+    expect(reader().getByText(/This link is a PDF/)).toBeDefined();
+    fireEvent.click(reader().getByRole('button', { name: 'Show live page' }));
+    await waitFor(() =>
+      expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe(
+        'true',
+      ),
+    );
+  });
+  it('does not offer the live page for a trashed link with no text', async () => {
+    renderReader({
+      trash: [makeTrashLink({ ...a, extractedText: null, description: null })],
+      route: '/trash?link=a',
+    });
+    await selected();
+    expect(reader().getByRole('heading', { name: 'No text to read' })).toBeDefined();
+    expect(reader().queryByRole('button', { name: 'Show live page' })).toBeNull();
+  });
   it('renders the Original iframe with the required sandbox and an escape link', async () => {
     const { container } = renderReader({ route: '/?link=a' });
     await selected();
@@ -835,7 +867,7 @@ describe('review regressions', () => {
   it('shows an empty capture hint and the original link for a full capture without text', async () => {
     renderReader({ live: [makeLink({ ...a, extractedText: null })], route: '/?link=a' });
     await selected();
-    expect(reader().getByText('No text was captured for this page.')).toBeDefined();
+    expect(reader().getByRole('heading', { name: 'No text to read' })).toBeDefined();
     expect(reader().getByRole('link', { name: 'Open original' }).getAttribute('href')).toBe(a.url);
     expect(reader().queryByRole('button', { name: 'Retry capture' })).toBeNull();
   });

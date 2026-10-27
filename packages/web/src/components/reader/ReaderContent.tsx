@@ -2,6 +2,7 @@ import { useRetryCapture } from '../../api/hooks';
 import type { LinkDetailJson, LinkJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
 import { embedFor } from './embedFor';
+import { ReaderIcon } from './ReaderIcon';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
 
@@ -35,26 +36,55 @@ function RetryCapture({ id }: { id: string }) {
   );
 }
 
-function NoCapturedText({ link }: { link: LinkJson }) {
+/** Capture skips non-HTML bodies, so a PDF link never has Reader text. */
+function looksLikePdf(url: string): boolean {
+  try {
+    const { pathname } = new URL(url);
+    return /\.pdf$/i.test(pathname) || /^\/pdf\//i.test(pathname);
+  } catch {
+    return false;
+  }
+}
+
+function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => void }) {
+  const retryable = link.captureStatus === 'partial' || link.captureStatus === 'bare';
+  const reason = looksLikePdf(link.url)
+    ? 'This link is a PDF. Silo saves its details but does not read PDF text yet.'
+    : 'Silo saved this link but could not read text from the page.';
   return (
-    <div className="silo-reader-retry">
-      <p>No text was captured for this page.</p>
-      <a className="silo-reader-btn" href={link.url} target="_blank" rel="noopener noreferrer">
-        Open original
-      </a>
-      {(link.captureStatus === 'partial' || link.captureStatus === 'bare') && (
-        <RetryCapture id={link.id} />
-      )}
-    </div>
+    <section className="silo-reader-empty" aria-labelledby={`silo-reader-empty-${link.id}`}>
+      <span className="silo-reader-empty-icon">
+        <ReaderIcon name="page" />
+      </span>
+      <h3 id={`silo-reader-empty-${link.id}`}>No text to read</h3>
+      <p>
+        {reason}
+        {showLive && ' Try the live page instead.'}
+      </p>
+      <div className="silo-reader-empty-actions">
+        {showLive && (
+          <button type="button" className="silo-reader-btn" onClick={showLive}>
+            Show live page
+          </button>
+        )}
+        {retryable && <RetryCapture id={link.id} />}
+        <a className="silo-reader-btn" href={link.url} target="_blank" rel="noopener noreferrer">
+          <ReaderIcon name="arrowUpRight" size={16} />
+          Open original
+        </a>
+      </div>
+    </section>
   );
 }
 
 export function ReaderContent({
   link,
   trashed = false,
+  showLive,
 }: {
   link: LinkJson | LinkDetailJson;
   trashed?: boolean;
+  showLive?: () => void;
 }) {
   if (link.captureStatus === 'enriching')
     return (
@@ -138,7 +168,9 @@ export function ReaderContent({
       {!prose &&
         source.kind !== 'twitter' &&
         !link.extractedText?.trim() &&
-        !link.description?.trim() && <NoCapturedText link={link} />}
+        !link.description?.trim() && (
+          <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
+        )}
       <RelatedLinks link={link} trashed={trashed} />
     </>
   );

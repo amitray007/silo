@@ -187,15 +187,17 @@ function ArticleBody({
   link,
   loading,
   trashed,
+  showLive,
 }: {
   link: LinkJson;
   loading: boolean;
   trashed: boolean;
+  showLive: () => void;
 }) {
   return loading && !('contentHtml' in link) ? (
     <ReaderSkeleton />
   ) : (
-    <ReaderContent link={link} trashed={trashed} />
+    <ReaderContent link={link} trashed={trashed} showLive={showLive} />
   );
 }
 
@@ -205,12 +207,14 @@ function ReaderArticle({
   trashed,
   purgeWindowDays,
   loading,
+  showLive,
 }: {
   link: LinkJson;
   actions: Actions;
   trashed: boolean;
   purgeWindowDays: number;
   loading: boolean;
+  showLive: () => void;
 }) {
   const [width] = useReaderWidth();
   const embed = embedFor(link.url, link.sourceData);
@@ -253,7 +257,7 @@ function ReaderArticle({
       <ReaderMeta key={link.id} link={link} trashed={trashed} />
       <div className="silo-reader-body-column">
         <div className="silo-reader-body-wrap">
-          <ArticleBody link={link} loading={loading} trashed={trashed} />
+          <ArticleBody link={link} loading={loading} trashed={trashed} showLive={showLive} />
         </div>
       </div>
     </article>
@@ -349,6 +353,7 @@ export function ReaderPane({
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
           loading={loading}
+          showLive={() => setTab('original')}
         />
       );
   return (

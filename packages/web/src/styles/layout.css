@@ -667,11 +667,58 @@
 .silo-reader-danger {
   color: var(--warn);
 }
-.silo-reader-hint,
-.silo-reader-retry {
+.silo-reader-hint {
   color: var(--fnt);
   font-size: 13px;
   margin-top: 16px;
+}
+/* No Reader text: a quiet centered state that points to the live page. */
+.silo-reader-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 48px 24px 24px;
+}
+.silo-reader-empty-icon {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: var(--hov);
+  color: var(--mut);
+}
+.silo-reader-empty-icon svg {
+  width: 22px;
+  height: 22px;
+}
+.silo-reader-empty h3 {
+  margin: 16px 0 0;
+  color: var(--ink);
+  font-size: 15px;
+  font-weight: 500;
+}
+.silo-reader-empty p {
+  margin: 6px 0 0;
+  max-width: 22rem;
+  color: var(--mut);
+  font-size: 14px;
+  line-height: 1.55;
+  text-wrap: pretty;
+}
+.silo-reader-empty-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 20px;
+}
+.silo-reader-empty-actions [role="alert"] {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+  color: var(--warn);
+  font-size: 13px;
 }
 .silo-reader-skeleton {
   height: 12px;
