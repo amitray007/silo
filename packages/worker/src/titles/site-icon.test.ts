@@ -14,9 +14,14 @@ function page(head: string, finalUrl = 'https://example.com/'): SafeFetchResult 
 
 const signal = () => new AbortController().signal;
 
-async function iconFor(head: string, finalUrl?: string): Promise<string | undefined> {
+async function iconsFor(head: string, finalUrl?: string): Promise<readonly string[]> {
   const find = createSiteIconFinder({ fetch: async () => page(head, finalUrl) });
   return find('example.com', signal());
+}
+
+/** The best candidate. */
+async function iconFor(head: string, finalUrl?: string): Promise<string | undefined> {
+  return (await iconsFor(head, finalUrl))[0];
 }
 
 describe('site icon finder', () => {
@@ -48,12 +53,24 @@ describe('site icon finder', () => {
     expect(await iconFor(head)).toBe('https://example.com/known.png');
   });
 
-  it('skips SVG icons by type or extension', async () => {
+  it('lists SVG icons last, after /favicon.ico, by type or extension', async () => {
     const head = `
       <link rel="icon" href="/a.svg">
       <link rel="icon" href="/b" type="image/svg+xml">
       <link rel="icon" href="/c.png">`;
-    expect(await iconFor(head)).toBe('https://example.com/c.png');
+    expect(await iconsFor(head)).toEqual([
+      'https://example.com/c.png',
+      'https://example.com/favicon.ico',
+      'https://example.com/a.svg',
+      'https://example.com/b',
+    ]);
+  });
+
+  it('offers an SVG-only site its SVG after /favicon.ico', async () => {
+    expect(await iconsFor('<link rel="icon" href="./favicon.svg" type="image/svg+xml">')).toEqual([
+      'https://example.com/favicon.ico',
+      'https://example.com/favicon.svg',
+    ]);
   });
 
   it('falls back to apple-touch-icon when only SVG icons exist', async () => {
@@ -92,13 +109,13 @@ describe('site icon finder', () => {
       async (): Promise<SafeFetchResult> => ({ ok: false, reason: 'http-error' }),
     );
     const find = createSiteIconFinder({ fetch });
-    expect(await find('example.com', signal())).toBe('https://example.com/favicon.ico');
+    expect(await find('example.com', signal())).toEqual(['https://example.com/favicon.ico']);
   });
 
   it('finds nothing when the site is unreachable', async () => {
     const fetch = vi.fn(async (): Promise<SafeFetchResult> => ({ ok: false, reason: 'dns-error' }));
     const find = createSiteIconFinder({ fetch });
-    expect(await find('example.com', signal())).toBeUndefined();
+    expect(await find('example.com', signal())).toEqual([]);
   });
 
   it('caches hits and misses for a day, then refetches', async () => {
@@ -130,17 +147,17 @@ describe('site icon finder', () => {
       find('Example.com', signal()),
       find('example.com', signal()),
     ]);
-    expect(a).toBe('https://example.com/i.png');
-    expect(b).toBe(a);
+    expect(a).toEqual(['https://example.com/i.png', 'https://example.com/favicon.ico']);
+    expect(b).toEqual(a);
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
-  it('resolves undefined as soon as the caller aborts', async () => {
+  it('resolves no icons as soon as the caller aborts', async () => {
     const fetch = vi.fn(() => new Promise<SafeFetchResult>(() => {}));
     const find = createSiteIconFinder({ fetch });
     const controller = new AbortController();
     const result = find('example.com', controller.signal);
     controller.abort();
-    expect(await result).toBeUndefined();
+    expect(await result).toEqual([]);
   });
 });
