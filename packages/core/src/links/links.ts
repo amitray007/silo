@@ -11,7 +11,9 @@ import {
   effectiveLimit,
   encodeListCursor,
   hydrateTags,
+  type LinkSummaryWithTags,
   type LinkWithTags,
+  listColumns,
   type PageParams,
 } from './pagination.js';
 import { runUnionSearch } from './search-query.js';
@@ -24,7 +26,7 @@ import { sourceDataSchema } from './source-data.js';
 // Re-exported here for compatibility (existing callers import `Link` from
 // `links.js` / `@silo/core`).
 export type { Db, Executor, Link, Tx } from './executor.js';
-export type { LinkWithTags, PageParams } from './pagination.js';
+export type { LinkSummaryWithTags, LinkWithTags, PageParams } from './pagination.js';
 export { InvalidCursorError } from './pagination.js';
 
 /** Postgres unique-violation error code (`23505`). */
@@ -610,7 +612,9 @@ const LIST_SNIPPET_MAX_CHARS = 200;
  * context; a caller that needs the full text calls `getById` for the one
  * link it actually wants to read.
  */
-export type ListResultRow = Omit<LinkWithTags, 'extractedText'> & { snippet: string | null };
+export type ListResultRow = Omit<LinkSummaryWithTags, 'extractedText'> & {
+  snippet: string | null;
+};
 
 export type ListPage = {
   links: ListResultRow[];
@@ -643,7 +647,7 @@ function truncatedSnippet(text: string | null | undefined): string | null {
 }
 
 /** Build a `list()` result row: strip `extractedText`, add its truncated `snippet`. */
-function toListResultRow(link: LinkWithTags): ListResultRow {
+function toListResultRow(link: LinkSummaryWithTags): ListResultRow {
   const { extractedText, ...rest } = link;
   return { ...rest, snippet: truncatedSnippet(extractedText ?? link.description) };
 }
@@ -763,7 +767,7 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
   if (cursorCondition) conditions.push(cursorCondition);
 
   const rows = await db
-    .select({ link: links, createdAtText })
+    .select({ link: listColumns, createdAtText })
     .from(links)
     .where(whereLive(...conditions))
     .orderBy(desc(links.createdAt), desc(links.id))
@@ -794,7 +798,7 @@ export type SearchResult = Link & { rank: number };
  * tokens of full article bodies into the caller's context. A caller that
  * wants the full text of a specific hit calls `getById`.
  */
-export type SearchResultRow = Omit<LinkWithTags, 'extractedText'> & {
+export type SearchResultRow = Omit<LinkSummaryWithTags, 'extractedText'> & {
   rank: number;
   snippet: string | null;
 };

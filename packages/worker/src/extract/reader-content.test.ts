@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { readerContentSchema } from '@silo/core/capture';
 import { JSDOM } from 'jsdom';
 import { describe, expect, it } from 'vitest';
 import { sanitizeReaderContent } from './reader-content.js';
@@ -34,6 +35,16 @@ describe('Reader sanitizer', () => {
     expect(result?.contentHtml).toContain('href="https://journal.example.org/safe#section"');
     expect(result?.contentHtml).toContain('target="_blank" rel="noopener noreferrer"');
     expect(result?.contentImages).toEqual(['https://journal.example.org/images/photo.png']);
+  });
+
+  it('drops images the Reader schema rejects, so the payload always validates', () => {
+    const result = sanitizeReaderContent(
+      '<p>photos</p><img src="http://192.168.1.1/a.png"><img src="http://localhost/b.png"><img src="http://my_host.test/c.png"><img src="/ok.png">',
+      url,
+    );
+    expect(result?.contentImages).toEqual(['https://journal.example.org/ok.png']);
+    expect(result?.contentHtml.match(/<img/g)).toHaveLength(1);
+    expect(readerContentSchema.safeParse(result).success).toBe(true);
   });
 
   it('keeps image order, canonicalizes once, and rejects credentials and non-http targets', () => {

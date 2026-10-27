@@ -49,16 +49,16 @@ export function createLinkTitleFetcher(
     if (cache.size > MAX_ENTRIES) cache.delete(cache.keys().next().value as string);
   };
 
-  const lookup = (url: string, signal: AbortSignal): Promise<string | null> => {
+  /** The shared fetch ignores every caller's signal: safeFetch bounds it with TIMEOUT_MS. */
+  const lookup = (url: string): Promise<string | null> => {
     const hit = cache.get(url);
     if (hit && hit.expires > now()) return Promise.resolve(hit.title);
     const running = pending.get(url);
     if (running) return running;
-    const work = readTitle(url, fetch, signal)
+    const work = readTitle(url, fetch, new AbortController().signal)
       .catch(() => null)
       .then((title) => {
-        // An aborted request says nothing about the page; leave it uncached.
-        if (!signal.aborted) remember(url, title);
+        remember(url, title);
         return title;
       })
       .finally(() => pending.delete(url));
@@ -66,12 +66,24 @@ export function createLinkTitleFetcher(
     return work;
   };
 
+  /** Resolves null as soon as this caller aborts, leaving the shared lookup running. */
+  const lookupFor = (url: string, signal: AbortSignal): Promise<string | null> => {
+    if (signal.aborted) return Promise.resolve(null);
+    return new Promise((resolve) => {
+      const stop = () => resolve(null);
+      signal.addEventListener('abort', stop, { once: true });
+      lookup(url)
+        .then(resolve)
+        .finally(() => signal.removeEventListener('abort', stop));
+    });
+  };
+
   const fetchTitles = async (urls: readonly string[], signal: AbortSignal) => {
     const titles: Record<string, string> = {};
     const queue = [...new Set(urls)];
     const run = async () => {
       for (let url = queue.shift(); url !== undefined && !signal.aborted; url = queue.shift()) {
-        const title = await lookup(url, signal);
+        const title = await lookupFor(url, signal);
         if (title) titles[url] = title;
       }
     };

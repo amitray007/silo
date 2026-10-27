@@ -134,7 +134,7 @@ describe('Sidebar', () => {
     expect(screen.getByRole('link', { name: /settings/i })).toBeDefined();
   });
 
-  it('renders v3 icons (svg) for Library, Trash, and Settings — and for tags', async () => {
+  it('renders icons (svg) for Library, Settings, and tags', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
       if (url === '/api/counts') {
@@ -156,7 +156,7 @@ describe('Sidebar', () => {
 
     expect(libraryLink.querySelector('svg')).not.toBeNull();
     expect(settingsLink.querySelector('svg')).not.toBeNull();
-    expect(tagLink.querySelector('svg')).toBeDefined();
+    expect(tagLink.querySelector('svg')).not.toBeNull();
   });
 
   it('leaves Library inactive on Trash, which is reached through the collection menu', () => {

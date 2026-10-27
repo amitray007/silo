@@ -1,4 +1,4 @@
-import { READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core/capture';
+import { isReaderImageUrl, READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core/capture';
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
 
@@ -132,7 +132,7 @@ export function sanitizeReaderContent(
     for (const image of fragment.querySelectorAll('img')) {
       const src = httpUrl(image.getAttribute('src') ?? responsiveSource(image), finalUrl, true);
       image.removeAttribute('srcset');
-      if (!src || imageCount >= 10_000) image.remove();
+      if (!src || !isReaderImageUrl(src) || imageCount >= 10_000) image.remove();
       else {
         image.setAttribute('src', src);
         imageCount++;

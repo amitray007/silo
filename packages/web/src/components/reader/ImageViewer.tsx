@@ -141,6 +141,8 @@ function usePointerGestures(
 ) {
   const pointers = useRef(new Map<number, Point>());
   const press = useRef<Press | null>(null);
+  const latestView = useRef(view);
+  latestView.current = view;
 
   const begin = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -216,7 +218,18 @@ function usePointerGestures(
     const stage = stageRef.current;
     const current = press.current;
     pointers.current.delete(event.pointerId);
-    if (pointers.current.size > 0) return;
+    if (pointers.current.size > 0) {
+      // After a pinch, the finger left down pans from the view the pinch ended on.
+      const [rest] = pointers.current.values();
+      if (current?.pinch && rest)
+        press.current = {
+          start: latestView.current,
+          origin: rest,
+          moved: true,
+          onImage: current.onImage,
+        };
+      return;
+    }
     press.current = null;
     setGesture(false);
     if (!stage || !current || current.moved || event.type === 'pointercancel') return;

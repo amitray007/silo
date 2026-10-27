@@ -1,4 +1,4 @@
-import type { LinkWithTags } from '@silo/core';
+import type { LinkSummaryWithTags } from '@silo/core';
 import { CAPTURE_SOURCES, sourceDataSchema } from '@silo/core';
 import { z } from 'zod';
 
@@ -113,7 +113,7 @@ function shapeSourceData(raw: unknown): BaseLinkContent['sourceData'] {
  * fields (e.g. `search_links`'s `rank`) spread this result and add their own
  * on top.
  */
-export function toBaseLinkContent(link: LinkWithTags): BaseLinkContent {
+export function toBaseLinkContent(link: LinkSummaryWithTags): BaseLinkContent {
   return {
     id: link.id,
     url: link.url,
@@ -141,7 +141,7 @@ export function toBaseLinkContent(link: LinkWithTags): BaseLinkContent {
  * exported row types) so one function serves both `search_links` and
  * `list_links` — the fields this function reads are identical across both.
  */
-type SnippetSourceRow = Omit<LinkWithTags, 'extractedText'> & { snippet: string | null };
+type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText'> & { snippet: string | null };
 
 /**
  * Builds the whitelisted `search_links`/`list_links` result-row fields by

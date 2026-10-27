@@ -124,4 +124,13 @@ describe('embedFor', () => {
       'theme=light',
     );
   });
+
+  it('flags video providers only', () => {
+    const video = (url: string) => embedFor(url, source)?.video;
+    expect(video('https://www.youtube.com/watch?v=jNQXAC9IVRw')).toBe(true);
+    expect(video('https://vimeo.com/76979871')).toBe(true);
+    expect(video('https://loom.com/share/1234567890abcdef1234567890abcdef')).toBe(true);
+    expect(video('https://x.com/karpathy/status/1886192184808149383')).toBe(false);
+    expect(video('https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC')).toBe(false);
+  });
 });

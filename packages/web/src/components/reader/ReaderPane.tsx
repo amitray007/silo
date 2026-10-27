@@ -130,7 +130,7 @@ function ReaderMore({
                 disabled={original.preparing}
                 onClick={() => {
                   setOpen(false);
-                  original.refresh.mutate();
+                  if (link) original.refresh.mutate(link.id);
                 }}
               >
                 Reload page
@@ -220,7 +220,7 @@ function ReaderArticle({
 }) {
   const [width] = useReaderWidth();
   const embed = embedFor(link.url, link.sourceData);
-  const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider) ? embed : undefined;
+  const video = embed?.video ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: delegated native anchor clicks also fire on Enter.

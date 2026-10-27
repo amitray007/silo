@@ -40,8 +40,9 @@ function CollectionTitle({ title }: { title: string }) {
   const frame = useOutletContext<{ showSidebar: () => void; sidebarHidden: boolean } | undefined>();
   const { data: counts } = useCounts();
   const { data: tags } = useTags();
-  // The sidebar already lists Library, Trash and tags; the switcher is for when it is out of view.
-  if (frame && !frame.sidebarHidden && !phone) return <h1>{title}</h1>;
+  // The switcher is the only Trash entry. The sidebar already lists tags, so the tag section shows
+  // only when the sidebar is out of view (phone, hidden, or no frame).
+  const showTags = phone || !frame || frame.sidebarHidden;
   return (
     <div className="silo-collection">
       <h1>
@@ -75,7 +76,7 @@ function CollectionTitle({ title }: { title: string }) {
                 </span>
               </MenuAction>
             ))}
-            {tags?.tags.length ? <div className="silo-menu-separator" /> : null}
+            {showTags && tags?.tags.length ? <div className="silo-menu-separator" /> : null}
             {phone && frame && (
               <MenuAction
                 icon={<ReaderIcon name="hash" />}
@@ -87,21 +88,22 @@ function CollectionTitle({ title }: { title: string }) {
                 Manage tags
               </MenuAction>
             )}
-            {tags?.tags.map((tag) => (
-              <MenuAction
-                key={tag.name}
-                icon={<ReaderIcon name="hash" />}
-                onClick={() => {
-                  setOpen(false);
-                  navigate(`/tags/${encodeURIComponent(tag.name)}`);
-                }}
-              >
-                <span className="silo-collection-name" title={tag.name}>
-                  {tag.name}
-                </span>
-                <span className="silo-collection-count">{formatCount(tag.count)}</span>
-              </MenuAction>
-            ))}
+            {showTags &&
+              tags?.tags.map((tag) => (
+                <MenuAction
+                  key={tag.name}
+                  icon={<ReaderIcon name="hash" />}
+                  onClick={() => {
+                    setOpen(false);
+                    navigate(`/tags/${encodeURIComponent(tag.name)}`);
+                  }}
+                >
+                  <span className="silo-collection-name" title={tag.name}>
+                    {tag.name}
+                  </span>
+                  <span className="silo-collection-count">{formatCount(tag.count)}</span>
+                </MenuAction>
+              ))}
           </MenuSurface>
         )}
       </MenuPresence>

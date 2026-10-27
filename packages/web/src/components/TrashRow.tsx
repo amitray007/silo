@@ -8,7 +8,7 @@ import { RowPopover } from './RowPopover';
 import { ReaderIcon } from './reader/ReaderIcon';
 
 function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () => void }) {
-  const restore = useRestoreLink(link.id);
+  const restore = useRestoreLink();
   const { closeMenu } = useRowMenu();
   const busy = restore.isPending;
   return (
@@ -29,7 +29,7 @@ function TrashRowMenu({ link, onDelete }: { link: TrashLinkJson; onDelete: () =>
         icon={<ReaderIcon name="restore" />}
         disabled={busy}
         onClick={() => {
-          restore.mutate(undefined, { onSuccess: closeMenu });
+          restore.mutate(link.id, { onSuccess: closeMenu });
         }}
       >
         Restore
@@ -51,7 +51,7 @@ export function TrashRow({
   purgeWindowDays: number;
   onDelete: (id: string) => void;
 }) {
-  const restore = useRestoreLink(link.id);
+  const restore = useRestoreLink();
   const { openMenuId, toggleMenu, closeMenu } = useRowMenu();
   const menuOpen = openMenuId === link.id;
   return (
@@ -59,7 +59,7 @@ export function TrashRow({
       link={link}
       busy={restore.isPending}
       error={restore.isError ? "Couldn't restore this link. Try again." : undefined}
-      onRemove={() => restore.mutate()}
+      onRemove={() => restore.mutate(link.id)}
       onDelete={() => onDelete(link.id)}
       purge={purgeCountdownDays(link.deletedAt, purgeWindowDays)}
       menuOpen={menuOpen}

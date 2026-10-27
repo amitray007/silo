@@ -69,17 +69,19 @@ describeIfPg('X post media proxy (Postgres)', () => {
   it('streams video with the client range and upstream range headers', async () => {
     const { app, openStreamSafely } = harness.mod();
     const close = vi.fn(async () => {});
+    const upstream = new Response(new Uint8Array([9, 9]), {
+      status: 206,
+      headers: {
+        'content-type': 'video/mp4',
+        'content-length': '2',
+        'content-range': 'bytes 0-1/100',
+      },
+    });
     openStreamSafely.mockResolvedValue({
       ok: true,
       close,
-      response: new Response(new Uint8Array([9, 9]), {
-        status: 206,
-        headers: {
-          'content-type': 'video/mp4',
-          'content-length': '2',
-          'content-range': 'bytes 0-1/100',
-        },
-      }) as never,
+      body: upstream.body,
+      response: upstream as never,
     });
     const link = await post([photo, video]);
     const response = await app.request(`/api/links/${link.id}/source-media/1`, {
@@ -93,16 +95,17 @@ describeIfPg('X post media proxy (Postgres)', () => {
       video,
       expect.objectContaining({ headers: { 'accept-encoding': 'identity', range: 'bytes=0-1' } }),
     );
-    expect(close).toHaveBeenCalled();
   });
 
   it('refuses non-video bodies, other hosts, bad ranges and missing media', async () => {
     const { app, openStreamSafely, fetchImageSafely } = harness.mod();
     const close = vi.fn(async () => {});
+    const upstream = new Response('<script>', { headers: { 'content-type': 'text/html' } });
     openStreamSafely.mockResolvedValue({
       ok: true,
       close,
-      response: new Response('<script>', { headers: { 'content-type': 'text/html' } }) as never,
+      body: upstream.body,
+      response: upstream as never,
     });
     const link = await post([
       video,
@@ -133,6 +136,7 @@ describeIfPg('X post media proxy (Postgres)', () => {
     openStreamSafely.mockResolvedValue({
       ok: true,
       close,
+      body: null,
       response: new Response(null, {
         status: 416,
         headers: { 'content-range': 'bytes */100' },

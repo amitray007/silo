@@ -67,16 +67,20 @@ describe('Reader isolation', () => {
     }
   });
 
-  it('rejects extraction on timeout so the capture job can retry', async () => {
+  it('falls back to metadata only on a Reader timeout so the capture settles', async () => {
     const reader = pool();
     const spy = vi
       .spyOn(readerWorker, 'extractPage')
       .mockImplementation(() => reader.run('stuck', url));
     const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
-      await expect(
-        extract({ url, contentType: 'text/html', html: '<title>Saved title</title>' }),
-      ).rejects.toBeInstanceOf(readerWorker.ReaderExtractionError);
+      const result = await extract({
+        url,
+        contentType: 'text/html',
+        html: '<title>Saved title</title>',
+      });
+      expect(result).toMatchObject({ title: 'Saved title' });
+      expect(result.reader).toBeUndefined();
       expect(log).toHaveBeenCalledWith('[reader] extraction unavailable', 'reader-timeout');
     } finally {
       spy.mockRestore();

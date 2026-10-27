@@ -1,8 +1,14 @@
 /**
- * A MINIMAL, self-contained SSRF-safe fetch for exactly one narrow use case:
- * `preview-image.ts` re-fetching a link's OWN stored `imageUrl` (never a
- * client-supplied URL — see that route's doc comment for the full SSRF
- * argument). NOT a general-purpose fetcher, and deliberately NOT
+ * A MINIMAL, self-contained SSRF-safe fetch for one narrow use case: proxying
+ * media a link already stored. Its callers are the `preview-image`,
+ * `content-image` and `source-media` routes.
+ *
+ * INVARIANT: only a link's OWN stored URLs are ever fetched (its `imageUrl`,
+ * Reader `contentImages`, X `sourceData` media), never a URL the client
+ * supplies. The client names a link id and an index; the URL comes from
+ * storage. See each route's doc comment for its SSRF argument.
+ *
+ * NOT a general-purpose fetcher, and deliberately NOT
  * `@silo/worker`'s `safe-fetch.ts` — `@silo/api` may not import `@silo/worker`
  * (`docs/rules/architecture.md`: adapters may only depend on `@silo/core`),
  * and `@silo/core` (the one place both could share it) has zero HTTP
@@ -39,6 +45,9 @@ import { Agent, type Response as UndiciResponse, fetch as undiciFetch } from 'un
 const ALLOWED_SCHEMES: ReadonlySet<string> = new Set(['http:', 'https:']);
 const TIMEOUT_MS = 5000;
 const MAX_BODY_BYTES = 5 * 1024 * 1024; // 5MB — a preview image is small; generous but finite.
+/** A proxied video may run long, but upstream must keep sending bytes. */
+const STREAM_IDLE_MS = 30_000;
+const STREAM_MAX_BYTES = 1024 * 1024 * 1024; // 1 GiB total per proxied stream.
 const USER_AGENT = 'silo/0.1 (+https://github.com/amitray007/silo)';
 
 /**
@@ -273,15 +282,64 @@ export async function fetchImageSafely(
 }
 
 export type OpenedStream =
-  | { ok: true; response: UndiciResponse; close: () => Promise<void> }
+  | {
+      ok: true;
+      response: UndiciResponse;
+      /**
+       * The response body behind an idle timeout and a total byte cap. Read this, not
+       * `response.body`. It closes the agent itself when it ends, errors or is cancelled.
+       */
+      body: ReadableStream<Uint8Array> | null;
+      close: () => Promise<void>;
+    }
   | { ok: false };
+
+/** Pull-based, so the idle clock runs only while the consumer is waiting on upstream. */
+function guardBody(
+  source: ReadableStream<Uint8Array>,
+  close: () => Promise<void>,
+  limits: { idleMs: number; maxBytes: number },
+): ReadableStream<Uint8Array> {
+  const reader = source.getReader();
+  let total = 0;
+  return new ReadableStream<Uint8Array>({
+    async pull(out) {
+      const fail = (reason: string) => {
+        out.error(new Error(reason));
+        void close();
+      };
+      const idle = setTimeout(() => fail('upstream idle'), limits.idleMs);
+      try {
+        const { done, value } = await reader.read();
+        if (done) {
+          out.close();
+          await close();
+          return;
+        }
+        total += value.byteLength;
+        if (total > limits.maxBytes) fail('stream too large');
+        else out.enqueue(value);
+      } catch (error) {
+        out.error(error);
+        await close();
+      } finally {
+        clearTimeout(idle);
+      }
+    },
+    async cancel() {
+      await close();
+    },
+  });
+}
 
 /**
  * Open a stored media URL through the same gate as `fetchImageSafely` (scheme
  * allowlist, DNS classify + pin, no redirects), but hand back the response so
  * the caller can stream a large body such as a video. The timeout covers only
- * connecting and the response headers; `signal` (the client request) aborts
- * the upstream download when the viewer goes away. `close` releases the agent.
+ * connecting and the response headers; after that `body` enforces an idle
+ * timeout and a byte cap, and `signal` (the client request) aborts the
+ * upstream download and releases the agent when the viewer goes away.
+ * `close` releases the agent early.
  */
 export async function openStreamSafely(
   rawUrl: string,
@@ -289,6 +347,10 @@ export async function openStreamSafely(
     headers?: Record<string, string>;
     signal?: AbortSignal;
     timeoutMs?: number;
+    /** No upstream bytes for this long aborts the stream. Defaults to 30s. */
+    idleTimeoutMs?: number;
+    /** Total bytes allowed before the stream aborts. Defaults to 1 GiB. */
+    maxBytes?: number;
     /** Non-2xx statuses the caller forwards, such as 416 for an unsatisfiable range. */
     passStatuses?: readonly number[];
   } = {},
@@ -301,14 +363,17 @@ export async function openStreamSafely(
   const abort = () => controller.abort();
   options.signal?.addEventListener('abort', abort, { once: true });
   if (options.signal?.aborted) controller.abort();
-  const close = async () => {
-    clearTimeout(timer);
-    options.signal?.removeEventListener('abort', abort);
-    controller.abort();
-    await agent?.destroy().catch(() => {
-      // best-effort teardown
-    });
-  };
+  let closing: Promise<void> | undefined;
+  // Idempotent: the abort listener below and the body guard may both call it.
+  const close = () =>
+    (closing ??= (async () => {
+      clearTimeout(timer);
+      options.signal?.removeEventListener('abort', abort);
+      controller.abort();
+      await agent?.destroy().catch(() => {
+        // best-effort teardown
+      });
+    })());
   try {
     // A resolver that never answers must still hit the timeout or the client abort.
     const deadline = new Promise<undefined>((resolve) => {
@@ -336,7 +401,15 @@ export async function openStreamSafely(
       await close();
       return { ok: false };
     }
-    return { ok: true, response, close };
+    // Register the client-abort cleanup before the caller can build a Response from the body.
+    controller.signal.addEventListener('abort', () => void close(), { once: true });
+    const body = response.body
+      ? guardBody(response.body as ReadableStream<Uint8Array>, close, {
+          idleMs: options.idleTimeoutMs ?? STREAM_IDLE_MS,
+          maxBytes: options.maxBytes ?? STREAM_MAX_BYTES,
+        })
+      : null;
+    return { ok: true, response, body, close };
   } catch {
     await close();
     return { ok: false };

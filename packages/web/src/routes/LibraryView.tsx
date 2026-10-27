@@ -1,8 +1,5 @@
 import { useCounts } from '../api/hooks';
 import { PasteCaptureButton } from '../components/PasteCaptureButton';
-
-export { PasteCaptureButton } from '../components/PasteCaptureButton';
-
 import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';

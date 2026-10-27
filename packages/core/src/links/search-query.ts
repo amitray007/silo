@@ -1,12 +1,13 @@
 import { db, links } from '@silo/db';
 import { asc, desc, sql } from 'drizzle-orm';
-import type { Link } from './executor.js';
 import {
   decodeSearchCursor,
   effectiveLimit,
   encodeSearchCursor,
   hydrateTags,
-  type LinkWithTags,
+  type LinkSummary,
+  type LinkSummaryWithTags,
+  listColumns,
   type PageParams,
 } from './pagination.js';
 
@@ -215,7 +216,10 @@ type SubstringSide = {
  * no post-mapping.
  */
 export type SearchRankedPage = {
-  results: (Omit<LinkWithTags, 'extractedText'> & { rank: number; snippet: string | null })[];
+  results: (Omit<LinkSummaryWithTags, 'extractedText'> & {
+    rank: number;
+    snippet: string | null;
+  })[];
   nextCursor?: string;
 };
 
@@ -465,7 +469,7 @@ export async function runUnionSearch(
   const orderBy = resolveOrderBy(options.sort, ftsMatchedFlag, combinedRankTerm, similarityTerm);
 
   const rows = await db
-    .select({ link: links, rank, snippet })
+    .select({ link: listColumns, rank, snippet })
     .from(links)
     .where(andAll(basePredicate, unionMatch, scopeCondition, ...(options.extraConditions ?? [])))
     .orderBy(...orderBy)
@@ -569,7 +573,7 @@ function andAll(base: SqlFragment, ...rest: ReadonlyArray<SqlFragment | undefine
 }
 
 async function toPage(
-  rows: { link: Link; rank: number; snippet: string | null }[],
+  rows: { link: LinkSummary; rank: number; snippet: string | null }[],
   limit: number,
   offset: number,
 ): Promise<SearchRankedPage> {

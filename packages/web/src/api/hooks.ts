@@ -131,7 +131,7 @@ export function useLinkTitles(urls: readonly string[], enabled: boolean) {
   });
 }
 
-/** Resolve a deep link only when its row is absent from loaded list pages. */
+/** Fetch one link's detail, including its Reader HTML, for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
   return useQuery({
     queryKey: queryKeys.link(id ?? ''),
@@ -466,13 +466,18 @@ export function useEditLink(id: string) {
  * Re-inserting just this one link by id, using whatever its row data looked
  * like right before removal, leaves every other row (and any of ITS
  * in-flight edits) untouched.
+ *
+ * The link id is the mutation VARIABLE, not a hook argument (also true of
+ * `useRestoreLink` and `useDeleteNow`): TanStack updates a pending mutation's
+ * options on re-render, so an id captured by the hook would retarget
+ * `onMutate`/`onError` at a newly selected link mid-flight.
  */
-export function useTrashLink(id: string) {
+export function useTrashLink() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => apiPost<LinkResponse>(`/api/links/${id}/trash`, {}),
-    onMutate: async () => {
+    mutationFn: (id: string) => apiPost<LinkResponse>(`/api/links/${id}/trash`, {}),
+    onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: ['links'] });
       const matches = queryClient.getQueriesData<LinksInfiniteData>({ queryKey: ['links'] });
       const removedLink = matches
@@ -656,12 +661,12 @@ function invalidateTrashQueries(queryClient: ReturnType<typeof useQueryClient>):
  * the trash list losing it. On failure the row is re-inserted (by id, not a
  * whole-cache snapshot — same rationale as `useTrashLink`'s doc comment).
  */
-export function useRestoreLink(id: string) {
+export function useRestoreLink() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => apiPost<RestoreResponse>(`/api/links/${id}/restore`, {}),
-    onMutate: async () => {
+    mutationFn: (id: string) => apiPost<RestoreResponse>(`/api/links/${id}/restore`, {}),
+    onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.trash() });
       const removedLink = removeFromTrashCache(queryClient, id);
       return { removedLink };
@@ -683,12 +688,12 @@ export function useRestoreLink(id: string) {
  * dialog. Optimistically removes the row from the trash cache; on failure
  * it's re-inserted (the delete never actually happened server-side).
  */
-export function useDeleteNow(id: string) {
+export function useDeleteNow() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => apiDelete<void>(`/api/trash/${id}`),
-    onMutate: async () => {
+    mutationFn: (id: string) => apiDelete<void>(`/api/trash/${id}`),
+    onMutate: async (id) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.trash() });
       const removedLink = removeFromTrashCache(queryClient, id);
       return { removedLink };

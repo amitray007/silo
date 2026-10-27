@@ -7,7 +7,8 @@ import {
   effectiveLimit,
   encodeTrashCursor,
   hydrateTags,
-  type LinkWithTags,
+  type LinkSummaryWithTags,
+  listColumns,
   type PageParams,
 } from './pagination.js';
 import { runUnionSearch } from './search-query.js';
@@ -28,7 +29,7 @@ import { runUnionSearch } from './search-query.js';
  */
 
 export type TrashPage = {
-  links: LinkWithTags[];
+  links: LinkSummaryWithTags[];
   nextCursor?: string;
 };
 
@@ -79,7 +80,7 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
   const where = cursorCondition ? and(trashedCondition, cursorCondition) : trashedCondition;
 
   const rows = await db
-    .select({ link: links, deletedAtText })
+    .select({ link: listColumns, deletedAtText })
     .from(links)
     .where(where)
     .orderBy(desc(links.deletedAt), desc(links.id))

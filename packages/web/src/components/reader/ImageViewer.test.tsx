@@ -84,4 +84,41 @@ describe('Reader image viewer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Fit to screen' }));
     expect((stageImage as HTMLElement).style.transform).toContain('scale(1)');
   });
+
+  it('pans from the pinched view when one finger lifts and the other keeps moving', () => {
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1000);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      left: 0,
+      top: 0,
+      width: 1000,
+      height: 800,
+      right: 1000,
+      bottom: 800,
+      x: 0,
+      y: 0,
+      toJSON: () => ({}),
+    });
+    Element.prototype.setPointerCapture = () => {};
+    const { images } = show();
+    fireEvent.click(images[0] as HTMLImageElement);
+    const stage = screen.getByRole('dialog').querySelector('.silo-viewer-stage') as HTMLElement;
+    const image = stage.querySelector('img') as HTMLElement;
+    const pointer = (type: string, id: number, x: number, y: number) =>
+      fireEvent(
+        stage,
+        Object.assign(new MouseEvent(type, { bubbles: true, button: 0, clientX: x, clientY: y }), {
+          pointerId: id,
+        }),
+      );
+    const offset = () => Number(/translate\((-?[\d.]+)px/.exec(image.style.transform)?.[1]);
+    pointer('pointerdown', 1, 400, 400);
+    pointer('pointerdown', 2, 600, 400);
+    pointer('pointermove', 2, 700, 400);
+    pointer('pointerup', 1, 400, 400);
+    const pinched = offset();
+    expect(image.style.transform).not.toContain('scale(1)');
+    pointer('pointermove', 2, 690, 400);
+    expect(offset()).toBeCloseTo(pinched - 10, 5);
+  });
 });

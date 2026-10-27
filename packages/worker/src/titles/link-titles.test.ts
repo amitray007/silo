@@ -58,15 +58,41 @@ describe('link title fetcher', () => {
     expect(peak).toBeLessThanOrEqual(8);
   });
 
-  it('does not cache an aborted lookup', async () => {
+  it('keeps a shared lookup alive when the first caller aborts', async () => {
+    let release: (result: SafeFetchResult) => void = () => {};
+    const fetch = vi.fn(
+      () =>
+        new Promise<SafeFetchResult>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const titles = createLinkTitleFetcher({ fetch });
+    const url = 'https://a.test/shared';
+    const first = new AbortController();
+    const firstResult = titles([url], first.signal);
+    const secondResult = titles([url], signal());
+    first.abort();
+    expect(await firstResult).toEqual({});
+    release(page('<title>Shared title</title>'));
+    expect(await secondResult).toEqual({ [url]: 'Shared title' });
+    expect(await titles([url], signal())).toEqual({ [url]: 'Shared title' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('gives the shared fetch a signal that a caller abort cannot trigger', async () => {
     const controller = new AbortController();
-    const fetch = vi.fn(async () => {
+    let seen: AbortSignal | undefined;
+    const fetch = vi.fn(async (_url: string, options: { signal: AbortSignal }) => {
+      seen = options.signal;
       controller.abort();
-      return { ok: false, reason: 'timeout' } as SafeFetchResult;
+      return page('<title>T</title>');
     });
     const titles = createLinkTitleFetcher({ fetch });
     await titles(['https://a.test/slow'], controller.signal);
-    await titles(['https://a.test/slow'], signal());
-    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(seen?.aborted).toBe(false);
+    expect(await titles(['https://a.test/slow'], signal())).toEqual({
+      'https://a.test/slow': 'T',
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
   });
 });

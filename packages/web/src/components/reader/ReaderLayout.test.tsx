@@ -1226,10 +1226,14 @@ describe('responsive reader header', () => {
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith(a.url));
   });
 
-  it('shows a plain Library title while the sidebar is open', async () => {
+  it('keeps Trash reachable from the Library switcher while the sidebar is open, without repeating tags', async () => {
     renderReader();
-    const heading = await screen.findByRole('heading', { level: 1, name: 'Library' });
-    expect(within(heading).queryByRole('button')).toBeNull();
+    await screen.findByText('First link');
+    fireEvent.click(screen.getByRole('button', { name: 'Library' }));
+    expect(screen.getByRole('menuitem', { name: /Trash/ })).toBeDefined();
+    expect(screen.queryByRole('menuitem', { name: /mcp/ })).toBeNull();
+    fireEvent.click(screen.getByRole('menuitem', { name: /Trash/ }));
+    await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/trash'));
   });
 
   it('keeps tags reachable from the Library collection menu', async () => {

@@ -27,13 +27,13 @@ export function LinkRow({ link }: { link: LinkJson }) {
     if (menuOpen) scheduleHide(link.id);
   }, [menuOpen, scheduleHide, link.id]);
   const source = link.sourceData;
-  const trash = useTrashLink(link.id);
+  const trash = useTrashLink();
   return (
     <ListRow
       link={link}
       busy={trash.isPending}
       error={trash.isError ? "Couldn't move this link to trash. Try again." : undefined}
-      onRemove={() => trash.mutate()}
+      onRemove={() => trash.mutate(link.id)}
       menuOpen={menuOpen}
       toggleMenu={() => toggleMenu(link.id)}
       menu={(anchor) =>

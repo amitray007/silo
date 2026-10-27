@@ -156,7 +156,7 @@ export function TrashView() {
   const { data: counts } = useCounts();
   const { data, isLoading, isError } = useTrashList();
   const [deleteId, setDeleteId] = useState<string | null>(null);
-  const remove = useDeleteNow(deleteId ?? '');
+  const remove = useDeleteNow();
 
   const links = data?.links ?? [];
   const purgeWindowDays = counts?.purgeWindowDays ?? 30;
@@ -189,7 +189,7 @@ export function TrashView() {
           pending={remove.isPending}
           onClose={() => setDeleteId(null)}
           onConfirm={() =>
-            remove.mutate(undefined, {
+            remove.mutate(deleteId, {
               onSettled: () => setDeleteId(null),
             })
           }

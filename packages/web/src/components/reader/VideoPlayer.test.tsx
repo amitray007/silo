@@ -60,6 +60,20 @@ describe('VideoPlayer', () => {
     expect(video.pause).toHaveBeenCalled();
   });
 
+  it('leaves Space to a focused control button and toggles playback from the player itself', () => {
+    const { container } = show();
+    fireEvent.click(screen.getByRole('button', { name: 'Play video' }));
+    const pause = vi.mocked(HTMLMediaElement.prototype.pause);
+    const figure = container.querySelector('figure') as HTMLElement;
+    // fireEvent returns false when the handler called preventDefault.
+    expect(fireEvent.keyDown(screen.getByRole('button', { name: 'Mute' }), { key: ' ' })).toBe(
+      true,
+    );
+    expect(pause).not.toHaveBeenCalled();
+    expect(fireEvent.keyDown(figure, { key: ' ' })).toBe(false);
+    expect(pause).toHaveBeenCalledOnce();
+  });
+
   it('shows a spinner while buffering and a retry when loading fails', () => {
     const { video, container } = show();
     fireEvent.click(screen.getByRole('button', { name: 'Play video' }));

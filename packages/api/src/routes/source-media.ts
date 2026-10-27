@@ -1,4 +1,4 @@
-import { getById } from '@silo/core';
+import { getById, sourceDataSchema } from '@silo/core';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
 import { allowedImageContentType, imageResponse } from '../image-response.js';
@@ -30,9 +30,9 @@ const params = z.object({
 type Target = { url: string; video: boolean };
 
 function mediaTarget(sourceData: unknown, index: number | 'poster'): Target | undefined {
-  if (typeof sourceData !== 'object' || sourceData === null) return undefined;
-  const data = sourceData as { kind?: string; mediaUrls?: string[]; thumbnailUrl?: string };
-  if (data.kind !== 'twitter') return undefined;
+  const parsed = sourceDataSchema.safeParse(sourceData);
+  if (!parsed.success || parsed.data.kind !== 'twitter') return undefined;
+  const data = parsed.data;
   const raw = index === 'poster' ? data.thumbnailUrl : data.mediaUrls?.[index];
   if (!raw) return undefined;
   try {
@@ -67,7 +67,7 @@ async function streamVideo(c: Context, url: string): Promise<Response> {
     return new Response(null, { status: 416, headers: unsatisfied });
   }
   const type = response.headers.get('content-type')?.split(';')[0]?.trim().toLowerCase();
-  if (!type || !VIDEO_TYPES.has(type) || !response.body) {
+  if (!type || !VIDEO_TYPES.has(type) || !opened.body) {
     await close();
     return missing(c);
   }
@@ -81,11 +81,7 @@ async function streamVideo(c: Context, url: string): Promise<Response> {
     const value = response.headers.get(name);
     if (value) headers.set(name, value);
   }
-  const body = (response.body as ReadableStream<Uint8Array>).pipeThrough(
-    new TransformStream<Uint8Array, Uint8Array>({ flush: () => close() }),
-  );
-  c.req.raw.signal.addEventListener('abort', () => void close(), { once: true });
-  return new Response(body, { status: response.status, headers });
+  return new Response(opened.body, { status: response.status, headers });
 }
 
 export function registerSourceMediaRoutes(app: Hono): void {

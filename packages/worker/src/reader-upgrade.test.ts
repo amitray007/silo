@@ -220,4 +220,38 @@ describeIfPg('Reader upgrade job (Postgres)', () => {
     expect(fetcher).toHaveBeenCalledTimes(1);
     expect(await job.runReaderUpgrade()).toEqual({ upgraded: 0, unchanged: 0, unavailable: 0 });
   });
+
+  it('counts a link whose fetch or extract throws as unavailable and keeps going', async () => {
+    await capture('full');
+    await capture('partial');
+    await capture('bare');
+    const order = await core.findReaderUpgradeCandidates();
+    expect(order).toHaveLength(3);
+    const poisoned = order[1]?.url;
+    const log = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    fetcher.mockImplementation(async (url) => {
+      if (url === poisoned) throw new Error('parser exploded');
+      return {
+        ok: true,
+        html: '<article><p>Captured Reader</p></article>',
+        contentType: 'text/html',
+        finalUrl: url,
+        status: 200,
+      };
+    });
+    try {
+      const seen: string[] = [];
+      expect(await job.runReaderUpgrade((id) => seen.push(id))).toEqual({
+        upgraded: 2,
+        unchanged: 0,
+        unavailable: 1,
+      });
+      expect(seen).toEqual(order.map((candidate) => candidate.id));
+      const [first, , last] = order;
+      expect((await core.getById(first?.id ?? ''))?.contentHtml).not.toBeNull();
+      expect((await core.getById(last?.id ?? ''))?.contentHtml).not.toBeNull();
+    } finally {
+      log.mockRestore();
+    }
+  });
 });

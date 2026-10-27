@@ -81,4 +81,29 @@ describeIfPg('Reader storage (Postgres)', () => {
     expect(second).toHaveLength(3);
     expect([...first, ...second].map((row) => row.id).sort()).toEqual(ids.sort());
   });
+
+  it('keeps the Reader payload out of list, search, trash and export reads but not getById', async () => {
+    const { core } = harness.mod();
+    const live = await core.createLink({ url: 'https://example.org/heavy', sourceKind: 'link' });
+    await core.recordEnrichment(live.id, { status: 'full', text: 'heavy needle', reader: content });
+    const gone = await core.createLink({ url: 'https://example.org/gone', sourceKind: 'link' });
+    await core.recordEnrichment(gone.id, { status: 'full', text: 'gone needle', reader: content });
+    await core.softDelete(gone.id);
+
+    const listed = (await core.list()).links[0];
+    const found = (await core.search('heavy')).results[0];
+    const trashed = (await core.listTrash()).links[0];
+    const trashFound = (await core.searchTrash('gone')).results[0];
+    for (const row of [listed, found, trashed, trashFound]) {
+      expect(row).toBeDefined();
+      expect(row).not.toHaveProperty('contentHtml');
+      expect(row).not.toHaveProperty('contentImages');
+      expect(row).toHaveProperty('tags');
+    }
+    expect(listed?.id).toBe(live.id);
+    expect((await core.exportLinks()).body).not.toContain('<p>Reader</p>');
+    const detail = await core.getById(live.id);
+    expect(detail?.contentHtml).toBe(content.contentHtml);
+    expect(detail?.contentImages).toEqual(content.contentImages);
+  });
 });

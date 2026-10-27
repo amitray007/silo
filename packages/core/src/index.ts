@@ -153,6 +153,7 @@ export type {
   GetByIdOptions,
   Link,
   LinkCounts,
+  LinkSummaryWithTags,
   LinkWithTags,
   LinkWithTextWindow,
   ListFilter,

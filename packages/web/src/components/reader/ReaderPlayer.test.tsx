@@ -9,6 +9,7 @@ const tweet = {
   title: 'X post',
   aspect: 'auto',
   height: 250,
+  video: false,
 } as const;
 
 describe('Reader player', () => {

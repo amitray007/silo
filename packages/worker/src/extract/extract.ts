@@ -9,7 +9,7 @@ import metascraperTitle from 'metascraper-title';
 import metascraperUrl from 'metascraper-url';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
 import type { PageContent } from './reader-page.js';
-import { extractPage, ReaderExtractionError } from './reader-worker.js';
+import { extractPage } from './reader-worker.js';
 
 // PRIVACY: deliberately does NOT include `metascraper-logo-favicon` — it
 // performs a third-party favicon fetch per row, which violates silo's
@@ -199,7 +199,8 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
     return { status: 'bare' };
   }
 
-  // Parser timeouts reject so the capture job retries. No publisher URLs are fetched.
+  // A Reader failure falls back to metadata only, so a page that always fails still settles
+  // (retry only counts recorded attempts). reader-upgrade can rebuild Reader content later.
   const fields = await runMetascraper(url, html);
   try {
     const page = await extractPage(
@@ -213,7 +214,6 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
       '[reader] extraction unavailable',
       error instanceof Error ? error.message : 'reader-failed',
     );
-    if (error instanceof ReaderExtractionError) throw error;
     return buildResult(fields, undefined);
   }
 }

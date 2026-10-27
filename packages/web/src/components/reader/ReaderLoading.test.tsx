@@ -25,6 +25,7 @@ describe('Frame loading deadline', () => {
           src: 'https://www.youtube-nocookie.com/embed/jNQXAC9IVRw',
           title: 'YouTube video',
           aspect: '16 / 9',
+          video: true,
         }}
         url="https://www.youtube.com/watch?v=jNQXAC9IVRw"
       />,

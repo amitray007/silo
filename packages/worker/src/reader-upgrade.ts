@@ -1,4 +1,9 @@
-import { findReaderUpgradeCandidates, getById, recordReaderUpgrade } from '@silo/core';
+import {
+  findReaderUpgradeCandidates,
+  getById,
+  type ReaderContent,
+  recordReaderUpgrade,
+} from '@silo/core';
 import { extract } from './extract/extract.js';
 import { safeFetch } from './fetch/safe-fetch.js';
 
@@ -15,15 +20,29 @@ export async function upgradeReader(
   const link = await getById(linkId);
   if (!link || (!options.refreshHtml && link.contentHtml !== null && link.extractedText))
     return 'unchanged';
-  const result = await deps.safeFetch(link.url);
-  if (!result.ok) return 'unavailable';
-  const extracted = await deps.extract({
-    url: result.finalUrl,
-    html: result.html,
-    contentType: result.contentType,
-  });
-  if (!extracted.reader) return 'unavailable';
-  return (await recordReaderUpgrade(linkId, extracted.reader, extracted.text, options.refreshHtml))
+  // Only the network and parser step is caught: a database error still aborts the run.
+  let reader: ReaderContent | undefined;
+  let text: string | undefined;
+  try {
+    const result = await deps.safeFetch(link.url);
+    if (!result.ok) return 'unavailable';
+    const extracted = await deps.extract({
+      url: result.finalUrl,
+      html: result.html,
+      contentType: result.contentType,
+    });
+    reader = extracted.reader;
+    text = extracted.text;
+  } catch (error) {
+    console.warn(
+      '[reader-upgrade] fetch or extract failed',
+      linkId,
+      error instanceof Error ? error.message : 'unknown',
+    );
+    return 'unavailable';
+  }
+  if (!reader) return 'unavailable';
+  return (await recordReaderUpgrade(linkId, reader, text, options.refreshHtml))
     ? 'upgraded'
     : 'unchanged';
 }

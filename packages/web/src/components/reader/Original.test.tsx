@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setApiBaseUrl } from '../../api/client';
+import { queryKeys } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { makeLink } from '../../test/fixtures';
 import { ThemeProvider } from '../../theme/ThemeProvider';
@@ -14,7 +15,7 @@ function Standalone({ link, showReader = () => {} }: { link: LinkJson; showReade
   const state = useOriginal(link, true);
   return (
     <>
-      <button type="button" onClick={() => state.refresh.mutate()}>
+      <button type="button" onClick={() => state.refresh.mutate(link.id)}>
         Reload page
       </button>
       <button type="button" onClick={state.toggleDarkPage}>
@@ -216,6 +217,48 @@ describe('Original mode order', () => {
     expect(container.querySelector('iframe')?.getAttribute('src')).toContain(
       '/api/links/link-id/view',
     );
+  });
+});
+
+describe('Original same-origin and reload binding', () => {
+  it('never frames a same-origin page live, even when the hint says direct', async () => {
+    const { container } = show('direct', `${window.location.origin}/inside`);
+    const frame = await screen.findByTitle('Silo view');
+    expect(frame.getAttribute('sandbox')).not.toContain('allow-same-origin');
+    expect(screen.queryByTitle('Live page')).toBeNull();
+    expect(container.querySelector('.silo-original')?.getAttribute('data-mode')).toBe('view');
+  });
+  it('writes a finished Reload to the link it started on, and leaves the new link alone', async () => {
+    let finish: (() => void) | undefined;
+    const fetch = vi.fn(async (url: string, init?: RequestInit) => {
+      if (url.includes('fresh=1'))
+        await new Promise<void>((resolve) => {
+          finish = resolve;
+        });
+      return new Response(init?.method === 'HEAD' ? null : JSON.stringify({ mode: 'direct' }));
+    });
+    vi.stubGlobal('fetch', fetch);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const tree = (current: LinkJson) => (
+      <QueryClientProvider client={client}>
+        <ThemeProvider>
+          <Standalone link={current} />
+        </ThemeProvider>
+      </QueryClientProvider>
+    );
+    const first = makeLink({ id: 'link-a', url: 'https://publisher.test/a' });
+    const second = makeLink({ id: 'link-b', url: 'https://publisher.test/b' });
+    const view = render(tree(first));
+    await screen.findByTitle('Live page');
+    fireEvent.click(screen.getByRole('button', { name: 'Reload page' }));
+    await waitFor(() => expect(finish).toBeDefined());
+    view.rerender(tree(second));
+    const frame = await screen.findByTitle('Live page');
+    await act(async () => {
+      finish?.();
+    });
+    await waitFor(() => expect(client.getQueryData(queryKeys.frame('link-a'))).toBeDefined());
+    expect(screen.getByTitle('Live page')).toBe(frame);
   });
 });
 

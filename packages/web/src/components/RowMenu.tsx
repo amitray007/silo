@@ -35,7 +35,7 @@ export function LinkMenuActions({
   const { openEdit } = useRowMenu();
   const [tagsOpen, setTagsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
-  const trash = useTrashLink(link.id);
+  const trash = useTrashLink();
   const retry = useRetryCapture(link.id);
   const tags = useLinkTags(link);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -150,7 +150,7 @@ export function LinkMenuActions({
         onClick={() => {
           closeMenu();
           if (onTrash) onTrash();
-          else trash.mutate();
+          else trash.mutate(link.id);
         }}
       >
         Move to trash

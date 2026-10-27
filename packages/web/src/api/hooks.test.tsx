@@ -734,10 +734,10 @@ describe('useTrashLink', () => {
       jsonResponse({ link: makeLink({ id: '1', tags: [] }) }, 200),
     );
 
-    const { result } = renderHook(() => useTrashLink('1'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/trash', {
@@ -757,10 +757,10 @@ describe('useTrashLink', () => {
 
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
 
-    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     await waitFor(() => {
@@ -778,10 +778,10 @@ describe('useTrashLink', () => {
       jsonResponse({ error: 'not_found', message: 'gone' }, 404),
     );
 
-    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync().catch(() => {});
+      await result.current.mutateAsync('target').catch(() => {});
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -815,10 +815,10 @@ describe('useTrashLink', () => {
         }),
     );
 
-    const { result } = renderHook(() => useTrashLink('target'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     // Wait for the optimistic removal to land (onMutate has run).
@@ -851,10 +851,10 @@ describe('useTrashLink', () => {
       jsonResponse({ link: makeLink({ id: '1', tags: [] }) }, 200),
     );
 
-    const { result } = renderHook(() => useTrashLink('1'), { wrapper: TrashWrapper });
+    const { result } = renderHook(() => useTrashLink(), { wrapper: TrashWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
@@ -1055,10 +1055,10 @@ describe('useRestoreLink', () => {
       jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
     );
 
-    const { result } = renderHook(() => useRestoreLink('1'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/links/1/restore', {
@@ -1078,10 +1078,10 @@ describe('useRestoreLink', () => {
 
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
 
-    const { result } = renderHook(() => useRestoreLink('target'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     await waitFor(() => {
@@ -1099,10 +1099,10 @@ describe('useRestoreLink', () => {
       jsonResponse({ error: 'not_found', message: 'gone' }, 404),
     );
 
-    const { result } = renderHook(() => useRestoreLink('target'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync().catch(() => {});
+      await result.current.mutateAsync('target').catch(() => {});
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -1117,10 +1117,10 @@ describe('useRestoreLink', () => {
       jsonResponse({ outcome: 'restored', link: makeLink({ id: '1' }) }, 200),
     );
 
-    const { result } = renderHook(() => useRestoreLink('1'), { wrapper: RestoreWrapper });
+    const { result } = renderHook(() => useRestoreLink(), { wrapper: RestoreWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);
@@ -1152,10 +1152,10 @@ describe('useDeleteNow', () => {
     const { DeleteWrapper } = makeWrapper();
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    const { result } = renderHook(() => useDeleteNow('1'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     expect(fetch).toHaveBeenCalledWith('/api/trash/1', {
@@ -1172,10 +1172,10 @@ describe('useDeleteNow', () => {
 
     vi.mocked(fetch).mockImplementationOnce(() => new Promise(() => {}));
 
-    const { result } = renderHook(() => useDeleteNow('target'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     act(() => {
-      result.current.mutate();
+      result.current.mutate('target');
     });
 
     await waitFor(() => {
@@ -1193,10 +1193,10 @@ describe('useDeleteNow', () => {
       jsonResponse({ error: 'not_found', message: 'gone' }, 404),
     );
 
-    const { result } = renderHook(() => useDeleteNow('target'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync().catch(() => {});
+      await result.current.mutateAsync('target').catch(() => {});
     });
 
     await waitFor(() => expect(result.current.isError).toBe(true));
@@ -1209,10 +1209,10 @@ describe('useDeleteNow', () => {
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
     vi.mocked(fetch).mockResolvedValueOnce(new Response(null, { status: 204 }));
 
-    const { result } = renderHook(() => useDeleteNow('1'), { wrapper: DeleteWrapper });
+    const { result } = renderHook(() => useDeleteNow(), { wrapper: DeleteWrapper });
 
     await act(async () => {
-      await result.current.mutateAsync();
+      await result.current.mutateAsync('1');
     });
 
     const invalidatedKeys = invalidateSpy.mock.calls.map((call) => call[0]?.queryKey);

@@ -238,8 +238,60 @@ describe('openStreamSafely', () => {
     if (!opened.ok) return;
     expect(range).toBe('bytes=0-2');
     expect(opened.response.status).toBe(206);
-    expect(Array.from(new Uint8Array(await opened.response.arrayBuffer()))).toEqual([7, 8, 9]);
+    expect(Array.from(new Uint8Array(await new Response(opened.body).arrayBuffer()))).toEqual([
+      7, 8, 9,
+    ]);
     await opened.close();
+  });
+
+  it('aborts a stream whose upstream goes quiet after the headers', async () => {
+    handler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'video/mp4' });
+      res.write(Buffer.from([1, 2]));
+      // Never ends: the idle timeout must cut it off.
+    };
+    const opened = await openStreamSafely(`http://media.example:${port}/stall.mp4`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      idleTimeoutMs: 100,
+    });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok || !opened.body) return;
+    await expect(new Response(opened.body).arrayBuffer()).rejects.toThrow();
+    await opened.close();
+  });
+
+  it('aborts a stream that passes the byte cap', async () => {
+    handler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'video/mp4' });
+      res.end(Buffer.alloc(64));
+    };
+    const opened = await openStreamSafely(`http://media.example:${port}/big.mp4`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      maxBytes: 16,
+    });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok || !opened.body) return;
+    await expect(new Response(opened.body).arrayBuffer()).rejects.toThrow('stream too large');
+  });
+
+  it('stops reading when the client request aborts mid-stream', async () => {
+    handler = (_req, res) => {
+      res.writeHead(200, { 'content-type': 'video/mp4' });
+      res.write(Buffer.from([1]));
+    };
+    const client = new AbortController();
+    const opened = await openStreamSafely(`http://media.example:${port}/gone.mp4`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      signal: client.signal,
+    });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok || !opened.body) return;
+    const pending = new Response(opened.body).arrayBuffer();
+    client.abort();
+    await expect(pending).rejects.toThrow();
   });
 
   it('refuses loopback without the test bypass, redirects, and non-2xx answers', async () => {

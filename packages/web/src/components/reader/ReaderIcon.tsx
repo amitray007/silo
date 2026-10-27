@@ -34,7 +34,6 @@ const paths = {
   logout: 'M10 3H4v18h6M16 7l5 5-5 5M21 12H9',
   hash: 'M10 5.5 8.5 18.5M15.5 5.5 14 18.5M6 9.75h12.5M5.5 14.25H18',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
-  check: 'm5 12 4 4L19 6',
   right: 'm9 5 7 7-7 7',
 } as const;
 

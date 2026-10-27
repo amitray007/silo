@@ -282,6 +282,8 @@ export function VideoPlayer({
   };
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
     if (event.target instanceof HTMLInputElement || event.metaKey || event.ctrlKey) return;
+    // Space activates a focused control button; it must not also toggle playback.
+    if (event.key === ' ' && event.target instanceof HTMLButtonElement) return;
     const action = keys[event.key];
     if (!action) return;
     event.preventDefault();

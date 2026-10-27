@@ -92,6 +92,7 @@ function TweetCard({ linkId, source }: { linkId: string; source: TweetSource }) 
       <p>{source.text}</p>
       {source.mediaUrls && (
         <TweetMedia
+          key={linkId}
           linkId={linkId}
           mediaUrls={source.mediaUrls}
           hasPoster={Boolean(source.thumbnailUrl)}
@@ -128,7 +129,7 @@ export function ReaderContent({
 
   const source = link.sourceData;
   const embed = embedFor(link.url, source);
-  const video = embed && ['youtube', 'vimeo', 'loom'].includes(embed.provider);
+  const video = embed?.video;
   const prose = 'contentHtml' in link && link.contentHtml !== null;
   return (
     <>

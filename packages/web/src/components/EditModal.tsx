@@ -25,7 +25,7 @@ export function EditModal({
   const noteRef = useRef<HTMLTextAreaElement>(null);
   const tags = useLinkTags(link);
   const edit = useEditLink(link.id);
-  const trash = useTrashLink(link.id);
+  const trash = useTrashLink();
   const domain = deriveDomain(link.url);
   const busy = edit.isPending || trash.isPending;
   useEffect(() => {
@@ -147,7 +147,7 @@ export function EditModal({
           className="silo-edit-footer-btn silo-quiet-danger"
           disabled={busy}
           onClick={() => {
-            trash.mutate(undefined, {
+            trash.mutate(link.id, {
               onSuccess: () => {
                 closeEdit();
               },

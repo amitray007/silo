@@ -7,7 +7,11 @@ export type PlayerEmbed = {
   title: string;
   aspect: string;
   height?: number;
+  /** A video provider: the reader shows it as the post's player and can seek its chapters. */
+  video: boolean;
 };
+type ProviderEmbed = Omit<PlayerEmbed, 'video'>;
+const videoProviders: readonly Provider[] = ['youtube', 'vimeo', 'loom'];
 
 const youtubeId = /^[\w-]{11}$/;
 function startSeconds(value: string | null): number | undefined {
@@ -19,7 +23,7 @@ function startSeconds(value: string | null): number | undefined {
   return Number.isSafeInteger(seconds) ? seconds : undefined;
 }
 
-function youtube(url: URL, source: SourceData): PlayerEmbed | undefined {
+function youtube(url: URL, source: SourceData): ProviderEmbed | undefined {
   const short = url.hostname === 'youtu.be';
   const path = /^\/(?:shorts|embed|live)\/([\w-]+)\/?$/.exec(url.pathname);
   let id = short ? /^\/([\w-]+)\/?$/.exec(url.pathname)?.[1] : path?.[1];
@@ -33,7 +37,7 @@ function youtube(url: URL, source: SourceData): PlayerEmbed | undefined {
   return { provider: 'youtube', src: src.href, title: 'YouTube video', aspect: '16 / 9' };
 }
 
-function vimeo(url: URL): PlayerEmbed | undefined {
+function vimeo(url: URL): ProviderEmbed | undefined {
   const match = /^\/(?:video\/)?([1-9]\d{0,11})(?:\/([a-f\d]{10}))?\/?$/.exec(url.pathname);
   if (!match) return undefined;
   const hash = match[2] ?? url.searchParams.get('h');
@@ -43,7 +47,7 @@ function vimeo(url: URL): PlayerEmbed | undefined {
   return { provider: 'vimeo', src: src.href, title: 'Vimeo video', aspect: '16 / 9' };
 }
 
-function otherEmbed(url: URL): PlayerEmbed | undefined {
+function otherEmbed(url: URL): ProviderEmbed | undefined {
   const host = url.hostname;
   if (['loom.com', 'www.loom.com'].includes(host)) {
     const id = /^\/(?:share|embed)\/([a-f\d]{32})\/?$/.exec(url.pathname)?.[1];
@@ -82,7 +86,7 @@ function otherEmbed(url: URL): PlayerEmbed | undefined {
   return figma(url);
 }
 
-function figma(url: URL): PlayerEmbed | undefined {
+function figma(url: URL): ProviderEmbed | undefined {
   if (!['figma.com', 'www.figma.com', 'embed.figma.com'].includes(url.hostname)) return undefined;
   const path = /^\/(design|file|board|proto)\/([A-Za-z\d]{10,128})(?:\/[^/]*)?\/?$/.exec(
     url.pathname,
@@ -111,12 +115,11 @@ function figma(url: URL): PlayerEmbed | undefined {
   };
 }
 
-/** Construct trusted player URLs; never render HTML returned by a provider. */
-export function embedFor(
+function resolveEmbed(
   rawUrl: string,
   sourceData: SourceData,
-  theme: 'light' | 'dark' = 'light',
-): PlayerEmbed | undefined {
+  theme: 'light' | 'dark',
+): ProviderEmbed | undefined {
   let url: URL;
   try {
     url = new URL(rawUrl);
@@ -153,4 +156,14 @@ export function embedFor(
     return undefined;
   }
   return otherEmbed(url);
+}
+
+/** Construct trusted player URLs; never render HTML returned by a provider. */
+export function embedFor(
+  rawUrl: string,
+  sourceData: SourceData,
+  theme: 'light' | 'dark' = 'light',
+): PlayerEmbed | undefined {
+  const embed = resolveEmbed(rawUrl, sourceData, theme);
+  return embed && { ...embed, video: videoProviders.includes(embed.provider) };
 }
