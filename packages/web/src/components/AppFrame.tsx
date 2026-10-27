@@ -243,7 +243,7 @@ export function AppFrame() {
                   aria-controls={DRAWER_ID}
                   onClick={showSidebar}
                 >
-                  <ReaderIcon name="menu" />
+                  <ReaderIcon name="sidebar" />
                 </button>
                 <Outlet context={{ showSidebar, sidebarHidden: collapsed }} />
                 <MobileBar onSearch={commandPalette.openPalette} />

@@ -21,7 +21,6 @@ const paths = {
   // Rounded panel with a short inset rail, matching Shiori's sidebar glyph.
   sidebar:
     'M7.75 4.75h8.5a3 3 0 0 1 3 3v8.5a3 3 0 0 1-3 3h-8.5a3 3 0 0 1-3-3v-8.5a3 3 0 0 1 3-3ZM8.75 7.75v8.5',
-  menu: 'M4 6h16M4 12h16M4 18h16',
   sun: 'M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5M17 12a5 5 0 1 1-10 0 5 5 0 0 1 10 0',
   moon: 'M20 15a9 9 0 0 1-11-11A9 9 0 1 0 20 15',
   library: 'M6 3h12a1 1 0 0 1 1 1v17l-7-4-7 4V4a1 1 0 0 1 1-1Z',
