@@ -38,6 +38,16 @@ A live canonical-URL lookup hides save buttons for links already in the Library.
 Saving uses normal capture without tags, shows pending and filled states, and
 offers an inline retry on failure. Each row opens its URL in a new tab.
 
+## Image viewer
+
+Article images at least 64 px on a side open in a full-screen viewer by click,
+Enter or Space. Pinch or ctrl/⌘ + scroll zooms at the pointer; a plain scroll
+or a drag pans a zoomed image; a click toggles fit and a close-up (actual size
+when that is at least 1.5x the fit, else 2.5x). Keys: `+` `-` `0`, arrows for
+the previous or next article image, Escape to close. Zoom stops at 4x the fit
+or 2x actual size. A linked image keeps its link on the new-tab button. App
+shortcuts do not run behind the viewer.
+
 ## QA set (binding)
 
 Test with real links, never the dummy `example.com` rows. The set lives in
