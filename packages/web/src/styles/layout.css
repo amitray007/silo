@@ -583,6 +583,74 @@
   white-space: pre-wrap;
   margin: 0;
 }
+/* X's own layouts: one item full width, two side by side, three with a tall lead, four in a grid. */
+.silo-tweet-media {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px;
+  margin: 14px 0 4px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--line);
+}
+.silo-tweet-media[data-count="1"] {
+  grid-template-columns: 1fr;
+}
+.silo-tweet-media[data-count="3"] > :first-child {
+  grid-row: span 2;
+}
+.silo-tweet-photo {
+  display: block;
+  padding: 0;
+  border: 0;
+  background: var(--hov);
+  cursor: zoom-in;
+}
+.silo-tweet-img,
+.silo-tweet-video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.silo-tweet-media:not([data-count="1"]) :is(.silo-tweet-photo, .silo-tweet-gif, .silo-tweet-video) {
+  aspect-ratio: 16 / 10;
+}
+.silo-tweet-media[data-count="3"] > :first-child {
+  aspect-ratio: auto;
+}
+.silo-tweet-media[data-count="1"] :is(.silo-tweet-img, .silo-tweet-video) {
+  height: auto;
+  max-height: 560px;
+  object-fit: contain;
+  background: #000;
+}
+.silo-tweet-gif {
+  position: relative;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: var(--hov);
+  cursor: pointer;
+}
+.silo-tweet-gif-badge {
+  position: absolute;
+  left: 8px;
+  bottom: 8px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: rgb(0 0 0 / 0.65);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+.silo-tweet-gif:focus-visible,
+.silo-tweet-photo:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: -2px;
+}
 .silo-reader-who {
   display: flex;
   gap: 10px;

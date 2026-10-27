@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ImageFetchResolver } from './ssrf-safe-image-fetch.js';
-import { fetchImageSafely } from './ssrf-safe-image-fetch.js';
+import { fetchImageSafely, openStreamSafely } from './ssrf-safe-image-fetch.js';
 
 /**
  * Unit tests for the narrow SSRF-safe image fetch backing `GET /api/
@@ -219,4 +219,77 @@ it('bounds a DNS resolver that never settles by the same five-second deadline', 
   } finally {
     vi.useRealTimers();
   }
+});
+
+describe('openStreamSafely', () => {
+  it('streams through the pinned agent and forwards the range header', async () => {
+    let range: string | undefined;
+    handler = (req, res) => {
+      range = req.headers.range;
+      res.writeHead(206, { 'content-type': 'video/mp4', 'content-range': 'bytes 0-2/10' });
+      res.end(Buffer.from([7, 8, 9]));
+    };
+    const opened = await openStreamSafely(`http://media.example:${port}/clip.mp4`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      headers: { range: 'bytes=0-2' },
+    });
+    expect(opened.ok).toBe(true);
+    if (!opened.ok) return;
+    expect(range).toBe('bytes=0-2');
+    expect(opened.response.status).toBe(206);
+    expect(Array.from(new Uint8Array(await opened.response.arrayBuffer()))).toEqual([7, 8, 9]);
+    await opened.close();
+  });
+
+  it('refuses loopback without the test bypass, redirects, and non-2xx answers', async () => {
+    expect(
+      (await openStreamSafely(`http://media.example:${port}/a`, { resolver: loopbackResolver() }))
+        .ok,
+    ).toBe(false);
+    handler = (_req, res) => {
+      res.writeHead(302, { location: 'http://169.254.169.254/' });
+      res.end();
+    };
+    const options = { resolver: loopbackResolver(), allowLoopbackForTests: true };
+    expect((await openStreamSafely(`http://media.example:${port}/a`, options)).ok).toBe(false);
+    handler = (_req, res) => {
+      res.writeHead(404);
+      res.end();
+    };
+    expect((await openStreamSafely(`http://media.example:${port}/a`, options)).ok).toBe(false);
+  });
+
+  it('gives up when the client request is already gone', async () => {
+    const controller = new AbortController();
+    controller.abort();
+    const opened = await openStreamSafely(`http://media.example:${port}/a`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      signal: controller.signal,
+    });
+    expect(opened.ok).toBe(false);
+  });
+
+  it('times out a resolver that never answers', async () => {
+    const opened = await openStreamSafely('http://media.example/a', {
+      resolver: () => new Promise(() => {}),
+      timeoutMs: 50,
+    });
+    expect(opened.ok).toBe(false);
+  });
+
+  it('passes through statuses the caller asks for', async () => {
+    handler = (_req, res) => {
+      res.writeHead(416, { 'content-range': 'bytes */10' });
+      res.end();
+    };
+    const opened = await openStreamSafely(`http://media.example:${port}/a`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      passStatuses: [416],
+    });
+    expect(opened.ok && opened.response.status).toBe(416);
+    if (opened.ok) await opened.close();
+  });
 });

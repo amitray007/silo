@@ -6,6 +6,7 @@ import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
+import { TweetMedia } from './TweetMedia';
 
 function Paragraphs({ link }: { link: LinkJson }) {
   const text = link.extractedText?.trim() || link.description?.trim();
@@ -78,6 +79,31 @@ function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => v
   );
 }
 
+type TweetSource = Extract<LinkJson['sourceData'], { kind: 'twitter' }>;
+
+function TweetCard({ linkId, source }: { linkId: string; source: TweetSource }) {
+  return (
+    <div className="silo-reader-tweet">
+      <div className="silo-reader-who">
+        <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
+      </div>
+      <p>{source.text}</p>
+      {source.mediaUrls && (
+        <TweetMedia
+          linkId={linkId}
+          mediaUrls={source.mediaUrls}
+          hasPoster={Boolean(source.thumbnailUrl)}
+        />
+      )}
+      <div className="silo-reader-stats">
+        <span>{source.likes} likes</span>
+        <span>{source.reposts} reposts</span>
+        <span>{source.replies} replies</span>
+      </div>
+    </div>
+  );
+}
+
 export function ReaderContent({
   link,
   trashed = false,
@@ -95,19 +121,7 @@ export function ReaderContent({
   const prose = 'contentHtml' in link && link.contentHtml !== null;
   return (
     <>
-      {source.kind === 'twitter' && (
-        <div className="silo-reader-tweet">
-          <div className="silo-reader-who">
-            <strong>{source.authorName}</strong> <span>@{source.authorHandle}</span>
-          </div>
-          <p>{source.text}</p>
-          <div className="silo-reader-stats">
-            <span>{source.likes} likes</span>
-            <span>{source.reposts} reposts</span>
-            <span>{source.replies} replies</span>
-          </div>
-        </div>
-      )}
+      {source.kind === 'twitter' && <TweetCard linkId={link.id} source={source} />}
 
       {source.kind === 'hacker_news' && (
         <div className="silo-reader-card">

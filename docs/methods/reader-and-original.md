@@ -48,6 +48,19 @@ the previous or next article image, Escape to close. Zoom stops at 4x the fit
 or 2x actual size. A linked image keeps its link on the new-tab button. App
 shortcuts do not run behind the viewer.
 
+## X post media
+
+Reader's X post card shows the post's photos, videos and GIFs from
+`sourceData.mediaUrls`, up to four, in X's grid layouts. Every item loads from
+`GET /api/links/:id/source-media/:index` (`poster` for the video still), so the
+browser never contacts X. The route reads the URL from storage, accepts only
+https on `pbs.twimg.com` and `video.twimg.com`, and fetches through the
+SSRF-safe image gate. Photos must be raster image types. Videos must be
+`video/mp4` or `video/webm` and stream with Range passthrough, so seeking does
+not download the whole file; the upstream download stops when the player goes
+away. Videos load on play, GIFs loop muted, and photos open in the image viewer.
+Live keeps X's own embed for quote posts, polls and cards.
+
 ## QA set (binding)
 
 Test with real links, never the dummy `example.com` rows. The set lives in

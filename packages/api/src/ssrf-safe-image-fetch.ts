@@ -159,6 +159,21 @@ async function validateAndPinHost(
   return { url, hostname, pinned };
 }
 
+/** An undici agent that can only connect to the one validated address. */
+function pinnedAgent(hostname: string, pinned: { address: string; family: number }): Agent {
+  return new Agent({
+    connect: {
+      lookup(host, _opts, callback) {
+        if (host !== hostname) {
+          callback(new Error('ssrf-safe-image-fetch: unexpected host'), []);
+          return;
+        }
+        callback(null, [{ address: pinned.address, family: pinned.family === 6 ? 6 : 4 }]);
+      },
+    },
+  });
+}
+
 /**
  * Stream the response body, counting bytes and aborting past
  * `MAX_BODY_BYTES` — never trusts `Content-Length`. Mirrors `safe-fetch.ts`'s
@@ -226,17 +241,7 @@ export async function fetchImageSafely(
     ]);
     if (!validated || controller.signal.aborted) return { ok: false };
     const { url, hostname, pinned } = validated;
-    agent = new Agent({
-      connect: {
-        lookup(host, _opts, callback) {
-          if (host !== hostname) {
-            callback(new Error('ssrf-safe-image-fetch: unexpected host'), []);
-            return;
-          }
-          callback(null, [{ address: pinned.address, family: pinned.family === 6 ? 6 : 4 }]);
-        },
-      },
-    });
+    agent = pinnedAgent(hostname, pinned);
     const response = await undiciFetch(url, {
       dispatcher: agent,
       redirect: 'manual',
@@ -264,5 +269,76 @@ export async function fetchImageSafely(
     await agent?.destroy().catch(() => {
       // best-effort teardown
     });
+  }
+}
+
+export type OpenedStream =
+  | { ok: true; response: UndiciResponse; close: () => Promise<void> }
+  | { ok: false };
+
+/**
+ * Open a stored media URL through the same gate as `fetchImageSafely` (scheme
+ * allowlist, DNS classify + pin, no redirects), but hand back the response so
+ * the caller can stream a large body such as a video. The timeout covers only
+ * connecting and the response headers; `signal` (the client request) aborts
+ * the upstream download when the viewer goes away. `close` releases the agent.
+ */
+export async function openStreamSafely(
+  rawUrl: string,
+  options: FetchImageSafelyOptions & {
+    headers?: Record<string, string>;
+    signal?: AbortSignal;
+    timeoutMs?: number;
+    /** Non-2xx statuses the caller forwards, such as 416 for an unsatisfiable range. */
+    passStatuses?: readonly number[];
+  } = {},
+): Promise<OpenedStream> {
+  const resolver = options.resolver ?? resolveHostname;
+  const allowLoopback = IS_TEST_ENV && (options.allowLoopbackForTests ?? false);
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), options.timeoutMs ?? TIMEOUT_MS);
+  let agent: Agent | undefined;
+  const abort = () => controller.abort();
+  options.signal?.addEventListener('abort', abort, { once: true });
+  if (options.signal?.aborted) controller.abort();
+  const close = async () => {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', abort);
+    controller.abort();
+    await agent?.destroy().catch(() => {
+      // best-effort teardown
+    });
+  };
+  try {
+    // A resolver that never answers must still hit the timeout or the client abort.
+    const deadline = new Promise<undefined>((resolve) => {
+      if (controller.signal.aborted) resolve(undefined);
+      controller.signal.addEventListener('abort', () => resolve(undefined), { once: true });
+    });
+    const validated = await Promise.race([
+      validateAndPinHost(rawUrl, resolver, allowLoopback),
+      deadline,
+    ]);
+    if (!validated || controller.signal.aborted) {
+      await close();
+      return { ok: false };
+    }
+    agent = pinnedAgent(validated.hostname, validated.pinned);
+    const response = await undiciFetch(validated.url, {
+      dispatcher: agent,
+      redirect: 'manual',
+      signal: controller.signal,
+      headers: { 'user-agent': USER_AGENT, ...options.headers },
+    });
+    clearTimeout(timer);
+    const passed = options.passStatuses?.includes(response.status) ?? false;
+    if (!passed && (response.status < 200 || response.status >= 300 || !response.body)) {
+      await close();
+      return { ok: false };
+    }
+    return { ok: true, response, close };
+  } catch {
+    await close();
+    return { ok: false };
   }
 }

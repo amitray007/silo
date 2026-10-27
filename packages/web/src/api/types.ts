@@ -67,9 +67,9 @@ export type SourceData =
       mediaUrls?: string[];
       externalLinks?: string[];
       /** The tweet's own media thumbnail (video poster / photo), set by the
-       * live FxEmbed enricher when present — served through
-       * `/api/preview-image` (never rendered as a raw `twimg.com` `<img
-       * src>`). See `packages/core/src/links/source-data.ts`'s doc comment. */
+       * live FxEmbed enricher when present. Like `mediaUrls`, it is served
+       * through silo (`/api/preview-image`, `/source-media/poster`) and never
+       * rendered as a raw `twimg.com` URL. See `packages/core/src/links/source-data.ts`. */
       thumbnailUrl?: string;
     }
   | {
