@@ -47,6 +47,7 @@ describe('App routing', () => {
   });
 
   afterEach(() => {
+    localStorage.removeItem('silo.sidebarCollapsed');
     vi.unstubAllGlobals();
   });
 
@@ -61,6 +62,8 @@ describe('App routing', () => {
   });
 
   it('renders the Trash view + active nav item at /trash', async () => {
+    // The Library/Trash switcher only shows while the sidebar is collapsed.
+    localStorage.setItem('silo.sidebarCollapsed', 'true');
     renderApp(['/trash']);
     await waitFor(() => expect(screen.getByText('Trash is empty')).toBeDefined());
     fireEvent.click(
