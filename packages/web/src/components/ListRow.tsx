@@ -97,7 +97,7 @@ export function ListRow({
         <span className="silo-row-meta">
           <span>{domain}</span>
           {hovered && <span className="silo-row-time">{relativeTimeFromNow(link.createdAt)}</span>}
-          {link.captureStatus === 'enriching' && <span className="silo-capturing">Capturing</span>}
+          {link.captureStatus === 'enriching' && <span className="silo-sr-only">Capturing</span>}
           {purge !== undefined && (
             <span className="silo-row-purge" title={`Auto-deletes in ${purge} days`}>
               Purges in {purge} days

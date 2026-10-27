@@ -15,13 +15,14 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
   return (
     <>
       <div className="silo-reader-byline">
-        <div className="silo-reader-source">
+        <div
+          className="silo-reader-source"
+          data-capturing={link.captureStatus === 'enriching' || undefined}
+        >
           <Chip domain={deriveDomain(link.url)} size={16} />
           <span title={relativeTimeFromNow(link.createdAt)}>{deriveDomain(link.url)}</span>
           {link.addedBy === 'agent' && <span className="silo-reader-agent">◆ Added by Claude</span>}
-          {link.captureStatus === 'enriching' && (
-            <span className="silo-capturing">◌ Capturing</span>
-          )}
+          {link.captureStatus === 'enriching' && <span className="silo-sr-only">Capturing</span>}
         </div>
         <div className="silo-meta-strip">
           {membership.tags.map((tag) => (

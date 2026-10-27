@@ -505,6 +505,8 @@ describe('reader content', () => {
     await selected();
     expect(reader().getByRole('status', { name: 'Capturing page' })).toBeDefined();
     expect(reader().getByText('◆ Added by Claude')).toBeDefined();
+    expect(reader().getByText('Capturing').className).toBe('silo-sr-only');
+    expect(document.querySelector('.silo-reader-source[data-capturing]')).not.toBeNull();
   });
   it.each(['partial', 'bare'] as const)(
     'retries a %s capture with no text',

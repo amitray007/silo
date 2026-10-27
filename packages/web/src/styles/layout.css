@@ -323,11 +323,9 @@
 .silo-letter-chip[data-state="pending"] img {
   opacity: 0;
 }
-.silo-capturing {
-  color: var(--mark);
-  font-size: 12px;
-  white-space: nowrap;
-  font-weight: 500;
+/* A capture in flight blinks the favicon; the list row sweeps instead. */
+.silo-reader-source[data-capturing] .silo-letter-chip {
+  animation: siloPulse 1.6s ease-in-out infinite;
 }
 
 .silo-readerpane {

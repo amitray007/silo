@@ -83,9 +83,10 @@ describe('LinkRow', () => {
     expect(screen.queryByRole('img')).toBeNull();
   });
 
-  it('shows Capturing and the domain beneath an enriching title', () => {
-    renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
-    expect(screen.getByText('Capturing')).toBeDefined();
+  it('announces Capturing only to screen readers beneath an enriching title', () => {
+    const { container } = renderRow(<LinkRow link={link({ captureStatus: 'enriching' })} />);
+    expect(screen.getByText('Capturing').className).toBe('silo-sr-only');
+    expect(container.querySelector('[data-enriching="true"]')).not.toBeNull();
     expect(screen.getByText('example.com')).toBeDefined();
     expect(screen.getByText('A post').className).toBe('silo-row-title');
   });
