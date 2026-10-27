@@ -217,41 +217,68 @@
 .silo-tags-anchor {
   position: relative;
 }
-.silo-tag-picker {
-  width: 190px;
+/* Row menus size surfaces to their content; the picker keeps room for names and counts. */
+.silo-menu-surface.silo-tag-picker {
+  min-width: 220px;
+  max-width: 280px;
   max-height: min(440px, 70dvh);
+  padding: 0 0 4px;
   overflow-y: auto;
 }
+/* The search row lines its text up with the row labels below it. */
 .silo-tag-search {
-  padding: 6px 8px 8px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-bottom: 4px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--line);
-  margin: -5px -5px 5px;
+  background: var(--bg2);
 }
 .silo-tag-search input {
   width: 100%;
-  font-size: 13px;
+  min-height: 20px;
+  padding: 0;
   border: 0;
   background: none;
   color: var(--ink);
-  padding: 0;
-  min-height: 24px;
+  font-size: 13px;
+  line-height: 20px;
+}
+.silo-tag-search input::placeholder {
+  color: var(--fnt);
+}
+.silo-tag-search input:focus-visible {
+  outline: none;
+}
+.silo-tag-picker .silo-tag-option {
+  gap: 10px;
+  font-size: 13px;
 }
 .silo-tag-checkbox {
-  width: 16px;
-  height: 16px;
-  border: 1.5px solid var(--line-2);
-  border-radius: 5px;
   display: grid;
   place-items: center;
   flex: none;
-  font-size: 11px;
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line-2);
+  border-radius: 4px;
+  color: var(--bg2);
+  transition:
+    background-color 120ms var(--ease-out),
+    border-color 120ms var(--ease-out);
 }
 .silo-tag-checkbox.is-checked {
-  background: var(--btn);
-  border-color: var(--btn);
-  color: var(--btn-ink);
+  border-color: var(--ink);
+  background: var(--ink);
 }
-.silo-tag-option > span:nth-child(2) {
+.silo-tag-checkbox.silo-tag-create {
+  border-style: dashed;
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 1;
+}
+.silo-tag-name {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -259,13 +286,15 @@
 }
 .silo-tag-count {
   margin-left: auto;
-  font-size: 12px;
+  padding-left: 12px;
   color: var(--fnt);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 .silo-tag-more {
-  font-size: 11.5px;
+  padding: 6px 14px 4px;
   color: var(--fnt);
-  padding: 6px 8px;
+  font-size: 12px;
 }
 .silo-modal-header {
   padding: 28px 28px 0;

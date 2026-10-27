@@ -79,9 +79,19 @@ function TagChoices({
             className={`silo-tag-checkbox${opt.active ? ' is-checked' : ''}`}
             aria-hidden="true"
           >
-            {opt.active ? '✓' : ''}
+            {opt.active && (
+              <svg viewBox="0 0 16 16" width="12" height="12" fill="none" aria-hidden="true">
+                <path
+                  d="m3.5 8.5 3 3 6-7"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            )}
           </span>
-          <span>{opt.name}</span>
+          <span className="silo-tag-name">{opt.name}</span>
           <span className="silo-tag-count">
             {all.find((tag) => tag.name === opt.name)?.count ?? 0}
           </span>
@@ -93,20 +103,20 @@ function TagChoices({
           type="button"
           role="option"
           aria-selected="false"
-          className={`silo-menu-item${selected === opts.length ? ' is-current' : ''}`}
+          className={`silo-menu-item silo-tag-option${selected === opts.length ? ' is-current' : ''}`}
           disabled={membership.busy}
           onClick={() => {
             void membership.toggle(name, false, true);
             onChosen?.();
           }}
         >
-          <span className="silo-menu-icon" aria-hidden="true">
+          <span className="silo-tag-checkbox silo-tag-create" aria-hidden="true">
             +
           </span>
-          Create “{name}”
+          <span className="silo-tag-name">Create “{name}”</span>
         </button>
       )}
-      {hidden > 0 && <div className="silo-tag-more">{hidden} more - type to narrow</div>}
+      {hidden > 0 && <div className="silo-tag-more">{hidden} more, type to filter</div>}
       {opts.length === 0 && !canCreate && <div className="silo-tag-more">No tags yet</div>}
     </div>
   );
