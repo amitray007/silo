@@ -57,3 +57,43 @@ export function imageResponse(bytes: Uint8Array, contentType: string): Response 
     },
   });
 }
+
+const SVG_MIME = 'image/svg+xml';
+
+/**
+ * The type to serve for fetched image bytes: an allowlisted raster type, or SVG
+ * when the body really is a small `<svg>` document (README badges, site icons).
+ * Anything else is refused.
+ */
+export function servableImageType(
+  rawContentType: string,
+  bytes: Uint8Array,
+  maxSvgBytes: number,
+): string | undefined {
+  const raster = allowedImageContentType(rawContentType);
+  if (raster) return raster;
+  const mime = rawContentType.split(';')[0]?.trim().toLowerCase();
+  if (mime !== SVG_MIME || bytes.byteLength > maxSvgBytes) return undefined;
+  const start = new TextDecoder().decode(bytes.subarray(0, 512)).trimStart().toLowerCase();
+  return start.startsWith('<svg') || start.startsWith('<?xml') ? SVG_MIME : undefined;
+}
+
+/**
+ * Serve image bytes whose type came from `servableImageType`. SVG can carry
+ * script: an `<img>` never runs it, but opening the URL directly would render it
+ * on silo's origin, so SVG is sandboxed with no script or network access and
+ * downloads instead of rendering when opened.
+ */
+export function servedImageResponse(bytes: Uint8Array, contentType: string): Response {
+  if (contentType !== SVG_MIME) return imageResponse(bytes, contentType);
+  return new Response(new Uint8Array(bytes), {
+    status: 200,
+    headers: {
+      'Content-Type': SVG_MIME,
+      'Cache-Control': 'public, max-age=86400',
+      'X-Content-Type-Options': 'nosniff',
+      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      'Content-Disposition': 'attachment; filename="image.svg"',
+    },
+  });
+}

@@ -1,7 +1,11 @@
 import { findSiteIcons } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { allowedImageContentType, imageResponse } from '../image-response.js';
+import {
+  allowedImageContentType,
+  servableImageType,
+  servedImageResponse,
+} from '../image-response.js';
 import { fetchImageSafely } from '../ssrf-safe-image-fetch.js';
 
 /**
@@ -117,21 +121,10 @@ async function iconFromGoogle(domain: string): Promise<Icon | undefined> {
   }
 }
 
-const SVG = 'image/svg+xml';
 /** A site icon is small; an SVG past this is not an icon worth serving. */
 const MAX_SVG_BYTES = 64 * 1024;
 /** Candidates tried per domain, so a site listing many broken icons stays cheap. */
 const MAX_SITE_CANDIDATES = 4;
-
-/** An allowlisted raster type, or SVG for a small body that really is an `<svg>` document. */
-function siteIconType(rawContentType: string, bytes: Uint8Array): string | undefined {
-  const raster = allowedImageContentType(rawContentType);
-  if (raster) return raster;
-  const mime = rawContentType.split(';')[0]?.trim().toLowerCase();
-  if (mime !== SVG || bytes.byteLength > MAX_SVG_BYTES) return undefined;
-  const start = new TextDecoder().decode(bytes.subarray(0, 512)).trimStart().toLowerCase();
-  return start.startsWith('<svg') || start.startsWith('<?xml') ? SVG : undefined;
-}
 
 /**
  * The site's own icon, for domains Google does not know. The icon URLs come from
@@ -148,7 +141,7 @@ async function iconFromSite(domain: string): Promise<Icon | undefined> {
       if (controller.signal.aborted) return undefined;
       const image = await fetchImageSafely(url);
       if (!image.ok) continue;
-      const contentType = siteIconType(image.contentType, image.bytes);
+      const contentType = servableImageType(image.contentType, image.bytes, MAX_SVG_BYTES);
       if (contentType) return { bytes: image.bytes, contentType };
     }
     return undefined;
@@ -157,24 +150,6 @@ async function iconFromSite(domain: string): Promise<Icon | undefined> {
   } finally {
     clearTimeout(timer);
   }
-}
-
-/**
- * SVG can carry script. An `<img>` never runs it, but opening the URL directly
- * would render it on silo's origin, so the response is sandboxed with no script
- * or network access and downloads instead of rendering when opened.
- */
-function svgResponse(bytes: Uint8Array): Response {
-  return new Response(new Uint8Array(bytes), {
-    status: 200,
-    headers: {
-      'Content-Type': SVG,
-      'Cache-Control': 'public, max-age=86400',
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-      'Content-Disposition': 'attachment; filename="favicon.svg"',
-    },
-  });
 }
 
 export function registerFaviconRoutes(app: Hono): void {
@@ -203,9 +178,7 @@ export function registerFaviconRoutes(app: Hono): void {
     if (!entry.icon) {
       return c.json({ error: 'not_found', message: 'Favicon unavailable' }, 404);
     }
-    return entry.icon.contentType === SVG
-      ? svgResponse(entry.icon.bytes)
-      : imageResponse(entry.icon.bytes, entry.icon.contentType);
+    return servedImageResponse(entry.icon.bytes, entry.icon.contentType);
   });
 }
 

@@ -78,6 +78,29 @@ describeIfPg('Reader content-image API (Postgres)', () => {
     );
   });
 
+  it('serves an SVG badge sandboxed, and refuses one that is not really SVG', async () => {
+    const { app, fetchImageSafely } = harness.mod();
+    const link = await capture('badge');
+    fetchImageSafely.mockResolvedValueOnce({
+      ok: true,
+      bytes: new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"></svg>'),
+      contentType: 'image/svg+xml;charset=utf-8',
+    });
+    const badge = await app.request(`/api/links/${link.id}/content-image/0`);
+    expect(badge.status).toBe(200);
+    expect(badge.headers.get('content-type')).toBe('image/svg+xml');
+    expect(badge.headers.get('content-security-policy')).toContain('sandbox');
+    expect(badge.headers.get('content-disposition')).toMatch(/^attachment/);
+    expect(badge.headers.get('cache-control')).toBe('private, no-store');
+
+    fetchImageSafely.mockResolvedValueOnce({
+      ok: true,
+      bytes: new TextEncoder().encode('<html><script>x</script></html>'),
+      contentType: 'image/svg+xml',
+    });
+    expect((await app.request(`/api/links/${link.id}/content-image/0`)).status).toBe(404);
+  });
+
   it('is 404 without fetching when the page has no live Reader', async () => {
     const { app, fetchImageSafely } = harness.mod();
     const link = await capture('no-reader');

@@ -1,8 +1,11 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { allowedImageContentType, imageResponse } from '../image-response.js';
+import { servableImageType, servedImageResponse } from '../image-response.js';
 import { fetchImageSafely } from '../ssrf-safe-image-fetch.js';
 import { loadReader } from './reader.js';
+
+/** README badges and diagrams are often SVG; past this size an SVG is refused. */
+const MAX_SVG_BYTES = 256 * 1024;
 
 const imageParams = z.object({
   id: z.uuid(),
@@ -17,11 +20,13 @@ export function registerContentImageRoutes(app: Hono): void {
     if (!target)
       return c.json({ error: 'not_found', message: 'No Reader image at this index' }, 404);
     const result = await fetchImageSafely(target);
-    const contentType = result.ok ? allowedImageContentType(result.contentType) : undefined;
+    const contentType = result.ok
+      ? servableImageType(result.contentType, result.bytes, MAX_SVG_BYTES)
+      : undefined;
     if (!result.ok || !contentType) {
       return c.json({ error: 'not_found', message: 'Reader image unavailable' }, 404);
     }
-    const response = imageResponse(result.bytes, contentType);
+    const response = servedImageResponse(result.bytes, contentType);
     // The live page can change between reads. Do not cache one version under another's URL.
     response.headers.set('Cache-Control', 'private, no-store');
     return response;
