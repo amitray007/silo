@@ -5,7 +5,7 @@
 
 /**
  * The row's domain suffix: `new URL(url).hostname` with a leading `www.`
- * stripped (mirrors `Chip`'s own `www.` handling, `chipLetter`). Falls back to
+ * stripped (the same `www.` handling `Chip` applies). Falls back to
  * the raw `url` string on a malformed URL rather than throwing — a row must
  * always render something.
  */

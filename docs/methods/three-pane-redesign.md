@@ -97,8 +97,8 @@ before the first edit). `exactOptionalPropertyTypes` is on.
    auth gate, error boundary, dev tools.
 10. **Privacy holds:** no third-party request per row from the browser.
     Real favicons through silo's `/api/favicon` proxy (2026-10-26: the
-    letter-only chips were reverted on request); a letter on a neutral tile
-    only when a site has no icon. Images only through `/api/preview-image`.
+    letter-only chips were reverted on request); a neutral globe only when a
+    site has no icon (2026-10-28). Images only through `/api/preview-image`.
 
 ## Units (one commit each; the lead reviews between units)
 

@@ -105,6 +105,13 @@ describe('LinkRow', () => {
     expect(screen.getByText('example.com')).toBeDefined();
   });
 
+  it('shows the globe in the chip when the favicon fails', () => {
+    const { container } = renderRow(<LinkRow link={link({ captureStatus: 'full' })} />);
+    fireEvent.error(container.querySelector('.silo-letter-chip img') as HTMLImageElement);
+    expect(container.querySelector('.silo-letter-chip img')).toBeNull();
+    expect(container.querySelector('.silo-letter-chip svg.silo-reader-icon')).not.toBeNull();
+  });
+
   it('shows the favicon chip (not the loader) and the domain suffix once the row is full', () => {
     renderRow(<LinkRow link={link({ captureStatus: 'full' })} />);
     expect(screen.queryByLabelText('enriching')).toBeNull();

@@ -41,7 +41,8 @@ styles take precedence over the historical design notes below.
   spacing scales remain for components until their redesign unit. Removed
   tokens: the old mark plate, badge colors, and unused motion/spacing roles.
 - Keep the pre-paint theme script and both themes. Healthy rows have no
-  completion badge. Letter chips remain local; images use the preview proxy.
+  completion badge. Favicons use the local proxy; a missing favicon falls back
+  to a neutral globe icon. Images use the preview proxy.
 
 The sections below record earlier decisions. They do not override this redesign.
 
