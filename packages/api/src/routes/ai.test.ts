@@ -48,7 +48,7 @@ describeIfPg('/api/ai routes (integration)', () => {
     for (const kind of core.AI_PROVIDER_KINDS) await core.removeAiProvider(kind);
     await core.updateSettings({
       theme: 'system',
-      ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+      ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
     });
   });
 
@@ -66,11 +66,24 @@ describeIfPg('/api/ai routes (integration)', () => {
     expect(text).not.toContain('v1.');
     expect(text).not.toContain('encrypted');
     const body = JSON.parse(text);
-    expect(body.status).toMatchObject({ enabled: false, secretKey: 'ok', ready: false });
+    expect(body.status).toMatchObject({
+      enabled: false,
+      secretKey: 'ok',
+      features: { 'x-post-title': { ready: false } },
+    });
     expect(body.providers).toEqual([
       { kind: 'anthropic', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
       { kind: 'openai', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
       { kind: 'gateway', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
+      {
+        kind: 'fireworks',
+        configured: false,
+        keyLast4: null,
+        keyReadable: true,
+        lastTest: null,
+        models: [],
+        modelsFetchedAt: null,
+      },
     ]);
     expect(body.features).toEqual([
       {
@@ -156,22 +169,25 @@ describeIfPg('/api/ai routes (integration)', () => {
     await core.updateSettings({
       ai: {
         enabled: true,
-        provider: 'anthropic',
-        model: 'claude-haiku-5-5',
-        features: { 'x-post-title': false },
+        features: {
+          'x-post-title': {
+            enabled: false,
+            model: { provider: 'anthropic', id: 'claude-haiku-5-5' },
+          },
+        },
       },
     });
     const res = await app.request('/api/ai/providers/anthropic', { method: 'DELETE' });
     expect(res.status).toBe(204);
     const body = (await (await app.request('/api/ai')).json()) as {
       providers: Array<Record<string, unknown>>;
-      status: { provider: string | null };
+      status: { features: { 'x-post-title': { provider: string | null } } };
     };
     expect(body.providers[0]).toMatchObject({ kind: 'anthropic', configured: false });
-    expect(body.status.provider).toBeNull();
-    expect((await core.getAllSettings()).ai.model).toBeNull();
+    expect(body.status.features['x-post-title'].provider).toBeNull();
+    expect((await core.getAllSettings()).ai.features['x-post-title'].model).toBeNull();
     await core.updateSettings({
-      ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+      ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
     });
   });
 
@@ -230,9 +246,9 @@ describeIfPg('/api/ai routes (integration)', () => {
       body: JSON.stringify({
         ai: {
           enabled: true,
-          provider: 'anthropic',
-          model: 'gpt-6-astra',
-          features: { 'x-post-title': false },
+          features: {
+            'x-post-title': { enabled: false, model: { provider: 'anthropic', id: 'gpt-6-astra' } },
+          },
         },
       }),
     });
@@ -269,9 +285,7 @@ describeIfPg('/api/ai routes (integration)', () => {
       ).toBe(403);
       const ai = {
         enabled: true,
-        provider: null,
-        model: null,
-        features: { 'x-post-title': false },
+        features: { 'x-post-title': { enabled: false, model: null } },
       };
       const patchAi = await app.request('/api/settings', {
         method: 'PATCH',
@@ -301,9 +315,7 @@ describeIfPg('/api/ai routes (integration)', () => {
         body: JSON.stringify({
           ai: {
             enabled: false,
-            provider: 'gateway',
-            model: null,
-            features: { 'x-post-title': false },
+            features: { 'x-post-title': { enabled: false, model: null } },
           },
         }),
       });
@@ -341,5 +353,77 @@ describeIfPg('/api/ai routes (integration)', () => {
       expect(del.status).toBe(403);
       expect(((await del.json()) as { error: string }).error).toBe('csrf_required');
     });
+  });
+  it('refreshes Fireworks through the protected port and returns only its public list', async () => {
+    const { setAiModelsFetcher } = await import('@silo/core/ai-credential');
+    const { app, core } = harness.mod();
+    const model = {
+      id: 'accounts/fireworks/models/glm-5p3-flash',
+      label: 'GLM',
+      contextLength: 200000,
+    };
+    setAiModelsFetcher(async () => ({ ok: true, models: [model] }));
+    try {
+      const saved = await putKey('fireworks', API_KEY);
+      expect(saved.status).toBe(200);
+      expect(await saved.json()).toMatchObject({
+        test: { ok: true },
+        provider: { models: [model], modelsFetchedAt: expect.any(String) },
+      });
+      const refreshed = await app.request('/api/ai/providers/fireworks/models/refresh', {
+        method: 'POST',
+      });
+      expect(refreshed.status).toBe(200);
+      expect(await refreshed.json()).toEqual({ ok: true, models: [model] });
+      const response = await app.request('/api/ai');
+      const text = await response.text();
+      expect(text).not.toContain(API_KEY);
+      expect(text).not.toContain('encrypted');
+      const body = JSON.parse(text);
+      expect(body.providers.find((p: { kind: string }) => p.kind === 'fireworks').models).toEqual([
+        model,
+      ]);
+      expect(
+        body.providers.find((p: { kind: string }) => p.kind === 'anthropic'),
+      ).not.toHaveProperty('models');
+      const ai = {
+        enabled: true,
+        features: {
+          'x-post-title': { enabled: true, model: { provider: 'fireworks', id: model.id } },
+        },
+      };
+      expect(
+        (
+          await app.request('/api/settings', {
+            method: 'PATCH',
+            headers: json,
+            body: JSON.stringify({ ai }),
+          })
+        ).status,
+      ).toBe(200);
+      ai.features['x-post-title'].model.id = 'unlisted';
+      expect(
+        (
+          await app.request('/api/settings', {
+            method: 'PATCH',
+            headers: json,
+            body: JSON.stringify({ ai }),
+          })
+        ).status,
+      ).toBe(400);
+      expect((await core.getAllSettings()).ai.features['x-post-title'].model?.id).toBe(model.id);
+      const token = await core.generateAccessToken('fireworks refresh test');
+      process.env.SILO_API_TOKEN = ENV_TOKEN;
+      expect(
+        (
+          await app.request('/api/ai/providers/fireworks/models/refresh', {
+            method: 'POST',
+            headers: bearer(token.token),
+          })
+        ).status,
+      ).toBe(403);
+    } finally {
+      setAiModelsFetcher(undefined);
+    }
   });
 });

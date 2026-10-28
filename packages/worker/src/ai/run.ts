@@ -1,5 +1,5 @@
 import { type AiErrorCode, isAiFeatureOn } from '@silo/core';
-import { type AiCredential, resolveAiCredential } from '@silo/core/ai-credential';
+import { type AiCredential, resolveAiFeatureCredential } from '@silo/core/ai-credential';
 import {
   generateText,
   type LanguageModel,
@@ -21,14 +21,14 @@ export type AiRunResult<Out> =
 /** Injectable seams so tests need no database and no network. */
 export type AiRunDeps = {
   isFeatureOn: typeof isAiFeatureOn;
-  credential: () => Promise<AiCredential | undefined>;
+  credential: (id: Parameters<typeof isAiFeatureOn>[0]) => Promise<AiCredential | undefined>;
   model: (credential: AiCredential) => LanguageModel;
   abortSignal?: AbortSignal | undefined;
 };
 
 const defaultDeps: AiRunDeps = {
   isFeatureOn: isAiFeatureOn,
-  credential: () => resolveAiCredential(),
+  credential: resolveAiFeatureCredential,
   model: languageModelFor,
 };
 
@@ -52,7 +52,7 @@ export async function runAiFeature<In, Out, Raw>(
     const featureOn = await isFeatureOn(definition.id);
     abortSignal?.throwIfAborted();
     if (!featureOn) return { ok: false, code: 'off' };
-    const credential = await loadCredential();
+    const credential = await loadCredential(definition.id);
     abortSignal?.throwIfAborted();
     if (!credential) return { ok: false, code: 'off' };
 

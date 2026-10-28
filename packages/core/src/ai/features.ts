@@ -34,6 +34,7 @@ export const AI_ERROR_CODES = [
   'no_access',
   'model_not_found',
   'rate_limited',
+  'quota',
   'timeout',
   'network',
   'provider_error',

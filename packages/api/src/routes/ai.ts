@@ -11,6 +11,7 @@ import {
   InvalidAiApiKeyError,
   listAiProviders,
   modelsForProvider,
+  refreshFireworksModels,
   removeAiProvider,
   SecretKeyMissingError,
   saveAiProviderKey,
@@ -31,6 +32,9 @@ const INVALID_KEY_BODY = {
 function providerJson(p: AiProviderSummary) {
   return {
     kind: p.kind,
+    ...(p.kind === 'fireworks'
+      ? { models: p.models ?? [], modelsFetchedAt: p.modelsFetchedAt?.toISOString() ?? null }
+      : {}),
     configured: p.configured,
     keyLast4: p.keyLast4,
     keyReadable: p.keyReadable,
@@ -49,7 +53,9 @@ function catalogJson() {
     providers: AI_PROVIDER_KINDS.filter((kind) =>
       modelsForProvider(kind).some((m) => m.id === entry.id),
     ),
-    defaultFor: AI_PROVIDER_KINDS.filter((kind) => defaultModelFor(kind).id === entry.id),
+    defaultFor: AI_PROVIDER_KINDS.filter(
+      (kind) => kind !== 'fireworks' && defaultModelFor(kind).id === entry.id,
+    ),
   }));
 }
 
@@ -109,6 +115,13 @@ export function registerAiRoutes(app: Hono): void {
   app.post('/ai/providers/:kind/test', operatorOnly, async (c) => {
     const kind = parseKind(c);
     return c.json(testJson(await testAiProvider(kind)));
+  });
+
+  app.post('/ai/providers/fireworks/models/refresh', operatorOnly, async (c) => {
+    const result = await refreshFireworksModels();
+    return result.ok
+      ? c.json(result)
+      : c.json({ error: result.code, message: 'Could not refresh Fireworks models.' }, 502);
   });
 
   app.delete('/ai/providers/:kind', operatorOnly, async (c) => {

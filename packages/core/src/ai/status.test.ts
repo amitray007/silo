@@ -3,167 +3,106 @@ import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
-import type * as Providers from './providers.js';
-import type * as Status from './status.js';
 
 const describeIfPg = postgresReachable() ? describe : describe.skip;
-const newKey = () => randomBytes(32).toString('base64');
 const FAKE_KEY = 'sk-test-0000000000000000';
 
-type Mods = {
-  status: typeof Status;
-  providers: typeof Providers;
-  settings: typeof import('../settings/settings.js');
-};
-
-describeIfPg('ai status, credential and tester (integration)', () => {
-  const harness = setupPgHarness(
-    'silo_core_ai_status_test',
-    async (): Promise<Mods> => ({
-      status: await import('./status.js'),
-      providers: await import('./providers.js'),
-      settings: await import('../settings/settings.js'),
-    }),
-  );
+describeIfPg('per-feature AI readiness and credentials', () => {
+  const harness = setupPgHarness('silo_core_ai_status_test', async () => ({
+    status: await import('./status.js'),
+    providers: await import('./providers.js'),
+    settings: await import('../settings/settings.js'),
+  }));
   let savedKey: string | undefined;
-
   beforeEach(async () => {
     savedKey = process.env.SILO_SECRET_KEY;
-    process.env.SILO_SECRET_KEY = newKey();
+    process.env.SILO_SECRET_KEY = randomBytes(32).toString('base64');
     await harness.rawDb().execute(sql`TRUNCATE TABLE ai_providers, settings`);
   });
-
   afterEach(() => {
     if (savedKey === undefined) delete process.env.SILO_SECRET_KEY;
     else process.env.SILO_SECRET_KEY = savedKey;
   });
-
-  const setAi = (over: Record<string, unknown>) =>
+  const setAi = (
+    model: { provider: 'anthropic' | 'openai' | 'gateway'; id: string } | null,
+    enabled = true,
+    featureEnabled = true,
+  ) =>
     harness.mod().settings.setSetting('ai', {
-      enabled: true,
+      enabled,
+      features: { 'x-post-title': { enabled: featureEnabled, model } },
+    });
+  const feature = async () => (await harness.mod().status.aiStatus()).features['x-post-title'];
+
+  it('requires master consent, feature consent, secret key and an explicit model', async () => {
+    const { status } = harness.mod();
+    expect(await feature()).toMatchObject({ ready: false, reason: 'disabled' });
+    await setAi(null);
+    expect(await feature()).toMatchObject({
+      ready: false,
+      reason: 'no_model',
       provider: null,
       model: null,
-      features: { 'x-post-title': false },
-      ...over,
     });
-
-  describe('aiStatus', () => {
-    it('reports disabled by default', async () => {
-      expect(await harness.mod().status.aiStatus()).toMatchObject({
-        enabled: false,
-        ready: false,
-        reason: 'disabled',
-        provider: null,
-        model: null,
-      });
-    });
-
-    it('reports no_secret_key for a missing or invalid key', async () => {
-      const { status } = harness.mod();
-      await setAi({});
-      delete process.env.SILO_SECRET_KEY;
-      expect(await status.aiStatus()).toMatchObject({
-        secretKey: 'missing',
-        reason: 'no_secret_key',
-      });
-      process.env.SILO_SECRET_KEY = 'bad';
-      expect(await status.aiStatus()).toMatchObject({
-        secretKey: 'invalid',
-        reason: 'no_secret_key',
-      });
-    });
-
-    it('reports no_provider, then no_key, then key_unreadable, then ready', async () => {
-      const { status, providers } = harness.mod();
-      await setAi({});
-      expect(await status.aiStatus()).toMatchObject({ ready: false, reason: 'no_provider' });
-
-      await setAi({ provider: 'anthropic' });
-      expect(await status.aiStatus()).toMatchObject({ ready: false, reason: 'no_key' });
-
-      await providers.saveAiProviderKey('anthropic', FAKE_KEY);
-      const ready = await status.aiStatus();
-      expect(ready).toMatchObject({
-        ready: true,
-        provider: 'anthropic',
-        model: { id: 'claude-haiku-5-5', fellBack: false },
-      });
-      expect(ready.reason).toBeUndefined();
-
-      const original = process.env.SILO_SECRET_KEY as string;
-      process.env.SILO_SECRET_KEY = newKey();
-      expect(await status.aiStatus()).toMatchObject({ ready: false, reason: 'key_unreadable' });
-      process.env.SILO_SECRET_KEY = original;
-    });
-
-    it('never contains the key or ciphertext', async () => {
-      const { status, providers } = harness.mod();
-      await providers.saveAiProviderKey('openai', FAKE_KEY);
-      await setAi({ provider: 'openai', model: 'gpt-6-astra' });
-      const serialized = JSON.stringify(await status.aiStatus());
-      expect(serialized).not.toContain(FAKE_KEY);
-      expect(serialized).not.toContain('v1.');
-    });
-
-    it('keeps enabled and provider and reports the default model when the stored model left the catalog', async () => {
-      const { status } = harness.mod();
-      await harness.rawDb().execute(
-        sql`INSERT INTO settings (key, value) VALUES ('ai', ${JSON.stringify({
-          enabled: true,
-          provider: 'anthropic',
-          model: 'retired-model',
-          features: { 'x-post-title': false },
-        })}::jsonb)`,
-      );
-      expect(await status.aiStatus()).toMatchObject({
-        enabled: true,
-        provider: 'anthropic',
-        model: { id: 'claude-haiku-5-5', fellBack: false },
-        reason: 'no_key',
-      });
-    });
+    expect(await status.resolveAiFeatureCredential('x-post-title')).toBeUndefined();
+    await setAi(null, true, false);
+    expect(await feature()).toMatchObject({ reason: 'feature_disabled' });
+    delete process.env.SILO_SECRET_KEY;
+    expect(await feature()).toMatchObject({ reason: 'no_secret_key' });
+    expect((await status.aiStatus()).secretKey).toBe('missing');
+    process.env.SILO_SECRET_KEY = 'bad';
+    expect((await status.aiStatus()).secretKey).toBe('invalid');
   });
 
-  describe('resolveAiCredential', () => {
-    it('returns undefined until AI is ready', async () => {
-      const { status, providers } = harness.mod();
-      await providers.saveAiProviderKey('anthropic', FAKE_KEY);
-      expect(await status.resolveAiCredential()).toBeUndefined();
-      await setAi({ enabled: false, provider: 'anthropic' });
-      expect(await status.resolveAiCredential()).toBeUndefined();
+  it('requires a readable key and returns only the selected model', async () => {
+    const { status, providers } = harness.mod();
+    await setAi({ provider: 'openai', id: 'gpt-6-astra' });
+    expect(await feature()).toMatchObject({ reason: 'no_key' });
+    await providers.saveAiProviderKey('openai', FAKE_KEY);
+    expect(await feature()).toEqual({
+      ready: true,
+      reason: null,
+      provider: 'openai',
+      model: 'gpt-6-astra',
     });
+    expect(await status.isAiFeatureOn('x-post-title')).toBe(true);
+    expect(await status.resolveAiFeatureCredential('x-post-title')).toMatchObject({
+      kind: 'openai',
+      apiKey: FAKE_KEY,
+      model: { id: 'gpt-6-astra' },
+    });
+    const serialized = JSON.stringify(await status.aiStatus());
+    expect(serialized).not.toContain(FAKE_KEY);
+    expect(serialized).not.toContain('v1.');
+    process.env.SILO_SECRET_KEY = randomBytes(32).toString('base64');
+    expect(await feature()).toMatchObject({ reason: 'key_unreadable' });
+    expect(await status.resolveAiFeatureCredential('x-post-title')).toBeUndefined();
+  });
 
-    it('returns the key and the chosen model when ready', async () => {
-      const { status, providers } = harness.mod();
-      await providers.saveAiProviderKey('gateway', FAKE_KEY);
-      await setAi({ provider: 'gateway', model: 'gpt-6-astra' });
-      const credential = await status.resolveAiCredential();
-      expect(credential).toMatchObject({ kind: 'gateway', apiKey: FAKE_KEY });
-      expect(credential?.model.id).toBe('gpt-6-astra');
-    });
+  it('never defaults a retired stored selection on a feature run', async () => {
+    const { status, providers } = harness.mod();
+    await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`INSERT INTO settings (key, value) VALUES ('ai', ${JSON.stringify({ enabled: true, provider: 'anthropic', model: 'retired-model', features: { 'x-post-title': true } })}::jsonb)`,
+      );
+    expect(await feature()).toMatchObject({ ready: false, reason: 'no_model', model: null });
+    expect(await status.resolveAiFeatureCredential('x-post-title')).toBeUndefined();
+  });
 
-    it('with an override kind ignores ai.enabled and uses that kind default model', async () => {
-      const { status, providers } = harness.mod();
-      await providers.saveAiProviderKey('openai', FAKE_KEY);
-      await setAi({ enabled: false, provider: 'anthropic' });
-      const credential = await status.resolveAiCredential('openai');
-      expect(credential).toMatchObject({ kind: 'openai', apiKey: FAKE_KEY });
-      expect(credential?.model.id).toBe('gpt-6-luna');
+  it('connection tests use a provider default while AI is off; explicit bad models fail closed', async () => {
+    const { status, providers } = harness.mod();
+    expect(await status.resolveAiCredential('openai')).toBeUndefined();
+    await providers.saveAiProviderKey('openai', FAKE_KEY);
+    expect(await status.resolveAiCredential('openai')).toMatchObject({
+      kind: 'openai',
+      model: { id: 'gpt-6-luna' },
     });
-
-    it('with an override that matches ai.provider uses ai.model', async () => {
-      const { status, providers } = harness.mod();
-      await providers.saveAiProviderKey('openai', FAKE_KEY);
-      await setAi({ enabled: false, provider: 'openai', model: 'gpt-6-astra' });
-      expect((await status.resolveAiCredential('openai'))?.model.id).toBe('gpt-6-astra');
+    expect(await status.resolveAiCredential('openai', 'gpt-6-astra')).toMatchObject({
+      model: { id: 'gpt-6-astra' },
     });
-
-    it('is undefined for an override with no key or no secret key', async () => {
-      const { status, providers } = harness.mod();
-      expect(await status.resolveAiCredential('anthropic')).toBeUndefined();
-      await providers.saveAiProviderKey('anthropic', FAKE_KEY);
-      delete process.env.SILO_SECRET_KEY;
-      expect(await status.resolveAiCredential('anthropic')).toBeUndefined();
-    });
+    expect(await status.resolveAiCredential('openai', 'claude-haiku-5-5')).toBeUndefined();
+    expect(await status.resolveAiFeatureCredential('x-post-title')).toBeUndefined();
   });
 });

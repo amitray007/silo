@@ -1,7 +1,7 @@
 import { aiProviders, db } from '@silo/db';
 import { and, eq } from 'drizzle-orm';
 import { getSetting, setSetting } from '../settings/settings.js';
-import { AI_PROVIDER_KINDS, type AiProviderKind } from './catalog.js';
+import { AI_PROVIDER_KINDS, type AiLiveModel, type AiProviderKind } from './catalog.js';
 import type { AiErrorCode } from './features.js';
 import { decryptSecret, encryptSecret, needsReencrypt, secretKeyStatus } from './secret-box.js';
 
@@ -22,6 +22,8 @@ export class InvalidAiApiKeyError extends Error {
 
 export type AiProviderSummary = {
   kind: AiProviderKind;
+  models?: AiLiveModel[];
+  modelsFetchedAt?: Date | null;
   configured: boolean;
   keyLast4: string | null;
   /** False only when a row exists but no configured secret key decrypts it. */
@@ -37,7 +39,7 @@ function aadFor(kind: AiProviderKind): string {
 }
 
 /**
- * All three provider kinds, configured or not. Never returns key material:
+ * All provider kinds, configured or not. Never returns key material:
  * `keyReadable` comes from a trial decrypt whose plaintext is discarded.
  */
 export async function listAiProviders(): Promise<AiProviderSummary[]> {
@@ -49,15 +51,30 @@ export async function listAiProviders(): Promise<AiProviderSummary[]> {
       lastTestOk: aiProviders.lastTestOk,
       lastTestAt: aiProviders.lastTestAt,
       lastTestCode: aiProviders.lastTestCode,
+      models: aiProviders.models,
+      modelsFetchedAt: aiProviders.modelsFetchedAt,
     })
     .from(aiProviders);
   const byKind = new Map(rows.map((row) => [row.kind, row]));
   return AI_PROVIDER_KINDS.map((kind) => {
     const row = byKind.get(kind);
-    if (!row) return { kind, configured: false, keyLast4: null, keyReadable: true, lastTest: null };
+    const live =
+      kind === 'fireworks'
+        ? { models: row?.models ?? [], modelsFetchedAt: row?.modelsFetchedAt ?? null }
+        : {};
+    if (!row)
+      return {
+        kind,
+        ...live,
+        configured: false,
+        keyLast4: null,
+        keyReadable: true,
+        lastTest: null,
+      };
     const tested = row.lastTestOk !== null && row.lastTestAt !== null;
     return {
       kind,
+      ...live,
       configured: true,
       keyLast4: row.keyLast4,
       keyReadable: decryptSecret(row.encryptedKey, aadFor(kind)) !== undefined,
@@ -83,6 +100,8 @@ export async function saveAiProviderKey(kind: AiProviderKind, apiKey: string): P
     lastTestOk: null,
     lastTestAt: null,
     lastTestCode: null,
+    models: null,
+    modelsFetchedAt: null,
   };
   await db
     .insert(aiProviders)
@@ -91,17 +110,16 @@ export async function saveAiProviderKey(kind: AiProviderKind, apiKey: string): P
 }
 
 /**
- * Deletes the key for `kind`. In the same transaction, when the `ai` setting
- * points at this provider, clears `provider` and `model` so no setting names a
- * provider with no key.
+ * Deletes the key and clears selections for that provider in one transaction.
  */
 export async function removeAiProvider(kind: AiProviderKind): Promise<void> {
   await db.transaction(async (tx) => {
     await tx.delete(aiProviders).where(eq(aiProviders.kind, kind));
     const ai = await getSetting('ai', tx);
-    if (ai.provider === kind) {
-      await setSetting('ai', { ...ai, provider: null, model: null }, tx);
+    for (const feature of Object.values(ai.features)) {
+      if (feature.model?.provider === kind) feature.model = null;
     }
+    await setSetting('ai', ai, tx);
   });
 }
 

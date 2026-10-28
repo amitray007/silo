@@ -52,7 +52,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -224,7 +224,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -259,7 +259,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -298,7 +298,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -312,7 +312,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -329,9 +329,9 @@ describeIfPg('settings store (integration, plan 016)', () => {
   describe('ai setting drift on read', () => {
     const drifted = {
       enabled: true,
-      provider: 'anthropic',
-      model: 'retired-model',
-      features: { retired_feature: true },
+      features: {
+        retired_feature: { enabled: true, model: { provider: 'anthropic', id: 'retired-model' } },
+      },
     };
 
     it('nulls a retired model and drops a retired feature, keeping enabled and provider', async () => {
@@ -340,9 +340,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       );
       expect(await ops.getSetting('ai')).toEqual({
         enabled: true,
-        provider: 'anthropic',
-        model: null,
-        features: { 'x-post-title': false },
+        features: { 'x-post-title': { enabled: false, model: null } },
       });
       expect((await ops.getAllSettings()).ai.enabled).toBe(true);
     });

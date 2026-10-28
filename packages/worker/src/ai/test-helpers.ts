@@ -1,3 +1,4 @@
+import type { CatalogEntry } from '@silo/core';
 import type { AiCredential } from '@silo/core/ai-credential';
 import { APICallError } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
@@ -13,7 +14,7 @@ export function deferred<T>() {
 
 export const LEAK_KEY = 'sk-test-LEAK-0000';
 
-export const credential: AiCredential = {
+export const credential: AiCredential & { model: CatalogEntry } = {
   kind: 'anthropic',
   apiKey: LEAK_KEY,
   model: {

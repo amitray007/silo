@@ -58,7 +58,7 @@ describeIfPg('ai provider storage (integration)', () => {
 
   it('lists all three kinds as not configured on a fresh database', async () => {
     const list = await harness.mod().providers.listAiProviders();
-    expect(list.map((p) => p.kind)).toEqual(['anthropic', 'openai', 'gateway']);
+    expect(list.map((p) => p.kind)).toEqual(['anthropic', 'openai', 'gateway', 'fireworks']);
     expect(list.every((p) => !p.configured && p.keyLast4 === null && p.lastTest === null)).toBe(
       true,
     );
@@ -132,9 +132,12 @@ describeIfPg('ai provider storage (integration)', () => {
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
     await settings.setSetting('ai', {
       enabled: true,
-      provider: 'anthropic',
-      model: 'claude-sonnet-5-5',
-      features: { 'x-post-title': false },
+      features: {
+        'x-post-title': {
+          enabled: false,
+          model: { provider: 'anthropic', id: 'claude-sonnet-5-5' },
+        },
+      },
     });
 
     await providers.removeAiProvider('anthropic');
@@ -144,9 +147,7 @@ describeIfPg('ai provider storage (integration)', () => {
     ).toBe(false);
     expect(await settings.getSetting('ai')).toEqual({
       enabled: true,
-      provider: null,
-      model: null,
-      features: { 'x-post-title': false },
+      features: { 'x-post-title': { enabled: false, model: null } },
     });
   });
 
@@ -156,9 +157,12 @@ describeIfPg('ai provider storage (integration)', () => {
     await providers.saveAiProviderKey('openai', FAKE_KEY);
     const selected = {
       enabled: true,
-      provider: 'openai' as const,
-      model: 'gpt-6-astra',
-      features: { 'x-post-title': false },
+      features: {
+        'x-post-title': {
+          enabled: false,
+          model: { provider: 'openai' as const, id: 'gpt-6-astra' },
+        },
+      },
     };
     await settings.setSetting('ai', selected);
 

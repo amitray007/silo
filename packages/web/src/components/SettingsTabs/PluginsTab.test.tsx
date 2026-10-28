@@ -619,7 +619,7 @@ describe('PluginsTab AI titles toggle', () => {
   function aiSettings(on = false) {
     return {
       ...defaultSettings(),
-      ai: { enabled: true, provider: 'anthropic', model: null, features: { 'x-post-title': on } },
+      ai: { enabled: true, features: { 'x-post-title': { enabled: on, model: null } } },
     };
   }
 
@@ -682,9 +682,7 @@ describe('PluginsTab AI titles toggle', () => {
     await waitFor(() =>
       expect(getStore().ai).toEqual({
         enabled: true,
-        provider: 'anthropic',
-        model: null,
-        features: { 'x-post-title': true },
+        features: { 'x-post-title': { enabled: true, model: null } },
       }),
     );
   });

@@ -261,22 +261,24 @@ export type SettingsMap = {
   /** Optional AI layer; mirrors core's `settingsSchema.ai`. The key is never a setting. */
   ai: {
     enabled: boolean;
-    provider: 'anthropic' | 'openai' | 'gateway' | null;
-    model: string | null;
-    features: Record<string, boolean>;
+    features: Record<
+      string,
+      { enabled: boolean; model: { provider: AiProviderKind; id: string } | null }
+    >;
   };
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
 export type UpdateSettingsRequest = Partial<SettingsMap>;
 
-export type AiProviderKind = 'anthropic' | 'openai' | 'gateway';
+export type AiProviderKind = 'anthropic' | 'openai' | 'gateway' | 'fireworks';
 
 /** Stable failure codes a connection test reports (plus `unavailable`: the test could not run). */
 export type AiTestCode =
   | 'invalid_key'
   | 'no_access'
   | 'model_not_found'
+  | 'quota'
   | 'rate_limited'
   | 'timeout'
   | 'network'
@@ -308,10 +310,15 @@ export type AiSettingsResponse = {
   status: {
     enabled: boolean;
     secretKey: 'ok' | 'missing' | 'invalid';
-    provider: AiProviderKind | null;
-    model: { id: string; fellBack: boolean } | null;
-    ready: boolean;
-    reason?: string;
+    features: Record<
+      string,
+      {
+        ready: boolean;
+        reason: string | null;
+        provider: AiProviderKind | null;
+        model: string | null;
+      }
+    >;
   };
   providers: AiProviderJson[];
   catalog: AiCatalogEntry[];

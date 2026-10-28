@@ -1,6 +1,7 @@
 import type { AiProviderKind } from './catalog.js';
 import { AI_ERROR_CODES, type AiErrorCode } from './features.js';
-import { recordAiTest } from './providers.js';
+import { refreshFireworksModels } from './models.js';
+import { readAiProviderKey, recordAiTest } from './providers.js';
 import { type AiCredential, resolveWithBlob } from './status.js';
 
 /** Result of a connection test run by the registered tester. */
@@ -38,6 +39,10 @@ function sanitize(raw: AiConnectionResult, latencyMs: number): AiConnectionResul
  */
 export async function testAiProvider(kind: AiProviderKind): Promise<AiTestOutcome> {
   if (!tester) return { ok: false, code: 'unavailable' };
+  if (kind === 'fireworks') {
+    const failure = await refreshForTest();
+    if (failure) return failure;
+  }
   const resolved = await resolveWithBlob(kind);
   if (!resolved) return { ok: false, code: 'unavailable' };
   const started = Date.now();
@@ -53,5 +58,17 @@ export async function testAiProvider(kind: AiProviderKind): Promise<AiTestOutcom
     result.ok ? { ok: true } : { ok: false, code: result.code },
     resolved.encryptedKey,
   );
+  return result;
+}
+
+async function refreshForTest(): Promise<AiTestOutcome | undefined> {
+  const key = await readAiProviderKey('fireworks');
+  if (key.state !== 'ok') return { ok: false, code: 'unavailable' };
+  const started = Date.now();
+  const refreshed = await refreshFireworksModels();
+  if (refreshed.ok) return undefined;
+  if (refreshed.code === 'unavailable') return { ok: false, code: 'unavailable' };
+  const result = { ok: false, code: refreshed.code, latencyMs: Date.now() - started } as const;
+  await recordAiTest('fireworks', result, key.encryptedKey);
   return result;
 }

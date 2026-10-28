@@ -1,5 +1,7 @@
 import { db, settings } from '@silo/db';
 import { eq } from 'drizzle-orm';
+import { z } from 'zod';
+import { storedFireworksModels } from '../ai/model-store.js';
 import type { Executor } from '../links/executor.js';
 import {
   isSettingKey,
@@ -29,12 +31,25 @@ import {
  * corrupted row degrades to that one key's default rather than surfacing an
  * uncaught 500 on an otherwise-unrelated read.
  */
-function parseSettingValueSafely<K extends SettingKey>(
+async function parseSettingValueSafely<K extends SettingKey>(
   key: K,
   value: unknown,
-): SettingValue<K> | undefined {
+  executor: Executor = db,
+): Promise<SettingValue<K> | undefined> {
   try {
-    return parseStoredSettingValue(key, value);
+    const parsed = parseStoredSettingValue(key, value);
+    if (key === 'ai') {
+      const ai = parsed as SettingValue<'ai'>;
+      const models = await storedFireworksModels(executor);
+      for (const feature of Object.values(ai.features)) {
+        if (
+          feature.model?.provider === 'fireworks' &&
+          !models.some((m) => m.id === feature.model?.id)
+        )
+          feature.model = null;
+      }
+    }
+    return parsed;
   } catch {
     return undefined;
   }
@@ -64,7 +79,7 @@ export async function getSetting<K extends SettingKey>(
   const [row] = await executor.select().from(settings).where(eq(settings.key, key)).limit(1);
   if (!row) return SETTINGS_DEFAULTS[key];
 
-  const parsed = parseSettingValueSafely(key, row.value);
+  const parsed = await parseSettingValueSafely(key, row.value, executor);
   return parsed ?? SETTINGS_DEFAULTS[key];
 }
 
@@ -87,6 +102,7 @@ export async function setSetting<K extends SettingKey>(
   executor: Executor = db,
 ): Promise<void> {
   const parsed = parseSettingValue(key, value);
+  if (key === 'ai') await validateFireworksSelection(parsed as SettingValue<'ai'>, executor);
   await executor
     .insert(settings)
     .values({ key, value: parsed })
@@ -107,7 +123,7 @@ export async function getAllSettings(): Promise<SettingsMap> {
   const result = { ...SETTINGS_DEFAULTS };
   for (const key of Object.keys(SETTINGS_DEFAULTS) as SettingKey[]) {
     if (!stored.has(key)) continue;
-    const parsed = parseSettingValueSafely(key, stored.get(key));
+    const parsed = await parseSettingValueSafely(key, stored.get(key));
     if (parsed !== undefined) {
       (result as Record<SettingKey, unknown>)[key] = parsed;
     }
@@ -156,4 +172,28 @@ export async function updateSettings(patch: Record<string, unknown>): Promise<Se
   });
 
   return getAllSettings();
+}
+
+async function validateFireworksSelection(
+  ai: SettingValue<'ai'>,
+  executor: Executor,
+): Promise<void> {
+  const selections = Object.entries(ai.features).filter(
+    ([, f]) => f.model?.provider === 'fireworks',
+  );
+  if (!selections.length) return;
+  const models = await storedFireworksModels(executor);
+  z.unknown()
+    .superRefine((_value, ctx) => {
+      for (const [id, feature] of selections) {
+        if (!models.some((m) => m.id === feature.model?.id)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'model is not in the stored Fireworks list',
+            path: ['features', id, 'model'],
+          });
+        }
+      }
+    })
+    .parse(ai);
 }

@@ -27,7 +27,7 @@ const settings: SettingsMap = {
   mcpAccess: true,
   linkPreviewImages: true,
   hoverPreview: true,
-  ai: { enabled: false, provider: null, model: null, features: {} },
+  ai: { enabled: false, features: {} },
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },

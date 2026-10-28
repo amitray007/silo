@@ -25,8 +25,9 @@ const PROVIDER_NAMES: Record<AiProviderKind, string> = {
   anthropic: 'Anthropic',
   openai: 'OpenAI',
   gateway: 'Vercel AI Gateway',
+  fireworks: 'Fireworks',
 };
-const PROVIDER_KINDS = Object.keys(PROVIDER_NAMES) as AiProviderKind[];
+const PROVIDER_KINDS: AiProviderKind[] = ['anthropic', 'openai', 'gateway'];
 
 const FAILURE_WORDS: Record<AiTestCode, string> = {
   invalid_key: 'Key rejected',
@@ -36,6 +37,7 @@ const FAILURE_WORDS: Record<AiTestCode, string> = {
   timeout: 'Timed out',
   network: 'Network error',
   provider_error: 'Provider error',
+  quota: 'Out of credit or over the limit',
   unavailable: 'Test unavailable right now',
 };
 
@@ -333,7 +335,7 @@ function ModelSelect({
   disabled: boolean;
   onChange: (id: string) => void;
 }) {
-  const provider = ai.status.provider;
+  const provider = settingsAi.features['x-post-title']?.model?.provider;
   const reachable = provider ? ai.catalog.filter((m) => m.providers.includes(provider)) : [];
   const groups = (Object.keys(FAMILY_LABELS) as AiCatalogEntry['family'][])
     .map((family) => ({
@@ -353,7 +355,7 @@ function ModelSelect({
       </div>
       <SettingsSelect
         ariaLabel="Model"
-        value={ai.status.model?.id ?? settingsAi.model ?? null}
+        value={settingsAi.features['x-post-title']?.model?.id ?? null}
         groups={groups}
         placeholder="Pick a provider first"
         disabled={disabled || !provider}
@@ -365,10 +367,7 @@ function ModelSelect({
 
 function isUnreadable(ai: AiSettingsResponse, kind: AiProviderKind): boolean {
   const provider = ai.providers.find((p) => p.kind === kind);
-  return (
-    provider?.keyReadable === false ||
-    (ai.status.provider === kind && ai.status.reason === 'key_unreadable')
-  );
+  return provider?.keyReadable === false;
 }
 
 function AiSections({
@@ -397,10 +396,13 @@ function AiSections({
             key={kind}
             kind={kind}
             provider={ai.providers.find((p) => p.kind === kind)}
-            selected={ai.status.provider === kind}
+            selected={settingsAi.features['x-post-title']?.model?.provider === kind}
             unreadable={isUnreadable(ai, kind)}
             disabled={off || busy}
-            onPick={() => patch({ ...settingsAi, provider: kind, model: null })}
+            onPick={() => {
+              const id = ai.catalog.find((m) => m.defaultFor.includes(kind))?.id;
+              if (id) patchTitleModel(settingsAi, { provider: kind, id }, patch);
+            }}
           />
         ))}
       </div>
@@ -409,7 +411,10 @@ function AiSections({
         ai={ai}
         settingsAi={settingsAi}
         disabled={off || busy}
-        onChange={(id) => patch({ ...settingsAi, model: id })}
+        onChange={(id) => {
+          const provider = settingsAi.features['x-post-title']?.model?.provider;
+          if (provider) patchTitleModel(settingsAi, { provider, id }, patch);
+        }}
       />
     </div>
   );
@@ -466,4 +471,13 @@ export function AiTab() {
       )}
     </>
   );
+}
+
+function patchTitleModel(
+  ai: AiSetting,
+  model: { provider: AiProviderKind; id: string },
+  patch: (next: AiSetting) => void,
+) {
+  const feature = ai.features['x-post-title'] ?? { enabled: false, model: null };
+  patch({ ...ai, features: { ...ai.features, 'x-post-title': { ...feature, model } } });
 }

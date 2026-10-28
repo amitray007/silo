@@ -8,7 +8,7 @@
  * the Vercel AI Gateway ID, which reaches every model.
  */
 
-export const AI_PROVIDER_KINDS = ['anthropic', 'openai', 'gateway'] as const;
+export const AI_PROVIDER_KINDS = ['anthropic', 'openai', 'gateway', 'fireworks'] as const;
 export type AiProviderKind = (typeof AI_PROVIDER_KINDS)[number];
 
 export type CatalogEntry = {
@@ -98,10 +98,11 @@ export const AI_MODEL_CATALOG: readonly CatalogEntry[] = [
 ];
 
 /** Which catalog family each provider reaches. `all` means every family (the gateway). */
-const PROVIDER_FAMILY: Record<AiProviderKind, CatalogEntry['family'] | 'all'> = {
+const PROVIDER_FAMILY: Record<AiProviderKind, CatalogEntry['family'] | 'all' | 'live'> = {
   anthropic: 'claude',
   openai: 'chatgpt',
   gateway: 'all',
+  fireworks: 'live',
 };
 
 /** Catalog entries a provider can reach: Anthropic -> Claude, OpenAI -> ChatGPT, Gateway -> all. */
@@ -132,7 +133,21 @@ export function resolveModel(
 }
 
 /** The model ID to send to `kind`: the gateway ID for Gateway, else the direct ID. */
-export function providerModelId(entry: CatalogEntry, kind: AiProviderKind): string {
+export type AiLiveModel = {
+  id: string;
+  label: string;
+  contextLength: number | null;
+  reasoning?: never;
+};
+export type AiModel = CatalogEntry | AiLiveModel;
+
+export function defaultFireworksModel(models: readonly AiLiveModel[]): AiLiveModel | undefined {
+  return models.find((m) => m.id === 'accounts/fireworks/models/glm-5p3-flash') ?? models[0];
+}
+
+export function providerModelId(entry: AiModel, kind: AiProviderKind): string {
+  if (kind === 'fireworks') return entry.id;
+  if (!('gatewayId' in entry)) throw new Error('Live model requires Fireworks');
   if (kind === 'gateway') return entry.gatewayId;
   const id = kind === 'anthropic' ? entry.anthropicId : entry.openaiId;
   if (!id) throw new Error(`${entry.id} is not reachable by ${kind}`);

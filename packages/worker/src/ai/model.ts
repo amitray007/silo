@@ -31,6 +31,8 @@ export function languageModelFor(
       );
     case 'openai':
       return createOpenAI({ apiKey, baseURL: OPENAI_BASE_URL, ...(fetch ? { fetch } : {}) })(id);
+    case 'fireworks':
+      throw new Error('Fireworks inference is unavailable');
     case 'gateway':
       return createGateway({ apiKey, ...(fetch ? { fetch } : {}) })(id);
   }

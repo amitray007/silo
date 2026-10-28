@@ -258,67 +258,68 @@ describe('hoverPreview schema and default', () => {
 });
 
 describe('ai setting', () => {
-  const ai = (over: Record<string, unknown>) => ({ ...SETTINGS_DEFAULTS.ai, ...over });
-
-  it('defaults to off with no provider, model or features', () => {
-    expect(SETTINGS_DEFAULTS.ai).toEqual({
+  const selection = (provider: string, id: string) => ({
+    enabled: true,
+    features: { 'x-post-title': { enabled: true, model: { provider, id } } },
+  });
+  it('defaults off with no selected model', () => {
+    expect(parseSettingValue('ai', SETTINGS_DEFAULTS.ai)).toEqual({
       enabled: false,
-      provider: null,
-      model: null,
-      features: { 'x-post-title': false },
+      features: { 'x-post-title': { enabled: false, model: null } },
     });
-    expect(parseSettingValue('ai', SETTINGS_DEFAULTS.ai)).toEqual(SETTINGS_DEFAULTS.ai);
   });
-
-  it('accepts a model the provider can reach', () => {
-    const value = ai({ provider: 'anthropic', model: 'claude-sonnet-5-5' });
-    expect(parseSettingValue('ai', value)).toEqual(value);
-    const viaGateway = ai({ provider: 'gateway', model: 'gpt-6-astra' });
-    expect(parseSettingValue('ai', viaGateway)).toEqual(viaGateway);
+  it('accepts reachable curated selections and rejects unreachable and unknown models', () => {
+    expect(parseSettingValue('ai', selection('anthropic', 'claude-sonnet-5-5'))).toEqual(
+      selection('anthropic', 'claude-sonnet-5-5'),
+    );
+    expect(() => parseSettingValue('ai', selection('gateway', 'nope'))).toThrow();
+    expect(() => parseSettingValue('ai', selection('openai', 'claude-haiku-5-5'))).toThrow();
   });
-
-  it('rejects an unknown model', () => {
-    expect(() => parseSettingValue('ai', ai({ provider: 'gateway', model: 'nope' }))).toThrow();
+  it('converts legacy booleans and the global selection only on reads', () => {
+    const old = {
+      enabled: true,
+      provider: 'anthropic',
+      model: 'claude-haiku-5-5',
+      features: { 'x-post-title': true, retired: true },
+    };
+    expect(parseStoredSettingValue('ai', old)).toEqual(selection('anthropic', 'claude-haiku-5-5'));
+    expect(() => parseSettingValue('ai', old)).toThrow();
   });
-
-  it('rejects a model the provider cannot reach', () => {
-    expect(() =>
-      parseSettingValue('ai', ai({ provider: 'openai', model: 'claude-haiku-5-5' })),
-    ).toThrow();
-  });
-
-  it('rejects a model with no provider', () => {
-    expect(() => parseSettingValue('ai', ai({ model: 'claude-haiku-5-5' }))).toThrow();
-  });
-
-  it('rejects an unknown feature key and an unknown top-level key', () => {
-    expect(() => parseSettingValue('ai', ai({ features: { not_registered: true } }))).toThrow();
-    expect(() => parseSettingValue('ai', ai({ extra: 1 }))).toThrow();
-  });
-
-  it('stored read drops a retired feature key and keeps the rest', () => {
-    const stored = ai({ enabled: true, features: { retired_feature: true } });
+  it('fills missing features off, drops retired features on read and rejects them on write', () => {
+    const stored = { enabled: true, features: { retired: { enabled: true, model: null } } };
     expect(parseStoredSettingValue('ai', stored)).toEqual({
-      ...stored,
-      features: { 'x-post-title': false },
+      enabled: true,
+      features: { 'x-post-title': { enabled: false, model: null } },
     });
     expect(() => parseSettingValue('ai', stored)).toThrow();
   });
-
-  it('stored read nulls a model that is unknown or unreachable, keeping the rest', () => {
-    for (const over of [
-      { provider: 'anthropic', model: 'retired-model' },
-      { provider: 'openai', model: 'claude-haiku-5-5' },
-      { provider: null, model: 'claude-haiku-5-5' },
+  it('nulls retired or unreachable selections on reads without changing consent', () => {
+    for (const [provider, id] of [
+      ['anthropic', 'retired'],
+      ['openai', 'claude-haiku-5-5'],
     ]) {
-      const stored = ai({ enabled: true, ...over });
-      expect(parseStoredSettingValue('ai', stored)).toEqual({ ...stored, model: null });
-      expect(() => parseSettingValue('ai', stored)).toThrow();
+      expect(parseStoredSettingValue('ai', selection(provider ?? '', id ?? ''))).toEqual({
+        enabled: true,
+        features: { 'x-post-title': { enabled: true, model: null } },
+      });
     }
+    expect(
+      parseStoredSettingValue('ai', {
+        enabled: true,
+        provider: 'openai',
+        model: null,
+        features: { 'x-post-title': true },
+      }),
+    ).toEqual({ enabled: true, features: { 'x-post-title': { enabled: true, model: null } } });
   });
-
-  it('stored read passes non-objects through for Zod to reject', () => {
-    expect(() => parseStoredSettingValue('ai', 'x')).toThrow();
-    expect(() => parseStoredSettingValue('ai', { enabled: true })).toThrow();
+  it('rejects malformed shapes and unknown properties', () => {
+    for (const value of [
+      'x',
+      { enabled: true },
+      { ...SETTINGS_DEFAULTS.ai, extra: 1 },
+      { enabled: true, features: { 'x-post-title': true } },
+    ]) {
+      expect(() => parseSettingValue('ai', value)).toThrow();
+    }
   });
 });

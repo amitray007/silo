@@ -76,9 +76,18 @@ const settingsPatchBodySchema = z
     ai: z
       .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_PROVIDER_KINDS).nullable(),
-        model: z.string().nullable(),
-        features: z.record(z.string(), z.boolean()),
+        features: z.record(
+          z.string(),
+          z
+            .object({
+              enabled: z.boolean(),
+              model: z
+                .object({ provider: z.enum(AI_PROVIDER_KINDS), id: z.string().min(1) })
+                .strict()
+                .nullable(),
+            })
+            .strict(),
+        ),
       })
       .strict()
       .optional(),

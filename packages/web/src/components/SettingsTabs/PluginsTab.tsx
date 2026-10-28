@@ -146,9 +146,10 @@ function AiFeatureRows({
   const { data: ai } = useAi();
   const features = (ai?.features ?? []).filter((feature) => feature.plugin === source);
   const settingsAi = settings?.ai;
-  const ready = ai?.status?.ready === true;
+  const ready = ai?.status?.enabled === true && ai.status.secretKey === 'ok';
   return features.map((feature) => {
-    const on = settingsAi?.features[feature.id as keyof typeof settingsAi.features] === true;
+    const on =
+      settingsAi?.features[feature.id as keyof typeof settingsAi.features]?.enabled === true;
     return (
       <FeatureToggleRow
         key={feature.id}
@@ -160,7 +161,16 @@ function AiFeatureRows({
         onToggle={() =>
           settingsAi &&
           updateSettings.mutate({
-            ai: { ...settingsAi, features: { ...settingsAi.features, [feature.id]: !on } },
+            ai: {
+              ...settingsAi,
+              features: {
+                ...settingsAi.features,
+                [feature.id]: {
+                  enabled: !on,
+                  model: settingsAi.features[feature.id]?.model ?? null,
+                },
+              },
+            },
           })
         }
       />

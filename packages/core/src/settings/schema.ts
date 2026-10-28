@@ -6,45 +6,34 @@ const registeredFeatureIds: ReadonlySet<string> = new Set(
   (AI_FEATURES as readonly AiFeatureDef[]).map((f) => f.id),
 );
 
-/**
- * `ai.features`: feature id -> on/off. `.strict()` in spirit: a key that is not
- * in the registry is rejected, so a typo cannot be stored. The cast gives the
- * map its registry-derived type; the refinement is what enforces it at runtime.
- */
-const aiFeaturesSchema = z.record(z.string(), z.boolean()).superRefine((features, ctx) => {
-  for (const key of Object.keys(features)) {
-    if (!registeredFeatureIds.has(key)) {
-      ctx.addIssue({ code: 'custom', message: `unknown AI feature: ${key}`, path: [key] });
-    }
-  }
-}) as unknown as z.ZodType<Record<AiFeatureId, boolean>>;
-
-/**
- * Optional AI layer (AI foundation). `enabled` is the master switch; `provider`
- * picks which stored key is used; `model` is a catalog id or null for the
- * provider default. The model must be reachable by the provider, so a model
- * with no provider is rejected. The key itself is never a setting.
- */
-const aiSchema = z
+/** Each feature owns its consent and explicit model selection. */
+const aiFeatureSchema = z
   .object({
     enabled: z.boolean(),
-    provider: z.enum(AI_PROVIDER_KINDS).nullable(),
-    model: z.string().nullable(),
-    features: aiFeaturesSchema,
+    model: z
+      .object({ provider: z.enum(AI_PROVIDER_KINDS), id: z.string().min(1) })
+      .strict()
+      .nullable(),
   })
-  .strict()
-  .superRefine((ai, ctx) => {
-    if (ai.model === null) return;
-    const reachable =
-      ai.provider !== null && modelsForProvider(ai.provider).some((m) => m.id === ai.model);
-    if (!reachable) {
+  .strict();
+
+const aiFeaturesSchema = z.record(z.string(), aiFeatureSchema).superRefine((features, ctx) => {
+  for (const [id, feature] of Object.entries(features)) {
+    if (!registeredFeatureIds.has(id)) {
+      ctx.addIssue({ code: 'custom', message: `unknown AI feature: ${id}`, path: [id] });
+    }
+    const model = feature.model;
+    if (model && model.provider !== 'fireworks' && !modelReachable(model.provider, model.id)) {
       ctx.addIssue({
         code: 'custom',
-        message: 'model is not in the catalog or not reachable by the provider',
-        path: ['model'],
+        message: 'model is not reachable by the provider',
+        path: [id, 'model'],
       });
     }
-  });
+  }
+}) as unknown as z.ZodType<Record<AiFeatureId, z.infer<typeof aiFeatureSchema>>>;
+
+const aiSchema = z.object({ enabled: z.boolean(), features: aiFeaturesSchema }).strict();
 
 /**
  * The settings allowlist (plan 016) — every KNOWN key this store accepts,
@@ -165,7 +154,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     youtube: { enabled: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },
   },
-  ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
+  ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
 };
 
 /** `true` when `key` is one of the allowlisted setting keys. */
@@ -294,30 +283,49 @@ export function normalizePluginsValue(raw: unknown): unknown {
   };
 }
 
-/**
- * Fills every registered feature missing from `ai.features` with `false`, and
- * (read side only, `stored: true`) repairs drift so a stored blob never fails
- * re-validation: it drops keys of features no longer registered and nulls a
- * `model` that is no longer in the catalog or not reachable by `provider`. The
- * write path only fills, so an unknown feature or bad model in a write is
- * rejected by the schema, not silently changed. Anything that is not an object
- * with an object `features` passes through for Zod to reject.
- */
+/** Only stored reads accept the old global selection and boolean flags. */
 function normalizeAiValue(raw: unknown, stored: boolean): unknown {
-  if (raw === null || typeof raw !== 'object') return raw;
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
   const value = raw as Record<string, unknown>;
   const flags = value.features;
   if (flags === null || typeof flags !== 'object' || Array.isArray(flags)) return raw;
   const features: Record<string, unknown> = {};
-  for (const [key, flag] of Object.entries(flags)) {
-    if (!stored || registeredFeatureIds.has(key)) features[key] = flag;
+  const legacy = stored && hasLegacySelection(value);
+  for (const [id, flag] of Object.entries(flags)) {
+    if (stored && !registeredFeatureIds.has(id)) continue;
+    const feature = convertLegacyFeature(flag, legacy ? value : undefined);
+    features[id] = stored ? repairFeatureModel(feature) : feature;
   }
-  for (const id of registeredFeatureIds) features[id] ??= false;
-  const result: Record<string, unknown> = { ...value, features };
-  if (stored && typeof value.model === 'string' && !modelReachable(value.provider, value.model)) {
-    result.model = null;
+  for (const id of registeredFeatureIds) features[id] ??= { enabled: false, model: null };
+  if (legacy) {
+    const { provider: _provider, model: _model, ...rest } = value;
+    return { ...rest, features };
   }
-  return result;
+  return { ...value, features };
+}
+
+function hasLegacySelection(value: Record<string, unknown>): boolean {
+  return 'provider' in value || 'model' in value;
+}
+
+function convertLegacyFeature(flag: unknown, legacy: Record<string, unknown> | undefined): unknown {
+  return legacy && typeof flag === 'boolean' ? { enabled: flag, model: legacyModel(legacy) } : flag;
+}
+
+function legacyModel(value: Record<string, unknown>): unknown {
+  return typeof value.model === 'string' && modelReachable(value.provider, value.model)
+    ? { provider: value.provider, id: value.model }
+    : null;
+}
+
+function repairFeatureModel(feature: unknown): unknown {
+  const parsed = aiFeatureSchema.safeParse(feature);
+  if (!parsed.success) return feature;
+  const model = parsed.data.model;
+  if (model && model.provider !== 'fireworks' && !modelReachable(model.provider, model.id)) {
+    return { ...parsed.data, model: null };
+  }
+  return parsed.data;
 }
 
 function modelReachable(provider: unknown, model: string): boolean {

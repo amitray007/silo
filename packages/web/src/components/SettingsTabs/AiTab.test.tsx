@@ -20,7 +20,15 @@ function settingsFixture(ai?: Partial<{ enabled: boolean; provider: string | nul
     linkPreviewImages: true,
     hoverPreview: false,
     plugins: {},
-    ai: { enabled: true, provider: null, model: null, features: {}, ...ai },
+    ai: {
+      enabled: ai?.enabled ?? true,
+      features: {
+        'x-post-title': {
+          enabled: false,
+          model: ai?.provider ? { provider: ai.provider, id: 'claude-haiku-5-5' } : null,
+        },
+      },
+    },
   };
 }
 
@@ -70,9 +78,14 @@ function aiFixture(opts: {
     status: {
       enabled: true,
       secretKey: opts.secretKey ?? 'ok',
-      provider: opts.provider ?? null,
-      model: opts.model ? { id: opts.model, fellBack: false } : null,
-      ready: false,
+      features: {
+        'x-post-title': {
+          ready: false,
+          reason: 'feature_disabled',
+          provider: opts.provider ?? null,
+          model: opts.model ?? null,
+        },
+      },
     },
     providers,
     catalog: CATALOG,
@@ -286,7 +299,16 @@ describe('AiTab', () => {
       expect(calls).toContainEqual(
         expect.objectContaining({
           method: 'PATCH',
-          body: { ai: expect.objectContaining({ provider: 'anthropic', model: null }) },
+          body: {
+            ai: expect.objectContaining({
+              features: {
+                'x-post-title': {
+                  enabled: false,
+                  model: { provider: 'anthropic', id: 'claude-haiku-5-5' },
+                },
+              },
+            }),
+          },
         }),
       ),
     );
@@ -320,7 +342,16 @@ describe('AiTab', () => {
       expect(calls).toContainEqual(
         expect.objectContaining({
           method: 'PATCH',
-          body: { ai: expect.objectContaining({ model: 'gpt-5-mini' }) },
+          body: {
+            ai: expect.objectContaining({
+              features: {
+                'x-post-title': {
+                  enabled: false,
+                  model: { provider: 'gateway', id: 'gpt-5-mini' },
+                },
+              },
+            }),
+          },
         }),
       ),
     );

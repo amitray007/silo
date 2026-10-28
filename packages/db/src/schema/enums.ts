@@ -46,7 +46,12 @@ export const captureSource = pgEnum('capture_source', [
  * AI provider kind (AI foundation): which service a stored API key belongs to.
  * `gateway` is the Vercel AI Gateway. A new kind is an additive enum value.
  */
-export const aiProviderKind = pgEnum('ai_provider_kind', ['anthropic', 'openai', 'gateway']);
+export const aiProviderKind = pgEnum('ai_provider_kind', [
+  'anthropic',
+  'openai',
+  'gateway',
+  'fireworks',
+]);
 
 /**
  * Title ownership (AI titles slice): who wrote `links.title`. `page` is the

@@ -5,10 +5,11 @@ export const name = '@silo/core';
 // `aiStatus` and `listAiProviders` (key-free). Anything that hands out the
 // plaintext key lives in the `@silo/core/ai-credential` subpath, which adapters
 // must not import (Biome + dependency-cruiser enforce it).
-export type { AiProviderKind, CatalogEntry } from './ai/catalog.js';
+export type { AiLiveModel, AiModel, AiProviderKind, CatalogEntry } from './ai/catalog.js';
 export {
   AI_MODEL_CATALOG,
   AI_PROVIDER_KINDS,
+  defaultFireworksModel,
   defaultModelFor,
   modelsForProvider,
   providerModelId,
@@ -16,6 +17,7 @@ export {
 } from './ai/catalog.js';
 export type { AiErrorCode, AiFeatureDef, AiFeatureId, AiPluginKind } from './ai/features.js';
 export { AI_ERROR_CODES, AI_FEATURES } from './ai/features.js';
+export { refreshFireworksModels } from './ai/models.js';
 export type { AiProviderSummary } from './ai/providers.js';
 export {
   InvalidAiApiKeyError,
