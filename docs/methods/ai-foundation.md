@@ -9,7 +9,7 @@ key, pick a model, and test the connection. The first feature,
 Later features (titles for other sources, a chat view) reuse the same layer. Each
 one is its own slice.
 
-**Status: draft for gate 1. Nothing is built.**
+**Status: approved at gate 1 (2026-10-28). Building.**
 
 ## Rules this layer must keep
 
@@ -26,7 +26,7 @@ one is its own slice.
 5. **Keys stay on the server.** A key is encrypted at rest and never returned, logged,
    exported, or exposed over MCP.
 
-## Decision: AI runs inside silo (needs Amit's confirmation at gate 1)
+## Decision: AI runs inside silo (approved 2026-10-28)
 
 `CLAUDE.md`, `README.md`, `docs/README.md`, `docs/product/scope.html`,
 `docs/foundation.md` and `docs/rules/mcp.md` say "No AI lives inside silo". Amit
@@ -84,8 +84,8 @@ history.
 - Anthropic forbids third-party apps from routing requests through Pro or Max plan
   credentials ([legal](https://code.claude.com/docs/en/legal-and-compliance)).
 
-**Recommendation:** park "ChatGPT plan via SIWC (not ACP)" in
-`docs/product/future-scope.md`. The provider list below can add it as a fourth kind
+**Decision (gate 1):** parked as "ChatGPT plan via SIWC (not ACP)" in
+`docs/product/future-scope.md` and [issue #104](https://github.com/amitray007/silo/issues/104). The provider list below can add it as a fourth kind
 later without other changes.
 
 ## Shape
@@ -339,11 +339,9 @@ QA before gate 2, against a real Postgres and real keys:
 - `docs/product/future-scope.md`: ChatGPT plan via SIWC; a per-feature model choice;
   a chat view; the MCP exception for AI settings.
 
-## Questions for gate 1
+## Gate 1 decisions (2026-10-28)
 
-1. Confirm the principle change and its wording.
-2. Park the ChatGPT-subscription provider (SIWC, not ACP) in future-scope?
-3. Only the web session or the operator token may change AI settings, not named or
-   OAuth tokens. Recommendation: yes.
-4. For the next slice ([X titles](ai-x-titles.md)): Enrich then shows on every link,
-   `full` included, and never downgrades a `full` link. Recommendation: yes.
+1. The principle change and its wording: approved.
+2. The ChatGPT-subscription provider: parked, [issue #104](https://github.com/amitray007/silo/issues/104).
+3. Only the web session or the operator token may change AI settings: approved.
+4. Enrich shows on every link and never downgrades a `full` link (X titles slice): approved.
