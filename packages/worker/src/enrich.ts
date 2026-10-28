@@ -246,12 +246,15 @@ export async function enrichLink(
   if (!link) {
     return;
   }
-  if (isFinishedRunDuplicate(link.captureStatus, job)) {
+  if (isFinishedSweepDuplicate(link.captureStatus, job)) {
     return;
   }
-  // The row decides, not the payload: `enrich_floor_status` is set by the
-  // request in the same transaction and survives job loss and double clicks.
-  const holdFull = link.enrichFloorStatus === 'full';
+  // The row decides, not the payload. A run is held at `full` when its floor
+  // (`enrich_floor_status`, set by the owner's Enrich request) is `full`, or
+  // when the link is already `full` at job start (a re-save of a complete link,
+  // or a second job after the first run finished). `recordEnrichment` only sees
+  // the floor, so a held run passes `status: 'full'` itself.
+  const holdFull = link.enrichFloorStatus === 'full' || link.captureStatus === 'full';
 
   const enabledPlugins = await deps.getPluginsSetting().catch(() => SETTINGS_DEFAULTS.plugins);
 
@@ -291,7 +294,7 @@ export async function enrichLink(
 
   if (!fetchResult.ok) {
     await recordThenMaybeSettle(linkId, {
-      status: mapSafeFetchFailureToStatus(fetchResult.reason),
+      status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
       ...postText,
       ...(sourceData ? { sourceData } : {}),
     });
@@ -341,7 +344,7 @@ async function recordExtraction(
   // result (only the source data and the status, which stays `full`).
   if (holdFull && extracted.status !== 'full') {
     await recordThenMaybeSettle(linkId, {
-      status: extracted.status,
+      status: 'full',
       ...(sourceData ? { sourceData } : {}),
     });
     return;
@@ -357,17 +360,16 @@ async function recordExtraction(
 }
 
 /**
- * A manual or sweep run always starts from `enriching` (the request sets it).
- * A job that finds another status is a duplicate of a run that already
- * finished (a second Enrich click queues a second job), so it must not run: a
- * thin result would overwrite the first run's good one. Direct calls without a
- * job context and capture-triggered jobs (a re-save of a complete link) run.
+ * A sweep run starts from `enriching` (the re-kick sets it). A sweep job that
+ * finds another status is a duplicate of a run that already finished, so it
+ * does nothing. Manual and capture jobs always run: an Enrich click or a
+ * re-save must be answered, and a held `full` link cannot be downgraded.
  */
-function isFinishedRunDuplicate(
+function isFinishedSweepDuplicate(
   status: CaptureStatus | 'enriching',
   job: EnrichJobData | undefined,
 ): boolean {
-  return job !== undefined && job.trigger !== 'capture' && status !== 'enriching';
+  return job?.trigger === 'sweep' && status !== 'enriching';
 }
 
 function updateRenderedStatus(extracted: ExtractResult, selected: ReaderExtraction): void {

@@ -106,6 +106,26 @@ describeIfPg('runSweepEnriching (integration)', () => {
     expect(after?.captureStatus).toBe('enriching');
   });
 
+  it('puts a stranded link held at full back to full instead of re-kicking it', async () => {
+    process.env.SILO_ENRICHING_STALE_MINUTES = '15';
+    const held = await insertEnrichingLink(
+      'https://example.com/sweep-held-full',
+      new Date(Date.now() - 30 * MINUTE_MS),
+    );
+    await rawDb.execute(sql`update links set enrich_floor_status = 'full' where id = ${held.id}`);
+    const baseline = await activeJobCountForLink(held.id);
+
+    const result = await sweepJobMod.runSweepEnriching();
+
+    expect(result.reenqueued).toBe(0);
+    expect(await activeJobCountForLink(held.id)).toBe(baseline);
+    const after = await rawDb.execute<{
+      capture_status: string;
+      enrich_floor_status: string | null;
+    }>(sql`select capture_status, enrich_floor_status from links where id = ${held.id}`);
+    expect(after.rows[0]).toEqual({ capture_status: 'full', enrich_floor_status: null });
+  });
+
   it('does NOT sweep a recently-updated (fresh) enriching link', async () => {
     process.env.SILO_ENRICHING_STALE_MINUTES = '15';
     // insertEnrichingLink's createLink call itself enqueues one job via the

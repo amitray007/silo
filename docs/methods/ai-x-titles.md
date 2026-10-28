@@ -84,7 +84,7 @@ other row gets `'page'`.
 - Any other twitter title was probably edited.
 - Any non-twitter title that differs from its url may have been edited, so it is
   `'user'`. This makes Enrich keep the existing title on every row saved before
-  this slice.
+  this slice. The escape is the parked "Reset to automatic title".
 
 The API and MCP link shapes do not expose `title_source` in this slice.
 
@@ -116,8 +116,13 @@ All of these must hold:
   thin, the worker skips the Reader write and writes no title, description, image or text
   (source data may update). A confirmed 404 or 410 does not trash a link whose floor is
   `full`: it stays `full` with its old data.
-- A manual or sweep job that finds its link no longer `enriching` is a duplicate of a
-  finished run (a double click queues two jobs) and does nothing.
+- A worker run is held at `full` when the floor is `full` or the link is already `full`
+  at job start (a re-save of a complete link, or a second job after the first finished).
+  A held run passes `status: 'full'` itself. Manual and capture jobs always run (a click
+  must be answered, and X3 re-asks the AI); only a sweep job that finds its link no longer
+  `enriching` is a duplicate and does nothing.
+- The sweep puts a stranded link whose floor is `full` back to `full` and clears the floor,
+  instead of re-kicking it. `settleGiveUp` does not touch a link that is `enriching`.
 - `RowMenu` shows Enrich for every status, labelled "Re-enrich" while `enriching` as
   today. `retry_capture`'s description gains "also re-runs enrichment on a complete
   link".

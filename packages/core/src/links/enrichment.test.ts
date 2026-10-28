@@ -866,11 +866,25 @@ describeIfPg('enrichment operations (integration)', () => {
         url: 'https://ex.com/floor-settle',
         sourceKind: 'link',
       });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
       await rawDb.execute(
         sql`update links set enrich_floor_status = 'partial' where id = ${link.id}`,
       );
       await enrichmentOps.settleGiveUp(link.id);
       expect((await floorOf(link.id))?.enrich_floor_status).toBeNull();
+    });
+  });
+
+  describe('settleGiveUp and a click that landed after the attempt', () => {
+    it('does not overwrite a link that was reset to enriching', async () => {
+      const link = await linksOps.createLink({
+        url: 'https://ex.com/settle-click',
+        sourceKind: 'link',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      await enrichmentOps.requestEnrich(link.id);
+      expect(await enrichmentOps.settleGiveUp(link.id)).toBeNull();
+      expect((await linksOps.getById(link.id))?.captureStatus).toBe('enriching');
     });
   });
 
@@ -939,6 +953,7 @@ describeIfPg('enrichment operations (integration)', () => {
       expect(created.title).toBeNull();
       expect(created.siteName).toBeNull();
 
+      await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
       const settled = await enrichmentOps.settleGiveUp(created.id);
 
       expect(settled).not.toBeNull();
@@ -961,6 +976,7 @@ describeIfPg('enrichment operations (integration)', () => {
         sourceKind: 'link',
       });
 
+      await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
       const settled = await enrichmentOps.settleGiveUp(created.id);
 
       expect(settled).not.toBeNull();
@@ -1115,10 +1131,12 @@ describeIfPg('enrichment operations (integration)', () => {
 
     it('settleGiveUp fills an empty title only and leaves the source alone', async () => {
       const link = await newLink('ts-settle');
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
       await enrichmentOps.settleGiveUp(link.id);
       expect((await titleState(link.id))?.title_source).toBe('page');
       const edited = await newLink('ts-settle-user');
       await linksOps.editLink(edited.id, { title: 'Mine' });
+      await enrichmentOps.recordEnrichment(edited.id, { status: 'partial' });
       await enrichmentOps.settleGiveUp(edited.id);
       expect(await titleState(edited.id)).toEqual({ title: 'Mine', title_source: 'user' });
     });

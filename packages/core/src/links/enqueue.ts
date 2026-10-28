@@ -44,7 +44,7 @@ export type EnrichTrigger = z.infer<typeof enrichTriggerSchema>;
 /** The enrichment-specific part of the `enrich-link` job payload (the queue adds `linkId`). */
 export type EnrichJobData = {
   trigger: EnrichTrigger;
-  /** The link's capture status when the run was requested; `full` is never downgraded. */
+  /** The link's capture status when the run was requested. A hint only: the worker reads the row (`enrich_floor_status`, `capture_status`). */
   previousStatus: Link['captureStatus'];
 };
 

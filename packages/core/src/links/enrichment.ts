@@ -1,5 +1,5 @@
 import { db, links } from '@silo/db';
-import { eq, sql } from 'drizzle-orm';
+import { eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { READER_VERSION } from '../capture.js';
 import { type EnrichTrigger, enqueueEnrichment } from './enqueue.js';
@@ -386,7 +386,9 @@ export async function settleGiveUp(linkId: string): Promise<Link | null> {
       title: sql`coalesce(${links.title}, ${row.url})`,
       siteName: sql`coalesce(${links.siteName}, ${domain ?? null})`,
     })
-    .where(whereLive(eq(links.id, linkId)))
+    // `enriching` is excluded: an Enrich click that landed after the attempt was
+    // recorded has started a new run, and settling would overwrite it to `bare`.
+    .where(whereLive(eq(links.id, linkId), ne(links.captureStatus, 'enriching')))
     .returning();
 
   return updated ?? null;

@@ -445,6 +445,9 @@ describeIfPg('GET /api/trash (integration)', () => {
       expect(res.status).toBe(200);
       const body = (await res.json()) as { link: { captureStatus: string } };
       expect(body.link.captureStatus).toBe('enriching');
+      // Internal columns stay out of the API shape.
+      expect(body.link).not.toHaveProperty('titleSource');
+      expect(body.link).not.toHaveProperty('enrichFloorStatus');
     });
 
     it('retrying an unknown id -> 404 not_found', async () => {

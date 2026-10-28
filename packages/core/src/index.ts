@@ -252,7 +252,7 @@ export {
 // the caller's (the worker's scheduled job) job, keeping core free of any
 // pg-boss dependency. See sweep.ts's doc comment for the full split rationale.
 export type { FindStrandedEnrichingOptions, StrandedLink } from './links/sweep.js';
-export { findStrandedEnriching } from './links/sweep.js';
+export { findStrandedEnriching, restoreHeldFull } from './links/sweep.js';
 // Tag list with live-link counts (plan 007, C3): the sidebar's per-tag
 // counts, e.g. "ai 23" — see tags.ts for the zero-count/ordering decisions.
 export type { TagCount } from './links/tags.js';
