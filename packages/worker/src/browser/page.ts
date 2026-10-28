@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { BrowserContextOptions } from 'playwright-core';
+import { prepareBoxSpacing } from '../extract/box-spacing.js';
 import { isChallengePage } from '../extract/challenge-page.js';
 import type { PageContent } from '../extract/reader-page.js';
 import { sanitizeRenderedPage } from '../extract/reader-worker.js';
@@ -121,6 +122,7 @@ const EXTRACT = String.raw`(() => {
     if (alts[index] === null) image.removeAttribute('alt');
     else image.setAttribute('alt', alts[index]);
   });
+  (${prepareBoxSpacing.toString()})(document, true);
   const { content, wordCount } = new Defuddle(document, {
     useAsync: false, removeSmallImages: false,
   }).parse();

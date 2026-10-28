@@ -2,6 +2,7 @@ import { detectSource, type ReaderContent } from '@silo/core/capture';
 import { Defuddle } from 'defuddle/node';
 import { JSDOM, VirtualConsole } from 'jsdom';
 import { parseHTML } from 'linkedom';
+import { prepareBoxSpacing } from './box-spacing.js';
 import { isChallengePage } from './challenge-page.js';
 import { recoverEmbeddedJson } from './embedded-json.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
@@ -68,6 +69,7 @@ export async function extractPageContent(
 async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
   // jsdom repairs malformed HTML (notably the RFC's body/pre nesting). Defuddle's
   // selectors need linkedom; running directly on jsdom hits its selector limit.
+  prepareBoxSpacing(dom.window.document);
   prepareGists(dom.window.document);
   prepareCodeLanguages(dom.window.document);
   const { document } = parseHTML(dom.serialize());

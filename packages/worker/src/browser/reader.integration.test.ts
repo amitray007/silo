@@ -513,6 +513,39 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
     }
   }, 25_000);
 
+  it('separates block cards and flex items while preserving inline and code text', async () => {
+    const browser = await chromium.connect(endpoint);
+    const html = `<style>.card { display:flex } .separate { display:inline-flex }</style>
+      <article><a href="/course"><div>01</div><div>Electricity</div><div>47 lessons</div></a>
+      <a href="/flex" class="card"><span>01</span><span>Electricity</span><span>47 lessons</span></a>
+      <a href="/inline"><span class="separate">01</span><span class="separate">Electricity</span><span class="separate">47 lessons</span></a>
+      <p><b>foo</b>bar</p><pre><code><span class="separate">foo</span><span class="separate">bar</span></code></pre></article>`;
+    try {
+      const result = await renderPage(
+        browser,
+        `${url}/spacing`,
+        AbortSignal.timeout(20_000),
+        async () => ({
+          ok: true,
+          status: 200,
+          finalUrl: `${url}/spacing`,
+          bytes: Buffer.from(html),
+          contentType: 'text/html',
+        }),
+      );
+      const { document } = parseHTML(result.reader?.contentHtml ?? '');
+      expect([...document.querySelectorAll('a')].map((a) => a.textContent)).toEqual([
+        '01 Electricity 47 lessons',
+        '01 Electricity 47 lessons',
+        '01 Electricity 47 lessons',
+      ]);
+      expect(result.text).toContain('foobar');
+      expect(document.querySelector('code')?.textContent).toBe('foobar');
+    } finally {
+      await browser.close();
+    }
+  }, 25_000);
+
   it('injects the browser UMD even when publishers expose AMD or CommonJS globals', async () => {
     expect((await reader.run(`${url}/amd`))?.text).toContain('built by JavaScript');
   }, 25_000);
