@@ -323,12 +323,6 @@
   height: 100%;
   object-fit: contain;
 }
-/* .silo-reader-icon pins icons to 20px; the globe scales with the chip. */
-.silo-letter-chip .silo-reader-icon {
-  width: 85%;
-  height: 85%;
-  stroke-width: 1.75;
-}
 .silo-letter-chip[data-state="pending"] img {
   opacity: 0;
 }
@@ -2011,6 +2005,12 @@ div.silo-reader-notecard {
   stroke-linejoin: round;
   fill: none;
   flex: none;
+}
+/* .silo-reader-icon above pins icons to 20px; the globe scales with the chip. */
+.silo-letter-chip .silo-reader-icon {
+  width: 85%;
+  height: 85%;
+  stroke-width: 1.75;
 }
 
 @media (hover: hover) and (pointer: fine) {
