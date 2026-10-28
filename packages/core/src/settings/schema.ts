@@ -9,8 +9,7 @@ const registeredFeatureIds: ReadonlySet<string> = new Set(
 /**
  * `ai.features`: feature id -> on/off. `.strict()` in spirit: a key that is not
  * in the registry is rejected, so a typo cannot be stored. The cast gives the
- * map its registry-derived type (`Record<never, boolean>` while the registry is
- * empty); the refinement is what enforces it at runtime.
+ * map its registry-derived type; the refinement is what enforces it at runtime.
  */
 const aiFeaturesSchema = z.record(z.string(), z.boolean()).superRefine((features, ctx) => {
   for (const key of Object.keys(features)) {
@@ -166,7 +165,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     youtube: { enabled: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },
   },
-  ai: { enabled: false, provider: null, model: null, features: {} },
+  ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
 };
 
 /** `true` when `key` is one of the allowlisted setting keys. */

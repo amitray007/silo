@@ -3,10 +3,8 @@ import { describe, expect, it } from 'vitest';
 import { AI_FEATURE_DEFINITIONS, assertAiRegistryMatchesCore } from './registry.js';
 
 describe('AI feature registry', () => {
-  it('loads without drift and matches core while both are empty', () => {
-    expect(AI_FEATURE_DEFINITIONS.map((d) => d.id)).toEqual(
-      (AI_FEATURES as readonly { id: string }[]).map((f) => f.id),
-    );
+  it('loads without drift and matches core', () => {
+    expect(AI_FEATURE_DEFINITIONS.map((d) => d.id)).toEqual(AI_FEATURES.map((f) => f.id));
   });
 });
 

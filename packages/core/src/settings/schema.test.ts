@@ -265,7 +265,7 @@ describe('ai setting', () => {
       enabled: false,
       provider: null,
       model: null,
-      features: {},
+      features: { 'x-post-title': false },
     });
     expect(parseSettingValue('ai', SETTINGS_DEFAULTS.ai)).toEqual(SETTINGS_DEFAULTS.ai);
   });
@@ -298,7 +298,10 @@ describe('ai setting', () => {
 
   it('stored read drops a retired feature key and keeps the rest', () => {
     const stored = ai({ enabled: true, features: { retired_feature: true } });
-    expect(parseStoredSettingValue('ai', stored)).toEqual({ ...stored, features: {} });
+    expect(parseStoredSettingValue('ai', stored)).toEqual({
+      ...stored,
+      features: { 'x-post-title': false },
+    });
     expect(() => parseSettingValue('ai', stored)).toThrow();
   });
 

@@ -24,7 +24,11 @@ import {
   settleGiveUp,
   softDelete,
 } from '@silo/core';
+import type { AiRunResult } from './ai/run.js';
+import { runAiFeature } from './ai/run.js';
 import { enrichSource } from './enrich-source/index.js';
+import { xPostTitle } from './enrich-source/twitter-title/index.js';
+import type { XPostTitleInput } from './enrich-source/twitter-title/prompt.js';
 import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extract.js';
 import { extract } from './extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from './extract/extract-constants.js';
@@ -56,6 +60,12 @@ export interface EnrichLinkDeps {
    * `enrichLink` call (not per source) — see the call site below.
    */
   getPluginsSetting: () => Promise<SettingsMap['plugins']>;
+  /**
+   * Asks the optional AI layer for an X post's title (`x-post-title`). Never
+   * throws; `off` means AI or the feature is off. Defaults to the real runner;
+   * tests inject a stub that counts calls.
+   */
+  runXPostTitle?: (post: XPostTitleInput) => Promise<AiRunResult<string>>;
 }
 
 const defaultDeps: EnrichLinkDeps = {
@@ -70,6 +80,7 @@ const defaultDeps: EnrichLinkDeps = {
   enrichSource: (sourceKind, url, enabledPlugins) =>
     enrichSource(sourceKind, url, undefined, enabledPlugins),
   getPluginsSetting: () => getSetting('plugins'),
+  runXPostTitle: (post) => runAiFeature(xPostTitle, post),
 };
 
 /**
@@ -187,6 +198,61 @@ function twitterTextFields(sourceData: SourceData | undefined): { text?: string 
   return text.length > 0 ? { text } : {};
 }
 
+type TwitterData = Extract<SourceData, { kind: 'twitter' }>;
+
+/**
+ * The AI title rules (docs/methods/ai-x-titles.md, "When the worker asks for an
+ * AI title"): a twitter post with text, a title the owner has not edited, and
+ * either a page-written title or an owner-started run. A sweep or a re-save
+ * never replaces a title the AI already wrote. The feature gate (AI on, feature
+ * on, provider ready) lives in `runAiFeature`, so it costs no network call.
+ */
+function aiTitleInput(
+  link: { sourceKind: string; titleSource: 'page' | 'ai' | 'user' },
+  sourceData: SourceData | undefined,
+  job: EnrichJobData | undefined,
+): XPostTitleInput | undefined {
+  if (link.sourceKind !== 'twitter' || sourceData?.kind !== 'twitter') return undefined;
+  if (link.titleSource === 'user') return undefined;
+  if (link.titleSource !== 'page' && job?.trigger !== 'manual') return undefined;
+  const text = sourceData.text.trim();
+  if (text.length === 0) return undefined;
+  const post: TwitterData = sourceData;
+  return {
+    authorName: post.authorName,
+    authorHandle: post.authorHandle,
+    language: post.language,
+    text,
+    thread: (post.threadAfter ?? []).map((later) => later.text.trim()).filter((t) => t.length > 0),
+  };
+}
+
+/**
+ * Starts the AI title call and resolves to the title, or `undefined` when AI is
+ * off, fails or runs out of time. Never rejects. The race adds a hard stop at the
+ * feature's own budget, so a stuck call cannot hold a capture longer.
+ */
+function startAiTitle(
+  input: XPostTitleInput,
+  run: (post: XPostTitleInput) => Promise<AiRunResult<string>>,
+): Promise<string | undefined> {
+  let timer: NodeJS.Timeout | undefined;
+  const budget = new Promise<undefined>((resolve) => {
+    timer = setTimeout(() => resolve(undefined), xPostTitle.timeoutMs);
+    timer.unref();
+  });
+  const call = run(input).then(
+    (result) => (result.ok ? result.value : undefined),
+    () => undefined,
+  );
+  return Promise.race([call, budget]).finally(() => clearTimeout(timer));
+}
+
+/** The title fields of a recorded result: the AI title with its source, or nothing. */
+function aiTitleFields(aiTitle: string | undefined): { title?: string; titleSource?: 'ai' } {
+  return aiTitle === undefined ? {} : { title: aiTitle, titleSource: 'ai' };
+}
+
 /**
  * Run the enrichment pipeline for `linkId`: fetch -> extract -> record.
  *
@@ -259,6 +325,17 @@ export async function enrichLink(
   const enabledPlugins = await deps.getPluginsSetting().catch(() => SETTINGS_DEFAULTS.plugins);
 
   const fetchedAt = new Date();
+  // The source call is awaited by the AI title start and by the join below, so the
+  // AI call begins the moment the post text arrives, in parallel with the page
+  // fetch, extraction and the Reader. It is awaited once, before recording.
+  const sourcePromise = deps.enrichSource(link.sourceKind, link.url, enabledPlugins);
+  const runXPostTitle = deps.runXPostTitle ?? defaultDeps.runXPostTitle;
+  const aiTitlePromise: Promise<string | undefined> = sourcePromise
+    .catch(() => undefined)
+    .then((source) => {
+      const input = aiTitleInput(link, source, job);
+      return input && runXPostTitle ? startAiTitle(input, runXPostTitle) : undefined;
+    });
   const [fetchResult, enrichedSource] = await Promise.all([
     deps.safeFetch(link.url),
     // Defense in depth (reliability review): `enrichSource` is already
@@ -268,7 +345,7 @@ export async function enrichLink(
     // `.catch` here guarantees that even a future regression in that
     // contract degrades to "no sourceData this pass" rather than propagating
     // and failing the whole `enrichLink` job.
-    deps.enrichSource(link.sourceKind, link.url, enabledPlugins).catch(() => undefined),
+    sourcePromise.catch(() => undefined),
   ]);
 
   const youtube =
@@ -295,6 +372,7 @@ export async function enrichLink(
   if (!fetchResult.ok) {
     await recordThenMaybeSettle(linkId, {
       status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
+      ...aiTitleFields(await aiTitlePromise),
       ...postText,
       ...(sourceData ? { sourceData } : {}),
     });
@@ -320,6 +398,7 @@ export async function enrichLink(
     sourceData,
     holdFull,
     fetchedAt,
+    aiTitle: await aiTitlePromise,
   });
 }
 
@@ -327,6 +406,8 @@ type ExtractionRecord = {
   sourceData: SourceData | undefined;
   holdFull: boolean;
   fetchedAt: Date;
+  /** A fresh AI title for an X post, or `undefined` to keep the page title. */
+  aiTitle: string | undefined;
 };
 
 /** Record a successful fetch + extract, including the Reader (see `enrichLink`). */
@@ -334,17 +415,19 @@ async function recordExtraction(
   link: { id: string; sourceKind: string },
   extracted: ExtractResult,
   selected: ReaderExtraction,
-  { sourceData, holdFull, fetchedAt }: ExtractionRecord,
+  { sourceData, holdFull, fetchedAt, aiTitle }: ExtractionRecord,
 ): Promise<void> {
   const linkId = link.id;
   updateRenderedStatus(extracted, selected);
   if (link.sourceKind === 'youtube') extracted.status = 'partial';
   // A held `full` link whose re-run comes back thin keeps everything it has:
   // no Reader write, and no title, description, image or text from the thin
-  // result (only the source data and the status, which stays `full`).
+  // result (only the source data and the status, which stays `full`). A
+  // successful AI title is the exception: the post text is fresh, so it is written.
   if (holdFull && extracted.status !== 'full') {
     await recordThenMaybeSettle(linkId, {
       status: 'full',
+      ...aiTitleFields(aiTitle),
       ...(sourceData ? { sourceData } : {}),
     });
     return;
@@ -354,6 +437,7 @@ async function recordExtraction(
   // Reader writes own search text, including empty results and rejected older captures.
   await recordThenMaybeSettle(linkId, {
     ...stored,
+    ...aiTitleFields(aiTitle),
     ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
     ...(sourceData ? { sourceData } : {}),
   });

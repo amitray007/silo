@@ -43,7 +43,7 @@ describeIfPg('ai status, credential and tester (integration)', () => {
       enabled: true,
       provider: null,
       model: null,
-      features: {},
+      features: { 'x-post-title': false },
       ...over,
     });
 
@@ -112,7 +112,7 @@ describeIfPg('ai status, credential and tester (integration)', () => {
           enabled: true,
           provider: 'anthropic',
           model: 'retired-model',
-          features: {},
+          features: { 'x-post-title': false },
         })}::jsonb)`,
       );
       expect(await status.aiStatus()).toMatchObject({

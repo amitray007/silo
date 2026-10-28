@@ -134,7 +134,7 @@ describeIfPg('ai provider storage (integration)', () => {
       enabled: true,
       provider: 'anthropic',
       model: 'claude-sonnet-5-5',
-      features: {},
+      features: { 'x-post-title': false },
     });
 
     await providers.removeAiProvider('anthropic');
@@ -146,7 +146,7 @@ describeIfPg('ai provider storage (integration)', () => {
       enabled: true,
       provider: null,
       model: null,
-      features: {},
+      features: { 'x-post-title': false },
     });
   });
 
@@ -158,7 +158,7 @@ describeIfPg('ai provider storage (integration)', () => {
       enabled: true,
       provider: 'openai' as const,
       model: 'gpt-6-astra',
-      features: {},
+      features: { 'x-post-title': false },
     };
     await settings.setSetting('ai', selected);
 

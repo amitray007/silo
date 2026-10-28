@@ -52,7 +52,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: {} },
+        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -224,7 +224,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: {} },
+        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -259,7 +259,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: {} },
+        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -298,7 +298,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: {} },
+        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -312,7 +312,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, provider: null, model: null, features: {} },
+        ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -342,7 +342,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         enabled: true,
         provider: 'anthropic',
         model: null,
-        features: {},
+        features: { 'x-post-title': false },
       });
       expect((await ops.getAllSettings()).ai.enabled).toBe(true);
     });

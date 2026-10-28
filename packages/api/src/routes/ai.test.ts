@@ -48,7 +48,7 @@ describeIfPg('/api/ai routes (integration)', () => {
     for (const kind of core.AI_PROVIDER_KINDS) await core.removeAiProvider(kind);
     await core.updateSettings({
       theme: 'system',
-      ai: { enabled: false, provider: null, model: null, features: {} },
+      ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
     });
   });
 
@@ -72,7 +72,14 @@ describeIfPg('/api/ai routes (integration)', () => {
       { kind: 'openai', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
       { kind: 'gateway', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
     ]);
-    expect(body.features).toEqual([]);
+    expect(body.features).toEqual([
+      {
+        id: 'x-post-title',
+        label: 'AI titles',
+        description: 'Short titles written by your AI model',
+        plugin: 'twitter',
+      },
+    ]);
     const haiku = body.catalog.find((m: { id: string }) => m.id === 'claude-haiku-5-5');
     expect(haiku).toEqual({
       id: 'claude-haiku-5-5',
@@ -147,7 +154,12 @@ describeIfPg('/api/ai routes (integration)', () => {
   it('DELETE removes the key and clears ai.provider when it pointed there', async () => {
     const { core, app } = harness.mod();
     await core.updateSettings({
-      ai: { enabled: true, provider: 'anthropic', model: 'claude-haiku-5-5', features: {} },
+      ai: {
+        enabled: true,
+        provider: 'anthropic',
+        model: 'claude-haiku-5-5',
+        features: { 'x-post-title': false },
+      },
     });
     const res = await app.request('/api/ai/providers/anthropic', { method: 'DELETE' });
     expect(res.status).toBe(204);
@@ -159,7 +171,7 @@ describeIfPg('/api/ai routes (integration)', () => {
     expect(body.status.provider).toBeNull();
     expect((await core.getAllSettings()).ai.model).toBeNull();
     await core.updateSettings({
-      ai: { enabled: false, provider: null, model: null, features: {} },
+      ai: { enabled: false, provider: null, model: null, features: { 'x-post-title': false } },
     });
   });
 
@@ -216,7 +228,12 @@ describeIfPg('/api/ai routes (integration)', () => {
       method: 'PATCH',
       headers: json,
       body: JSON.stringify({
-        ai: { enabled: true, provider: 'anthropic', model: 'gpt-6-astra', features: {} },
+        ai: {
+          enabled: true,
+          provider: 'anthropic',
+          model: 'gpt-6-astra',
+          features: { 'x-post-title': false },
+        },
       }),
     });
     expect(res.status).toBe(400);
@@ -250,7 +267,12 @@ describeIfPg('/api/ai routes (integration)', () => {
       expect(
         (await app.request('/api/ai/providers/openai/test', { method: 'POST', headers: h })).status,
       ).toBe(403);
-      const ai = { enabled: true, provider: null, model: null, features: {} };
+      const ai = {
+        enabled: true,
+        provider: null,
+        model: null,
+        features: { 'x-post-title': false },
+      };
       const patchAi = await app.request('/api/settings', {
         method: 'PATCH',
         headers: h,
@@ -277,7 +299,12 @@ describeIfPg('/api/ai routes (integration)', () => {
         method: 'PATCH',
         headers: h,
         body: JSON.stringify({
-          ai: { enabled: false, provider: 'gateway', model: null, features: {} },
+          ai: {
+            enabled: false,
+            provider: 'gateway',
+            model: null,
+            features: { 'x-post-title': false },
+          },
         }),
       });
       expect(patch.status).toBe(200);
