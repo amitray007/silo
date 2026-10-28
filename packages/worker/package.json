@@ -16,8 +16,11 @@
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.90",
+    "@ai-sdk/openai": "4.0.104",
     "@silo/core": "workspace:*",
     "@silo/queue": "workspace:*",
+    "ai": "7.0.155",
     "defuddle": "0.19.6",
     "dompurify": "catalog:",
     "drizzle-orm": "catalog:",

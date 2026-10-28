@@ -19,6 +19,7 @@ import {
   logDlqDepth,
   registerEnqueuer,
 } from '@silo/queue';
+import { prepareAiAtStartup } from './ai/startup.js';
 import { closeBrowserReader } from './browser/reader.js';
 import { enrichLink } from './enrich.js';
 import { closeReaderPool } from './extract/reader-worker.js';
@@ -56,6 +57,10 @@ export async function startWorker(): Promise<WorkerHandle> {
   });
 
   await boss.start();
+
+  // Fire and forget: AI housekeeping must never delay or fail startup (it never throws).
+  void prepareAiAtStartup();
+
   await ensureEnrichLinkQueue(boss);
 
   // Surface any dead-lettered enrichments (stranded links) at startup — the DLQ

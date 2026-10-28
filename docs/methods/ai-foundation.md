@@ -195,9 +195,10 @@ whether AI is usable.
   whose `kid` is not current, in one transaction. Then the operator removes the old
   key. A row that no configured key decrypts reads as `key_unreadable`, and the UI
   asks for the key again.
-- Unset or malformed key: silo starts normally and logs one line naming the
-  variable. AI stays unavailable, the AI tab explains the fix, and saving a key
-  returns `409 secret_key_missing`.
+- Unset or malformed key: silo starts normally and AI stays unavailable. A malformed
+  key logs one line naming the variable; an unset key logs nothing, so an owner who
+  never uses AI sees no noise. The AI tab explains the fix, and saving a key returns
+  `409 secret_key_missing`.
 
 ### Where the plaintext exists
 
