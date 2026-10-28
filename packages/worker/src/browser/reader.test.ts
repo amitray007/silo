@@ -78,6 +78,26 @@ describe('rendered Reader pool', () => {
       await reader.close();
     }
   });
+  it('logs why the browser connection failed', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const reader = new BrowserReader('ws://brwser:3000/silo-browser', {
+      connect: async () => {
+        throw new Error('getaddrinfo ENOTFOUND brwser');
+      },
+    });
+    try {
+      expect(await reader.run('https://example.org/')).toMatchObject({ renderOutcome: 'failed' });
+      expect(debug).toHaveBeenCalledWith(
+        '[reader/browser] render failed',
+        'browser-connect',
+        'getaddrinfo ENOTFOUND brwser',
+      );
+    } finally {
+      debug.mockRestore();
+      await reader.close();
+    }
+  });
+
   it('does no browser work when endpoint is unset', async () => {
     vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', '');
     const connect = vi.spyOn(chromium, 'connect');

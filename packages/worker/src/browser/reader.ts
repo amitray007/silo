@@ -172,9 +172,16 @@ export class BrowserReader {
     halfOpen: boolean,
     signal?: AbortSignal,
   ): BrowserResult | undefined {
+    // A wrapped cause (DNS failure, refused connection, wrong WebSocket path) explains
+    // `browser-connect`; without it a bad SILO_BROWSER_WS_ENDPOINT looks like any outage.
+    const cause =
+      error instanceof Error && error.cause instanceof Error
+        ? diagnosticMessage(error.cause.message)
+        : undefined;
     console.debug(
       '[reader/browser] render failed',
       error instanceof Error ? diagnosticMessage(error.message) : 'browser-error',
+      ...(cause ? [cause] : []),
     );
     if (signal?.aborted || this.closed) return undefined;
     if (!infrastructureFailure(error)) {
