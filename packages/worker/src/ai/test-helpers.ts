@@ -2,6 +2,15 @@ import type { AiCredential } from '@silo/core/ai-credential';
 import { APICallError } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 
+/** Holds a read open until a cancellation test releases it. */
+export function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void;
+  const promise = new Promise<T>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve };
+}
+
 export const LEAK_KEY = 'sk-test-LEAK-0000';
 
 export const credential: AiCredential = {

@@ -7,7 +7,7 @@ import { MockLanguageModelV4 } from 'ai/test';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { apiError, credential, failingModel, okResult } from './ai/test-helpers.js';
+import { apiError, credential, deferred, failingModel, okResult } from './ai/test-helpers.js';
 import type { EnrichLinkDeps } from './enrich.js';
 import { xPostTitle } from './enrich-source/twitter-title/index.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
@@ -95,8 +95,9 @@ describeIfPg('enrichLink AI titles (integration)', () => {
         Promise.resolve({ status: 'full', title: opts.pageTitle ?? 'Interfere on X', text: 'x' }),
       enrichSource: () => Promise.resolve(opts.source ?? post()),
       getPluginsSetting: () => Promise.resolve(plugins),
-      runXPostTitle: (input) =>
+      runXPostTitle: (input, abortSignal) =>
         runAiFeature(xPostTitle, input, {
+          abortSignal,
           isFeatureOn: async () => featureOn,
           credential: async () => credential,
           model: () => model,
@@ -132,6 +133,128 @@ describeIfPg('enrichLink AI titles (integration)', () => {
     );
     expect((await core.getById(id))?.title).toBe('Interfere adds a command menu');
   });
+
+  it('stores a title containing NUL after stripping the control character', async () => {
+    const id = await newPost();
+    await enrichMod.enrichLink(id, depsFor(modelReturning('Interfere\u0000 adds a menu')));
+    const link = await core.getById(id);
+    expect(link?.title).toBe('Interfere adds a menu');
+    expect(link?.captureStatus).toBe('full');
+  });
+
+  it.each(['readiness', 'credential'] as const)(
+    'records the page title and makes no provider call after the budget aborts a slow %s read',
+    async (stage) => {
+      const id = await newPost();
+      const model = modelReturning('Never used');
+      const pending = deferred<void>();
+      const started = deferred<void>();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      let aiRun: ReturnType<NonNullable<EnrichLinkDeps['runXPostTitle']>> | undefined;
+      const slowRead = async () => {
+        started.resolve();
+        await pending.promise;
+      };
+      const deps = depsFor(model);
+      deps.runXPostTitle = (input, abortSignal) => {
+        aiRun = runAiFeature(xPostTitle, input, {
+          abortSignal,
+          isFeatureOn: async () => {
+            if (stage === 'readiness') await slowRead();
+            return true;
+          },
+          credential: async () => {
+            if (stage === 'credential') await slowRead();
+            return credential;
+          },
+          model: () => model,
+        });
+        return aiRun;
+      };
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
+      try {
+        const capture = enrichMod.enrichLink(id, deps);
+        await started.promise;
+        await vi.advanceTimersByTimeAsync(xPostTitle.timeoutMs);
+        await capture;
+        const link = await core.getById(id);
+        expect(link?.title).toBe('Interfere on X');
+        expect(link?.titleSource).toBe('page');
+        expect(link?.captureStatus).toBe('full');
+        pending.resolve();
+        expect(await aiRun).toEqual({ ok: false, code: 'timeout' });
+        expect(model.doGenerateCalls).toHaveLength(0);
+        expect(warn.mock.calls).toEqual([['silo ai: x-post-title@v1 failed (timeout)']]);
+        const budgetIndex = timers.mock.calls.findIndex(
+          ([, delay]) => delay === xPostTitle.timeoutMs,
+        );
+        expect(budgetIndex).toBeGreaterThanOrEqual(0);
+        expect(clearedTimers).toHaveBeenCalledWith(timers.mock.results[budgetIndex]?.value);
+      } finally {
+        pending.resolve();
+        timers.mockRestore();
+        clearedTimers.mockRestore();
+        vi.useRealTimers();
+        warn.mockRestore();
+      }
+    },
+  );
+
+  it.each(['not-found', 'extract-failure'] as const)(
+    'cancels pending AI work when capture exits through %s',
+    async (outcome) => {
+      const id = await newPost();
+      const model = modelReturning('Never used');
+      const pending = deferred<void>();
+      const started = deferred<void>();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      const clearedTimers = vi.spyOn(globalThis, 'clearTimeout');
+      let aiRun: ReturnType<NonNullable<EnrichLinkDeps['runXPostTitle']>> | undefined;
+      const deps = depsFor(model);
+      deps.runXPostTitle = (input, abortSignal) => {
+        aiRun = runAiFeature(xPostTitle, input, {
+          abortSignal,
+          isFeatureOn: async () => true,
+          credential: async () => {
+            started.resolve();
+            await pending.promise;
+            return credential;
+          },
+          model: () => model,
+        });
+        return aiRun;
+      };
+      deps.safeFetch = async (url) => {
+        await started.promise;
+        return outcome === 'not-found' ? { ok: false, reason: 'not-found' } : okFetch(url);
+      };
+      deps.extract = async () => {
+        throw new Error('extract failed');
+      };
+      try {
+        const capture = enrichMod.enrichLink(id, deps);
+        if (outcome === 'not-found') await expect(capture).resolves.toBeUndefined();
+        else await expect(capture).rejects.toThrow('extract failed');
+        pending.resolve();
+        expect(await aiRun).toEqual({ ok: false, code: 'timeout' });
+        expect(model.doGenerateCalls).toHaveLength(0);
+        expect(warn.mock.calls).toEqual([['silo ai: x-post-title@v1 failed (timeout)']]);
+        const budgetIndex = timers.mock.calls.findIndex(
+          ([, delay]) => delay === xPostTitle.timeoutMs,
+        );
+        expect(budgetIndex).toBeGreaterThanOrEqual(0);
+        expect(clearedTimers).toHaveBeenCalledWith(timers.mock.results[budgetIndex]?.value);
+      } finally {
+        pending.resolve();
+        timers.mockRestore();
+        clearedTimers.mockRestore();
+        warn.mockRestore();
+      }
+    },
+  );
 
   it('keeps the page title when the model fails, and the job still resolves', async () => {
     const id = await newPost();

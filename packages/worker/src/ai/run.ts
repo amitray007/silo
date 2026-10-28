@@ -23,6 +23,7 @@ export type AiRunDeps = {
   isFeatureOn: typeof isAiFeatureOn;
   credential: () => Promise<AiCredential | undefined>;
   model: (credential: AiCredential) => LanguageModel;
+  abortSignal?: AbortSignal | undefined;
 };
 
 const defaultDeps: AiRunDeps = {
@@ -40,10 +41,19 @@ export async function runAiFeature<In, Out, Raw>(
   input: In,
   deps: Partial<AiRunDeps> = {},
 ): Promise<AiRunResult<Out>> {
-  const { isFeatureOn, credential: loadCredential, model } = { ...defaultDeps, ...deps };
+  const {
+    isFeatureOn,
+    credential: loadCredential,
+    model,
+    abortSignal,
+  } = { ...defaultDeps, ...deps };
   try {
-    if (!(await isFeatureOn(definition.id))) return { ok: false, code: 'off' };
+    abortSignal?.throwIfAborted();
+    const featureOn = await isFeatureOn(definition.id);
+    abortSignal?.throwIfAborted();
+    if (!featureOn) return { ok: false, code: 'off' };
     const credential = await loadCredential();
+    abortSignal?.throwIfAborted();
     if (!credential) return { ok: false, code: 'off' };
 
     const { output } = await generateText({
@@ -54,9 +64,11 @@ export async function runAiFeature<In, Out, Raw>(
       reasoning: credential.model.reasoning,
       maxRetries: 2,
       timeout: { totalMs: definition.timeoutMs },
+      ...(abortSignal ? { abortSignal } : {}),
       maxOutputTokens: definition.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
       telemetry: { isEnabled: false },
     });
+    abortSignal?.throwIfAborted();
     const value = definition.postProcess(output);
     if (value === undefined) {
       logAiFailure(definition.id, definition.promptVersion, 'invalid_output');
@@ -65,8 +77,9 @@ export async function runAiFeature<In, Out, Raw>(
     return { ok: true, value };
   } catch (error) {
     // A model that returns unparseable or schema-invalid output throws NoObjectGeneratedError.
-    const code =
-      NoObjectGeneratedError.isInstance(error) || NoOutputGeneratedError.isInstance(error)
+    const code = abortSignal?.aborted
+      ? 'timeout'
+      : NoObjectGeneratedError.isInstance(error) || NoOutputGeneratedError.isInstance(error)
         ? 'invalid_output'
         : aiErrorCode(error);
     logAiFailure(definition.id, definition.promptVersion, code);

@@ -3,7 +3,14 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import type { AiFeatureDefinition } from './define.js';
 import { runAiFeature } from './run.js';
-import { apiError, credential, failingModel, LEAK_KEY, okResult } from './test-helpers.js';
+import {
+  apiError,
+  credential,
+  deferred,
+  failingModel,
+  LEAK_KEY,
+  okResult,
+} from './test-helpers.js';
 
 const PROMPT_TEXT = 'SECRET PROMPT TEXT about a tweet';
 
@@ -86,6 +93,81 @@ describe('runAiFeature', () => {
     );
     expect(result).toEqual({ ok: false, code: 'off' });
     expect(model.doGenerateCalls).toHaveLength(0);
+  });
+
+  it('returns timeout without reading settings or calling the model when already aborted', async () => {
+    const model = okModel();
+    const isFeatureOn = vi.fn(async () => true);
+    const result = await runAiFeature(
+      definition,
+      { text: 'hi' },
+      deps(model, { isFeatureOn, abortSignal: AbortSignal.abort('private abort reason') }),
+    );
+    expect(result).toEqual({ ok: false, code: 'timeout' });
+    expect(isFeatureOn).not.toHaveBeenCalled();
+    expect(model.doGenerateCalls).toHaveLength(0);
+    expect(logs[0]?.mock.calls).toEqual([['silo ai: test_feature@v2 failed (timeout)']]);
+    expect(logged()).not.toContain('private abort reason');
+  });
+
+  it.each(['readiness', 'credential'] as const)(
+    'does not start a provider call after aborting a slow %s read',
+    async (stage) => {
+      const controller = new AbortController();
+      const pending = deferred<void>();
+      const started = deferred<void>();
+      const model = okModel();
+      const slowRead = async () => {
+        started.resolve();
+        await pending.promise;
+      };
+      const run = runAiFeature(
+        definition,
+        { text: 'hi' },
+        deps(model, {
+          abortSignal: controller.signal,
+          isFeatureOn: async () => {
+            if (stage === 'readiness') await slowRead();
+            return true;
+          },
+          credential: async () => {
+            if (stage === 'credential') await slowRead();
+            return credential;
+          },
+        }),
+      );
+      await started.promise;
+      controller.abort();
+      pending.resolve();
+      expect(await run).toEqual({ ok: false, code: 'timeout' });
+      expect(model.doGenerateCalls).toHaveLength(0);
+      expect(logs[0]?.mock.calls).toEqual([['silo ai: test_feature@v2 failed (timeout)']]);
+    },
+  );
+
+  it('passes caller cancellation to an in-flight provider request', async () => {
+    const controller = new AbortController();
+    const started = deferred<AbortSignal | undefined>();
+    const model = new MockLanguageModelV4({
+      doGenerate: ({ abortSignal }) =>
+        new Promise((_resolve, reject) => {
+          started.resolve(abortSignal);
+          abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true });
+        }),
+    });
+    const run = runAiFeature(
+      definition,
+      { text: 'hi' },
+      deps(model, {
+        abortSignal: controller.signal,
+      }),
+    );
+    const providerSignal = await started.promise;
+    controller.abort();
+    expect(await run).toEqual({ ok: false, code: 'timeout' });
+    expect(providerSignal?.aborted).toBe(true);
+    expect(model.doGenerateCalls).toHaveLength(1);
+    expect(logs[0]?.mock.calls).toEqual([['silo ai: test_feature@v2 failed (timeout)']]);
   });
 
   it('maps 401 to invalid_key without retrying', async () => {

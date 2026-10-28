@@ -190,12 +190,15 @@ The post text is cut at 2,000 characters.
 ### Sanitizer
 
 The sanitizer trims and takes the first line. It drops a leading `Title:` label,
-surrounding quotes or backticks, emojis (`\p{Extended_Pictographic}` and variation
-selectors), `#` and `@` prefixes, and a trailing `.`, `!` or `…`. It collapses
-whitespace. It rejects the title when the result is shorter than 3 characters,
-contains `http` or `www.`, or starts like a refusal (`I can't`, `I cannot`,
-`Sorry`). A title over 70 characters is cut at the last word boundary at or before
-70.
+surrounding quotes or backticks, whole emoji sequences (including skin tones,
+ZWJ, variation selectors, flags and keycaps), non-whitespace C0/C1 controls,
+whole `@handle` tokens, and a trailing `.`, `!` or `…`. It removes a `#` prefix
+before a letter or digit at a word start, keeping the hashtag's word. Emails,
+`C#` and `F#` stay intact. It collapses whitespace, then cuts titles over 70
+characters at the last word boundary at or before 70. If that cut leaves fewer
+than 3 characters, or there is no boundary, it cuts at 70 characters. All reject
+checks use the final title: fewer than 3 characters, containing `http` or `www.`,
+or starting like a refusal (`I can't`, `I cannot`, `Sorry`).
 
 ### Live eval (not in CI)
 

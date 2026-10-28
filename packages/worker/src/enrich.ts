@@ -65,7 +65,10 @@ export interface EnrichLinkDeps {
    * throws; `off` means AI or the feature is off. Defaults to the real runner;
    * tests inject a stub that counts calls.
    */
-  runXPostTitle?: (post: XPostTitleInput) => Promise<AiRunResult<string>>;
+  runXPostTitle?: (
+    post: XPostTitleInput,
+    abortSignal?: AbortSignal,
+  ) => Promise<AiRunResult<string>>;
 }
 
 const defaultDeps: EnrichLinkDeps = {
@@ -80,7 +83,7 @@ const defaultDeps: EnrichLinkDeps = {
   enrichSource: (sourceKind, url, enabledPlugins) =>
     enrichSource(sourceKind, url, undefined, enabledPlugins),
   getPluginsSetting: () => getSetting('plugins'),
-  runXPostTitle: (post) => runAiFeature(xPostTitle, post),
+  runXPostTitle: (post, abortSignal) => runAiFeature(xPostTitle, post, { abortSignal }),
 };
 
 /**
@@ -232,20 +235,34 @@ function aiTitleInput(
  * off, fails or runs out of time. Never rejects. The race adds a hard stop at the
  * feature's own budget, so a stuck call cannot hold a capture longer.
  */
-function startAiTitle(
+async function startAiTitle(
   input: XPostTitleInput,
-  run: (post: XPostTitleInput) => Promise<AiRunResult<string>>,
+  run: NonNullable<EnrichLinkDeps['runXPostTitle']>,
+  controller: AbortController,
 ): Promise<string | undefined> {
   let timer: NodeJS.Timeout | undefined;
+  let onAbort: (() => void) | undefined;
   const budget = new Promise<undefined>((resolve) => {
-    timer = setTimeout(() => resolve(undefined), xPostTitle.timeoutMs);
+    onAbort = () => {
+      clearTimeout(timer);
+      resolve(undefined);
+    };
+    controller.signal.addEventListener('abort', onAbort, { once: true });
+    timer = setTimeout(() => controller.abort(), xPostTitle.timeoutMs);
     timer.unref();
   });
-  const call = run(input).then(
-    (result) => (result.ok ? result.value : undefined),
-    () => undefined,
-  );
-  return Promise.race([call, budget]).finally(() => clearTimeout(timer));
+  try {
+    const call = run(input, controller.signal).then(
+      (result) => (result.ok ? result.value : undefined),
+      () => undefined,
+    );
+    return await Promise.race([call, budget]);
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
+    if (onAbort) controller.signal.removeEventListener('abort', onAbort);
+  }
 }
 
 /** The title fields of a recorded result: the AI title with its source, or nothing. */
@@ -329,77 +346,84 @@ export async function enrichLink(
   // AI call begins the moment the post text arrives, in parallel with the page
   // fetch, extraction and the Reader. It is awaited once, before recording.
   const sourcePromise = deps.enrichSource(link.sourceKind, link.url, enabledPlugins);
+  const aiController = new AbortController();
   const runXPostTitle = deps.runXPostTitle ?? defaultDeps.runXPostTitle;
   const aiTitlePromise: Promise<string | undefined> = sourcePromise
     .catch(() => undefined)
     .then((source) => {
+      if (aiController.signal.aborted) return undefined;
       const input = aiTitleInput(link, source, job);
-      return input && runXPostTitle ? startAiTitle(input, runXPostTitle) : undefined;
+      return input && runXPostTitle ? startAiTitle(input, runXPostTitle, aiController) : undefined;
     });
-  const [fetchResult, enrichedSource] = await Promise.all([
-    deps.safeFetch(link.url),
-    // Defense in depth (reliability review): `enrichSource` is already
-    // contracted never to throw (its dispatcher wraps everything in a
-    // try/catch), but a best-effort rich-preview enricher must NEVER be the
-    // thing that fails an otherwise-fine capture — so a second, cheap
-    // `.catch` here guarantees that even a future regression in that
-    // contract degrades to "no sourceData this pass" rather than propagating
-    // and failing the whole `enrichLink` job.
-    sourcePromise.catch(() => undefined),
-  ]);
+  try {
+    const [fetchResult, enrichedSource] = await Promise.all([
+      deps.safeFetch(link.url),
+      // Defense in depth (reliability review): `enrichSource` is already
+      // contracted never to throw (its dispatcher wraps everything in a
+      // try/catch), but a best-effort rich-preview enricher must NEVER be the
+      // thing that fails an otherwise-fine capture — so a second, cheap
+      // `.catch` here guarantees that even a future regression in that
+      // contract degrades to "no sourceData this pass" rather than propagating
+      // and failing the whole `enrichLink` job.
+      sourcePromise.catch(() => undefined),
+    ]);
 
-  const youtube =
-    fetchResult.ok && link.sourceKind === 'youtube'
-      ? extractYouTubeWatch(fetchResult.html, fetchResult.finalUrl)
-      : undefined;
-  const sourceData = youtube?.sourceData ?? enrichedSource;
-  const postText = twitterTextFields(sourceData);
+    const youtube =
+      fetchResult.ok && link.sourceKind === 'youtube'
+        ? extractYouTubeWatch(fetchResult.html, fetchResult.finalUrl)
+        : undefined;
+    const sourceData = youtube?.sourceData ?? enrichedSource;
+    const postText = twitterTextFields(sourceData);
 
-  // A confirmed 404/410 (plan 025 U4): the target genuinely no longer exists,
-  // not merely unreachable/blocked/slow — silently trash it and stop. This is
-  // terminal, so it bypasses `recordEnrichment` entirely (there is no capture
-  // status to record; the link is gone). Every OTHER fetch failure (blocked,
-  // rate-limited, 5xx, timeout, DNS, etc.) still flows to the existing
-  // `mapSafeFetchFailureToStatus` -> `recordEnrichment` degraded path below —
-  // those mean "couldn't fetch right now", not "doesn't exist".
-  // A re-run of a `full` link (floor `full`) never trashes it: it takes the
-  // degraded branch below and stays `full` with its old data.
-  if (!fetchResult.ok && fetchResult.reason === 'not-found' && !holdFull) {
-    await softDelete(linkId);
-    return;
-  }
+    // A confirmed 404/410 (plan 025 U4): the target genuinely no longer exists,
+    // not merely unreachable/blocked/slow — silently trash it and stop. This is
+    // terminal, so it bypasses `recordEnrichment` entirely (there is no capture
+    // status to record; the link is gone). Every OTHER fetch failure (blocked,
+    // rate-limited, 5xx, timeout, DNS, etc.) still flows to the existing
+    // `mapSafeFetchFailureToStatus` -> `recordEnrichment` degraded path below —
+    // those mean "couldn't fetch right now", not "doesn't exist".
+    // A re-run of a `full` link (floor `full`) never trashes it: it takes the
+    // degraded branch below and stays `full` with its old data.
+    if (!fetchResult.ok && fetchResult.reason === 'not-found' && !holdFull) {
+      await softDelete(linkId);
+      return;
+    }
 
-  if (!fetchResult.ok) {
-    await recordThenMaybeSettle(linkId, {
-      status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
-      ...aiTitleFields(await aiTitlePromise),
-      ...postText,
-      ...(sourceData ? { sourceData } : {}),
-    });
-    return;
-  }
+    if (!fetchResult.ok) {
+      await recordThenMaybeSettle(linkId, {
+        status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
+        ...aiTitleFields(await aiTitlePromise),
+        ...postText,
+        ...(sourceData ? { sourceData } : {}),
+      });
+      return;
+    }
 
-  const extracted = withTwitterThumbnailOverride(
-    await deps.extract({
+    const extracted = withTwitterThumbnailOverride(
+      await deps.extract({
+        url: fetchResult.finalUrl,
+        html: fetchResult.html,
+        contentType: fetchResult.contentType,
+      }),
+      sourceData,
+    );
+    Object.assign(extracted, postText);
+
+    const selected = await selectReader(link.sourceKind, extracted, youtube, {
       url: fetchResult.finalUrl,
-      html: fetchResult.html,
       contentType: fetchResult.contentType,
-    }),
-    sourceData,
-  );
-  Object.assign(extracted, postText);
-
-  const selected = await selectReader(link.sourceKind, extracted, youtube, {
-    url: fetchResult.finalUrl,
-    contentType: fetchResult.contentType,
-    signal: AbortSignal.timeout(60_000),
-  });
-  await recordExtraction(link, extracted, selected, {
-    sourceData,
-    holdFull,
-    fetchedAt,
-    aiTitle: await aiTitlePromise,
-  });
+      signal: AbortSignal.timeout(60_000),
+    });
+    await recordExtraction(link, extracted, selected, {
+      sourceData,
+      holdFull,
+      fetchedAt,
+      aiTitle: await aiTitlePromise,
+    });
+  } finally {
+    // Early returns and capture failures must also stop pending AI work.
+    aiController.abort();
+  }
 }
 
 type ExtractionRecord = {
