@@ -52,6 +52,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, provider: null, model: null, features: {} },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -223,6 +224,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, provider: null, model: null, features: {} },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -257,6 +259,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, provider: null, model: null, features: {} },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -295,6 +298,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, provider: null, model: null, features: {} },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -308,6 +312,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, provider: null, model: null, features: {} },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -318,6 +323,32 @@ describeIfPg('settings store (integration, plan 016)', () => {
       // And it's actually persisted, not just returned.
       expect(await ops.getSetting('theme')).toBe('dark');
       expect(await ops.getSetting('mcpAccess')).toBe(false);
+    });
+  });
+
+  describe('ai setting drift on read', () => {
+    const drifted = {
+      enabled: true,
+      provider: 'anthropic',
+      model: 'retired-model',
+      features: { retired_feature: true },
+    };
+
+    it('nulls a retired model and drops a retired feature, keeping enabled and provider', async () => {
+      await rawDb.execute(
+        sql`INSERT INTO settings (key, value) VALUES ('ai', ${JSON.stringify(drifted)}::jsonb)`,
+      );
+      expect(await ops.getSetting('ai')).toEqual({
+        enabled: true,
+        provider: 'anthropic',
+        model: null,
+        features: {},
+      });
+      expect((await ops.getAllSettings()).ai.enabled).toBe(true);
+    });
+
+    it('setSetting still rejects the same blob', async () => {
+      await expect(ops.setSetting('ai', drifted)).rejects.toThrow();
     });
   });
 });

@@ -134,6 +134,13 @@
       "when": 1793139183110,
       "tag": "0018_reader_render_pending",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793191447848,
+      "tag": "0019_ai_providers",
+      "breakpoints": true
     }
   ]
 }

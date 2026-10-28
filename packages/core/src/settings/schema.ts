@@ -1,4 +1,51 @@
 import { z } from 'zod';
+import { AI_PROVIDER_KINDS, modelsForProvider } from '../ai/catalog.js';
+import { AI_FEATURES, type AiFeatureDef, type AiFeatureId } from '../ai/features.js';
+
+const registeredFeatureIds: ReadonlySet<string> = new Set(
+  (AI_FEATURES as readonly AiFeatureDef[]).map((f) => f.id),
+);
+
+/**
+ * `ai.features`: feature id -> on/off. `.strict()` in spirit: a key that is not
+ * in the registry is rejected, so a typo cannot be stored. The cast gives the
+ * map its registry-derived type (`Record<never, boolean>` while the registry is
+ * empty); the refinement is what enforces it at runtime.
+ */
+const aiFeaturesSchema = z.record(z.string(), z.boolean()).superRefine((features, ctx) => {
+  for (const key of Object.keys(features)) {
+    if (!registeredFeatureIds.has(key)) {
+      ctx.addIssue({ code: 'custom', message: `unknown AI feature: ${key}`, path: [key] });
+    }
+  }
+}) as unknown as z.ZodType<Record<AiFeatureId, boolean>>;
+
+/**
+ * Optional AI layer (AI foundation). `enabled` is the master switch; `provider`
+ * picks which stored key is used; `model` is a catalog id or null for the
+ * provider default. The model must be reachable by the provider, so a model
+ * with no provider is rejected. The key itself is never a setting.
+ */
+const aiSchema = z
+  .object({
+    enabled: z.boolean(),
+    provider: z.enum(AI_PROVIDER_KINDS).nullable(),
+    model: z.string().nullable(),
+    features: aiFeaturesSchema,
+  })
+  .strict()
+  .superRefine((ai, ctx) => {
+    if (ai.model === null) return;
+    const reachable =
+      ai.provider !== null && modelsForProvider(ai.provider).some((m) => m.id === ai.model);
+    if (!reachable) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'model is not in the catalog or not reachable by the provider',
+        path: ['model'],
+      });
+    }
+  });
 
 /**
  * The settings allowlist (plan 016) — every KNOWN key this store accepts,
@@ -94,6 +141,7 @@ const settingsSchema = {
         .strict(),
     })
     .strict(),
+  ai: aiSchema,
 } as const;
 
 /** The allowlisted setting keys — `Object.keys(settingsSchema)` at the type level. */
@@ -118,6 +166,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     youtube: { enabled: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },
   },
+  ai: { enabled: false, provider: null, model: null, features: {} },
 };
 
 /** `true` when `key` is one of the allowlisted setting keys. */
@@ -246,8 +295,60 @@ export function normalizePluginsValue(raw: unknown): unknown {
   };
 }
 
+/**
+ * Fills every registered feature missing from `ai.features` with `false`, and
+ * (read side only, `stored: true`) repairs drift so a stored blob never fails
+ * re-validation: it drops keys of features no longer registered and nulls a
+ * `model` that is no longer in the catalog or not reachable by `provider`. The
+ * write path only fills, so an unknown feature or bad model in a write is
+ * rejected by the schema, not silently changed. Anything that is not an object
+ * with an object `features` passes through for Zod to reject.
+ */
+function normalizeAiValue(raw: unknown, stored: boolean): unknown {
+  if (raw === null || typeof raw !== 'object') return raw;
+  const value = raw as Record<string, unknown>;
+  const flags = value.features;
+  if (flags === null || typeof flags !== 'object' || Array.isArray(flags)) return raw;
+  const features: Record<string, unknown> = {};
+  for (const [key, flag] of Object.entries(flags)) {
+    if (!stored || registeredFeatureIds.has(key)) features[key] = flag;
+  }
+  for (const id of registeredFeatureIds) features[id] ??= false;
+  const result: Record<string, unknown> = { ...value, features };
+  if (stored && typeof value.model === 'string' && !modelReachable(value.provider, value.model)) {
+    result.model = null;
+  }
+  return result;
+}
+
+function modelReachable(provider: unknown, model: string): boolean {
+  return (
+    typeof provider === 'string' &&
+    (AI_PROVIDER_KINDS as readonly string[]).includes(provider) &&
+    modelsForProvider(provider as (typeof AI_PROVIDER_KINDS)[number]).some((m) => m.id === model)
+  );
+}
+
 /** Validates `value` against the schema for `key`, throwing a `ZodError` on failure — the single boundary check every write path (`setSetting`, the PATCH route) runs through. Runs the plan-026 `plugins` legacy-shape migration (`normalizePluginsValue`) ahead of validation so a pre-026 stored blob upgrades instead of failing re-validation on read. */
 export function parseSettingValue<K extends SettingKey>(key: K, value: unknown): SettingValue<K> {
-  const coerced = key === 'plugins' ? normalizePluginsValue(value) : value;
+  const coerced = coerceForParse(key, value);
   return settingsSchema[key].parse(coerced) as SettingValue<K>;
+}
+
+function coerceForParse(key: SettingKey, value: unknown): unknown {
+  if (key === 'plugins') return normalizePluginsValue(value);
+  if (key === 'ai') return normalizeAiValue(value, false);
+  return value;
+}
+
+/**
+ * Read-side counterpart of `parseSettingValue`: repairs registry/catalog drift
+ * in a STORED value (see `normalizeAiValue`) before the same strict validation.
+ * Writes must keep using `parseSettingValue`.
+ */
+export function parseStoredSettingValue<K extends SettingKey>(
+  key: K,
+  raw: unknown,
+): SettingValue<K> {
+  return parseSettingValue(key, key === 'ai' ? normalizeAiValue(raw, true) : raw);
 }

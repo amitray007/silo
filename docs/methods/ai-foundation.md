@@ -128,7 +128,8 @@ active provider can reach. An Anthropic key shows Claude, an OpenAI key shows
 ChatGPT, and a Gateway key shows both. The default is the `fast` model of the
 provider's family (Gateway: Claude Haiku 5.5). The builder confirms the `reasoning`
 values against the AI SDK provider mapping. A stored model ID that leaves the catalog
-falls back to the provider's default, and the UI says so.
+(or that the provider cannot reach) reads back as `null`, so the provider's default is
+used. AI stays on. Release notes announce removed models.
 
 ## Feature registry (`packages/core/src/ai/features.ts`)
 
@@ -304,8 +305,8 @@ builds from this file. The Opus lead reviews and integrates.
 | --- | --- | --- |
 | F1 | `secret-box`, `ai_providers` table and migration, core provider CRUD, startup re-encryption | round trip; wrong AAD or kid fails; a tampered tag fails; rotation re-encrypts; a missing key degrades; the list has no ciphertext |
 | F2 | catalog, feature registry, settings key `ai`, `aiReadiness()` | invalid model, unknown feature and unreachable model are rejected; each readiness reason; a model removed from the catalog falls back |
-| F3 | worker runner, `languageModelFor`, errors, connection-test port | `MockLanguageModelV3` from `ai/test`: success, timeout, 401, 429 then success, 429 three times, invalid output, AI off makes no call; console spy shows no key or prompt |
-| F4 | `/api/ai` routes, `operatorOnly`, AI tab | `403` for a DB token, `403` without CSRF, the key absent from every response including errors; web tests for each tab state |
+| F3 | worker runner, `languageModelFor`, errors, connection-test port, `reencryptAiProviders()` at worker startup | `MockLanguageModelV3` from `ai/test`: success, timeout, 401, 429 then success, 429 three times, invalid output, AI off makes no call; console spy shows no key or prompt |
+| F4 | `/api/ai` routes, `operatorOnly` (also on `PATCH /api/settings` with `ai`), a Biome `noRestrictedImports` rule that keeps `resolveAiCredential` and `setAiConnectionTester` out of api, mcp and web, AI tab | `403` for a DB token, `403` without CSRF, the key absent from every response including errors; web tests for each tab state |
 | F5 | docs: principle, `docs/rules/ai.md`, `deploy.md`, `.env.example`, compose, future-scope | `pnpm quality` |
 
 Whole-tree gate after each unit:

@@ -4,6 +4,7 @@ import type { Executor } from '../links/executor.js';
 import {
   isSettingKey,
   parseSettingValue,
+  parseStoredSettingValue,
   SETTINGS_DEFAULTS,
   type SettingKey,
   type SettingsMap,
@@ -33,7 +34,7 @@ function parseSettingValueSafely<K extends SettingKey>(
   value: unknown,
 ): SettingValue<K> | undefined {
   try {
-    return parseSettingValue(key, value);
+    return parseStoredSettingValue(key, value);
   } catch {
     return undefined;
   }
@@ -56,8 +57,11 @@ function parseSettingValueSafely<K extends SettingKey>(
  * tightened in a later slice can't silently keep serving a value that would
  * no longer validate.
  */
-export async function getSetting<K extends SettingKey>(key: K): Promise<SettingValue<K>> {
-  const [row] = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+export async function getSetting<K extends SettingKey>(
+  key: K,
+  executor: Executor = db,
+): Promise<SettingValue<K>> {
+  const [row] = await executor.select().from(settings).where(eq(settings.key, key)).limit(1);
   if (!row) return SETTINGS_DEFAULTS[key];
 
   const parsed = parseSettingValueSafely(key, row.value);

@@ -95,6 +95,7 @@ function settingsWithPlugins(
     mcpAccess: true,
     linkPreviewImages: true,
     hoverPreview,
+    ai: { enabled: false, provider: null, model: null, features: {} },
     plugins: {
       hacker_news: { enabled: true, inline: true, hover: true, palette: true },
       github: { enabled: true, hover: true, palette: true },

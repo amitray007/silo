@@ -1,4 +1,4 @@
-import { getAllSettings, updateSettings } from '@silo/core';
+import { AI_PROVIDER_KINDS, getAllSettings, updateSettings } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 
@@ -67,6 +67,17 @@ const settingsPatchBodySchema = z
             palette: z.boolean(),
           })
           .strict(),
+      })
+      .strict()
+      .optional(),
+    // AI foundation: shape only. Core checks that `model` is a catalog id the
+    // `provider` can reach and that every `features` key is registered.
+    ai: z
+      .object({
+        enabled: z.boolean(),
+        provider: z.enum(AI_PROVIDER_KINDS).nullable(),
+        model: z.string().nullable(),
+        features: z.record(z.string(), z.boolean()),
       })
       .strict()
       .optional(),

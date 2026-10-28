@@ -258,6 +258,13 @@ export type SettingsMap = {
     // `packages/core/src/settings/schema.ts`'s doc comment.
     twitter: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
   };
+  /** Optional AI layer; mirrors core's `settingsSchema.ai`. The key is never a setting. */
+  ai: {
+    enabled: boolean;
+    provider: 'anthropic' | 'openai' | 'gateway' | null;
+    model: string | null;
+    features: Record<string, boolean>;
+  };
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
