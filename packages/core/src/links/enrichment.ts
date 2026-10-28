@@ -65,6 +65,12 @@ export const ENRICH_ATTEMPT_CAP = 10;
 
 export const enrichmentResultSchema = z.object({
   title: z.string().max(FIELD_MAX.title).optional(),
+  /**
+   * Who wrote `title`: `'page'` (default, the page's own title) or `'ai'` (a
+   * title from the optional AI layer). `'user'` is never a valid result: only
+   * the owner's edit sets it. Ownership rules: see `recordEnrichment`.
+   */
+  titleSource: z.enum(['page', 'ai']).optional(),
   description: z.string().max(FIELD_MAX.description).optional(),
   imageUrl: z.string().max(FIELD_MAX.imageUrl).optional(),
   siteName: z.string().max(FIELD_MAX.siteName).optional(),
@@ -180,6 +186,8 @@ export async function recordEnrichment(
     ...(result.text !== undefined ? { text: clampToMax(result.text, FIELD_MAX.text) } : {}),
   };
   const parsed = enrichmentResultSchema.parse(clamped);
+  const incomingTitle = parsed.title ?? null;
+  const incomingTitleSource = parsed.titleSource ?? 'page';
   const sourceDataJson = parsed.sourceData ? JSON.stringify(parsed.sourceData) : null;
 
   // Single atomic UPDATE with the don't-clobber fallback expressed as
@@ -195,7 +203,19 @@ export async function recordEnrichment(
   const [updated] = await db
     .update(links)
     .set({
-      title: sql`coalesce(${parsed.title ?? null}, ${links.title})`,
+      // Title ownership (AI titles slice), decided in SQL against the row's LIVE
+      // `title_source` so an edit that lands while enrichment runs still wins:
+      //   - 'user'  -> never replaced, by page or AI title.
+      //   - 'ai'    -> replaced only by another AI title; a page title is ignored.
+      //   - 'page'  -> replaced by a page title (coalesce, as before) or an AI title.
+      // `title_source` flips to 'ai' only when an AI title is actually written.
+      title: sql`case
+        when ${links.titleSource} = 'user' or ${incomingTitle}::text is null then ${links.title}
+        when ${links.titleSource} = 'ai' and ${incomingTitleSource}::title_source <> 'ai' then ${links.title}
+        else ${incomingTitle}::text end`,
+      titleSource: sql`case
+        when ${links.titleSource} <> 'user' and ${incomingTitle}::text is not null and ${incomingTitleSource}::title_source = 'ai'
+        then 'ai'::title_source else ${links.titleSource} end`,
       description: sql`coalesce(${parsed.description ?? null}, ${links.description})`,
       imageUrl: sql`coalesce(${parsed.imageUrl ?? null}, ${links.imageUrl})`,
       siteName: sql`coalesce(${parsed.siteName ?? null}, ${links.siteName})`,

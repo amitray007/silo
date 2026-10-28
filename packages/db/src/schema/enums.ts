@@ -47,3 +47,12 @@ export const captureSource = pgEnum('capture_source', [
  * `gateway` is the Vercel AI Gateway. A new kind is an additive enum value.
  */
 export const aiProviderKind = pgEnum('ai_provider_kind', ['anthropic', 'openai', 'gateway']);
+
+/**
+ * Title ownership (AI titles slice): who wrote `links.title`. `page` is the
+ * page's own title (the default); `ai` is a title the optional AI layer wrote;
+ * `user` is a title the owner (or an import) set explicitly. `recordEnrichment`
+ * never replaces a `user` title, and replaces an `ai` title only with another
+ * `ai` one. See `recordEnrichment` in `@silo/core`.
+ */
+export const titleSource = pgEnum('title_source', ['page', 'ai', 'user']);

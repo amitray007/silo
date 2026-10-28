@@ -12,7 +12,7 @@ import {
   uuid,
 } from 'drizzle-orm/pg-core';
 import { tsvector } from '../types.js';
-import { captureSource, captureStatus, linkOrigin } from './enums.js';
+import { captureSource, captureStatus, linkOrigin, titleSource } from './enums.js';
 
 /**
  * The `links` table — one row per saved item. Stable typed columns for
@@ -36,6 +36,11 @@ export const links = pgTable(
     canonicalUrl: text('canonical_url').notNull(),
 
     title: text('title'),
+
+    // Who wrote `title` (see `titleSource` in enums.ts). `NOT NULL DEFAULT 'page'`
+    // backfills every existing row; the migration then marks edited twitter titles
+    // as 'user'. The write rules live in `recordEnrichment`'s single UPDATE.
+    titleSource: titleSource('title_source').notNull().default('page'),
     description: text('description'),
     imageUrl: text('image_url'),
     siteName: text('site_name'),
