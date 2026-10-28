@@ -3,10 +3,12 @@ import type { LinkJson } from '../api/types';
 import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { useCompactLinks } from '../lib/useCompactLinks';
+import { useTitleReveal } from '../lib/useTitleReveal';
 import { Chip } from './Chip';
 import { MenuPresence } from './MenuPresence';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useReaderSelection } from './reader/ReaderSelection';
+import { ScrambleText } from './ScrambleText';
 
 function RowNoteIcon({ notes, compact }: { notes: string | null; compact: boolean }) {
   if (!notes || !compact) return null;
@@ -48,6 +50,7 @@ export function ListRow({
   error?: string | undefined;
 }) {
   const [compact] = useCompactLinks();
+  const revealTitle = useTitleReveal(link);
   const anchorRef = useRef<HTMLSpanElement>(null);
   const [hovered, setHovered] = useState(false);
   const reader = useReaderSelection();
@@ -92,7 +95,11 @@ export function ListRow({
           <span className="silo-row-iconwrap">
             <Chip domain={domain} />
           </span>
-          <span className="silo-row-title">{link.title ?? deriveTitleFromUrl(link.url)}</span>
+          <ScrambleText
+            className="silo-row-title"
+            text={link.title ?? deriveTitleFromUrl(link.url)}
+            reveal={revealTitle}
+          />
         </span>
         <span className="silo-row-meta">
           <span>{domain}</span>
