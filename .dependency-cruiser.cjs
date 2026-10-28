@@ -95,6 +95,9 @@ module.exports = {
   ],
   options: {
     doNotFollow: { path: 'node_modules' },
+    // Build output (the web app's bundled chunks) is not source; its vendor
+    // chunks import each other in cycles by design.
+    exclude: { path: '(^|/)dist/' },
     tsPreCompilationDeps: true,
     enhancedResolveOptions: {
       exportsFields: ['exports'],
