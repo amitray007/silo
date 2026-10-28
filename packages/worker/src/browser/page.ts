@@ -13,6 +13,8 @@ import { BROWSER_USER_AGENT } from './profile.js';
 import { type BrowserFetch, BrowserRoutes, type RoutePort } from './route.js';
 
 export interface PagePort {
+  on(event: 'pageerror', listener: (error: Error) => void): unknown;
+  on(event: 'console', listener: (message: { type(): string; text(): string }) => void): unknown;
   goto(url: string, options: { waitUntil: 'domcontentloaded' }): Promise<unknown>;
   evaluate(expression: string): Promise<unknown>;
 }
@@ -140,30 +142,71 @@ function sanitizeResult(value: unknown, url: string, signal: AbortSignal): Promi
   return sanitizeRenderedPage(content, url, signal);
 }
 
+export interface RenderDiagnostics {
+  routes?: ReturnType<BrowserRoutes['stats']>;
+  timings: { gotoMs: number; settleMs: number; extractMs: number };
+  errors: string[];
+  bodyTextLength: number;
+  contentLength: number;
+}
+
+export function diagnosticMessage(message: string): string {
+  return message
+    .replace(/https?:\/\/[^\s"'<>]+/g, (value) => {
+      try {
+        const url = new URL(value);
+        return url.host + url.pathname.slice(0, 80);
+      } catch {
+        return '[url]';
+      }
+    })
+    .slice(0, 200);
+}
+
 /** Every context, including one that resolves after cancellation, is closed here. */
 export async function renderPage(
   browser: BrowserPort,
   url: string,
   signal: AbortSignal,
   fetch?: BrowserFetch,
-): Promise<PageContent> {
+  diagnostics: RenderDiagnostics = {
+    timings: { gotoMs: 0, settleMs: 0, extractMs: 0 },
+    errors: [],
+    bodyTextLength: 0,
+    contentLength: 0,
+  },
+): Promise<PageContent & { diagnostics: RenderDiagnostics }> {
   const context = await browser.newContext(CONTEXT_OPTIONS);
   let closing: Promise<void> | undefined;
   const close = () => (closing ??= closeWithin(() => context.close()));
   signal.addEventListener('abort', close, { once: true });
+  const routes = new BrowserRoutes(signal, fetch);
   try {
     signal.throwIfAborted();
-    const routes = new BrowserRoutes(signal, fetch);
     await context.route('**/*', routes.handle);
     // HTTP routes do not intercept WebSocket handshakes.
     await context.routeWebSocket('**/*', (socket) => socket.close());
     const page = await context.newPage();
+    const record = (message: string) => {
+      if (diagnostics.errors.length < 3) diagnostics.errors.push(diagnosticMessage(message));
+    };
+    page.on('pageerror', (error) => record(error.message));
+    page.on('console', (message) => {
+      if (message.type() === 'error') record(message.text());
+    });
     // A publisher must not create extra rendering slots through popups.
     context.on('page', (popup) => {
       void popup.close().catch(() => {});
     });
-    await page.goto(url, { waitUntil: 'domcontentloaded' });
+    let started = Date.now();
+    try {
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+    } finally {
+      diagnostics.timings.gotoMs = Date.now() - started;
+    }
+    started = Date.now();
     await routes.settle();
+    diagnostics.timings.settleMs = Date.now() - started;
     signal.throwIfAborted();
     const challenge = await page.evaluate(
       `${PAGE_PRELUDE}(${isChallengePage.toString()})(document)`,
@@ -171,10 +214,27 @@ export async function renderPage(
     if (challenge) throw new Error('browser-challenge');
     // UMD must publish its browser global even on sites with AMD/CommonJS globals.
     await page.evaluate(`(function(module, exports, define) { ${DEFUDDLE}\n}).call(window);`);
-    const result = await page.evaluate(EXTRACT);
+    diagnostics.bodyTextLength = Number(
+      await page.evaluate('document.body?.innerText.length ?? 0'),
+    );
+    started = Date.now();
+    let result: unknown;
+    try {
+      result = await page.evaluate(EXTRACT);
+    } finally {
+      diagnostics.timings.extractMs = Date.now() - started;
+    }
+    diagnostics.contentLength =
+      result &&
+      typeof result === 'object' &&
+      'content' in result &&
+      typeof result.content === 'string'
+        ? result.content.length
+        : 0;
     signal.throwIfAborted();
-    return await sanitizeResult(result, url, signal);
+    return { ...(await sanitizeResult(result, url, signal)), diagnostics };
   } finally {
+    diagnostics.routes = routes.stats();
     signal.removeEventListener('abort', close);
     await close();
   }

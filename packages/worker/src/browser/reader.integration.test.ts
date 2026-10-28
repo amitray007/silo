@@ -138,6 +138,11 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
         req.url === '/article.js' ? 'application/javascript' : 'text/html',
       );
       switch (req.url) {
+        case '/js-error':
+          res.end(
+            `<article><p>${article}</p></article><script>throw new Error('fixture-pageerror')</script>`,
+          );
+          break;
         case '/metadata':
           res.setHeader('content-type', 'application/json');
           res.setHeader('obs-status', 'success');
@@ -300,6 +305,11 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
     udp?.close();
     if (turn) await new Promise<void>((resolve) => turn.close(() => resolve()));
     await Promise.all([closeServer(fixture), closeServer(target)]);
+  });
+
+  it('records page errors in render diagnostics', async () => {
+    const result = await reader.run(`${url}/js-error`);
+    expect(result).toMatchObject({ diagnostics: { errors: ['fixture-pageerror'] } });
   });
 
   it('builds a Reader from scripts delivered through the route proxy and reuses one connection', async () => {

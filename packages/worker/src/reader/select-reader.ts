@@ -42,11 +42,16 @@ export async function selectReader(
     STATIC_SOURCES.has(sourceKind) ||
     !isHtmlContentType(options.contentType) ||
     options.signal?.aborted
-  )
+  ) {
+    console.debug('[reader] choice', { rendered: 'skipped', choice: 'static' });
     return fallback;
-  if (!options.render && !process.env.SILO_BROWSER_WS_ENDPOINT?.trim()) return fallback;
+  }
+  if (!options.render && !process.env.SILO_BROWSER_WS_ENDPOINT?.trim()) {
+    console.debug('[reader] choice', { rendered: 'skipped', choice: 'static' });
+    return fallback;
+  }
   const rendered = await (options.render ?? renderReader)(options.url, options.signal).catch(
-    (): BrowserResult => ({ renderPending: true }),
+    (): BrowserResult => ({ renderPending: true, renderOutcome: 'failed' }),
   );
   const staticLength = extracted.text?.length ?? 0;
   const renderedLength = rendered?.text?.trim().length ?? 0;
@@ -64,6 +69,7 @@ export async function selectReader(
     [...staticRich.gists].every((gist) => renderedRich.gists.has(gist)) &&
     (staticLength < FULL_TEXT_THRESHOLD || renderedLength >= staticLength * 0.8);
   console.debug('[reader] choice', {
+    rendered: renderOutcome(rendered),
     staticLength,
     renderedLength,
     staticImageCount,
@@ -99,4 +105,10 @@ function richContent(html: string | undefined): { diagrams: number; gists: Set<s
 function pendingFallback(fallback: ReaderExtraction, pending?: boolean): ReaderExtraction {
   if (pending && fallback.status !== 'fetch_failed') return { ...fallback, renderPending: true };
   return fallback;
+}
+
+function renderOutcome(result: BrowserResult | undefined): string {
+  if (result?.renderOutcome) return result.renderOutcome;
+  if (result?.renderPending) return 'pending';
+  return result?.reader && result.text?.trim() ? 'ok' : 'empty';
 }
