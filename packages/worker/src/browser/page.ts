@@ -2,6 +2,7 @@ import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 import type { BrowserContextOptions } from 'playwright-core';
+import { prepareBoxSpacing } from '../extract/box-spacing.js';
 import { isChallengePage } from '../extract/challenge-page.js';
 import type { PageContent } from '../extract/reader-page.js';
 import { sanitizeRenderedPage } from '../extract/reader-worker.js';
@@ -45,8 +46,16 @@ const CONTEXT_OPTIONS: BrowserContextOptions = {
   userAgent: BROWSER_USER_AGENT,
 };
 
+/**
+ * Functions sent into the page as source keep whatever helpers the TypeScript loader
+ * added. tsx (production) wraps named inner functions in `__name(fn, "name")`, which
+ * does not exist in the page, so every page script defines it first.
+ */
+export const PAGE_PRELUDE = 'var __name = (target) => target;';
+
 // A string keeps this code independent of transpiler helpers in Node's TypeScript loader.
 const EXTRACT = String.raw`(() => {
+  ${PAGE_PRELUDE}
   (${prepareGists.toString()})(document);
   (${prepareCodeLanguages.toString()})(document);
   // Match Defuddle 0.19.6's small-image rule without broken-image layout sizes.
@@ -113,6 +122,7 @@ const EXTRACT = String.raw`(() => {
     if (alts[index] === null) image.removeAttribute('alt');
     else image.setAttribute('alt', alts[index]);
   });
+  (${prepareBoxSpacing.toString()})(document, true);
   const { content, wordCount } = new Defuddle(document, {
     useAsync: false, removeSmallImages: false,
   }).parse();
@@ -155,7 +165,9 @@ export async function renderPage(
     await page.goto(url, { waitUntil: 'domcontentloaded' });
     await routes.settle();
     signal.throwIfAborted();
-    const challenge = await page.evaluate(`(${isChallengePage.toString()})(document)`);
+    const challenge = await page.evaluate(
+      `${PAGE_PRELUDE}(${isChallengePage.toString()})(document)`,
+    );
     if (challenge) throw new Error('browser-challenge');
     // UMD must publish its browser global even on sites with AMD/CommonJS globals.
     await page.evaluate(`(function(module, exports, define) { ${DEFUDDLE}\n}).call(window);`);
