@@ -65,7 +65,7 @@ function ModelOptions({
       key={kind}
       heading={
         <>
-          <ProviderLogo kind={kind} size={20} />
+          <ProviderLogo kind={kind} size={14} />
           {AI_PROVIDER_NAMES[kind]}
         </>
       }
@@ -81,7 +81,20 @@ function ModelOptions({
             onSelect={() => onPick({ provider: kind, id: model.id })}
           >
             <div className="silo-model-option-copy">
-              <span className="silo-model-option-label">{model.label}</span>
+              <div className="silo-model-option-heading">
+                <span className="silo-model-option-label">{model.label}</span>
+                {model.contextWindow != null && (
+                  <span
+                    className="silo-model-context"
+                    title={`${model.contextWindow.toLocaleString()} tokens`}
+                  >
+                    {contextLabel(model.contextWindow)}
+                  </span>
+                )}
+                <span className="silo-model-check" data-current={selected || undefined}>
+                  {selected ? '✓' : ''}
+                </span>
+              </div>
               {(model.id !== model.label || (kind === 'gateway' && model.owner)) && (
                 <span className="silo-model-option-meta">
                   {model.id !== model.label && <span className="silo-model-id">{model.id}</span>}
@@ -91,17 +104,6 @@ function ModelOptions({
                 </span>
               )}
             </div>
-            {model.contextWindow != null && (
-              <span
-                className="silo-model-context"
-                title={`${model.contextWindow.toLocaleString()} tokens`}
-              >
-                {contextLabel(model.contextWindow)}
-              </span>
-            )}
-            <span className="silo-model-check" data-current={selected || undefined}>
-              {selected ? '✓' : ''}
-            </span>
           </Command.Item>
         );
       })}
@@ -160,38 +162,51 @@ function ModelPickerPopover({
   }, [search, provider]);
 
   useLayoutEffect(() => {
+    // The content pane excludes Settings' header and close button.
+    const boundary = trigger?.closest('.silo-settings-panel, .silo-modal-panel');
     function place() {
       if (!trigger) return;
       const rect = trigger.getBoundingClientRect();
-      const width = Math.min(460, window.innerWidth - 16);
-      const below = window.innerHeight - rect.bottom - 12;
-      const above = rect.top - 12;
-      const flip = below < 240 && above > below;
+      const bounds = boundary?.getBoundingClientRect();
+      const left = Math.max(0, bounds?.left ?? 0) + 8;
+      const right = Math.min(window.innerWidth, bounds?.right ?? window.innerWidth) - 8;
+      const top = Math.max(0, bounds?.top ?? 0) + 8;
+      const bottom = Math.min(window.innerHeight, bounds?.bottom ?? window.innerHeight) - 8;
+      const width = Math.max(0, Math.min(Math.max(rect.width, 380), 420, right - left));
+      const belowAnchor = Math.max(top, Math.min(rect.bottom + 4, bottom));
+      const aboveAnchor = Math.max(top, Math.min(rect.top - 4, bottom));
+      const below = Math.max(0, bottom - belowAnchor);
+      const above = Math.max(0, aboveAnchor - top);
+      const flip = below < 400 && above > below;
       const anchor = flip
         ? {
             '--model-top': 'auto',
-            '--model-bottom': `${window.innerHeight - rect.top + 4}px`,
-            '--model-fixed-height': 'min(480px, var(--model-height))',
+            '--model-bottom': `${window.innerHeight - aboveAnchor}px`,
+            '--model-fixed-height': 'min(400px, var(--model-height))',
           }
         : {
-            '--model-top': `${rect.bottom + 4}px`,
+            '--model-top': `${belowAnchor}px`,
             '--model-bottom': 'auto',
             '--model-fixed-height': 'auto',
           };
       setPosition({
         ...anchor,
-        '--model-left': `${Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))}px`,
+        '--model-left': `${Math.max(left, Math.min(rect.right - width, right - width))}px`,
         '--model-width': `${width}px`,
-        '--model-height': `${Math.max(120, flip ? above : below)}px`,
+        '--model-height': `${flip ? above : below}px`,
       } as CSSProperties);
     }
     function onScroll(event: Event) {
       if (!panel.current?.contains(event.target as Node)) place();
     }
     place();
+    const observer = new ResizeObserver(place);
+    if (boundary) observer.observe(boundary);
+    if (trigger) observer.observe(trigger);
     window.addEventListener('resize', place);
     window.addEventListener('scroll', onScroll, true);
     return () => {
+      observer.disconnect();
       window.removeEventListener('resize', place);
       window.removeEventListener('scroll', onScroll, true);
     };
@@ -237,8 +252,8 @@ function ModelPickerPopover({
         >
           <div className="silo-palette-input">
             <svg
-              width="20"
-              height="20"
+              width="16"
+              height="16"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -256,14 +271,6 @@ function ModelPickerPopover({
               spellCheck={false}
               onValueChange={setSearch}
             />
-            <button
-              type="button"
-              className="silo-model-picker-close"
-              onClick={onClose}
-              onKeyDown={isolateCommandKeys}
-            >
-              Close
-            </button>
           </div>
           {missing && <p className="silo-model-missing silo-model-missing-header">{missing}</p>}
           <fieldset className="silo-model-provider-chips" aria-label="Filter by provider">
@@ -285,7 +292,7 @@ function ModelPickerPopover({
                 onKeyDown={isolateCommandKeys}
                 onClick={() => setProvider(group.kind)}
               >
-                <ProviderLogo kind={group.kind} size={20} />
+                <ProviderLogo kind={group.kind} size={14} />
                 {AI_PROVIDER_NAMES[group.kind]}{' '}
                 <span className="silo-model-count">{group.models.length}</span>
               </button>

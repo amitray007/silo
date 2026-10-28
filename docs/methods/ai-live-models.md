@@ -120,17 +120,33 @@ uses `cmdk`.
   substring, then id or owner substring. Ties use newest first.
 - **Provider chips:**
   - "All" plus one chip per provider with a readable key, each with its logo.
+  - Chips are 26px tall, with 14px logos and muted model counts. They scroll
+    horizontally when they do not fit. Group headings use 12px muted text and 14px logos.
   - A chip narrows the list. The chosen chip persists while the picker is open.
 - **Rows:**
-  - Each row shows the label. The id appears in quiet text when it differs.
+  - Rows are 44px tall. The label uses 13px text at weight 500. The id appears
+    beneath it in 12px muted text when it differs, on one line with an ellipsis.
   - Rows also show the context window when it is known. Counts of one million or more
     use M with at most one decimal and no trailing `.0` (1M, 1.5M). Smaller counts
     use whole K (262K, 131K, 200K).
+  - The context window and current-choice tick align to the right of the label line.
   - Gateway rows show the owner, for example "anthropic".
   - With an empty query, rows are sorted newest first within each provider.
     The current choice has a tick.
 - **Behavior:**
-  - The popover opens below the trigger, and its list scrolls at about 360 px.
+  - The desktop popover aligns to the trigger's right edge. Its width is the greater
+    of the trigger width and 380px, capped at 420px and the visible Settings pane width.
+  - It prefers opening below the trigger. When below has less than 400px and above
+    has more room, it opens above with a fixed bottom anchor and a height up to 400px.
+  - Both directions clamp to the visible Settings content pane, inset by 8px, with
+    a 4px gap from the trigger. The header and close button stay clear. The list
+    scrolls at 320px or less when space is limited. Scrolling or resizing the pane
+    updates the position. Filtering does not move the anchor.
+  - The floating surface uses `--bg2`, lifted toward `--ink` by 4% in dark mode,
+    a 1px `--line` border, `--menu-shadow`, and an 8px menu radius. Inset rows use
+    `--menu-highlight` and `--menu-highlight-shadow` for hover and active states.
+  - Search is 36px tall with a 16px icon. There is no Close text button. An outside
+    click or Escape dismisses the picker and restores focus to the trigger.
   - Arrow keys, Enter and Escape follow the existing dropdown fix. Escape closes only
     the popover.
   - Typing goes straight into the search field.
@@ -140,7 +156,8 @@ uses `cmdk`.
 - **Empty states:**
   - "No models match" when the search finds nothing.
   - "Add a key in Providers" when no provider is ready.
-- **Phone:** the picker opens as a full-width sheet.
+- **Phone (up to 640px):** the picker opens as a full-width bottom sheet, capped at
+  70dvh, with the same compact controls and elevated surface as desktop.
 
 ## Units
 

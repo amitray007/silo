@@ -82,7 +82,8 @@ describe('ModelPicker', () => {
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     fireEvent.click(trigger);
     expect(trigger.getAttribute('aria-expanded')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(screen.queryByRole('button', { name: 'Close' })).toBeNull();
+    press(screen.getByRole('combobox'), 'Escape');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 
@@ -265,7 +266,7 @@ describe('ModelPicker', () => {
     expect(trigger.querySelector('svg')).toBeTruthy();
     const rows = screen.getAllByRole('option');
     expect(rows.map((row) => row.textContent)).toEqual([
-      'Claude newestclaude-new200K✓',
+      'Claude newest200K✓claude-new',
       'Claude olderclaude-old',
       'Lunagpt-private-id',
       'Gateway reasoningvendor/r1deepseek',
@@ -385,7 +386,7 @@ describe('ModelPicker', () => {
       expect(dialog.style.getPropertyValue('--model-top')).toBe(above ? 'auto' : '144px');
       expect(dialog.style.getPropertyValue('--model-bottom')).toBe(above ? '104px' : 'auto');
       expect(dialog.style.getPropertyValue('--model-fixed-height')).toBe(
-        above ? 'min(480px, var(--model-height))' : 'auto',
+        above ? 'min(400px, var(--model-height))' : 'auto',
       );
       const position = dialog.getAttribute('style');
       search(input, 'Luna');
@@ -396,6 +397,74 @@ describe('ModelPicker', () => {
       rect.mockRestore();
     }
   });
+
+  it.each([
+    { top: 220, triggerWidth: 280, panelWidth: 580, width: 380, height: 348, above: false },
+    { top: 540, triggerWidth: 400, panelWidth: 580, width: 400, height: 328, above: true },
+    { top: 540, triggerWidth: 480, panelWidth: 580, width: 420, height: 328, above: true },
+    { top: 540, triggerWidth: 280, panelWidth: 360, width: 344, height: 328, above: true },
+    { top: 380, triggerWidth: 280, panelWidth: 580, width: 380, height: 188, above: false },
+  ])(
+    'fits the visible Settings pane: %j',
+    ({ top, triggerWidth, panelWidth, width, height, above }) => {
+      const box = (left: number, top: number, width: number, height: number) =>
+        new DOMRect(left, top, width, height);
+      const rect = vi
+        .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+        .mockImplementation(function (this: HTMLElement) {
+          return this.classList.contains('silo-settings-panel')
+            ? box(300, 200, panelWidth, 420)
+            : box(300 + panelWidth - 28 - triggerWidth, top, triggerWidth, 40);
+        });
+      try {
+        render(
+          <ModalShell width={780} ariaLabel="Settings" onClose={vi.fn()} variant="settings">
+            <div className="silo-settings-panel">
+              <ModelPicker
+                label="Title model"
+                providers={providers}
+                value={null}
+                onChange={vi.fn()}
+              />
+            </div>
+          </ModalShell>,
+        );
+        const trigger = screen.getByRole('button', { name: 'Title model' });
+        fireEvent.click(trigger);
+        const dialog = screen.getByRole('dialog', { name: 'Title model' });
+        expect(dialog.style.getPropertyValue('--model-width')).toBe(`${width}px`);
+        expect(dialog.style.getPropertyValue('--model-left')).toBe(
+          `${Math.max(308, 300 + panelWidth - 28 - width)}px`,
+        );
+        expect(dialog.style.getPropertyValue('--model-height')).toBe(`${height}px`);
+        expect(dialog.style.getPropertyValue('--model-top')).toBe(above ? 'auto' : `${top + 44}px`);
+        expect(dialog.style.getPropertyValue('--model-bottom')).toBe(
+          above ? `${window.innerHeight - top + 4}px` : 'auto',
+        );
+        // The content pane shrinks while the picker remains open.
+        rect.mockImplementation(function (this: HTMLElement) {
+          return this.classList.contains('silo-settings-panel')
+            ? box(300, 300, panelWidth, 120)
+            : box(500, 348, triggerWidth, 40);
+        });
+        fireEvent.resize(window);
+        expect(dialog.style.getPropertyValue('--model-height')).toBe('36px');
+        // Even an anchor scrolled out of view stays inside the pane's inset edges.
+        rect.mockImplementation(function (this: HTMLElement) {
+          return this.classList.contains('silo-settings-panel')
+            ? box(300, 200, panelWidth, 420)
+            : box(500, 700, triggerWidth, 40);
+        });
+        fireEvent.scroll(screen.getByRole('dialog', { name: 'Settings' }));
+        expect(dialog.style.getPropertyValue('--model-top')).toBe('auto');
+        expect(dialog.style.getPropertyValue('--model-bottom')).toBe(
+          `${window.innerHeight - 612}px`,
+        );
+      } finally {
+        rect.mockRestore();
+      }
+    },
+  );
 
   it('shows the no-match state and recovers when search clears', () => {
     const { input } = setup();
@@ -481,9 +550,9 @@ describe('ModelPicker', () => {
     expect(fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })).toBe(false);
     expect(document.activeElement).toBe(last);
     // Interior controls keep the browser's normal Tab default.
-    const close = screen.getByRole('button', { name: 'Close' });
-    close.focus();
-    expect(fireEvent.keyDown(close, { key: 'Tab' })).toBe(true);
+    const all = screen.getByRole('button', { name: 'All' });
+    all.focus();
+    expect(fireEvent.keyDown(all, { key: 'Tab' })).toBe(true);
     expect(onChange).not.toHaveBeenCalled();
   });
 
