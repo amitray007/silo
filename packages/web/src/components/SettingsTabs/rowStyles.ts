@@ -24,6 +24,12 @@ export const settingsRow: CSSProperties = {
   flexWrap: 'wrap',
 };
 
+/** Provider rows keep the logo, copy, and actions on one line at every width. */
+export const providerRow: CSSProperties = {
+  ...settingsRow,
+  flexWrap: 'nowrap',
+};
+
 /** The roomier row + the `--line` divider under it (every row except a tab's last). */
 export const settingsRowDivided: CSSProperties = {
   ...settingsRow,

@@ -17,11 +17,22 @@ import type {
   SettingsMap,
 } from '../../api/types';
 import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER } from '../../lib/aiModels';
+import { useEscapeLayer } from '../../lib/useEscapeLayer';
 import { ConfirmDialog } from '../ConfirmDialog';
+import { MenuAction, MenuSurface } from '../MenuSurface';
+import { RowPopover } from '../RowPopover';
+import { ReaderIcon } from '../reader/ReaderIcon';
 import { Skeleton } from '../Skeleton';
 import { ModelPicker } from './ModelPicker';
 import { ProviderLogo } from './ProviderLogo';
-import { rowDesc, rowLabel, settingsField, settingsRow, settingsRowDivided } from './rowStyles';
+import {
+  providerRow,
+  rowDesc,
+  rowLabel,
+  settingsField,
+  settingsRow,
+  settingsRowDivided,
+} from './rowStyles';
 import { ToggleSwitch } from './ToggleSwitch';
 
 const FAILURE_WORDS: Record<AiTestCode, string> = {
@@ -47,20 +58,6 @@ function timeAgo(iso: string, now = Date.now()): string {
   const hours = Math.round(minutes / 60);
   if (hours < 24) return `${hours} h ago`;
   return `${Math.round(hours / 24)} d ago`;
-}
-
-/** The row status line. Never shows more of the key than its last four characters. */
-function providerStatus(provider: AiProviderJson | undefined, unreadable: boolean): string {
-  if (!provider?.configured) return 'Not set';
-  if (unreadable) return "Key can't be read. Add it again.";
-  const test = provider.lastTest;
-  if (test && !test.ok && (test.code === 'invalid_key' || test.code === 'no_access')) {
-    return FAILURE_WORDS[test.code];
-  }
-  const key = `Key ••••${provider.keyLast4 ?? ''}`;
-  if (!test) return `${key} · Not tested`;
-  if (test.ok) return `${key} · Tested ${timeAgo(test.at)}`;
-  return `${key} · ${test.code ? FAILURE_WORDS[test.code] : 'Test failed'}`;
 }
 
 const metaStyle: CSSProperties = {
@@ -190,29 +187,89 @@ function testFailureText(data: { ok: boolean; code?: AiTestCode } | undefined) {
   return data && !data.ok ? FAILURE_WORDS[data.code ?? 'unavailable'] : null;
 }
 
-function ProviderModelsStatus({
+function savedTestFailure(test: AiProviderJson['lastTest']) {
+  if (!test || test.ok) return null;
+  return test.code ? FAILURE_WORDS[test.code] : 'Test failed';
+}
+
+function MetaSegment({
+  text,
+  warning,
+  announce = true,
+  title,
+}: {
+  text: string;
+  warning?: boolean;
+  announce?: boolean;
+  title?: string;
+}) {
+  return (
+    <span
+      role={warning && announce ? 'alert' : undefined}
+      className={warning ? 'silo-ai-provider-warning' : undefined}
+      title={title}
+    >
+      {text}
+    </span>
+  );
+}
+
+function ModelsMeta({
   provider,
   pending,
+  error,
 }: {
-  provider: AiProviderJson | undefined;
+  provider: AiProviderJson;
   pending: boolean;
+  error: string | null | undefined;
 }) {
-  if (pending)
-    return (
-      <div role="status" style={metaStyle}>
-        Refreshing models…
-      </div>
-    );
-  const count = provider?.models?.length ?? 0;
-  const age = provider?.modelsFetchedAt
+  const count = provider.models?.length ?? 0;
+  const failure = error ?? (provider.modelsRefreshError ? "Couldn't refresh the list" : null);
+  const text = pending
+    ? 'Refreshing…'
+    : (failure ??
+      (count ? `${count} models` : 'No models available. Refresh the list or test the key.'));
+  const age = provider.modelsFetchedAt
     ? `updated ${timeAgo(provider.modelsFetchedAt)}`
     : 'not updated yet';
   return (
-    <div role="status" style={metaStyle}>
-      {count} models · {age}
-      {provider?.modelsRefreshError && <div>Couldn't refresh the list</div>}
-      {!count && <div>No models available. Refresh the list or test the key.</div>}
-    </div>
+    <MetaSegment
+      text={text}
+      warning={!pending && (!!failure || !count)}
+      announce={!!failure}
+      title={`${count} models · ${age}`}
+    />
+  );
+}
+
+/** One quiet line; a failure replaces only the affected segment. */
+function ProviderMeta({
+  provider,
+  unreadable,
+  refreshing,
+  refreshError,
+  testError,
+}: {
+  provider: AiProviderJson | undefined;
+  unreadable: boolean;
+  refreshing: boolean;
+  refreshError: string | null | undefined;
+  testError: string | null | undefined;
+}) {
+  if (!provider?.configured) return <>Not set</>;
+  const lastTest = provider.lastTest;
+  const failure = testError ?? savedTestFailure(lastTest);
+  const keyError = unreadable ? "Key can't be read" : failure === 'Key rejected' ? failure : null;
+  const testFailure = failure === 'Key rejected' ? null : failure;
+  const tested = lastTest ? `tested ${timeAgo(lastTest.at)}` : 'Not tested';
+  return (
+    <>
+      <MetaSegment text={keyError ?? `••••${provider.keyLast4 ?? ''}`} warning={!!keyError} />
+      {' · '}
+      <ModelsMeta provider={provider} pending={refreshing} error={refreshError} />
+      {' · '}
+      <MetaSegment text={testFailure ?? tested} warning={!!testFailure} />
+    </>
   );
 }
 
@@ -229,6 +286,7 @@ function ProviderRow({
 }) {
   const [formOpen, setFormOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const test = useTestAiKey(kind);
   const remove = useRemoveAiKey(kind);
   const save = useSaveAiKey(kind);
@@ -238,14 +296,15 @@ function ProviderRow({
   const { reset: resetSave } = save;
   useEffect(() => () => resetSave(), [resetSave]);
   const addRef = useRef<HTMLButtonElement>(null);
+  const moreRef = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
   const name = AI_PROVIDER_NAMES[kind];
   const configured = provider?.configured === true;
 
   useEffect(() => {
-    if (wasOpen.current && !formOpen) addRef.current?.focus();
+    if (wasOpen.current && !formOpen) (configured ? moreRef : addRef).current?.focus();
     wasOpen.current = formOpen;
-  }, [formOpen]);
+  }, [formOpen, configured]);
 
   function resetRowMutations() {
     test.reset();
@@ -254,56 +313,40 @@ function ProviderRow({
     refresh.reset();
   }
 
-  const rowError =
-    refreshErrorText(refresh.error) ??
-    test.error?.message ??
-    removeErrorText(confirming, remove.error) ??
-    testFailureText(test.data);
+  function closeMenu() {
+    setMenuOpen(false);
+    moreRef.current?.focus();
+  }
+
+  useEscapeLayer(menuOpen, closeMenu);
+
+  const testError =
+    test.error?.message ?? removeErrorText(confirming, remove.error) ?? testFailureText(test.data);
   const statusId = `ai-${kind}-status`;
   return (
     <>
-      <div style={settingsRow} aria-busy={busy}>
+      <div style={providerRow} aria-busy={busy} className="silo-ai-provider-row">
         <ProviderLogo kind={kind} />
         <div className="silo-ai-provider-copy">
-          <div style={rowLabel}>{name}</div>
-          <div id={statusId} role="status" style={metaStyle}>
-            {providerStatus(provider, unreadable)}
+          <div style={rowLabel} className="silo-ai-provider-name">
+            {name}
           </div>
-          {configured && <ProviderModelsStatus provider={provider} pending={refresh.isPending} />}
+          <div id={statusId} role="status" style={metaStyle} className="silo-ai-provider-meta">
+            <ProviderMeta
+              provider={provider}
+              unreadable={unreadable}
+              refreshing={refresh.isPending}
+              refreshError={refreshErrorText(refresh.error)}
+              testError={testError}
+            />
+          </div>
         </div>
         <div className="silo-ai-provider-actions">
-          <button
-            ref={addRef}
-            type="button"
-            className="silo-settings-btn"
-            disabled={busy}
-            aria-label={`${configured ? 'Replace' : 'Add'} ${name} key`}
-            onClick={() => {
-              resetRowMutations();
-              setFormOpen(true);
-            }}
-          >
-            {configured ? 'Replace key' : 'Add key'}
-          </button>
-          {configured && (
-            <button
-              type="button"
-              className="silo-settings-btn"
-              aria-label={`Refresh ${name} models`}
-              disabled={busy || unreadable}
-              onClick={() => {
-                resetRowMutations();
-                refresh.mutate();
-              }}
-            >
-              {refresh.isPending ? 'Refreshing…' : 'Refresh'}
-            </button>
-          )}
-          {configured && (
+          {configured ? (
             <>
               <button
                 type="button"
-                className="silo-settings-btn"
+                className="silo-settings-btn silo-ai-provider-primary"
                 disabled={busy}
                 aria-label={`Test ${name} key`}
                 onClick={() => {
@@ -314,26 +357,84 @@ function ProviderRow({
                 {test.isPending ? 'Testing…' : 'Test'}
               </button>
               <button
+                ref={moreRef}
                 type="button"
-                className="silo-settings-btn"
+                className="silo-settings-btn silo-ai-provider-more"
                 disabled={busy}
-                aria-label={`Remove ${name} key`}
-                onClick={() => {
-                  resetRowMutations();
-                  setConfirming(true);
+                aria-label={`More actions for ${name}`}
+                aria-haspopup="menu"
+                aria-expanded={menuOpen}
+                onClick={() => (menuOpen ? closeMenu() : setMenuOpen(true))}
+                onKeyDown={(event) => {
+                  if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+                  event.preventDefault();
+                  setMenuOpen(true);
                 }}
               >
-                Remove
+                <ReaderIcon name="more" />
               </button>
+              {menuOpen && (
+                <RowPopover anchor={moreRef.current} onDismiss={closeMenu}>
+                  <MenuSurface
+                    className="silo-row-menu silo-ai-provider-menu"
+                    label={`More actions for ${name}`}
+                    onClose={closeMenu}
+                    sheet={false}
+                  >
+                    <MenuAction
+                      icon={<ReaderIcon name="edit" />}
+                      onClick={() => {
+                        closeMenu();
+                        resetRowMutations();
+                        setFormOpen(true);
+                      }}
+                    >
+                      Replace key
+                    </MenuAction>
+                    <MenuAction
+                      icon={<ReaderIcon name="refresh" />}
+                      disabled={unreadable}
+                      onClick={() => {
+                        closeMenu();
+                        resetRowMutations();
+                        refresh.mutate();
+                      }}
+                    >
+                      Refresh models
+                    </MenuAction>
+                    <div className="silo-menu-separator" />
+                    <MenuAction
+                      icon={<ReaderIcon name="trash" />}
+                      danger
+                      onClick={() => {
+                        closeMenu();
+                        resetRowMutations();
+                        setConfirming(true);
+                      }}
+                    >
+                      Remove key
+                    </MenuAction>
+                  </MenuSurface>
+                </RowPopover>
+              )}
             </>
+          ) : (
+            <button
+              ref={addRef}
+              type="button"
+              className="silo-settings-btn silo-ai-provider-primary"
+              disabled={busy}
+              aria-label={`Add ${name} key`}
+              onClick={() => {
+                resetRowMutations();
+                setFormOpen(true);
+              }}
+            >
+              Add key
+            </button>
           )}
         </div>
       </div>
-      {rowError && (
-        <div role="alert" style={errorStyle}>
-          {rowError}
-        </div>
-      )}
       {formOpen && (
         <KeyForm
           kind={kind}

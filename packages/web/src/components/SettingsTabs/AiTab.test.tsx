@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ModalShell } from '../ModalShell';
 import { AiTab } from './AiTab';
 
 const TEST_KEY = 'sk-test-0123456789abcdef';
@@ -100,6 +102,7 @@ function setup(opts: {
   ai?: ReturnType<typeof aiFixture>;
   settings?: ReturnType<typeof settingsFixture>;
   putResponse?: Response;
+  inSettings?: boolean;
   /** Overrides the provider route (PUT/POST test/DELETE); may return a pending promise. */
   providerRoute?: (method: string) => Response | Promise<Response> | undefined;
 }) {
@@ -128,10 +131,25 @@ function setup(opts: {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      <AiTab />
+      {opts.inSettings ? <SettingsHarness /> : <AiTab />}
     </QueryClientProvider>,
   );
   return { calls };
+}
+
+function SettingsHarness() {
+  const [open, setOpen] = useState(true);
+  return open ? (
+    <ModalShell width={800} ariaLabel="Settings" onClose={() => setOpen(false)}>
+      <AiTab />
+    </ModalShell>
+  ) : null;
+}
+
+async function menuAction(provider: string, action: string) {
+  fireEvent.click(await screen.findByRole('button', { name: `More actions for ${provider}` }));
+  const menu = screen.getByRole('menu', { name: `More actions for ${provider}` });
+  fireEvent.click(within(menu).getByRole('menuitem', { name: action }));
 }
 
 afterEach(() => vi.unstubAllGlobals());
@@ -164,7 +182,7 @@ describe('AiTab', () => {
       settings: settingsFixture({ enabled: false }),
       ai: aiFixture({ providers: [ANTHROPIC_OK] }),
     });
-    const add = await screen.findByRole('button', { name: 'Replace Anthropic key' });
+    const add = await screen.findByRole('button', { name: 'More actions for Anthropic' });
     expect((add as HTMLButtonElement).disabled).toBe(true);
     expect(screen.queryByRole('radio')).toBeNull();
     expect(
@@ -272,14 +290,158 @@ describe('AiTab', () => {
         ],
       }),
     });
-    expect(await screen.findByText('Key ••••abcd · Tested just now')).toBeTruthy();
+    const key = await screen.findByText('••••abcd');
+    expect(key.closest('[role="status"]')?.textContent).toBe(
+      '••••abcd · 1 models · tested just now',
+    );
     expect(screen.getByText('Key rejected')).toBeTruthy();
-    expect(screen.getByText('Key ••••1234 · Rate limited')).toBeTruthy();
+    expect(screen.getByText('Rate limited').closest('[role="status"]')?.textContent).toBe(
+      '••••1234 · 2 models · Rate limited',
+    );
+  });
+
+  it('keeps the masked key, model count and test age on one meta line', async () => {
+    const now = new Date('2026-10-29T12:00:00Z').getTime();
+    const clock = vi.spyOn(Date, 'now').mockReturnValue(now);
+    try {
+      setup({
+        ai: aiFixture({
+          providers: [
+            {
+              ...ANTHROPIC_OK,
+              keyLast4: 'fwAA',
+              lastTest: { ok: true, at: new Date(now - 5 * 60 * 60_000).toISOString() },
+              models: Array.from({ length: 14 }, (_, i) => ({
+                id: `model-${i}`,
+                label: `Model ${i}`,
+                contextLength: null,
+              })),
+              modelsFetchedAt: new Date(now - 15 * 60_000).toISOString(),
+            },
+          ],
+        }),
+      });
+      const key = await screen.findByText('••••fwAA');
+      const row = key.closest('.silo-ai-provider-row');
+      expect(row?.querySelectorAll('[role="status"]')).toHaveLength(1);
+      expect(key.closest('[role="status"]')?.textContent).toBe(
+        '••••fwAA · 14 models · tested 5 h ago',
+      );
+      expect(screen.getByText('14 models').title).toBe('14 models · updated 15 min ago');
+      expect(screen.queryByText('updated 15 min ago')).toBeNull();
+      expect(screen.getAllByText('Not set')).toHaveLength(3);
+      expect(screen.queryByRole('menuitem')).toBeNull();
+      expect(
+        within(row as HTMLElement)
+          .getAllByRole('button')
+          .map((button) => button.textContent),
+      ).toEqual(['Test', '']);
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  it.each([
+    ['invalid_key', 'Key rejected'],
+    ['no_access', 'Key rejected'],
+    ['model_not_found', 'Model not found'],
+    ['rate_limited', 'Rate limited'],
+    ['timeout', 'Timed out'],
+    ['network', 'Network error'],
+    ['provider_error', 'Provider error'],
+    ['quota', 'Out of credit or over the limit'],
+    ['unavailable', 'Test unavailable right now'],
+  ])('renders the saved %s error in the affected meta segment', async (code, words) => {
+    setup({
+      ai: aiFixture({
+        providers: [
+          {
+            ...ANTHROPIC_OK,
+            lastTest: { ok: false, at: NOW, code },
+          },
+        ],
+      }),
+    });
+    const error = await screen.findByRole('alert');
+    expect(error.textContent).toBe(words);
+    expect(error.className).toBe('silo-ai-provider-warning');
+    const meta = error.closest('.silo-ai-provider-meta');
+    expect(meta).toBeTruthy();
+    expect(meta?.textContent).toContain('1 models');
+    if (words === 'Key rejected') expect(meta?.textContent).not.toContain('••••abcd');
+    else expect(meta?.textContent).toContain('••••abcd');
+  });
+
+  it('keeps the fallback copy for a saved failed test without an error code', async () => {
+    setup({
+      ai: aiFixture({
+        providers: [
+          {
+            ...ANTHROPIC_OK,
+            lastTest: { ok: false, at: NOW },
+          },
+        ],
+      }),
+    });
+    const error = await screen.findByRole('alert');
+    expect(error.textContent).toBe('Test failed');
+    expect(error.closest('.silo-ai-provider-meta')).toBeTruthy();
+  });
+
+  it('opens the shared menu with arrow keys and restores focus without dismissing Settings', async () => {
+    setup({ ai: aiFixture({ providers: [ANTHROPIC_OK] }), inSettings: true });
+    const trigger = await screen.findByRole('button', { name: 'More actions for Anthropic' });
+    trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'ArrowDown' });
+    const menu = screen.getByRole('menu', { name: 'More actions for Anthropic' });
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    expect(document.activeElement).toBe(
+      within(menu).getByRole('menuitem', { name: 'Replace key' }),
+    );
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(
+      within(menu).getByRole('menuitem', { name: 'Refresh models' }),
+    );
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(
+      within(menu).getByRole('menuitem', { name: 'Replace key' }),
+    );
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'End' });
+    expect(document.activeElement).toBe(within(menu).getByRole('menuitem', { name: 'Remove key' }));
+    fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(document.activeElement).toBe(trigger);
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+    fireEvent.keyDown(trigger, { key: 'Escape' });
+    expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
+  });
+
+  it('opens Replace key from the menu and returns focus after cancelling the inline field', async () => {
+    setup({ ai: aiFixture({ providers: [ANTHROPIC_OK] }) });
+    await menuAction('Anthropic', 'Replace key');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(document.activeElement).toBe(screen.getByLabelText('Anthropic API key'));
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByLabelText('Anthropic API key')).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'More actions for Anthropic' }),
+    );
+  });
+
+  it('cancels removal without deleting the key', async () => {
+    const { calls } = setup({ ai: aiFixture({ providers: [ANTHROPIC_OK] }) });
+    await menuAction('Anthropic', 'Remove key');
+    expect(screen.queryByRole('menu')).toBeNull();
+    expect(screen.getByRole('alertdialog', { name: 'Remove Anthropic key?' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(screen.queryByRole('alertdialog')).toBeNull();
+    expect(calls.some((call) => call.method === 'DELETE')).toBe(false);
   });
 
   it('removes a key only after the second step', async () => {
     const { calls } = setup({ ai: aiFixture({ providers: [ANTHROPIC_OK] }) });
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Anthropic key' }));
+    await menuAction('Anthropic', 'Remove key');
     expect(calls.some((c) => c.method === 'DELETE')).toBe(false);
     fireEvent.click(screen.getByRole('button', { name: 'Confirm remove?' }));
     await waitFor(() =>
@@ -386,7 +548,10 @@ describe('AiTab', () => {
         ],
       }),
     });
-    expect(await screen.findByText('1 models · updated just now')).toBeTruthy();
+    expect(await screen.findByText('1 models')).toHaveProperty(
+      'title',
+      '1 models · updated just now',
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'AI titles model' }));
     const list = screen.getByRole('listbox');
     expect(within(list).getAllByRole('option')).toHaveLength(1);
@@ -425,7 +590,11 @@ describe('AiTab', () => {
       }),
     });
     const hint = await screen.findByText("Couldn't refresh the list");
-    expect(hint.closest('[role="status"]')?.textContent).toContain('1 models · updated just now');
+    expect(hint.className).toBe('silo-ai-provider-warning');
+    expect(hint).toHaveProperty('title', '1 models · updated just now');
+    expect(hint.closest('[role="status"]')?.textContent).toBe(
+      "•••• · Couldn't refresh the list · Not tested",
+    );
     fireEvent.click(await screen.findByRole('button', { name: 'AI titles model' }));
     expect(screen.getByRole('option', { name: /Stored model/ })).toBeTruthy();
   });
@@ -440,14 +609,10 @@ describe('AiTab', () => {
           release = r;
         }),
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Refresh Fireworks models' }));
-    expect(await screen.findByText('Refreshing models…')).toBeTruthy();
-    for (const name of [
-      'Refresh Fireworks models',
-      'Replace Fireworks key',
-      'Test Fireworks key',
-      'Remove Fireworks key',
-    ]) {
+    await menuAction('Fireworks', 'Refresh models');
+    expect(await screen.findByText('Refreshing…')).toBeTruthy();
+    expect(screen.queryByRole('menu')).toBeNull();
+    for (const name of ['More actions for Fireworks', 'Test Fireworks key']) {
       expect(screen.getByRole('button', { name })).toHaveProperty('disabled', true);
     }
     expect(screen.getByRole('button', { name: 'Add Anthropic key' })).toHaveProperty(
@@ -463,7 +628,7 @@ describe('AiTab', () => {
     if (fireworks)
       fireworks.models = [{ id: 'live', label: 'New live model', contextLength: null }];
     release(jsonResponse({ ok: true, models: fireworks?.models }));
-    await screen.findByText('1 models · not updated yet');
+    await screen.findByText('1 models');
     fireEvent.click(screen.getByRole('button', { name: 'AI titles model' }));
     expect(screen.getByRole('option', { name: /New live model/ })).toBeTruthy();
   });
@@ -477,7 +642,7 @@ describe('AiTab', () => {
     expect(
       await screen.findByText('No models available. Refresh the list or test the key.'),
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Fireworks models' }));
+    await menuAction('Fireworks', 'Refresh models');
     expect((await screen.findByRole('alert')).textContent).toBe('Out of credit or over the limit');
   });
 
@@ -500,10 +665,11 @@ describe('AiTab', () => {
         }),
     });
     expect(await screen.findByText("Couldn't refresh the list")).toBeTruthy();
-    const refresh = screen.getByRole('button', { name: `Refresh ${name} models` });
-    fireEvent.click(refresh);
-    await screen.findByText('Refreshing models…');
-    expect(refresh).toHaveProperty('disabled', true);
+    await menuAction(name, 'Refresh models');
+    await screen.findByText('Refreshing…');
+    expect(screen.queryByRole('menu')).toBeNull();
+    const more = screen.getByRole('button', { name: `More actions for ${name}` });
+    expect(more).toHaveProperty('disabled', true);
     expect(screen.getByRole('button', { name: `Test ${name} key` })).toHaveProperty(
       'disabled',
       true,
@@ -519,7 +685,7 @@ describe('AiTab', () => {
       body: {},
     });
     finish(jsonResponse({ ok: true }));
-    await waitFor(() => expect(refresh).toHaveProperty('disabled', false));
+    await waitFor(() => expect(more).toHaveProperty('disabled', false));
   });
 
   it('shows an inline alert when selecting a model fails to PATCH', async () => {
@@ -564,15 +730,15 @@ describe('AiTab', () => {
               });
         },
       });
-      fireEvent.click(await screen.findByRole('button', { name: 'Refresh Fireworks models' }));
+      await menuAction('Fireworks', 'Refresh models');
       expect((await screen.findByRole('alert')).textContent).toBe(
         'Out of credit or over the limit',
       );
-      fireEvent.click(
-        screen.getByRole('button', {
-          name: action === 'Refresh' ? 'Refresh Fireworks models' : `${action} Fireworks key`,
-        }),
-      );
+      if (action === 'Test') {
+        fireEvent.click(screen.getByRole('button', { name: 'Test Fireworks key' }));
+      } else {
+        await menuAction('Fireworks', action === 'Refresh' ? 'Refresh models' : `${action} key`);
+      }
       await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
       if (action === 'Test' || action === 'Refresh') {
         finish(jsonResponse({ ok: true }));
@@ -607,7 +773,7 @@ describe('AiTab', () => {
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Test Fireworks key' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Network error');
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Fireworks models' }));
+    await menuAction('Fireworks', 'Refresh models');
     await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
   });
 
@@ -622,8 +788,8 @@ describe('AiTab', () => {
               finish = resolve;
             }),
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Replace Fireworks key' }));
-    fireEvent.click(screen.getByRole('button', { name: 'Refresh Fireworks models' }));
+    await menuAction('Fireworks', 'Replace key');
+    await menuAction('Fireworks', 'Refresh models');
     expect((await screen.findByRole('alert')).textContent).toBe('Out of credit or over the limit');
     fireEvent.change(screen.getByLabelText('Fireworks API key'), { target: { value: TEST_KEY } });
     fireEvent.click(screen.getByRole('button', { name: 'Save & test' }));
@@ -650,7 +816,8 @@ describe('AiTab', () => {
     expect(testing.textContent).toBe('Testing…');
     expect((testing as HTMLButtonElement).disabled).toBe(true);
     expect(
-      (screen.getByRole('button', { name: 'Remove Anthropic key' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: 'More actions for Anthropic' }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
     expect(calls).toContainEqual(
       expect.objectContaining({ method: 'POST', url: '/api/ai/providers/anthropic/test' }),
@@ -686,7 +853,10 @@ describe('AiTab', () => {
       providerRoute: () => jsonResponse({ ok: false, code }),
     });
     fireEvent.click(await screen.findByRole('button', { name: 'Test Anthropic key' }));
-    expect((await screen.findByRole('alert')).textContent).toBe(words);
+    const error = await screen.findByRole('alert');
+    expect(error.textContent).toBe(words);
+    expect(error.closest('.silo-ai-provider-meta')).toBeTruthy();
+    expect(error.className).toBe('silo-ai-provider-warning');
   });
 
   it('shows the error when the Test request fails', async () => {
@@ -709,7 +879,7 @@ describe('AiTab', () => {
           ? jsonResponse({ error: 'boom', message: 'Could not remove the key.' }, 500)
           : undefined,
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Remove Anthropic key' }));
+    await menuAction('Anthropic', 'Remove key');
     fireEvent.click(screen.getByRole('button', { name: 'Confirm remove?' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Could not remove the key.');
     expect(screen.getByRole('button', { name: 'Confirm remove?' })).toBeTruthy();
@@ -726,14 +896,15 @@ describe('AiTab', () => {
             })
           : undefined,
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Replace Anthropic key' }));
+    await menuAction('Anthropic', 'Replace key');
     fireEvent.change(screen.getByLabelText('Anthropic API key'), { target: { value: TEST_KEY } });
     fireEvent.click(screen.getByRole('button', { name: 'Save & test' }));
     await screen.findByText('Testing…', { selector: 'button' });
     expect(screen.queryByDisplayValue(TEST_KEY)).toBeNull();
     expect(document.body.innerHTML).not.toContain(TEST_KEY);
     expect(
-      (screen.getByRole('button', { name: 'Remove Anthropic key' }) as HTMLButtonElement).disabled,
+      (screen.getByRole('button', { name: 'More actions for Anthropic' }) as HTMLButtonElement)
+        .disabled,
     ).toBe(true);
     expect(screen.queryByRole('radio')).toBeNull();
     release(jsonResponse({ provider: null, test: { ok: true } }));
@@ -766,7 +937,7 @@ describe('AiTab', () => {
       ai: aiFixture({ providers: [rejected] }),
       putResponse: jsonResponse({ provider: rejected, test: { ok: false, code: 'invalid_key' } }),
     });
-    fireEvent.click(await screen.findByRole('button', { name: 'Replace Anthropic key' }));
+    await menuAction('Anthropic', 'Replace key');
     fireEvent.change(screen.getByLabelText('Anthropic API key'), { target: { value: TEST_KEY } });
     fireEvent.click(screen.getByRole('button', { name: 'Save & test' }));
     await waitFor(() => expect(screen.queryByLabelText('Anthropic API key')).toBeNull());
@@ -779,7 +950,14 @@ describe('AiTab', () => {
         providers: [{ ...ANTHROPIC_OK, keyReadable: false }],
       }),
     });
-    expect(await screen.findByText("Key can't be read. Add it again.")).toBeTruthy();
+    const error = await screen.findByText("Key can't be read");
+    expect(error.closest('.silo-ai-provider-meta')).toBeTruthy();
+    expect(error.className).toBe('silo-ai-provider-warning');
+    fireEvent.click(screen.getByRole('button', { name: 'More actions for Anthropic' }));
+    expect(screen.getByRole('menuitem', { name: 'Refresh models' })).toHaveProperty(
+      'disabled',
+      true,
+    );
     expect(screen.queryByRole('radio')).toBeNull();
   });
 
