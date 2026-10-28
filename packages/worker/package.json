@@ -12,6 +12,7 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "dev": "tsx --env-file-if-exists=../../.env src/worker.ts",
+    "eval:x-titles": "tsx src/enrich-source/twitter-title/eval.ts",
     "start": "tsx src/worker.ts",
     "test": "vitest run --no-file-parallelism"
   },
