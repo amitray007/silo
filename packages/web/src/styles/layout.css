@@ -306,7 +306,7 @@
   background: var(--line);
   color: var(--ink);
 }
-/* Real favicon tile; the letter on a neutral tile appears only when a site has no icon. */
+/* Real favicon tile; a neutral globe appears only when a site has no icon. */
 .silo-letter-chip {
   position: relative;
   overflow: hidden;
@@ -314,14 +314,7 @@
   flex: none;
   display: inline-grid;
   place-items: center;
-  font-size: 10.5px;
-  font-weight: 500;
   color: var(--fnt);
-  letter-spacing: -0.02em;
-}
-.silo-letter-chip[data-state="failed"] {
-  background: var(--bg2);
-  box-shadow: inset 0 0 0 0.5px var(--line-2);
 }
 .silo-letter-chip img {
   position: absolute;
@@ -329,6 +322,12 @@
   width: 100%;
   height: 100%;
   object-fit: contain;
+}
+/* .silo-reader-icon pins icons to 20px; the globe scales with the chip. */
+.silo-letter-chip .silo-reader-icon {
+  width: 85%;
+  height: 85%;
+  stroke-width: 1.75;
 }
 .silo-letter-chip[data-state="pending"] img {
   opacity: 0;

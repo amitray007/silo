@@ -39,6 +39,8 @@ const paths = {
   hash: 'M10 5.5 8.5 18.5M15.5 5.5 14 18.5M6 9.75h12.5M5.5 14.25H18',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   right: 'm9 5 7 7-7 7',
+  globe:
+    'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21M12 3C9.5 5.5 8.25 8.5 8.25 12S9.5 18.5 12 21',
 } as const;
 
 export function readerIconPath(name: keyof typeof paths): string {

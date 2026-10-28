@@ -1,20 +1,12 @@
 import { useState } from 'react';
-
-export function chipLetter(domain: string | null | undefined): string {
-  const segment = (
-    String(domain ?? '')
-      .replace(/^www\./i, '')
-      .split('.')[0] ?? ''
-  ).replace(/[^a-z0-9]/gi, '');
-  return segment ? segment.charAt(0).toUpperCase() : '·';
-}
+import { ReaderIcon } from './reader/ReaderIcon';
 
 type IconState = 'pending' | 'loaded' | 'failed';
 
 /**
  * The site's real favicon, served by silo's own `/api/favicon` proxy so the
  * browser never calls a third party per row. While it loads the tile stays
- * empty; a site with no icon shows its first letter on a quiet neutral tile.
+ * empty; a site with no icon (or no domain) shows a neutral globe.
  */
 export function Chip({ domain, size = 20 }: { domain: string | null | undefined; size?: number }) {
   const host = String(domain ?? '')
@@ -30,7 +22,7 @@ export function Chip({ domain, size = 20 }: { domain: string | null | undefined;
       style={{ width: size, height: size }}
       aria-hidden="true"
     >
-      {shown === 'failed' && chipLetter(host)}
+      {shown === 'failed' && <ReaderIcon name="globe" size={Math.round(size * 0.85)} />}
       {shown !== 'failed' && (
         <img
           src={`/api/favicon?domain=${encodeURIComponent(host)}`}

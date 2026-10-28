@@ -54,8 +54,8 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
   Do not hardcode hex values. The tokens (`src/styles/tokens.css`) are the source of
   truth, in both light and dark.
 - Fonts use self-hosted Inter Variable from `@fontsource-variable/inter` in `src/styles/base.css`.
-  Do not use a CDN or `fonts.googleapis.com`. No third-party fetch per row (letter-chips, not remote
-  favicons).
+  Do not use a CDN or `fonts.googleapis.com`. No third-party fetch per row (favicons through `/api/favicon`;
+  a missing favicon shows a neutral globe icon).
 - Surface API failures honestly: the client throws a typed `ApiError` (mirroring
   the API's `{ error, message, details }` envelope); hooks expose loading/error;
   a render error is caught by the `ErrorBoundary` (calm fallback, not a
@@ -90,4 +90,4 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 - Vitest + `@testing-library/react` + jsdom. **Mock `fetch`** — web tests never
   hit a real API or a database (unlike the core/api/mcp integration suites).
 - Assert design rules alongside behavior: ink primary buttons, neutral active
-  navigation, correct marks, and local letter chips.
+  navigation, correct marks, and local favicons with the globe fallback.
