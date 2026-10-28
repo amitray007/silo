@@ -1,10 +1,11 @@
-import { useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
 
 export type SettingsSelectOption<V extends string | number> = { value: V; label: string };
 
 /** A group of options. A group with a `label` renders a non-selectable heading above its options. */
 export type SettingsSelectGroup<V extends string | number> = {
   label?: string;
+  icon?: ReactNode;
   options: SettingsSelectOption<V>[];
 };
 
@@ -132,6 +133,7 @@ export function SettingsSelect<V extends string | number>({
               // biome-ignore lint/a11y/useSemanticElements: a listbox group is role="group"; <fieldset> is not valid inside a listbox.
               <div key={group.label} role="group" aria-label={group.label}>
                 <div aria-hidden="true" className="silo-settings-select-group-label">
+                  {group.icon}
                   {group.label}
                 </div>
                 {group.options.map(renderOption)}

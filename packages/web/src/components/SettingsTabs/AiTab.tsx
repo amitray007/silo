@@ -1,6 +1,8 @@
 import { type CSSProperties, useEffect, useId, useRef, useState } from 'react';
+import { ApiError } from '../../api/client';
 import {
   useAi,
+  useRefreshFireworksModels,
   useRemoveAiKey,
   useSaveAiKey,
   useSettings,
@@ -8,26 +10,19 @@ import {
   useUpdateSettings,
 } from '../../api/hooks';
 import type {
-  AiCatalogEntry,
   AiProviderJson,
   AiProviderKind,
   AiSettingsResponse,
   AiTestCode,
   SettingsMap,
 } from '../../api/types';
+import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER, readableAiProviders } from '../../lib/aiModels';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Skeleton } from '../Skeleton';
+import { ProviderLogo } from './ProviderLogo';
 import { rowDesc, rowLabel, settingsField, settingsRow, settingsRowDivided } from './rowStyles';
 import { SettingsSelect } from './SettingsSelect';
 import { ToggleSwitch } from './ToggleSwitch';
-
-const PROVIDER_NAMES: Record<AiProviderKind, string> = {
-  anthropic: 'Anthropic',
-  openai: 'OpenAI',
-  gateway: 'Vercel AI Gateway',
-  fireworks: 'Fireworks',
-};
-const PROVIDER_KINDS: AiProviderKind[] = ['anthropic', 'openai', 'gateway'];
 
 const FAILURE_WORDS: Record<AiTestCode, string> = {
   invalid_key: 'Key rejected',
@@ -39,11 +34,6 @@ const FAILURE_WORDS: Record<AiTestCode, string> = {
   provider_error: 'Provider error',
   quota: 'Out of credit or over the limit',
   unavailable: 'Test unavailable right now',
-};
-
-const FAMILY_LABELS: Record<AiCatalogEntry['family'], string> = {
-  claude: 'Claude',
-  chatgpt: 'ChatGPT',
 };
 
 type AiSetting = SettingsMap['ai'];
@@ -137,7 +127,7 @@ function KeyForm({
       }}
     >
       <label htmlFor={inputId} style={rowLabel}>
-        {PROVIDER_NAMES[kind]} API key
+        {AI_PROVIDER_NAMES[kind]} API key
       </label>
       <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap' }}>
         <input
@@ -183,32 +173,69 @@ function KeyForm({
   );
 }
 
+function refreshErrorText(error: Error | null) {
+  return error instanceof ApiError
+    ? (FAILURE_WORDS[error.error as AiTestCode] ?? error.message)
+    : error?.message;
+}
+
+function removeErrorText(confirming: boolean, error: Error | null) {
+  return confirming ? null : error?.message;
+}
+
+function testFailureText(data: { ok: boolean; code?: AiTestCode } | undefined) {
+  return data && !data.ok ? FAILURE_WORDS[data.code ?? 'unavailable'] : null;
+}
+
+function FireworksModelsStatus({
+  provider,
+  pending,
+}: {
+  provider: AiProviderJson | undefined;
+  pending: boolean;
+}) {
+  if (pending)
+    return (
+      <div role="status" style={metaStyle}>
+        Refreshing models…
+      </div>
+    );
+  const count = provider?.models?.length ?? 0;
+  const age = provider?.modelsFetchedAt
+    ? `updated ${timeAgo(provider.modelsFetchedAt)}`
+    : 'not updated yet';
+  return (
+    <div role="status" style={metaStyle}>
+      {count} models · {age}
+      {!count && <div>No models available. Refresh the list or test the key.</div>}
+    </div>
+  );
+}
+
 function ProviderRow({
   kind,
   provider,
-  selected,
   unreadable,
   disabled,
-  onPick,
 }: {
   kind: AiProviderKind;
   provider: AiProviderJson | undefined;
-  selected: boolean;
   unreadable: boolean;
   disabled: boolean;
-  onPick: () => void;
 }) {
   const [formOpen, setFormOpen] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const test = useTestAiKey(kind);
   const remove = useRemoveAiKey(kind);
   const save = useSaveAiKey(kind);
-  const busy = disabled || save.isPending || test.isPending || remove.isPending;
+  const refresh = useRefreshFireworksModels();
+  const busy =
+    disabled || save.isPending || test.isPending || remove.isPending || refresh.isPending;
   const { reset: resetSave } = save;
   useEffect(() => () => resetSave(), [resetSave]);
   const addRef = useRef<HTMLButtonElement>(null);
   const wasOpen = useRef(false);
-  const name = PROVIDER_NAMES[kind];
+  const name = AI_PROVIDER_NAMES[kind];
   const configured = provider?.configured === true;
 
   useEffect(() => {
@@ -216,29 +243,24 @@ function ProviderRow({
     wasOpen.current = formOpen;
   }, [formOpen]);
 
-  const testFailure =
-    test.data && !test.data.ok ? FAILURE_WORDS[test.data.code ?? 'unavailable'] : null;
   const rowError =
-    test.error?.message ?? (confirming ? null : remove.error?.message) ?? testFailure;
+    refreshErrorText(refresh.error) ??
+    test.error?.message ??
+    removeErrorText(confirming, remove.error) ??
+    testFailureText(test.data);
   const statusId = `ai-${kind}-status`;
   return (
     <>
-      <div style={settingsRow}>
-        <input
-          type="radio"
-          className="silo-radio"
-          name="ai-provider"
-          checked={selected}
-          disabled={busy || !configured || unreadable}
-          onChange={onPick}
-          aria-label={`Use ${name}`}
-          aria-describedby={statusId}
-        />
+      <div style={settingsRow} aria-busy={busy}>
+        <ProviderLogo kind={kind} />
         <div className="silo-ai-provider-copy">
           <div style={rowLabel}>{name}</div>
           <div id={statusId} role="status" style={metaStyle}>
             {providerStatus(provider, unreadable)}
           </div>
+          {kind === 'fireworks' && configured && (
+            <FireworksModelsStatus provider={provider} pending={refresh.isPending} />
+          )}
         </div>
         <div className="silo-ai-provider-actions">
           <button
@@ -251,6 +273,20 @@ function ProviderRow({
           >
             {configured ? 'Replace key' : 'Add key'}
           </button>
+          {kind === 'fireworks' && configured && (
+            <button
+              type="button"
+              className="silo-settings-btn"
+              aria-label="Refresh Fireworks models"
+              disabled={busy || unreadable}
+              onClick={() => {
+                refresh.reset();
+                refresh.mutate();
+              }}
+            >
+              {refresh.isPending ? 'Refreshing…' : 'Refresh'}
+            </button>
+          )}
           {configured && (
             <>
               <button
@@ -324,50 +360,87 @@ function SecretKeyCallout({ state }: { state: 'missing' | 'invalid' }) {
   );
 }
 
-function ModelSelect({
+const PLUGIN_NAMES: Record<string, string> = {
+  twitter: 'Twitter / X',
+  hacker_news: 'Hacker News',
+  github: 'GitHub',
+  youtube: 'YouTube',
+};
+
+const NOT_READY_WORDS: Record<string, string> = {
+  disabled: 'Turn on Use AI.',
+  no_secret_key: 'Set SILO_SECRET_KEY on the server.',
+  no_model: 'Choose a model.',
+  no_key: 'Add a key for the chosen provider.',
+  key_unreadable: "The provider key can't be read. Add it again.",
+};
+
+function FeatureRow({
   ai,
+  feature,
   settingsAi,
   disabled,
-  onChange,
+  patch,
 }: {
   ai: AiSettingsResponse;
+  feature: AiSettingsResponse['features'][number];
   settingsAi: AiSetting;
   disabled: boolean;
-  onChange: (id: string) => void;
+  patch: (next: AiSetting) => void;
 }) {
-  const provider = settingsAi.features['x-post-title']?.model?.provider;
-  const reachable = provider ? ai.catalog.filter((m) => m.providers.includes(provider)) : [];
-  const groups = (Object.keys(FAMILY_LABELS) as AiCatalogEntry['family'][])
-    .map((family) => ({
-      label: FAMILY_LABELS[family],
-      options: reachable
-        .filter((m) => m.family === family)
-        .map((m) => ({ value: m.id, label: `${m.label} - ${m.tier}` })),
+  const state = settingsAi.features[feature.id] ?? { enabled: false, model: null };
+  const model = state.model;
+  const groups = readableAiProviders(ai)
+    .map((kind) => ({
+      label: AI_PROVIDER_NAMES[kind],
+      icon: <ProviderLogo kind={kind} size={20} />,
+      options:
+        kind === 'fireworks'
+          ? (ai.providers.find((p) => p.kind === kind)?.models ?? []).map((m) => ({
+              value: JSON.stringify([kind, m.id]),
+              label: m.label,
+            }))
+          : ai.catalog
+              .filter((m) => m.providers.includes(kind))
+              .map((m) => ({
+                value: JSON.stringify([kind, m.id]),
+                label: `${m.label} - ${m.tier}`,
+              })),
     }))
     .filter((g) => g.options.length > 0);
+  const reason = ai.status.features[feature.id]?.reason;
+  const hint =
+    !state.enabled && feature.plugin
+      ? `Turn on in Plugins > ${PLUGIN_NAMES[feature.plugin] ?? feature.plugin}`
+      : reason
+        ? (NOT_READY_WORDS[reason] ?? 'AI is not ready. Check the provider key and model.')
+        : null;
   return (
-    <div style={settingsRow}>
-      <div style={{ flex: 1 }}>
-        <div style={rowLabel}>Model</div>
-        <div style={rowDesc}>
-          {provider ? 'Used by AI features.' : 'Pick a provider with a key first.'}
-        </div>
+    <div style={settingsRow} className="silo-ai-feature-row">
+      <div className="silo-ai-feature-copy">
+        <div style={rowLabel}>{feature.label}</div>
+        <div style={rowDesc}>{feature.plugin === 'twitter' ? 'X posts' : feature.description}</div>
+        {hint && <div style={metaStyle}>{hint}</div>}
       </div>
       <SettingsSelect
-        ariaLabel="Model"
-        value={settingsAi.features['x-post-title']?.model?.id ?? null}
+        ariaLabel={`${feature.label} model`}
+        value={model ? JSON.stringify([model.provider, model.id]) : null}
         groups={groups}
-        placeholder="Pick a provider first"
-        disabled={disabled || !provider}
-        onChange={onChange}
+        placeholder={groups.length ? 'Choose a model' : 'Add a provider key first'}
+        disabled={disabled || !groups.length}
+        onChange={(value) => {
+          const [provider, id] = JSON.parse(value) as [AiProviderKind, string];
+          patch({
+            ...settingsAi,
+            features: {
+              ...settingsAi.features,
+              [feature.id]: { ...state, model: { provider, id } },
+            },
+          });
+        }}
       />
     </div>
   );
-}
-
-function isUnreadable(ai: AiSettingsResponse, kind: AiProviderKind): boolean {
-  const provider = ai.providers.find((p) => p.kind === kind);
-  return provider?.keyReadable === false;
 }
 
 function AiSections({
@@ -383,39 +456,33 @@ function AiSections({
   busy: boolean;
   patch: (next: AiSetting) => void;
 }) {
-  const headingId = useId();
   if (ai.status.secretKey !== 'ok') return <SecretKeyCallout state={ai.status.secretKey} />;
   return (
     <div style={{ opacity: off ? 0.5 : 1 }}>
-      <h3 className="silo-plugin-section-label" id={headingId}>
-        Provider
-      </h3>
-      <div role="radiogroup" aria-labelledby={headingId}>
-        {PROVIDER_KINDS.map((kind) => (
+      <h3 className="silo-plugin-section-label">Providers</h3>
+      {AI_PROVIDER_ORDER.map((kind) => {
+        const provider = ai.providers.find((p) => p.kind === kind);
+        return (
           <ProviderRow
             key={kind}
             kind={kind}
-            provider={ai.providers.find((p) => p.kind === kind)}
-            selected={settingsAi.features['x-post-title']?.model?.provider === kind}
-            unreadable={isUnreadable(ai, kind)}
+            provider={provider}
+            unreadable={provider?.keyReadable === false}
             disabled={off || busy}
-            onPick={() => {
-              const id = ai.catalog.find((m) => m.defaultFor.includes(kind))?.id;
-              if (id) patchTitleModel(settingsAi, { provider: kind, id }, patch);
-            }}
           />
-        ))}
-      </div>
-      <h3 className="silo-plugin-section-label">Model</h3>
-      <ModelSelect
-        ai={ai}
-        settingsAi={settingsAi}
-        disabled={off || busy}
-        onChange={(id) => {
-          const provider = settingsAi.features['x-post-title']?.model?.provider;
-          if (provider) patchTitleModel(settingsAi, { provider, id }, patch);
-        }}
-      />
+        );
+      })}
+      <h3 className="silo-plugin-section-label">Features</h3>
+      {ai.features.map((feature) => (
+        <FeatureRow
+          key={feature.id}
+          ai={ai}
+          feature={feature}
+          settingsAi={settingsAi}
+          disabled={off || busy}
+          patch={patch}
+        />
+      ))}
     </div>
   );
 }
@@ -471,13 +538,4 @@ export function AiTab() {
       )}
     </>
   );
-}
-
-function patchTitleModel(
-  ai: AiSetting,
-  model: { provider: AiProviderKind; id: string },
-  patch: (next: AiSetting) => void,
-) {
-  const feature = ai.features['x-post-title'] ?? { enabled: false, model: null };
-  patch({ ...ai, features: { ...ai.features, 'x-post-title': { ...feature, model } } });
 }

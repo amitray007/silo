@@ -287,7 +287,11 @@ export type AiTestCode =
 
 export type AiTestResult = { ok: boolean; code?: AiTestCode; latencyMs?: number };
 
+type AiLiveModel = { id: string; label: string; contextLength: number | null };
+
 export type AiProviderJson = {
+  models?: AiLiveModel[];
+  modelsFetchedAt?: string | null;
   kind: AiProviderKind;
   configured: boolean;
   keyLast4: string | null;
@@ -296,7 +300,7 @@ export type AiProviderJson = {
   lastTest: { ok: boolean; at: string; code: AiTestCode | null } | null;
 };
 
-export type AiCatalogEntry = {
+type AiCatalogEntry = {
   id: string;
   family: 'claude' | 'chatgpt';
   label: string;

@@ -862,6 +862,18 @@ export function useAi() {
   });
 }
 
+/** Operator-only refresh; the server stores the live list before responding. */
+export function useRefreshFireworksModels() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost('/api/ai/providers/fireworks/models/refresh', {}),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+    },
+  });
+}
+
 /**
  * `PUT /api/ai/providers/:kind`. The typed key lives only in mutation variables,
  * so the cache entry is dropped at once (`gcTime: 0`) and callers `reset()` it.
@@ -872,7 +884,12 @@ export function useSaveAiKey(kind: AiProviderKind) {
     gcTime: 0,
     mutationFn: (apiKey: string) =>
       apiPut<SaveAiKeyResponse>(`/api/ai/providers/${kind}`, { apiKey }),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.ai() }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+      if (kind === 'fireworks') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      }
+    },
   });
 }
 
@@ -881,7 +898,12 @@ export function useTestAiKey(kind: AiProviderKind) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: () => apiPost<AiTestResult>(`/api/ai/providers/${kind}/test`, {}),
-    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.ai() }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+      if (kind === 'fireworks') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      }
+    },
   });
 }
 

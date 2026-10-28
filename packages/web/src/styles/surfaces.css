@@ -379,25 +379,27 @@
 }
 .silo-ai-provider-copy {
   flex: 1;
-  min-width: 0;
+  min-width: 160px;
 }
 .silo-ai-provider-actions {
+  margin-left: auto;
   display: flex;
   gap: 8px;
+  flex-wrap: wrap;
 }
 @media (max-width: 640px) {
   /* The settings touch-target rule (min-height: 40px on inputs) would stretch the circle. */
   .silo-settings-panel .silo-radio {
     min-height: 0;
   }
-  /* Actions wrap under the name, aligned with the text (radio 18px + row gap 16px). */
+  /* Align wrapped actions with the copy (28px tile + 16px row gap). */
   .silo-ai-provider-copy {
-    flex-basis: calc(100% - 34px);
+    flex-basis: calc(100% - 44px);
   }
   .silo-ai-provider-actions {
-    flex-basis: calc(100% - 34px);
+    flex-basis: calc(100% - 44px);
     flex-wrap: wrap;
-    margin-left: 34px;
+    margin-left: 44px;
   }
 }
 .silo-row-menu-portal {
@@ -1616,4 +1618,38 @@
 }
 .silo-reader-diagram svg marker path {
   fill: var(--mut);
+}
+
+.silo-ai-feature-copy {
+  flex: 1;
+  min-width: 140px;
+}
+.silo-ai-feature-row .silo-settings-select-wrap {
+  max-width: 100%;
+}
+.silo-ai-feature-row .silo-settings-select-trigger > span:first-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-ai-feature-row .silo-settings-select-menu {
+  width: max-content;
+  max-width: min(420px, calc(100vw - 64px));
+  max-height: min(360px, 50vh);
+  overflow-y: auto;
+}
+.silo-ai-feature-row .silo-settings-select-option {
+  white-space: normal;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.silo-settings-select-group-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+@media (max-width: 640px) {
+  .silo-ai-feature-row .silo-settings-select-wrap {
+    width: 100%;
+  }
 }

@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { useAi, useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
+import { aiModelLabel, defaultAiFeatureModel } from '../../lib/aiModels';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
@@ -146,7 +147,9 @@ function AiFeatureRows({
   const { data: ai } = useAi();
   const features = (ai?.features ?? []).filter((feature) => feature.plugin === source);
   const settingsAi = settings?.ai;
-  const ready = ai?.status?.enabled === true && ai.status.secretKey === 'ok';
+  const aiEnabled = ai?.status?.enabled === true && ai.status.secretKey === 'ok';
+  const ready = aiEnabled && defaultAiFeatureModel(ai) !== null;
+  const hint = aiEnabled ? 'Add a provider key and model in the AI tab' : AI_HINT;
   return features.map((feature) => {
     const on =
       settingsAi?.features[feature.id as keyof typeof settingsAi.features]?.enabled === true;
@@ -154,7 +157,12 @@ function AiFeatureRows({
       <FeatureToggleRow
         key={feature.id}
         name={feature.label}
-        desc={ready ? feature.description : AI_HINT}
+        desc={
+          ready && ai
+            ? (aiModelLabel(ai, settingsAi?.features[feature.id]?.model ?? null) ??
+              feature.description)
+            : hint
+        }
         on={on}
         masterEnabled={sourceEnabled && ready}
         loading={!settingsAi || updateSettings.isPending}
@@ -167,7 +175,9 @@ function AiFeatureRows({
                 ...settingsAi.features,
                 [feature.id]: {
                   enabled: !on,
-                  model: settingsAi.features[feature.id]?.model ?? null,
+                  model:
+                    settingsAi.features[feature.id]?.model ??
+                    (!on && ai ? defaultAiFeatureModel(ai) : null),
                 },
               },
             },
