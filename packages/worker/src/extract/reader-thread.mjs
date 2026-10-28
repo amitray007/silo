@@ -9,7 +9,7 @@ parentPort.on('message', async ({ html, url, description, operation }) => {
   try {
     const result =
       operation === 'sanitize'
-        ? sanitizeRenderedContent(html, url)
+        ? await sanitizeRenderedContent(html, url)
         : await extractPageContent(html, url, description);
     parentPort.postMessage({ result });
   } catch {

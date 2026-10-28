@@ -1,4 +1,5 @@
 import type { ReaderExtraction } from '@silo/core';
+import { parseHTML } from 'linkedom';
 import { type BrowserResult, renderReader } from '../browser/reader.js';
 import { type ExtractResult, isHtmlContentType } from '../extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from '../extract/extract-constants.js';
@@ -51,12 +52,16 @@ export async function selectReader(
   const renderedLength = rendered?.text?.trim().length ?? 0;
   const staticImageCount = extracted.reader?.contentImages.length ?? 0;
   const renderedImageCount = rendered?.reader?.contentImages.length ?? 0;
+  const staticRich = richContent(extracted.reader?.contentHtml);
+  const renderedRich = richContent(rendered?.reader?.contentHtml);
   const useRendered =
     !options.signal?.aborted &&
     !rendered?.challenge &&
     rendered?.reader &&
     renderedLength > 0 &&
     renderedImageCount >= staticImageCount / 2 &&
+    renderedRich.diagrams >= staticRich.diagrams &&
+    [...staticRich.gists].every((gist) => renderedRich.gists.has(gist)) &&
     (staticLength < FULL_TEXT_THRESHOLD || renderedLength >= staticLength * 0.8);
   console.debug('[reader] choice', {
     staticLength,
@@ -71,6 +76,24 @@ export async function selectReader(
     reader: rendered.reader,
     ...(rendered.text ? { text: rendered.text } : {}),
   };
+}
+
+/** Inspect sanitized structure, never source-code text that resembles an attribute. */
+function richContent(html: string | undefined): { diagrams: number; gists: Set<string> } {
+  const gists = new Set<string>();
+  if (!html) return { diagrams: 0, gists };
+  const { document } = parseHTML(`<html><body>${html}</body></html>`);
+  for (const figure of document.querySelectorAll('figure')) {
+    const link = figure.querySelector('figcaption a[href]');
+    const code = figure.querySelector('pre > code');
+    const href = link?.getAttribute('href') ?? '';
+    if (
+      /^https:\/\/gist\.github\.com\/(?:[\w-]+\/)?[a-f\d]{5,40}(?:\?file=[^#]*)?$/i.test(href) &&
+      code
+    )
+      gists.add(`${href}\n${link?.textContent}\n${code.textContent}`);
+  }
+  return { diagrams: document.querySelectorAll('pre > code[data-lang="mermaid"]').length, gists };
 }
 
 function pendingFallback(fallback: ReaderExtraction, pending?: boolean): ReaderExtraction {

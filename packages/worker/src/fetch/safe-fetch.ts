@@ -92,6 +92,7 @@ export type SafeFetchBytesResult =
       contentType: string | undefined;
       finalUrl: string;
       status: number;
+      responseHeaders?: Record<string, string>;
       xFrameOptions?: string;
       contentSecurityPolicy?: string;
     }
@@ -135,6 +136,8 @@ export interface SafeFetchOptions {
   /** Trusted caller profile only; never copy publisher request headers. */
   userAgent?: string;
   accept?: string;
+  /** Public application metadata selected by trusted callers, never request credentials. */
+  responseHeaderNames?: readonly string[];
   signal?: AbortSignal;
   maxRedirects?: number;
   maxBodyBytes?: number;
@@ -296,6 +299,7 @@ type HopOutcome =
 interface HopContext {
   userAgent: string;
   accept: string;
+  responseHeaderNames: readonly string[];
   includeHttpErrors: boolean;
   resolver: Resolver;
   maxBodyBytes: number;
@@ -402,6 +406,15 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
       contentType,
       finalUrl: url.toString(),
       status: response.status,
+      ...(ctx.responseHeaderNames.length
+        ? {
+            responseHeaders: Object.fromEntries(
+              ctx.responseHeaderNames
+                .filter((name) => response.headers.has(name))
+                .map((name) => [name, response.headers.get(name) ?? '']),
+            ),
+          }
+        : {}),
       ...(response.headers.has('x-frame-options')
         ? { xFrameOptions: response.headers.get('x-frame-options') ?? '' }
         : {}),
@@ -502,6 +515,7 @@ async function fetchBody(
       const outcome = await performHop(currentUrl, {
         resolver,
         includeHttpErrors,
+        responseHeaderNames: options.responseHeaderNames ?? [],
         accept: options.accept ?? '*/*',
         userAgent,
         maxBodyBytes,

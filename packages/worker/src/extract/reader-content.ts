@@ -1,6 +1,7 @@
 import { isReaderImageUrl, READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core/capture';
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { enrichRichBlocks } from './rich-blocks.js';
 
 const MATH_TAGS = [
   'math',
@@ -67,6 +68,19 @@ const MATH_LENGTH_ATTRS = [
   'lspace',
   'rspace',
 ];
+
+function richAttribute(node: Element, name: string, value: string): boolean | undefined {
+  if (name === 'data-lang')
+    return node.nodeName === 'CODE' && /^[a-z0-9][a-z0-9+#._-]{0,23}$/.test(value.toLowerCase());
+  if (!['data-callout', 'data-callout-title'].includes(name)) return undefined;
+  if (!['DIV', 'BLOCKQUOTE'].includes(node.nodeName)) return false;
+  if (name === 'data-callout') return /^[a-z-]{1,20}$/.test(value);
+  return (
+    value.length <= 200 &&
+    !/[<>]/.test(value) &&
+    !Array.from(value).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+  );
+}
 
 function validMathAttribute(node: Element, name: string, value: string): boolean {
   if (
@@ -198,6 +212,12 @@ export function sanitizeReaderContent(
         );
         return;
       }
+      const rich = richAttribute(node, data.attrName, node.getAttribute(data.attrName) ?? '');
+      if (rich !== undefined) {
+        data.keepAttr = rich;
+        data.attrValue =
+          data.attrName === 'data-lang' ? data.attrValue.toLowerCase() : data.attrValue;
+      }
       if (data.attrName === 'depth') data.keepAttr = false;
       if (['width', 'height'].includes(data.attrName))
         data.keepAttr =
@@ -238,6 +258,9 @@ export function sanitizeReaderContent(
         'height',
         'depth',
         'data-silo-embed',
+        'data-lang',
+        'data-callout',
+        'data-callout-title',
         ...MATH_ATTRS,
       ],
       ALLOW_DATA_ATTR: false,
@@ -350,13 +373,16 @@ function splitEmbedParagraphs(fragment: DocumentFragment): void {
 }
 
 /** Runs in the terminable Reader thread, so untrusted rendered HTML cannot block a deadline. */
-export function sanitizeRenderedContent(
+export async function sanitizeRenderedContent(
   html: string,
   url: string,
-): { reader?: ReaderContent; text?: string } {
+): Promise<{ reader?: ReaderContent; text?: string }> {
   const dom = new JSDOM('', { url, virtualConsole: new VirtualConsole() });
   try {
-    const reader = sanitizeReaderContent(html, url, dom);
+    const rich = dom.window.document.createElement('div');
+    rich.innerHTML = html;
+    await enrichRichBlocks(rich);
+    const reader = sanitizeReaderContent(rich.innerHTML, url, dom);
     if (!reader) return {};
     const container = dom.window.document.createElement('div');
     container.innerHTML = reader.contentHtml;

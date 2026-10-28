@@ -8,6 +8,7 @@ import { parseHTML } from 'linkedom';
 import { chromium } from 'playwright-core';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { closeReaderPool } from '../extract/reader-worker.js';
+import { prepareGists } from '../extract/rich-blocks.js';
 import { safeFetchBytes } from '../fetch/safe-fetch.js';
 import { renderPage } from './page.js';
 import { BrowserReader } from './reader.js';
@@ -137,6 +138,30 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
         req.url === '/article.js' ? 'application/javascript' : 'text/html',
       );
       switch (req.url) {
+        case '/metadata':
+          res.setHeader('content-type', 'application/json');
+          res.setHeader('obs-status', 'success');
+          res.setHeader('set-cookie', 'must-not-forward=1');
+          res.end('{}');
+          break;
+        case '/status-reader':
+          res.end(`<main><article><h1>Metadata driven article</h1><p>${article}</p></article></main><script>
+            fetch('http://localhost:' + location.port + '/metadata', {credentials:'include'}).then(async response => {
+              if (response.headers.get('obs-status') === 'success') document.querySelector('article').insertAdjacentHTML('beforeend', '<p>Publisher status was visible.</p>');
+            });
+            </script>`);
+          break;
+        case '/rich-blocks':
+          res.end(`<main><article><h1>Rich blocks</h1><p>${article}</p>
+            <pre><code class="language-typescript">const answer: number = 42;</code></pre>
+            <pre><code class="language-mermaid">graph TD; A--&gt;B</code></pre>
+            <div class="mermaid"><svg width="400" height="200"><text>Publisher diagram label</text></svg></div>
+            <pre class="mermaid" data-processed="true">Processed diagram label</pre>
+            <pre class="language-js"><svg width="16" height="16"></svg><code>const iconExample = true;</code></pre>
+            <p>Inline $x^2$ and display $$y_1$$.</p>
+            <div class="callout" data-callout="warning"><div class="callout-title">Careful</div><div class="callout-content"><p>Keep this warning body.</p></div></div>
+            </article></main>`);
+          break;
         case '/frames-redirect':
           res.writeHead(302, { location: '/frames' });
           res.end();
@@ -305,6 +330,47 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
     expect(
       document.querySelector('a[href="https://codepen.io/example/embed/abc123"]'),
     ).not.toBeNull();
+  }, 25_000);
+
+  it('preserves public publisher status headers on cross-origin fetches', async () => {
+    const result = await reader.run(`${url}/status-reader`);
+    expect(result?.reader?.contentHtml).toContain('Publisher status was visible.');
+  }, 25_000);
+
+  it('stores languages, leftover TeX and callouts through the real rendered path', async () => {
+    const result = await reader.run(`${url}/rich-blocks`);
+    const { document } = parseHTML(result?.reader?.contentHtml ?? '');
+    expect(document.querySelector('code[data-lang="typescript"]')?.textContent).toContain(
+      'const answer',
+    );
+    expect(document.querySelector('code[data-lang="mermaid"]')?.textContent).toContain('graph TD');
+    expect(document.querySelectorAll('pre > code[data-lang="mermaid"]')).toHaveLength(1);
+    expect(document.querySelector('code[data-lang="js"]')?.textContent).toContain('iconExample');
+    expect(document.querySelectorAll('math')).toHaveLength(2);
+    expect(document.querySelector('[data-callout="warning"]')?.textContent).toContain(
+      'Keep this warning body',
+    );
+    expect(document.querySelector('[data-callout-title="Careful"]')).not.toBeNull();
+  }, 25_000);
+
+  it('injects Gist preparation without transpiler helpers and removes duplicate publisher output', async () => {
+    const browser = await chromium.connect(endpoint);
+    const context = await browser.newContext({ javaScriptEnabled: true });
+    try {
+      const page = await context.newPage();
+      await page.route('**/*', (route) => route.abort());
+      await page.setContent(
+        '<article><div class="gist">Old code</div><script src="https://gist.github.com/a/abc123.js?file=one.ts"></script><link rel="stylesheet" href="https://github.githubassets.com/gist.css"><div class="gist">Next old code</div></article>',
+      );
+      await page.evaluate(`(${prepareGists.toString()})(document)`);
+      expect(await page.locator('code[data-lang="silo-gist"]').textContent()).toBe(
+        'https://gist.github.com/a/abc123?file=one.ts',
+      );
+      expect(await page.locator('.gist').count()).toBe(0);
+    } finally {
+      await context.close();
+      await browser.close();
+    }
   }, 25_000);
 
   it('blocks loopback, metadata, WebSockets and POST before they reach their targets', async () => {

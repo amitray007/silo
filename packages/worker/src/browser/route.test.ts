@@ -185,3 +185,25 @@ describe('browser request boundary', () => {
     expect(settled).toHaveBeenCalledTimes(2);
   });
 });
+
+it('forwards the public Obsidian status marker without forwarding arbitrary response headers', async () => {
+  const fetch = vi.fn(async () => ({
+    ...response(1),
+    responseHeaders: {
+      'obs-status': 'success',
+      'set-cookie': 'secret=x',
+      'content-security-policy': 'unsafe',
+    },
+  }));
+  const request = route();
+  await new BrowserRoutes(new AbortController().signal, fetch).handle(request);
+  expect(request.fulfill.mock.calls[0]?.[0].headers).toEqual({
+    'content-type': 'application/javascript',
+    'obs-status': 'success',
+    'access-control-expose-headers': 'obs-status',
+  });
+  expect(fetch).toHaveBeenCalledWith(
+    expect.anything(),
+    expect.objectContaining({ responseHeaderNames: ['obs-status'] }),
+  );
+});

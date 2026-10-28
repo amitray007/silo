@@ -1,7 +1,16 @@
+import { JSDOM } from 'jsdom';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserResult } from '../browser/reader.js';
 import type { ExtractResult } from '../extract/extract.js';
+import { sanitizeReaderContent } from '../extract/reader-content.js';
+import { enrichRichBlocks } from '../extract/rich-blocks.js';
+import { safeFetch } from '../fetch/safe-fetch.js';
 import { selectReader } from './select-reader.js';
+
+vi.mock('../fetch/safe-fetch.js', async (original) => ({
+  ...(await original<typeof import('../fetch/safe-fetch.js')>()),
+  safeFetch: vi.fn(),
+}));
 
 const reader = { contentHtml: '<p>Static</p>', contentImages: [] };
 const renderedReader = { contentHtml: '<p>Rendered</p>', contentImages: [] };
@@ -177,4 +186,114 @@ describe('stored Reader selection', () => {
       }),
     ).toEqual({ status: 'reader', reader, text: staticResult.text, renderPending: true });
   });
+});
+
+it('retains static Mermaid source when the publisher replaces it before rendered extraction', async () => {
+  const rich = {
+    ...reader,
+    contentHtml: '<pre><code data-lang="mermaid">graph TD; A--&gt;B</code></pre>',
+  };
+  const result = await selectReader(
+    'link',
+    { ...staticResult, reader: rich },
+    undefined,
+    options({ reader: renderedReader, text: 'b'.repeat(2_000) }),
+  );
+  expect(result).toEqual({ status: 'reader', reader: rich, text: staticResult.text });
+  const kept = await selectReader(
+    'link',
+    { ...staticResult, reader: rich },
+    undefined,
+    options({ reader: rich, text: 'b'.repeat(2_000) }),
+  );
+  expect(kept).toEqual({ status: 'reader', reader: rich, text: 'b'.repeat(2_000) });
+});
+
+it('ignores literal Mermaid attributes in prose and code when selecting rendered Reader', async () => {
+  const literal = {
+    ...reader,
+    contentHtml:
+      '<p>Use data-lang="mermaid" on code</p><pre><code data-lang="html">&lt;code data-lang="mermaid"&gt;</code></pre>',
+  };
+  const result = await selectReader(
+    'link',
+    { ...staticResult, reader: literal },
+    undefined,
+    options({ reader: renderedReader, text: 'b'.repeat(2_000) }),
+  );
+  expect(result).toMatchObject({ reader: renderedReader });
+});
+
+it('counts actual Mermaid blocks with single-quoted attributes', async () => {
+  const rich = {
+    ...reader,
+    contentHtml: "<pre><code data-lang='mermaid'>graph TD; A--&gt;B</code></pre>",
+  };
+  const result = await selectReader(
+    'link',
+    { ...staticResult, reader: rich },
+    undefined,
+    options({ reader: renderedReader, text: 'b'.repeat(2_000) }),
+  );
+  expect(result).toMatchObject({ reader: rich });
+});
+
+it('keeps static expanded Gist content even when rendered text and code counts pass', async () => {
+  vi.mocked(safeFetch).mockResolvedValue({
+    ok: true,
+    status: 200,
+    contentType: 'application/json',
+    finalUrl: 'https://api.github.com/gists/abc123',
+    html: JSON.stringify({
+      files: {
+        one: { filename: 'example.ts', language: 'TypeScript', content: 'const gistExample = 42;' },
+      },
+    }),
+  });
+  const dom = new JSDOM(
+    '<pre><code data-lang="silo-gist">https://gist.github.com/a/abc123</code></pre>',
+  );
+  try {
+    await enrichRichBlocks(dom.window.document.body);
+    const rich = sanitizeReaderContent(dom.window.document.body.innerHTML, options().url);
+    expect(rich?.contentHtml).toContain('https://gist.github.com/a/abc123');
+    const lost = {
+      ...renderedReader,
+      contentHtml: '<pre><code data-lang="typescript">const unrelated = 42;</code></pre>',
+    };
+    if (!rich) throw new Error('Expected expanded Gist Reader');
+    const extracted = { ...staticResult, reader: rich };
+    // Rendered is longer and retains the same number and language of code blocks.
+    expect(
+      await selectReader(
+        'link',
+        extracted,
+        undefined,
+        options({ reader: lost, text: 'b'.repeat(2_000) }),
+      ),
+    ).toMatchObject({ reader: rich });
+    expect(
+      await selectReader(
+        'link',
+        extracted,
+        undefined,
+        options({ reader: rich, text: 'b'.repeat(2_000) }),
+      ),
+    ).toMatchObject({ text: 'b'.repeat(2_000) });
+    const changedGist = {
+      ...lost,
+      contentHtml: rich?.contentHtml.replace('gistExample', 'lostExample') ?? '',
+    };
+    expect(
+      await selectReader(
+        'link',
+        extracted,
+        undefined,
+        options({ reader: changedGist, text: 'b'.repeat(2_000) }),
+      ),
+    ).toMatchObject({ reader: rich });
+  } finally {
+    dom.window.close();
+    vi.resetAllMocks();
+  }
 });

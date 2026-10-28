@@ -68,6 +68,7 @@ export class BrowserRoutes {
       const result = await this.fetch(route.request().url(), {
         signal: this.signal,
         bodyBudget: this.bodyBudget,
+        responseHeaderNames: ['obs-status'],
         maxBodyBytes: 5 * 1024 * 1024,
         userAgent: BROWSER_USER_AGENT,
         accept: browserAccept(route.request().resourceType()),
@@ -78,7 +79,15 @@ export class BrowserRoutes {
       }
       await route.fulfill({
         status: result.status,
-        headers: result.contentType ? { 'content-type': result.contentType } : {},
+        headers: {
+          ...(result.contentType ? { 'content-type': result.contentType } : {}),
+          ...(result.responseHeaders?.['obs-status'] !== undefined
+            ? {
+                'obs-status': result.responseHeaders['obs-status'],
+                'access-control-expose-headers': 'obs-status',
+              }
+            : {}),
+        },
         body: Buffer.from(result.bytes),
       });
     } catch {

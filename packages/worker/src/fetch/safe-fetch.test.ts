@@ -813,3 +813,20 @@ describe('browser proxy status and profile compatibility', () => {
     expect(userAgent).toContain('silo/');
   });
 });
+
+it('returns only the application response headers explicitly selected by a caller', async () => {
+  handler = (_req, res) => {
+    res.writeHead(200, {
+      'obs-status': 'success',
+      'set-cookie': 'private=x',
+      'x-unselected': 'ignored',
+    });
+    res.end('content');
+  };
+  const result = await safeFetchBytes(`http://fixture.test:${port}/`, {
+    resolver: loopbackResolver(),
+    allowLoopbackForTests: true,
+    responseHeaderNames: ['obs-status'],
+  });
+  expect(result.ok && result.responseHeaders).toEqual({ 'obs-status': 'success' });
+});

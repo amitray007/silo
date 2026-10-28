@@ -5,6 +5,7 @@ import type { BrowserContextOptions } from 'playwright-core';
 import { isChallengePage } from '../extract/challenge-page.js';
 import type { PageContent } from '../extract/reader-page.js';
 import { sanitizeRenderedPage } from '../extract/reader-worker.js';
+import { prepareCodeLanguages, prepareGists } from '../extract/rich-blocks.js';
 import { FETCH_ACCEPT_LANGUAGE } from '../fetch/safe-fetch.js';
 import { closeWithin } from './cleanup.js';
 import { BROWSER_USER_AGENT } from './profile.js';
@@ -46,6 +47,8 @@ const CONTEXT_OPTIONS: BrowserContextOptions = {
 
 // A string keeps this code independent of transpiler helpers in Node's TypeScript loader.
 const EXTRACT = String.raw`(() => {
+  (${prepareGists.toString()})(document);
+  (${prepareCodeLanguages.toString()})(document);
   // Match Defuddle 0.19.6's small-image rule without broken-image layout sizes.
   // Unloaded images have only the same declared dimensions as the static path.
   for (const element of document.querySelectorAll('img, svg')) {

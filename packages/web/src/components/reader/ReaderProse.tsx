@@ -1,10 +1,12 @@
 import createDOMPurify from 'dompurify';
 import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
 import type { LiveReaderJson } from '../../api/types';
+import { decorateBlocks } from './decorateBlocks';
 import { embedFor } from './embedFor';
 import { ImageViewer, type ViewerImage } from './ImageViewer';
 import { playerFrameAttributes } from './playerFrameAttributes';
 import { shapeProse } from './proseShape';
+import { shapeRichBlocks } from './shapeRichBlocks';
 
 const MATH_TAGS = [
   'math',
@@ -72,6 +74,19 @@ const MATH_LENGTH_ATTRS = [
   'rspace',
 ];
 
+function richAttribute(node: Element, name: string, value: string): boolean | undefined {
+  if (name === 'data-lang')
+    return node.nodeName === 'CODE' && /^[a-z0-9][a-z0-9+#._-]{0,23}$/.test(value.toLowerCase());
+  if (!['data-callout', 'data-callout-title'].includes(name)) return undefined;
+  if (!['DIV', 'BLOCKQUOTE'].includes(node.nodeName)) return false;
+  if (name === 'data-callout') return /^[a-z-]{1,20}$/.test(value);
+  return (
+    value.length <= 200 &&
+    !/[<>]/.test(value) &&
+    !Array.from(value).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+  );
+}
+
 function validMathAttribute(node: Element, name: string, value: string): boolean {
   if (
     ['width', 'height', 'depth'].includes(name) &&
@@ -111,6 +126,12 @@ function readerHtml(
         node.getAttribute(data.attrName) ?? '',
       );
       return;
+    }
+    const rich = richAttribute(node, data.attrName, node.getAttribute(data.attrName) ?? '');
+    if (rich !== undefined) {
+      data.keepAttr = rich;
+      data.attrValue =
+        data.attrName === 'data-lang' ? data.attrValue.toLowerCase() : data.attrValue;
     }
     if (data.attrName === 'depth') data.keepAttr = false;
     if (['width', 'height'].includes(data.attrName)) {
@@ -199,6 +220,9 @@ function readerHtml(
       'height',
       'depth',
       'data-silo-embed',
+      'data-lang',
+      'data-callout',
+      'data-callout-title',
       ...MATH_ATTRS,
     ],
     ALLOW_DATA_ATTR: false,
@@ -218,6 +242,7 @@ function readerHtml(
   buildEmbeds(fragment, topPlayerSrc);
   // After the id and link filters: shaping adds silo-fn ids and in-page note links.
   shapeProse(fragment);
+  shapeRichBlocks(fragment);
   for (const image of fragment.querySelectorAll('img')) {
     image.setAttribute('loading', 'lazy');
     image.setAttribute('data-loaded', 'false');
@@ -312,6 +337,11 @@ export function ReaderProse({
     for (const image of root.current?.querySelectorAll('img') ?? [])
       if (image.complete && image.naturalWidth) markViewable(image);
       else if (image.complete) image.dataset.loaded = 'true';
+  }, [html]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the effect decorates each new sanitized DOM.
+  useEffect(() => {
+    if (root.current) return decorateBlocks(root.current);
   }, [html]);
 
   const open = (target: EventTarget, event: MouseEvent | KeyboardEvent) => {

@@ -792,8 +792,12 @@
   line-height: inherit;
   background: none;
 }
+.silo-reader-prose math,
+.silo-reader-prose math * {
+  font-family: math;
+}
 .silo-reader-prose math[display="block"] {
-  display: block;
+  display: block math;
   margin: 16px 0;
   overflow-x: auto;
 }
@@ -1457,4 +1461,112 @@
   .silo-viewer-stage img {
     transition: none;
   }
+}
+
+/* Reader rich blocks use the same palette in both themes. */
+.silo-reader-prose {
+  --silo-code-foreground: var(--mut);
+  --silo-code-background: var(--hov);
+  --silo-code-token-constant: var(--ink);
+  --silo-code-token-string: var(--mut);
+  --silo-code-token-comment: var(--fnt);
+  --silo-code-token-keyword: var(--ink);
+  --silo-code-token-parameter: var(--mut);
+  --silo-code-token-function: var(--ink);
+  --silo-code-token-string-expression: var(--mut);
+  --silo-code-token-punctuation: var(--fnt);
+  --silo-code-token-link: var(--mut);
+}
+.silo-reader-code-label,
+.silo-reader-block-note,
+.silo-reader-diagram summary {
+  display: block;
+  color: var(--fnt);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 20px;
+}
+.silo-reader-code-label {
+  margin-bottom: 4px;
+}
+.silo-reader-prose [data-callout] {
+  margin: 16px 0;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--fnt);
+  border-radius: 8px;
+  padding: 14px 16px;
+  background: var(--bg2);
+  color: var(--ink);
+  font-style: normal;
+}
+.silo-reader-prose [data-callout-variant="info"] {
+  border-left-color: var(--mut);
+}
+.silo-reader-prose [data-callout-variant="tip"] {
+  background: var(--hov);
+  border-left-color: var(--ink);
+}
+.silo-reader-prose [data-callout-variant="warning"] {
+  border-left-color: var(--warn);
+}
+.silo-reader-prose [data-callout-variant="danger"] {
+  border-left-color: var(--warn);
+  background: var(--danger-soft);
+}
+.silo-reader-prose [data-callout-variant="quote"] {
+  color: var(--mut);
+}
+.silo-reader-prose [data-callout] > :last-child {
+  margin-bottom: 0;
+}
+.silo-reader-prose [data-callout] > p::before,
+.silo-reader-prose [data-callout] > p::after {
+  content: none;
+}
+.silo-reader-callout-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  font-size: 14px;
+  font-weight: 500;
+}
+.silo-reader-callout-title svg {
+  flex: none;
+}
+.silo-reader-diagram {
+  max-width: 100%;
+  overflow-x: auto;
+}
+.silo-reader-diagram > svg {
+  display: block;
+  max-width: 100%;
+  min-width: 600px;
+  height: auto;
+  margin: auto;
+  color: var(--ink);
+  font-family: inherit;
+}
+.silo-reader-diagram svg :is(text, tspan) {
+  fill: var(--ink);
+  stroke: none;
+}
+.silo-reader-diagram svg :is(rect, circle, ellipse, polygon) {
+  fill: var(--bg2);
+  stroke: var(--mut);
+}
+.silo-reader-diagram svg path {
+  stroke: var(--mut);
+}
+.silo-reader-diagram summary {
+  display: list-item;
+  cursor: pointer;
+  padding: 10px 0;
+}
+
+.silo-reader-diagram svg .flowchart-link {
+  fill: none;
+}
+.silo-reader-diagram svg marker path {
+  fill: var(--mut);
 }
