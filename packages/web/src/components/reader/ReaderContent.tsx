@@ -1,9 +1,8 @@
 import { useIsMutating } from '@tanstack/react-query';
-import { type RefObject, useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { queryKeys, useLiveReader, useRetryCapture } from '../../api/hooks';
 import type { LinkJson, LiveReaderJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
-import { relativeTimeFromNow } from '../../lib/relativeTime';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
@@ -82,35 +81,20 @@ function NoCapturedText({ link, showLive }: { link: LinkJson; showLive?: () => v
   );
 }
 
-function SavedReader({
-  capturedAt,
-  footerRef,
-}: {
-  capturedAt: string | null | undefined;
-  footerRef: RefObject<HTMLElement | null>;
-}) {
-  if (!capturedAt) return null;
-  return (
-    <footer ref={footerRef} className="silo-reader-saved">
-      <time dateTime={capturedAt}>Saved {relativeTimeFromNow(capturedAt)}</time>
-    </footer>
-  );
-}
-
 /** Keep a failed refresh at the current position; a new capture starts at the top. */
 function useReaderScrollReset(id: string, reader: LiveReaderJson | undefined, refreshing: boolean) {
   const capturedAt = reader?.capturedAt;
-  const footerRef = useRef<HTMLElement>(null);
+  const anchorRef = useRef<HTMLSpanElement>(null);
   const previous = useRef({ id, capturedAt });
   useEffect(() => {
     if (refreshing) return;
     if (previous.current.id === id && previous.current.capturedAt !== capturedAt) {
-      const scroll = footerRef.current?.closest<HTMLElement>('.silo-reader-scroll');
+      const scroll = anchorRef.current?.closest<HTMLElement>('.silo-reader-scroll');
       if (scroll) scroll.scrollTop = 0;
     }
     previous.current = { id, capturedAt };
   }, [id, capturedAt, refreshing]);
-  return footerRef;
+  return anchorRef;
 }
 
 function readerLoadingLabel(refreshing: boolean, status: LinkJson['captureStatus']) {
@@ -139,7 +123,7 @@ export function ReaderContent({
   );
   const refreshing =
     useIsMutating({ mutationKey: queryKeys.refreshReader(link.id), exact: true }) > 0;
-  const footerRef = useReaderScrollReset(link.id, live.data, refreshing);
+  const anchorRef = useReaderScrollReset(link.id, live.data, refreshing);
   const loadingLabel = readerLoadingLabel(refreshing, link.captureStatus);
   if (loadingLabel) return <ReaderSkeleton label={loadingLabel} />;
 
@@ -215,7 +199,8 @@ export function ReaderContent({
         !link.description?.trim() && (
           <NoCapturedText link={link} {...(showLive && !trashed ? { showLive } : {})} />
         )}
-      <SavedReader capturedAt={prose?.capturedAt} footerRef={footerRef} />
+      {/* Finds the Reader's scroll area for the refresh scroll reset; renders nothing. */}
+      <span ref={anchorRef} hidden />
       <RelatedLinks link={link} html={prose?.contentHtml} trashed={trashed} />
     </>
   );

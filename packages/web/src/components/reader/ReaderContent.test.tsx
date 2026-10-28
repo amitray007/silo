@@ -131,13 +131,9 @@ describe('Live Reader', () => {
     },
   );
 
-  it('shows Saved with the existing relative time helper only for stored Reader', async () => {
+  it('shows no saved-time line for a stored Reader', async () => {
     const capturedAt = new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString();
-    const view = show(() => json({ ...reader, capturedAt }));
-    const saved = await screen.findByText('Saved 2h ago');
-    expect(saved.getAttribute('dateTime')).toBe(capturedAt);
-    view.unmount();
-    show(() => json({ ...reader, capturedAt: null }));
+    show(() => json({ ...reader, capturedAt }));
     await screen.findByText('Live body');
     expect(screen.queryByText(/Saved /)).toBeNull();
   });

@@ -2264,9 +2264,3 @@ div.silo-reader-notecard {
   max-width: 636px;
   margin-inline: auto;
 }
-
-.silo-reader-saved {
-  margin-top: 24px;
-  color: var(--mut);
-  font-size: 12px;
-}
