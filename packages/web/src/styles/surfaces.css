@@ -243,20 +243,24 @@
 .silo-modal-panel-settings {
   position: relative;
   height: var(--modal-height);
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-rows: 48px minmax(0, 1fr);
   overflow: hidden;
 }
 .silo-modal-panel-settings > .silo-modal-header {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 1;
-  padding: 0;
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: flex-end;
+  padding: 8px;
+  background: var(--bg2);
 }
 .silo-modal-panel-settings > .silo-modal-header h2 {
   display: none;
 }
 .silo-settings-tabs {
+  grid-column: 1;
+  grid-row: 1 / 3;
   width: 200px;
   flex: none;
   display: flex;
@@ -288,12 +292,14 @@
   background: var(--sel);
 }
 .silo-settings-panel {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
   flex: 1;
   min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  /* Keep scrolled row actions clear of the floating 32px close button. */
-  padding: 22px 48px 22px 28px;
+  padding: 0 28px 22px;
 }
 .silo-settings-panel > h3 {
   margin: 0 32px 4px 0;
@@ -393,10 +399,15 @@
 }
 .silo-ai-provider-actions {
   flex: none;
-  display: grid;
-  grid-template-columns: 76px 32px;
+  display: flex;
+  justify-content: flex-end;
   align-items: center;
   gap: 8px;
+}
+.silo-settings-btn.silo-ai-provider-primary {
+  min-width: 76px;
+  text-align: center;
+  justify-content: center;
 }
 .silo-settings-btn.silo-ai-provider-more {
   display: inline-flex;
@@ -416,9 +427,6 @@
   /* The settings touch-target rule would stretch the radio, but never the logo tile. */
   .silo-settings-panel .silo-radio {
     min-height: 0;
-  }
-  .silo-ai-provider-actions {
-    grid-template-columns: 76px 40px;
   }
   .silo-ai-provider-meta {
     display: -webkit-box;
@@ -642,6 +650,7 @@
     padding: 0;
   }
   .silo-modal-panel-settings {
+    display: flex;
     width: 100%;
     height: 100%;
     max-height: 100%;
