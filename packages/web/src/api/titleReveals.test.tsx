@@ -92,6 +92,83 @@ describe('mutation title reveal provenance', () => {
     expect(getTitleReveal(old.id)).toBeUndefined();
   });
 
+  it('keeps the clicked row baseline when an inactive tag cache has a stale title', async () => {
+    const old = makeLink({ id: 'stale-tag-retry', title: 'Visible title', captureStatus: 'full' });
+    const { client, wrapper } = setup(old);
+    client.setQueryData(queryKeys.links({ tag: 'inactive' }), {
+      pages: [{ links: [{ ...old, title: 'Stale cached title' }] }],
+      pageParams: [undefined],
+    });
+    const row = renderHook(({ link }) => useTitleReveal(link), { initialProps: { link: old } });
+    const retry = renderHook(() => useRetryCapture(old.id, old.title ?? old.url), { wrapper });
+    vi.mocked(fetch).mockResolvedValueOnce(response({ ...old, captureStatus: 'enriching' }));
+    await act(async () => {
+      await retry.result.current.mutateAsync();
+    });
+    expect(row.result.current).toBe(false);
+    expect(getTitleReveal(old.id)?.kind).toBe('pending');
+    row.rerender({ link: { ...old, captureStatus: 'enriching' } });
+    row.rerender({ link: { ...old, title: 'Actual enriched title' } });
+    expect(row.result.current).toBe(true);
+    expect(getTitleReveal(old.id)).toBeUndefined();
+  });
+
+  it('hands off a visible temporary row when the server id is cached in another tag', async () => {
+    const old = makeLink({ id: 'cached-new-tag', title: 'Old title', tags: ['old'] });
+    const { client, wrapper } = setup(old);
+    const tagKey = queryKeys.links({ tag: 'new' });
+    client.setQueryData(tagKey, { pages: [{ links: [] }], pageParams: [undefined] });
+    let resolve!: (value: Response) => void;
+    vi.mocked(fetch).mockImplementationOnce(
+      () =>
+        new Promise((done) => {
+          resolve = done;
+        }),
+    );
+    const capture = renderHook(() => useCaptureLink(), { wrapper });
+    let saved!: Promise<unknown>;
+    await act(async () => {
+      saved = capture.result.current.mutateAsync({ url: old.url, tags: ['new'] });
+    });
+    const temp = client.getQueryData<{ pages: LinksResponse[] }>(tagKey)?.pages[0]?.links[0];
+    if (!temp) throw new Error('Missing optimistic tag row');
+    const optimistic = renderHook(() => useTitleReveal(temp));
+    expect(optimistic.result.current).toBe(false);
+    const server = { ...old, title: 'Already enriched in new tag', captureStatus: 'full' as const };
+    await act(async () => {
+      resolve(response(server, true));
+      await saved;
+    });
+    optimistic.unmount();
+    const settled = renderHook(() => useTitleReveal(server));
+    expect(settled.result.current).toBe(true);
+    expect(getTitleReveal(server.id)).toBeUndefined();
+    settled.unmount();
+    expect(renderHook(() => useTitleReveal(server)).result.current).toBe(false);
+  });
+
+  it('restores an in-progress reveal when Re-enrich fails', async () => {
+    const old = makeLink({ id: 'failed-re-enrich', title: 'Original', captureStatus: 'full' });
+    const { wrapper } = setup(old);
+    const row = renderHook(({ link }) => useTitleReveal(link), { initialProps: { link: old } });
+    const retry = renderHook(() => useRetryCapture(old.id), { wrapper });
+    vi.mocked(fetch).mockResolvedValueOnce(response({ ...old, captureStatus: 'enriching' }));
+    await act(async () => {
+      await retry.result.current.mutateAsync();
+    });
+    row.rerender({ link: { ...old, captureStatus: 'enriching' } });
+    const originalPending = getTitleReveal(old.id);
+    expect(originalPending?.kind).toBe('pending');
+    vi.mocked(fetch).mockRejectedValueOnce(new Error('Offline'));
+    await act(async () => {
+      await expect(retry.result.current.mutateAsync()).rejects.toThrow('Offline');
+    });
+    expect(getTitleReveal(old.id)).toBe(originalPending);
+    row.rerender({ link: { ...old, title: 'Finished original run' } });
+    expect(row.result.current).toBe(true);
+    expect(getTitleReveal(old.id)).toBeUndefined();
+  });
+
   it('never reveals an owner edit of a URL placeholder, including a late capture response', async () => {
     const old = makeLink({
       id: 'owner-reveal',

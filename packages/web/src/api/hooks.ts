@@ -7,8 +7,11 @@ import {
 } from '@tanstack/react-query';
 import {
   clearTitleReveal,
+  getTitleReveal,
   markTitleEdited,
+  mountedTitleBaselines,
   registerTitleReveal,
+  restoreTitleReveal,
   transferTitleReveal,
 } from '../lib/titleReveals';
 import { deriveTitleFromUrl } from '../lib/url';
@@ -403,21 +406,6 @@ function removeOptimisticLink(
   }
 }
 
-/** Snapshot titles before a save, including a dedup target with a different URL spelling. */
-function cachedTitleBaselines(queryClient: ReturnType<typeof useQueryClient>) {
-  const titles = new Map<string, string>();
-  const remember = (link: LinkJson) => {
-    titles.set(link.id, link.title ?? deriveTitleFromUrl(link.url));
-  };
-  for (const [, data] of queryClient.getQueriesData<LinkResponse>({ queryKey: ['link'] })) {
-    if (data?.link) remember(data.link);
-  }
-  for (const [, data] of queryClient.getQueriesData<LinksInfiniteData>({ queryKey: ['links'] })) {
-    for (const page of data?.pages ?? []) for (const link of page.links) remember(link);
-  }
-  return titles;
-}
-
 /**
  * The omnibar's capture mutation (`POST /api/links`, plan 011 V3-3) — the
  * web mutation layer's first `useMutation`. Wraps `apiPost` with v3's
@@ -451,7 +439,7 @@ export function useCaptureLink() {
     onMutate: async (input: CaptureRequest) => {
       await queryClient.cancelQueries({ queryKey: ['links'] });
       const optimisticLink = buildOptimisticLink(input);
-      const titles = cachedTitleBaselines(queryClient);
+      const titles = mountedTitleBaselines();
       const baselineTitle = deriveTitleFromUrl(input.url);
       registerTitleReveal(optimisticLink.id, baselineTitle);
       insertOptimisticLink(queryClient, optimisticLink);
@@ -463,7 +451,7 @@ export function useCaptureLink() {
         context.optimisticLinkId,
         link.id,
         context.titles.get(link.id) ?? context.baselineTitle,
-        !context.titles.has(link.id),
+        !mountedTitleBaselines().has(link.id),
       );
     },
     onError: (_error, _input, context) => {
@@ -811,13 +799,19 @@ export function useEmptyTrash() {
  * indicator/mark already re-renders correctly off a fresh `links` fetch, so
  * there's nothing worth optimistically patching.
  */
-export function useRetryCapture(id: string) {
+export function useRetryCapture(id: string, baselineTitle?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => apiPost<LinkResponse>(`/api/links/${id}/retry`, {}),
-    onMutate: () => registerTitleReveal(id, cachedTitleBaselines(queryClient).get(id)),
-    onError: (_error, _input, pending) => clearTitleReveal(id, pending),
+    onMutate: () => {
+      const previous = getTitleReveal(id);
+      const pending = registerTitleReveal(id, baselineTitle ?? mountedTitleBaselines().get(id));
+      return { previous, pending };
+    },
+    onError: (_error, _input, context) => {
+      if (context) restoreTitleReveal(id, context.pending, context.previous);
+    },
     // A retry only resets this link's own captureStatus — never tag
     // membership or live/trash counts.
     onSettled: () => invalidateLinkQueries(queryClient),

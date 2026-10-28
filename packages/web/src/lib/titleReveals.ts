@@ -14,6 +14,19 @@ type Entry = PendingReveal | TitleEdit;
 // Only local mutations create entries. Reads never retain a visited link id.
 const entries = new Map<string, Entry>();
 const listeners = new Set<() => void>();
+const mountedRows = new Set<{ id: string; title: string }>();
+
+export function mountTitleRow(id: string, title: string) {
+  const row = { id, title };
+  mountedRows.add(row);
+  return () => {
+    mountedRows.delete(row);
+  };
+}
+
+export function mountedTitleBaselines() {
+  return new Map(Array.from(mountedRows, ({ id, title }) => [id, title]));
+}
 
 function prune() {
   const now = Date.now();
@@ -65,6 +78,12 @@ export function clearTitleReveal(id: string, expected?: Entry) {
   prune();
   if (expected && entries.get(id) !== expected) return;
   if (entries.delete(id)) for (const notify of listeners) notify();
+}
+
+export function restoreTitleReveal(id: string, expected: Entry, previous: Entry | undefined) {
+  if (getTitleReveal(id) !== expected) return;
+  if (previous && previous.expiresAt > Date.now()) put(id, previous);
+  else clearTitleReveal(id, expected);
 }
 
 export function markTitleEdited(id: string) {

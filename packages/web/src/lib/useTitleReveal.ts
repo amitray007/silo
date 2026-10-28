@@ -1,6 +1,11 @@
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { LinkJson } from '../api/types';
-import { clearTitleReveal, getTitleReveal, subscribeTitleReveals } from './titleReveals';
+import {
+  clearTitleReveal,
+  getTitleReveal,
+  mountTitleRow,
+  subscribeTitleReveals,
+} from './titleReveals';
 import { deriveTitleFromUrl } from './url';
 
 export function useTitleReveal(link: LinkJson) {
@@ -13,6 +18,8 @@ export function useTitleReveal(link: LinkJson) {
   );
   const previous = useRef<{ id: string; title: string; enriching: boolean } | null>(null);
   const [reveal, setReveal] = useState<{ id: string; title: string } | null>(null);
+
+  useLayoutEffect(() => mountTitleRow(link.id, title), [link.id, title]);
 
   useLayoutEffect(() => {
     const before = previous.current;

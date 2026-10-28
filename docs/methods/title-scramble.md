@@ -38,9 +38,14 @@ every enrichment, AI title or not.
   store. Each entry expires after two minutes; the store holds at most 256 entries
   and prunes on access. Capture registers its temporary id, then transfers the
   pending reveal to the server id using the title shown at save time (URL,
-  placeholder or existing title). A visible temporary row can hand its reveal to
-  the new server row, even when enrichment has already finished. Enrich registers
-  the link id with its current title. A title edit clears the pending reveal and
+  placeholder or existing mounted row title). A registry tracks mounted row ids
+  and titles, and removes them on unmount. A visible temporary row can hand its
+  reveal to an unmounted server id, even when that id is cached in another tag
+  and enrichment has already finished. Cached rows do not set the baseline or
+  block the handoff. Enrich registers the link id with the clicked row's displayed
+  title, or the mounted row's title for other callers. A failed Re-enrich restores
+  the prior pending entry with its original expiry unless a later action replaced
+  or consumed the new entry. A title edit clears the pending reveal and
   leaves an expiring edit marker so a late capture response cannot animate it.
   A mounted row consumes its entry when a different title is settled, and plays
   once. It waits while enriching. A transition from enriching to settled with the
