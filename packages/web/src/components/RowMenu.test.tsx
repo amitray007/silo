@@ -136,35 +136,43 @@ describe('RowMenu', () => {
     fireEvent.keyDown(screen.getByRole('button', { name: 'Refresh' }), { key: 'r' });
     expect(refresh).toHaveBeenCalledOnce();
   });
-  it.each([422, 502, 503])('shows the existing action error surface for %s', async (status) => {
-    const error = new Map([
-      [422, 'no_reader'],
-      [502, 'fetch_failed'],
-      [503, 'refresh_unavailable'],
-    ]).get(status);
-    const message =
-      status === 503
-        ? 'Reader refresh needs the worker running in this process.'
-        : 'Reader could not be refreshed.';
-    vi.stubGlobal(
-      'fetch',
-      vi.fn((url: string) =>
-        Promise.resolve(
-          url.endsWith('/reader/refresh')
-            ? jsonResponse({ error, message }, status)
-            : jsonResponse({ tags: [] }),
+  it.each([422, 502, 503])(
+    'shows the existing action error surface for %s',
+    async (status) => {
+      const error = new Map([
+        [422, 'no_reader'],
+        [502, 'fetch_failed'],
+        [503, 'refresh_unavailable'],
+      ]).get(status);
+      const message =
+        status === 503
+          ? 'Reader refresh needs the worker running in this process.'
+          : 'Reader could not be refreshed.';
+      vi.stubGlobal(
+        'fetch',
+        vi.fn((url: string) =>
+          Promise.resolve(
+            url.endsWith('/reader/refresh')
+              ? jsonResponse({ error, message }, status)
+              : jsonResponse({ tags: [] }),
+          ),
         ),
-      ),
-    );
-    renderMenu();
-    fireEvent.click(screen.getByText('Refresh reader'));
-    expect((await screen.findByRole('alert')).textContent).toBe(
-      status === 503
-        ? 'Reader refresh needs the worker running in this process.'
-        : 'Reader could not be refreshed.',
-    );
-    expect(screen.getByText('Refresh reader').closest('button')?.disabled).toBe(false);
-  });
+      );
+      renderMenu();
+      fireEvent.click(screen.getByText('Refresh reader'));
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toBe(
+        status === 503
+          ? 'Reader refresh needs the worker running in this process.'
+          : 'Reader could not be refreshed.',
+      );
+      // Rendered on the page body, outside the menu that would trap a fixed toast.
+      expect(alert.parentElement).toBe(document.body);
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull(), { timeout: 6000 });
+      expect(screen.getByText('Refresh reader').closest('button')?.disabled).toBe(false);
+    },
+    10_000,
+  );
 
   it('shows the assigned tag count next to "Tags"', () => {
     renderMenu({ tags: ['mcp', 'ai'] });
