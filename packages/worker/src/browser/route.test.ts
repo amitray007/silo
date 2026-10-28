@@ -136,6 +136,7 @@ describe('browser request boundary', () => {
     expect(last.fulfill).toHaveBeenCalledOnce();
     expect(over.abort).toHaveBeenCalledOnce();
     expect(fetch).toHaveBeenCalledOnce();
+    expect(routes.stats().aborted).toEqual({ type: 199, budget: 1 });
   });
   it('caps fulfilled bytes at 20 MB under concurrent requests', async () => {
     const routes = new BrowserRoutes(new AbortController().signal, async () =>
@@ -206,4 +207,25 @@ it('forwards the public Obsidian status marker without forwarding arbitrary resp
     expect.anything(),
     expect.objectContaining({ responseHeaderNames: ['obs-status'] }),
   );
+});
+
+it('counts routed, aborted, fetch outcomes and fulfilled bytes', async () => {
+  const fetch = vi
+    .fn()
+    .mockResolvedValueOnce(response(3))
+    .mockResolvedValueOnce({ ok: false, reason: 'blocked-ip' });
+  const routes = new BrowserRoutes(new AbortController().signal, fetch);
+  await routes.handle(route(undefined, 'image'));
+  await routes.handle(route(undefined, 'fetch', 'POST'));
+  await routes.handle(route(undefined, 'document', 'GET', true));
+  await routes.handle(route('file:///secret'));
+  await routes.handle(route());
+  await routes.handle(route());
+  expect(routes.stats()).toEqual({
+    routed: { image: 1, fetch: 1, document: 4 },
+    aborted: { type: 1, method: 1, subframe: 1, 'unsafe-url': 2 },
+    ok: { 200: 1 },
+    failed: { 'blocked-ip': 1 },
+    fulfilledBytes: 3,
+  });
 });

@@ -6,6 +6,7 @@ import { BrowserReader, closeBrowserReader, renderReader } from './reader.js';
 
 function fakeBrowser() {
   const page: PagePort = {
+    on: vi.fn(),
     goto: vi.fn(async () => {}),
     evaluate: vi.fn(async (expression: string) =>
       expression.includes('new Defuddle')
@@ -50,6 +51,53 @@ async function advance<T>(promise: Promise<T>) {
 }
 
 describe('rendered Reader pool', () => {
+  it('classifies ok, empty, failed and open-circuit pending outcomes', async () => {
+    vi.useFakeTimers();
+    const fake = fakeBrowser();
+    const reader = new BrowserReader('ws://browser/', { connect: async () => fake.browser });
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    try {
+      expect(
+        (await advance(reader.run('https://example.org/path?secret=yes')))?.renderOutcome,
+      ).toBe('ok');
+      vi.mocked(fake.page.evaluate).mockImplementation(async (expression) =>
+        expression.includes('new Defuddle') ? { content: '<p></p>' } : false,
+      );
+      expect((await advance(reader.run('https://example.org/')))?.renderOutcome).toBe('empty');
+      vi.mocked(fake.page.goto).mockRejectedValue(new Error('Protocol error'));
+      for (let i = 0; i < 3; i++)
+        expect((await reader.run('https://example.org/'))?.renderOutcome).toBe('failed');
+      expect((await reader.run('https://example.org/'))?.renderOutcome).toBe('pending');
+      const lines = debug.mock.calls.filter((call) =>
+        String(call[0]).startsWith('[reader/browser] render result'),
+      );
+      expect(lines).toHaveLength(6);
+      expect(JSON.stringify(lines)).not.toContain('secret');
+    } finally {
+      debug.mockRestore();
+      await reader.close();
+    }
+  });
+  it('logs why the browser connection failed', async () => {
+    const debug = vi.spyOn(console, 'debug').mockImplementation(() => {});
+    const reader = new BrowserReader('ws://brwser:3000/silo-browser', {
+      connect: async () => {
+        throw new Error('getaddrinfo ENOTFOUND brwser');
+      },
+    });
+    try {
+      expect(await reader.run('https://example.org/')).toMatchObject({ renderOutcome: 'failed' });
+      expect(debug).toHaveBeenCalledWith(
+        '[reader/browser] render failed',
+        'browser-connect',
+        'getaddrinfo ENOTFOUND brwser',
+      );
+    } finally {
+      debug.mockRestore();
+      await reader.close();
+    }
+  });
+
   it('does no browser work when endpoint is unset', async () => {
     vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', '');
     const connect = vi.spyOn(chromium, 'connect');
@@ -109,7 +157,7 @@ describe('rendered Reader pool', () => {
       await vi.advanceTimersByTimeAsync(19_999);
       expect(fake.contexts[0]?.close).not.toHaveBeenCalled();
       await vi.advanceTimersByTimeAsync(1);
-      expect(await stuck).toEqual({ renderPending: true });
+      expect(await stuck).toMatchObject({ renderPending: true });
       expect(fake.contexts[0]?.close).toHaveBeenCalled();
       expect((await advance(next))?.reader).toBeDefined();
     } finally {
@@ -128,7 +176,7 @@ describe('rendered Reader pool', () => {
     });
     const result = reader.run('https://example.org/');
     await vi.advanceTimersByTimeAsync(20_000);
-    expect(await result).toEqual({ renderPending: true });
+    expect(await result).toMatchObject({ renderPending: true });
     finish?.(fake.browser);
     await vi.advanceTimersByTimeAsync(0);
     expect(fake.browser.close).toHaveBeenCalledOnce();
@@ -144,13 +192,13 @@ describe('rendered Reader pool', () => {
     const reader = new BrowserReader('ws://browser/', { connect, log });
     try {
       for (let i = 0; i < 3; i++)
-        expect(await reader.run('https://example.org/')).toEqual({ renderPending: true });
+        expect(await reader.run('https://example.org/')).toMatchObject({ renderPending: true });
       for (let i = 0; i < 4; i++)
-        expect(await reader.run('https://example.org/')).toEqual({ renderPending: true });
+        expect(await reader.run('https://example.org/')).toMatchObject({ renderPending: true });
       expect(fake.contexts).toHaveLength(3);
       expect(log).toHaveBeenCalledOnce();
       await vi.advanceTimersByTimeAsync(5 * 60_000 - 1);
-      expect(await reader.run('https://example.org/')).toEqual({ renderPending: true });
+      expect(await reader.run('https://example.org/')).toMatchObject({ renderPending: true });
       expect(fake.contexts).toHaveLength(3);
       await vi.advanceTimersByTimeAsync(1);
       vi.mocked(fake.page.goto).mockResolvedValue(undefined);
@@ -195,7 +243,9 @@ describe('rendered Reader pool', () => {
     );
     const reader = new BrowserReader('ws://browser/', { connect: async () => fake.browser });
     try {
-      expect(await advance(reader.run('https://example.org/'))).toBeUndefined();
+      expect((await advance(reader.run('https://example.org/')))?.renderOutcome).toMatch(
+        /empty|failed/,
+      );
       expect(fake.contexts[0]?.close).toHaveBeenCalledOnce();
     } finally {
       await reader.close();
@@ -207,7 +257,9 @@ describe('rendered Reader pool', () => {
     vi.mocked(fake.page.evaluate).mockResolvedValue(true);
     const reader = new BrowserReader('ws://browser/', { connect: async () => fake.browser });
     try {
-      expect(await advance(reader.run('https://example.org/'))).toBeUndefined();
+      expect((await advance(reader.run('https://example.org/')))?.renderOutcome).toMatch(
+        /empty|failed/,
+      );
       expect(fake.page.evaluate).toHaveBeenCalledTimes(1);
       expect(fake.contexts[0]?.close).toHaveBeenCalledOnce();
     } finally {
@@ -239,7 +291,8 @@ describe('rendered Reader pool', () => {
       vi.mocked(fake.page.goto).mockRejectedValue(new Error(message));
       const log = vi.fn();
       const reader = new BrowserReader('ws://browser/', { connect: async () => fake.browser, log });
-      for (let i = 0; i < 6; i++) expect(await reader.run('https://example.org/')).toBeUndefined();
+      for (let i = 0; i < 6; i++)
+        expect((await reader.run('https://example.org/'))?.renderOutcome).toBe('failed');
       expect(fake.contexts).toHaveLength(6);
       expect(log).not.toHaveBeenCalled();
       await reader.close();
@@ -271,7 +324,7 @@ describe('rendered Reader pool', () => {
     const work = reader.run('https://example.org/');
     await vi.waitFor(() => expect(fake.page.goto).toHaveBeenCalled());
     await fake.browser.close();
-    expect(await work).toEqual({ renderPending: true });
+    expect(await work).toMatchObject({ renderPending: true });
     await reader.close();
   });
   it('cancels queued callers immediately, frees capacity, and caps waiting work at ten', async () => {
@@ -335,7 +388,7 @@ describe('rendered Reader pool', () => {
     const queued = reader.run('https://example.org/');
     await vi.waitFor(() => expect(fake.page.goto).toHaveBeenCalled());
     await reader.close();
-    expect(await active).toBeUndefined();
+    expect((await active)?.renderOutcome).toBe('failed');
     expect(await queued).toBeUndefined();
     expect(fake.contexts).toHaveLength(1);
     expect(fake.contexts[0]?.close).toHaveBeenCalled();

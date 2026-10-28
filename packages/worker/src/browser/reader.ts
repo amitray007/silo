@@ -1,10 +1,11 @@
 import { chromium } from 'playwright-core';
 import type { PageContent } from '../extract/reader-page.js';
 import { closeWithin } from './cleanup.js';
-import { type BrowserPort, renderPage } from './page.js';
+import { type BrowserPort, diagnosticMessage, type RenderDiagnostics, renderPage } from './page.js';
 import type { BrowserFetch } from './route.js';
 
-export type BrowserResult = PageContent & { renderPending?: true };
+export type RenderOutcome = 'ok' | 'empty' | 'pending' | 'failed';
+export type BrowserResult = PageContent & { renderPending?: true; renderOutcome?: RenderOutcome };
 export interface BrowserReaderOptions {
   connect?: (endpoint: string) => Promise<BrowserPort>;
   fetch?: BrowserFetch;
@@ -44,14 +45,17 @@ export class BrowserReader {
   ) {}
 
   run(url: string, signal?: AbortSignal): Promise<BrowserResult | undefined> {
-    if (this.closed || signal?.aborted || this.queue.length >= 10)
+    if (this.closed || signal?.aborted || this.queue.length >= 10) {
+      this.resultLog(url, 'failed');
       return Promise.resolve(undefined);
+    }
     return new Promise((resolve) => {
       const job: Job = { url, signal, resolve, cancel: () => {} };
       job.cancel = () => {
         const index = this.queue.indexOf(job);
         if (index !== -1) this.queue.splice(index, 1);
         signal?.removeEventListener('abort', job.cancel);
+        this.resultLog(url, 'failed');
         resolve(undefined);
       };
       signal?.addEventListener('abort', job.cancel, { once: true });
@@ -100,7 +104,16 @@ export class BrowserReader {
 
   private async runNext(url: string, signal?: AbortSignal): Promise<BrowserResult | undefined> {
     if (this.closed || signal?.aborted) return undefined;
-    if (Date.now() < this.retryAt) return { renderPending: true };
+    if (Date.now() < this.retryAt) {
+      this.resultLog(url, 'pending');
+      return { renderPending: true, renderOutcome: 'pending' };
+    }
+    const diagnostics: RenderDiagnostics = {
+      timings: { gotoMs: 0, settleMs: 0, extractMs: 0 },
+      errors: [],
+      bodyTextLength: 0,
+      contentLength: 0,
+    };
     const halfOpen = this.retryAt > 0;
     const controller = new AbortController();
     this.active = controller;
@@ -123,13 +136,17 @@ export class BrowserReader {
     });
     try {
       const work = this.connection(controller.signal).then((browser) =>
-        renderPage(browser, url, controller.signal, this.options.fetch),
+        renderPage(browser, url, controller.signal, this.options.fetch, diagnostics),
       );
       const result = await Promise.race([work, cancelled]);
       this.healthy();
-      return result.reader && result.text?.trim() ? result : undefined;
+      const outcome = result.reader && result.text?.trim() ? 'ok' : 'empty';
+      this.resultLog(url, outcome, diagnostics);
+      return { ...result, renderOutcome: outcome };
     } catch (error) {
-      return this.failed(error, halfOpen, signal);
+      const result = this.failed(error, halfOpen, signal);
+      this.resultLog(url, 'failed', diagnostics);
+      return { ...result, renderOutcome: 'failed' };
     } finally {
       clearTimeout(timer);
       signal?.removeEventListener('abort', abort);
@@ -139,14 +156,32 @@ export class BrowserReader {
     }
   }
 
+  private resultLog(url: string, outcome: RenderOutcome, diagnostics?: RenderDiagnostics): void {
+    let target = '[invalid]';
+    try {
+      const parsed = new URL(url);
+      target = parsed.host + parsed.pathname.slice(0, 80);
+    } catch {}
+    console.debug(
+      `[reader/browser] render result ${JSON.stringify({ outcome, target, ...diagnostics })}`,
+    );
+  }
+
   private failed(
     error: unknown,
     halfOpen: boolean,
     signal?: AbortSignal,
   ): BrowserResult | undefined {
+    // A wrapped cause (DNS failure, refused connection, wrong WebSocket path) explains
+    // `browser-connect`; without it a bad SILO_BROWSER_WS_ENDPOINT looks like any outage.
+    const cause =
+      error instanceof Error && error.cause instanceof Error
+        ? diagnosticMessage(error.cause.message)
+        : undefined;
     console.debug(
       '[reader/browser] render failed',
-      error instanceof Error ? error.message : 'browser-error',
+      error instanceof Error ? diagnosticMessage(error.message) : 'browser-error',
+      ...(cause ? [cause] : []),
     );
     if (signal?.aborted || this.closed) return undefined;
     if (!infrastructureFailure(error)) {

@@ -28,25 +28,45 @@ export type BrowserFetch = (
 ) => Promise<SafeFetchBytesResult>;
 const ALLOWED_TYPES = new Set(['document', 'script', 'stylesheet', 'xhr', 'fetch']);
 
-function allowedRequest(request: ReturnType<RoutePort['request']>): boolean {
-  if (request.method() !== 'GET' || !ALLOWED_TYPES.has(request.resourceType())) return false;
+function blockedReason(request: ReturnType<RoutePort['request']>): string | undefined {
+  if (request.method() !== 'GET') return 'method';
+  if (!ALLOWED_TYPES.has(request.resourceType())) return 'type';
   try {
     if (
       request.resourceType() === 'document' &&
       (!request.isNavigationRequest() || request.frame().parentFrame() !== null)
     )
-      return false;
+      return 'subframe';
     const url = new URL(request.url());
-    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
+    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
+      ? undefined
+      : 'unsafe-url';
   } catch {
-    return false;
+    return 'unsafe-url';
   }
 }
 
 /** No continue/fallback: even a failed proxy request must never use Chromium's network. */
 export class BrowserRoutes {
+  private readonly routed: Record<string, number> = {};
+  private readonly aborted: Record<string, number> = {};
+  private readonly ok: Record<string, number> = {};
+  private readonly failed: Record<string, number> = {};
+  stats() {
+    return {
+      routed: { ...this.routed },
+      aborted: { ...this.aborted },
+      ok: { ...this.ok },
+      failed: { ...this.failed },
+      fulfilledBytes: this.fulfilledBytes,
+    };
+  }
+  private count(counts: Record<string, number>, key: string): void {
+    counts[key] = (counts[key] ?? 0) + 1;
+  }
   private requests = 0;
   private fulfilledBytes = 0;
+  private reservedBytes = 0;
   private inFlight = 0;
   private lastActivity = Date.now();
   private readonly bodyBudget = new BodyByteBudget(20 * 1024 * 1024);
@@ -59,7 +79,14 @@ export class BrowserRoutes {
   readonly handle = async (route: RoutePort): Promise<void> => {
     this.requests++;
     this.lastActivity = Date.now();
-    if (this.signal.aborted || this.requests > 200 || !allowedRequest(route.request())) {
+    this.count(this.routed, route.request().resourceType());
+    const reason = this.signal.aborted
+      ? 'cancelled'
+      : this.requests > 200
+        ? 'budget'
+        : blockedReason(route.request());
+    if (reason) {
+      this.count(this.aborted, reason);
       await route.abort().catch(() => {});
       return;
     }
@@ -73,10 +100,13 @@ export class BrowserRoutes {
         userAgent: BROWSER_USER_AGENT,
         accept: browserAccept(route.request().resourceType()),
       });
-      if (!result.ok || this.signal.aborted || !this.reserve(result.bytes.byteLength)) {
+      const reason = this.fetchReason(result);
+      if (reason) {
+        this.count(this.aborted, reason);
         await route.abort();
         return;
       }
+      if (!result.ok) return;
       await route.fulfill({
         status: result.status,
         headers: {
@@ -90,7 +120,9 @@ export class BrowserRoutes {
         },
         body: Buffer.from(result.bytes),
       });
+      this.fulfilledBytes += result.bytes.byteLength;
     } catch {
+      this.count(this.failed, 'exception');
       await route.abort().catch(() => {});
     } finally {
       this.inFlight--;
@@ -98,9 +130,20 @@ export class BrowserRoutes {
     }
   };
 
+  private fetchReason(result: SafeFetchBytesResult): string | undefined {
+    if (!result.ok) {
+      this.count(this.failed, result.reason);
+      return result.reason.startsWith('blocked-') ? 'unsafe-url' : 'fetch';
+    }
+    this.count(this.ok, String(result.status));
+    if (this.signal.aborted) return 'cancelled';
+    if (!this.reserve(result.bytes.byteLength)) return 'budget';
+    return undefined;
+  }
+
   private reserve(bytes: number): boolean {
-    if (bytes > 5 * 1024 * 1024 || this.fulfilledBytes + bytes > 20 * 1024 * 1024) return false;
-    this.fulfilledBytes += bytes;
+    if (bytes > 5 * 1024 * 1024 || this.reservedBytes + bytes > 20 * 1024 * 1024) return false;
+    this.reservedBytes += bytes;
     return true;
   }
 
