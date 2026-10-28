@@ -1,5 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
+import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 import type { AiFeatureId } from './features.js';
@@ -35,6 +36,11 @@ describeIfPg('independent feature selections', () => {
     const { status, providers, settings } = harness.mod();
     await providers.saveAiProviderKey('anthropic', 'fake-anthropic-1234');
     await providers.saveAiProviderKey('openai', 'fake-openai-5678');
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = CASE kind WHEN 'anthropic' THEN '[{"id":"claude-haiku-5-5","label":"Haiku","structuredOutput":"native","reasoning":{"type":"anthropic"}}]'::jsonb ELSE '[{"id":"gpt-6-astra","label":"Astra","structuredOutput":"unknown","reasoning":{"type":"openai"}}]'::jsonb END`,
+      );
     await settings.setSetting('ai', {
       enabled: true,
       features: {

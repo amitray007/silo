@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { AiProviderJson, AiSettingsResponse, SettingsMap } from '../../api/types';
+import type { AiProviderJson, SettingsMap } from '../../api/types';
 import { PluginsTab } from './PluginsTab';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -632,26 +632,29 @@ describe('PluginsTab AI titles toggle', () => {
     };
   }
 
-  const catalog: AiSettingsResponse['catalog'] = [
-    {
-      id: 'claude-haiku-5-5',
-      label: 'Claude Haiku 5.5',
-      family: 'claude',
-      tier: 'fast',
-      providers: ['anthropic', 'gateway'],
-      defaultFor: ['anthropic', 'gateway'],
-    },
-    {
-      id: 'gpt-5-mini',
-      label: 'GPT-5 mini',
-      family: 'chatgpt',
-      tier: 'fast',
-      providers: ['openai'],
-      defaultFor: ['openai'],
-    },
-  ];
   function provider(kind: AiProviderJson['kind'], keyReadable = true): AiProviderJson {
-    return { kind, configured: true, keyReadable, keyLast4: '1234', lastTest: null };
+    const id =
+      kind === 'openai'
+        ? 'gpt-5-mini'
+        : kind === 'fireworks'
+          ? 'accounts/fireworks/models/glm-5p3-flash'
+          : 'claude-haiku-5-5';
+    return {
+      kind,
+      configured: true,
+      keyReadable,
+      keyLast4: '1234',
+      lastTest: null,
+      defaultModel: id,
+      models: [
+        {
+          id,
+          label: kind === 'openai' ? 'GPT-5 mini' : 'Claude Haiku 5.5',
+          structuredOutput: 'native',
+          reasoning: { type: kind },
+        },
+      ],
+    };
   }
 
   function renderWithAi(
@@ -677,7 +680,6 @@ describe('PluginsTab AI titles toggle', () => {
           jsonResponse({
             status: { enabled: ready, secretKey: 'ok', features: {} },
             providers: opts.providers ?? [provider('anthropic')],
-            catalog,
             features: [feature],
           }),
         );
@@ -786,11 +788,17 @@ describe('PluginsTab AI titles toggle', () => {
     const providers: AiProviderJson[] = kinds.map((kind) => ({
       ...provider(kind),
       models: [
-        { id: 'other', label: 'Other', contextLength: null },
+        {
+          id: 'other',
+          label: 'Other',
+          structuredOutput: 'native' as const,
+          reasoning: { type: 'fireworks' as const },
+        },
         {
           id: 'accounts/fireworks/models/glm-5p3-flash',
           label: 'GLM 5.3 Flash',
-          contextLength: null,
+          structuredOutput: 'native' as const,
+          reasoning: { type: 'fireworks' as const },
         },
       ],
     }));
@@ -813,7 +821,15 @@ describe('PluginsTab AI titles toggle', () => {
         provider('anthropic', false),
         {
           ...provider('fireworks'),
-          models: [{ id: 'first-live', label: 'First live', contextLength: null }],
+          defaultModel: 'first-live',
+          models: [
+            {
+              id: 'first-live',
+              label: 'First live',
+              structuredOutput: 'native' as const,
+              reasoning: { type: 'fireworks' as const },
+            },
+          ],
         },
       ],
     });
@@ -846,7 +862,9 @@ describe('PluginsTab AI titles toggle', () => {
   });
 
   it('keeps the toggle disabled without a usable provider model', async () => {
-    renderWithAi(true, false, { providers: [{ ...provider('fireworks'), models: [] }] });
+    renderWithAi(true, false, {
+      providers: [{ ...provider('fireworks'), defaultModel: null, models: [] }],
+    });
     fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
     expect(await screen.findByRole('switch', { name: 'AI titles' })).toHaveProperty(
       'disabled',

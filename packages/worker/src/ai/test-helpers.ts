@@ -1,4 +1,4 @@
-import type { CatalogEntry } from '@silo/core';
+import type { AiLiveModel } from '@silo/core';
 import type { AiCredential } from '@silo/core/ai-credential';
 import { APICallError } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
@@ -24,17 +24,14 @@ export function deferred<T>() {
 
 export const LEAK_KEY = 'sk-test-LEAK-0000';
 
-export const credential: AiCredential & { model: CatalogEntry } = {
+export const credential: AiCredential & { model: AiLiveModel } = {
   kind: 'anthropic',
   apiKey: LEAK_KEY,
   model: {
     id: 'claude-haiku-5-5',
-    family: 'claude',
     label: 'Claude Haiku 5.5',
-    tier: 'fast',
-    anthropicId: 'claude-haiku-5-5',
-    gatewayId: 'anthropic/claude-haiku-5.5',
-    reasoning: 'none',
+    structuredOutput: 'native',
+    reasoning: { type: 'anthropic', thinking: 'disabled', effort: 'low' },
   },
 };
 

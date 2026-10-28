@@ -12,6 +12,4 @@ export type AiFeatureDefinition<In = never, Out = unknown, Raw = unknown> = {
   /** Returns `undefined` to reject the model's output. */
   postProcess(output: Raw): Out | undefined;
   timeoutMs: number;
-  /** Defaults to `DEFAULT_MAX_OUTPUT_TOKENS`. */
-  maxOutputTokens?: number;
 };

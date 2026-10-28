@@ -1,6 +1,6 @@
-import type { AiProviderKind } from './catalog.js';
 import { AI_ERROR_CODES, type AiErrorCode } from './features.js';
-import { refreshFireworksModels } from './models.js';
+import type { AiProviderKind } from './model-types.js';
+import { refreshProviderModels } from './models.js';
 import { readAiProviderKey, recordAiTest } from './providers.js';
 import { type AiCredential, resolveWithBlob } from './status.js';
 
@@ -40,10 +40,8 @@ function sanitize(raw: AiConnectionResult, latencyMs: number): AiConnectionResul
 export async function testAiProvider(kind: AiProviderKind): Promise<AiTestOutcome> {
   if (!tester) return { ok: false, code: 'unavailable' };
   // Finish the list refresh before invoking the tester, which owns the generation deadline.
-  if (kind === 'fireworks') {
-    const failure = await refreshForTest();
-    if (failure) return failure;
-  }
+  const failure = await refreshForTest(kind);
+  if (failure) return failure;
   const resolved = await resolveWithBlob(kind);
   if (!resolved) return { ok: false, code: 'unavailable' };
   const started = Date.now();
@@ -62,17 +60,17 @@ export async function testAiProvider(kind: AiProviderKind): Promise<AiTestOutcom
   return result;
 }
 
-async function refreshForTest(): Promise<AiTestOutcome | undefined> {
-  const key = await readAiProviderKey('fireworks');
+async function refreshForTest(kind: AiProviderKind): Promise<AiTestOutcome | undefined> {
+  const key = await readAiProviderKey(kind);
   if (key.state !== 'ok') return { ok: false, code: 'unavailable' };
   const started = Date.now();
-  const refreshed = await refreshFireworksModels();
+  const refreshed = await refreshProviderModels(kind);
   if (refreshed.ok) return undefined;
-  if (refreshed.code === 'unavailable') return { ok: false, code: 'unavailable' };
   // A refresh failure does not prevent inference with the same key's stored default.
-  const stored = await resolveWithBlob('fireworks');
+  const stored = await resolveWithBlob(kind);
   if (stored?.encryptedKey === key.encryptedKey) return undefined;
+  if (refreshed.code === 'unavailable') return { ok: false, code: 'unavailable' };
   const result = { ok: false, code: refreshed.code, latencyMs: Date.now() - started } as const;
-  await recordAiTest('fireworks', result, key.encryptedKey);
+  await recordAiTest(kind, result, key.encryptedKey);
   return result;
 }

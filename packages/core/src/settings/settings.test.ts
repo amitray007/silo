@@ -333,7 +333,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         features: {
           'x-post-title': {
             enabled: true,
-            model: { provider: 'anthropic', id: 'claude-haiku-5-5' },
+            model: null,
           },
         },
       };

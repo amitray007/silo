@@ -3,11 +3,24 @@ import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
+import type { AiLiveModel } from './model-types.js';
 import type { AiConnectionResult } from './tester.js';
 
 const describeIfPg = postgresReachable() ? describe : describe.skip;
-const FIRST = { id: 'accounts/fireworks/models/first', label: 'First', contextLength: 1000 };
-const GLM = { id: 'accounts/fireworks/models/glm-5p3-flash', label: 'GLM', contextLength: 2000 };
+const FIRST: AiLiveModel = {
+  id: 'accounts/fireworks/models/first',
+  label: 'First',
+  contextWindow: 1000,
+  structuredOutput: 'native',
+  reasoning: { type: 'fireworks' },
+};
+const GLM: AiLiveModel = {
+  id: 'accounts/fireworks/models/glm-5p3-flash',
+  label: 'GLM',
+  contextWindow: 2000,
+  structuredOutput: 'native',
+  reasoning: { type: 'fireworks' },
+};
 
 describeIfPg('Fireworks live-list port and selection validation', () => {
   const harness = setupPgHarness('silo_ai_models', async () => ({
@@ -37,7 +50,7 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     const { providers, models } = harness.mod();
     await providers.saveAiProviderKey('fireworks', 'fake-fireworks-1234');
     models.setAiModelsFetcher(async () => ({ ok: true, models: [FIRST, GLM] }));
-    return models.refreshFireworksModels();
+    return models.refreshProviderModels('fireworks');
   };
 
   it('validates writes against the stored list and nulls removed models on reads', async () => {
@@ -59,7 +72,7 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     ).rejects.toThrow();
     expect(await settings.getSetting('theme')).toBe('system');
     models.setAiModelsFetcher(async () => ({ ok: true, models: [FIRST] }));
-    await models.refreshFireworksModels();
+    await models.refreshProviderModels('fireworks');
     expect((await settings.getSetting('ai')).features['x-post-title'].model).toBeNull();
     expect((await settings.getAllSettings()).ai.features['x-post-title'].model).toBeNull();
     expect(await status.resolveAiFeatureCredential('x-post-title')).toBeUndefined();
@@ -143,15 +156,19 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     await prepare();
     const { models } = harness.mod();
     models.setAiModelsFetcher(async () => ({ ok: true, models: entries }));
-    expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'provider_error' });
-    expect(await models.storedFireworksModels()).toEqual([FIRST, GLM]);
+    expect(await models.refreshProviderModels('fireworks')).toEqual({
+      ok: false,
+      code: 'provider_error',
+    });
+    expect(await models.storedProviderModels('fireworks')).toEqual([FIRST, GLM]);
   });
 
   it('refreshes before key inference and uses GLM when listed, otherwise the first model', async () => {
     const { tester, models, providers } = harness.mod();
     await prepare();
     const calls: string[] = [];
-    models.setAiModelsFetcher(async (key) => {
+    models.setAiModelsFetcher(async (kind, key) => {
+      expect(kind).toBe('fireworks');
       expect(key).toBe('fake-fireworks-1234');
       calls.push('list');
       return { ok: true, models: [FIRST, GLM] };
@@ -168,8 +185,8 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     const row = (await providers.listAiProviders()).find((p) => p.kind === 'fireworks');
     expect(row?.modelsFetchedAt).toBeInstanceOf(Date);
     expect(JSON.stringify(row)).not.toContain('fake-fireworks-1234');
-    expect((await providers.listAiProviders()).find((p) => p.kind === 'openai')).not.toHaveProperty(
-      'models',
+    expect((await providers.listAiProviders()).find((p) => p.kind === 'openai')?.models).toEqual(
+      [],
     );
   });
 
@@ -202,7 +219,7 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
       await settings.setSetting('ai', selection(GLM.id));
       const before = (await providers.listAiProviders()).find((p) => p.kind === 'fireworks');
       models.setAiModelsFetcher(async () => ({ ok: false, code }));
-      expect(await models.refreshFireworksModels()).toEqual({ ok: false, code });
+      expect(await models.refreshProviderModels('fireworks')).toEqual({ ok: false, code });
       const after = (await providers.listAiProviders()).find((p) => p.kind === 'fireworks');
       expect(after).toMatchObject({
         models: [FIRST, GLM],
@@ -250,9 +267,9 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     const { models, providers } = harness.mod();
     await prepare();
     models.setAiModelsFetcher(async () => ({ ok: false, code: 'network' }));
-    await models.refreshFireworksModels();
+    await models.refreshProviderModels('fireworks');
     models.setAiModelsFetcher(async () => ({ ok: true, models: [] }));
-    expect(await models.refreshFireworksModels()).toEqual({ ok: true, models: [] });
+    expect(await models.refreshProviderModels('fireworks')).toEqual({ ok: true, models: [] });
     expect((await providers.listAiProviders()).find((p) => p.kind === 'fireworks')).toMatchObject({
       models: [],
       modelsFetchedAt: expect.any(Date),
@@ -272,7 +289,10 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
       `);
       return ok ? { ok: true, models: [GLM] } : { ok: false, code: 'network' };
     });
-    expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'unavailable' });
+    expect(await models.refreshProviderModels('fireworks')).toEqual({
+      ok: false,
+      code: 'unavailable',
+    });
     expect((await providers.listAiProviders()).find((p) => p.kind === 'fireworks')).toMatchObject({
       models: [FIRST],
       modelsFetchedAt: new Date('2026-10-29T00:00:00Z'),
@@ -282,12 +302,115 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
 
   it('unavailable, malformed and thrown fetchers return fixed codes without leaking keys', async () => {
     const { models } = harness.mod();
-    expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'unavailable' });
+    expect(await models.refreshProviderModels('fireworks')).toEqual({
+      ok: false,
+      code: 'unavailable',
+    });
     await prepare();
     models.setAiModelsFetcher(async () => {
       throw new Error('fake-fireworks-1234');
     });
-    expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'provider_error' });
-    expect(await models.storedFireworksModels()).toEqual([FIRST, GLM]);
+    expect(await models.refreshProviderModels('fireworks')).toEqual({
+      ok: false,
+      code: 'provider_error',
+    });
+    expect(await models.storedProviderModels('fireworks')).toEqual([FIRST, GLM]);
+  });
+  it.each(['anthropic', 'openai', 'gateway', 'fireworks'] as const)(
+    '%s stores, validates, and preserves a failed refresh',
+    async (kind) => {
+      const { providers, models, settings } = harness.mod();
+      await providers.saveAiProviderKey(kind, 'provider-key-1234');
+      const live: AiLiveModel = {
+        id: 'future-model',
+        label: 'Future',
+        structuredOutput: 'unknown',
+        reasoning: { type: kind },
+      };
+      models.setAiModelsFetcher(async (requested, key) => {
+        expect(requested).toBe(kind);
+        expect(key).toBe('provider-key-1234');
+        return { ok: true, models: [live] };
+      });
+      await models.refreshProviderModels(kind);
+      const ai = {
+        enabled: true,
+        features: { 'x-post-title': { enabled: true, model: { provider: kind, id: live.id } } },
+      };
+      await settings.setSetting('ai', ai);
+      expect(await settings.getSetting('ai')).toEqual(ai);
+      const before = (await providers.listAiProviders()).find((p) => p.kind === kind);
+      models.setAiModelsFetcher(async () => ({ ok: false, code: 'network' }));
+      await models.refreshProviderModels(kind);
+      expect((await providers.listAiProviders()).find((p) => p.kind === kind)).toMatchObject({
+        models: [live],
+        modelsFetchedAt: before?.modelsFetchedAt,
+        modelsRefreshError: 'network',
+      });
+      await expect(
+        settings.setSetting('ai', {
+          ...ai,
+          features: {
+            'x-post-title': { enabled: true, model: { provider: kind, id: 'unlisted' } },
+          },
+        }),
+      ).rejects.toThrow();
+    },
+  );
+
+  it('refreshes stale lists in the background once per provider and never blocks the caller', async () => {
+    const { providers, models } = harness.mod();
+    await providers.saveAiProviderKey('anthropic', 'anthropic-key-1234');
+    await providers.saveAiProviderKey('openai', 'openai-key-1234');
+    let release: (() => void) | undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const seen: string[] = [];
+    models.setAiModelsFetcher(async (kind) => {
+      seen.push(kind);
+      await blocked;
+      return { ok: true, models: [] };
+    });
+    const snapshot = await providers.listAiProviders();
+    expect(models.refreshStaleProviderModels(snapshot)).toBeUndefined();
+    models.refreshStaleProviderModels(snapshot);
+    await expect.poll(() => seen.length).toBe(2);
+    expect(seen.sort()).toEqual(['anthropic', 'openai']);
+    const refreshes = [
+      models.refreshProviderModels('anthropic'),
+      models.refreshProviderModels('openai'),
+    ];
+    release?.();
+    await Promise.all(refreshes);
+    models.refreshStaleProviderModels(await providers.listAiProviders());
+    expect(seen).toHaveLength(2);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models_fetched_at = NOW() - INTERVAL '25 hours' WHERE kind = 'anthropic'`,
+      );
+    models.refreshStaleProviderModels(await providers.listAiProviders());
+    await models.refreshProviderModels('anthropic');
+    expect(seen).toHaveLength(3);
+  });
+
+  it('upgrades an existing Fireworks cache in place without a database migration', async () => {
+    const { providers, models } = harness.mod();
+    await providers.saveAiProviderKey('fireworks', 'fireworks-key-1234');
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"old-cache","label":"Cached","contextLength":1000}]'::jsonb WHERE kind = 'fireworks'`,
+      );
+    expect(await models.storedProviderModels('fireworks')).toEqual([
+      {
+        id: 'old-cache',
+        label: 'Cached',
+        contextWindow: 1000,
+        structuredOutput: 'native',
+        reasoning: { type: 'fireworks' },
+      },
+    ]);
   });
 });

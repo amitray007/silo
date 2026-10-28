@@ -1,7 +1,7 @@
 import { aiProviders, db, settings } from '@silo/db';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import { z } from 'zod';
-import { storedFireworksModels } from '../ai/model-store.js';
+import { parseStoredModels, storedProviderModels } from '../ai/model-store.js';
 import type { Executor } from '../links/executor.js';
 import {
   isSettingKey,
@@ -35,18 +35,17 @@ async function parseSettingValueSafely<K extends SettingKey>(
   key: K,
   value: unknown,
   executor: Executor = db,
+  repairModels = true,
 ): Promise<SettingValue<K> | undefined> {
   try {
     const parsed = parseStoredSettingValue(key, value);
-    if (key === 'ai') {
+    if (key === 'ai' && repairModels) {
       const ai = parsed as SettingValue<'ai'>;
-      const models = await storedFireworksModels(executor);
       for (const feature of Object.values(ai.features)) {
-        if (
-          feature.model?.provider === 'fireworks' &&
-          !models.some((m) => m.id === feature.model?.id)
-        )
-          feature.model = null;
+        const model = feature.model;
+        if (!model) continue;
+        const models = await storedProviderModels(model.provider, executor);
+        if (!models.some((m) => m.id === model.id)) feature.model = null;
       }
     }
     return parsed;
@@ -104,7 +103,7 @@ export async function setSetting<K extends SettingKey>(
   const parsed = parseSettingValue(key, value);
   if (key === 'ai') {
     await executor.transaction(async (tx) => {
-      await validateFireworksSelection(parsed as SettingValue<'ai'>, tx);
+      await validateProviderSelection(parsed as SettingValue<'ai'>, tx);
       await persistSetting(key, parsed, tx);
     });
   } else {
@@ -188,33 +187,45 @@ export async function updateSettings(patch: Record<string, unknown>): Promise<Se
   return getAllSettings();
 }
 
-async function validateFireworksSelection(
+async function validateProviderSelection(
   ai: SettingValue<'ai'>,
   executor: Executor,
 ): Promise<void> {
-  const selections = Object.entries(ai.features).filter(
-    ([, f]) => f.model?.provider === 'fireworks',
-  );
+  const selections = Object.entries(ai.features).filter(([, f]) => f.model !== null);
   if (!selections.length) return;
-  // FOR SHARE conflicts with the row lock taken by refresh's UPDATE, even
-  // though refresh does not change the provider's primary key.
-  await executor
-    .select({ kind: aiProviders.kind })
+  // Lock in provider order to prevent deadlocks between multi-feature writes.
+  const rows = await executor
+    .select({ kind: aiProviders.kind, models: aiProviders.models })
     .from(aiProviders)
-    .where(eq(aiProviders.kind, 'fireworks'))
+    .where(
+      inArray(
+        aiProviders.kind,
+        selections.flatMap(([, f]) => (f.model ? [f.model.provider] : [])),
+      ),
+    )
+    .orderBy(aiProviders.kind)
     .for('share');
-  const models = await storedFireworksModels(executor);
+  const byKind = new Map(rows.map((row) => [row.kind, parseStoredModels(row.kind, row.models)]));
   z.unknown()
     .superRefine((_value, ctx) => {
       for (const [id, feature] of selections) {
-        if (!models.some((m) => m.id === feature.model?.id)) {
+        const model = feature.model;
+        if (model && !(byKind.get(model.provider) ?? []).some((m) => m.id === model.id)) {
           ctx.addIssue({
             code: 'custom',
-            message: 'model is not in the stored Fireworks list',
+            message: 'model is not in the stored provider list',
             path: ['features', id, 'model'],
           });
         }
       }
     })
     .parse(ai);
+}
+
+/** Internal readiness read retains the selection so an unloaded list gets its own reason. */
+export async function getAiSettingForStatus(): Promise<SettingValue<'ai'>> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'ai')).limit(1);
+  return row
+    ? ((await parseSettingValueSafely('ai', row.value, db, false)) ?? SETTINGS_DEFAULTS.ai)
+    : SETTINGS_DEFAULTS.ai;
 }

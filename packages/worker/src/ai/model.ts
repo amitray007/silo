@@ -1,7 +1,6 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createFireworks } from '@ai-sdk/fireworks';
 import { createOpenAI } from '@ai-sdk/openai';
-import { providerModelId } from '@silo/core';
 import type { AiCredential } from '@silo/core/ai-credential';
 import { createGateway, type LanguageModel } from 'ai';
 
@@ -24,7 +23,7 @@ export function languageModelFor(
 ): LanguageModel {
   const apiKey = credential.apiKey.trim();
   if (!apiKey) throw new Error('AI provider key is empty');
-  const id = providerModelId(credential.model, credential.kind);
+  const id = credential.model.id;
   switch (credential.kind) {
     case 'anthropic':
       return createAnthropic({ apiKey, baseURL: ANTHROPIC_BASE_URL, ...(fetch ? { fetch } : {}) })(
@@ -39,6 +38,41 @@ export function languageModelFor(
         ...(fetch ? { fetch } : {}),
       })(id);
     case 'gateway':
+      if (
+        credential.model.reasoning.type === 'gateway' &&
+        credential.model.reasoning.budgetTokens !== undefined
+      )
+        return gatewayBudgetModel(apiKey, id, fetch);
       return createGateway({ apiKey, ...(fetch ? { fetch } : {}) })(id);
   }
+}
+
+/** SDK 7's portable reasoning accepts effort only. Budget-only Gateway models use its documented Chat Completions extension. */
+function gatewayBudgetModel(
+  apiKey: string,
+  id: string,
+  fetch: typeof globalThis.fetch = globalThis.fetch,
+): ReturnType<ReturnType<typeof createGateway>['languageModel']> {
+  const gateway = createGateway({ apiKey, fetch })(id);
+  const compatible = (budget: unknown) =>
+    createOpenAI({
+      apiKey,
+      baseURL: 'https://ai-gateway.vercel.sh/v1',
+      fetch: (url, init) => {
+        const body = JSON.parse(String(init?.body));
+        if (typeof budget === 'number') body.reasoning = { max_tokens: budget };
+        return fetch(url, { ...init, body: JSON.stringify(body) });
+      },
+    }).chat(id);
+
+  return {
+    specificationVersion: 'v4',
+    provider: gateway.provider,
+    modelId: id,
+    supportedUrls: gateway.supportedUrls,
+    doStream: (options) =>
+      compatible(options.providerOptions?.gateway?.reasoningBudget).doStream(options),
+    doGenerate: (options) =>
+      compatible(options.providerOptions?.gateway?.reasoningBudget).doGenerate(options),
+  };
 }

@@ -9,11 +9,9 @@ import {
 } from 'ai';
 import type { AiFeatureDefinition } from './define.js';
 import { aiErrorCode, logAiFailure } from './errors.js';
-import { FIREWORKS_MAX_OUTPUT_TOKENS, withFireworksReasoning } from './fireworks-generation.js';
+import { withModelSettings } from './generation.js';
 import { languageModelFor } from './model.js';
 import './registry.js'; // runs the registry drift guard in every process that runs a feature
-
-const DEFAULT_MAX_OUTPUT_TOKENS = 200;
 
 export type AiRunResult<Out> =
   | { ok: true; value: Out }
@@ -57,25 +55,30 @@ export async function runAiFeature<In, Out, Raw>(
     abortSignal?.throwIfAborted();
     if (!credential) return { ok: false, code: 'off' };
 
-    const { output } = await withFireworksReasoning(
-      credential.kind,
+    const output = await withModelSettings(
+      credential,
       definition.timeoutMs,
-      (settings) =>
-        generateText({
+      async ({ structuredOutput, ...settings }) => {
+        const output = Output.object({ schema: definition.schema });
+        const result = await generateText({
           model: model(credential),
           instructions: definition.instructions,
           prompt: definition.buildPrompt(input),
-          output: Output.object({ schema: definition.schema }),
-          ...(credential.kind === 'fireworks' ? {} : { reasoning: credential.model.reasoning }),
+          output: structuredOutput
+            ? output
+            : { ...output, responseFormat: Promise.resolve({ type: 'text' as const }) },
           maxRetries: 2,
           ...settings,
-          ...(abortSignal ? { abortSignal } : {}),
-          maxOutputTokens:
-            credential.kind === 'fireworks'
-              ? FIREWORKS_MAX_OUTPUT_TOKENS
-              : (definition.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS),
           telemetry: { isEnabled: false },
-        }),
+        });
+        if (result.finishReason === 'length' && !result.text) {
+          throw new NoOutputGeneratedError({
+            cause: Object.assign(new Error('Output budget exhausted'), { finishReason: 'length' }),
+          });
+        }
+        return result.output;
+      },
+      abortSignal,
     );
     abortSignal?.throwIfAborted();
     const value = definition.postProcess(output);

@@ -4,7 +4,7 @@
  * (web/api/mcp) must not (Biome `noRestrictedImports` + dependency-cruiser).
  */
 
-export type { AiModelsFetcher } from './models.js';
+export type { AiModelsFetcher, AiProviderModelsFetcher } from './models.js';
 export { setAiModelsFetcher } from './models.js';
 export type { AiCredential } from './status.js';
 export { resolveAiCredential, resolveAiFeatureCredential } from './status.js';

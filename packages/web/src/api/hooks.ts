@@ -890,7 +890,7 @@ export function useUpdateSettings() {
   });
 }
 
-/** `GET /api/ai`: readiness, provider rows (last four characters only), model catalog. */
+/** `GET /api/ai`: readiness, provider rows (last four characters only), stored model lists. */
 export function useAi() {
   return useQuery({
     queryKey: queryKeys.ai(),

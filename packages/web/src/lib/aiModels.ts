@@ -17,11 +17,7 @@ export function readableAiProviders(ai: AiSettingsResponse) {
 /** Used only when the owner enables a feature that has no model yet. */
 export function defaultAiFeatureModel(ai: AiSettingsResponse) {
   for (const provider of readableAiProviders(ai)) {
-    const models = ai.providers.find((p) => p.kind === provider)?.models ?? [];
-    const id =
-      provider === 'fireworks'
-        ? (models.find((m) => m.id === 'accounts/fireworks/models/glm-5p3-flash') ?? models[0])?.id
-        : ai.catalog.find((m) => m.defaultFor.includes(provider))?.id;
+    const id = ai.providers.find((p) => p.kind === provider)?.defaultModel;
     if (id) return { provider, id };
   }
   return null;
@@ -32,10 +28,8 @@ export function aiModelLabel(
   model: SettingsMap['ai']['features'][string]['model'],
 ) {
   if (!model) return null;
-  const label =
-    model.provider === 'fireworks'
-      ? ai.providers.find((p) => p.kind === 'fireworks')?.models?.find((m) => m.id === model.id)
-          ?.label
-      : ai.catalog.find((m) => m.id === model.id)?.label;
+  const label = ai.providers
+    .find((p) => p.kind === model.provider)
+    ?.models?.find((m) => m.id === model.id)?.label;
   return `${label ?? model.id} via ${AI_PROVIDER_NAMES[model.provider]}`;
 }

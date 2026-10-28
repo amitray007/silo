@@ -32,25 +32,6 @@ function settingsFixture(ai?: Partial<{ enabled: boolean; provider: string | nul
   };
 }
 
-const CATALOG = [
-  {
-    id: 'claude-haiku-5-5',
-    family: 'claude',
-    label: 'Claude Haiku 5.5',
-    tier: 'fast',
-    providers: ['anthropic', 'gateway'],
-    defaultFor: ['anthropic'],
-  },
-  {
-    id: 'gpt-5-mini',
-    family: 'chatgpt',
-    label: 'GPT-5 mini',
-    tier: 'balanced',
-    providers: ['openai', 'gateway'],
-    defaultFor: ['openai'],
-  },
-];
-
 type Provider = {
   kind: string;
   configured: boolean;
@@ -75,7 +56,23 @@ function aiFixture(opts: {
     keyLast4: null,
     keyReadable: true,
     lastTest: null,
-    models: [],
+    models:
+      kind === 'anthropic'
+        ? [{ id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' }]
+        : kind === 'openai'
+          ? [{ id: 'gpt-5-mini', label: 'GPT-5 mini' }]
+          : kind === 'gateway'
+            ? [
+                { id: 'claude-haiku-5-5', label: 'Claude Haiku 5.5' },
+                { id: 'gpt-5-mini', label: 'GPT-5 mini' },
+              ]
+            : [],
+    defaultModel:
+      kind === 'anthropic'
+        ? 'claude-haiku-5-5'
+        : kind === 'fireworks'
+          ? 'accounts/fireworks/models/glm-5p3-flash'
+          : 'gpt-5-mini',
     modelsFetchedAt: null,
     ...opts.providers?.find((p) => p.kind === kind),
   }));
@@ -93,7 +90,6 @@ function aiFixture(opts: {
       },
     },
     providers,
-    catalog: CATALOG,
     features: [
       { id: 'x-post-title', label: 'AI titles', description: 'Short titles', plugin: 'twitter' },
     ],
@@ -327,7 +323,7 @@ describe('AiTab', () => {
     expect(within(list).queryByRole('group', { name: 'Fireworks' })).toBeNull();
     const gateway = within(list).getByRole('group', { name: 'Vercel AI Gateway' });
     expect(gateway.querySelector('svg[fill="currentColor"]')).toBeTruthy();
-    fireEvent.click(within(gateway).getByRole('option', { name: 'GPT-5 mini - balanced' }));
+    fireEvent.click(within(gateway).getByRole('option', { name: 'GPT-5 mini' }));
     await waitFor(() =>
       expect(calls).toContainEqual(
         expect.objectContaining({

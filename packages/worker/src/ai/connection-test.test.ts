@@ -1,11 +1,15 @@
 import { MockLanguageModelV4 } from 'ai/test';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { aiConnectionTester } from './connection-test.js';
 import { apiError, credential, fakeAbortTimeout, LEAK_KEY, okResult } from './test-helpers.js';
 
 vi.mock('./model.js', () => ({ languageModelFor: vi.fn() }));
 const { languageModelFor } = await import('./model.js');
 
+let testId = 0;
+beforeEach(() => {
+  credential.model.id = `test-haiku-${++testId}`;
+});
 afterEach(() => {
   vi.clearAllMocks();
   vi.restoreAllMocks();
@@ -20,7 +24,7 @@ describe('aiConnectionTester', () => {
     expect(result.ok).toBe(true);
     expect(result.latencyMs).toBeGreaterThanOrEqual(0);
     expect(model.doGenerateCalls).toHaveLength(1);
-    expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(256);
+    expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(1024);
   });
 
   it.each([
@@ -54,7 +58,7 @@ describe('aiConnectionTester', () => {
     });
     vi.mocked(languageModelFor).mockReturnValue(model);
     expect(await aiConnectionTester(credential)).toMatchObject({ ok: true });
-    expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(256);
+    expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(1024);
   });
   it('sends low reasoning and 1024 output tokens for a Fireworks key test', async () => {
     const model = new MockLanguageModelV4({ doGenerate: async () => okResult('ok') });

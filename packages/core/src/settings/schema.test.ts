@@ -268,12 +268,12 @@ describe('ai setting', () => {
       features: { 'x-post-title': { enabled: false, model: null } },
     });
   });
-  it('accepts reachable curated selections and rejects unreachable and unknown models', () => {
+  it('parses model ids without a static list and rejects invalid shapes', () => {
     expect(parseSettingValue('ai', selection('anthropic', 'claude-sonnet-5-5'))).toEqual(
       selection('anthropic', 'claude-sonnet-5-5'),
     );
-    expect(() => parseSettingValue('ai', selection('gateway', 'nope'))).toThrow();
-    expect(() => parseSettingValue('ai', selection('openai', 'claude-haiku-5-5'))).toThrow();
+    expect(() => parseSettingValue('ai', selection('gateway', ''))).toThrow();
+    expect(() => parseSettingValue('ai', selection('unknown', 'model'))).toThrow();
   });
   it('converts legacy booleans and the global selection only on reads', () => {
     const old = {
@@ -305,15 +305,17 @@ describe('ai setting', () => {
       }),
     ).toThrow();
   });
-  it.each([
-    ['anthropic', 'claude-haiku-5-5'],
-    ['openai', 'gpt-6-luna'],
-    ['gateway', 'claude-haiku-5-5'],
-  ])('preserves the legacy default for %s on reads', (provider, id) => {
-    const old = { enabled: true, provider, model: null, features: { 'x-post-title': true } };
-    expect(parseStoredSettingValue('ai', old)).toEqual(selection(provider, id));
-    expect(() => parseSettingValue('ai', old)).toThrow();
-  });
+  it.each(['anthropic', 'openai', 'gateway'])(
+    'keeps a legacy null selection for %s unselected',
+    (provider) => {
+      const old = { enabled: true, provider, model: null, features: { 'x-post-title': true } };
+      expect(parseStoredSettingValue('ai', old)).toEqual({
+        enabled: true,
+        features: { 'x-post-title': { enabled: true, model: null } },
+      });
+      expect(() => parseSettingValue('ai', old)).toThrow();
+    },
+  );
   it('keeps a null legacy provider unselected', () => {
     expect(
       parseStoredSettingValue('ai', {
@@ -324,16 +326,10 @@ describe('ai setting', () => {
       }),
     ).toEqual({ enabled: true, features: { 'x-post-title': { enabled: true, model: null } } });
   });
-  it('nulls retired or unreachable selections on reads without changing consent', () => {
-    for (const [provider, id] of [
-      ['anthropic', 'retired'],
-      ['openai', 'claude-haiku-5-5'],
-    ]) {
-      expect(parseStoredSettingValue('ai', selection(provider ?? '', id ?? ''))).toEqual({
-        enabled: true,
-        features: { 'x-post-title': { enabled: true, model: null } },
-      });
-    }
+  it('retains ids for stored-list validation in the settings store', () => {
+    expect(parseStoredSettingValue('ai', selection('anthropic', 'future-model'))).toEqual(
+      selection('anthropic', 'future-model'),
+    );
   });
   it('rejects malformed shapes and unknown properties', () => {
     for (const value of [

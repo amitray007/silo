@@ -27,10 +27,26 @@ describeIfPg('/api/ai routes (integration)', () => {
   const harness = setupPgHarness('silo_api_ai_test', async () => {
     process.env.SILO_SECRET_KEY = SECRET_KEY;
     const core = (await import('@silo/core')) as typeof CoreOps;
-    const { setAiConnectionTester } = await import('@silo/core/ai-credential');
+    const { setAiConnectionTester, setAiModelsFetcher } = await import('@silo/core/ai-credential');
     setAiConnectionTester(async () => tester());
+    setAiModelsFetcher(async (kind) => ({
+      ok: true,
+      models: [
+        {
+          id:
+            kind === 'anthropic'
+              ? 'claude-haiku-5-5'
+              : kind === 'openai'
+                ? 'gpt-6-luna'
+                : 'anthropic/claude-haiku-5.5',
+          label: 'Live model',
+          structuredOutput: 'native',
+          reasoning: kind === 'fireworks' ? { type: 'fireworks' } : { type: kind },
+        },
+      ],
+    }));
     const { createApp } = await import('../app.js');
-    return { core, app: createApp() };
+    return { core, app: createApp(), setAiModelsFetcher };
   });
 
   const clearEnv = () => {
@@ -40,6 +56,22 @@ describeIfPg('/api/ai routes (integration)', () => {
   };
   beforeEach(clearEnv);
   beforeEach(() => {
+    harness.mod().setAiModelsFetcher(async (kind) => ({
+      ok: true,
+      models: [
+        {
+          id:
+            kind === 'anthropic'
+              ? 'claude-haiku-5-5'
+              : kind === 'openai'
+                ? 'gpt-6-luna'
+                : 'anthropic/claude-haiku-5.5',
+          label: 'Live model',
+          structuredOutput: 'native',
+          reasoning: { type: kind },
+        },
+      ],
+    }));
     tester = okTester;
   });
   afterEach(async () => {
@@ -71,21 +103,19 @@ describeIfPg('/api/ai routes (integration)', () => {
       secretKey: 'ok',
       features: { 'x-post-title': { ready: false } },
     });
-    expect(body.providers).toEqual([
-      { kind: 'anthropic', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
-      { kind: 'openai', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
-      { kind: 'gateway', configured: false, keyLast4: null, keyReadable: true, lastTest: null },
-      {
-        kind: 'fireworks',
+    expect(body.providers).toEqual(
+      ['anthropic', 'openai', 'gateway', 'fireworks'].map((kind) => ({
+        kind,
         configured: false,
         keyLast4: null,
         keyReadable: true,
         lastTest: null,
         models: [],
+        defaultModel: null,
         modelsFetchedAt: null,
         modelsRefreshError: null,
-      },
-    ]);
+      })),
+    );
     expect(body.features).toEqual([
       {
         id: 'x-post-title',
@@ -94,18 +124,7 @@ describeIfPg('/api/ai routes (integration)', () => {
         plugin: 'twitter',
       },
     ]);
-    const haiku = body.catalog.find((m: { id: string }) => m.id === 'claude-haiku-5-5');
-    expect(haiku).toEqual({
-      id: 'claude-haiku-5-5',
-      family: 'claude',
-      label: 'Claude Haiku 5.5',
-      tier: 'fast',
-      providers: ['anthropic', 'gateway'],
-      defaultFor: ['anthropic', 'gateway'],
-    });
-    const gpt = body.catalog.find((m: { id: string }) => m.id === 'gpt-6-astra');
-    expect(gpt.providers).toEqual(['openai', 'gateway']);
-    expect(gpt.defaultFor).toEqual([]);
+    expect(body).not.toHaveProperty('catalog');
   });
 
   it('PUT saves, tests, and never echoes the key; GET stays key-free', async () => {
@@ -167,6 +186,7 @@ describeIfPg('/api/ai routes (integration)', () => {
 
   it('DELETE removes the key and clears ai.provider when it pointed there', async () => {
     const { core, app } = harness.mod();
+    await putKey('anthropic', API_KEY);
     await core.updateSettings({
       ai: {
         enabled: true,
@@ -361,7 +381,9 @@ describeIfPg('/api/ai routes (integration)', () => {
     const model = {
       id: 'accounts/fireworks/models/glm-5p3-flash',
       label: 'GLM',
-      contextLength: 200000,
+      contextWindow: 200000,
+      structuredOutput: 'native' as const,
+      reasoning: { type: 'fireworks' as const },
     };
     setAiModelsFetcher(async () => ({ ok: true, models: [model] }));
     try {
@@ -384,9 +406,9 @@ describeIfPg('/api/ai routes (integration)', () => {
       expect(body.providers.find((p: { kind: string }) => p.kind === 'fireworks').models).toEqual([
         model,
       ]);
-      expect(
-        body.providers.find((p: { kind: string }) => p.kind === 'anthropic'),
-      ).not.toHaveProperty('models');
+      expect(body.providers.find((p: { kind: string }) => p.kind === 'anthropic')).toHaveProperty(
+        'models',
+      );
       const ai = {
         enabled: true,
         features: {
@@ -450,6 +472,59 @@ describeIfPg('/api/ai routes (integration)', () => {
       ).toBe(403);
     } finally {
       setAiModelsFetcher(undefined);
+    }
+  });
+  it.each(['anthropic', 'openai', 'gateway', 'fireworks'] as const)(
+    'refreshes %s through the operator-only route',
+    async (kind) => {
+      await putKey(kind, API_KEY);
+      const { app, core } = harness.mod();
+      const result = await app.request(`/api/ai/providers/${kind}/models/refresh`, {
+        method: 'POST',
+      });
+      expect(result.status).toBe(200);
+      expect(await result.json()).toMatchObject({
+        ok: true,
+        models: [{ reasoning: { type: kind } }],
+      });
+      const token = await core.generateAccessToken('refresh guard');
+      process.env.SILO_API_TOKEN = ENV_TOKEN;
+      const denied = await app.request(`/api/ai/providers/${kind}/models/refresh`, {
+        method: 'POST',
+        headers: bearer(token.token),
+      });
+      expect(denied.status).toBe(403);
+    },
+  );
+  it('GET returns its stored snapshot while a deduplicated background refresh is pending', async () => {
+    const { app, core, setAiModelsFetcher } = harness.mod();
+    await core.saveAiProviderKey('anthropic', API_KEY);
+    let release: (() => void) | undefined;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let requests = 0;
+    setAiModelsFetcher(async () => {
+      requests += 1;
+      await blocked;
+      return { ok: true, models: [] };
+    });
+    try {
+      const first = await app.request('/api/ai');
+      const second = await app.request('/api/ai');
+      expect(first.status).toBe(200);
+      expect(second.status).toBe(200);
+      const body = (await first.json()) as {
+        providers: { models: unknown[]; modelsFetchedAt: string | null }[];
+      };
+      expect(body.providers[0]).toMatchObject({
+        models: [],
+        modelsFetchedAt: null,
+      });
+      await expect.poll(() => requests).toBe(1);
+    } finally {
+      release?.();
+      await core.refreshProviderModels('anthropic');
     }
   });
 });

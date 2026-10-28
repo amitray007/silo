@@ -1,6 +1,6 @@
 import { z } from 'zod';
-import { AI_PROVIDER_KINDS, defaultModelFor, modelsForProvider } from '../ai/catalog.js';
 import { AI_FEATURES, type AiFeatureDef, type AiFeatureId } from '../ai/features.js';
+import { AI_PROVIDER_KINDS } from '../ai/model-types.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(
   (AI_FEATURES as readonly AiFeatureDef[]).map((f) => f.id),
@@ -18,17 +18,9 @@ const aiFeatureSchema = z
   .strict();
 
 const aiFeaturesSchema = z.record(z.string(), aiFeatureSchema).superRefine((features, ctx) => {
-  for (const [id, feature] of Object.entries(features)) {
+  for (const id of Object.keys(features)) {
     if (!registeredFeatureIds.has(id)) {
       ctx.addIssue({ code: 'custom', message: `unknown AI feature: ${id}`, path: [id] });
-    }
-    const model = feature.model;
-    if (model && model.provider !== 'fireworks' && !modelReachable(model.provider, model.id)) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'model is not reachable by the provider',
-        path: [id, 'model'],
-      });
     }
   }
 }) as unknown as z.ZodType<Record<AiFeatureId, z.infer<typeof aiFeatureSchema>>>;
@@ -296,7 +288,7 @@ function normalizeAiValue(raw: unknown, stored: boolean): unknown {
   for (const [id, flag] of Object.entries(flags)) {
     if (stored && !registeredFeatureIds.has(id)) continue;
     const feature = convertLegacyFeature(flag, legacy ? value : undefined);
-    features[id] = stored ? repairFeatureModel(feature) : feature;
+    features[id] = feature;
   }
   if (legacy) {
     const { provider: _provider, model: _model, ...rest } = value;
@@ -315,30 +307,7 @@ function convertLegacyFeature(flag: unknown, legacy: Record<string, unknown> | u
 
 function legacyModel(value: Record<string, unknown>): unknown {
   const provider = AI_PROVIDER_KINDS.find((kind) => kind === value.provider);
-  if (value.model === null && provider && provider !== 'fireworks') {
-    return { provider, id: defaultModelFor(provider).id };
-  }
-  return typeof value.model === 'string' && modelReachable(value.provider, value.model)
-    ? { provider: value.provider, id: value.model }
-    : null;
-}
-
-function repairFeatureModel(feature: unknown): unknown {
-  const parsed = aiFeatureSchema.safeParse(feature);
-  if (!parsed.success) return feature;
-  const model = parsed.data.model;
-  if (model && model.provider !== 'fireworks' && !modelReachable(model.provider, model.id)) {
-    return { ...parsed.data, model: null };
-  }
-  return parsed.data;
-}
-
-function modelReachable(provider: unknown, model: string): boolean {
-  return (
-    typeof provider === 'string' &&
-    (AI_PROVIDER_KINDS as readonly string[]).includes(provider) &&
-    modelsForProvider(provider as (typeof AI_PROVIDER_KINDS)[number]).some((m) => m.id === model)
-  );
+  return provider && typeof value.model === 'string' ? { provider, id: value.model } : null;
 }
 
 /** Validates `value` against the schema for `key`, throwing a `ZodError` on failure — the single boundary check every write path (`setSetting`, the PATCH route) runs through. Runs the plan-026 `plugins` legacy-shape migration (`normalizePluginsValue`) ahead of validation so a pre-026 stored blob upgrades instead of failing re-validation on read. */
@@ -354,7 +323,7 @@ function coerceForParse(key: SettingKey, value: unknown): unknown {
 }
 
 /**
- * Read-side counterpart of `parseSettingValue`: repairs registry/catalog drift
+ * Read-side counterpart of `parseSettingValue`: repairs registry drift
  * in a STORED value (see `normalizeAiValue`) before the same strict validation.
  * Writes must keep using `parseSettingValue`.
  */

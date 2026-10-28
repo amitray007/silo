@@ -392,6 +392,7 @@ const NOT_READY_WORDS: Record<string, string> = {
   disabled: 'Turn on Use AI.',
   no_secret_key: 'Set SILO_SECRET_KEY on the server.',
   no_model: 'Choose a model.',
+  list_not_loaded: 'Model list not loaded. Test the provider key.',
   no_key: 'Add a key for the chosen provider.',
   key_unreadable: "The provider key can't be read. Add it again.",
 };
@@ -415,18 +416,10 @@ function FeatureRow({
     .map((kind) => ({
       label: AI_PROVIDER_NAMES[kind],
       icon: <ProviderLogo kind={kind} size={20} />,
-      options:
-        kind === 'fireworks'
-          ? (ai.providers.find((p) => p.kind === kind)?.models ?? []).map((m) => ({
-              value: JSON.stringify([kind, m.id]),
-              label: m.label,
-            }))
-          : ai.catalog
-              .filter((m) => m.providers.includes(kind))
-              .map((m) => ({
-                value: JSON.stringify([kind, m.id]),
-                label: `${m.label} - ${m.tier}`,
-              })),
+      options: (ai.providers.find((p) => p.kind === kind)?.models ?? []).map((m) => ({
+        value: JSON.stringify([kind, m.id]),
+        label: m.label,
+      })),
     }))
     .filter((g) => g.options.length > 0);
   const reason = ai.status.features[feature.id]?.reason;

@@ -71,7 +71,7 @@ const settingsPatchBodySchema = z
       })
       .strict()
       .optional(),
-    // AI foundation: shape only. Core checks that `model` is a catalog id the
+    // AI foundation: shape only. Core checks that `model` is in the stored list the
     // `provider` can reach and that every `features` key is registered.
     ai: z
       .object({

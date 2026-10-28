@@ -1,6 +1,5 @@
 import {
   AI_FEATURES,
-  AI_MODEL_CATALOG,
   AI_PROVIDER_KINDS,
   type AiFeatureDef,
   type AiProviderKind,
@@ -10,8 +9,8 @@ import {
   defaultModelFor,
   InvalidAiApiKeyError,
   listAiProviders,
-  modelsForProvider,
-  refreshFireworksModels,
+  refreshProviderModels,
+  refreshStaleProviderModels,
   removeAiProvider,
   SecretKeyMissingError,
   saveAiProviderKey,
@@ -32,13 +31,19 @@ const INVALID_KEY_BODY = {
 function providerJson(p: AiProviderSummary) {
   return {
     kind: p.kind,
-    ...(p.kind === 'fireworks'
-      ? {
-          models: p.models ?? [],
-          modelsFetchedAt: p.modelsFetchedAt?.toISOString() ?? null,
-          modelsRefreshError: p.modelsRefreshError ?? null,
-        }
-      : {}),
+    models: (p.models ?? []).map((model) => ({
+      id: model.id,
+      label: model.label,
+      owner: model.owner,
+      createdAt: model.createdAt,
+      contextWindow: model.contextWindow,
+      maxOutputTokens: model.maxOutputTokens,
+      structuredOutput: model.structuredOutput,
+      reasoning: model.reasoning,
+    })),
+    defaultModel: defaultModelFor(p.kind, p.models ?? [])?.id ?? null,
+    modelsFetchedAt: p.modelsFetchedAt?.toISOString() ?? null,
+    modelsRefreshError: p.modelsRefreshError ?? null,
     configured: p.configured,
     keyLast4: p.keyLast4,
     keyReadable: p.keyReadable,
@@ -46,21 +51,6 @@ function providerJson(p: AiProviderSummary) {
       ? { ok: p.lastTest.ok, at: p.lastTest.at.toISOString(), code: p.lastTest.code }
       : null,
   };
-}
-
-function catalogJson() {
-  return AI_MODEL_CATALOG.map((entry) => ({
-    id: entry.id,
-    family: entry.family,
-    label: entry.label,
-    tier: entry.tier,
-    providers: AI_PROVIDER_KINDS.filter((kind) =>
-      modelsForProvider(kind).some((m) => m.id === entry.id),
-    ),
-    defaultFor: AI_PROVIDER_KINDS.filter(
-      (kind) => kind !== 'fireworks' && defaultModelFor(kind).id === entry.id,
-    ),
-  }));
 }
 
 function featuresJson() {
@@ -78,16 +68,16 @@ function parseKind(c: { req: { param(name: string): string } }): AiProviderKind 
 
 /**
  * Optional-AI settings surface. Serializes only key-free core output
- * (`aiStatus`, `listAiProviders`, catalog/feature metadata, test outcomes).
+ * (`aiStatus`, `listAiProviders`, model/feature metadata, test outcomes).
  * Writes are operator-only (see `operator-only.ts`); `GET /ai` holds no secret.
  */
 export function registerAiRoutes(app: Hono): void {
   app.get('/ai', async (c) => {
     const [status, providers] = await Promise.all([aiStatus(), listAiProviders()]);
+    refreshStaleProviderModels(providers);
     return c.json({
       status,
       providers: providers.map(providerJson),
-      catalog: catalogJson(),
       features: featuresJson(),
     });
   });
@@ -121,11 +111,11 @@ export function registerAiRoutes(app: Hono): void {
     return c.json(testJson(await testAiProvider(kind)));
   });
 
-  app.post('/ai/providers/fireworks/models/refresh', operatorOnly, async (c) => {
-    const result = await refreshFireworksModels();
+  app.post('/ai/providers/:kind/models/refresh', operatorOnly, async (c) => {
+    const result = await refreshProviderModels(parseKind(c));
     return result.ok
       ? c.json(result)
-      : c.json({ error: result.code, message: 'Could not refresh Fireworks models.' }, 502);
+      : c.json({ error: result.code, message: 'Could not refresh provider models.' }, 502);
   });
 
   app.delete('/ai/providers/:kind', operatorOnly, async (c) => {

@@ -130,6 +130,11 @@ describeIfPg('ai provider storage (integration)', () => {
   it('removeAiProvider deletes the row and clears ai.provider and ai.model for that kind', async () => {
     const { providers, settings } = harness.mod();
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"claude-sonnet-5-5","label":"Sonnet","structuredOutput":"native","reasoning":{"type":"anthropic"}}]'::jsonb WHERE kind = 'anthropic'`,
+      );
     await settings.setSetting('ai', {
       enabled: true,
       features: {
@@ -164,6 +169,11 @@ describeIfPg('ai provider storage (integration)', () => {
         },
       },
     };
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"gpt-6-astra","label":"Astra","structuredOutput":"unknown","reasoning":{"type":"openai"}}]'::jsonb WHERE kind = 'openai'`,
+      );
     await settings.setSetting('ai', selected);
 
     await providers.removeAiProvider('anthropic');

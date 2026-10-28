@@ -287,10 +287,20 @@ export type AiTestCode =
 
 export type AiTestResult = { ok: boolean; code?: AiTestCode; latencyMs?: number };
 
-type AiLiveModel = { id: string; label: string; contextLength: number | null };
+type AiLiveModel = {
+  id: string;
+  label: string;
+  owner?: string;
+  createdAt?: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  structuredOutput: 'native' | 'unknown';
+  reasoning: { type: AiProviderKind; thinking?: string; effort?: string; budgetTokens?: number };
+};
 
 export type AiProviderJson = {
   models?: AiLiveModel[];
+  defaultModel?: string | null;
   modelsFetchedAt?: string | null;
   modelsRefreshError?: AiTestCode | null;
   kind: AiProviderKind;
@@ -299,15 +309,6 @@ export type AiProviderJson = {
   /** False only when a key is stored but the server cannot decrypt it. */
   keyReadable: boolean;
   lastTest: { ok: boolean; at: string; code: AiTestCode | null } | null;
-};
-
-type AiCatalogEntry = {
-  id: string;
-  family: 'claude' | 'chatgpt';
-  label: string;
-  tier: 'fast' | 'balanced' | 'best';
-  providers: AiProviderKind[];
-  defaultFor: AiProviderKind[];
 };
 
 /** `GET /api/ai` response. No key ever appears here, only the last four characters. */
@@ -326,7 +327,6 @@ export type AiSettingsResponse = {
     >;
   };
   providers: AiProviderJson[];
-  catalog: AiCatalogEntry[];
   features: { id: string; label: string; description: string; plugin: string | null }[];
 };
 

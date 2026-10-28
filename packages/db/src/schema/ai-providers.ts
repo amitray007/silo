@@ -17,7 +17,7 @@ export const aiProviders = pgTable('ai_providers', {
   lastTestOk: boolean('last_test_ok'),
   lastTestAt: timestamp('last_test_at', { withTimezone: true }),
   lastTestCode: text('last_test_code'),
-  models: jsonb('models').$type<{ id: string; label: string; contextLength: number | null }[]>(),
+  models: jsonb('models').$type<unknown[]>(),
   modelsFetchedAt: timestamp('models_fetched_at', { withTimezone: true }),
   modelsRefreshError: text('models_refresh_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),

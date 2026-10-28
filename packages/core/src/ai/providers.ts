@@ -1,8 +1,9 @@
 import { aiProviders, db } from '@silo/db';
 import { and, eq } from 'drizzle-orm';
 import { getSetting, setSetting } from '../settings/settings.js';
-import { AI_PROVIDER_KINDS, type AiLiveModel, type AiProviderKind } from './catalog.js';
 import { AI_ERROR_CODES, type AiErrorCode } from './features.js';
+import { parseStoredModels } from './model-store.js';
+import { AI_PROVIDER_KINDS, type AiLiveModel, type AiProviderKind } from './model-types.js';
 import { decryptSecret, encryptSecret, needsReencrypt, secretKeyStatus } from './secret-box.js';
 
 /**
@@ -22,9 +23,9 @@ export class InvalidAiApiKeyError extends Error {
 
 export type AiProviderSummary = {
   kind: AiProviderKind;
-  models?: AiLiveModel[];
-  modelsFetchedAt?: Date | null;
-  modelsRefreshError?: AiErrorCode | null;
+  models: AiLiveModel[];
+  modelsFetchedAt: Date | null;
+  modelsRefreshError: AiErrorCode | null;
   configured: boolean;
   keyLast4: string | null;
   /** False only when a row exists but no configured secret key decrypts it. */
@@ -60,15 +61,11 @@ export async function listAiProviders(): Promise<AiProviderSummary[]> {
   const byKind = new Map(rows.map((row) => [row.kind, row]));
   return AI_PROVIDER_KINDS.map((kind) => {
     const row = byKind.get(kind);
-    const live =
-      kind === 'fireworks'
-        ? {
-            models: row?.models ?? [],
-            modelsFetchedAt: row?.modelsFetchedAt ?? null,
-            modelsRefreshError:
-              AI_ERROR_CODES.find((code) => code === row?.modelsRefreshError) ?? null,
-          }
-        : {};
+    const live = {
+      models: parseStoredModels(kind, row?.models),
+      modelsFetchedAt: row?.modelsFetchedAt ?? null,
+      modelsRefreshError: AI_ERROR_CODES.find((code) => code === row?.modelsRefreshError) ?? null,
+    };
     if (!row)
       return {
         kind,

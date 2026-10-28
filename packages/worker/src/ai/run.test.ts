@@ -49,8 +49,10 @@ async function settle<T>(promise: Promise<T>): Promise<T> {
   return tracked;
 }
 
+let testId = 0;
 let logs: ReturnType<typeof vi.spyOn>[];
 beforeEach(() => {
+  credential.model.id = `test-haiku-${++testId}`;
   logs = [
     vi.spyOn(console, 'warn').mockImplementation(() => {}),
     vi.spyOn(console, 'error').mockImplementation(() => {}),
@@ -70,8 +72,8 @@ describe('runAiFeature', () => {
     const result = await runAiFeature(definition, { text: 'hi' }, deps(model));
     expect(result).toEqual({ ok: true, value: 'Hello' });
     const call = model.doGenerateCalls[0];
-    expect(call?.maxOutputTokens).toBe(200);
-    expect(call?.reasoning).toBe('none');
+    expect(call?.maxOutputTokens).toBe(1024);
+    expect(call?.providerOptions?.anthropic).toMatchObject({ thinking: { type: 'disabled' } });
   });
 
   it('returns off without calling the model when the gate is off', async () => {
@@ -279,21 +281,27 @@ describe('runAiFeature', () => {
     expect(result).toEqual({ ok: false, code: 'invalid_output' });
   });
 
-  it('sends instructions, prompt, the maxOutputTokens override and the reasoning setting', async () => {
+  it('sends instructions, prompt, the shared token budget and model settings', async () => {
     const model = okModel();
     await runAiFeature(
-      { ...definition, maxOutputTokens: 77 },
+      definition,
       { text: 'hi' },
       deps(model, {
         credential: async () => ({
           ...credential,
-          model: { ...credential.model, reasoning: 'low' },
+          model: {
+            ...credential.model,
+            reasoning: { type: 'anthropic', thinking: 'adaptive', effort: 'low' },
+          },
         }),
       }),
     );
     const call = model.doGenerateCalls[0];
-    expect(call?.maxOutputTokens).toBe(77);
-    expect(call?.reasoning).toBe('low');
+    expect(call?.maxOutputTokens).toBe(1024);
+    expect(call?.providerOptions?.anthropic).toMatchObject({
+      thinking: { type: 'adaptive' },
+      effort: 'low',
+    });
     const sent = JSON.stringify(call?.prompt);
     expect(sent).toContain('Write a title.');
     expect(sent).toContain(`${PROMPT_TEXT} hi`);
@@ -341,7 +349,7 @@ describe('runAiFeature', () => {
     ['fireworks', 400, 'reasoning_effort rejected', 2],
     ['fireworks', 400, 'invalid schema', 1],
     ['fireworks', 401, 'reasoning access denied', 1],
-    ['anthropic', 400, 'reasoning unsupported', 1],
+    ['anthropic', 400, 'reasoning unsupported', 2],
   ] as const)('bounds fallback for %s HTTP %s (%s)', async (kind, status, message, calls) => {
     const model = failingModel(apiError(status, `${message} ${LEAK_KEY}`));
     expect(
@@ -349,7 +357,11 @@ describe('runAiFeature', () => {
         definition,
         { text: 'hi' },
         deps(model, {
-          credential: async () => ({ ...credential, kind }),
+          credential: async () => ({
+            ...credential,
+            kind,
+            model: { ...credential.model, id: `${kind}-${status}-${calls}` },
+          }),
         }),
       ),
     ).toEqual({ ok: false, code: status === 401 ? 'invalid_key' : 'provider_error' });

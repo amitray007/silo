@@ -7,7 +7,7 @@
  *
  * Provider is `anthropic`, `openai` or `gateway`. The key comes from
  * `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` or `AI_GATEWAY_API_KEY`. The model is a
- * catalog id (default: the provider's default). It prints one row per fixture
+ * live-list id (default: the provider's default). It prints one row per fixture
  * with the title the app would store, the prompt version, and the mechanical
  * checks. Whether a title reads well is for a person to judge from the table.
  */
@@ -80,13 +80,24 @@ async function main(): Promise<void> {
 
   // @silo/core opens a lazy database pool on import. The eval never queries it.
   process.env.DATABASE_URL ??= 'postgres://unused:unused@localhost:5432/unused';
-  const { defaultModelFor, modelsForProvider } = await import('@silo/core');
+  const { defaultModelFor } = await import('@silo/core');
+  const { createAnthropicModelsFetcher } = await import('../../ai/anthropic-models.js');
+  const { createOpenAiModelsFetcher } = await import('../../ai/openai-models.js');
+  const { createGatewayModelsFetcher } = await import('../../ai/gateway-models.js');
+  const fetchers = {
+    anthropic: createAnthropicModelsFetcher,
+    openai: createOpenAiModelsFetcher,
+    gateway: createGatewayModelsFetcher,
+  };
+  const list = await fetchers[provider](globalThis.fetch)(apiKey);
+  if (!list.ok) fail(`Could not load models: ${list.code}`);
+  const models = list.models;
   const wanted = process.env.SILO_EVAL_MODEL?.trim();
   const model = wanted
-    ? modelsForProvider(provider).find((entry) => entry.id === wanted)
-    : defaultModelFor(provider);
+    ? models.find((entry) => entry.id === wanted)
+    : defaultModelFor(provider, models);
   if (!model) {
-    const ids = modelsForProvider(provider).map((entry) => entry.id);
+    const ids = models.map((entry) => entry.id);
     fail(
       `SILO_EVAL_MODEL "${wanted}" is not a ${provider} model. Choose one of: ${ids.join(', ')}.`,
     );

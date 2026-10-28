@@ -8,12 +8,16 @@ describe('languageModelFor', () => {
   it('builds a model per provider kind', () => {
     const anthropic = languageModelFor(credential);
     expect(anthropic).toMatchObject({ modelId: 'claude-haiku-5-5' });
-    const gateway = languageModelFor({ ...credential, kind: 'gateway' });
+    const gateway = languageModelFor({
+      ...credential,
+      kind: 'gateway',
+      model: { ...credential.model, id: 'anthropic/claude-haiku-5.5' },
+    });
     expect(gateway).toMatchObject({ modelId: 'anthropic/claude-haiku-5.5' });
     const openai = languageModelFor({
       kind: 'openai',
       apiKey: 'sk-test-0000',
-      model: { ...credential.model, openaiId: 'gpt-x' },
+      model: { ...credential.model, id: 'gpt-x' },
     });
     expect(openai).toMatchObject({ modelId: 'gpt-x' });
   });
@@ -45,7 +49,7 @@ describe('languageModelFor', () => {
           {
             kind,
             apiKey: 'sk-test-0000',
-            model: { ...credential.model, openaiId: 'gpt-x' },
+            model: { ...credential.model, id: 'gpt-x' },
           },
           fetch,
         );
@@ -77,7 +81,9 @@ describe('languageModelFor', () => {
           model: {
             id: 'accounts/fireworks/models/glm-5p3-flash',
             label: 'GLM',
-            contextLength: 200000,
+            contextWindow: 200000,
+            structuredOutput: 'native',
+            reasoning: { type: 'fireworks' },
           },
         },
         fetch,

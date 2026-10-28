@@ -44,16 +44,25 @@ describe('Fireworks live model list', () => {
     expect(result).toEqual({
       ok: true,
       models: [
-        { id: 'accounts/fireworks/models/first', label: 'First model', contextLength: 200000 },
+        {
+          id: 'accounts/fireworks/models/first',
+          label: 'First model',
+          structuredOutput: 'native',
+          reasoning: { type: 'fireworks' },
+          contextWindow: 200000,
+        },
         {
           id: 'accounts/fireworks/models/glm-5p3-flash',
           label: 'glm-5p3-flash',
-          contextLength: 200000,
+          structuredOutput: 'native',
+          reasoning: { type: 'fireworks' },
+          contextWindow: 200000,
         },
         {
           id: 'accounts/fireworks/models/unknown-context',
           label: 'unknown-context',
-          contextLength: null,
+          structuredOutput: 'native',
+          reasoning: { type: 'fireworks' },
         },
       ],
     });
@@ -121,7 +130,9 @@ describe('Fireworks live model list', () => {
         {
           id: 'accounts/fireworks/models/glm-5p3-flash',
           label: 'GLM 5.3 Flash',
-          contextLength: 1048576,
+          structuredOutput: 'native',
+          reasoning: { type: 'fireworks' },
+          contextWindow: 1048576,
         },
       ],
     });
@@ -145,7 +156,9 @@ describe('Fireworks live model list', () => {
       models: ['chat-model-without-kind', 'chat-model-with-kind'].map((id) => ({
         id,
         label: id,
-        contextLength: 200000,
+        structuredOutput: 'native',
+        reasoning: { type: 'fireworks' },
+        contextWindow: 200000,
       })),
     });
   });
@@ -174,7 +187,9 @@ describe('Fireworks live model list', () => {
       models: ['future-iso', 'future-date', 'no-date'].map((id) => ({
         id,
         label: id,
-        contextLength: 200000,
+        structuredOutput: 'native',
+        reasoning: { type: 'fireworks' },
+        contextWindow: 200000,
       })),
     });
   });
@@ -184,7 +199,15 @@ describe('Fireworks live model list', () => {
     const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(body));
     expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
       ok: true,
-      models: [{ id: 'one', label: 'one', contextLength: 200000 }],
+      models: [
+        {
+          id: 'one',
+          label: 'one',
+          structuredOutput: 'native',
+          reasoning: { type: 'fireworks' },
+          contextWindow: 200000,
+        },
+      ],
     });
   });
 
@@ -242,8 +265,20 @@ describe('Fireworks live model list', () => {
     expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
       ok: true,
       models: [
-        { id, label, contextLength: 200000 },
-        { id: 'f'.repeat(512), label: 'f'.repeat(256), contextLength: 200000 },
+        {
+          id,
+          label,
+          structuredOutput: 'native',
+          reasoning: { type: 'fireworks' },
+          contextWindow: 200000,
+        },
+        {
+          id: 'f'.repeat(512),
+          label: 'f'.repeat(256),
+          structuredOutput: 'native',
+          reasoning: { type: 'fireworks' },
+          contextWindow: 200000,
+        },
       ],
     });
   });
@@ -265,9 +300,10 @@ describe('Fireworks live model list', () => {
   });
 
   it('caps at ten pages and refuses a partial list', async () => {
+    let cursor = 0;
     const fetch = vi
       .fn<typeof globalThis.fetch>()
-      .mockImplementation(async () => page([active('one')], 'more'));
+      .mockImplementation(async () => page([active('one')], String(++cursor)));
     expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
       ok: false,
       code: 'provider_error',

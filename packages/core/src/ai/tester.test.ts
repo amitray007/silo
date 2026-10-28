@@ -40,6 +40,11 @@ describeIfPg('testAiProvider (integration)', () => {
   it('returns unavailable with no tester registered, and records nothing', async () => {
     const { tester, providers } = harness.mod();
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"claude-haiku-5-5","label":"Haiku","structuredOutput":"native","reasoning":{"type":"anthropic","thinking":"disabled"}}]'::jsonb WHERE kind = 'anthropic'`,
+      );
     expect(await tester.testAiProvider('anthropic')).toEqual({ ok: false, code: 'unavailable' });
     expect(await lastTest()).toBeNull();
   });
@@ -58,6 +63,11 @@ describeIfPg('testAiProvider (integration)', () => {
   it('runs the tester with the credential and records ok and failure results', async () => {
     const { tester, providers } = harness.mod();
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"claude-haiku-5-5","label":"Haiku","structuredOutput":"native","reasoning":{"type":"anthropic","thinking":"disabled"}}]'::jsonb WHERE kind = 'anthropic'`,
+      );
     let seenKey: string | undefined;
     tester.setAiConnectionTester(async (credential) => {
       seenKey = credential.apiKey;
@@ -79,6 +89,11 @@ describeIfPg('testAiProvider (integration)', () => {
   it('does not hand the ciphertext to the tester', async () => {
     const { tester, providers } = harness.mod();
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"claude-haiku-5-5","label":"Haiku","structuredOutput":"native","reasoning":{"type":"anthropic","thinking":"disabled"}}]'::jsonb WHERE kind = 'anthropic'`,
+      );
     let seen = '';
     tester.setAiConnectionTester(async (credential) => {
       seen = Object.keys(credential).sort().join(',');
@@ -91,6 +106,11 @@ describeIfPg('testAiProvider (integration)', () => {
   it('a throwing tester becomes provider_error and is recorded', async () => {
     const { tester, providers } = harness.mod();
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"claude-haiku-5-5","label":"Haiku","structuredOutput":"native","reasoning":{"type":"anthropic","thinking":"disabled"}}]'::jsonb WHERE kind = 'anthropic'`,
+      );
     tester.setAiConnectionTester(async () => {
       throw new Error(`boom ${FAKE_KEY}`);
     });
@@ -103,6 +123,11 @@ describeIfPg('testAiProvider (integration)', () => {
   it('keeps only known fields and maps an unknown code to provider_error', async () => {
     const { tester, providers } = harness.mod();
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"claude-haiku-5-5","label":"Haiku","structuredOutput":"native","reasoning":{"type":"anthropic","thinking":"disabled"}}]'::jsonb WHERE kind = 'anthropic'`,
+      );
     tester.setAiConnectionTester(
       async () =>
         ({
@@ -127,6 +152,11 @@ describeIfPg('testAiProvider (integration)', () => {
   it('drops the result when the key was replaced while the test ran', async () => {
     const { tester, providers } = harness.mod();
     await providers.saveAiProviderKey('anthropic', FAKE_KEY);
+    await harness
+      .rawDb()
+      .execute(
+        sql`UPDATE ai_providers SET models = '[{"id":"claude-haiku-5-5","label":"Haiku","structuredOutput":"native","reasoning":{"type":"anthropic","thinking":"disabled"}}]'::jsonb WHERE kind = 'anthropic'`,
+      );
     tester.setAiConnectionTester(async () => {
       await providers.saveAiProviderKey('anthropic', 'sk-test-1111111111111111');
       return { ok: false, code: 'invalid_key', latencyMs: 2 };

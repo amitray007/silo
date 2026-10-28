@@ -138,9 +138,31 @@ describeIfPg('enrichLink AI titles (integration)', () => {
         await core.saveAiProviderKey('fireworks', 'fake-fireworks-5678');
         setAiModelsFetcher(async () => ({
           ok: true,
-          models: [{ id: fireworksId, label: 'GLM', contextLength: 200000 }],
+          models: [
+            {
+              id: fireworksId,
+              label: 'GLM',
+              contextWindow: 200000,
+              structuredOutput: 'native',
+              reasoning: { type: 'fireworks' },
+            },
+          ],
         }));
-        await core.refreshFireworksModels();
+        await core.refreshProviderModels('fireworks');
+        if (kind === 'anthropic') {
+          setAiModelsFetcher(async () => ({
+            ok: true,
+            models: [
+              {
+                id: 'claude-haiku-5-5',
+                label: 'Haiku',
+                structuredOutput: 'native',
+                reasoning: { type: 'anthropic', thinking: 'disabled' },
+              },
+            ],
+          }));
+          await core.refreshProviderModels('anthropic');
+        }
         const modelId = kind === 'fireworks' ? fireworksId : 'claude-haiku-5-5';
         await core.updateSettings({
           ai: {
@@ -165,7 +187,9 @@ describeIfPg('enrichLink AI titles (integration)', () => {
         );
         expect((await core.getById(id))?.title).toBe('Interfere adds a command menu');
         expect((await core.getById(id))?.titleSource).toBe('ai');
-        expect(model.doGenerateCalls[0]?.reasoning).toBe(kind === 'fireworks' ? undefined : 'none');
+        expect(model.doGenerateCalls[0]?.providerOptions?.[kind]).toMatchObject(
+          kind === 'fireworks' ? { reasoningEffort: 'low' } : { thinking: { type: 'disabled' } },
+        );
         await core.updateSettings({
           ai: { enabled: true, features: { 'x-post-title': { enabled: true, model: null } } },
         });

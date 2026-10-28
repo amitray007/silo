@@ -1,23 +1,15 @@
 export const name = '@silo/core';
 
-// AI foundation (optional AI layer): curated model catalog, feature registry,
+export type { AiErrorCode, AiFeatureDef, AiFeatureId, AiPluginKind } from './ai/features.js';
+export { AI_ERROR_CODES, AI_FEATURES } from './ai/features.js';
+// AI foundation (optional AI layer): live model lists, feature registry,
 // encrypted provider keys, readiness, and the connection-test port. Adapters use
 // `aiStatus` and `listAiProviders` (key-free). Anything that hands out the
 // plaintext key lives in the `@silo/core/ai-credential` subpath, which adapters
 // must not import (Biome + dependency-cruiser enforce it).
-export type { AiLiveModel, AiModel, AiProviderKind, CatalogEntry } from './ai/catalog.js';
-export {
-  AI_MODEL_CATALOG,
-  AI_PROVIDER_KINDS,
-  defaultFireworksModel,
-  defaultModelFor,
-  modelsForProvider,
-  providerModelId,
-  resolveModel,
-} from './ai/catalog.js';
-export type { AiErrorCode, AiFeatureDef, AiFeatureId, AiPluginKind } from './ai/features.js';
-export { AI_ERROR_CODES, AI_FEATURES } from './ai/features.js';
-export { refreshFireworksModels } from './ai/models.js';
+export type { AiLiveModel, AiProviderKind } from './ai/model-types.js';
+export { AI_PROVIDER_KINDS, defaultModelFor, newestModels } from './ai/model-types.js';
+export { refreshProviderModels, refreshStaleProviderModels } from './ai/models.js';
 export type { AiProviderSummary } from './ai/providers.js';
 export {
   InvalidAiApiKeyError,
