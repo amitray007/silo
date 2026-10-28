@@ -9,7 +9,7 @@ key, pick a model, and test the connection. The first feature,
 Later features (titles for other sources, a chat view) reuse the same layer. Each
 one is its own slice.
 
-**Status: approved at gate 1 (2026-10-28). Building.**
+**Status: built; passed gate 2 (2026-10-28).**
 
 ## Rules this layer must keep
 

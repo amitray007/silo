@@ -9,7 +9,7 @@ convenient. Read more ↓ https://interfere.com/changelog/command-menu" gets the
 
 This slice starts only after the foundation passes gate 2.
 
-**Status: approved at gate 1 (2026-10-28), including Enrich on every link. Builds after the foundation.**
+**Status: built; passed gate 2 (2026-10-28) with Anthropic (Claude Haiku 5.5). GPT-6 Luna not yet tried with a real key.**
 
 ## Behavior
 
