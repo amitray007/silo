@@ -3,7 +3,7 @@
 A follow-up to the [AI foundation](ai-foundation.md) and [AI titles for X
 posts](ai-x-titles.md), on the same branch and PR (#105) because neither has shipped.
 
-**Status: draft for gate 1 (2026-10-28).**
+**Status: approved at gate 1 (2026-10-28): live Fireworks list, switch stays in Plugins, Anthropic mark used.**
 
 ## Request (Amit, 2026-10-28)
 
@@ -24,7 +24,7 @@ posts](ai-x-titles.md), on the same branch and PR (#105) because neither has shi
   one row per registered feature. Today that is one row, "AI titles: X posts", with a
   model select. The select lists models from every provider that has a readable key,
   grouped by provider, each group headed by its logo.
-- **Fireworks** is a fourth provider, with a curated list and a live list (decision 1).
+- **Fireworks** is a fourth provider. Its models come from the live list fetched with the owner's key.
 - The feature's on/off switch stays in Plugins > Twitter / X (decision 2). That row
   also shows the chosen model, for example "Claude Haiku 5.5 via Anthropic".
 
@@ -47,8 +47,8 @@ ai: {
   `model`, and a boolean flag becomes `enabled`. It nulls a model that is no longer
   reachable, as it does today. The old shape has never shipped, so this only protects
   local databases.
-- The write path is strict. A model must be in the curated catalog for that provider, or
-  in that provider's stored live list.
+- The write path is strict. A model must be in the curated catalog for that provider
+  (Anthropic, OpenAI, Gateway), or in Fireworks' stored live list.
 - When the owner turns a feature on with `model: null`, the UI fills it with the default
   of the first provider that has a readable key. The order is Anthropic, OpenAI,
   Gateway, Fireworks. The worker never guesses: a feature with no model is not ready.
@@ -71,16 +71,11 @@ takes the provider kind.
 - **Structured output:** the provider sends `Output.object` as `response_format:
   json_schema`. JSON schema turns off reasoning output on Fireworks. GPT-OSS rejects
   reasoning `none`, so each catalog entry carries its tested reasoning setting.
-- **Curated list** (the "Recommended" group):
-
-  | Model | ID (`accounts/fireworks/models/...`) | Tier |
-  | --- | --- | --- |
-  | GLM 5.3 Flash | `glm-5p3-flash` | fast (default) |
-  | Nemotron Lightning 3.5 30B A3B | `nemotron-lightning-3p5-30b-a3b` | fast |
-  | DeepSeek V4.1 Flash 1017 | `deepseek-v4p1-flash-1017` | balanced |
-  | GPT-OSS 120B | `gpt-oss-120b` (reasoning `low`) | balanced |
-
-- **Live list** (the "All Fireworks models" group):
+- **No curated list.** Every Fireworks model comes from the live list. The default
+  is `accounts/fireworks/models/glm-5p3-flash` when the list has it, else the first
+  listed model. Silo sends no reasoning setting to Fireworks, because GPT-OSS rejects
+  `none` and JSON schema turns reasoning output off anyway.
+- **Live list:**
   - Fetched with the stored key from `GET https://api.fireworks.ai/v1/accounts/fireworks/models`
     with `pageSize=200` and `pageToken` paging.
   - Filtered locally: `conversationConfig` set, `supportsServerless`, `state ===
@@ -89,9 +84,8 @@ takes the provider kind.
     `ai_providers.models` jsonb column.
   - Refreshed on Save & test, and by a Refresh action on the Fireworks row. The list
     is not a secret, but the API returns it only through the operator-only endpoints.
-  - A live model gets no reasoning setting, so the provider default applies.
-- **Key test:** the same 256-token test generation the other providers use, on the
-  default model, then a refresh of the live list. A list fetch alone would not prove
+- **Key test:** refresh the live list first, then run the same 256-token test
+  generation the other providers use on the default model. A list fetch alone would not prove
   the key can run inference.
 - **Errors:**
 
@@ -141,9 +135,9 @@ MCP is unchanged: AI settings stay off MCP.
 
 | Unit | Content | Focused checks |
 | --- | --- | --- |
-| M1 | core: settings shape, read converter, per-feature status, catalog `fireworks` entries, `quota` code, migration 0021, live-list store and write validation; API routes | old shape reads as new; a model outside catalog and live list is rejected; feature not ready without a model; two features on two providers each resolve their own |
-| M2 | worker: Fireworks model, reasoning per entry, error mapping incl. 402, live-list fetcher with paging and filter, tester refresh, `runAiFeature` per-feature resolution | mock fetch for paging and filtering; a 401, 402 and 404 each map to their code; a title run uses the feature's provider |
-| M3 | web: `ProviderLogo`, providers without radio, Features section with grouped select and logos, Fireworks row with Refresh, Plugins row shows the model | the select lists only providers with readable keys; Fireworks shows both groups; dark and light, desktop and phone |
+| M1 | core: settings shape, read converter, per-feature status, `fireworks` provider kind, `quota` code, migration 0021, live-list store and write validation; API routes | old shape reads as new; a model outside catalog and live list is rejected; feature not ready without a model; two features on two providers each resolve their own |
+| M2 | worker: Fireworks model (no reasoning setting), error mapping incl. 402, live-list fetcher with paging and filter, tester refresh, `runAiFeature` per-feature resolution | mock fetch for paging and filtering; a 401, 402 and 404 each map to their code; a title run uses the feature's provider |
+| M3 | web: `ProviderLogo`, providers without radio, Features section with grouped select and logos, Fireworks row with Refresh, Plugins row shows the model | the select lists only providers with readable keys; Fireworks lists its live models; dark and light, desktop and phone |
 
 Same gate and review protocol. Builds go to Sol fast, then a Sol review per unit.
 
@@ -153,16 +147,14 @@ QA before gate 2:
 - With a real Fireworks key (Amit's), list the models and write titles with GLM 5.3
   Flash.
 
-## Decisions for gate 1
+## Gate 1 decisions (2026-10-28)
 
-1. **Fireworks models:** curated 4 plus the live list (recommended), or curated only.
-2. **Feature switch:** keep the on/off switch in Plugins and put the model in the AI
-   tab's Features section (recommended), or move both into the AI tab.
-3. **Anthropic logo:** use the mark now as nominative use and remove it if Anthropic
-   objects (recommended), or show a neutral "A" tile until approval.
+1. Fireworks models come from the live list only.
+2. The on/off switch stays in Plugins; the model is chosen in the AI tab's Features
+   section.
+3. The Anthropic mark is used to identify the integration.
 
 ## Parked
 
 - Fireworks models through the Vercel AI Gateway.
-- A background check that curated models still exist.
 - A "default model" that new features inherit.
