@@ -306,7 +306,11 @@ describe('rendered Reader pool', () => {
       });
       const work = renderPage(fake.browser, 'https://example.org/', new AbortController().signal);
       await vi.advanceTimersByTimeAsync(900);
-      await vi.waitFor(() => expect(fake.contexts[0]?.close).toHaveBeenCalled());
+      // Sanitizing starts a real worker thread; a slow CI runner can take over
+      // vi.waitFor's 1s default before cleanup runs.
+      await vi.waitFor(() => expect(fake.contexts[0]?.close).toHaveBeenCalled(), {
+        timeout: 10_000,
+      });
       await vi.advanceTimersByTimeAsync(1_000);
       expect((await work).reader).toBeDefined();
     },
