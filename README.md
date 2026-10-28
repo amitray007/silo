@@ -10,9 +10,11 @@
 
 Feed in web material — links, Twitter/X posts, HN posts, videos — captured with rich
 metadata and full text, organized by tags and one note field, searchable, and served
-over **MCP** so an external agent does all the intelligence.
+over **MCP** so an external agent does the intelligence.
 
-**No AI lives inside silo.** silo is the substrate; the mind sits on top, over MCP.
+**AI is optional.** silo is the substrate; the mind sits on top, over MCP. You can turn on small AI
+features, such as short titles for saved X posts, with your own Anthropic, OpenAI, or Vercel AI
+Gateway key. They are off by default, and silo works fully without them.
 
 <img src="docs/design/app/shots/01-library-dark.png" alt="silo's library — day-grouped, searchable, in the Oat design" width="820">
 

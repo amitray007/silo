@@ -175,6 +175,17 @@ collapse to the same safe outcome, because the alternative (trying to
 distinguish them) would require a second query that a concurrent trash/
 restore could race anyway — the atomic guard is the only thing that matters.
 
+### AI settings (`/api/ai`)
+
+`GET /api/ai` (status, providers with `keyLast4`, model catalog, features) is open to
+any authenticated caller; it holds no secret. `PUT /api/ai/providers/:kind` (save a
+key, then test it), `POST /api/ai/providers/:kind/test` and
+`DELETE /api/ai/providers/:kind` go through `operatorOnly` (`src/operator-only.ts`), as
+does `PATCH /api/settings` when its body carries `ai`. `operatorOnly` allows the web
+session (CSRF still applies), the env `SILO_API_TOKEN`, or no-auth-configured
+localhost; a named access token gets `403 operator_only`. `generalTokenAuth` records
+which credential passed in `c.get('authKind')`. See [`ai.md`](ai.md).
+
 ## Auth (no auth BY DEFAULT — v1 is localhost, single-user — with two gates)
 
 **This API has no authentication BY DEFAULT.** On a default local setup (the

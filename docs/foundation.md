@@ -10,7 +10,7 @@ No **feature** increment is built until every item below is checked (Build philo
 - [x] The read-later queue model is defined — **there isn't one.** Tags carry toread/done; queue cut deliberately.
 - [ ] The "better-than-a-list" viewing UI is defined at a product level (what makes it good — not how it's built) ← **design phase, in progress**
 - [x] The MCP surface is defined at a product level — agent can add a link, list/filter/search items, read an item's details + notes; same operations the human UI uses. (Build staged as the immediate second increment.)
-- [x] What silo deliberately does NOT do is written down — anti-scope in `product/scope.html`: no AI inside, not a file store, not a content archive, not every-site understanding, not harbor's everything-store, not multi-user.
+- [x] What silo deliberately does NOT do is written down — anti-scope in `product/scope.html`: no required AI (optional AI features since 2026-10-28, off by default), not a file store, not a content archive, not every-site understanding, not harbor's everything-store, not multi-user.
 
 ## Engineering foundation (fill in AFTER product shape is locked)
 - [x] Guardrails: `docs/rules/` per language/stack + Claude agents/skills/hooks that enforce them — (2026-07-04, increment 1: `docs/rules/` + lefthook + `.claude/` hooks + CI)

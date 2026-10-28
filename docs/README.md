@@ -1,6 +1,6 @@
 # Silo — build reference docs
 
-Silo is an **agent-native personal link store**: feed in web material (links, Twitter/X posts, HN posts, videos) captured with rich metadata + full text, organized by tags + a single note field, searchable, and served over MCP so an external agent (Claude) does all the intelligence. **No AI lives inside silo** — silo is the substrate; the mind sits on top.
+Silo is an **agent-native personal link store**: feed in web material (links, Twitter/X posts, HN posts, videos) captured with rich metadata + full text, organized by tags + a single note field, searchable, and served over MCP so an external agent (Claude) does all the intelligence. **AI is optional** — Silo is the substrate, and the agent over MCP still does the thinking. Silo may run small, optional AI features that the owner turns on with their own provider key. They are off by default, never block a capture, and silo works fully without them.
 
 These docs were produced in a planning phase and moved here as the reference the build implements against. The **stack is deliberately undecided** — that is the first real decision, made here in the project.
 

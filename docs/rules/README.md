@@ -11,6 +11,7 @@ carry the rest (idioms, intent, forbidden patterns a linter can't see).
 - [`mcp.md`](mcp.md) — MCP adapter conventions (thin; delegates to core; stdio transport)
 - [`web-react.md`](web-react.md) — React SPA conventions (talks to the API over HTTP; the no-core-import bundling rule; Oat design fidelity)
 - [`db-drizzle.md`](db-drizzle.md) — data layer conventions (owned by @silo/core)
+- [`ai.md`](ai.md) — the optional AI layer (providers, keys, runner, features)
 - [`testing.md`](testing.md) — test conventions (Vitest, colocated, behavior-first)
 
 Rules marked **ENFORCED** are checked by the gate and will fail CI. Rules marked
