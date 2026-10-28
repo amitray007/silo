@@ -153,7 +153,12 @@ describe('AiTab', () => {
     expect(
       (screen.getByRole('radio', { name: 'Use Anthropic' }) as HTMLInputElement).disabled,
     ).toBe(true);
-    expect((screen.getByLabelText('Model') as HTMLSelectElement).disabled).toBe(true);
+    expect((screen.getByRole('button', { name: 'Model' }) as HTMLButtonElement).disabled).toBe(
+      true,
+    );
+    expect(screen.getByRole('button', { name: 'Model' }).textContent).toContain(
+      'Pick a provider first',
+    );
   });
 
   it('PATCHes ai.enabled from the master switch', async () => {
@@ -298,13 +303,19 @@ describe('AiTab', () => {
         ],
       }),
     });
-    const select = (await screen.findByLabelText('Model')) as HTMLSelectElement;
-    await waitFor(() => expect(select.disabled).toBe(false));
-    expect(within(select).getByRole('group', { name: 'Claude' })).toBeTruthy();
-    expect(within(select).getByRole('group', { name: 'ChatGPT' })).toBeTruthy();
-    expect(within(select).getByRole('option', { name: 'Claude Haiku 5.5 - fast' })).toBeTruthy();
-    expect(select.value).toBe('claude-haiku-5-5');
-    fireEvent.change(select, { target: { value: 'gpt-5-mini' } });
+    const trigger = (await screen.findByRole('button', { name: 'Model' })) as HTMLButtonElement;
+    await waitFor(() => expect(trigger.disabled).toBe(false));
+    expect(trigger.textContent).toContain('Claude Haiku 5.5 - fast');
+    fireEvent.click(trigger);
+    const list = screen.getByRole('listbox', { name: 'Model' });
+    expect(within(list).getByRole('group', { name: 'Claude' })).toBeTruthy();
+    expect(within(list).getByRole('group', { name: 'ChatGPT' })).toBeTruthy();
+    expect(
+      within(list)
+        .getByRole('option', { name: /Claude Haiku 5.5 - fast/ })
+        .getAttribute('aria-selected'),
+    ).toBe('true');
+    fireEvent.click(within(list).getByRole('option', { name: 'GPT-5 mini - balanced' }));
     await waitFor(() =>
       expect(calls).toContainEqual(
         expect.objectContaining({
@@ -324,9 +335,33 @@ describe('AiTab', () => {
         providers: [ANTHROPIC_OK],
       }),
     });
-    const select = await screen.findByLabelText('Model');
-    expect(within(select).queryByRole('option', { name: /GPT-5 mini/ })).toBeNull();
-    expect(within(select).getByRole('option', { name: /Claude Haiku/ })).toBeTruthy();
+    const trigger = await screen.findByRole('button', { name: 'Model' });
+    await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(trigger);
+    const list = screen.getByRole('listbox', { name: 'Model' });
+    expect(within(list).queryByRole('option', { name: /GPT-5 mini/ })).toBeNull();
+    expect(within(list).queryByRole('group', { name: 'ChatGPT' })).toBeNull();
+    expect(within(list).getByRole('option', { name: /Claude Haiku/ })).toBeTruthy();
+  });
+
+  it('keeps group headings out of the option list', async () => {
+    setup({
+      settings: settingsFixture({ provider: 'gateway' }),
+      ai: aiFixture({
+        provider: 'gateway',
+        model: 'claude-haiku-5-5',
+        providers: [{ kind: 'gateway', configured: true, keyLast4: '1234', lastTest: null }],
+      }),
+    });
+    const trigger = await screen.findByRole('button', { name: 'Model' });
+    await waitFor(() => expect((trigger as HTMLButtonElement).disabled).toBe(false));
+    fireEvent.click(trigger);
+    const names = screen.getAllByRole('option').map((o) => o.textContent);
+    expect(names).toHaveLength(2);
+    expect(screen.queryByRole('option', { name: 'Claude' })).toBeNull();
+    fireEvent.click(screen.getByText('ChatGPT'));
+    expect(screen.queryByRole('listbox')).not.toBeNull();
+    expect(trigger.textContent).toContain('Claude Haiku 5.5 - fast');
   });
 
   it('disables the row and shows Testing… while a Test is pending, then refreshes', async () => {

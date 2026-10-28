@@ -18,6 +18,7 @@ import type {
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Skeleton } from '../Skeleton';
 import { rowDesc, rowLabel, settingsField, settingsRow, settingsRowDivided } from './rowStyles';
+import { SettingsSelect } from './SettingsSelect';
 import { ToggleSwitch } from './ToggleSwitch';
 
 const PROVIDER_NAMES: Record<AiProviderKind, string> = {
@@ -223,6 +224,7 @@ function ProviderRow({
       <div style={settingsRow}>
         <input
           type="radio"
+          className="silo-radio"
           name="ai-provider"
           checked={selected}
           disabled={busy || !configured || unreadable}
@@ -230,13 +232,13 @@ function ProviderRow({
           aria-label={`Use ${name}`}
           aria-describedby={statusId}
         />
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="silo-ai-provider-copy">
           <div style={rowLabel}>{name}</div>
           <div id={statusId} role="status" style={metaStyle}>
             {providerStatus(provider, unreadable)}
           </div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div className="silo-ai-provider-actions">
           <button
             ref={addRef}
             type="button"
@@ -333,38 +335,30 @@ function ModelSelect({
 }) {
   const provider = ai.status.provider;
   const reachable = provider ? ai.catalog.filter((m) => m.providers.includes(provider)) : [];
-  const selectId = useId();
   const groups = (Object.keys(FAMILY_LABELS) as AiCatalogEntry['family'][])
-    .map((family) => ({ family, models: reachable.filter((m) => m.family === family) }))
-    .filter((g) => g.models.length > 0);
+    .map((family) => ({
+      label: FAMILY_LABELS[family],
+      options: reachable
+        .filter((m) => m.family === family)
+        .map((m) => ({ value: m.id, label: `${m.label} - ${m.tier}` })),
+    }))
+    .filter((g) => g.options.length > 0);
   return (
     <div style={settingsRow}>
       <div style={{ flex: 1 }}>
-        <label htmlFor={selectId} style={rowLabel}>
-          Model
-        </label>
+        <div style={rowLabel}>Model</div>
         <div style={rowDesc}>
           {provider ? 'Used by AI features.' : 'Pick a provider with a key first.'}
         </div>
       </div>
-      <select
-        id={selectId}
-        value={ai.status.model?.id ?? settingsAi.model ?? ''}
+      <SettingsSelect
+        ariaLabel="Model"
+        value={ai.status.model?.id ?? settingsAi.model ?? null}
+        groups={groups}
+        placeholder="Pick a provider first"
         disabled={disabled || !provider}
-        onChange={(e) => onChange(e.target.value)}
-        className="silo-field"
-        style={{ ...settingsField, minWidth: 200 }}
-      >
-        {groups.map((g) => (
-          <optgroup key={g.family} label={FAMILY_LABELS[g.family]}>
-            {g.models.map((m) => (
-              <option key={m.id} value={m.id}>
-                {m.label} - {m.tier}
-              </option>
-            ))}
-          </optgroup>
-        ))}
-      </select>
+        onChange={onChange}
+      />
     </div>
   );
 }

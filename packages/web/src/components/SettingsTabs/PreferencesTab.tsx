@@ -1,30 +1,16 @@
-import { useEffect, useId, useRef, useState } from 'react';
 import { useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
 import { useCompactLinks } from '../../lib/useCompactLinks';
 import { ThemeToggle } from '../../theme/ThemeToggle';
 import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
+import { SettingsSelect } from './SettingsSelect';
 import { ToggleSwitch } from './ToggleSwitch';
 
 const PURGE_DAY_OPTIONS = [7, 30, 90] as const satisfies readonly SettingsMap['trashPurgeDays'][];
 
-function ChevronDownIcon() {
-  return (
-    <svg
-      width="14"
-      height="14"
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.6"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      <path d="m4.5 6.5 3.5 3 3.5-3" />
-    </svg>
-  );
-}
+const PURGE_GROUPS = [
+  { options: PURGE_DAY_OPTIONS.map((days) => ({ value: days, label: `${days} days` })) },
+];
 
 function TrashPurgeDropdown({
   value,
@@ -33,67 +19,13 @@ function TrashPurgeDropdown({
   value: SettingsMap['trashPurgeDays'];
   onChange: (value: SettingsMap['trashPurgeDays']) => void;
 }) {
-  const [open, setOpen] = useState(false);
-  const rootRef = useRef<HTMLSpanElement>(null);
-  const listboxId = useId();
-
-  useEffect(() => {
-    if (!open) return;
-
-    function onPointerDown(event: PointerEvent) {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
-    }
-
-    document.addEventListener('pointerdown', onPointerDown);
-    return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [open]);
-
-  function selectValue(nextValue: SettingsMap['trashPurgeDays']) {
-    onChange(nextValue);
-    setOpen(false);
-  }
-
   return (
-    <span ref={rootRef} className="silo-settings-select-wrap">
-      <button
-        type="button"
-        className="silo-settings-select-trigger"
-        aria-label="Trash auto-empty window"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-controls={listboxId}
-        onClick={() => setOpen((current) => !current)}
-        onKeyDown={(event) => {
-          if (event.key === 'Escape') setOpen(false);
-        }}
-      >
-        <span>{value} days</span>
-        <span aria-hidden="true" className="silo-settings-select-chevron">
-          <ChevronDownIcon />
-        </span>
-      </button>
-      {open && (
-        <div id={listboxId} role="listbox" className="silo-settings-select-menu">
-          {PURGE_DAY_OPTIONS.map((days) => (
-            <button
-              key={days}
-              type="button"
-              role="option"
-              aria-selected={days === value}
-              className="silo-settings-select-option"
-              onClick={() => selectValue(days)}
-            >
-              <span>{days} days</span>
-              {days === value && (
-                <span aria-hidden="true" className="silo-settings-select-check">
-                  ✓
-                </span>
-              )}
-            </button>
-          ))}
-        </div>
-      )}
-    </span>
+    <SettingsSelect
+      ariaLabel="Trash auto-empty window"
+      value={value}
+      groups={PURGE_GROUPS}
+      onChange={onChange}
+    />
   );
 }
 
