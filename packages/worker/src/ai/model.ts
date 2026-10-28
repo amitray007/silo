@@ -1,4 +1,5 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
+import { createFireworks } from '@ai-sdk/fireworks';
 import { createOpenAI } from '@ai-sdk/openai';
 import { providerModelId } from '@silo/core';
 import type { AiCredential } from '@silo/core/ai-credential';
@@ -32,7 +33,11 @@ export function languageModelFor(
     case 'openai':
       return createOpenAI({ apiKey, baseURL: OPENAI_BASE_URL, ...(fetch ? { fetch } : {}) })(id);
     case 'fireworks':
-      throw new Error('Fireworks inference is unavailable');
+      return createFireworks({
+        apiKey,
+        baseURL: 'https://api.fireworks.ai/inference/v1',
+        ...(fetch ? { fetch } : {}),
+      })(id);
     case 'gateway':
       return createGateway({ apiKey, ...(fetch ? { fetch } : {}) })(id);
   }

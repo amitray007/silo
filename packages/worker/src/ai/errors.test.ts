@@ -7,6 +7,8 @@ import { apiError, credential, LEAK_KEY } from './test-helpers.js';
 describe('aiErrorCode', () => {
   it.each([
     [401, 'invalid_key'],
+    [402, 'quota'],
+    [412, 'no_access'],
     [403, 'no_access'],
     [404, 'model_not_found'],
     [429, 'rate_limited'],
@@ -81,6 +83,8 @@ describe('aiErrorCode with gateway errors', () => {
 
   it.each([
     [401, 'invalid_key'],
+    [402, 'quota'],
+    [412, 'no_access'],
     [429, 'rate_limited'],
   ] as const)('maps a real createGateway %s response', async (status, code) => {
     const fetch = (async () =>

@@ -14,7 +14,7 @@ export const aiConnectionTester: AiConnectionTester = async (credential) => {
     await generateText({
       model: languageModelFor(credential),
       prompt: TEST_PROMPT,
-      reasoning: credential.model.reasoning,
+      ...(credential.kind === 'fireworks' ? {} : { reasoning: credential.model.reasoning }),
       maxRetries: 0,
       timeout: { totalMs: TEST_TIMEOUT_MS },
       maxOutputTokens: TEST_MAX_OUTPUT_TOKENS,

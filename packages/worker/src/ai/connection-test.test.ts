@@ -19,15 +19,20 @@ describe('aiConnectionTester', () => {
     expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(256);
   });
 
-  it('maps a 401 to invalid_key, with no retry and no key in the result', async () => {
+  it.each([
+    [401, 'invalid_key'],
+    [402, 'quota'],
+    [404, 'model_not_found'],
+    [412, 'no_access'],
+  ] as const)('maps %s to %s, with no retry and no key in the result', async (status, code) => {
     const model = new MockLanguageModelV4({
       doGenerate: async () => {
-        throw apiError(401);
+        throw apiError(status);
       },
     });
     vi.mocked(languageModelFor).mockReturnValue(model);
     const result = await aiConnectionTester(credential);
-    expect(result).toMatchObject({ ok: false, code: 'invalid_key' });
+    expect(result).toMatchObject({ ok: false, code });
     expect(JSON.stringify(result)).not.toContain(LEAK_KEY);
     expect(model.doGenerateCalls).toHaveLength(1);
   });
@@ -45,6 +50,15 @@ describe('aiConnectionTester', () => {
     });
     vi.mocked(languageModelFor).mockReturnValue(model);
     expect(await aiConnectionTester(credential)).toMatchObject({ ok: true });
+    expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(256);
+  });
+  it('sends no reasoning setting for a Fireworks key test', async () => {
+    const model = new MockLanguageModelV4({ doGenerate: async () => okResult('ok') });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    expect(await aiConnectionTester({ ...credential, kind: 'fireworks' })).toMatchObject({
+      ok: true,
+    });
+    expect(model.doGenerateCalls[0]?.reasoning).toBeUndefined();
     expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(256);
   });
 });

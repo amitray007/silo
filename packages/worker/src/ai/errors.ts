@@ -24,7 +24,8 @@ const NAME_CODES: Record<string, AiErrorCode> = {
 
 function statusCode(status: number): AiErrorCode {
   if (status === 401) return 'invalid_key';
-  if (status === 403) return 'no_access';
+  if (status === 402) return 'quota';
+  if (status === 403 || status === 412) return 'no_access';
   if (status === 404) return 'model_not_found';
   if (status === 429) return 'rate_limited';
   return 'provider_error';

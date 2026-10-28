@@ -170,10 +170,14 @@ describe('runAiFeature', () => {
     expect(logs[0]?.mock.calls).toEqual([['silo ai: test_feature@v2 failed (timeout)']]);
   });
 
-  it('maps 401 to invalid_key without retrying', async () => {
-    const model = failingModel(apiError(401));
+  it.each([
+    [401, 'invalid_key'],
+    [402, 'quota'],
+    [404, 'model_not_found'],
+  ] as const)('maps %s to %s without retrying', async (status, code) => {
+    const model = failingModel(apiError(status));
     const result = await runAiFeature(definition, { text: 'hi' }, deps(model));
-    expect(result).toEqual({ ok: false, code: 'invalid_key' });
+    expect(result).toEqual({ ok: false, code });
     expect(model.doGenerateCalls).toHaveLength(1);
   });
 
@@ -292,5 +296,14 @@ describe('runAiFeature', () => {
     const sent = JSON.stringify(call?.prompt);
     expect(sent).toContain('Write a title.');
     expect(sent).toContain(`${PROMPT_TEXT} hi`);
+  });
+  it('resolves the requested feature and omits reasoning for Fireworks even with a curated credential', async () => {
+    const model = okModel();
+    const load = vi.fn(async () => ({ ...credential, kind: 'fireworks' as const }));
+    expect(
+      await runAiFeature(definition, { text: 'hi' }, deps(model, { credential: load })),
+    ).toEqual({ ok: true, value: 'Hello' });
+    expect(load).toHaveBeenCalledWith(definition.id);
+    expect(model.doGenerateCalls[0]?.reasoning).toBeUndefined();
   });
 });

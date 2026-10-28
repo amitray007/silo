@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@ai-sdk/anthropic": "4.0.90",
+    "@ai-sdk/fireworks": "3.0.83",
     "@ai-sdk/openai": "4.0.104",
     "@silo/core": "workspace:*",
     "@silo/queue": "workspace:*",

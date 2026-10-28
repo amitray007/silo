@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { runMigrations } from '@silo/db/migrate';
 import {
   createDisposableDatabase,
@@ -124,6 +125,67 @@ describeIfPg('enrichLink AI titles (integration)', () => {
     expect(link?.captureStatus).toBe('full');
     expect(model.doGenerateCalls).toHaveLength(1);
   });
+
+  it.each(['anthropic', 'fireworks'] as const)(
+    'resolves the title feature through its stored %s provider',
+    async (kind) => {
+      const savedKey = process.env.SILO_SECRET_KEY;
+      process.env.SILO_SECRET_KEY = randomBytes(32).toString('base64');
+      const { setAiModelsFetcher } = await import('@silo/core/ai-credential');
+      const fireworksId = 'accounts/fireworks/models/glm-5p3-flash';
+      try {
+        await core.saveAiProviderKey('anthropic', 'fake-anthropic-1234');
+        await core.saveAiProviderKey('fireworks', 'fake-fireworks-5678');
+        setAiModelsFetcher(async () => ({
+          ok: true,
+          models: [{ id: fireworksId, label: 'GLM', contextLength: 200000 }],
+        }));
+        await core.refreshFireworksModels();
+        const modelId = kind === 'fireworks' ? fireworksId : 'claude-haiku-5-5';
+        await core.updateSettings({
+          ai: {
+            enabled: true,
+            features: { 'x-post-title': { enabled: true, model: { provider: kind, id: modelId } } },
+          },
+        });
+        const model = modelReturning('Interfere adds a command menu');
+        const factory = vi.fn(() => model);
+        const id = await newPost();
+        await enrichMod.enrichLink(id, {
+          ...depsFor(model),
+          runXPostTitle: (input, abortSignal) =>
+            runAiFeature(xPostTitle, input, { abortSignal, model: factory }),
+        });
+        expect(factory).toHaveBeenCalledWith(
+          expect.objectContaining({
+            kind,
+            apiKey: kind === 'fireworks' ? 'fake-fireworks-5678' : 'fake-anthropic-1234',
+            model: expect.objectContaining({ id: modelId }),
+          }),
+        );
+        expect((await core.getById(id))?.title).toBe('Interfere adds a command menu');
+        expect((await core.getById(id))?.titleSource).toBe('ai');
+        expect(model.doGenerateCalls[0]?.reasoning).toBe(kind === 'fireworks' ? undefined : 'none');
+        await core.updateSettings({
+          ai: { enabled: true, features: { 'x-post-title': { enabled: true, model: null } } },
+        });
+        const noSelection = await newPost();
+        factory.mockClear();
+        await enrichMod.enrichLink(noSelection, {
+          ...depsFor(model),
+          runXPostTitle: (input) => runAiFeature(xPostTitle, input, { model: factory }),
+        });
+        expect(factory).not.toHaveBeenCalled();
+        expect((await core.getById(noSelection))?.titleSource).toBe('page');
+      } finally {
+        setAiModelsFetcher(undefined);
+        await core.removeAiProvider('anthropic');
+        await core.removeAiProvider('fireworks');
+        if (savedKey === undefined) delete process.env.SILO_SECRET_KEY;
+        else process.env.SILO_SECRET_KEY = savedKey;
+      }
+    },
+  );
 
   it('cleans the model output before storing it', async () => {
     const id = await newPost();

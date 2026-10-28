@@ -1,5 +1,6 @@
-import { generateText } from 'ai';
+import { generateText, Output } from 'ai';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 import { languageModelFor } from './model.js';
 import { credential } from './test-helpers.js';
 
@@ -56,4 +57,47 @@ describe('languageModelFor', () => {
       expect(urls[0]?.startsWith(expected)).toBe(true);
     },
   );
+  it('uses the fixed Fireworks inference host, full model id, JSON schema and no reasoning setting', async () => {
+    process.env.FIREWORKS_BASE_URL = 'https://evil.example.com/v1';
+    process.env.FIREWORKS_API_KEY = 'env-key-never-use';
+    let sentUrl = '';
+    let sentBody: Record<string, unknown> = {};
+    let sentHeaders: Headers | undefined;
+    const fetch: typeof globalThis.fetch = async (input, init) => {
+      sentUrl = String(input);
+      sentBody = JSON.parse(String(init?.body));
+      sentHeaders = new Headers(init?.headers);
+      return new Response('{}', { status: 500 });
+    };
+    try {
+      const model = languageModelFor(
+        {
+          kind: 'fireworks',
+          apiKey: 'fake-fireworks-key',
+          model: {
+            id: 'accounts/fireworks/models/glm-5p3-flash',
+            label: 'GLM',
+            contextLength: 200000,
+          },
+        },
+        fetch,
+      );
+      expect(model).toMatchObject({ specificationVersion: 'v4' });
+      await generateText({
+        model,
+        prompt: 'hi',
+        output: Output.object({ schema: z.object({ title: z.string() }) }),
+        maxRetries: 0,
+      }).catch(() => undefined);
+      expect(sentUrl).toBe('https://api.fireworks.ai/inference/v1/chat/completions');
+      expect(sentHeaders?.get('authorization')).toBe('Bearer fake-fireworks-key');
+      expect(sentBody.model).toBe('accounts/fireworks/models/glm-5p3-flash');
+      expect(sentBody.response_format).toMatchObject({ type: 'json_schema' });
+      expect(sentBody).not.toHaveProperty('reasoning_effort');
+      expect(sentBody).not.toHaveProperty('reasoning');
+    } finally {
+      delete process.env.FIREWORKS_BASE_URL;
+      delete process.env.FIREWORKS_API_KEY;
+    }
+  });
 });

@@ -61,7 +61,7 @@ export async function runAiFeature<In, Out, Raw>(
       instructions: definition.instructions,
       prompt: definition.buildPrompt(input),
       output: Output.object({ schema: definition.schema }),
-      reasoning: credential.model.reasoning,
+      ...(credential.kind === 'fireworks' ? {} : { reasoning: credential.model.reasoning }),
       maxRetries: 2,
       timeout: { totalMs: definition.timeoutMs },
       ...(abortSignal ? { abortSignal } : {}),

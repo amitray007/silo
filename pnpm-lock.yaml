@@ -607,6 +607,9 @@ importers:
       '@ai-sdk/anthropic':
         specifier: 4.0.90
         version: 4.0.90(zod@4.6.7)
+      '@ai-sdk/fireworks':
+        specifier: 3.0.83
+        version: 3.0.83(zod@4.6.7)
       '@ai-sdk/openai':
         specifier: 4.0.104
         version: 4.0.104(zod@4.6.7)
@@ -713,8 +716,20 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
+  '@ai-sdk/fireworks@3.0.83':
+    resolution: {integrity: sha512-75R1rKG6lKl9yef2S6Y0WSbpKOpTtef61VvfU+11NlstBJ7kIMt8iNt5takfke+HtagWLx7LntrArzl6OsRnzg==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: 4.6.7
+
   '@ai-sdk/gateway@4.0.128':
     resolution: {integrity: sha512-vAEUQPql1k+wyU3JUEosUupdwnwFD7Sts05EcxAYifY4Z1+dl+rD88y4gz8QZOnOidxzYZe2gPSBsWlo/ZahOw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@ai-sdk/openai-compatible@3.0.80':
+    resolution: {integrity: sha512-FoFoYodwufDyuOlPrFBnGD6HNA8nIB5a6HofyTJoPUJn9NBtDmloWudbNDyf4hYV8YTPOyR5iPfn1ufK2XD2Zg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
@@ -4888,11 +4903,24 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.70(zod@4.6.7)
       zod: 4.6.7
 
+  '@ai-sdk/fireworks@3.0.83(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/openai-compatible': 3.0.80(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.34
+      '@ai-sdk/provider-utils': 5.0.70(zod@4.6.7)
+      zod: 4.6.7
+
   '@ai-sdk/gateway@4.0.128(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 4.0.34
       '@ai-sdk/provider-utils': 5.0.70(zod@4.6.7)
       '@vercel/oidc': 3.2.0
+      zod: 4.6.7
+
+  '@ai-sdk/openai-compatible@3.0.80(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.34
+      '@ai-sdk/provider-utils': 5.0.70(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai@4.0.104(zod@4.6.7)':
