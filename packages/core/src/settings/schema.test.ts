@@ -292,6 +292,37 @@ describe('ai setting', () => {
       features: { 'x-post-title': { enabled: false, model: null } },
     });
     expect(() => parseSettingValue('ai', stored)).toThrow();
+    expect(parseSettingValue('ai', { enabled: true, features: {} })).toEqual({
+      enabled: true,
+      features: { 'x-post-title': { enabled: false, model: null } },
+    });
+  });
+  it('rejects an explicit null feature instead of filling its default', () => {
+    expect(() =>
+      parseSettingValue('ai', {
+        enabled: true,
+        features: { 'x-post-title': null },
+      }),
+    ).toThrow();
+  });
+  it.each([
+    ['anthropic', 'claude-haiku-5-5'],
+    ['openai', 'gpt-6-luna'],
+    ['gateway', 'claude-haiku-5-5'],
+  ])('preserves the legacy default for %s on reads', (provider, id) => {
+    const old = { enabled: true, provider, model: null, features: { 'x-post-title': true } };
+    expect(parseStoredSettingValue('ai', old)).toEqual(selection(provider, id));
+    expect(() => parseSettingValue('ai', old)).toThrow();
+  });
+  it('keeps a null legacy provider unselected', () => {
+    expect(
+      parseStoredSettingValue('ai', {
+        enabled: true,
+        provider: null,
+        model: null,
+        features: { 'x-post-title': true },
+      }),
+    ).toEqual({ enabled: true, features: { 'x-post-title': { enabled: true, model: null } } });
   });
   it('nulls retired or unreachable selections on reads without changing consent', () => {
     for (const [provider, id] of [
@@ -303,14 +334,6 @@ describe('ai setting', () => {
         features: { 'x-post-title': { enabled: true, model: null } },
       });
     }
-    expect(
-      parseStoredSettingValue('ai', {
-        enabled: true,
-        provider: 'openai',
-        model: null,
-        features: { 'x-post-title': true },
-      }),
-    ).toEqual({ enabled: true, features: { 'x-post-title': { enabled: true, model: null } } });
   });
   it('rejects malformed shapes and unknown properties', () => {
     for (const value of [

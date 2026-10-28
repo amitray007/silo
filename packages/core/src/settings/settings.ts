@@ -1,4 +1,4 @@
-import { db, settings } from '@silo/db';
+import { aiProviders, db, settings } from '@silo/db';
 import { eq } from 'drizzle-orm';
 import { z } from 'zod';
 import { storedFireworksModels } from '../ai/model-store.js';
@@ -93,8 +93,8 @@ export async function getSetting<K extends SettingKey>(
  * Takes an optional `Executor` (the pooled `db` singleton, or a transaction
  * handle — same shared type `links.ts`'s `createLink` uses) so
  * `updateSettings` can run every key's write inside ONE transaction; direct
- * callers (a future single-key write path) can omit it and get the plain
- * pooled `db`.
+ * callers can omit it. AI writes use a transaction so the live-list row
+ * stays locked from selection validation through persistence.
  */
 export async function setSetting<K extends SettingKey>(
   key: K,
@@ -102,7 +102,21 @@ export async function setSetting<K extends SettingKey>(
   executor: Executor = db,
 ): Promise<void> {
   const parsed = parseSettingValue(key, value);
-  if (key === 'ai') await validateFireworksSelection(parsed as SettingValue<'ai'>, executor);
+  if (key === 'ai') {
+    await executor.transaction(async (tx) => {
+      await validateFireworksSelection(parsed as SettingValue<'ai'>, tx);
+      await persistSetting(key, parsed, tx);
+    });
+  } else {
+    await persistSetting(key, parsed, executor);
+  }
+}
+
+async function persistSetting<K extends SettingKey>(
+  key: K,
+  parsed: SettingValue<K>,
+  executor: Executor,
+): Promise<void> {
   await executor
     .insert(settings)
     .values({ key, value: parsed })
@@ -182,6 +196,13 @@ async function validateFireworksSelection(
     ([, f]) => f.model?.provider === 'fireworks',
   );
   if (!selections.length) return;
+  // FOR SHARE conflicts with the row lock taken by refresh's UPDATE, even
+  // though refresh does not change the provider's primary key.
+  await executor
+    .select({ kind: aiProviders.kind })
+    .from(aiProviders)
+    .where(eq(aiProviders.kind, 'fireworks'))
+    .for('share');
   const models = await storedFireworksModels(executor);
   z.unknown()
     .superRefine((_value, ctx) => {

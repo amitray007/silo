@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { AI_PROVIDER_KINDS, modelsForProvider } from '../ai/catalog.js';
+import { AI_PROVIDER_KINDS, defaultModelFor, modelsForProvider } from '../ai/catalog.js';
 import { AI_FEATURES, type AiFeatureDef, type AiFeatureId } from '../ai/features.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(
@@ -289,14 +289,15 @@ function normalizeAiValue(raw: unknown, stored: boolean): unknown {
   const value = raw as Record<string, unknown>;
   const flags = value.features;
   if (flags === null || typeof flags !== 'object' || Array.isArray(flags)) return raw;
-  const features: Record<string, unknown> = {};
+  const features: Record<string, unknown> = Object.fromEntries(
+    [...registeredFeatureIds].map((id) => [id, { enabled: false, model: null }]),
+  );
   const legacy = stored && hasLegacySelection(value);
   for (const [id, flag] of Object.entries(flags)) {
     if (stored && !registeredFeatureIds.has(id)) continue;
     const feature = convertLegacyFeature(flag, legacy ? value : undefined);
     features[id] = stored ? repairFeatureModel(feature) : feature;
   }
-  for (const id of registeredFeatureIds) features[id] ??= { enabled: false, model: null };
   if (legacy) {
     const { provider: _provider, model: _model, ...rest } = value;
     return { ...rest, features };
@@ -313,6 +314,10 @@ function convertLegacyFeature(flag: unknown, legacy: Record<string, unknown> | u
 }
 
 function legacyModel(value: Record<string, unknown>): unknown {
+  const provider = AI_PROVIDER_KINDS.find((kind) => kind === value.provider);
+  if (value.model === null && provider && provider !== 'fireworks') {
+    return { provider, id: defaultModelFor(provider).id };
+  }
   return typeof value.model === 'string' && modelReachable(value.provider, value.model)
     ? { provider: value.provider, id: value.model }
     : null;

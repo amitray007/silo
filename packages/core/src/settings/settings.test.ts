@@ -327,6 +327,27 @@ describeIfPg('settings store (integration, plan 016)', () => {
   });
 
   describe('ai setting drift on read', () => {
+    it('rejects a null feature without overwriting an enabled feature', async () => {
+      const ai = {
+        enabled: true,
+        features: {
+          'x-post-title': {
+            enabled: true,
+            model: { provider: 'anthropic', id: 'claude-haiku-5-5' },
+          },
+        },
+      };
+      await ops.setSetting('ai', ai);
+      await expect(
+        ops.updateSettings({
+          theme: 'dark',
+          ai: { enabled: true, features: { 'x-post-title': null } },
+        }),
+      ).rejects.toThrow();
+      expect(await ops.getSetting('ai')).toEqual(ai);
+      expect(await ops.getSetting('theme')).toBe('system');
+    });
+
     const drifted = {
       enabled: true,
       features: {

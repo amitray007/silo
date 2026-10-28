@@ -64,6 +64,88 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     expect(await status.resolveAiFeatureCredential('x-post-title')).toBeUndefined();
   });
 
+  it.each(['setSetting', 'updateSettings'] as const)(
+    '%s waits for a concurrent list update and rejects a removed model',
+    async (method) => {
+      await prepare();
+      const { settings } = harness.mod();
+      let saving: Promise<unknown> | undefined;
+      try {
+        await harness.rawDb().transaction(async (tx) => {
+          await tx.execute(
+            sql`UPDATE ai_providers SET models = '[]'::jsonb WHERE kind = 'fireworks'`,
+          );
+          const write =
+            method === 'setSetting'
+              ? settings.setSetting('ai', selection(GLM.id))
+              : settings.updateSettings({ theme: 'dark', ai: selection(GLM.id) });
+          saving = write.then(
+            () => null,
+            (error: unknown) => error,
+          );
+          await waitForLock('%ai_providers%');
+        });
+      } finally {
+        const error = await saving;
+        expect(error).toMatchObject({ name: 'ZodError' });
+      }
+      expect(await settings.getSetting('theme')).toBe('system');
+      expect((await settings.getSetting('ai')).enabled).toBe(false);
+    },
+  );
+
+  it('holds the live-list lock until a standalone settings save commits', async () => {
+    await prepare();
+    const { settings } = harness.mod();
+    await settings.setSetting('ai', selection(FIRST.id));
+    let saving: Promise<unknown> | undefined;
+    try {
+      await expect(
+        harness.rawDb().transaction(async (tx) => {
+          await tx.execute(sql`SELECT key FROM settings WHERE key = 'ai' FOR UPDATE`);
+          saving = settings.setSetting('ai', selection(GLM.id)).then(
+            () => null,
+            (error: unknown) => error,
+          );
+          await waitForLock('%insert into "settings"%');
+          // A plain UPDATE takes NO KEY UPDATE, so FOR KEY SHARE would not suffice.
+          await tx.execute(sql`SET LOCAL lock_timeout = '200ms'`);
+          await tx.execute(
+            sql`UPDATE ai_providers SET models = '[]'::jsonb WHERE kind = 'fireworks'`,
+          );
+        }),
+      ).rejects.toMatchObject({ cause: { code: '55P03' } });
+    } finally {
+      expect(await saving).toBeNull();
+    }
+    expect((await settings.getSetting('ai')).features['x-post-title'].model?.id).toBe(GLM.id);
+  });
+
+  async function waitForLock(query: string): Promise<void> {
+    await expect
+      .poll(async () => {
+        const result = await harness.rawDb().execute(sql`
+        SELECT pid FROM pg_stat_activity
+        WHERE datname = current_database() AND pid <> pg_backend_pid()
+          AND wait_event_type = 'Lock' AND query LIKE ${query}
+      `);
+        return result.rows.length;
+      })
+      .toBe(1);
+  }
+
+  it.each([
+    { entries: Array.from({ length: 501 }, (_, i) => ({ ...FIRST, id: `model-${i}` })) },
+    { entries: [{ ...FIRST, id: 'i'.repeat(513) }] },
+    { entries: [{ ...FIRST, label: 'l'.repeat(257) }] },
+  ])('rejects an oversized live list at the storage boundary (%#)', async ({ entries }) => {
+    await prepare();
+    const { models } = harness.mod();
+    models.setAiModelsFetcher(async () => ({ ok: true, models: entries }));
+    expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'provider_error' });
+    expect(await models.storedFireworksModels()).toEqual([]);
+  });
+
   it('refreshes before key inference and uses GLM when listed, otherwise the first model', async () => {
     const { tester, models, providers } = harness.mod();
     await prepare();

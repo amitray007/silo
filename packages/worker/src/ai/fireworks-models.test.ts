@@ -25,7 +25,7 @@ describe('Fireworks live model list', () => {
             active('no-chat', { conversationConfig: null }),
             active('dedicated', { supportsServerless: false }),
             active('loading', { state: 'CREATING' }),
-            active('retired', { deprecationDate: '2000-01-01T00:00:00Z' }),
+            active('retired', { deprecationDate: { year: 2000, month: 1, day: 1 } }),
             active('invalid-date', { deprecationDate: 'not a date' }),
           ],
           'next token+/=',
@@ -34,7 +34,7 @@ describe('Fireworks live model list', () => {
       .mockResolvedValueOnce(
         page([
           active('accounts/fireworks/models/glm-5p3-flash', {
-            deprecationDate: '2999-01-01T00:00:00Z',
+            deprecationDate: { year: 2999, month: 1, day: 1 },
           }),
           active('accounts/fireworks/models/unknown-context', { contextLength: undefined }),
         ]),
@@ -73,6 +73,104 @@ describe('Fireworks live model list', () => {
       signal: expect.any(AbortSignal),
     });
     expect(fetch.mock.calls[0]?.[1]?.signal).toBe(fetch.mock.calls[1]?.[1]?.signal);
+  });
+
+  it('accepts ISO dates and skips individual malformed models without losing usable entries', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        page([
+          active('future-iso', { deprecationDate: '2999-01-01T00:00:00Z' }),
+          active('future-date', { deprecationDate: '2999-01-01' }),
+          active('no-date', { deprecationDate: null }),
+          active('retired-iso', { deprecationDate: '2000-01-01T00:00:00Z' }),
+          active('impossible-date', { deprecationDate: { year: 2999, month: 2, day: 30 } }),
+          active('missing-day', { deprecationDate: { year: 2999, month: 1 } }),
+          active('invalid-month', { deprecationDate: { year: 2999, month: 13, day: 1 } }),
+          active('bad-context', { contextLength: 'unknown' }),
+          active('bad-name', { name: null }),
+          null,
+          'garbage',
+        ]),
+      );
+    const result = await createFireworksModelsFetcher(fetch)(KEY);
+    expect(result).toEqual({
+      ok: true,
+      models: ['future-iso', 'future-date', 'no-date'].map((id) => ({
+        id,
+        label: id,
+        contextLength: 200000,
+      })),
+    });
+  });
+
+  it('accepts a page at the byte limit', async () => {
+    const body = JSON.stringify({ models: [active('one')] }).padEnd(2 * 1024 * 1024, ' ');
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(new Response(body));
+    expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
+      ok: true,
+      models: [{ id: 'one', label: 'one', contextLength: 200000 }],
+    });
+  });
+
+  it('aborts and cancels a streamed page over the byte limit without a content-length header', async () => {
+    const cancel = vi.fn();
+    const chunk = new TextEncoder().encode('é'.repeat(512 * 1024));
+    const response = new Response(
+      new ReadableStream({
+        pull(controller) {
+          controller.enqueue(chunk);
+        },
+        cancel,
+      }),
+    );
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(response);
+    expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
+      ok: false,
+      code: 'provider_error',
+    });
+    expect(cancel).toHaveBeenCalledTimes(1);
+    expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([500, 501])('bounds unique models across pages at 500 (%s entries)', async (count) => {
+    const entries = Array.from({ length: count }, (_, i) => active(`model-${i}`));
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValueOnce(page(entries.slice(0, 200), 'two'))
+      .mockResolvedValueOnce(page(entries.slice(200, 400), 'three'))
+      .mockResolvedValueOnce(page([...entries.slice(400), active('model-0')]));
+    const result = await createFireworksModelsFetcher(fetch)(KEY);
+    if (count === 500) {
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.models).toHaveLength(500);
+    } else {
+      expect(result).toEqual({ ok: false, code: 'provider_error' });
+      expect(fetch.mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    }
+  });
+
+  it('caps id and label lengths and skips oversized entries', async () => {
+    const id = 'i'.repeat(512);
+    const label = 'l'.repeat(256);
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        page([
+          active(id, { displayName: label }),
+          active(`${id}x`),
+          active('oversized-label', { displayName: `${label}x` }),
+          active('f'.repeat(512)),
+        ]),
+      );
+    expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
+      ok: true,
+      models: [
+        { id, label, contextLength: 200000 },
+        { id: 'f'.repeat(512), label: 'f'.repeat(256), contextLength: 200000 },
+      ],
+    });
   });
 
   it.each([
