@@ -63,6 +63,7 @@ describeIfPg('registerScheduledJobs (integration)', () => {
     expect(await scheduleRowCount(jobsMod.SWEEP_ENRICHING_QUEUE)).toBe(1);
     expect(await scheduleRowCount(jobsMod.DLQ_ALERT_QUEUE)).toBe(1);
     expect(await scheduleRowCount(jobsMod.OAUTH_CLEANUP_QUEUE)).toBe(1);
+    expect(await scheduleRowCount('reader-backfill')).toBe(1);
   });
 
   it('registered schedules carry the documented cron cadence', async () => {
@@ -74,6 +75,7 @@ describeIfPg('registerScheduledJobs (integration)', () => {
           jobsMod.SWEEP_ENRICHING_QUEUE,
           jobsMod.DLQ_ALERT_QUEUE,
           jobsMod.OAUTH_CLEANUP_QUEUE,
+          'reader-backfill',
         ],
       ],
     );
@@ -82,5 +84,6 @@ describeIfPg('registerScheduledJobs (integration)', () => {
     expect(byName[jobsMod.SWEEP_ENRICHING_QUEUE]).toBe(jobsMod.SWEEP_ENRICHING_CRON);
     expect(byName[jobsMod.DLQ_ALERT_QUEUE]).toBe(jobsMod.DLQ_ALERT_CRON);
     expect(byName[jobsMod.OAUTH_CLEANUP_QUEUE]).toBe(jobsMod.OAUTH_CLEANUP_CRON);
+    expect(byName['reader-backfill']).toBe('*/5 * * * *');
   });
 });

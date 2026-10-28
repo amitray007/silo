@@ -132,16 +132,23 @@ function noteNumber(paragraph: Element): number | undefined {
   return bracketMark(anchor);
 }
 
+/** Blocks a note can contain; a quote or list inside a note must not end the notes. */
+const NOTE_BLOCKS = new Set(['P', 'BLOCKQUOTE', 'UL', 'OL', 'PRE']);
+
 /**
- * Consecutive sibling paragraphs grouped by their `[1]`, `[2]`, ... openers.
- * Paragraphs between two notes continue the earlier note; trailing ones after
+ * Consecutive sibling blocks grouped by their `[1]`, `[2]`, ... paragraph openers.
+ * Blocks between two notes continue the earlier note; trailing ones after
  * the last note (a "Thanks" line) stay in the article.
  */
 function noteGroups(first: Element): Element[][] {
   const groups: Element[][] = [];
   let pending: Element[] = [];
-  for (let node: Element | null = first; node?.tagName === 'P'; node = node.nextElementSibling) {
-    const number = noteNumber(node);
+  for (
+    let node: Element | null = first;
+    node && NOTE_BLOCKS.has(node.tagName);
+    node = node.nextElementSibling
+  ) {
+    const number = node.tagName === 'P' ? noteNumber(node) : undefined;
     if (number === groups.length + 1) {
       groups.at(-1)?.push(...pending);
       pending = [];
@@ -195,7 +202,9 @@ function noteList(root: DocumentFragment | Element) {
     back.href = `#${mark.id}`;
     back.title = 'return to article';
     back.textContent = '↩';
-    group.at(-1)?.append(' ', back);
+    // The arrow ends the note's last paragraph, not a quote or list inside it.
+    const last = group.findLast((element) => element.tagName === 'P') ?? group.at(-1);
+    last?.append(' ', back);
   });
 }
 

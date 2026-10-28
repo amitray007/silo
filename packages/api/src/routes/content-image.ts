@@ -1,6 +1,7 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { servableImageType, servedImageResponse } from '../image-response.js';
+import { sizeReaderSvg } from '../reader-svg.js';
 import { fetchImageSafely } from '../ssrf-safe-image-fetch.js';
 import { loadReader } from './reader.js';
 
@@ -26,7 +27,10 @@ export function registerContentImageRoutes(app: Hono): void {
     if (!result.ok || !contentType) {
       return c.json({ error: 'not_found', message: 'Reader image unavailable' }, 404);
     }
-    const response = servedImageResponse(result.bytes, contentType);
+    const response = servedImageResponse(
+      contentType === 'image/svg+xml' ? sizeReaderSvg(result.bytes) : result.bytes,
+      contentType,
+    );
     // The live page can change between reads. Do not cache one version under another's URL.
     response.headers.set('Cache-Control', 'private, no-store');
     return response;

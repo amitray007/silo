@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { ExtractResult } from '../extract/extract.js';
 import type { SafeFetchResult } from '../fetch/safe-fetch.js';
+import * as safeFetchModule from '../fetch/safe-fetch.js';
 import { createLiveReader } from './live-reader.js';
 
 const MINUTE = 60 * 1000;
@@ -184,4 +185,55 @@ describe('live reader', () => {
     await reader(link, signal());
     expect(fetch).toHaveBeenCalledTimes(2);
   });
+});
+
+it('requests HTML from the page fetcher by default', async () => {
+  const fetch = vi.spyOn(safeFetchModule, 'safeFetch').mockResolvedValue(page());
+  const reader = createLiveReader({ extract: withReader });
+  try {
+    expect(await reader(link, signal())).toEqual(content);
+    expect(fetch).toHaveBeenCalledWith(link.url, {
+      accept: 'text/html,application/xhtml+xml,*/*;q=0.8',
+    });
+  } finally {
+    fetch.mockRestore();
+  }
+});
+
+it('does not repopulate an invalidated link from an older in-flight read', async () => {
+  let finish: ((value: ExtractResult) => void) | undefined;
+  const old = new Promise<ExtractResult>((resolve) => {
+    finish = resolve;
+  });
+  const fresh = { contentHtml: '<p>Fresh</p>', contentImages: [] };
+  const run = vi
+    .fn()
+    .mockImplementationOnce(() => old)
+    .mockResolvedValue({ status: 'full', reader: fresh });
+  const reader = createLiveReader({ fetch: async () => page(), extract: run });
+  const pending = reader(link, signal());
+  await vi.waitFor(() => expect(run).toHaveBeenCalledOnce());
+  reader.clear(link.id);
+  expect(await reader(link, signal())).toEqual(fresh);
+  finish?.({ status: 'full', reader: content });
+  expect(await pending).toEqual(content);
+  expect(await reader(link, signal())).toEqual(fresh);
+  expect(run).toHaveBeenCalledTimes(2);
+});
+
+it('keeps live Reader static even when stored rendering is configured', async () => {
+  const browser = await import('../browser/reader.js');
+  vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://browser.invalid/');
+  const render = vi.spyOn(browser, 'renderReader').mockResolvedValue({
+    reader: { contentHtml: '<p>Rendered</p>', contentImages: [] },
+    text: 'Rendered',
+  });
+  try {
+    const live = createLiveReader({ fetch: async () => page(), extract: withReader });
+    expect(await live(link, signal())).toEqual(content);
+    expect(render).not.toHaveBeenCalled();
+  } finally {
+    render.mockRestore();
+    vi.unstubAllEnvs();
+  }
 });

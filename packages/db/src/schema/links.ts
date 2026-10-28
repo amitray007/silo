@@ -1,6 +1,7 @@
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import {
+  boolean,
   index,
   integer,
   jsonb,
@@ -41,6 +42,9 @@ export const links = pgTable(
     extractedText: text('extracted_text'),
     contentHtml: text('content_html'),
     contentImages: jsonb('content_images').$type<string[]>(),
+    readerVersion: integer('reader_version'),
+    readerCapturedAt: timestamp('reader_captured_at', { withTimezone: true }),
+    readerRenderPending: boolean('reader_render_pending'),
 
     sourceKind: text('source_kind').notNull(),
     // Deliberately typed as the loose storage shape, NOT `SourceData`.

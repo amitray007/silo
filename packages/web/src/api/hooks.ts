@@ -62,6 +62,7 @@ export const queryKeys = {
   frame: (id: string) => ['frame', id] as const,
   link: (id: string) => ['link', id] as const,
   liveReader: (id: string) => ['live-reader', id] as const,
+  refreshReader: (id: string) => ['refresh-reader', id] as const,
   savedLinks: (urls: readonly string[]) => ['saved-links', urls] as const,
   linkTitles: (urls: readonly string[]) => ['link-titles', urls] as const,
   /**
@@ -148,6 +149,21 @@ export function useLiveReader(linkId: string, enabled: boolean) {
     staleTime: 10 * 60 * 1000,
     refetchOnWindowFocus: false,
     retry: false,
+  });
+}
+
+/** Manual Reader refresh updates the open Reader without polling. */
+export function useRefreshReader(linkId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationKey: queryKeys.refreshReader(linkId),
+    mutationFn: () =>
+      apiPost<LiveReaderJson>(`/api/links/${encodeURIComponent(linkId)}/reader/refresh`, {}),
+    onSuccess: async (reader) => {
+      await queryClient.cancelQueries({ queryKey: queryKeys.liveReader(linkId) });
+      queryClient.setQueryData(queryKeys.liveReader(linkId), reader);
+      queryClient.invalidateQueries({ queryKey: queryKeys.link(linkId) });
+    },
   });
 }
 

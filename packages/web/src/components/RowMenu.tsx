@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useRetryCapture, useTrashLink } from '../api/hooks';
+import { useRefreshReader, useRetryCapture, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import { layoutMedia } from '../lib/breakpoints';
 import { MenuPresence } from './MenuPresence';
@@ -24,6 +24,7 @@ export function LinkMenuActions({
   onCopy,
   busy = false,
   showEdit = true,
+  trashed = false,
 }: {
   link: LinkJson;
   onClose: () => void;
@@ -31,12 +32,14 @@ export function LinkMenuActions({
   onCopy?: () => Promise<void>;
   busy?: boolean;
   showEdit?: boolean;
+  trashed?: boolean;
 }) {
   const { openEdit } = useRowMenu();
   const [tagsOpen, setTagsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const trash = useTrashLink();
   const retry = useRetryCapture(link.id);
+  const refresh = useRefreshReader(link.id);
   const tags = useLinkTags(link);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const tagsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -78,6 +81,24 @@ export function LinkMenuActions({
       >
         {copied ? 'Copied' : 'Copy link'}
       </MenuAction>
+      {!trashed &&
+        !('deletedAt' in link) &&
+        link.sourceKind !== 'twitter' &&
+        link.sourceData.kind !== 'twitter' && (
+          <MenuAction
+            icon={<ReaderIcon name="refresh" />}
+            shortcut="r"
+            disabled={refresh.isPending}
+            onClick={() => refresh.mutate()}
+          >
+            {refresh.isPending ? 'Refreshing…' : 'Refresh reader'}
+          </MenuAction>
+        )}
+      {refresh.isError && (
+        <div className="silo-toast" role="alert">
+          {refresh.error.message}
+        </div>
+      )}
       {showEdit && (
         <MenuAction
           icon={<ReaderIcon name="edit" />}

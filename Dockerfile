@@ -47,6 +47,16 @@ RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm install --frozen-lockfile
 FROM deps AS build
 RUN pnpm --filter @silo/web build
 
+# ---- browser: pinned server installed before network isolation --------------
+# The upstream image has Chromium but no Playwright npm package. Runtime npx
+# would need egress, which the browser's internal-only network must forbid.
+FROM mcr.microsoft.com/playwright:v1.64.1-noble AS browser
+RUN npm install --prefix /opt/silo-browser --ignore-scripts --no-audit --no-fund playwright-core@1.64.1
+COPY packages/worker/src/browser/server.mjs /opt/silo-browser/server.mjs
+ENV SILO_BROWSER_HOST=0.0.0.0
+USER pwuser
+CMD ["node", "/opt/silo-browser/server.mjs"]
+
 # ---- runtime: source + deps + built SPA -------------------------------------
 FROM base AS runtime
 ENV NODE_ENV=production

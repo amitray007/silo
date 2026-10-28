@@ -1,5 +1,5 @@
 export { accessTokens } from './access-tokens.js';
-export { captureStatus } from './enums.js';
+export { captureSource, captureStatus, linkOrigin } from './enums.js';
 export { linkTags } from './link-tags.js';
 export { links } from './links.js';
 export { oauthClients } from './oauth-clients.js';

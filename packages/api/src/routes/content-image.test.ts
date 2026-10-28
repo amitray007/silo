@@ -78,6 +78,24 @@ describeIfPg('Reader content-image API (Postgres)', () => {
     );
   });
 
+  it('uses the stored image list without calling the live port', async () => {
+    const { core, app, fetchImageSafely } = harness.mod();
+    const link = await capture('stored-image');
+    const stored = {
+      contentHtml: '<img src="https://stored.test/b.png">',
+      contentImages: ['https://stored.test/b.png'],
+    };
+    await core.recordReader(link.id, { status: 'reader', reader: stored }, new Date());
+    fetchImageSafely.mockResolvedValue({
+      ok: true,
+      bytes: new Uint8Array([1]),
+      contentType: 'image/png',
+    });
+    expect((await app.request(`/api/links/${link.id}/content-image/0`)).status).toBe(200);
+    expect(fetchImageSafely).toHaveBeenCalledWith('https://stored.test/b.png');
+    expect(liveReader).not.toHaveBeenCalled();
+  });
+
   it('serves an SVG badge sandboxed, and refuses one that is not really SVG', async () => {
     const { app, fetchImageSafely } = harness.mod();
     const link = await capture('badge');

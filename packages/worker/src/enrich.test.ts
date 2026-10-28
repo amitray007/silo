@@ -5,7 +5,7 @@ import {
 } from '@silo/db/test-support/disposable-database';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EnrichLinkDeps } from './enrich.js';
 import type { ExtractResult } from './extract/extract.js';
 import { ReaderExtractionError } from './extract/reader-worker.js';
@@ -117,7 +117,7 @@ describeIfPg('enrichLink (integration)', () => {
     const link = await core.getById(id);
     expect(link?.captureStatus).toBe('enriching');
     expect(link?.extractedText).toBeNull();
-    expect(link?.contentHtml).toBeNull();
+    expect(link).not.toHaveProperty('contentHtml');
   });
 
   it('fetch ok + extract full -> records full with metadata', async () => {
@@ -148,7 +148,7 @@ describeIfPg('enrichLink (integration)', () => {
     expect(link?.extractedText).toBe('x'.repeat(400));
   });
 
-  it('records the extracted text but never the Reader HTML', async () => {
+  it('records the extracted text and Reader HTML from one extraction', async () => {
     const id = await newLink('https://example.com/no-reader-html');
     await enrichMod.enrichLink(
       id,
@@ -171,8 +171,52 @@ describeIfPg('enrichLink (integration)', () => {
     const link = await core.getById(id);
     expect(link?.captureStatus).toBe('full');
     expect(link?.extractedText).toBe('y'.repeat(400));
-    expect(link?.contentHtml).toBeNull();
-    expect(link?.contentImages).toBeNull();
+    expect(await core.getStoredReader(id)).toMatchObject({
+      contentHtml: '<p>Formatted</p>',
+      contentImages: ['https://cdn.test/a.png'],
+    });
+  });
+
+  it('capture and refresh store the same rendered Reader and search text on the real database', async () => {
+    const browser = await import('./browser/reader.js');
+    const rendered = { contentHtml: '<p>Rendered body</p>', contentImages: [] };
+    const text = 'Rendered article prose. '.repeat(30).trim();
+    vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://browser.invalid/');
+    const render = vi.spyOn(browser, 'renderReader').mockResolvedValue({ reader: rendered, text });
+    const id = await newLink('https://example.org/rendered-parity');
+    const page = {
+      ok: true as const,
+      html: '<main></main>',
+      contentType: 'text/html',
+      finalUrl: 'https://final.example.org/article',
+      status: 200,
+    };
+    const extracted: ExtractResult = {
+      title: 'Script built',
+      status: 'partial',
+      text: 'Thin shell',
+    };
+    try {
+      await enrichMod.enrichLink(id, stubDeps(page, extracted));
+      expect(await core.getStoredReader(id)).toMatchObject(rendered);
+      expect(await core.getById(id)).toMatchObject({ extractedText: text, captureStatus: 'full' });
+      const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+      core.setReaderRefresher(
+        createReaderRefresher(() => {}, {
+          fetch: async () => page,
+          extract: async () => extracted,
+        }),
+      );
+      expect(await core.refreshReader(id)).toMatchObject({ status: 'reader', reader: rendered });
+      expect((await core.getById(id))?.extractedText).toBe(text);
+      expect(render).toHaveBeenCalledTimes(2);
+      expect(render).toHaveBeenNthCalledWith(1, page.finalUrl, expect.any(AbortSignal));
+      expect(render).toHaveBeenNthCalledWith(2, page.finalUrl, expect.any(AbortSignal));
+    } finally {
+      core.setReaderRefresher(undefined);
+      render.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 
   it('fetch ok + extract partial (JS-wall) -> records partial', async () => {
@@ -733,6 +777,194 @@ describeIfPg('enrichLink (integration)', () => {
       link = await core.getById(id);
       expect(link?.captureStatus).toBe('bare');
       expect(link?.title).toBe('https://example.com/permanently-500s');
+    });
+  });
+  it('upgrades partial capture status when rendering supplies full text and passes the render deadline', async () => {
+    const browser = await import('./browser/reader.js');
+    const renderedReader = { contentHtml: '<p>Rendered content</p>', contentImages: [] };
+    const render = vi
+      .spyOn(browser, 'renderReader')
+      .mockResolvedValue({ reader: renderedReader, text: 'useful '.repeat(100) });
+    vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://configured/');
+    try {
+      const id = await newLink('https://example.com/rendered-partial');
+      await enrichMod.enrichLink(
+        id,
+        stubDeps(
+          {
+            ok: true,
+            html: '',
+            contentType: 'text/html',
+            finalUrl: 'https://example.com/final',
+            status: 200,
+          },
+          { status: 'partial', text: 'Static shell' },
+        ),
+      );
+      expect((await core.getById(id))?.captureStatus).toBe('full');
+      expect(await core.getStoredReader(id)).toMatchObject(renderedReader);
+      expect(render).toHaveBeenCalledWith('https://example.com/final', expect.any(AbortSignal));
+      expect(render.mock.calls[0]?.[1]?.aborted).toBe(false);
+    } finally {
+      render.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+  it('capture and refresh do not render explicit non-HTML MIME', async () => {
+    const browser = await import('./browser/reader.js');
+    const render = vi.spyOn(browser, 'renderReader');
+    vi.stubEnv('SILO_BROWSER_WS_ENDPOINT', 'ws://configured/');
+    try {
+      const id = await newLink('https://example.com/document.pdf');
+      const page = {
+        ok: true as const,
+        html: '%PDF',
+        contentType: 'application/pdf',
+        finalUrl: 'https://example.com/document.pdf',
+        status: 200,
+      };
+      await enrichMod.enrichLink(id, stubDeps(page, { status: 'bare' }));
+      const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+      const refresh = createReaderRefresher(() => {}, {
+        fetch: async () => page,
+        extract: async () => ({ status: 'bare' }),
+      });
+      await refresh({ id, url: page.finalUrl, sourceKind: 'link' }, new AbortController().signal);
+      expect(render).not.toHaveBeenCalled();
+    } finally {
+      render.mockRestore();
+      vi.unstubAllEnvs();
+    }
+  });
+  describe('stored Reader capture and refresh parity', () => {
+    const reader = { contentHtml: '<p>Extracted body</p>', contentImages: [] };
+    const watch = `<script>var ytInitialPlayerResponse = ${JSON.stringify({ videoDetails: { videoId: 'abcdefghijk', shortDescription: 'Watch description', author: 'Channel' } })};</script>`;
+    it.each([
+      {
+        name: 'readerFailed',
+        sourceKind: 'link',
+        html: '',
+        extracted: { status: 'partial', readerFailed: true },
+        status: 'fetch_failed',
+        text: null,
+      },
+      {
+        name: 'no_reader',
+        sourceKind: 'link',
+        html: '',
+        extracted: { status: 'partial', text: 'Fallback text' },
+        status: 'no_reader',
+        text: 'Fallback text',
+      },
+      {
+        name: 'twitter',
+        sourceKind: 'twitter',
+        html: '',
+        extracted: { status: 'partial', reader, text: 'Tweet' },
+        status: 'no_reader',
+        text: 'Tweet',
+      },
+      {
+        name: 'youtube',
+        sourceKind: 'youtube',
+        html: watch,
+        extracted: { status: 'partial', reader, text: 'Wrong chrome' },
+        status: 'reader',
+        text: 'Watch description',
+      },
+      {
+        name: 'youtube-failed',
+        sourceKind: 'youtube',
+        html: watch,
+        extracted: { status: 'partial', readerFailed: true },
+        status: 'reader',
+        text: 'Watch description',
+      },
+      {
+        name: 'youtube-fallback',
+        sourceKind: 'youtube',
+        html: '',
+        extracted: {
+          status: 'partial',
+          reader,
+          description: 'Fallback description',
+          text: 'Wrong chrome',
+        },
+        status: 'reader',
+        text: 'Fallback description',
+      },
+    ] as const)('stores matching content for $name', async (fixture) => {
+      const link = await core.createLink({
+        url: `https://example.org/parity-${fixture.name}`,
+        sourceKind: fixture.sourceKind,
+      });
+      const page = {
+        ok: true as const,
+        html: fixture.html,
+        contentType: 'text/html',
+        finalUrl: 'https://www.youtube.com/watch?v=abcdefghijk',
+        status: 200,
+      };
+      await enrichMod.enrichLink(link.id, stubDeps(page, fixture.extracted));
+      const captured = await core.getStoredReader(link.id);
+      expect((await core.getById(link.id))?.extractedText).toBe(fixture.text);
+      const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+      core.setReaderRefresher(
+        createReaderRefresher(() => {}, {
+          fetch: async () => page,
+          extract: async () => fixture.extracted,
+        }),
+      );
+      try {
+        const refreshed = await core.refreshReader(link.id);
+        expect(refreshed.status).toBe(fixture.status);
+        expect((await core.getById(link.id))?.extractedText).toBe(fixture.text);
+        if (refreshed.status === 'reader') {
+          expect(refreshed.reader.contentHtml).toBe(captured?.contentHtml);
+          expect(refreshed.reader.contentImages).toEqual(captured?.contentImages);
+          if (fixture.html) expect(captured?.contentHtml).toContain('Watch description');
+        } else expect(captured).toBeUndefined();
+      } finally {
+        core.setReaderRefresher(undefined);
+      }
+    });
+    it('registerLiveReader wires the real refresher and clears the cached live entry', async () => {
+      const { registerLiveReader } = await import('./reader/live-reader.js');
+      const fetchModule = await import('./fetch/safe-fetch.js');
+      const extractModule = await import('./extract/extract.js');
+      const link = await core.createLink({ url: 'https://example.org/wiring', sourceKind: 'link' });
+      const page = {
+        ok: true as const,
+        html: '<html></html>',
+        contentType: 'text/html',
+        finalUrl: link.url,
+        status: 200,
+      };
+      const fetch = vi.spyOn(fetchModule, 'safeFetch').mockResolvedValue(page);
+      const fresh = { contentHtml: '<p>Fresh body</p>', contentImages: [] };
+      const run = vi
+        .spyOn(extractModule, 'extract')
+        .mockResolvedValueOnce({ status: 'full', reader })
+        .mockResolvedValue({ status: 'full', reader: fresh, text: 'Fresh text' });
+      const registration = registerLiveReader();
+      try {
+        const signal = new AbortController().signal;
+        expect(await core.readLive(link, signal)).toEqual(reader);
+        expect(await core.readLive(link, signal)).toEqual(reader);
+        expect(fetch).toHaveBeenCalledOnce();
+        expect(await core.refreshReader(link.id)).toMatchObject({
+          status: 'reader',
+          reader: fresh,
+        });
+        expect(fetch).toHaveBeenCalledTimes(2);
+        expect(await core.readLive(link, signal)).toEqual(fresh);
+        expect(fetch).toHaveBeenCalledTimes(3);
+        expect(run).toHaveBeenCalledTimes(3);
+      } finally {
+        registration.close();
+        fetch.mockRestore();
+        run.mockRestore();
+      }
     });
   });
 });

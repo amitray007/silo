@@ -180,6 +180,7 @@ it('keeps only five controls inline and orders Edit and Reload before existing m
     'Edite',
     'Open originalo',
     'Copy linkc',
+    'Refresh readerr',
     'Tags',
     'Move to trash⌫',
   ]);
@@ -194,7 +195,15 @@ it('keeps only five controls inline and orders Edit and Reload before existing m
     within(menu)
       .getAllByRole('menuitem')
       .map((item) => item.textContent),
-  ).toEqual(['Edite', 'Reload page', 'Open originalo', 'Copy linkc', 'Tags', 'Move to trash⌫']);
+  ).toEqual([
+    'Edite',
+    'Reload page',
+    'Open originalo',
+    'Copy linkc',
+    'Refresh readerr',
+    'Tags',
+    'Move to trash⌫',
+  ]);
   const edit = within(menu).getByRole('menuitem', { name: 'Edit' });
   const reload = within(menu).getByRole('menuitem', { name: 'Reload page' });
   expect(edit.nextElementSibling).toBe(reload);

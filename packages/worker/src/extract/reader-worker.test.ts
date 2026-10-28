@@ -122,3 +122,39 @@ describe('Reader isolation', () => {
     }
   });
 });
+
+it('terminates rendered sanitization when the browser deadline aborts and restores the CPU queue', async () => {
+  const reader = pool();
+  const controller = new AbortController();
+  try {
+    const first = await reader.run('warm', url);
+    const cancelled = expect(reader.sanitize('stuck', url, controller.signal)).rejects.toThrow(
+      'reader-cancelled',
+    );
+    const next = reader.run('next', url);
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    controller.abort();
+    await cancelled;
+    const replacement = await next;
+    expect(replacement.text?.split(':')[0]).not.toBe(first.text?.split(':')[0]);
+    expect(replacement.text).toMatch(/:1:next$/);
+  } finally {
+    await reader.close();
+  }
+});
+
+it('sanitizes rendered content in the real CPU thread without executing publisher scripts', async () => {
+  try {
+    const result = await readerWorker.sanitizeRenderedPage(
+      '<p>Hello <a href="/next">reader</a>.</p><script>throw new Error("publisher script")</script><img src="/photo.png" onerror="attack()">',
+      url,
+      new AbortController().signal,
+    );
+    expect(result.text).toBe('Hello reader.');
+    expect(result.reader?.contentHtml).toContain('https://journal.example.org/next');
+    expect(result.reader?.contentHtml).not.toContain('script');
+    expect(result.reader?.contentHtml).not.toContain('onerror');
+  } finally {
+    await readerWorker.closeReaderPool();
+  }
+});

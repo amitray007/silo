@@ -55,7 +55,12 @@ export const DEFAULT_MAX_REDIRECTS = 5;
 export const DEFAULT_MAX_BODY_BYTES = 5 * 1024 * 1024; // 5MB
 export const DEFAULT_TIMEOUT_MS = 10_000;
 
+export const FETCH_ACCEPT_LANGUAGE = 'en-US,en;q=0.9';
+
 const USER_AGENT = 'silo/0.1 (+https://github.com/amitray007/silo)';
+
+/** `accept` for callers that fetch a web page; other callers default to any type. */
+export const HTML_ACCEPT = 'text/html,application/xhtml+xml,*/*;q=0.8';
 
 /**
  * Runtime gate for the `allowLoopbackForTests` seam. The loopback bypass is
@@ -80,13 +85,14 @@ export type SafeFetchFailureReason =
   | 'not-found'
   | 'fetch-error';
 
-export type SafeFetchResult =
+export type SafeFetchBytesResult =
   | {
       ok: true;
-      html: string;
+      bytes: Uint8Array;
       contentType: string | undefined;
       finalUrl: string;
       status: number;
+      responseHeaders?: Record<string, string>;
       xFrameOptions?: string;
       contentSecurityPolicy?: string;
     }
@@ -96,6 +102,11 @@ export type SafeFetchResult =
       /** Extra detail for logging/debugging; never user-facing. */
       detail?: string;
     };
+
+/** Raw bodies and HTTP statuses use the same DNS, redirect and streaming boundary. */
+export type SafeFetchResult =
+  | (Omit<Extract<SafeFetchBytesResult, { ok: true }>, 'bytes'> & { html: string })
+  | Extract<SafeFetchBytesResult, { ok: false }>;
 
 /**
  * A hostname resolver: given a hostname, returns every address it resolves
@@ -122,6 +133,11 @@ const defaultResolver: Resolver = (hostname) =>
   });
 
 export interface SafeFetchOptions {
+  /** Trusted caller profile only; never copy publisher request headers. */
+  userAgent?: string;
+  accept?: string;
+  /** Public application metadata selected by trusted callers, never request credentials. */
+  responseHeaderNames?: readonly string[];
   signal?: AbortSignal;
   maxRedirects?: number;
   maxBodyBytes?: number;
@@ -276,9 +292,15 @@ function buildPinnedAgent(hostname: string, pinnedIp: string, family: number): A
 }
 
 /** Outcome of a single hop: either a terminal result, or a redirect to follow. */
-type HopOutcome = { kind: 'redirect'; nextUrl: string } | { kind: 'done'; result: SafeFetchResult };
+type HopOutcome =
+  | { kind: 'redirect'; nextUrl: string }
+  | { kind: 'done'; result: SafeFetchBytesResult };
 
 interface HopContext {
+  userAgent: string;
+  accept: string;
+  responseHeaderNames: readonly string[];
+  includeHttpErrors: boolean;
   resolver: Resolver;
   maxBodyBytes: number;
   bodyBudget: BodyByteBudget | undefined;
@@ -307,7 +329,7 @@ async function performHop(currentUrl: string, ctx: HopContext): Promise<HopOutco
   try {
     return await requestAndInterpret(validated.url, agent, ctx);
   } catch (err) {
-    const failure: SafeFetchResult = ctx.controller.signal.aborted
+    const failure: SafeFetchBytesResult = ctx.controller.signal.aborted
       ? { ok: false, reason: 'timeout' }
       : {
           ok: false,
@@ -344,12 +366,16 @@ async function performHop(currentUrl: string, ctx: HopContext): Promise<HopOutco
  * torn down (in `performHop`'s finally) after we are done with the body.
  */
 async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Promise<HopOutcome> {
-  const response = await requestOnce(url, agent, ctx.controller);
+  const response = await requestOnce(url, agent, ctx.controller, ctx.accept, ctx.userAgent);
 
-  if (response.status >= 300 && response.status < 400) {
+  if (
+    response.status >= 300 &&
+    response.status < 400 &&
+    (!ctx.includeHttpErrors || [301, 302, 303, 307, 308].includes(response.status))
+  ) {
     return interpretRedirect(response, url, ctx.isLastHop);
   }
-  if (response.status >= 400) {
+  if (response.status >= 400 && !ctx.includeHttpErrors) {
     // A true 404/410 means the resource genuinely no longer exists — the
     // worker branches on this to silently trash the link (plan 025). Every
     // other 4xx/5xx (403/429/500/503/...) is "couldn't fetch right now", not
@@ -376,10 +402,19 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
     kind: 'done',
     result: {
       ok: true,
-      html: decodeBody(body.bytes, contentType),
+      bytes: body.bytes,
       contentType,
       finalUrl: url.toString(),
       status: response.status,
+      ...(ctx.responseHeaderNames.length
+        ? {
+            responseHeaders: Object.fromEntries(
+              ctx.responseHeaderNames
+                .filter((name) => response.headers.has(name))
+                .map((name) => [name, response.headers.get(name) ?? '']),
+            ),
+          }
+        : {}),
       ...(response.headers.has('x-frame-options')
         ? { xFrameOptions: response.headers.get('x-frame-options') ?? '' }
         : {}),
@@ -420,6 +455,8 @@ async function requestOnce(
   url: URL,
   agent: Agent,
   controller: AbortController,
+  accept: string,
+  userAgent: string,
 ): Promise<UndiciResponse> {
   // Deliberately `undici`'s own `fetch`, NOT Node's global `fetch`. Node's
   // native fetch is built on its own internally-bundled undici, which is a
@@ -434,7 +471,11 @@ async function requestOnce(
     dispatcher: agent,
     redirect: 'manual',
     signal: controller.signal,
-    headers: { 'user-agent': USER_AGENT },
+    headers: {
+      'user-agent': userAgent,
+      accept,
+      'accept-language': FETCH_ACCEPT_LANGUAGE,
+    },
   });
 }
 
@@ -445,10 +486,12 @@ async function requestOnce(
  *
  * Never throws for an expected failure — returns `{ ok: false, reason }`.
  */
-export async function safeFetch(
+async function fetchBody(
   rawUrl: string,
-  options: SafeFetchOptions = {},
-): Promise<SafeFetchResult> {
+  options: SafeFetchOptions,
+  includeHttpErrors: boolean,
+  userAgent = USER_AGENT,
+): Promise<SafeFetchBytesResult> {
   const maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
   const maxBodyBytes = options.maxBodyBytes ?? DEFAULT_MAX_BODY_BYTES;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
@@ -471,6 +514,10 @@ export async function safeFetch(
     for (let hop = 0; hop <= maxRedirects; hop++) {
       const outcome = await performHop(currentUrl, {
         resolver,
+        includeHttpErrors,
+        responseHeaderNames: options.responseHeaderNames ?? [],
+        accept: options.accept ?? '*/*',
+        userAgent,
         maxBodyBytes,
         bodyBudget: options.bodyBudget,
         controller,
@@ -489,6 +536,25 @@ export async function safeFetch(
     options.signal?.removeEventListener('abort', onAbort);
     options.bodyBudget?.signal.removeEventListener('abort', onAbort);
   }
+}
+
+/** Existing page-fetch contract, including its 404/410 and error handling. */
+export async function safeFetch(
+  rawUrl: string,
+  options: SafeFetchOptions = {},
+): Promise<SafeFetchResult> {
+  const result = await fetchBody(rawUrl, options, false);
+  if (!result.ok) return result;
+  const { bytes, ...response } = result;
+  return { ...response, html: decodeBody(bytes, result.contentType) };
+}
+
+/** Browser proxy: preserve bytes and terminal statuses without forwarding credentials. */
+export function safeFetchBytes(
+  rawUrl: string,
+  options: SafeFetchOptions = {},
+): Promise<SafeFetchBytesResult> {
+  return fetchBody(rawUrl, options, true, options.userAgent ?? USER_AGENT);
 }
 
 /**

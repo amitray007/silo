@@ -140,7 +140,11 @@ export type LinkJson = {
  * `contentImages` is in document order; the Reader loads image `n` through
  * `/api/links/:id/content-image/n`.
  */
-export type LiveReaderJson = { contentHtml: string; contentImages: string[] };
+export type LiveReaderJson = {
+  contentHtml: string;
+  contentImages: string[];
+  capturedAt: string | null;
+};
 
 /** `LinkJson` plus `deletedAt` (ISO string) — `GET /api/trash`'s per-row shape. */
 export type TrashLinkJson = LinkJson & { deletedAt: string };

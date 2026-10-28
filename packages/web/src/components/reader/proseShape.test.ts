@@ -62,6 +62,22 @@ describe('shapeProse notes', () => {
     );
   });
 
+  it('keeps numbering notes past a quote inside a note', () => {
+    expect(
+      shape(
+        'See [<a href="#a">2</a>].<br><br>[<a>1</a>] First note.<br><br>[<a>2</a>] Second note. ' +
+          '<blockquote> A quoted line </blockquote> [<a>3</a>] Third note.',
+      ),
+    ).toBe(
+      '<p>See<sup id="silo-fn-4"><a href="#silo-fn-3">2</a></sup>.</p><ol>' +
+        '<li id="silo-fn-1"><p>First note.</p></li>' +
+        '<li id="silo-fn-3"><p>Second note. <a href="#silo-fn-4" title="return to article">↩</a></p>' +
+        '<blockquote><p>A quoted line</p></blockquote></li>' +
+        '<li id="silo-fn-5"><p>Third note.</p></li>' +
+        '</ol>',
+    );
+  });
+
   it('leaves captures that already have footnotes and lone brackets alone', () => {
     const captured =
       '<p>Ref<sup id="silo-fn-1"><a href="#silo-fn-2">1</a></sup></p><p>[<a>1</a>] a</p><p>[<a>2</a>] b</p>';

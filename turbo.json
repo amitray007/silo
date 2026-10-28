@@ -24,7 +24,8 @@
         "SILO_ENRICHING_STALE_MINUTES",
         "SILO_API_TOKEN",
         "SILO_APP_PASSWORD",
-        "SILO_SESSION_SECRET"
+        "SILO_SESSION_SECRET",
+        "SILO_BROWSER_WS_ENDPOINT"
       ]
     },
     "test": {
@@ -38,8 +39,10 @@
         "SILO_ENRICHING_STALE_MINUTES",
         "SILO_API_TOKEN",
         "SILO_APP_PASSWORD",
-        "SILO_SESSION_SECRET"
-      ]
+        "SILO_SESSION_SECRET",
+        "SILO_BROWSER_WS_ENDPOINT"
+      ],
+      "env": ["CI_REQUIRE_BROWSER"]
     }
   }
 }

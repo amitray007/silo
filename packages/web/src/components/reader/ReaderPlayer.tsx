@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PlayerEmbed } from './embedFor';
+import { playerFrameAttributes } from './playerFrameAttributes';
 import { FrameLoadNotice, PlayerSkeleton, useFrameLoading } from './ReaderLoading';
 
 function record(value: unknown): Record<string, unknown> | undefined {
@@ -63,10 +64,10 @@ export function ReaderPlayer({
           aspectRatio: fill ? undefined : embed.aspect,
           ...(!fill && height ? { height } : {}),
         }}
-        referrerPolicy="strict-origin-when-cross-origin"
-        allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+        referrerPolicy={playerFrameAttributes.referrerpolicy}
+        allow={playerFrameAttributes.allow}
         allowFullScreen
-        loading="lazy"
+        loading={playerFrameAttributes.loading}
       />
       {timedOut && <FrameLoadNotice href={url ?? embed.src} />}
       {loading && (

@@ -19,6 +19,7 @@ import {
   logDlqDepth,
   registerEnqueuer,
 } from '@silo/queue';
+import { closeBrowserReader } from './browser/reader.js';
 import { enrichLink } from './enrich.js';
 import { closeReaderPool } from './extract/reader-worker.js';
 import { registerScheduledJobs } from './jobs/index.js';
@@ -92,6 +93,7 @@ export async function startWorker(): Promise<WorkerHandle> {
   return {
     stop: async () => {
       await boss.stop({ graceful: true });
+      await closeBrowserReader();
       await closeReaderPool();
     },
   };

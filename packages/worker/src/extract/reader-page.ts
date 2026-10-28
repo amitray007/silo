@@ -6,6 +6,7 @@ import { isChallengePage } from './challenge-page.js';
 import { recoverEmbeddedJson } from './embedded-json.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
 import { sanitizeReaderContent } from './reader-content.js';
+import { enrichRichBlocks, prepareCodeLanguages, prepareGists } from './rich-blocks.js';
 import { extractYouTubeWatch } from './youtube-watch.js';
 
 export interface PageContent {
@@ -67,6 +68,8 @@ export async function extractPageContent(
 async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
   // jsdom repairs malformed HTML (notably the RFC's body/pre nesting). Defuddle's
   // selectors need linkedom; running directly on jsdom hits its selector limit.
+  prepareGists(dom.window.document);
+  prepareCodeLanguages(dom.window.document);
   const { document } = parseHTML(dom.serialize());
   Object.defineProperty(document, 'URL', { value: url, configurable: true });
   Object.defineProperty(document, 'styleSheets', { value: [] });
@@ -83,11 +86,14 @@ async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
       throw new Error('Reader network access is disabled');
     },
   });
-  const reader = sanitizeReaderContent(article.content, url, dom);
+  const rich = dom.window.document.createElement('div');
+  rich.innerHTML = article.content;
+  await enrichRichBlocks(rich);
+  const reader = sanitizeReaderContent(rich.innerHTML, url, dom);
   const result: PageContent = {};
   // Search text follows Defuddle's content, before the stored-HTML byte cap.
   const textContainer = document.createElement('div');
-  textContainer.innerHTML = article.content;
+  textContainer.innerHTML = rich.innerHTML;
   const text = normalizeWhitespace(textContainer.textContent ?? '');
   if (text) result.text = text;
   if (reader) result.reader = reader;

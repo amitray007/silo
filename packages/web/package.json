@@ -16,9 +16,11 @@
     "@tanstack/react-query": "catalog:",
     "cmdk": "catalog:",
     "dompurify": "catalog:",
+    "mermaid": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "react-router": "catalog:"
+    "react-router": "catalog:",
+    "shiki": "catalog:"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",

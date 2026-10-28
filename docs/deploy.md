@@ -139,3 +139,68 @@ into the config after copying.
   project's current scale.
 
 See `.env.example` for the full annotated env surface.
+
+## Optional rendered Reader
+
+Leave `SILO_BROWSER_WS_ENDPOINT` unset to keep static extraction. To render stored
+Readers during capture, refresh and backfill, set it on **api only**:
+
+```bash
+SILO_BROWSER_WS_ENDPOINT=ws://browser:3000/silo-browser docker compose -f docker-compose.prod.yml --profile browser up --build
+```
+
+The browser target uses `mcr.microsoft.com/playwright:v1.64.1-noble` and installs
+`playwright-core@1.64.1` at build time. Keep the image, server and client versions
+equal to the root `playwright` pin. It runs `browser/server.mjs` with plain Node
+as the non-root `pwuser`. The application install still uses `--ignore-scripts`.
+
+Only api and browser join the production `internal: true` browser network. Do
+not attach browser to an external network or publish its port in production.
+The internal network blocks internet egress, but browser can still reach api on
+that network. When **both** `SILO_APP_PASSWORD` and `SILO_API_TOKEN` are unset,
+ordinary API routes have no authentication gate and unsafe calls bypass CSRF. Set authentication for
+any deployment that other machines can reach.
+
+Chromium runs untrusted JavaScript. HTTP and WebSocket routes block direct page
+requests. The launcher also disables non-proxied WebRTC UDP and sends unhandled
+traffic (including SharedWorkers) through a dead proxy at `127.0.0.1:9`, with
+`<-loopback>` removing Chromium's implicit loopback bypass. Only the worker's
+SSRF-checked GET fetches reach publishers. They use a fixed Chrome user agent and
+resource-specific Accept, without publisher cookies or authorization. Integration
+tests exercise this same launcher and local HTTP, STUN and TURN traps.
+
+Residual risk: Chromium's sandbox remains disabled. Enable Chromium sandbox +
+Playwright seccomp profile, verified under Docker, before treating this as a
+sandbox against a compromised browser process. The proxy and network controls do
+not provide that process boundary.
+
+Both compose files provisionally use `mem_limit: 2g` and `shm_size: 1gb`.
+Summing process RSS double-counts shared memory. Operators should confirm peak
+cgroup memory usage under their workload before adjusting the limit.
+
+For local Docker, run `docker compose --profile browser up --build browser` and
+set `SILO_BROWSER_WS_ENDPOINT=ws://127.0.0.1:3000/silo-browser` on the worker.
+Local compose uses a normal bridge so the published loopback port is reachable;
+the launcher supplies the traffic controls. Without Docker, use the same launcher:
+
+```bash
+pnpm --filter @silo/worker exec node src/browser/server.mjs
+```
+
+`SILO_BROWSER_HOST` defaults to `127.0.0.1` (`0.0.0.0` in the image), and
+`SILO_BROWSER_PORT` defaults to `3000`. The WebSocket path is `/silo-browser`.
+
+Rendering reuses one connection and one active page, with at most ten queued
+requests. Queued callers can cancel immediately. Capture allows 60 seconds for
+queueing and rendering; each active attempt has a 20-second deadline. Three
+consecutive infrastructure failures open the circuit for five minutes. One trial
+then closes it on success or reopens it on infrastructure failure. Challenge,
+empty, content-limit and navigation outcomes do not count toward the breaker.
+
+When configured rendering is unavailable, the static Reader remains readable at
+the current version and `reader_render_pending` is true. Backfill retries these
+rows after the existing six-hour cooldown. A successful render or deliberate
+static choice clears the flag. Explicit non-HTML responses skip rendering;
+missing Content-Type headers may still be extracted. Live Reader stays static.
+Shutdown closes the browser reader before the extraction pool, with bounded
+best-effort browser cleanup.

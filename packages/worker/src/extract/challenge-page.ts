@@ -1,9 +1,12 @@
 /** Match the verification screen, not an article that merely discusses bot protection. */
 export function isChallengePage(document: Document): boolean {
-  const copy = (node: Element | null) => node?.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-  const heading = [document.title, ...Array.from(document.querySelectorAll('h1, h2'), copy)].join(
-    ' ',
-  );
+  const heading = [
+    document.title,
+    ...Array.from(
+      document.querySelectorAll('h1, h2'),
+      (node) => node.textContent?.replace(/\s+/g, ' ').trim() ?? '',
+    ),
+  ].join(' ');
   if (
     /just a moment|verify (?:to continue|(?:that )?you(?:'re| are) (?:a )?human)|attention required|pardon our interruption|are you a (?:human|robot)/i.test(
       heading,
@@ -12,7 +15,9 @@ export function isChallengePage(document: Document): boolean {
     return true;
   // Walk text without cloning or mutating the document needed by embedded JSON.
   const walker = document.createTreeWalker(document.body, 4, {
-    acceptNode: (node) => (node.parentElement?.closest('script, style, template') ? 2 : 1),
+    acceptNode(node) {
+      return node.parentElement?.closest('script, style, template') ? 2 : 1;
+    },
   });
   let bodyText = '';
   while (walker.nextNode()) bodyText += walker.currentNode.textContent ?? '';

@@ -798,6 +798,7 @@ describe('reader keyboard and phone toolbar', () => {
       'Edite',
       'Open originalo',
       'Copy linkc',
+      'Refresh readerr',
       'Tags',
       'Move to trash⌫',
     ]);
@@ -1065,6 +1066,7 @@ describe('review regressions', () => {
       route: '/?link=a',
       readers: {
         a: {
+          capturedAt: null,
           contentHtml:
             '<h1>Article heading</h1><p style="color:red" onclick="bad()">Safe prose <a href="javascript:alert(1)">bad link</a><a href="https://react.dev">React docs</a></p><script>alert(1)</script><img src="https://cdn.test/a.png" onerror="bad()"><img src="https://cdn.test/a.png"><img src="https://cdn.test/extra.png"><pre><code>const a = 1;</code></pre><table><caption>Values</caption><tbody><tr><td>A</td></tr></tbody></table>',
           contentImages: ['https://cdn.test/a.png', 'https://cdn.test/a.png'],

@@ -64,6 +64,7 @@ export interface ExtractResult {
   text?: string;
   status: CaptureStatus;
   reader?: ReaderContent;
+  readerFailed?: boolean;
 }
 
 export interface ExtractInput {
@@ -73,7 +74,7 @@ export interface ExtractInput {
 }
 
 /** `text/html; charset=utf-8` -> `text/html`. Compares case-insensitively. */
-function isHtmlContentType(contentType: string | undefined): boolean {
+export function isHtmlContentType(contentType: string | undefined): boolean {
   if (!contentType) {
     // No Content-Type header at all — proceed and let extraction try; a
     // missing header is common enough (some servers omit it) that treating
@@ -214,7 +215,7 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
       '[reader] extraction unavailable',
       error instanceof Error ? error.message : 'reader-failed',
     );
-    return buildResult(fields, undefined);
+    return { ...buildResult(fields, undefined), readerFailed: true };
   }
 }
 
@@ -223,7 +224,7 @@ function pageResult(fields: MetascraperFields, page: PageContent, html: string):
     fields.title = page.title;
   if (fields.description === undefined && page.description) fields.description = page.description;
   const result = buildResult(fields, page.text);
-  if (page.challenge) return result;
+  if (page.challenge) return { ...result, readerFailed: true };
   if (page.videoDescription) result.status = 'partial';
   if (page.reader) result.reader = page.reader;
   if (result.status === 'bare' && isJsWalled(fields, page.text, html)) result.status = 'partial';

@@ -41,6 +41,10 @@ const paths = {
   right: 'm9 5 7 7-7 7',
 } as const;
 
+export function readerIconPath(name: keyof typeof paths): string {
+  return paths[name];
+}
+
 /** Original silo glyphs drawn on the shared 24-unit grid. */
 export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size?: number }) {
   return (

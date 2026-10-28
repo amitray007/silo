@@ -67,7 +67,7 @@ export {
   TOKEN_PREFIX_LEN,
   verifyAccessToken,
 } from './auth/tokens.js';
-export { READER_HTML_MAX_BYTES, type ReaderContent } from './capture.js';
+export { READER_HTML_MAX_BYTES, READER_VERSION, type ReaderContent } from './capture.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
 // of the single-id write ops above, modeled on `import.ts`'s sequential-
 // bulk-with-per-item-results pattern (see bulk.ts's module doc comment).
@@ -204,6 +204,15 @@ export { CAPTURE_SOURCES } from './links/source.js';
 // keyed on `source_kind`, and its inferred type.
 export type { SourceData } from './links/source-data.js';
 export { sourceDataSchema, THREAD_SIDE_MAX, twitterThreadPostSchema } from './links/source-data.js';
+export {
+  getStoredReader,
+  type ReaderExtraction,
+  type ReaderRefresher,
+  recordReader,
+  refreshReader,
+  runReaderBackfill,
+  setReaderRefresher,
+} from './links/stored-reader.js';
 // Stranded-enriching sweep (scheduling-jobs slice): a live-scoped, bounded
 // FIND for links stuck at capture_status='enriching' past a staleness
 // window. Core exposes the find only — re-enqueueing (via requestRetry) is

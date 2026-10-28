@@ -5,7 +5,7 @@ import {
   PageViewerUnavailableError,
   setPageViewer,
 } from '@silo/core';
-import { type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
+import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 import { PageCache } from './cache.js';
 import { addDarkPageStyle } from './dark-theme.js';
 import { ViewLimit } from './limit.js';
@@ -81,7 +81,8 @@ export function createPageViewer(options: ViewerOptions = {}): {
 } {
   const pool = new TransformPool();
   const transform = options.transform ?? ((html, url, signal) => pool.run(html, url, signal));
-  const fetchPage = options.fetch ?? ((url, signal) => safeFetch(url, { signal }));
+  const fetchPage =
+    options.fetch ?? ((url, signal) => safeFetch(url, { accept: HTML_ACCEPT, signal }));
   const cache = new PageCache<Page>(options.cacheBytes, options.ttlMs);
   const limit = new ViewLimit(options.waitMs);
   const refreshed = new Map<string, number>();

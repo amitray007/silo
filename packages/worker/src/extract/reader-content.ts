@@ -1,6 +1,102 @@
 import { isReaderImageUrl, READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core/capture';
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { enrichRichBlocks } from './rich-blocks.js';
+
+const MATH_TAGS = [
+  'math',
+  'mrow',
+  'mi',
+  'mn',
+  'mo',
+  'ms',
+  'mtext',
+  'mspace',
+  'msup',
+  'msub',
+  'msubsup',
+  'mfrac',
+  'msqrt',
+  'mroot',
+  'mover',
+  'munder',
+  'munderover',
+  'mtable',
+  'mtr',
+  'mtd',
+  'mstyle',
+  'mpadded',
+  'mphantom',
+  'menclose',
+  'semantics',
+  'annotation',
+];
+const MATH_ATTRS = [
+  'display',
+  'mathvariant',
+  'displaystyle',
+  'scriptlevel',
+  'stretchy',
+  'fence',
+  'separator',
+  'accent',
+  'accentunder',
+  'columnalign',
+  'rowalign',
+  'columnspan',
+  'rowspan',
+  'lspace',
+  'rspace',
+  'linethickness',
+  'notation',
+  'form',
+  'largeop',
+  'movablelimits',
+  'symmetric',
+  'minsize',
+  'maxsize',
+  'voffset',
+];
+const MATH_LENGTH_ATTRS = [
+  'linethickness',
+  'minsize',
+  'maxsize',
+  'voffset',
+  'width',
+  'height',
+  'depth',
+  'lspace',
+  'rspace',
+];
+
+function richAttribute(node: Element, name: string, value: string): boolean | undefined {
+  if (name === 'data-lang')
+    return node.nodeName === 'CODE' && /^[a-z0-9][a-z0-9+#._-]{0,23}$/.test(value.toLowerCase());
+  if (!['data-callout', 'data-callout-title'].includes(name)) return undefined;
+  if (!['DIV', 'BLOCKQUOTE'].includes(node.nodeName)) return false;
+  if (name === 'data-callout') return /^[a-z-]{1,20}$/.test(value);
+  return (
+    value.length <= 200 &&
+    !/[<>]/.test(value) &&
+    !Array.from(value).some((char) => char.charCodeAt(0) < 32 || char.charCodeAt(0) === 127)
+  );
+}
+
+function validMathAttribute(node: Element, name: string, value: string): boolean {
+  if (
+    ['width', 'height', 'depth'].includes(name) &&
+    !['mspace', 'mpadded'].includes(node.localName)
+  )
+    return false;
+  if (name === 'scriptlevel') return /^[0-3]$/.test(value);
+  if (name === 'notation') return /^[a-z]+(?: +[a-z]+)*$/.test(value);
+  if (MATH_LENGTH_ATTRS.includes(name))
+    return (
+      /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:em|ex|px|pt|%|mu)?$/.test(value) ||
+      (name === 'linethickness' && /^(?:thin|medium|thick)$/.test(value))
+    );
+  return MATH_ATTRS.includes(name);
+}
 
 const READER_TAGS = [
   'article',
@@ -59,6 +155,7 @@ const READER_TAGS = [
   'summary',
   'colgroup',
   'col',
+  ...MATH_TAGS,
 ];
 
 function httpUrl(raw: string | null, baseUrl: string, stripHash = false): string | undefined {
@@ -106,8 +203,43 @@ export function sanitizeReaderContent(
   const dom = existingDom ?? new JSDOM('', { url: finalUrl, virtualConsole: new VirtualConsole() });
   try {
     const purifier = createDOMPurify(dom.window);
+    purifier.addHook('uponSanitizeAttribute', (node, data) => {
+      if (node.namespaceURI === 'http://www.w3.org/1998/Math/MathML') {
+        data.keepAttr = validMathAttribute(
+          node,
+          data.attrName,
+          node.getAttribute(data.attrName) ?? '',
+        );
+        return;
+      }
+      const rich = richAttribute(node, data.attrName, node.getAttribute(data.attrName) ?? '');
+      if (rich !== undefined) {
+        data.keepAttr = rich;
+        data.attrValue =
+          data.attrName === 'data-lang' ? data.attrValue.toLowerCase() : data.attrValue;
+      }
+      if (data.attrName === 'depth') data.keepAttr = false;
+      if (['width', 'height'].includes(data.attrName))
+        data.keepAttr =
+          node.nodeName === 'IMG' && validImageSize(node.getAttribute(data.attrName) ?? '');
+    });
+    purifier.addHook('afterSanitizeAttributes', (node) => {
+      if (node.nodeName !== 'IFRAME') return;
+      const src = httpUrl(node.getAttribute('src'), finalUrl);
+      if (!src) {
+        node.remove();
+        return;
+      }
+      const figure = dom.window.document.createElement('figure');
+      figure.setAttribute('data-silo-embed', '');
+      const anchor = dom.window.document.createElement('a');
+      anchor.href = src;
+      anchor.textContent = new URL(src).host;
+      figure.append(anchor);
+      node.replaceWith(figure);
+    });
     const fragment = purifier.sanitize(html, {
-      ALLOWED_TAGS: READER_TAGS,
+      ALLOWED_TAGS: [...READER_TAGS, 'iframe'],
       ALLOWED_ATTR: [
         'id',
         'href',
@@ -122,12 +254,22 @@ export function sanitizeReaderContent(
         'reversed',
         'open',
         'datetime',
+        'width',
+        'height',
+        'depth',
+        'data-silo-embed',
+        'data-lang',
+        'data-callout',
+        'data-callout-title',
+        ...MATH_ATTRS,
       ],
       ALLOW_DATA_ATTR: false,
       ALLOW_ARIA_ATTR: false,
       RETURN_DOM_FRAGMENT: true,
     });
+    splitEmbedParagraphs(fragment);
     rewriteLinks(fragment, finalUrl);
+    openLongDetails(fragment);
     let imageCount = 0;
     for (const image of fragment.querySelectorAll('img')) {
       const src = httpUrl(image.getAttribute('src') ?? responsiveSource(image), finalUrl, true);
@@ -197,4 +339,55 @@ function responsiveSource(image: Element): string | null {
     }
   }
   return best;
+}
+
+function validImageSize(value: string): boolean {
+  return /^\d+$/.test(value) && Number(value) >= 1 && Number(value) <= 4000;
+}
+
+function openLongDetails(fragment: DocumentFragment): void {
+  for (const details of fragment.querySelectorAll('details')) {
+    const summaryLength = Array.from(details.querySelectorAll('summary')).reduce(
+      (length, summary) => length + (summary.textContent?.length ?? 0),
+      0,
+    );
+    if ((details.textContent?.length ?? 0) - summaryLength >= 280) details.setAttribute('open', '');
+    else details.removeAttribute('open');
+  }
+}
+
+/** Lift embed figures out of paragraphs before HTML serialization reparses them. */
+function splitEmbedParagraphs(fragment: DocumentFragment): void {
+  for (const figure of fragment.querySelectorAll('p figure[data-silo-embed]')) {
+    const paragraph = figure.closest('p');
+    if (!paragraph) continue;
+    const range = paragraph.ownerDocument.createRange();
+    range.selectNodeContents(paragraph);
+    range.setStartAfter(figure);
+    const after = paragraph.cloneNode(false) as HTMLParagraphElement;
+    after.append(range.extractContents());
+    paragraph.after(figure, after);
+    for (const part of [paragraph, after])
+      if (!part.textContent?.trim() && !part.querySelector('img, math, figure, br')) part.remove();
+  }
+}
+
+/** Runs in the terminable Reader thread, so untrusted rendered HTML cannot block a deadline. */
+export async function sanitizeRenderedContent(
+  html: string,
+  url: string,
+): Promise<{ reader?: ReaderContent; text?: string }> {
+  const dom = new JSDOM('', { url, virtualConsole: new VirtualConsole() });
+  try {
+    const rich = dom.window.document.createElement('div');
+    rich.innerHTML = html;
+    await enrichRichBlocks(rich);
+    const reader = sanitizeReaderContent(rich.innerHTML, url, dom);
+    if (!reader) return {};
+    const container = dom.window.document.createElement('div');
+    container.innerHTML = reader.contentHtml;
+    return { reader, text: (container.textContent ?? '').replace(/\s+/g, ' ').trim() };
+  } finally {
+    dom.window.close();
+  }
 }

@@ -32,6 +32,8 @@
     "metascraper-title": "catalog:",
     "metascraper-url": "catalog:",
     "pg-boss": "catalog:",
+    "playwright-core": "1.64.1",
+    "temml": "catalog:",
     "tsx": "catalog:",
     "undici": "catalog:",
     "zod": "catalog:"
