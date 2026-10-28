@@ -1,0 +1,8 @@
+fix(ai): bound Fireworks model refreshes and validate selections atomically
+
+Accept Fireworks date objects and ISO dates. Skip malformed models and bound
+response bytes, model counts, IDs, and labels. Lock the live-list row while
+validating and saving settings. Preserve legacy provider defaults and reject
+explicit null features. Add regression tests, including Postgres lock tests.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
