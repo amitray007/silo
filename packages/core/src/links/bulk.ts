@@ -1,4 +1,4 @@
-import { requestRetry } from './enrichment.js';
+import { requestEnrich } from './enrichment.js';
 import {
   addTag,
   type CreateLinkInput,
@@ -15,7 +15,7 @@ import {
 /**
  * Bulk write + batch-read core operations (agent-navigation slice U3):
  * `*Many` variants of the existing single-id write ops (`addTag`/`removeTag`/
- * `softDelete`/`restore`/`requestRetry`/`createLink`), plus `getByIds`, the
+ * `softDelete`/`restore`/`requestEnrich`/`createLink`), plus `getByIds`, the
  * batch-read `get_link`'s `ids[]` mode will use.
  *
  * Modeled EXACTLY on `import.ts`'s bulk pattern (see its module doc comment):
@@ -34,7 +34,7 @@ import {
  *
  * These functions are ADDITIVE: every existing single-id caller (MCP tools,
  * API routes) keeps calling `addTag`/`removeTag`/`softDelete`/`restore`/
- * `requestRetry`/`createLink` directly, unchanged. Wiring `id | ids[]` into
+ * `requestEnrich`/`createLink` directly, unchanged. Wiring `id | ids[]` into
  * the adapters is U4/U5's job, not this unit's.
  */
 
@@ -189,24 +189,23 @@ export async function restoreMany(ids: ReadonlyArray<string>): Promise<BulkItemR
 }
 
 /**
- * Retry capture for many links, reusing `requestRetry`'s existing live +
- * retryable-status guard (see its doc comment: excludes `full`, and any
- * trashed/unknown id). `null` -> `ok: false` with a reason mirroring the MCP
+ * Re-run enrichment for many links with `requestEnrich` (the owner-started
+ * path: any live status, `full` included; a trashed or unknown id is not
+ * found). `null` -> `ok: false` with a reason mirroring the MCP
  * `retry_capture` tool's own not-found message, so an agent driving this in
  * bulk gets the same explanation it would from the single-id tool.
  */
 export async function retryCaptureMany(ids: ReadonlyArray<string>): Promise<BulkItemResult[]> {
   return runBulk(
     ids,
-    (id) => requestRetry(id),
+    (id) => requestEnrich(id),
     (id, updated: Link | null) =>
       updated
         ? { id, ok: true }
         : {
             id,
             ok: false,
-            reason:
-              "not found, trashed, or already fully captured (status 'full', nothing to retry)",
+            reason: 'not found or trashed',
           },
   );
 }

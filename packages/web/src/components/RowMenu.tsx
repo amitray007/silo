@@ -162,17 +162,15 @@ export function LinkMenuActions({
           )}
         </MenuPresence>
       </div>
-      {link.captureStatus !== 'full' && (
-        <MenuAction
-          icon={<ReaderIcon name="refresh" />}
-          onClick={() => {
-            closeMenu();
-            retry.mutate();
-          }}
-        >
-          {link.captureStatus === 'enriching' ? 'Re-enrich' : 'Enrich'}
-        </MenuAction>
-      )}
+      <MenuAction
+        icon={<ReaderIcon name="refresh" />}
+        onClick={() => {
+          closeMenu();
+          retry.mutate();
+        }}
+      >
+        {link.captureStatus === 'enriching' ? 'Re-enrich' : 'Enrich'}
+      </MenuAction>
       <div className="silo-menu-separator" />
       <MenuAction
         icon={<ReaderIcon name="trash" />}

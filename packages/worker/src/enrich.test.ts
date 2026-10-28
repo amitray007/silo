@@ -704,6 +704,64 @@ describeIfPg('enrichLink (integration)', () => {
     });
   });
 
+  describe('no downgrade of a full link (Enrich on every link)', () => {
+    const okFetch = (url: string): SafeFetchResult => ({
+      ok: true,
+      html: '<html></html>',
+      contentType: 'text/html',
+      finalUrl: url,
+      status: 200,
+    });
+
+    async function fullLink(url: string): Promise<string> {
+      const id = await newLink(url);
+      await core.recordEnrichment(id, {
+        title: 'Good title',
+        description: 'Good description',
+        text: 'x'.repeat(400),
+        status: 'full',
+      });
+      return id;
+    }
+
+    it('a manual re-run of a full link that comes back partial stays full and keeps its data', async () => {
+      const id = await fullLink('https://example.com/rerun-partial');
+      await enrichMod.enrichLink(id, stubDeps(okFetch(id), { status: 'partial' }), {
+        trigger: 'manual',
+        previousStatus: 'full',
+      });
+      const link = await core.getById(id);
+      expect(link?.captureStatus).toBe('full');
+      expect(link?.title).toBe('Good title');
+      expect(link?.description).toBe('Good description');
+      expect(link?.extractedText).toBe('x'.repeat(400));
+    });
+
+    it('a manual re-run of a full link whose fetch fails stays full', async () => {
+      const id = await fullLink('https://example.com/rerun-down');
+      await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'http-error', detail: '503' }), {
+        trigger: 'manual',
+        previousStatus: 'full',
+      });
+      expect((await core.getById(id))?.captureStatus).toBe('full');
+    });
+
+    it('a previously partial link is still recorded as partial', async () => {
+      const id = await newLink('https://example.com/rerun-was-partial');
+      await enrichMod.enrichLink(id, stubDeps(okFetch(id), { status: 'partial' }), {
+        trigger: 'manual',
+        previousStatus: 'partial',
+      });
+      expect((await core.getById(id))?.captureStatus).toBe('partial');
+    });
+
+    it('with no job context (a legacy queued job) a thin result is recorded as is', async () => {
+      const id = await newLink('https://example.com/legacy-job');
+      await enrichMod.enrichLink(id, stubDeps(okFetch(id), { status: 'partial' }));
+      expect((await core.getById(id))?.captureStatus).toBe('partial');
+    });
+  });
+
   describe('404-trash + attempt-cap give-up (plan 025 U4)', () => {
     it('a confirmed 404/410 (reason: not-found) silently trashes the link, never records a status', async () => {
       const id = await newLink('https://example.com/vanished');

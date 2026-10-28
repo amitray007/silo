@@ -132,10 +132,11 @@ export { detectSource } from './links/detect-source.js';
 // registered enqueuer (no-op by default). The worker registers the real
 // pg-boss send at startup via setEnrichmentEnqueuer — this keeps core free of
 // any @silo/worker dependency (dependency flows adapter -> core).
-export type { EnrichmentEnqueuer } from './links/enqueue.js';
+export type { EnrichJobData, EnrichmentEnqueuer, EnrichTrigger } from './links/enqueue.js';
 export {
   ENRICH_LINK_QUEUE,
   enqueueEnrichment,
+  enrichJobSchema,
   resetEnrichmentEnqueuer,
   setEnrichmentEnqueuer,
 } from './links/enqueue.js';
@@ -149,6 +150,7 @@ export {
   ENRICH_ATTEMPT_CAP,
   enrichmentResultSchema,
   recordEnrichment,
+  requestEnrich,
   requestRetry,
   settleGiveUp,
 } from './links/enrichment.js';

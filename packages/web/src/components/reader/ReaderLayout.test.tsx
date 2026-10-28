@@ -801,6 +801,7 @@ describe('reader keyboard and phone toolbar', () => {
       'Copy linkc',
       'Refresh readerr',
       'Tags',
+      'Enrich',
       'Move to trash⌫',
     ]);
     expect(document.activeElement).toBe(items[0]);

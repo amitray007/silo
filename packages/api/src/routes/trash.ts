@@ -3,7 +3,7 @@ import {
   getById,
   hardDelete,
   listTrash,
-  requestRetry,
+  requestEnrich,
   restore,
   restoreMany,
   retryCaptureMany,
@@ -215,22 +215,21 @@ export function registerTrashRoutes(app: Hono): void {
   });
 
   /**
-   * `POST /api/links/:id/retry` — retry a degraded capture (plan 007, A4).
+   * `POST /api/links/:id/retry` — the row menu's Enrich (plan 007, A4).
    * Mirrors `retry_capture`'s MCP handler (`retry-capture.ts`): `core.
-   * requestRetry` resets a LIVE, retryable link (`partial`/`bare`/stuck
-   * `enriching`) back to `enriching`; a `full` (already-good) capture, an
-   * unknown id, or a trashed one all return `null` (a good capture is never
-   * downgraded by a retry — same honest not-retryable message as the MCP tool).
+   * requestEnrich` resets any LIVE link, `full` included, back to `enriching`
+   * and re-runs enrichment (the worker keeps a `full` link `full` if the re-run
+   * comes back thin). An unknown or trashed id returns `null`.
    */
   app.post('/links/:id/retry', async (c) => {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
 
-    const retried = await requestRetry(id);
+    const retried = await requestEnrich(id);
     if (!retried) {
       return c.json(
         {
           error: 'not_found',
-          message: `Could not retry link ${id} — it's either unknown, trashed, or already fully captured (status 'full', nothing to retry).`,
+          message: `Could not enrich link ${id} — it's either unknown or trashed.`,
         },
         404,
       );

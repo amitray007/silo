@@ -1,8 +1,8 @@
 import { db, links } from '@silo/db';
-import { eq, inArray, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { READER_VERSION } from '../capture.js';
-import { enqueueEnrichment } from './enqueue.js';
+import { type EnrichTrigger, enqueueEnrichment } from './enqueue.js';
 import type { Link } from './links.js';
 import { whereLive } from './live.js';
 import { sourceDataSchema } from './source-data.js';
@@ -264,14 +264,49 @@ const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
  * count a prior failing streak left behind.
  */
 export async function requestRetry(linkId: string): Promise<Link | null> {
+  return resetToEnriching(linkId, 'sweep', RETRYABLE_STATUSES);
+}
+
+/**
+ * Re-run enrichment on a LIVE link at the owner's request: the web Enrich item
+ * and MCP `retry_capture`. Unlike `requestRetry` (the sweep's re-kick) it
+ * accepts every status, `full` included, so the owner can re-run a complete
+ * link (and ask the AI layer for a title again). It resets the status to
+ * `enriching` and `enrich_attempts` to 0, and enqueues
+ * `{ trigger: 'manual', previousStatus }` in the same transaction. The worker
+ * uses `previousStatus` to keep a `full` link `full` if the re-run comes back
+ * thin. Returns `null` if `linkId` doesn't exist or is trashed.
+ */
+export async function requestEnrich(linkId: string): Promise<Link | null> {
+  return resetToEnriching(linkId, 'manual');
+}
+
+/**
+ * Shared body of `requestRetry` and `requestEnrich`: read the live status
+ * (row-locked, so the payload's `previousStatus` is the status this call
+ * replaces), reset to `enriching` with a fresh attempt budget, and enqueue in
+ * the same transaction. `allowed` limits which statuses may be reset.
+ */
+async function resetToEnriching(
+  linkId: string,
+  trigger: EnrichTrigger,
+  allowed?: ReadonlyArray<Link['captureStatus']>,
+): Promise<Link | null> {
   return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ captureStatus: links.captureStatus })
+      .from(links)
+      .where(whereLive(eq(links.id, linkId)))
+      .for('update');
+    if (!current || (allowed && !allowed.includes(current.captureStatus))) return null;
     const [updated] = await tx
       .update(links)
       .set({ captureStatus: 'enriching', enrichAttempts: 0 })
-      .where(whereLive(eq(links.id, linkId), inArray(links.captureStatus, RETRYABLE_STATUSES)))
+      .where(eq(links.id, linkId))
       .returning();
-    if (updated) await enqueueEnrichment(tx, linkId);
-    return updated ?? null;
+    if (!updated) return null;
+    await enqueueEnrichment(tx, linkId, { trigger, previousStatus: current.captureStatus });
+    return updated;
   });
 }
 

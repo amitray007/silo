@@ -591,7 +591,10 @@ describeIfPg('enrichment operations (integration)', () => {
       core.setEnrichmentEnqueuer(enqueue);
       try {
         expect((await enrichmentOps.requestRetry(link.id))?.captureStatus).toBe('enriching');
-        expect(enqueue).toHaveBeenCalledWith(expect.anything(), link.id);
+        expect(enqueue).toHaveBeenCalledWith(expect.anything(), link.id, {
+          trigger: 'sweep',
+          previousStatus: 'partial',
+        });
         await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
         enqueue.mockRejectedValueOnce(new Error('queue down'));
         await expect(enrichmentOps.requestRetry(link.id)).rejects.toThrow('queue down');
@@ -676,6 +679,152 @@ describeIfPg('enrichment operations (integration)', () => {
       const result = await enrichmentOps.requestRetry(link.id);
       expect(result).not.toBeNull();
       expect(result?.captureStatus).toBe('enriching');
+    });
+  });
+
+  describe('requestEnrich', () => {
+    async function seedEnriched(path: string, status: 'full' | 'partial' | 'bare') {
+      const link = await linksOps.createLink({ url: `https://ex.com/${path}`, sourceKind: 'link' });
+      await enrichmentOps.recordEnrichment(link.id, { title: 'T', status });
+      return link.id;
+    }
+
+    it('resets a full link to enriching, resets attempts, and enqueues manual with previousStatus full', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('enrich-full', 'full');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        const result = await enrichmentOps.requestEnrich(id);
+        expect(result?.captureStatus).toBe('enriching');
+        expect(result?.enrichAttempts).toBe(0);
+        expect(enqueue).toHaveBeenCalledWith(expect.anything(), id, {
+          trigger: 'manual',
+          previousStatus: 'full',
+        });
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('accepts partial, bare and enriching, passing each as previousStatus', async () => {
+      const core = await import('@silo/core');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        for (const status of ['partial', 'bare'] as const) {
+          const id = await seedEnriched(`enrich-${status}`, status);
+          expect((await enrichmentOps.requestEnrich(id))?.captureStatus).toBe('enriching');
+          expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), id, {
+            trigger: 'manual',
+            previousStatus: status,
+          });
+        }
+        const stuck = await linksOps.createLink({
+          url: 'https://ex.com/enrich-stuck',
+          sourceKind: 'link',
+        });
+        expect((await enrichmentOps.requestEnrich(stuck.id))?.captureStatus).toBe('enriching');
+        expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), stuck.id, {
+          trigger: 'manual',
+          previousStatus: 'enriching',
+        });
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('returns null for a trashed or unknown link and enqueues nothing', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('enrich-trashed', 'full');
+      await linksOps.softDelete(id);
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        expect(await enrichmentOps.requestEnrich(id)).toBeNull();
+        expect(
+          await enrichmentOps.requestEnrich('00000000-0000-0000-0000-000000000000'),
+        ).toBeNull();
+        expect(await isTrashed(id)).toBe(true);
+        expect(enqueue).not.toHaveBeenCalled();
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('rolls the status back when the enqueue fails', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('enrich-rollback', 'full');
+      core.setEnrichmentEnqueuer(async () => {
+        throw new Error('queue down');
+      });
+      try {
+        await expect(enrichmentOps.requestEnrich(id)).rejects.toThrow('queue down');
+        expect((await linksOps.getById(id))?.captureStatus).toBe('full');
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('requestRetry (the sweep) still skips a full link and enqueues nothing', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('sweep-skips-full', 'full');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        expect(await enrichmentOps.requestRetry(id)).toBeNull();
+        expect(enqueue).not.toHaveBeenCalled();
+        expect((await linksOps.getById(id))?.captureStatus).toBe('full');
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('createLink enqueues trigger capture, for a new link and for a dedup merge', async () => {
+      const core = await import('@silo/core');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        const link = await linksOps.createLink({
+          url: 'https://ex.com/enq-capture',
+          sourceKind: 'link',
+        });
+        expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), link.id, {
+          trigger: 'capture',
+          previousStatus: 'enriching',
+        });
+        await enrichmentOps.recordEnrichment(link.id, { status: 'full' });
+        await linksOps.createLink({ url: 'https://ex.com/enq-capture', sourceKind: 'link' });
+        expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), link.id, {
+          trigger: 'capture',
+          previousStatus: 'full',
+        });
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+  });
+
+  describe('enrichJobSchema', () => {
+    it('accepts a full payload', async () => {
+      const { enrichJobSchema } = await import('./enqueue.js');
+      expect(
+        enrichJobSchema.parse({ linkId: 'a', trigger: 'manual', previousStatus: 'full' }),
+      ).toEqual({ linkId: 'a', trigger: 'manual', previousStatus: 'full' });
+    });
+
+    it('treats a legacy or invalid payload as a sweep of an enriching link', async () => {
+      const { enrichJobSchema } = await import('./enqueue.js');
+      const safe = { linkId: 'a', trigger: 'sweep', previousStatus: 'enriching' };
+      expect(enrichJobSchema.parse({ linkId: 'a' })).toEqual(safe);
+      expect(enrichJobSchema.parse({ linkId: 'a', trigger: 'bogus', previousStatus: 7 })).toEqual(
+        safe,
+      );
+    });
+
+    it('rejects a payload with no linkId', async () => {
+      const { enrichJobSchema } = await import('./enqueue.js');
+      expect(enrichJobSchema.safeParse({ trigger: 'manual' }).success).toBe(false);
     });
   });
 

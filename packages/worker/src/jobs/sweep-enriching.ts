@@ -72,7 +72,7 @@ export async function runSweepEnriching(): Promise<{ found: number; reenqueued: 
         continue;
       }
       await db.transaction(async (tx) => {
-        await enqueueEnrichment(tx, id);
+        await enqueueEnrichment(tx, id, { trigger: 'sweep', previousStatus: 'enriching' });
       });
       reenqueued += 1;
     } catch (error) {

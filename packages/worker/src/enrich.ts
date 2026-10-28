@@ -13,7 +13,7 @@
  * job (see `worker.ts`).
  */
 
-import type { ReaderExtraction, SettingsMap, SourceData } from '@silo/core';
+import type { EnrichJobData, ReaderExtraction, SettingsMap, SourceData } from '@silo/core';
 import {
   ENRICH_ATTEMPT_CAP,
   getById,
@@ -57,6 +57,13 @@ export interface EnrichLinkDeps {
    */
   getPluginsSetting: () => Promise<SettingsMap['plugins']>;
 }
+
+/**
+ * The job context when a caller supplies none (and for queued jobs from before
+ * the payload had one): the most cautious values, a sweep re-kick of a link
+ * that was `enriching`.
+ */
+const SWEEP_JOB: EnrichJobData = { trigger: 'sweep', previousStatus: 'enriching' };
 
 const defaultDeps: EnrichLinkDeps = {
   safeFetch: (url) => safeFetch(url, { accept: HTML_ACCEPT }),
@@ -136,8 +143,13 @@ function mapSafeFetchFailureToStatus(
 async function recordThenMaybeSettle(
   linkId: string,
   result: Parameters<typeof recordEnrichment>[1],
+  previousStatus: EnrichJobData['previousStatus'],
 ): Promise<void> {
-  const updated = await recordEnrichment(linkId, result);
+  // No downgrade: a re-run of a `full` link that comes back thin stays `full`.
+  // The don't-clobber writes already keep its earlier title, text and image,
+  // so `full` still describes what is stored.
+  const status = previousStatus === 'full' ? 'full' : result.status;
+  const updated = await recordEnrichment(linkId, { ...result, status });
   if (updated && updated.captureStatus !== 'full' && updated.enrichAttempts >= ENRICH_ATTEMPT_CAP) {
     await settleGiveUp(linkId);
   }
@@ -238,6 +250,7 @@ function twitterTextFields(sourceData: SourceData | undefined): { text?: string 
 export async function enrichLink(
   linkId: string,
   deps: EnrichLinkDeps = defaultDeps,
+  job: EnrichJobData = SWEEP_JOB,
 ): Promise<void> {
   const link = await getById(linkId);
   if (!link) {
@@ -279,11 +292,15 @@ export async function enrichLink(
   }
 
   if (!fetchResult.ok) {
-    await recordThenMaybeSettle(linkId, {
-      status: mapSafeFetchFailureToStatus(fetchResult.reason),
-      ...postText,
-      ...(sourceData ? { sourceData } : {}),
-    });
+    await recordThenMaybeSettle(
+      linkId,
+      {
+        status: mapSafeFetchFailureToStatus(fetchResult.reason),
+        ...postText,
+        ...(sourceData ? { sourceData } : {}),
+      },
+      job.previousStatus,
+    );
     return;
   }
 
@@ -307,11 +324,15 @@ export async function enrichLink(
   if (link.sourceKind !== 'twitter') await recordReader(linkId, selected, fetchedAt);
   const { reader: _reader, readerFailed: _readerFailed, text, ...stored } = extracted;
   // Reader writes own search text, including empty results and rejected older captures.
-  await recordThenMaybeSettle(linkId, {
-    ...stored,
-    ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
-    ...(sourceData ? { sourceData } : {}),
-  });
+  await recordThenMaybeSettle(
+    linkId,
+    {
+      ...stored,
+      ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
+      ...(sourceData ? { sourceData } : {}),
+    },
+    job.previousStatus,
+  );
 }
 
 function updateRenderedStatus(extracted: ExtractResult, selected: ReaderExtraction): void {

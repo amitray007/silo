@@ -418,7 +418,10 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
         const existing = await findExistingForDedup(tx, input.url);
         if (existing) {
           const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
-          await enqueueEnrichment(tx, merged.id);
+          await enqueueEnrichment(tx, merged.id, {
+            trigger: 'capture',
+            previousStatus: merged.captureStatus,
+          });
           return merged;
         }
       }
@@ -448,7 +451,10 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (input.tags && input.tags.length > 0) {
         await attachTags(tx, inserted.id, input.tags);
       }
-      await enqueueEnrichment(tx, inserted.id);
+      await enqueueEnrichment(tx, inserted.id, {
+        trigger: 'capture',
+        previousStatus: 'enriching',
+      });
       return inserted;
     });
   } catch (error) {
@@ -464,7 +470,10 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
         throw error;
       }
       const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
-      await enqueueEnrichment(tx, merged.id);
+      await enqueueEnrichment(tx, merged.id, {
+        trigger: 'capture',
+        previousStatus: merged.captureStatus,
+      });
       return merged;
     });
   }

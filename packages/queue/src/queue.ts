@@ -148,10 +148,10 @@ if (ENRICH_LINK_QUEUE !== CORE_ENRICH_LINK_QUEUE) {
  * either.
  */
 export function registerEnqueuer(boss: PgBoss): void {
-  setEnrichmentEnqueuer(async (exec, linkId) => {
+  setEnrichmentEnqueuer(async (exec, linkId, data) => {
     await boss.send(
       ENRICH_LINK_QUEUE,
-      { linkId },
+      { linkId, ...data },
       {
         ...ENRICH_LINK_QUEUE_OPTIONS,
         singletonKey: linkId,

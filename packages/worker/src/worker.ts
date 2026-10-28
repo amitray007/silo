@@ -12,6 +12,7 @@
  * destructures `([job]) => ...` to make the v12 contract explicit.
  */
 
+import { enrichJobSchema } from '@silo/core';
 import {
   createBoss,
   ENRICH_LINK_QUEUE,
@@ -81,7 +82,7 @@ export async function startWorker(): Promise<WorkerHandle> {
   // process.
   await registerScheduledJobs(boss);
 
-  await boss.work<{ linkId: string }>(
+  await boss.work<Record<string, unknown>>(
     ENRICH_LINK_QUEUE,
     { batchSize: 1, localConcurrency: LOCAL_CONCURRENCY },
     async ([job]) => {
@@ -91,7 +92,15 @@ export async function startWorker(): Promise<WorkerHandle> {
       if (!job) {
         return;
       }
-      await enrichLink(job.data.linkId);
+      // Jobs queued before the trigger/previousStatus fields existed carry only
+      // `linkId`; `enrichJobSchema` fills them with the safe values (sweep).
+      const payload = enrichJobSchema.safeParse(job.data);
+      if (!payload.success) {
+        console.error('[silo/worker] enrich-link: dropping job with an invalid payload');
+        return;
+      }
+      const { linkId, trigger, previousStatus } = payload.data;
+      await enrichLink(linkId, undefined, { trigger, previousStatus });
     },
   );
 

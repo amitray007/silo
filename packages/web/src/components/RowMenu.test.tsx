@@ -233,14 +233,14 @@ describe('RowMenu', () => {
     expect(screen.getByText('Re-enrich')).toBeDefined();
   });
 
-  it('hides the enrich action entirely for a full link (nothing to re-enrich)', () => {
+  it('shows "Enrich" for a full link too (the owner can re-run a complete link)', () => {
     renderMenu({ captureStatus: 'full' });
-    expect(screen.queryByText('Enrich')).toBeNull();
+    expect(screen.getByText('Enrich')).toBeDefined();
     expect(screen.queryByText('Re-enrich')).toBeNull();
   });
 
   it('clicking "Enrich" calls the retry mutation (POSTs /api/links/:id/retry)', async () => {
-    renderMenu({ captureStatus: 'partial' });
+    renderMenu({ captureStatus: 'full' });
     fireEvent.click(screen.getByText('Enrich'));
 
     await waitFor(() =>
@@ -410,6 +410,7 @@ describe('RowMenu', () => {
       'Refresh readerr',
       'Edite',
       'Tags1',
+      'Enrich',
       'Move to trash⌫',
     ]);
     expect(document.activeElement).toBe(screen.getByRole('menuitem', { name: /Open original/ }));
