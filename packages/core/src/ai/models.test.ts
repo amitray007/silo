@@ -172,6 +172,27 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     );
   });
 
+  it('starts generation after a slow refresh and measures its latency separately', async () => {
+    const { tester, models } = harness.mod();
+    await prepare();
+    let now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    try {
+      models.setAiModelsFetcher(async () => {
+        now += 9_000;
+        return { ok: true, models: [GLM] };
+      });
+      tester.setAiConnectionTester(async () => {
+        now += 20_000;
+        return { ok: true, latencyMs: Number.NaN };
+      });
+      // Total route time is 29 seconds; generation still has its own full budget.
+      expect(await tester.testAiProvider('fireworks')).toEqual({ ok: true, latencyMs: 20_000 });
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
   it('clears a failed list and never runs inference; key replacement drops a stale list', async () => {
     const { models, tester, providers } = harness.mod();
     await prepare();

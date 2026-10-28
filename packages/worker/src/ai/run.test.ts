@@ -8,6 +8,7 @@ import {
   credential,
   deferred,
   failingModel,
+  fakeAbortTimeout,
   LEAK_KEY,
   okResult,
 } from './test-helpers.js';
@@ -297,7 +298,7 @@ describe('runAiFeature', () => {
     expect(sent).toContain('Write a title.');
     expect(sent).toContain(`${PROMPT_TEXT} hi`);
   });
-  it('resolves the requested feature and omits reasoning for Fireworks even with a curated credential', async () => {
+  it('resolves the feature and sends Fireworks low reasoning with 1024 output tokens', async () => {
     const model = okModel();
     const load = vi.fn(async () => ({ ...credential, kind: 'fireworks' as const }));
     expect(
@@ -305,5 +306,88 @@ describe('runAiFeature', () => {
     ).toEqual({ ok: true, value: 'Hello' });
     expect(load).toHaveBeenCalledWith(definition.id);
     expect(model.doGenerateCalls[0]?.reasoning).toBeUndefined();
+    expect(model.doGenerateCalls[0]?.providerOptions).toEqual({
+      fireworks: { reasoningEffort: 'low' },
+    });
+    expect(model.doGenerateCalls[0]?.maxOutputTokens).toBe(1024);
+  });
+
+  it('retries a Fireworks reasoning 400 without reasoning and returns the title', async () => {
+    let calls = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async () => {
+        if (++calls === 1) throw apiError(400, `Unknown reasoning_effort ${LEAK_KEY}`);
+        return okResult('{"title":"Recovered"}');
+      },
+    });
+    const result = await runAiFeature(
+      definition,
+      { text: 'hi' },
+      deps(model, {
+        credential: async () => ({ ...credential, kind: 'fireworks' }),
+      }),
+    );
+    expect(result).toEqual({ ok: true, value: 'Recovered' });
+    expect(model.doGenerateCalls).toHaveLength(2);
+    expect(model.doGenerateCalls[0]?.providerOptions?.fireworks).toEqual({
+      reasoningEffort: 'low',
+    });
+    expect(model.doGenerateCalls[1]?.providerOptions?.fireworks).toBeUndefined();
+    expect(model.doGenerateCalls[1]?.maxOutputTokens).toBe(1024);
+    expect(logged()).not.toContain(LEAK_KEY);
+  });
+
+  it.each([
+    ['fireworks', 400, 'reasoning_effort rejected', 2],
+    ['fireworks', 400, 'invalid schema', 1],
+    ['fireworks', 401, 'reasoning access denied', 1],
+    ['anthropic', 400, 'reasoning unsupported', 1],
+  ] as const)('bounds fallback for %s HTTP %s (%s)', async (kind, status, message, calls) => {
+    const model = failingModel(apiError(status, `${message} ${LEAK_KEY}`));
+    expect(
+      await runAiFeature(
+        definition,
+        { text: 'hi' },
+        deps(model, {
+          credential: async () => ({ ...credential, kind }),
+        }),
+      ),
+    ).toEqual({ ok: false, code: status === 401 ? 'invalid_key' : 'provider_error' });
+    expect(model.doGenerateCalls).toHaveLength(calls);
+    expect(logs[0]?.mock.calls).toEqual([
+      [
+        'silo ai: test_feature@v2 failed (' +
+          (status === 401 ? 'invalid_key' : 'provider_error') +
+          ')',
+      ],
+    ]);
+    expect(logged()).not.toContain(LEAK_KEY);
+  });
+
+  it('keeps both Fireworks attempts inside the 15 second title budget', async () => {
+    vi.useFakeTimers();
+    fakeAbortTimeout();
+    let calls = 0;
+    const model = new MockLanguageModelV4({
+      doGenerate: async ({ abortSignal }) => {
+        if (++calls === 1) {
+          await new Promise((resolve) => setTimeout(resolve, 2_000));
+          throw apiError(400, 'Unsupported reasoning');
+        }
+        return new Promise((_resolve, reject) => {
+          abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true });
+        });
+      },
+    });
+    const result = runAiFeature(
+      { ...definition, timeoutMs: 15_000 },
+      { text: 'hi' },
+      deps(model, {
+        credential: async () => ({ ...credential, kind: 'fireworks' }),
+      }),
+    );
+    await vi.advanceTimersByTimeAsync(15_000);
+    expect(await result).toEqual({ ok: false, code: 'timeout' });
+    expect(model.doGenerateCalls).toHaveLength(2);
   });
 });

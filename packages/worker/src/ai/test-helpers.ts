@@ -2,6 +2,16 @@ import type { CatalogEntry } from '@silo/core';
 import type { AiCredential } from '@silo/core/ai-credential';
 import { APICallError } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
+import { vi } from 'vitest';
+
+/** Node's native AbortSignal.timeout does not follow Vitest's fake clock. */
+export function fakeAbortTimeout(): void {
+  vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms) => {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(new DOMException('Timed out', 'TimeoutError')), ms);
+    return controller.signal;
+  });
+}
 
 /** Holds a read open until a cancellation test releases it. */
 export function deferred<T>() {
@@ -41,9 +51,12 @@ export function okResult(text: string) {
 }
 
 /** An error that carries the key in every field a leak could come from. */
-export function apiError(statusCode: number | undefined): APICallError {
+export function apiError(
+  statusCode: number | undefined,
+  message = `bad key ${LEAK_KEY}`,
+): APICallError {
   return new APICallError({
-    message: `bad key ${LEAK_KEY}`,
+    message,
     url: `https://api.example.com/v1?key=${LEAK_KEY}`,
     requestBodyValues: { prompt: 'SECRET PROMPT TEXT', key: LEAK_KEY },
     ...(statusCode === undefined ? {} : { statusCode }),

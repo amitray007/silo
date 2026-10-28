@@ -34,6 +34,7 @@ const deprecationDateSchema = z
 
 const modelSchema = z.object({
   name: z.string().min(1).max(MAX_ID_LENGTH),
+  kind: z.string().optional(),
   displayName: z.string().max(MAX_LABEL_LENGTH).nullable().optional(),
   contextLength: z.number().int().nonnegative().optional(),
   conversationConfig: z.object({}).nullable().optional(),
@@ -49,6 +50,10 @@ const pageSchema = z.object({
 function usable(model: z.infer<typeof modelSchema>, now: number): boolean {
   const expires = model.deprecationDate;
   return (
+    // `kind` is documented at https://docs.fireworks.ai/api-reference/list-models.
+    // Both Qwen embedding and reranker models report EMBEDDING_MODEL in the live API.
+    model.kind !== 'EMBEDDING_MODEL' &&
+    !/embedding|rerank/i.test(model.name) &&
     model.conversationConfig != null &&
     model.supportsServerless === true &&
     model.state === 'READY' &&

@@ -9,6 +9,7 @@ import {
 } from 'ai';
 import type { AiFeatureDefinition } from './define.js';
 import { aiErrorCode, logAiFailure } from './errors.js';
+import { FIREWORKS_MAX_OUTPUT_TOKENS, withFireworksReasoning } from './fireworks-generation.js';
 import { languageModelFor } from './model.js';
 import './registry.js'; // runs the registry drift guard in every process that runs a feature
 
@@ -56,18 +57,26 @@ export async function runAiFeature<In, Out, Raw>(
     abortSignal?.throwIfAborted();
     if (!credential) return { ok: false, code: 'off' };
 
-    const { output } = await generateText({
-      model: model(credential),
-      instructions: definition.instructions,
-      prompt: definition.buildPrompt(input),
-      output: Output.object({ schema: definition.schema }),
-      ...(credential.kind === 'fireworks' ? {} : { reasoning: credential.model.reasoning }),
-      maxRetries: 2,
-      timeout: { totalMs: definition.timeoutMs },
-      ...(abortSignal ? { abortSignal } : {}),
-      maxOutputTokens: definition.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS,
-      telemetry: { isEnabled: false },
-    });
+    const { output } = await withFireworksReasoning(
+      credential.kind,
+      definition.timeoutMs,
+      (settings) =>
+        generateText({
+          model: model(credential),
+          instructions: definition.instructions,
+          prompt: definition.buildPrompt(input),
+          output: Output.object({ schema: definition.schema }),
+          ...(credential.kind === 'fireworks' ? {} : { reasoning: credential.model.reasoning }),
+          maxRetries: 2,
+          ...settings,
+          ...(abortSignal ? { abortSignal } : {}),
+          maxOutputTokens:
+            credential.kind === 'fireworks'
+              ? FIREWORKS_MAX_OUTPUT_TOKENS
+              : (definition.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS),
+          telemetry: { isEnabled: false },
+        }),
+    );
     abortSignal?.throwIfAborted();
     const value = definition.postProcess(output);
     if (value === undefined) {

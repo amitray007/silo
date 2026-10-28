@@ -57,7 +57,7 @@ describe('languageModelFor', () => {
       expect(urls[0]?.startsWith(expected)).toBe(true);
     },
   );
-  it('uses the fixed Fireworks inference host, full model id, JSON schema and no reasoning setting', async () => {
+  it('sends Fireworks JSON schema, low reasoning and the token budget to the fixed host', async () => {
     process.env.FIREWORKS_BASE_URL = 'https://evil.example.com/v1';
     process.env.FIREWORKS_API_KEY = 'env-key-never-use';
     let sentUrl = '';
@@ -87,13 +87,16 @@ describe('languageModelFor', () => {
         model,
         prompt: 'hi',
         output: Output.object({ schema: z.object({ title: z.string() }) }),
+        providerOptions: { fireworks: { reasoningEffort: 'low' } },
+        maxOutputTokens: 1024,
         maxRetries: 0,
       }).catch(() => undefined);
       expect(sentUrl).toBe('https://api.fireworks.ai/inference/v1/chat/completions');
       expect(sentHeaders?.get('authorization')).toBe('Bearer fake-fireworks-key');
       expect(sentBody.model).toBe('accounts/fireworks/models/glm-5p3-flash');
       expect(sentBody.response_format).toMatchObject({ type: 'json_schema' });
-      expect(sentBody).not.toHaveProperty('reasoning_effort');
+      expect(sentBody.reasoning_effort).toBe('low');
+      expect(sentBody.max_tokens).toBe(1024);
       expect(sentBody).not.toHaveProperty('reasoning');
     } finally {
       delete process.env.FIREWORKS_BASE_URL;

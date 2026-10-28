@@ -39,6 +39,7 @@ function sanitize(raw: AiConnectionResult, latencyMs: number): AiConnectionResul
  */
 export async function testAiProvider(kind: AiProviderKind): Promise<AiTestOutcome> {
   if (!tester) return { ok: false, code: 'unavailable' };
+  // Finish the list refresh before invoking the tester, which owns the generation deadline.
   if (kind === 'fireworks') {
     const failure = await refreshForTest();
     if (failure) return failure;

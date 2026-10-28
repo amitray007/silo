@@ -1,6 +1,7 @@
 import type { AiConnectionTester } from '@silo/core/ai-credential';
 import { generateText, NoOutputGeneratedError } from 'ai';
 import { aiErrorCode } from './errors.js';
+import { FIREWORKS_MAX_OUTPUT_TOKENS, withFireworksReasoning } from './fireworks-generation.js';
 import { languageModelFor } from './model.js';
 
 const TEST_PROMPT = 'Reply with the word ok.';
@@ -11,15 +12,19 @@ const TEST_MAX_OUTPUT_TOKENS = 256;
 export const aiConnectionTester: AiConnectionTester = async (credential) => {
   const started = Date.now();
   try {
-    await generateText({
-      model: languageModelFor(credential),
-      prompt: TEST_PROMPT,
-      ...(credential.kind === 'fireworks' ? {} : { reasoning: credential.model.reasoning }),
-      maxRetries: 0,
-      timeout: { totalMs: TEST_TIMEOUT_MS },
-      maxOutputTokens: TEST_MAX_OUTPUT_TOKENS,
-      telemetry: { isEnabled: false },
-    });
+    const timeoutMs = credential.kind === 'fireworks' ? 30_000 : TEST_TIMEOUT_MS;
+    await withFireworksReasoning(credential.kind, timeoutMs, (settings) =>
+      generateText({
+        model: languageModelFor(credential),
+        prompt: TEST_PROMPT,
+        ...(credential.kind === 'fireworks' ? {} : { reasoning: credential.model.reasoning }),
+        maxRetries: 0,
+        ...settings,
+        maxOutputTokens:
+          credential.kind === 'fireworks' ? FIREWORKS_MAX_OUTPUT_TOKENS : TEST_MAX_OUTPUT_TOKENS,
+        telemetry: { isEnabled: false },
+      }),
+    );
     return { ok: true, latencyMs: Date.now() - started };
   } catch (error) {
     // The provider answered; the test never needs the content.

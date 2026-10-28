@@ -75,6 +75,76 @@ describe('Fireworks live model list', () => {
     expect(fetch.mock.calls[0]?.[1]?.signal).toBe(fetch.mock.calls[1]?.[1]?.signal);
   });
 
+  it('excludes the live embedding and reranker shapes even though they have chat configs', async () => {
+    // Public fields from the Fireworks API on 2026-10-29. Templates and unrelated metadata omitted.
+    const live = [
+      {
+        name: 'accounts/fireworks/models/qwen3-embedding-8b',
+        displayName: 'Qwen3 Embedding 8B',
+        kind: 'EMBEDDING_MODEL',
+        baseModelDetails: { modelType: 'qwen3' },
+        conversationConfig: { style: 'jinja', system: '' },
+        supportsServerless: true,
+        state: 'READY',
+        contextLength: 40960,
+      },
+      {
+        name: 'accounts/fireworks/models/qwen3-reranker-8b',
+        displayName: 'Qwen3 Reranker 8B',
+        kind: 'EMBEDDING_MODEL',
+        baseModelDetails: { modelType: 'qwen3' },
+        conversationConfig: { style: 'jinja', system: '' },
+        supportsServerless: true,
+        state: 'READY',
+        contextLength: 40960,
+      },
+      {
+        name: 'accounts/fireworks/models/glm-5p3-flash',
+        displayName: 'GLM 5.3 Flash',
+        kind: 'HF_BASE_MODEL',
+        baseModelDetails: { modelType: 'glm5_next_text' },
+        conversationConfig: { style: '', system: '', template: '' },
+        supportsServerless: true,
+        state: 'READY',
+        contextLength: 1048576,
+      },
+    ];
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(page(live));
+    expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
+      ok: true,
+      models: [
+        {
+          id: 'accounts/fireworks/models/glm-5p3-flash',
+          label: 'GLM 5.3 Flash',
+          contextLength: 1048576,
+        },
+      ],
+    });
+  });
+
+  it('uses kind independently of name and falls back to embedding or rerank names', async () => {
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        page([
+          active('semantic-vectors', { kind: 'EMBEDDING_MODEL' }),
+          active('Qwen3-EMBEDDING-8b'),
+          active('qwen3-reranker-8b', { kind: 'HF_BASE_MODEL' }),
+          active('new-rerank-model'),
+          active('chat-model-without-kind'),
+          active('chat-model-with-kind', { kind: 'HF_BASE_MODEL' }),
+        ]),
+      );
+    expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({
+      ok: true,
+      models: ['chat-model-without-kind', 'chat-model-with-kind'].map((id) => ({
+        id,
+        label: id,
+        contextLength: 200000,
+      })),
+    });
+  });
+
   it('accepts ISO dates and skips individual malformed models without losing usable entries', async () => {
     const fetch = vi
       .fn<typeof globalThis.fetch>()
