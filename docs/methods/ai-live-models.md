@@ -2,7 +2,7 @@
 
 Follows [per-feature models](ai-feature-models.md), on the same branch and PR (#105).
 
-**Status: draft for gate 1 (2026-10-29).**
+**Status: approved at gate 1 (2026-10-29) with the three recommended choices.**
 
 ## Request (Amit, 2026-10-29)
 
@@ -116,16 +116,14 @@ Builds go to Sol fast, with a Sol review per unit, as before. For QA, Amit's
 Anthropic and Fireworks keys list and title real posts; OpenAI and Gateway are
 checked with fake keys for errors, plus the public Gateway list.
 
-## Decisions for gate 1
+## Gate 1 decisions (2026-10-29)
 
-1. **OpenAI filter:** an id-pattern rule that hides audio, image, codex, pro and
-   others (recommended), or show every model the key lists.
-2. **Gateway list:** about 272 models, every structured-output language model
-   (recommended, since search handles the size), or only Anthropic and OpenAI models
-   through the Gateway.
-3. **Refresh:** on key save or test, the Refresh button, and a background refresh
-   when the AI tab opens and the list is over 24 hours old (recommended), or manual
-   only.
+1. OpenAI uses the id-pattern rule that hides audio, image, codex, pro and the other
+   non-chat families.
+2. The Gateway shows every structured-output language model, about 272; search
+   handles the size.
+3. Lists refresh on key save or test, on Refresh, and in the background when the AI
+   tab opens and a list is over 24 hours old.
 
 ## Parked
 
