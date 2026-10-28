@@ -114,21 +114,29 @@ uses `cmdk`.
 └──────────────────────────────────────────────┘
 ```
 
-- **Search** matches the label and the id across every provider. It is fuzzy, using
-  `cmdk`'s own scoring.
+- **Search** matches case-insensitive substrings in the label, id and owner across
+  every provider. Each whitespace-separated query token must match one of those fields.
+  Within each provider, matches rank by label prefix, label word prefix, label
+  substring, then id or owner substring. Ties use newest first.
 - **Provider chips:**
   - "All" plus one chip per provider with a readable key, each with its logo.
   - A chip narrows the list. The chosen chip persists while the picker is open.
 - **Rows:**
   - Each row shows the label. The id appears in quiet text when it differs.
-  - Rows also show the context window when it is known.
+  - Rows also show the context window when it is known. Counts of one million or more
+    use M with at most one decimal and no trailing `.0` (1M, 1.5M). Smaller counts
+    use whole K (262K, 131K, 200K).
   - Gateway rows show the owner, for example "anthropic".
-  - Rows are sorted newest first within each provider. The current choice has a tick.
+  - With an empty query, rows are sorted newest first within each provider.
+    The current choice has a tick.
 - **Behavior:**
   - The popover opens below the trigger, and its list scrolls at about 360 px.
   - Arrow keys, Enter and Escape follow the existing dropdown fix. Escape closes only
     the popover.
   - Typing goes straight into the search field.
+  - Opening with an empty query makes the current choice active and scrolls it into
+    view. Each query change resets the list to the top and makes the first match
+    active, including when the query clears.
 - **Empty states:**
   - "No models match" when the search finds nothing.
   - "Add a key in Providers" when no provider is ready.

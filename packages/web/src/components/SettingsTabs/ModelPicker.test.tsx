@@ -67,6 +67,122 @@ function press(input: HTMLElement, key: string) {
 }
 
 describe('ModelPicker', () => {
+  it('matches only Sonnet models for son and sorts each provider by relevance then date', () => {
+    const { input } = setup({
+      providers: [
+        provider('anthropic', [
+          model('opus-4.5', 'Claude Opus 4.5'),
+          model('claude-sonnet-old', 'Claude Sonnet 4', { createdAt: '2025-01-01' }),
+          model('claude-sonnet-new', 'Claude Sonnet 4.5', { createdAt: '2026-01-01' }),
+          model('sonnet', 'Sonnet', { createdAt: '2024-01-01' }),
+        ]),
+        provider('fireworks', [
+          model('nemotron', 'NVIDIA Nemotron 3 Ultra NVFP4'),
+          model('gpt-oss-120b', 'OpenAI gpt-oss-120b'),
+          model('deepseek', 'DeepSeek V4.1 Flash'),
+          model('glm-5p3-flash', 'GLM 5.3 Flash'),
+          model('sonnet-fireworks', 'Claude Sonnet', { createdAt: '2026-10-01' }),
+        ]),
+      ],
+    });
+    search(input, 'SON');
+    expect(
+      screen
+        .getAllByRole('option')
+        .map((row) => row.querySelector('.silo-model-option-label')?.textContent),
+    ).toEqual(['Sonnet', 'Claude Sonnet 4.5', 'Claude Sonnet 4', 'Claude Sonnet']);
+  });
+
+  it('ranks label prefixes, word prefixes, label substrings, then id or owner matches', () => {
+    const { input } = setup({
+      providers: [
+        provider('fireworks', [
+          model('son-id', 'Id match', { createdAt: '2026-01-01' }),
+          model('owner', 'Owner match', { owner: 'son', createdAt: '2025-01-01' }),
+          model('person', 'Person', { createdAt: '2027-01-01' }),
+          model('word', 'Claude Sonnet', { createdAt: '2027-01-01' }),
+          model('prefix', 'Sonnet', { createdAt: '2024-01-01' }),
+        ]),
+      ],
+    });
+    search(input, 'son');
+    expect(
+      screen
+        .getAllByRole('option')
+        .map((row) => row.querySelector('.silo-model-option-label')?.textContent),
+    ).toEqual(['Sonnet', 'Claude Sonnet', 'Person', 'Id match', 'Owner match']);
+  });
+
+  it('requires every whitespace-separated token and supports id-only queries', () => {
+    const { input } = setup({
+      providers: [
+        provider('fireworks', [
+          model('gpt-oss-120b', 'OpenAI gpt-oss-120b'),
+          model('gpt-6', 'OpenAI GPT 6'),
+          model('glm-5p3-flash', 'GLM 5.3 Flash'),
+        ]),
+      ],
+    });
+    search(input, '  GPT\t oss  ');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(screen.getByRole('option').textContent).toContain('gpt-oss-120b');
+    search(input, 'glm-5p3');
+    expect(screen.getAllByRole('option')).toHaveLength(1);
+    expect(screen.getByRole('option').textContent).toContain('GLM 5.3 Flash');
+    search(input, 'gpt missing');
+    expect(screen.queryByRole('option')).toBeNull();
+  });
+
+  it.each(['Claude', 'claude', 'newest', 'no-such-model', ''])(
+    'resets scroll and the active item when the query changes to %j',
+    async (query) => {
+      const { input, onChange } = setup({ value: { provider: 'gateway', id: 'vendor/r1' } });
+      const list = screen.getByRole('listbox');
+      search(input, 'CLAUDE');
+      press(input, 'End');
+      list.scrollTop = 300;
+      search(input, query);
+      await waitFor(() => {
+        expect(list.scrollTop).toBe(0);
+        const first = screen.queryAllByRole('option')[0];
+        if (first) {
+          expect(first.getAttribute('aria-selected')).toBe('true');
+        } else {
+          expect(list.querySelector('[aria-selected="true"]')).toBeNull();
+        }
+      });
+      press(input, 'Enter');
+      if (query === 'no-such-model') {
+        expect(onChange).not.toHaveBeenCalled();
+      } else {
+        expect(onChange).toHaveBeenCalledExactlyOnceWith({
+          provider: 'anthropic',
+          id: 'claude-new',
+        });
+      }
+    },
+  );
+
+  it.each([
+    [1_000_000, '1M'],
+    [1_048_576, '1M'],
+    [2_000_000, '2M'],
+    [1_500_000, '1.5M'],
+    [262_144, '262K'],
+    [200_000, '200K'],
+    [131_072, '131K'],
+    [8_192, '8K'],
+  ])('formats a %i-token context window as %s', (tokens, expected) => {
+    setup({
+      providers: [
+        provider('anthropic', [model('context', 'Context model', { contextWindow: tokens })]),
+      ],
+    });
+    expect(screen.getByRole('option').querySelector('.silo-model-context')?.textContent).toBe(
+      expected,
+    );
+  });
+
   it('searches labels, ids and owners across all readable providers', () => {
     const { input } = setup();
     for (const [query, expected] of [

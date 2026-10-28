@@ -26,7 +26,20 @@ function newestFirst(a: Model, b: Model) {
 }
 
 function contextLabel(tokens: number) {
-  return tokens >= 1000 ? `${Number((tokens / 1000).toFixed(1))}K` : String(tokens);
+  if (tokens >= 1_000_000) return `${Number((tokens / 1_000_000).toFixed(1))}M`;
+  return tokens >= 1000 ? `${Math.round(tokens / 1000)}K` : String(tokens);
+}
+
+function searchRank(model: Model, query: string) {
+  const label = model.label.toLowerCase();
+  const fields = [label, model.id.toLowerCase(), model.owner?.toLowerCase() ?? ''];
+  if (!query.split(' ').every((token) => fields.some((field) => field.includes(token)))) {
+    return -1;
+  }
+  if (label.startsWith(query)) return 0;
+  const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  if (new RegExp(`\\b${escaped}`).test(label)) return 1;
+  return label.includes(query) ? 2 : 3;
 }
 
 function isolateCommandKeys(event: KeyboardEvent<HTMLButtonElement>) {
@@ -121,7 +134,30 @@ function ModelPickerPopover({
   const [position, setPosition] = useState<CSSProperties>({});
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const previousFilter = useRef({ search, provider });
+  const visibleGroups = useMemo(() => {
+    const query = search.trim().toLowerCase().split(/\s+/).join(' ');
+    return groups.flatMap((group) => {
+      if (provider !== 'all' && group.kind !== provider) return [];
+      const models = group.models
+        .map((model) => ({ model, rank: searchRank(model, query) }))
+        .filter(({ rank }) => rank >= 0)
+        .sort((a, b) => a.rank - b.rank || newestFirst(a.model, b.model))
+        .map(({ model }) => model);
+      return models.length ? [{ kind: group.kind, models }] : [];
+    });
+  }, [groups, provider, search]);
   useEscapeLayer(true, onClose);
+
+  useLayoutEffect(() => {
+    if (previousFilter.current.search === search && previousFilter.current.provider === provider) {
+      return;
+    }
+    previousFilter.current = { search, provider };
+    // cmdk activates the first rendered item on each input change, even with filtering off.
+    if (list.current) list.current.scrollTop = 0;
+  }, [search, provider]);
 
   useLayoutEffect(() => {
     function place() {
@@ -195,6 +231,7 @@ function ModelPickerPopover({
       >
         <Command
           label="Search models"
+          shouldFilter={false}
           defaultValue={missing || !value ? '' : JSON.stringify([value.provider, value.id])}
           loop
         >
@@ -254,7 +291,7 @@ function ModelPickerPopover({
               </button>
             ))}
           </fieldset>
-          <Command.List label="Models">
+          <Command.List ref={list} label="Models">
             <Command.Empty>
               {!groups.length
                 ? 'Add a key in Providers'
@@ -262,14 +299,7 @@ function ModelPickerPopover({
                   ? 'No models loaded yet - use Refresh on a provider'
                   : 'No models match'}
             </Command.Empty>
-            <ModelOptions
-              groups={groups.filter(
-                (group) =>
-                  group.models.length > 0 && (provider === 'all' || group.kind === provider),
-              )}
-              value={value}
-              onPick={onPick}
-            />
+            <ModelOptions groups={visibleGroups} value={value} onPick={onPick} />
           </Command.List>
         </Command>
       </div>
