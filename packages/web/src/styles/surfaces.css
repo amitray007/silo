@@ -410,10 +410,18 @@
   justify-content: center;
 }
 .silo-settings-btn.silo-ai-provider-more {
+  flex: none;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   padding: 0;
+}
+.silo-ai-provider-more > .silo-reader-icon {
+  width: 16px;
+  height: 16px;
 }
 .silo-ai-provider-menu .silo-menu-grab {
   display: none;
@@ -424,6 +432,11 @@
   z-index: 50 !important;
 }
 @media (max-width: 640px) {
+  .silo-settings-btn.silo-ai-provider-more {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
   /* The settings touch-target rule would stretch the radio, but never the logo tile. */
   .silo-settings-panel .silo-radio {
     min-height: 0;

@@ -371,7 +371,7 @@ function ProviderRow({
                   setMenuOpen(true);
                 }}
               >
-                <ReaderIcon name="more" />
+                <ReaderIcon name="more" size={16} />
               </button>
               {menuOpen && (
                 <RowPopover anchor={moreRef.current} onDismiss={closeMenu}>
