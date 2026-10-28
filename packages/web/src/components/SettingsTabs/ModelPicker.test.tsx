@@ -36,13 +36,21 @@ const providers: [AiProviderJson, AiProviderJson, AiProviderJson, AiProviderJson
   provider('fireworks', []),
 ];
 
-function setup(options: { providers?: AiProviderJson[]; selected?: boolean } = {}) {
+function setup(
+  options: {
+    providers?: AiProviderJson[];
+    selected?: boolean;
+    value?: { provider: AiProviderJson['kind']; id: string };
+  } = {},
+) {
   const onChange = vi.fn();
   render(
     <ModelPicker
       label="Title model"
       providers={options.providers ?? providers}
-      value={options.selected ? { provider: 'anthropic', id: 'claude-new' } : null}
+      value={
+        options.value ?? (options.selected ? { provider: 'anthropic', id: 'claude-new' } : null)
+      }
       onChange={onChange}
     />,
   );
@@ -76,7 +84,7 @@ describe('ModelPicker', () => {
   it('combines chips with search, keeps the chip during typing and resets with All', () => {
     const { input, trigger } = setup();
     const chip = screen.getByRole('button', { name: 'Anthropic 2' });
-    expect(screen.queryByRole('button', { name: /Fireworks/ })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Fireworks 0' })).toBeTruthy();
     fireEvent.click(chip);
     expect(chip.getAttribute('aria-pressed')).toBe('true');
     expect(screen.getAllByRole('option')).toHaveLength(2);
@@ -127,12 +135,110 @@ describe('ModelPicker', () => {
 
   it.each([
     { providers: [] },
-    { providers: [provider('openai', [])] },
     { providers: [provider('openai', [model('a', 'A')], { keyReadable: false })] },
   ])('shows the no-provider empty state', (options) => {
     setup(options);
     expect(screen.getByText('Add a key in Providers')).toBeTruthy();
     expect(screen.queryByText('No models match')).toBeNull();
+  });
+
+  it.each([[], undefined])(
+    'keeps a keyed provider with models %j and explains how to load them',
+    (models) => {
+      const keyed = provider('openai', []);
+      if (!models) delete keyed.models;
+      const { input } = setup({ providers: [keyed] });
+      expect(screen.getByRole('button', { name: 'OpenAI 0' })).toBeTruthy();
+      expect(screen.getByText('No models loaded yet - use Refresh on a provider')).toBeTruthy();
+      expect(screen.queryByText('Add a key in Providers')).toBeNull();
+      search(input, 'anything');
+      expect(screen.getByText('No models match')).toBeTruthy();
+      search(input, '');
+      expect(screen.getByText('No models loaded yet - use Refresh on a provider')).toBeTruthy();
+    },
+  );
+
+  it('warns about a missing choice in the trigger and list header, and allows a replacement', () => {
+    const { trigger, onChange } = setup({ value: { provider: 'fireworks', id: 'removed-model' } });
+    const warning = 'removed-model - no longer available';
+    expect(trigger.querySelector('.silo-model-missing')?.textContent).toBe(warning);
+    expect(trigger.getAttribute('aria-description')).toBe(warning);
+    const dialog = screen.getByRole('dialog', { name: 'Title model' });
+    expect(within(dialog).getByText(warning).className).toContain('silo-model-missing');
+    expect(screen.queryByText('✓')).toBeNull();
+    fireEvent.click(screen.getByRole('option', { name: /Luna/ }));
+    expect(onChange).toHaveBeenCalledExactlyOnceWith({ provider: 'openai', id: 'gpt-private-id' });
+  });
+
+  it.each([1280, 390])(
+    'opens with a below-fold choice active and scrolled into view at %ipx',
+    async (width) => {
+      const originalWidth = window.innerWidth;
+      window.innerWidth = width;
+      const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+      try {
+        const { input, trigger, onChange } = setup({
+          providers: [
+            provider(
+              'anthropic',
+              Array.from({ length: 30 }, (_, i) => model(`claude-${i}`, `Claude ${i}`)),
+            ),
+            provider('fireworks', [model('current', 'Current Fireworks')]),
+          ],
+          value: { provider: 'fireworks', id: 'current' },
+        });
+        const current = screen.getByRole('option', { name: /Current Fireworks/ });
+        await waitFor(() => {
+          expect(current.getAttribute('aria-selected')).toBe('true');
+          expect(scroll.mock.contexts).toContain(current);
+        });
+        expect(document.activeElement).toBe(input);
+        press(input, 'Escape');
+        scroll.mockClear();
+        fireEvent.click(trigger);
+        await waitFor(() =>
+          expect(scroll.mock.contexts).toContain(
+            screen.getByRole('option', { name: /Current Fireworks/ }),
+          ),
+        );
+        press(screen.getByRole('combobox'), 'Enter');
+        expect(onChange).toHaveBeenCalledExactlyOnceWith({ provider: 'fireworks', id: 'current' });
+      } finally {
+        scroll.mockRestore();
+        window.innerWidth = originalWidth;
+      }
+    },
+  );
+
+  it.each([true, false])('keeps the positioning stable while filtering (above: %s)', (above) => {
+    const top = above ? window.innerHeight - 100 : 100;
+    const rect = vi.spyOn(HTMLButtonElement.prototype, 'getBoundingClientRect').mockReturnValue({
+      top,
+      bottom: top + 40,
+      left: 400,
+      right: 680,
+      width: 280,
+      height: 40,
+      x: 400,
+      y: top,
+      toJSON: () => ({}),
+    });
+    try {
+      const { input } = setup();
+      const dialog = screen.getByRole('dialog', { name: 'Title model' });
+      expect(dialog.style.getPropertyValue('--model-top')).toBe(above ? 'auto' : '144px');
+      expect(dialog.style.getPropertyValue('--model-bottom')).toBe(above ? '104px' : 'auto');
+      expect(dialog.style.getPropertyValue('--model-fixed-height')).toBe(
+        above ? 'min(480px, var(--model-height))' : 'auto',
+      );
+      const position = dialog.getAttribute('style');
+      search(input, 'Luna');
+      expect(dialog.getAttribute('style')).toBe(position);
+      search(input, 'no-such-model');
+      expect(dialog.getAttribute('style')).toBe(position);
+    } finally {
+      rect.mockRestore();
+    }
   });
 
   it('shows the no-match state and recovers when search clears', () => {
@@ -202,6 +308,26 @@ describe('ModelPicker', () => {
     expect(chip.tabIndex).toBe(0);
     expect(screen.getAllByRole('option')).toHaveLength(1);
     expect(chip.getAttribute('aria-pressed')).toBe('true');
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
+  it('wraps Tab from the last chip to search and Shift+Tab back to the last chip', () => {
+    const { input, onChange } = setup();
+    const dialog = screen.getByRole('dialog', { name: 'Title model' });
+    // jsdom has no layout; expose the visible controls to the real dialog trap.
+    for (const control of dialog.querySelectorAll('button, input')) {
+      Object.defineProperty(control, 'offsetParent', { get: () => dialog });
+    }
+    const last = screen.getByRole('button', { name: 'Fireworks 0' });
+    last.focus();
+    expect(fireEvent.keyDown(last, { key: 'Tab' })).toBe(false);
+    expect(document.activeElement).toBe(input);
+    expect(fireEvent.keyDown(input, { key: 'Tab', shiftKey: true })).toBe(false);
+    expect(document.activeElement).toBe(last);
+    // Interior controls keep the browser's normal Tab default.
+    const close = screen.getByRole('button', { name: 'Close' });
+    close.focus();
+    expect(fireEvent.keyDown(close, { key: 'Tab' })).toBe(true);
     expect(onChange).not.toHaveBeenCalled();
   });
 

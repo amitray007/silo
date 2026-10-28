@@ -1,6 +1,7 @@
 import { Command } from 'cmdk';
 import {
   type CSSProperties,
+  type KeyboardEvent,
   useEffect,
   useId,
   useLayoutEffect,
@@ -26,6 +27,15 @@ function newestFirst(a: Model, b: Model) {
 
 function contextLabel(tokens: number) {
   return tokens >= 1000 ? `${Number((tokens / 1000).toFixed(1))}K` : String(tokens);
+}
+
+function isolateCommandKeys(event: KeyboardEvent<HTMLButtonElement>) {
+  if (
+    ['ArrowDown', 'ArrowUp', 'Home', 'End', 'Enter'].includes(event.key) ||
+    (event.ctrlKey && ['n', 'j', 'p', 'k'].includes(event.key))
+  ) {
+    event.stopPropagation();
+  }
 }
 
 function ModelOptions({
@@ -92,6 +102,7 @@ function ModelPickerPopover({
   label,
   groups,
   value,
+  missing,
   trigger,
   onClose,
   onPick,
@@ -100,11 +111,13 @@ function ModelPickerPopover({
   label: string;
   groups: ModelGroup[];
   value: ModelChoice | null;
+  missing: string | null;
   trigger: HTMLButtonElement | null;
   onClose: () => void;
   onPick: (choice: ModelChoice) => void;
 }) {
   const [provider, setProvider] = useState<AiProviderKind | 'all'>('all');
+  const [search, setSearch] = useState('');
   const [position, setPosition] = useState<CSSProperties>({});
   const panel = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -118,11 +131,21 @@ function ModelPickerPopover({
       const below = window.innerHeight - rect.bottom - 12;
       const above = rect.top - 12;
       const flip = below < 240 && above > below;
+      const anchor = flip
+        ? {
+            '--model-top': 'auto',
+            '--model-bottom': `${window.innerHeight - rect.top + 4}px`,
+            '--model-fixed-height': 'min(480px, var(--model-height))',
+          }
+        : {
+            '--model-top': `${rect.bottom + 4}px`,
+            '--model-bottom': 'auto',
+            '--model-fixed-height': 'auto',
+          };
       setPosition({
+        ...anchor,
         '--model-left': `${Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))}px`,
         '--model-width': `${width}px`,
-        '--model-top': flip ? 'auto' : `${rect.bottom + 4}px`,
-        '--model-bottom': flip ? `${window.innerHeight - rect.top + 4}px` : 'auto',
         '--model-height': `${Math.max(120, flip ? above : below)}px`,
       } as CSSProperties);
     }
@@ -170,7 +193,11 @@ function ModelPickerPopover({
           event.stopPropagation();
         }}
       >
-        <Command label="Search models" loop>
+        <Command
+          label="Search models"
+          defaultValue={missing || !value ? '' : JSON.stringify([value.provider, value.id])}
+          loop
+        >
           <div className="silo-palette-input">
             <svg
               width="20"
@@ -190,22 +217,24 @@ function ModelPickerPopover({
               aria-label="Search models"
               autoCapitalize="off"
               spellCheck={false}
+              onValueChange={setSearch}
             />
             <button
               type="button"
               className="silo-model-picker-close"
               onClick={onClose}
-              onKeyDown={(event) => event.stopPropagation()}
+              onKeyDown={isolateCommandKeys}
             >
               Close
             </button>
           </div>
+          {missing && <p className="silo-model-missing silo-model-missing-header">{missing}</p>}
           <fieldset className="silo-model-provider-chips" aria-label="Filter by provider">
             <button
               type="button"
               className="silo-model-chip"
               aria-pressed={provider === 'all'}
-              onKeyDown={(event) => event.stopPropagation()}
+              onKeyDown={isolateCommandKeys}
               onClick={() => setProvider('all')}
             >
               All
@@ -216,7 +245,7 @@ function ModelPickerPopover({
                 type="button"
                 className="silo-model-chip"
                 aria-pressed={provider === group.kind}
-                onKeyDown={(event) => event.stopPropagation()}
+                onKeyDown={isolateCommandKeys}
                 onClick={() => setProvider(group.kind)}
               >
                 <ProviderLogo kind={group.kind} size={20} />
@@ -227,10 +256,17 @@ function ModelPickerPopover({
           </fieldset>
           <Command.List label="Models">
             <Command.Empty>
-              {groups.length ? 'No models match' : 'Add a key in Providers'}
+              {!groups.length
+                ? 'Add a key in Providers'
+                : !search && groups.every((group) => group.models.length === 0)
+                  ? 'No models loaded yet - use Refresh on a provider'
+                  : 'No models match'}
             </Command.Empty>
             <ModelOptions
-              groups={groups.filter((group) => provider === 'all' || group.kind === provider)}
+              groups={groups.filter(
+                (group) =>
+                  group.models.length > 0 && (provider === 'all' || group.kind === provider),
+              )}
               value={value}
               onPick={onPick}
             />
@@ -270,15 +306,14 @@ export function ModelPicker({
     () =>
       AI_PROVIDER_ORDER.flatMap((kind) => {
         const provider = providers.find((p) => p.kind === kind && p.configured && p.keyReadable);
-        return provider?.models?.length
-          ? [{ kind, models: [...provider.models].sort(newestFirst) }]
-          : [];
+        return provider ? [{ kind, models: [...(provider.models ?? [])].sort(newestFirst) }] : [];
       }),
     [providers],
   );
   const chosen = providers
     .find((p) => p.kind === value?.provider)
     ?.models?.find((m) => m.id === value?.id);
+  const missing = value && !chosen ? `${value.id} - no longer available` : null;
   function close() {
     setOpen(false);
     trigger.current?.focus({ preventScroll: true });
@@ -290,6 +325,8 @@ export function ModelPicker({
         type="button"
         className="silo-settings-select-trigger silo-model-picker-trigger"
         aria-label={label}
+        aria-description={missing ?? undefined}
+        title={missing ?? undefined}
         aria-haspopup="dialog"
         aria-expanded={open && !disabled}
         aria-controls={open ? id : undefined}
@@ -304,7 +341,14 @@ export function ModelPicker({
       >
         {value && <ProviderLogo kind={value.provider} size={20} />}
         <span className="silo-model-trigger-copy">
-          <span>{chosen?.label ?? value?.id ?? 'Choose a model'}</span>
+          {missing ? (
+            <span className="silo-model-missing">
+              <span className="silo-model-missing-id">{value?.id}</span>
+              <span> - no longer available</span>
+            </span>
+          ) : (
+            <span>{chosen?.label ?? 'Choose a model'}</span>
+          )}
           {value && <span className="silo-model-via">via {AI_PROVIDER_NAMES[value.provider]}</span>}
         </span>
         <span aria-hidden="true" className="silo-model-chevron">
@@ -317,6 +361,7 @@ export function ModelPicker({
           label={label}
           groups={groups}
           value={value}
+          missing={missing}
           trigger={trigger.current}
           onClose={close}
           onPick={(choice) => {
