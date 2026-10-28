@@ -2,7 +2,7 @@ import { type CSSProperties, useEffect, useId, useRef, useState } from 'react';
 import { ApiError } from '../../api/client';
 import {
   useAi,
-  useRefreshFireworksModels,
+  useRefreshAiModels,
   useRemoveAiKey,
   useSaveAiKey,
   useSettings,
@@ -16,12 +16,12 @@ import type {
   AiTestCode,
   SettingsMap,
 } from '../../api/types';
-import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER, readableAiProviders } from '../../lib/aiModels';
+import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER } from '../../lib/aiModels';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { Skeleton } from '../Skeleton';
+import { ModelPicker } from './ModelPicker';
 import { ProviderLogo } from './ProviderLogo';
 import { rowDesc, rowLabel, settingsField, settingsRow, settingsRowDivided } from './rowStyles';
-import { SettingsSelect } from './SettingsSelect';
 import { ToggleSwitch } from './ToggleSwitch';
 
 const FAILURE_WORDS: Record<AiTestCode, string> = {
@@ -190,7 +190,7 @@ function testFailureText(data: { ok: boolean; code?: AiTestCode } | undefined) {
   return data && !data.ok ? FAILURE_WORDS[data.code ?? 'unavailable'] : null;
 }
 
-function FireworksModelsStatus({
+function ProviderModelsStatus({
   provider,
   pending,
 }: {
@@ -232,7 +232,7 @@ function ProviderRow({
   const test = useTestAiKey(kind);
   const remove = useRemoveAiKey(kind);
   const save = useSaveAiKey(kind);
-  const refresh = useRefreshFireworksModels();
+  const refresh = useRefreshAiModels(kind);
   const busy =
     disabled || save.isPending || test.isPending || remove.isPending || refresh.isPending;
   const { reset: resetSave } = save;
@@ -269,9 +269,7 @@ function ProviderRow({
           <div id={statusId} role="status" style={metaStyle}>
             {providerStatus(provider, unreadable)}
           </div>
-          {kind === 'fireworks' && configured && (
-            <FireworksModelsStatus provider={provider} pending={refresh.isPending} />
-          )}
+          {configured && <ProviderModelsStatus provider={provider} pending={refresh.isPending} />}
         </div>
         <div className="silo-ai-provider-actions">
           <button
@@ -287,11 +285,11 @@ function ProviderRow({
           >
             {configured ? 'Replace key' : 'Add key'}
           </button>
-          {kind === 'fireworks' && configured && (
+          {configured && (
             <button
               type="button"
               className="silo-settings-btn"
-              aria-label="Refresh Fireworks models"
+              aria-label={`Refresh ${name} models`}
               disabled={busy || unreadable}
               onClick={() => {
                 resetRowMutations();
@@ -412,16 +410,6 @@ function FeatureRow({
 }) {
   const state = settingsAi.features[feature.id] ?? { enabled: false, model: null };
   const model = state.model;
-  const groups = readableAiProviders(ai)
-    .map((kind) => ({
-      label: AI_PROVIDER_NAMES[kind],
-      icon: <ProviderLogo kind={kind} size={20} />,
-      options: (ai.providers.find((p) => p.kind === kind)?.models ?? []).map((m) => ({
-        value: JSON.stringify([kind, m.id]),
-        label: m.label,
-      })),
-    }))
-    .filter((g) => g.options.length > 0);
   const reason = ai.status.features[feature.id]?.reason;
   const hint =
     !state.enabled && feature.plugin
@@ -436,14 +424,12 @@ function FeatureRow({
         <div style={rowDesc}>{feature.plugin === 'twitter' ? 'X posts' : feature.description}</div>
         {hint && <div style={metaStyle}>{hint}</div>}
       </div>
-      <SettingsSelect
-        ariaLabel={`${feature.label} model`}
-        value={model ? JSON.stringify([model.provider, model.id]) : null}
-        groups={groups}
-        placeholder={groups.length ? 'Choose a model' : 'Add a provider key first'}
-        disabled={disabled || !groups.length}
-        onChange={(value) => {
-          const [provider, id] = JSON.parse(value) as [AiProviderKind, string];
+      <ModelPicker
+        label={`${feature.label} model`}
+        value={model}
+        providers={ai.providers}
+        disabled={disabled}
+        onChange={({ provider, id }) => {
           patch({
             ...settingsAi,
             features: {

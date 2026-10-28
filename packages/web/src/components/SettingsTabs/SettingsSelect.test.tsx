@@ -7,7 +7,6 @@ import { SettingsSelect } from './SettingsSelect';
 const groups = [
   {
     label: 'First provider',
-    icon: <svg role="img" aria-label="Decorative provider mark" />,
     options: [
       { value: 'a', label: 'Alpha' },
       { value: 'b', label: 'Beta' },

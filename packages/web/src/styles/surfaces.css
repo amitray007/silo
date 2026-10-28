@@ -1624,32 +1624,221 @@
   flex: 1;
   min-width: 140px;
 }
-.silo-ai-feature-row .silo-settings-select-wrap {
+/* Model picker uses the palette recipes in an overlay, outside the modal scroll area. */
+.silo-model-picker {
+  display: inline-flex;
   max-width: 100%;
+  min-width: 0;
 }
-.silo-ai-feature-row .silo-settings-select-trigger > span:first-child {
+.silo-model-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 280px;
+  height: auto;
+  min-height: 40px;
+  padding: 6px 10px;
+}
+.silo-model-trigger-copy {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  text-align: left;
+  line-height: 18px;
+}
+.silo-model-picker-trigger .silo-model-trigger-copy > span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.silo-ai-feature-row .silo-settings-select-menu {
-  width: max-content;
-  max-width: min(420px, calc(100vw - 64px));
-  max-height: min(360px, 50vh);
-  overflow-y: auto;
+.silo-model-via,
+.silo-model-chevron {
+  color: var(--fnt);
+  font-size: 12px;
+  font-weight: 400;
 }
-.silo-ai-feature-row .silo-settings-select-option {
-  white-space: normal;
-  line-height: 1.4;
-  overflow-wrap: anywhere;
+.silo-model-picker-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
 }
-.silo-settings-select-group-label {
+.silo-model-picker-scrim {
+  display: none;
+}
+.silo-model-picker-popover {
+  position: fixed;
+  top: var(--model-top);
+  bottom: var(--model-bottom);
+  left: var(--model-left);
+  width: var(--model-width);
+  max-height: var(--model-height);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border-radius: 12px;
+  background: var(--bg2);
+  color: var(--ink);
+  box-shadow: var(--elev-2);
+  pointer-events: auto;
+  font-size: 14px;
+}
+.silo-model-picker-popover [cmdk-root] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.silo-model-picker-popover [cmdk-list] {
+  max-height: 360px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 6px;
+}
+.silo-model-picker-popover [cmdk-group-heading] {
   display: flex;
   align-items: center;
   gap: 8px;
+  padding: 8px 12px 4px;
+  color: var(--fnt);
+  font-size: 12px;
+  font-weight: 500;
+}
+.silo-model-picker-popover [cmdk-empty] {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--fnt);
+}
+.silo-model-picker-close,
+.silo-model-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: transparent;
+  color: var(--mut);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.silo-model-provider-chips {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  overflow-x: auto;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: 8px;
+  border-bottom: 0.5px solid var(--line);
+}
+.silo-model-chip {
+  white-space: nowrap;
+}
+.silo-model-chip[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.silo-model-count {
+  color: var(--fnt);
+  font-variant-numeric: tabular-nums;
+}
+.silo-model-picker-close:focus-visible,
+.silo-model-chip:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: -2px;
+}
+.silo-palette-row.silo-model-option {
+  padding: 8px 12px;
+  gap: 8px;
+  height: auto;
+  min-height: 40px;
+}
+.silo-model-option-copy {
+  flex: 1;
+  min-width: 0;
+}
+.silo-model-option-label,
+.silo-model-option-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-model-option-meta {
+  display: flex;
+  gap: 4px;
+  color: var(--fnt);
+  font-size: 12px;
+  line-height: 18px;
+}
+.silo-model-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-model-owner {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-model-id + .silo-model-owner::before {
+  content: " · ";
+}
+.silo-model-option > .silo-model-context,
+.silo-model-option > .silo-model-check {
+  flex: none;
+  color: var(--fnt);
+  font-size: 12px;
+}
+.silo-model-option > .silo-model-check {
+  width: 14px;
+  color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-model-picker-close:hover,
+  .silo-model-chip:hover {
+    background: var(--hov);
+    color: var(--ink);
+  }
 }
 @media (max-width: 640px) {
-  .silo-ai-feature-row .silo-settings-select-wrap {
+  .silo-model-picker,
+  .silo-model-picker-trigger {
     width: 100%;
+    max-width: 100%;
+  }
+  .silo-model-chevron {
+    margin-left: auto;
+  }
+  .silo-model-picker-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: var(--scrim);
+    backdrop-filter: blur(4px);
+    pointer-events: auto;
+  }
+  .silo-model-picker-popover {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    max-height: calc(100dvh - 8px);
+    border-radius: 12px 12px 0 0;
+    box-shadow: var(--elev-3);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  /* Portalled controls keep the settings touch floor. Marks remain 20px spans. */
+  .silo-model-picker-popover :is(button, input) {
+    min-height: 40px;
   }
 }

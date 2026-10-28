@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useEscapeLayer } from '../../lib/useEscapeLayer';
 
 export type SettingsSelectOption<V extends string | number> = { value: V; label: string };
@@ -6,7 +6,6 @@ export type SettingsSelectOption<V extends string | number> = { value: V; label:
 /** A group of options. A group with a `label` renders a non-selectable heading above its options. */
 export type SettingsSelectGroup<V extends string | number> = {
   label?: string;
-  icon?: ReactNode;
   options: SettingsSelectOption<V>[];
 };
 
@@ -67,7 +66,7 @@ function OptionButton<V extends string | number>({
   );
 }
 
-/** The Settings dropdown (listbox popover) shared by Preferences and the AI tab. */
+/** The Settings dropdown (listbox popover) shared by settings controls. */
 export function SettingsSelect<V extends string | number>({
   ariaLabel,
   value,
@@ -198,7 +197,6 @@ export function SettingsSelect<V extends string | number>({
               // biome-ignore lint/a11y/useSemanticElements: a listbox group is role="group"; <fieldset> is not valid inside a listbox.
               <div key={group.label} role="group" aria-label={group.label}>
                 <div aria-hidden="true" className="silo-settings-select-group-label">
-                  {group.icon}
                   {group.label}
                 </div>
                 {group.options.map(renderOption)}

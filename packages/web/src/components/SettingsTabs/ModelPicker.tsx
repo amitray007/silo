@@ -1,0 +1,331 @@
+import { Command } from 'cmdk';
+import {
+  type CSSProperties,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
+import { createPortal } from 'react-dom';
+import type { AiProviderJson, AiProviderKind, SettingsMap } from '../../api/types';
+import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER } from '../../lib/aiModels';
+import { useEscapeLayer } from '../../lib/useEscapeLayer';
+import { trapDialogTab } from '../ModalShell';
+import { ProviderLogo } from './ProviderLogo';
+
+type ModelChoice = NonNullable<SettingsMap['ai']['features'][string]['model']>;
+type Model = NonNullable<AiProviderJson['models']>[number];
+type ModelGroup = { kind: AiProviderKind; models: Model[] };
+
+function newestFirst(a: Model, b: Model) {
+  const time = (model: Model) => Date.parse(model.createdAt ?? '') || 0;
+  return time(b) - time(a);
+}
+
+function contextLabel(tokens: number) {
+  return tokens >= 1000 ? `${Number((tokens / 1000).toFixed(1))}K` : String(tokens);
+}
+
+function ModelOptions({
+  groups,
+  value,
+  onPick,
+}: {
+  groups: ModelGroup[];
+  value: ModelChoice | null;
+  onPick: (choice: ModelChoice) => void;
+}) {
+  return groups.map(({ kind, models }) => (
+    <Command.Group
+      key={kind}
+      heading={
+        <>
+          <ProviderLogo kind={kind} size={20} />
+          {AI_PROVIDER_NAMES[kind]}
+        </>
+      }
+    >
+      {models.map((model) => {
+        const selected = value?.provider === kind && value.id === model.id;
+        return (
+          <Command.Item
+            key={model.id}
+            value={JSON.stringify([kind, model.id])}
+            keywords={[model.label, model.id, model.owner ?? '']}
+            className="silo-palette-row silo-model-option"
+            onSelect={() => onPick({ provider: kind, id: model.id })}
+          >
+            <div className="silo-model-option-copy">
+              <span className="silo-model-option-label">{model.label}</span>
+              {(model.id !== model.label || (kind === 'gateway' && model.owner)) && (
+                <span className="silo-model-option-meta">
+                  {model.id !== model.label && <span className="silo-model-id">{model.id}</span>}
+                  {kind === 'gateway' && model.owner && (
+                    <span className="silo-model-owner">{model.owner}</span>
+                  )}
+                </span>
+              )}
+            </div>
+            {model.contextWindow != null && (
+              <span
+                className="silo-model-context"
+                title={`${model.contextWindow.toLocaleString()} tokens`}
+              >
+                {contextLabel(model.contextWindow)}
+              </span>
+            )}
+            <span className="silo-model-check" data-current={selected || undefined}>
+              {selected ? '✓' : ''}
+            </span>
+          </Command.Item>
+        );
+      })}
+    </Command.Group>
+  ));
+}
+
+/** Mounted only while open, so each new search starts with all providers. */
+function ModelPickerPopover({
+  id,
+  label,
+  groups,
+  value,
+  trigger,
+  onClose,
+  onPick,
+}: {
+  id: string;
+  label: string;
+  groups: ModelGroup[];
+  value: ModelChoice | null;
+  trigger: HTMLButtonElement | null;
+  onClose: () => void;
+  onPick: (choice: ModelChoice) => void;
+}) {
+  const [provider, setProvider] = useState<AiProviderKind | 'all'>('all');
+  const [position, setPosition] = useState<CSSProperties>({});
+  const panel = useRef<HTMLDivElement>(null);
+  const input = useRef<HTMLInputElement>(null);
+  useEscapeLayer(true, onClose);
+
+  useLayoutEffect(() => {
+    function place() {
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(460, window.innerWidth - 16);
+      const below = window.innerHeight - rect.bottom - 12;
+      const above = rect.top - 12;
+      const flip = below < 240 && above > below;
+      setPosition({
+        '--model-left': `${Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8))}px`,
+        '--model-width': `${width}px`,
+        '--model-top': flip ? 'auto' : `${rect.bottom + 4}px`,
+        '--model-bottom': flip ? `${window.innerHeight - rect.top + 4}px` : 'auto',
+        '--model-height': `${Math.max(120, flip ? above : below)}px`,
+      } as CSSProperties);
+    }
+    function onScroll(event: Event) {
+      if (!panel.current?.contains(event.target as Node)) place();
+    }
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', onScroll, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', onScroll, true);
+    };
+  }, [trigger]);
+
+  useEffect(() => {
+    input.current?.focus({ preventScroll: true });
+    function outside(event: PointerEvent) {
+      const target = event.target as Node;
+      if (!panel.current?.contains(target) && !trigger?.contains(target)) onClose();
+    }
+    document.addEventListener('pointerdown', outside);
+    return () => document.removeEventListener('pointerdown', outside);
+  }, [trigger, onClose]);
+
+  return createPortal(
+    <div className="silo-model-picker-layer">
+      <button
+        type="button"
+        className="silo-model-picker-scrim"
+        aria-label="Close model picker"
+        onClick={onClose}
+      />
+      <div
+        ref={panel}
+        id={id}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        className="silo-model-picker-popover"
+        style={position}
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => {
+          trapDialogTab(event);
+          event.stopPropagation();
+        }}
+      >
+        <Command label="Search models" loop>
+          <div className="silo-palette-input">
+            <svg
+              width="20"
+              height="20"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <circle cx="10.5" cy="10.5" r="6.5" />
+              <path d="m16 16 4.5 4.5" />
+            </svg>
+            <Command.Input
+              ref={input}
+              placeholder="Search models"
+              aria-label="Search models"
+              autoCapitalize="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="silo-model-picker-close"
+              onClick={onClose}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
+              Close
+            </button>
+          </div>
+          <fieldset className="silo-model-provider-chips" aria-label="Filter by provider">
+            <button
+              type="button"
+              className="silo-model-chip"
+              aria-pressed={provider === 'all'}
+              onKeyDown={(event) => event.stopPropagation()}
+              onClick={() => setProvider('all')}
+            >
+              All
+            </button>
+            {groups.map((group) => (
+              <button
+                key={group.kind}
+                type="button"
+                className="silo-model-chip"
+                aria-pressed={provider === group.kind}
+                onKeyDown={(event) => event.stopPropagation()}
+                onClick={() => setProvider(group.kind)}
+              >
+                <ProviderLogo kind={group.kind} size={20} />
+                {AI_PROVIDER_NAMES[group.kind]}{' '}
+                <span className="silo-model-count">{group.models.length}</span>
+              </button>
+            ))}
+          </fieldset>
+          <Command.List label="Models">
+            <Command.Empty>
+              {groups.length ? 'No models match' : 'Add a key in Providers'}
+            </Command.Empty>
+            <ModelOptions
+              groups={groups.filter((group) => provider === 'all' || group.kind === provider)}
+              value={value}
+              onPick={onPick}
+            />
+          </Command.List>
+        </Command>
+      </div>
+    </div>,
+    document.body,
+  );
+}
+
+/** Searchable per-feature choice; settings writes stay with the AI tab. */
+export function ModelPicker({
+  label,
+  providers,
+  value,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  providers: AiProviderJson[];
+  value: ModelChoice | null;
+  disabled?: boolean;
+  onChange: (choice: ModelChoice) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLButtonElement>(null);
+  const restoreAfterSave = useRef(false);
+  useEffect(() => {
+    if (!disabled && restoreAfterSave.current) {
+      trigger.current?.focus({ preventScroll: true });
+      restoreAfterSave.current = false;
+    }
+  }, [disabled]);
+  const id = useId();
+  const groups = useMemo(
+    () =>
+      AI_PROVIDER_ORDER.flatMap((kind) => {
+        const provider = providers.find((p) => p.kind === kind && p.configured && p.keyReadable);
+        return provider?.models?.length
+          ? [{ kind, models: [...provider.models].sort(newestFirst) }]
+          : [];
+      }),
+    [providers],
+  );
+  const chosen = providers
+    .find((p) => p.kind === value?.provider)
+    ?.models?.find((m) => m.id === value?.id);
+  function close() {
+    setOpen(false);
+    trigger.current?.focus({ preventScroll: true });
+  }
+  return (
+    <span className="silo-model-picker">
+      <button
+        ref={trigger}
+        type="button"
+        className="silo-settings-select-trigger silo-model-picker-trigger"
+        aria-label={label}
+        aria-haspopup="dialog"
+        aria-expanded={open && !disabled}
+        aria-controls={open ? id : undefined}
+        disabled={disabled}
+        onClick={() => (open ? close() : setOpen(true))}
+        onKeyDown={(event) => {
+          if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+          event.preventDefault();
+          event.stopPropagation();
+          setOpen(true);
+        }}
+      >
+        {value && <ProviderLogo kind={value.provider} size={20} />}
+        <span className="silo-model-trigger-copy">
+          <span>{chosen?.label ?? value?.id ?? 'Choose a model'}</span>
+          {value && <span className="silo-model-via">via {AI_PROVIDER_NAMES[value.provider]}</span>}
+        </span>
+        <span aria-hidden="true" className="silo-model-chevron">
+          ⌄
+        </span>
+      </button>
+      {open && !disabled && (
+        <ModelPickerPopover
+          id={id}
+          label={label}
+          groups={groups}
+          value={value}
+          trigger={trigger.current}
+          onClose={close}
+          onPick={(choice) => {
+            restoreAfterSave.current = true;
+            close();
+            onChange(choice);
+          }}
+        />
+      )}
+    </span>
+  );
+}

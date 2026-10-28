@@ -317,13 +317,17 @@ describe('AiTab', () => {
     expect(
       within(list)
         .getAllByRole('group')
-        .map((g) => g.getAttribute('aria-label')),
+        .map((g) => document.getElementById(g.getAttribute('aria-labelledby') ?? '')?.textContent),
     ).toEqual(['Anthropic', 'Vercel AI Gateway']);
     expect(within(list).queryByRole('group', { name: 'OpenAI' })).toBeNull();
     expect(within(list).queryByRole('group', { name: 'Fireworks' })).toBeNull();
     const gateway = within(list).getByRole('group', { name: 'Vercel AI Gateway' });
-    expect(gateway.querySelector('svg[fill="currentColor"]')).toBeTruthy();
-    fireEvent.click(within(gateway).getByRole('option', { name: 'GPT-5 mini' }));
+    expect(
+      document
+        .getElementById(gateway.getAttribute('aria-labelledby') ?? '')
+        ?.querySelector('svg[fill="currentColor"]'),
+    ).toBeTruthy();
+    fireEvent.click(within(gateway).getByRole('option', { name: /GPT-5 mini/ }));
     await waitFor(() =>
       expect(calls).toContainEqual(
         expect.objectContaining({
@@ -355,7 +359,7 @@ describe('AiTab', () => {
     expect(
       within(list)
         .getAllByRole('option')
-        .filter((o) => o.getAttribute('aria-selected') === 'true'),
+        .filter((o) => o.querySelector('[data-current]')),
     ).toHaveLength(1);
     fireEvent.click(within(list).getByText('Anthropic'));
     expect(screen.queryByRole('listbox')).toBeTruthy();
@@ -386,7 +390,7 @@ describe('AiTab', () => {
     fireEvent.click(await screen.findByRole('button', { name: 'AI titles model' }));
     const list = screen.getByRole('listbox');
     expect(within(list).getAllByRole('option')).toHaveLength(1);
-    fireEvent.click(within(list).getByRole('option', { name: 'Live custom model' }));
+    fireEvent.click(within(list).getByRole('option', { name: /Live custom model/ }));
     await waitFor(() =>
       expect(calls).toContainEqual(
         expect.objectContaining({
@@ -423,7 +427,7 @@ describe('AiTab', () => {
     const hint = await screen.findByText("Couldn't refresh the list");
     expect(hint.closest('[role="status"]')?.textContent).toContain('1 models · updated just now');
     fireEvent.click(await screen.findByRole('button', { name: 'AI titles model' }));
-    expect(screen.getByRole('option', { name: 'Stored model' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /Stored model/ })).toBeTruthy();
   });
 
   it('refreshes Fireworks through the operator route and disables that row while pending', async () => {
@@ -461,7 +465,7 @@ describe('AiTab', () => {
     release(jsonResponse({ ok: true, models: fireworks?.models }));
     await screen.findByText('1 models · not updated yet');
     fireEvent.click(screen.getByRole('button', { name: 'AI titles model' }));
-    expect(screen.getByRole('option', { name: 'New live model' })).toBeTruthy();
+    expect(screen.getByRole('option', { name: /New live model/ })).toBeTruthy();
   });
 
   it('shows the empty Fireworks state and a failed refresh in plain words', async () => {
@@ -475,6 +479,64 @@ describe('AiTab', () => {
     ).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh Fireworks models' }));
     expect((await screen.findByRole('alert')).textContent).toBe('Out of credit or over the limit');
+  });
+
+  it.each([
+    ['anthropic', 'Anthropic'],
+    ['openai', 'OpenAI'],
+    ['gateway', 'Vercel AI Gateway'],
+    ['fireworks', 'Fireworks'],
+  ])('refreshes %s with its own busy state and stale-list hint', async (kind, name) => {
+    let finish: (response: Response) => void = () => {};
+    const { calls } = setup({
+      ai: aiFixture({
+        providers: [
+          { kind, configured: true, modelsRefreshError: 'timeout', modelsFetchedAt: NOW },
+        ],
+      }),
+      providerRoute: () =>
+        new Promise<Response>((resolve) => {
+          finish = resolve;
+        }),
+    });
+    expect(await screen.findByText("Couldn't refresh the list")).toBeTruthy();
+    const refresh = screen.getByRole('button', { name: `Refresh ${name} models` });
+    fireEvent.click(refresh);
+    await screen.findByText('Refreshing models…');
+    expect(refresh).toHaveProperty('disabled', true);
+    expect(screen.getByRole('button', { name: `Test ${name} key` })).toHaveProperty(
+      'disabled',
+      true,
+    );
+    const other = kind === 'anthropic' ? 'OpenAI' : 'Anthropic';
+    expect(screen.getByRole('button', { name: `Add ${other} key` })).toHaveProperty(
+      'disabled',
+      false,
+    );
+    expect(calls).toContainEqual({
+      method: 'POST',
+      url: `/api/ai/providers/${kind}/models/refresh`,
+      body: {},
+    });
+    finish(jsonResponse({ ok: true }));
+    await waitFor(() => expect(refresh).toHaveProperty('disabled', false));
+  });
+
+  it('shows an inline alert when selecting a model fails to PATCH', async () => {
+    setup({ ai: aiFixture({ providers: [ANTHROPIC_OK] }) });
+    const trigger = await screen.findByRole('button', { name: 'AI titles model' });
+    const original = vi.mocked(fetch).getMockImplementation() as typeof fetch;
+    vi.mocked(fetch).mockImplementation((input, init) =>
+      init?.method === 'PATCH'
+        ? Promise.resolve(
+            jsonResponse({ error: 'invalid_model', message: 'Model is no longer available.' }, 400),
+          )
+        : original(input, init),
+    );
+    fireEvent.click(trigger);
+    fireEvent.click(screen.getByRole('option', { name: /Claude Haiku/ }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Model is no longer available.');
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 
   it('shows a feature readiness reason in plain words', async () => {

@@ -8,7 +8,7 @@ export const AI_PROVIDER_NAMES: Record<AiProviderKind, string> = {
 };
 export const AI_PROVIDER_ORDER: AiProviderKind[] = ['anthropic', 'openai', 'gateway', 'fireworks'];
 
-export function readableAiProviders(ai: AiSettingsResponse) {
+function readableAiProviders(ai: AiSettingsResponse) {
   return AI_PROVIDER_ORDER.filter((kind) =>
     ai.providers.some((p) => p.kind === kind && p.configured && p.keyReadable),
   );

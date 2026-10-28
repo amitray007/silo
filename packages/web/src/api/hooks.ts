@@ -899,10 +899,10 @@ export function useAi() {
 }
 
 /** Operator-only refresh; the server stores the live list before responding. */
-export function useRefreshFireworksModels() {
+export function useRefreshAiModels(kind: AiProviderKind) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => apiPost('/api/ai/providers/fireworks/models/refresh', {}),
+    mutationFn: () => apiPost(`/api/ai/providers/${kind}/models/refresh`, {}),
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
       queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
