@@ -6,7 +6,9 @@ type Settings = Pick<
   'providerOptions' | 'reasoning' | 'timeout' | 'maxOutputTokens' | 'abortSignal'
 > & { structuredOutput: boolean };
 type Option = 'reasoning' | 'thinking' | 'effort' | 'temperature' | 'format';
-const remembered = new Map<string, Set<Option>>();
+const remembered = new Map<string, { options: Set<Option>; expiresAt: number }>();
+const REMEMBERED_LIMIT = 200;
+const REMEMBERED_TTL_MS = 7 * 24 * 60 * 60_000;
 
 function settingsFor(credential: AiCredential): Settings {
   const { kind, model } = credential;
@@ -59,13 +61,13 @@ function applyGatewaySettings(
 }
 
 /** Read messages only to identify a rejected option; never log or persist provider text. */
-function rejectedOption(error: unknown): Option | undefined {
+function rejectedOption(error: unknown, kind: AiCredential['kind']): Option | undefined {
   let current: unknown = RetryError.isInstance(error) ? error.lastError : error;
   for (let depth = 0; depth < 4 && typeof current === 'object' && current !== null; depth += 1) {
     const failure = current as { statusCode?: unknown; message?: unknown; cause?: unknown };
     if (failure.statusCode === 401 || failure.statusCode === 403) return undefined;
     if (failure.statusCode === 400 && typeof failure.message === 'string') {
-      const option = optionInMessage(failure.message);
+      const option = optionInMessage(failure.message, kind);
       if (option) return option;
     }
     current = failure.cause;
@@ -73,13 +75,50 @@ function rejectedOption(error: unknown): Option | undefined {
   return undefined;
 }
 
-function optionInMessage(message: string): Option | undefined {
-  if (/response.?format|output.?format|structured.?output|output_config[. ]format/i.test(message))
-    return 'format';
-  if (/thinking/i.test(message)) return 'thinking';
-  if (/reasoning/i.test(message)) return 'reasoning';
-  if (/effort/i.test(message)) return 'effort';
-  if (/temperature/i.test(message)) return 'temperature';
+const FORMAT_PATTERN =
+  /\b(?:response[_ .]?format|output[_ .]?format|structured[_ .]?output|output_config[. ]format)\b/i;
+const REJECTED_OPTIONS: Record<AiCredential['kind'], readonly (readonly [Option, RegExp])[]> = {
+  anthropic: [
+    ['format', FORMAT_PATTERN],
+    ['thinking', /\bthinking\b/i],
+    ['effort', /\beffort\b/i],
+    ['reasoning', /\breasoning\b/i],
+  ],
+  openai: [
+    ['format', FORMAT_PATTERN],
+    ['reasoning', /\breasoning(?:[_ .]effort)?\b/i],
+    ['temperature', /\btemperature\b/i],
+  ],
+  gateway: [
+    ['format', FORMAT_PATTERN],
+    ['reasoning', /\b(?:reasoning(?:[_ .]effort|[_ .]budget)?|thinking|effort)\b/i],
+    ['temperature', /\btemperature\b/i],
+  ],
+  // GLM: "disabling thinking (reasoning_effort='none') is not supported".
+  fireworks: [
+    ['format', FORMAT_PATTERN],
+    ['reasoning', /\b(?:reasoning(?:_effort)?|thinking)\b/i],
+    ['temperature', /\btemperature\b/i],
+  ],
+};
+
+function optionInMessage(message: string, kind: AiCredential['kind']): Option | undefined {
+  for (const [option, pattern] of REJECTED_OPTIONS[kind]) {
+    for (const match of message.matchAll(new RegExp(pattern.source, 'gi'))) {
+      const before = message.slice(0, match.index);
+      const after = message.slice(match.index + match[0].length);
+      // Require rejection of this parameter, not an unrelated error elsewhere in the message.
+      if (
+        /\b(?:unsupported|unknown|unrecognized|invalid)(?:\s+(?:parameter|option|argument|field|value|of|for|the))*\s*[:='"`([]*\s*$/i.test(
+          before,
+        ) ||
+        /^[\s'"`)\]]*(?:\s*[:=]\s*['"]?[\w.-]+['"]?[\s)\]]*)?\s*(?:(?:is|are|was)\s+)?(?:unsupported|not supported|invalid|unknown|unrecognized)\b/i.test(
+          after,
+        )
+      )
+        return option;
+    }
+  }
   return undefined;
 }
 
@@ -137,9 +176,11 @@ export async function withModelSettings<T>(
   const started = Date.now();
   const settings = settingsFor(credential);
   const key = `${credential.kind}:${credential.model.id}`;
-  const previous = remembered.get(key);
+  const previous = rememberedOptions(key);
   for (const option of previous ?? []) omitOption(settings, option);
-  const retries: { rejected?: Option; increasedBudget: boolean } = { increasedBudget: false };
+  const retries: { rejected?: Option; increasedBudget: boolean; remember?: Option } = {
+    increasedBudget: false,
+  };
   while (true) {
     abortSignal?.throwIfAborted();
     const remaining = timeoutMs - (Date.now() - started);
@@ -150,10 +191,11 @@ export async function withModelSettings<T>(
         timeout: { totalMs: remaining },
         ...(abortSignal ? { abortSignal } : {}),
       });
-      rememberSettings(key, previous, retries.rejected);
+      rememberSettings(key, previous, retries.remember);
       return result;
     } catch (error) {
-      if (applyFallback(error, settings, retries)) continue;
+      delete retries.remember;
+      if (applyFallback(error, credential.kind, settings, retries)) continue;
       throw error;
     }
   }
@@ -161,12 +203,14 @@ export async function withModelSettings<T>(
 
 function applyFallback(
   error: unknown,
+  kind: AiCredential['kind'],
   settings: Settings,
-  retries: { rejected?: Option; increasedBudget: boolean },
+  retries: { rejected?: Option; increasedBudget: boolean; remember?: Option },
 ): boolean {
-  const option = rejectedOption(error);
+  const option = rejectedOption(error, kind);
   if (!retries.rejected && option && omitOption(settings, option)) {
     retries.rejected = option;
+    retries.remember = option;
     return true;
   }
   if (!retries.increasedBudget && exhausted(error)) {
@@ -176,12 +220,31 @@ function applyFallback(
   }
   return false;
 }
+function rememberedOptions(key: string): Set<Option> | undefined {
+  const cached = remembered.get(key);
+  if (!cached) return undefined;
+  if (cached.expiresAt > Date.now()) return cached.options;
+  remembered.delete(key);
+  return undefined;
+}
+
 function rememberSettings(
   key: string,
   previous: Set<Option> | undefined,
   rejected: Option | undefined,
 ): void {
   if (!rejected) return;
-  if (remembered.size >= 500) remembered.clear();
-  remembered.set(key, new Set([...(previous ?? []), rejected]));
+  const now = Date.now();
+  for (const [id, entry] of remembered) {
+    if (entry.expiresAt <= now) remembered.delete(id);
+  }
+  remembered.delete(key);
+  if (remembered.size >= REMEMBERED_LIMIT) {
+    const oldest = remembered.keys().next().value;
+    if (oldest !== undefined) remembered.delete(oldest);
+  }
+  remembered.set(key, {
+    options: new Set([...(previous ?? []), rejected]),
+    expiresAt: now + REMEMBERED_TTL_MS,
+  });
 }

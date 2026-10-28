@@ -18,7 +18,7 @@ import {
 } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { operatorOnly } from '../operator-only.js';
+import { operatorOnly, operatorOnlyFailure } from '../operator-only.js';
 
 const kindParamSchema = z.object({ kind: z.enum(AI_PROVIDER_KINDS) });
 const putBodySchema = z.object({ apiKey: z.string() });
@@ -39,6 +39,7 @@ function providerJson(p: AiProviderSummary) {
       contextWindow: model.contextWindow,
       maxOutputTokens: model.maxOutputTokens,
       structuredOutput: model.structuredOutput,
+      eligibility: model.eligibility,
       reasoning: model.reasoning,
     })),
     defaultModel: defaultModelFor(p.kind, p.models ?? [])?.id ?? null,
@@ -74,7 +75,7 @@ function parseKind(c: { req: { param(name: string): string } }): AiProviderKind 
 export function registerAiRoutes(app: Hono): void {
   app.get('/ai', async (c) => {
     const [status, providers] = await Promise.all([aiStatus(), listAiProviders()]);
-    refreshStaleProviderModels(providers);
+    if (!operatorOnlyFailure(c)) refreshStaleProviderModels(providers);
     return c.json({
       status,
       providers: providers.map(providerJson),

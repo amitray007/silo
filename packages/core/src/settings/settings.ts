@@ -13,6 +13,24 @@ import {
   type SettingValue,
 } from './schema.js';
 
+// Only migrates pre-live-list settings that used catalog ids for Gateway models.
+const LEGACY_GATEWAY_IDS = new Map([
+  ['claude-haiku-5-5', 'anthropic/claude-haiku-5.5'],
+  ['claude-sonnet-5-5', 'anthropic/claude-sonnet-5.5'],
+  ['claude-opus-5-5', 'anthropic/claude-opus-5.5'],
+  ['claude-fable-5-1', 'anthropic/claude-fable-5.1'],
+  ['gpt-6-luna', 'openai/gpt-6-luna'],
+  ['gpt-6.1-terra', 'openai/gpt-6.1-terra'],
+  ['gpt-6.1-sol', 'openai/gpt-6.1-sol'],
+  ['gpt-6-astra', 'openai/gpt-6-astra'],
+]);
+
+function migrateGatewaySelections(ai: SettingValue<'ai'>): void {
+  for (const { model } of Object.values(ai.features)) {
+    if (model?.provider === 'gateway') model.id = LEGACY_GATEWAY_IDS.get(model.id) ?? model.id;
+  }
+}
+
 /**
  * Settings ops (plan 016) — the ONLY `core` module that touches
  * `@silo/db`'s `settings` table. Single-user/localhost store: a "row per
@@ -39,6 +57,7 @@ async function parseSettingValueSafely<K extends SettingKey>(
 ): Promise<SettingValue<K> | undefined> {
   try {
     const parsed = parseStoredSettingValue(key, value);
+    if (key === 'ai') migrateGatewaySelections(parsed as SettingValue<'ai'>);
     if (key === 'ai' && repairModels) {
       const ai = parsed as SettingValue<'ai'>;
       for (const feature of Object.values(ai.features)) {
@@ -102,6 +121,7 @@ export async function setSetting<K extends SettingKey>(
 ): Promise<void> {
   const parsed = parseSettingValue(key, value);
   if (key === 'ai') {
+    migrateGatewaySelections(parsed as SettingValue<'ai'>);
     await executor.transaction(async (tx) => {
       await validateProviderSelection(parsed as SettingValue<'ai'>, tx);
       await persistSetting(key, parsed, tx);

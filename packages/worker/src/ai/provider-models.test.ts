@@ -29,7 +29,7 @@ const gateway = (id: string, extra = {}) => ({
   released: 1791331200,
   context_window: 1000000,
   max_tokens: 128000,
-  eligible: true,
+  model_eligibility: { status: 'eligible', evaluated_runtime: 'http' },
   reasoning_options: [{ type: 'effort', values: ['high', 'low', 'medium'] }],
   ...extra,
 });
@@ -231,8 +231,22 @@ describe('Gateway models', () => {
           }),
           gateway('image', { type: 'image' }),
           gateway('no-json', { tags: [] }),
-          gateway('no-access', { eligible: false }),
-          gateway('denied', { eligibility: { eligible: false } }),
+          gateway('no-access', {
+            model_eligibility: {
+              status: 'ineligible',
+              evaluated_runtime: 'http',
+              category: 'policy',
+              reason: 'model_not_allowed',
+            },
+          }),
+          gateway('unknown', {
+            model_eligibility: {
+              status: 'unknown',
+              evaluated_runtime: 'http',
+              reason: 'dependency_unavailable',
+            },
+          }),
+          gateway('missing', { model_eligibility: undefined }),
           gateway('deprecated', { deprecated_at: 1999999999999 }),
         ],
       }),
@@ -247,6 +261,18 @@ describe('Gateway models', () => {
       'https://ai-gateway.vercel.sh/v1/models?include_availability',
     );
     expect(fetch.mock.calls[0]?.[1]?.headers).toEqual({ Authorization: `Bearer ${KEY}` });
+    expect(result.ok && result.models.every((m) => m.eligibility === 'eligible')).toBe(true);
+  });
+  it('marks an unannotated catalog as unverified instead of claiming team eligibility', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>().mockResolvedValue(
+      Response.json({
+        data: [gateway('public-model', { model_eligibility: undefined })],
+      }),
+    );
+    expect(await createGatewayModelsFetcher(fetch)(KEY)).toMatchObject({
+      ok: true,
+      models: [{ id: 'public-model', eligibility: 'unverified' }],
+    });
   });
   it('accepts payloads above 2 MB and rejects payloads above 4 MB', async () => {
     for (const [size, ok] of [

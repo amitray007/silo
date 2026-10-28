@@ -27,6 +27,7 @@ export const liveModelSchema = z.object({
   contextWindow: z.number().int().positive().optional(),
   maxOutputTokens: z.number().int().positive().optional(),
   structuredOutput: z.enum(['native', 'unknown']),
+  eligibility: z.enum(['eligible', 'unverified']).optional(),
   reasoning: reasoningSchema,
 });
 export type AiLiveModel = z.infer<typeof liveModelSchema>;

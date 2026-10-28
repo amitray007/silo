@@ -138,6 +138,113 @@ function run(
 }
 
 describe('bounded fallbacks', () => {
+  it.each([
+    'reasoning service is temporarily unavailable',
+    'thinking request failed due to quota',
+    'reasoning_effort rejected',
+    'reasoning failed: invalid schema',
+    'invalid request while processing reasoning',
+  ])('does not retry or remember a nonspecific 400: %s', async (message) => {
+    const chosen = {
+      ...credential,
+      kind: 'fireworks' as const,
+      model: { ...credential.model, id: message },
+    };
+    const generate = vi.fn(async () => {
+      throw apiError(400, message);
+    });
+    await expect(withModelSettings(chosen, 5000, generate)).rejects.toThrow();
+    expect(generate).toHaveBeenCalledTimes(1);
+    await withModelSettings(chosen, 5000, async (settings) => {
+      expect(settings.providerOptions?.fireworks).toEqual({ reasoningEffort: 'low' });
+    });
+  });
+
+  it.each([
+    'Unsupported reasoning_effort',
+    'reasoning_effort is not supported',
+    'Invalid reasoning_effort value',
+    'Unknown reasoning_effort',
+    'Unrecognized reasoning_effort',
+    "disabling thinking (reasoning_effort='none') is not supported",
+  ])('removes Fireworks reasoning only after explicit evidence: %s', async (message) => {
+    const chosen = {
+      ...credential,
+      kind: 'fireworks' as const,
+      model: { ...credential.model, id: message },
+    };
+    let calls = 0;
+    await withModelSettings(chosen, 5000, async (settings) => {
+      if (++calls === 1) {
+        expect(settings.providerOptions?.fireworks).toEqual({ reasoningEffort: 'low' });
+        throw apiError(400, message);
+      }
+      expect(settings.providerOptions?.fireworks).toBeUndefined();
+    });
+    expect(calls).toBe(2);
+    await withModelSettings(chosen, 5000, async (settings) => {
+      expect(settings.providerOptions?.fireworks).toBeUndefined();
+    });
+  });
+
+  it('does not remember an option fallback when only a later budget retry succeeds', async () => {
+    const chosen = {
+      ...credential,
+      model: {
+        ...credential.model,
+        id: 'non-immediate-success',
+        reasoning: { type: 'anthropic' as const, thinking: 'adaptive' as const },
+      },
+    };
+    let calls = 0;
+    await withModelSettings(chosen, 5000, async () => {
+      if (++calls === 1) throw apiError(400, 'Unsupported thinking');
+      if (calls === 2)
+        throw new NoOutputGeneratedError({
+          cause: Object.assign(new Error('no JSON'), { finishReason: 'length' }),
+        });
+      return 'ok';
+    });
+    expect(calls).toBe(3);
+    await withModelSettings(chosen, 5000, async (settings) => {
+      expect(settings.providerOptions?.anthropic).toHaveProperty('thinking');
+    });
+  });
+
+  it('expires successful fallbacks after seven days and keeps at most 200 entries', async () => {
+    let now = Date.now();
+    const clock = vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const chosen = (id: string) => ({
+      ...credential,
+      kind: 'fireworks' as const,
+      model: { ...credential.model, id },
+    });
+    const remember = async (id: string) => {
+      let calls = 0;
+      await withModelSettings(chosen(id), 5000, async () => {
+        if (++calls === 1) throw apiError(400, 'Unsupported reasoning_effort');
+      });
+    };
+    const check = async (id: string, omitted: boolean) =>
+      withModelSettings(chosen(id), 5000, async (settings) => {
+        expect(settings.providerOptions?.fireworks?.reasoningEffort).toBe(
+          omitted ? undefined : 'low',
+        );
+      });
+    try {
+      await remember('expires');
+      now += 7 * 24 * 60 * 60_000 - 1;
+      await check('expires', true);
+      now += 1;
+      await check('expires', false);
+      for (let i = 0; i <= 200; i += 1) await remember(`bounded-${i}`);
+      await check('bounded-0', false);
+      await check('bounded-1', true);
+      await check('bounded-200', true);
+    } finally {
+      clock.mockRestore();
+    }
+  });
   it.each(['thinking', 'effort', 'reasoning', 'response_format'])(
     'removes only the rejected %s setting and remembers success',
     async (option) => {

@@ -37,6 +37,7 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     await harness.rawDb().execute(sql`TRUNCATE ai_providers, settings`);
   });
   afterEach(() => {
+    vi.restoreAllMocks();
     harness.mod().models.setAiModelsFetcher(undefined);
     harness.mod().tester.setAiConnectionTester(undefined);
     if (savedKey === undefined) delete process.env.SILO_SECRET_KEY;
@@ -297,6 +298,158 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
       models: [FIRST],
       modelsFetchedAt: new Date('2026-10-29T00:00:00Z'),
       modelsRefreshError: null,
+    });
+  });
+
+  it('Save & test starts a new-key refresh while the old-key refresh is pending', async () => {
+    const { models, providers, tester } = harness.mod();
+    await providers.saveAiProviderKey('fireworks', 'old-key-1234');
+    let release!: () => void;
+    const blocked = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const fetcher = vi.fn(async (_kind: string, key: string) => {
+      if (key === 'old-key-1234') {
+        await blocked;
+        return { ok: true as const, models: [FIRST] };
+      }
+      return { ok: true as const, models: [GLM] };
+    });
+    models.setAiModelsFetcher(fetcher);
+    const old = models.refreshProviderModels('fireworks');
+    await expect.poll(() => fetcher.mock.calls.length).toBe(1);
+    try {
+      await providers.saveAiProviderKey('fireworks', 'new-key-5678');
+      const inference = vi.fn(async () => ({ ok: true as const, latencyMs: 1 }));
+      tester.setAiConnectionTester(inference);
+      expect(await tester.testAiProvider('fireworks')).toMatchObject({ ok: true });
+      expect(fetcher.mock.calls.map(([, key]) => key)).toEqual(['old-key-1234', 'new-key-5678']);
+      expect(inference).toHaveBeenCalledWith(
+        expect.objectContaining({ apiKey: 'new-key-5678', model: GLM }),
+      );
+    } finally {
+      release();
+      expect(await old).toEqual({ ok: false, code: 'unavailable' });
+    }
+    expect(await models.storedProviderModels('fireworks')).toEqual([GLM]);
+  });
+
+  it('backs off automatic failures from 15 minutes to 6 hours, with manual and key-change resets', async () => {
+    const { models, providers } = harness.mod();
+    await providers.saveAiProviderKey('fireworks', 'backoff-key-1234');
+    let now = Date.now();
+    vi.spyOn(Date, 'now').mockImplementation(() => now);
+    const reads = vi.spyOn(providers, 'readAiProviderKey');
+    let release!: () => void;
+    let blocked = Promise.resolve();
+    const fetcher = vi.fn(async () => {
+      await blocked;
+      return { ok: false as const, code: 'network' as const };
+    });
+    models.setAiModelsFetcher(fetcher);
+    const automatic = async () => {
+      models.refreshStaleProviderModels(await providers.listAiProviders());
+      await Promise.all(reads.mock.results.map((r) => r.value));
+    };
+    const failedRefresh = async () => {
+      const count = fetcher.mock.calls.length;
+      blocked = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await automatic();
+      expect(fetcher).toHaveBeenCalledTimes(count + 1);
+      const pending = models.refreshProviderModels('fireworks');
+      // Join the same credential's pending refresh before allowing it to finish.
+      await Promise.all(reads.mock.results.map((r) => r.value));
+      release();
+      expect(await pending).toEqual({ ok: false, code: 'network' });
+    };
+    for (const minutes of [15, 30, 60, 120, 240, 360, 360]) {
+      await failedRefresh();
+      const count = fetcher.mock.calls.length;
+      now += minutes * 60_000 - 1;
+      await automatic();
+      expect(fetcher).toHaveBeenCalledTimes(count);
+      now += 1;
+    }
+    // Manual refresh bypasses the outstanding delay and success clears it.
+    await failedRefresh();
+    models.setAiModelsFetcher(async () => ({ ok: true, models: [] }));
+    expect(await models.refreshProviderModels('fireworks')).toEqual({ ok: true, models: [] });
+    await harness.rawDb().execute(sql`UPDATE ai_providers SET models_fetched_at = NULL`);
+    models.setAiModelsFetcher(fetcher);
+    await failedRefresh();
+    await providers.saveAiProviderKey('fireworks', 'replaced-backoff-key-5678');
+    await failedRefresh();
+  });
+
+  it.each([
+    ['claude-haiku-5-5', 'anthropic/claude-haiku-5.5'],
+    ['claude-sonnet-5-5', 'anthropic/claude-sonnet-5.5'],
+    ['claude-opus-5-5', 'anthropic/claude-opus-5.5'],
+    ['claude-fable-5-1', 'anthropic/claude-fable-5.1'],
+    ['gpt-6-luna', 'openai/gpt-6-luna'],
+    ['gpt-6.1-terra', 'openai/gpt-6.1-terra'],
+    ['gpt-6.1-sol', 'openai/gpt-6.1-sol'],
+    ['gpt-6-astra', 'openai/gpt-6-astra'],
+  ])(
+    'migrates legacy Gateway selection %s on reads and persists it on write',
+    async (legacy, id) => {
+      const { settings, models, providers, status } = harness.mod();
+      await providers.saveAiProviderKey('gateway', 'gateway-key-1234');
+      models.setAiModelsFetcher(async () => ({
+        ok: true,
+        models: [{ ...FIRST, id, reasoning: { type: 'gateway' } }],
+      }));
+      await models.refreshProviderModels('gateway');
+      const ai = {
+        enabled: true,
+        features: { 'x-post-title': { enabled: true, model: { provider: 'gateway', id: legacy } } },
+      };
+      await harness
+        .rawDb()
+        .execute(
+          sql`INSERT INTO settings (key, value) VALUES ('ai', ${JSON.stringify(ai)}::jsonb)`,
+        );
+      const expected = { provider: 'gateway', id };
+      expect((await settings.getSetting('ai')).features['x-post-title'].model).toEqual(expected);
+      expect((await settings.getAllSettings()).ai.features['x-post-title'].model).toEqual(expected);
+      expect((await settings.getAiSettingForStatus()).features['x-post-title'].model).toEqual(
+        expected,
+      );
+      expect(await status.resolveAiFeatureCredential('x-post-title')).toMatchObject({
+        model: { id },
+      });
+      await settings.setSetting('ai', ai);
+      const stored = await harness
+        .rawDb()
+        .execute(sql`SELECT value FROM settings WHERE key = 'ai'`);
+      expect(stored.rows[0]?.value).toMatchObject({
+        features: { 'x-post-title': { model: expected } },
+      });
+    },
+  );
+
+  it.each([
+    ['anthropic', 'claude-haiku-5-5'],
+    ['openai', 'gpt-6-luna'],
+  ] as const)('keeps direct %s ids unchanged on reads and writes', async (kind, id) => {
+    const { providers, models, settings } = harness.mod();
+    await providers.saveAiProviderKey(kind, 'direct-key-1234');
+    models.setAiModelsFetcher(async () => ({
+      ok: true,
+      models: [{ ...FIRST, id, reasoning: { type: kind } }],
+    }));
+    await models.refreshProviderModels(kind);
+    await settings.updateSettings({
+      ai: {
+        enabled: true,
+        features: { 'x-post-title': { enabled: true, model: { provider: kind, id } } },
+      },
+    });
+    expect((await settings.getSetting('ai')).features['x-post-title'].model).toEqual({
+      provider: kind,
+      id,
     });
   });
 

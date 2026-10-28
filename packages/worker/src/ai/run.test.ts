@@ -346,7 +346,7 @@ describe('runAiFeature', () => {
   });
 
   it.each([
-    ['fireworks', 400, 'reasoning_effort rejected', 2],
+    ['fireworks', 400, 'reasoning_effort rejected', 1],
     ['fireworks', 400, 'invalid schema', 1],
     ['fireworks', 401, 'reasoning access denied', 1],
     ['anthropic', 400, 'reasoning unsupported', 2],

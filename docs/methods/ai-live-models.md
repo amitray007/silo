@@ -35,9 +35,22 @@ models, so it needs a search box that searches across providers and a provider f
 - **Refresh:**
   - Silo refreshes a provider's list when a key is saved or tested, and when the owner
     clicks Refresh on its row.
-  - Opening the AI tab refreshes in the background any list older than 24 hours.
+  - Operator reads (`open`, `env_token` or `session`) refresh in the background any
+    list older than 24 hours. Named tokens receive the stored list without starting
+    a refresh.
+  - After a failed refresh, automatic retries wait 15 minutes, then double the wait
+    up to 6 hours. This backoff is per provider and process. Success or a key change
+    resets it. Manual Refresh and Save & test bypass it.
+  - Concurrent refreshes share a request only when both provider and encrypted key
+    match. A result fetched with an old key cannot replace the new key's list.
   - A failed refresh keeps the old list and shows "Couldn't refresh the list", as it
     does for Fireworks.
+- **Gateway eligibility.** Annotated lists keep only rows whose
+  `model_eligibility.status` is `eligible`. Rows marked `ineligible` or `unknown`,
+  and rows missing annotations in an annotated response, are excluded. An
+  unannotated list is marked `unverified`; it does not prove team eligibility.
+  The keyed fetch does not fall back to the public catalog on failure. Annotation
+  shape follows the [Gateway REST API](https://vercel.com/docs/ai-gateway/sdks-and-apis/rest-api#team-availability-annotations).
 - **OpenAI filter.** The rule matches id patterns, not model names, so it holds for
   future models. It admits general-purpose `gpt-` and `o` families with known suffixes:
   `mini`, `nano`, `luna`, `terra`, `sol`, `astra`, and dated snapshots. It excludes
@@ -57,13 +70,29 @@ models, so it needs a search box that searches across providers and a provider f
     Ids that are not reasoning models get no reasoning option.
   - **Gateway:** pick the lowest value the model's `reasoning_options` advertise.
   - **Fireworks:** keep `low`.
-  - **All providers:** allow 1,024 output tokens. After a 400 that names an unsupported
-    option, retry once without that option and remember the working settings for that
-    provider and model. When the output budget runs out with no JSON, retry once with
-    4,096 tokens inside the same deadline. Never retry an auth failure.
+  - **All providers:** allow 1,024 output tokens. After a 400 that identifies an
+    option or its value as unsupported, not supported, invalid, unknown or unrecognized,
+    retry once without that option. Remember the fallback only if that immediate
+    retry succeeds. Keep at most 200 provider/model entries for 7 days. A message
+    that merely mentions reasoning does not qualify. When the output budget runs out
+    with no JSON, retry once with 4,096 tokens inside the same deadline. Never retry
+    an auth failure.
 - **Settings write:** the chosen model must be in that provider's stored list.
   Existing choices such as `claude-haiku-5-5` stay valid when the live list has them.
   The read path nulls a model that has left the list, as it does today.
+  Before lookup, reads and writes migrate pre-live-list Gateway catalog ids using
+  one legacy map. A write persists the mapped id. Direct provider ids do not change:
+
+  | Former Gateway catalog id | Gateway live id |
+  | --- | --- |
+  | `claude-haiku-5-5` | `anthropic/claude-haiku-5.5` |
+  | `claude-sonnet-5-5` | `anthropic/claude-sonnet-5.5` |
+  | `claude-opus-5-5` | `anthropic/claude-opus-5.5` |
+  | `claude-fable-5-1` | `anthropic/claude-fable-5.1` |
+  | `gpt-6-luna` | `openai/gpt-6-luna` |
+  | `gpt-6.1-terra` | `openai/gpt-6.1-terra` |
+  | `gpt-6.1-sol` | `openai/gpt-6.1-sol` |
+  | `gpt-6-astra` | `openai/gpt-6-astra` |
 
 ## The picker
 

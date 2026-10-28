@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import type * as CoreOps from '@silo/core';
 import type { AiConnectionTester } from '@silo/core/ai-credential';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
 /**
@@ -285,6 +285,32 @@ describeIfPg('/api/ai routes (integration)', () => {
   });
 
   describe('operator-only', () => {
+    it('named readers cannot trigger a stored-key refresh, while the operator can', async () => {
+      const { core, app, setAiModelsFetcher } = harness.mod();
+      await core.saveAiProviderKey('openai', API_KEY);
+      const fetcher = vi.fn(async () => ({ ok: false as const, code: 'network' as const }));
+      setAiModelsFetcher(fetcher);
+      process.env.SILO_API_TOKEN = ENV_TOKEN;
+      const { token } = await core.generateAccessToken('read-only-ai');
+      for (let i = 0; i < 3; i += 1) {
+        const response = await app.request('/api/ai', { headers: bearer(token) });
+        expect(response.status).toBe(200);
+        expect(await response.json()).toMatchObject({
+          providers: expect.arrayContaining([
+            expect.objectContaining({
+              kind: 'openai',
+              models: [],
+              modelsFetchedAt: null,
+              modelsRefreshError: null,
+            }),
+          ]),
+        });
+      }
+      expect(fetcher).not.toHaveBeenCalled();
+      await app.request('/api/ai', { headers: bearer(ENV_TOKEN) });
+      await expect.poll(() => fetcher.mock.calls.length).toBe(1);
+      await core.refreshProviderModels('openai');
+    });
     it('a named DB token gets 403 on writes but may read and patch non-AI settings', async () => {
       process.env.SILO_API_TOKEN = ENV_TOKEN;
       const { core, app } = harness.mod();

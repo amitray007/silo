@@ -7,7 +7,7 @@ import type { AiProviderSummary } from './providers.js';
 
 export { storedProviderModels } from './model-store.js';
 
-import { readAiProviderKey } from './providers.js';
+import { type AiKeyRead, readAiProviderKey } from './providers.js';
 
 export type AiModelsResult =
   | { ok: true; models: AiLiveModel[] }
@@ -20,19 +20,51 @@ export type AiProviderModelsFetcher = (
   apiKey: string,
 ) => Promise<AiModelsResult>;
 let fetcher: AiProviderModelsFetcher | undefined;
-const inFlight = new Map<AiProviderKind, Promise<AiModelsResult>>();
+const inFlight = new Map<string, Promise<AiModelsResult>>();
+type Backoff = { identity: string; failures: number; retryAt: number };
+const backoffs = new Map<AiProviderKind, Backoff>();
+const MIN_BACKOFF_MS = 15 * 60_000;
+const MAX_BACKOFF_MS = 6 * 60 * 60_000;
 export function setAiModelsFetcher(next: AiProviderModelsFetcher | undefined): void {
   fetcher = next;
 }
 
 /** Sanitizes provider output and uses ciphertext CAS so stale keys cannot overwrite a new list. */
 export function refreshProviderModels(kind: AiProviderKind): Promise<AiModelsResult> {
-  const pending = inFlight.get(kind);
+  return refreshWithBackoff(kind, false);
+}
+
+async function refreshWithBackoff(
+  kind: AiProviderKind,
+  automatic: boolean,
+): Promise<AiModelsResult> {
+  const key = await readAiProviderKey(kind);
+  if (key.state !== 'ok') return { ok: false, code: 'unavailable' };
+  const identity = `${kind}:${key.encryptedKey}`;
+  let backoff = backoffs.get(kind);
+  if (backoff?.identity !== identity) {
+    backoff = { identity, failures: 0, retryAt: 0 };
+    backoffs.set(kind, backoff);
+  }
+  const pending = inFlight.get(identity);
   if (pending) return pending;
-  const refresh = refreshModels(kind).finally(() => {
-    inFlight.delete(kind);
-  });
-  inFlight.set(kind, refresh);
+  if (automatic && Date.now() < backoff.retryAt) return { ok: false, code: 'unavailable' };
+  const state = backoff;
+  const refresh = refreshModels(kind, key)
+    .then((result) => {
+      // A refresh for a replaced key must not change the new key's retry state.
+      if (backoffs.get(kind) === state && (result.ok || result.code !== 'unavailable')) {
+        state.failures = result.ok ? 0 : state.failures + 1;
+        state.retryAt = result.ok
+          ? 0
+          : Date.now() + Math.min(MIN_BACKOFF_MS * 2 ** (state.failures - 1), MAX_BACKOFF_MS);
+      }
+      return result;
+    })
+    .finally(() => {
+      inFlight.delete(identity);
+    });
+  inFlight.set(identity, refresh);
   return refresh;
 }
 
@@ -42,14 +74,15 @@ export function refreshStaleProviderModels(providers: readonly AiProviderSummary
     if (!provider.configured || !provider.keyReadable) continue;
     if (provider.modelsFetchedAt && Date.now() - provider.modelsFetchedAt.getTime() <= 86_400_000)
       continue;
-    void refreshProviderModels(provider.kind).catch(() => {});
+    void refreshWithBackoff(provider.kind, true).catch(() => {});
   }
 }
 
-async function refreshModels(kind: AiProviderKind): Promise<AiModelsResult> {
+async function refreshModels(
+  kind: AiProviderKind,
+  key: Extract<AiKeyRead, { state: 'ok' }>,
+): Promise<AiModelsResult> {
   if (!fetcher) return { ok: false, code: 'unavailable' };
-  const key = await readAiProviderKey(kind);
-  if (key.state !== 'ok') return { ok: false, code: 'unavailable' };
   let result: AiModelsResult;
   try {
     const raw = await fetcher(kind, key.apiKey);
