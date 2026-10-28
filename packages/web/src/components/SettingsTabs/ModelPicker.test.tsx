@@ -67,6 +67,46 @@ function press(input: HTMLElement, key: string) {
 }
 
 describe('ModelPicker', () => {
+  it('shows the model label and provider in the trigger and tracks the expanded state', () => {
+    render(
+      <ModelPicker
+        label="Title model"
+        providers={[provider('fireworks', [model('deepseek', 'DeepSeek V4.1 Flash')])]}
+        value={{ provider: 'fireworks', id: 'deepseek' }}
+        onChange={vi.fn()}
+      />,
+    );
+    const trigger = screen.getByRole('button', { name: 'Title model' });
+    expect(within(trigger).getByText('DeepSeek V4.1 Flash')).toBeTruthy();
+    expect(within(trigger).getByText('· Fireworks')).toBeTruthy();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps the selected label visible and cannot open while AI is not ready', () => {
+    const onChange = vi.fn();
+    render(
+      <ModelPicker
+        label="Title model"
+        providers={providers}
+        value={{ provider: 'anthropic', id: 'claude-new' }}
+        disabled
+        onChange={onChange}
+      />,
+    );
+    const trigger = screen.getByRole('button', { name: 'Title model' });
+    expect(trigger).toHaveProperty('disabled', true);
+    expect(within(trigger).getByText('Claude newest')).toBeTruthy();
+    expect(within(trigger).getByText('· Anthropic')).toBeTruthy();
+    fireEvent.click(trigger);
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+    expect(screen.queryByRole('dialog')).toBeNull();
+    expect(onChange).not.toHaveBeenCalled();
+  });
+
   it('matches only Sonnet models for son and sorts each provider by relevance then date', () => {
     const { input } = setup({
       providers: [
@@ -221,7 +261,7 @@ describe('ModelPicker', () => {
 
   it('sorts newest first, shows metadata and marks only the stored choice', () => {
     const { trigger, input } = setup({ selected: true });
-    expect(trigger.textContent).toContain('Claude newestvia Anthropic');
+    expect(trigger.textContent).toContain('Claude newest · Anthropic');
     expect(trigger.querySelector('svg')).toBeTruthy();
     const rows = screen.getAllByRole('option');
     expect(rows.map((row) => row.textContent)).toEqual([

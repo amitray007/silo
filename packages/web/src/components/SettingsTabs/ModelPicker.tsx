@@ -369,7 +369,7 @@ export function ModelPicker({
           setOpen(true);
         }}
       >
-        {value && <ProviderLogo kind={value.provider} size={20} />}
+        {value && <ProviderLogo kind={value.provider} size={18} />}
         <span className="silo-model-trigger-copy">
           {missing ? (
             <span className="silo-model-missing">
@@ -379,10 +379,22 @@ export function ModelPicker({
           ) : (
             <span>{chosen?.label ?? 'Choose a model'}</span>
           )}
-          {value && <span className="silo-model-via">via {AI_PROVIDER_NAMES[value.provider]}</span>}
+          {value && <span className="silo-model-via"> · {AI_PROVIDER_NAMES[value.provider]}</span>}
         </span>
         <span aria-hidden="true" className="silo-model-chevron">
-          ⌄
+          <svg
+            width="16"
+            height="16"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <path d="m4.5 6.5 3.5 3 3.5-3" />
+          </svg>
         </span>
       </button>
       {open && !disabled && (

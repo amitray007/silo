@@ -1659,18 +1659,45 @@
 .silo-model-picker-trigger {
   display: flex;
   align-items: center;
-  gap: 8px;
-  max-width: 280px;
-  height: auto;
-  min-height: 40px;
-  padding: 6px 10px;
+  gap: var(--s2);
+  width: 320px;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+  height: 34px;
+  min-height: var(--s8);
+  padding: var(--s1-5) var(--s2-5);
+  border: 1px solid var(--line);
+  border-radius: var(--s2);
+  background: var(--input-bg);
+  box-shadow: var(--input-shadow);
+  font-size: var(--text-base);
+  line-height: var(--s5);
+}
+.silo-model-picker-trigger:focus-visible,
+.silo-model-picker-trigger[aria-expanded="true"] {
+  border-color: var(--line-2);
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
+}
+.silo-model-picker-trigger:disabled {
+  border-color: var(--line);
+  background: var(--input-bg);
+  color: var(--mut);
+  cursor: not-allowed;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-model-picker-trigger:hover:not(:disabled) {
+    background: var(--input-bg);
+    border-color: var(--line-2);
+  }
 }
 .silo-model-trigger-copy {
   display: flex;
-  flex-direction: column;
+  flex: 1;
+  gap: var(--s1);
   min-width: 0;
   text-align: left;
-  line-height: 18px;
+  font-weight: 500;
 }
 .silo-model-picker-trigger .silo-model-trigger-copy > span {
   overflow: hidden;
@@ -1679,9 +1706,24 @@
 }
 .silo-model-via,
 .silo-model-chevron {
-  color: var(--fnt);
-  font-size: 12px;
+  color: var(--mut);
   font-weight: 400;
+}
+.silo-model-trigger-copy > .silo-model-via {
+  flex: none;
+  white-space: pre;
+}
+.silo-model-chevron {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+}
+.silo-model-chevron > svg {
+  width: var(--s4);
+  height: var(--s4);
+}
+.silo-model-picker-trigger[aria-expanded="true"] .silo-model-chevron {
+  transform: rotate(180deg);
 }
 .silo-model-missing {
   color: var(--warn);
@@ -1866,8 +1908,9 @@
     width: 100%;
     max-width: 100%;
   }
-  .silo-model-chevron {
-    margin-left: auto;
+  .silo-model-picker-trigger {
+    height: var(--s10);
+    min-height: var(--s10);
   }
   .silo-model-picker-scrim {
     display: block;
