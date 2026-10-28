@@ -2,8 +2,9 @@ export const name = '@silo/core';
 
 // AI foundation (optional AI layer): curated model catalog, feature registry,
 // encrypted provider keys, readiness, and the connection-test port. Adapters use
-// `aiStatus` and `listAiProviders` (key-free); `resolveAiCredential` is for the
-// worker and the connection test only — see `ai/status.ts`.
+// `aiStatus` and `listAiProviders` (key-free). Anything that hands out the
+// plaintext key lives in the `@silo/core/ai-credential` subpath, which adapters
+// must not import (Biome + dependency-cruiser enforce it).
 export type { AiProviderKind, CatalogEntry } from './ai/catalog.js';
 export {
   AI_MODEL_CATALOG,
@@ -25,14 +26,10 @@ export {
   saveAiProviderKey,
 } from './ai/providers.js';
 export { SecretKeyMissingError, secretKeyStatus } from './ai/secret-box.js';
-export type { AiCredential, AiNotReadyReason, AiStatus } from './ai/status.js';
-export { aiStatus, isAiFeatureOn, resolveAiCredential } from './ai/status.js';
-export type {
-  AiConnectionResult,
-  AiConnectionTester,
-  AiTestOutcome,
-} from './ai/tester.js';
-export { setAiConnectionTester, testAiProvider } from './ai/tester.js';
+export type { AiNotReadyReason, AiStatus } from './ai/status.js';
+export { aiStatus, isAiFeatureOn } from './ai/status.js';
+export type { AiTestOutcome } from './ai/tester.js';
+export { testAiProvider } from './ai/tester.js';
 // Web-login primitives (web-auth cookie upgrade, U1): the human
 // `SILO_APP_PASSWORD` check + the `silo_session` signed-cookie secret/name/
 // value/max-age constants, shared by `@silo/api`'s login/logout routes and

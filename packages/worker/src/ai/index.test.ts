@@ -1,9 +1,9 @@
-import { setAiConnectionTester } from '@silo/core';
+import { setAiConnectionTester } from '@silo/core/ai-credential';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { registerAiConnectionTester } from './index.js';
 
-vi.mock('@silo/core', async (original) => ({
-  ...(await original<typeof import('@silo/core')>()),
+vi.mock('@silo/core/ai-credential', async (original) => ({
+  ...(await original<typeof import('@silo/core/ai-credential')>()),
   setAiConnectionTester: vi.fn(),
 }));
 

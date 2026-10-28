@@ -46,3 +46,15 @@ export const rowDesc: CSSProperties = {
   lineHeight: 'var(--lh-snug)',
   textWrap: 'pretty',
 };
+
+/** A text input or select in a settings row (Access tab name field, AI tab key and model fields). */
+export const settingsField: CSSProperties = {
+  boxSizing: 'border-box',
+  border: '1px solid var(--line)',
+  borderRadius: 8,
+  background: 'var(--bg2)',
+  color: 'var(--ink)',
+  fontFamily: 'inherit',
+  fontSize: 'var(--text-sm)',
+  padding: '8px 12px',
+};

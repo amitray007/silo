@@ -1,9 +1,5 @@
-import {
-  type AiCredential,
-  type AiErrorCode,
-  isAiFeatureOn,
-  resolveAiCredential,
-} from '@silo/core';
+import { type AiErrorCode, isAiFeatureOn } from '@silo/core';
+import { type AiCredential, resolveAiCredential } from '@silo/core/ai-credential';
 import {
   generateText,
   type LanguageModel,

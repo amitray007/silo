@@ -1,4 +1,4 @@
-import type { AiCredential } from '@silo/core';
+import type { AiCredential } from '@silo/core/ai-credential';
 import { APICallError } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 

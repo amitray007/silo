@@ -14,7 +14,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { Skeleton } from '../Skeleton';
 import { copyLabel, useCopyFlash } from './copyFlash';
 import { McpSetupDialog } from './McpSetupDialog';
-import { rowDesc, rowLabel, settingsRow, settingsRowDivided } from './rowStyles';
+import { rowDesc, rowLabel, settingsField, settingsRow, settingsRowDivided } from './rowStyles';
 import { SettingsHero } from './SettingsHero';
 import { ToggleSwitch } from './ToggleSwitch';
 
@@ -186,18 +186,7 @@ function CreateTokenForm() {
           }}
           placeholder="e.g. laptop cli, raycast"
           className="silo-field"
-          style={{
-            flex: 1,
-            minWidth: 0,
-            boxSizing: 'border-box',
-            border: '1px solid var(--line)',
-            borderRadius: 8,
-            background: 'var(--bg2)',
-            color: 'var(--ink)',
-            fontFamily: 'inherit',
-            fontSize: 'var(--text-sm)',
-            padding: '8px 12px',
-          }}
+          style={{ ...settingsField, flex: 1, minWidth: 0 }}
         />
         <button
           type="button"

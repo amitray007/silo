@@ -265,7 +265,7 @@ A later chat view adds `streamAiChat` beside `runAiFeature` on the same
 
 | Route | Body / result |
 | --- | --- |
-| `GET /api/ai` | `{ readiness, providers: [{ kind, configured, keyLast4, lastTest }], catalog, features }` |
+| `GET /api/ai` | `{ status, providers: [{ kind, configured, keyLast4, keyReadable, lastTest }], catalog, features }` |
 | `PUT /api/ai/providers/:kind` | `{ apiKey }`, 8-300 printable ASCII characters, trimmed. Saves, runs the test, returns the row |
 | `POST /api/ai/providers/:kind/test` | `{ ok, code?, latencyMs }` |
 | `DELETE /api/ai/providers/:kind` | `204`; also clears `ai.provider` and `ai.model` when they point at this kind |

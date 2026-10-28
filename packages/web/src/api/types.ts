@@ -270,6 +270,57 @@ export type SettingsMap = {
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
 export type UpdateSettingsRequest = Partial<SettingsMap>;
 
+export type AiProviderKind = 'anthropic' | 'openai' | 'gateway';
+
+/** Stable failure codes a connection test reports (plus `unavailable`: the test could not run). */
+export type AiTestCode =
+  | 'invalid_key'
+  | 'no_access'
+  | 'model_not_found'
+  | 'rate_limited'
+  | 'timeout'
+  | 'network'
+  | 'provider_error'
+  | 'unavailable';
+
+export type AiTestResult = { ok: boolean; code?: AiTestCode; latencyMs?: number };
+
+export type AiProviderJson = {
+  kind: AiProviderKind;
+  configured: boolean;
+  keyLast4: string | null;
+  /** False only when a key is stored but the server cannot decrypt it. */
+  keyReadable: boolean;
+  lastTest: { ok: boolean; at: string; code: AiTestCode | null } | null;
+};
+
+export type AiCatalogEntry = {
+  id: string;
+  family: 'claude' | 'chatgpt';
+  label: string;
+  tier: 'fast' | 'balanced' | 'best';
+  providers: AiProviderKind[];
+  defaultFor: AiProviderKind[];
+};
+
+/** `GET /api/ai` response. No key ever appears here, only the last four characters. */
+export type AiSettingsResponse = {
+  status: {
+    enabled: boolean;
+    secretKey: 'ok' | 'missing' | 'invalid';
+    provider: AiProviderKind | null;
+    model: { id: string; fellBack: boolean } | null;
+    ready: boolean;
+    reason?: string;
+  };
+  providers: AiProviderJson[];
+  catalog: AiCatalogEntry[];
+  features: { id: string; label: string; description: string; plugin: string | null }[];
+};
+
+/** `PUT /api/ai/providers/:kind` response. */
+export type SaveAiKeyResponse = { provider: AiProviderJson | null; test: AiTestResult };
+
 /**
  * Mirrors `ErrorEnvelope` in `packages/api/src/app.ts` — every non-2xx JSON
  * body the API returns has this shape. `error` is a short machine-stable

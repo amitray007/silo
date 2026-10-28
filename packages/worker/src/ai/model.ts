@@ -1,6 +1,7 @@
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
-import { type AiCredential, providerModelId } from '@silo/core';
+import { providerModelId } from '@silo/core';
+import type { AiCredential } from '@silo/core/ai-credential';
 import { createGateway, type LanguageModel } from 'ai';
 
 // Provider warnings can echo request details; silo logs its own fixed lines instead.

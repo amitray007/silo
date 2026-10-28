@@ -8,6 +8,7 @@ import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
 import { registerAccessTokenRoutes } from './routes/access-tokens.js';
+import { registerAiRoutes } from './routes/ai.js';
 import { registerAuthRoutes } from './routes/auth.js';
 import { registerConfigRoutes } from './routes/config.js';
 import { registerContentImageRoutes } from './routes/content-image.js';
@@ -244,6 +245,7 @@ export function createApp(): Hono {
   registerExportRoutes(api);
   registerImportRoutes(api);
   registerAccessTokenRoutes(api);
+  registerAiRoutes(api);
   app.route('/api', api);
 
   // Web SPA static serve + client-route fallback (Unit 1, deployable-silo

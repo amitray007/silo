@@ -136,10 +136,8 @@ describe('SettingsModal', () => {
   it('navigates settings tabs with the arrow keys', () => {
     renderPage();
     fireEvent.keyDown(screen.getByRole('tab', { name: 'Plugins' }), { key: 'ArrowDown' });
-    expect(screen.getByRole('tab', { name: 'Preferences' }).getAttribute('aria-selected')).toBe(
-      'true',
-    );
-    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'Preferences' }));
+    expect(screen.getByRole('tab', { name: 'AI' }).getAttribute('aria-selected')).toBe('true');
+    expect(document.activeElement).toBe(screen.getByRole('tab', { name: 'AI' }));
     expect(screen.getByTestId('settings-url').textContent).toBe('/');
   });
 

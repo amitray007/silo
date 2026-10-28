@@ -24,6 +24,8 @@ export type AiProviderSummary = {
   kind: AiProviderKind;
   configured: boolean;
   keyLast4: string | null;
+  /** False only when a row exists but no configured secret key decrypts it. */
+  keyReadable: boolean;
   lastTest: { ok: boolean; at: Date; code: string | null } | null;
 };
 
@@ -34,11 +36,15 @@ function aadFor(kind: AiProviderKind): string {
   return `silo/ai-provider/${kind}`;
 }
 
-/** All three provider kinds, configured or not. Never selects `encrypted_key`. */
+/**
+ * All three provider kinds, configured or not. Never returns key material:
+ * `keyReadable` comes from a trial decrypt whose plaintext is discarded.
+ */
 export async function listAiProviders(): Promise<AiProviderSummary[]> {
   const rows = await db
     .select({
       kind: aiProviders.kind,
+      encryptedKey: aiProviders.encryptedKey,
       keyLast4: aiProviders.keyLast4,
       lastTestOk: aiProviders.lastTestOk,
       lastTestAt: aiProviders.lastTestAt,
@@ -48,12 +54,13 @@ export async function listAiProviders(): Promise<AiProviderSummary[]> {
   const byKind = new Map(rows.map((row) => [row.kind, row]));
   return AI_PROVIDER_KINDS.map((kind) => {
     const row = byKind.get(kind);
-    if (!row) return { kind, configured: false, keyLast4: null, lastTest: null };
+    if (!row) return { kind, configured: false, keyLast4: null, keyReadable: true, lastTest: null };
     const tested = row.lastTestOk !== null && row.lastTestAt !== null;
     return {
       kind,
       configured: true,
       keyLast4: row.keyLast4,
+      keyReadable: decryptSecret(row.encryptedKey, aadFor(kind)) !== undefined,
       lastTest: tested
         ? { ok: row.lastTestOk === true, at: row.lastTestAt as Date, code: row.lastTestCode }
         : null,

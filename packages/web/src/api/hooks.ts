@@ -5,9 +5,12 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { apiDelete, apiGet, apiPatch, apiPost } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './client';
 import type {
   AccessTokensResponse,
+  AiProviderKind,
+  AiSettingsResponse,
+  AiTestResult,
   AppConfig,
   CaptureRequest,
   CaptureResponse,
@@ -23,6 +26,7 @@ import type {
   LiveReaderJson,
   OAuthClientsResponse,
   RestoreResponse,
+  SaveAiKeyResponse,
   SavedLinksResponse,
   SearchResponse,
   SettingsMap,
@@ -94,6 +98,7 @@ export const queryKeys = {
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
+  ai: () => ['ai'] as const,
   accessTokens: () => ['access-tokens'] as const,
   oauthClients: () => ['oauth-clients'] as const,
   appConfig: () => ['app-config'] as const,
@@ -842,6 +847,51 @@ export function useUpdateSettings() {
       queryClient.setQueryData(queryKeys.settings(), settings);
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      // AI readiness (enabled, provider, resolved model) derives from these settings.
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+    },
+  });
+}
+
+/** `GET /api/ai`: readiness, provider rows (last four characters only), model catalog. */
+export function useAi() {
+  return useQuery({
+    queryKey: queryKeys.ai(),
+    queryFn: () => apiGet<AiSettingsResponse>('/api/ai'),
+  });
+}
+
+/**
+ * `PUT /api/ai/providers/:kind`. The typed key lives only in mutation variables,
+ * so the cache entry is dropped at once (`gcTime: 0`) and callers `reset()` it.
+ */
+export function useSaveAiKey(kind: AiProviderKind) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    gcTime: 0,
+    mutationFn: (apiKey: string) =>
+      apiPut<SaveAiKeyResponse>(`/api/ai/providers/${kind}`, { apiKey }),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.ai() }),
+  });
+}
+
+/** `POST /api/ai/providers/:kind/test`. */
+export function useTestAiKey(kind: AiProviderKind) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<AiTestResult>(`/api/ai/providers/${kind}/test`, {}),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: queryKeys.ai() }),
+  });
+}
+
+/** `DELETE /api/ai/providers/:kind`. Settings can change too (the provider may fall back). */
+export function useRemoveAiKey(kind: AiProviderKind) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete<void>(`/api/ai/providers/${kind}`),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
       queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
     },
   });

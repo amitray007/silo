@@ -69,6 +69,22 @@ describe('CORS on /api/*', () => {
     expect(res.headers.get('access-control-allow-credentials')).toBe('true');
   });
 
+  it('preflight for PUT from an allowed origin allows PUT', async () => {
+    const { createApp } = await import('./app.js');
+    const app = createApp();
+    const res = await app.request('/api/ai/providers/anthropic', {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'http://localhost:5173',
+        'Access-Control-Request-Method': 'PUT',
+        'Access-Control-Request-Headers': 'Content-Type, X-Silo-CSRF',
+      },
+    });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('http://localhost:5173');
+    expect(res.headers.get('access-control-allow-methods')).toContain('PUT');
+  });
+
   it('preflight OPTIONS from a disallowed origin gets no CORS allow headers', async () => {
     const { createApp } = await import('./app.js');
     const app = createApp();

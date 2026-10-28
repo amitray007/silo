@@ -1,4 +1,4 @@
-import type { AiConnectionTester } from '@silo/core';
+import type { AiConnectionTester } from '@silo/core/ai-credential';
 import { generateText, NoOutputGeneratedError } from 'ai';
 import { aiErrorCode } from './errors.js';
 import { languageModelFor } from './model.js';
