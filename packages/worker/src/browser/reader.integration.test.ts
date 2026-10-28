@@ -363,8 +363,9 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
       { path: '/declared-size.png', width: '80', height: '65' },
       { path: '/stylesheet-size.png', width: '134', height: '49' },
     ]);
-    // Defuddle converts the retained equation image into semantic math.
-    expect(document.querySelector('math')?.textContent).toBe('\\alpha');
+    // Defuddle converts the retained equation image into MathML, not raw TeX text.
+    expect(document.querySelector('math mi')?.textContent).toBe('α');
+    expect(document.querySelector('math')?.textContent).not.toContain('\\alpha');
     expect(fixtureLog.some((entry) => entry.endsWith('.png'))).toBe(false);
   }, 25_000);
 

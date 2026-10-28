@@ -29,8 +29,9 @@ export interface BrowserPort {
 }
 
 const require = createRequire(import.meta.url);
-// Read once per worker process, never once per page. The bundle is shipped by defuddle.
-const DEFUDDLE = readFileSync(join(dirname(require.resolve('defuddle')), 'index.js'), 'utf8');
+// Read once per worker process, never once per page. The full bundle converts TeX to
+// MathML (temml), as the Node build does; the core bundle leaves raw TeX as text.
+const DEFUDDLE = readFileSync(join(dirname(require.resolve('defuddle')), 'index.full.js'), 'utf8');
 const MAX_CONTENT_BYTES = 4 * 1024 * 1024;
 const CONTEXT_OPTIONS: BrowserContextOptions = {
   javaScriptEnabled: true,
