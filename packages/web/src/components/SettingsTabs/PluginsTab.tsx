@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { useSettings, useUpdateSettings } from '../../api/hooks';
+import { useAi, useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
@@ -124,6 +124,48 @@ function FeatureToggleRow({
       <ToggleSwitch on={on} disabled={disabled} onToggle={onToggle} label={name} />
     </div>
   );
+}
+
+const AI_HINT = 'Turn on AI in the AI tab';
+
+/**
+ * The plugin-placed AI features (`GET /api/ai` -> `features[].plugin`). The
+ * toggle is off-limits until AI is ready; the hint then replaces the description.
+ */
+function AiFeatureRows({
+  source,
+  sourceEnabled,
+  settings,
+  updateSettings,
+}: {
+  source: PluginSource;
+  sourceEnabled: boolean;
+  settings: SettingsMap | undefined;
+  updateSettings: ReturnType<typeof useUpdateSettings>;
+}) {
+  const { data: ai } = useAi();
+  const features = (ai?.features ?? []).filter((feature) => feature.plugin === source);
+  const settingsAi = settings?.ai;
+  const ready = ai?.status?.ready === true;
+  return features.map((feature) => {
+    const on = settingsAi?.features[feature.id as keyof typeof settingsAi.features] === true;
+    return (
+      <FeatureToggleRow
+        key={feature.id}
+        name={feature.label}
+        desc={ready ? feature.description : AI_HINT}
+        on={on}
+        masterEnabled={sourceEnabled && ready}
+        loading={!settingsAi || updateSettings.isPending}
+        onToggle={() =>
+          settingsAi &&
+          updateSettings.mutate({
+            ai: { ...settingsAi, features: { ...settingsAi.features, [feature.id]: !on } },
+          })
+        }
+      />
+    );
+  });
 }
 
 function SiloSettingsSection({
@@ -266,6 +308,14 @@ export function PluginsTab() {
                       }
                     />
                   ))}
+                {expanded && (
+                  <AiFeatureRows
+                    source={source.key}
+                    sourceEnabled={state.enabled}
+                    settings={settings}
+                    updateSettings={updateSettings}
+                  />
+                )}
               </div>
             </div>
           );

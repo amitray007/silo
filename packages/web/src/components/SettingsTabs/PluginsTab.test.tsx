@@ -603,3 +603,89 @@ describe('PluginsTab source disclosures', () => {
     });
   });
 });
+
+describe('PluginsTab AI titles toggle', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const feature = {
+    id: 'x-post-title',
+    label: 'AI titles',
+    description: 'Short titles written by your AI model',
+    plugin: 'twitter',
+  };
+
+  function aiSettings(on = false) {
+    return {
+      ...defaultSettings(),
+      ai: { enabled: true, provider: 'anthropic', model: null, features: { 'x-post-title': on } },
+    };
+  }
+
+  function renderWithAi(ready: boolean, on = false) {
+    let store: ReturnType<typeof aiSettings> = aiSettings(on);
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/settings')) {
+        if (init?.method === 'PATCH') {
+          store = { ...store, ...JSON.parse((init.body as string) ?? '{}') };
+        }
+        return Promise.resolve(jsonResponse(store));
+      }
+      if (url.includes('/api/ai')) {
+        return Promise.resolve(
+          jsonResponse({
+            status: { enabled: ready, secretKey: 'ok', provider: null, model: null, ready },
+            providers: [],
+            catalog: [],
+            features: [feature],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PluginsTab />
+      </QueryClientProvider>,
+    );
+    return { fetchMock, getStore: () => store };
+  }
+
+  it('shows the toggle disabled with a hint until AI is ready', async () => {
+    renderWithAi(false);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    await screen.findByText('Turn on AI in the AI tab');
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText('Short titles written by your AI model')).toBeNull();
+  });
+
+  it('does not show the toggle under another source', async () => {
+    renderWithAi(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'GitHub' }));
+    await screen.findByRole('switch', { name: 'On hover (preview card)' });
+    expect(screen.queryByRole('switch', { name: 'AI titles' })).toBeNull();
+  });
+
+  it('enables the toggle when AI is ready and writes ai.features through settings', async () => {
+    const { getStore } = renderWithAi(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    await screen.findByText('Short titles written by your AI model');
+    const toggle = (await screen.findByRole('switch', { name: 'AI titles' })) as HTMLButtonElement;
+    await waitFor(() => expect(toggle.disabled).toBe(false));
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(getStore().ai).toEqual({
+        enabled: true,
+        provider: 'anthropic',
+        model: null,
+        features: { 'x-post-title': true },
+      }),
+    );
+  });
+});
