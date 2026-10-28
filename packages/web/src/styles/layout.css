@@ -165,6 +165,8 @@
 }
 .silo-panehead {
   gap: 12px;
+  /* 24px puts the pane title on the same edge as the day labels and row icons. */
+  padding-left: 24px;
 }
 .silo-reader-head {
   border-bottom: 0.5px solid var(--line);
@@ -211,6 +213,10 @@
   color: var(--ghost);
   padding: 24px 12px 4px;
   margin: 0;
+}
+/* The first day label sits right under the pane head; the body already pads 12px. */
+.silo-content-body div:first-child > .silo-daylabel {
+  padding-top: 8px;
 }
 .silo-frame .silo-list-menu {
   display: none;
@@ -1279,7 +1285,7 @@
     display: none;
   }
   .silo-frame .silo-panehead {
-    padding-left: 16px;
+    padding-left: 24px;
   }
   .silo-content-body {
     padding: 12px 12px calc(100px + env(safe-area-inset-bottom, 0px));
@@ -1996,7 +2002,8 @@ div.silo-reader-notecard {
   width: 24px;
   height: 24px;
   align-items: center;
-  justify-content: center;
+  /* Left-aligned so the icon starts on the same edge as the day label. */
+  justify-content: flex-start;
 }
 .silo-link-row[data-compact="true"] {
   gap: 12px;
