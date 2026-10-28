@@ -78,8 +78,8 @@ function cacheSet(domain: string, entry: CacheEntry): void {
  * reject obvious junk (empty, whitespace, a URL instead of a bare host, wildly
  * oversized input) before it's handed to Google's s2 endpoint as a query
  * value. Deliberately permissive on the charset (real-world hostnames include
- * punycode `xn--` labels, and being over-strict here only produces a letter-
- * chip fallback for a real domain, never a security issue — the SSRF guard
+ * punycode `xn--` labels, and being over-strict here only produces a globe
+ * fallback for a real domain, never a security issue — the SSRF guard
  * above is what actually matters).
  */
 const domainQuerySchema = z.object({
@@ -169,8 +169,8 @@ export function registerFaviconRoutes(app: Hono): void {
 
     let entry = cacheGet(domain);
     if (!entry) {
-      // Never leak the upstream cause to the client. The web falls back to the
-      // letter chip on a 404.
+      // Never leak the upstream cause to the client. The web falls back to a
+      // neutral globe on a 404.
       const icon = (await iconFromGoogle(domain)) ?? (await iconFromSite(domain));
       entry = { icon, ts: Date.now() };
       cacheSet(domain, entry);
