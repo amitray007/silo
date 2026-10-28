@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useId, useRef, useState } from 'react';
+import { useEscapeLayer } from '../../lib/useEscapeLayer';
 
 export type SettingsSelectOption<V extends string | number> = { value: V; label: string };
 
@@ -27,13 +28,23 @@ function ChevronDownIcon() {
   );
 }
 
+function nextOptionIndex(key: string, current: number, count: number): number {
+  if (key === 'Home') return 0;
+  if (key === 'End') return count - 1;
+  return Math.max(0, Math.min(count - 1, current + (key === 'ArrowDown' ? 1 : -1)));
+}
+
 function OptionButton<V extends string | number>({
   option,
   selected,
+  active,
+  onFocus,
   onPick,
 }: {
   option: SettingsSelectOption<V>;
   selected: boolean;
+  active: boolean;
+  onFocus: () => void;
   onPick: (value: V) => void;
 }) {
   return (
@@ -41,6 +52,8 @@ function OptionButton<V extends string | number>({
       type="button"
       role="option"
       aria-selected={selected}
+      tabIndex={active ? 0 : -1}
+      onFocus={onFocus}
       className="silo-settings-select-option"
       onClick={() => onPick(option.value)}
     >
@@ -72,9 +85,37 @@ export function SettingsSelect<V extends string | number>({
   disabled?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLSpanElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const listboxRef = useRef<HTMLDivElement>(null);
   const listboxId = useId();
-  const current = groups.flatMap((g) => g.options).find((o) => o.value === value);
+  const options = groups.flatMap((g) => g.options);
+  const current = options.find((o) => o.value === value);
+  const expanded = open && !disabled;
+  const active = Math.min(activeIndex, options.length - 1);
+
+  function close() {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }
+
+  function show(
+    index = Math.max(
+      0,
+      options.findIndex((option) => option.value === value),
+    ),
+  ) {
+    setActiveIndex(index);
+    setOpen(true);
+  }
+
+  useEscapeLayer(expanded, close);
+
+  useEffect(() => {
+    if (expanded)
+      listboxRef.current?.querySelectorAll<HTMLElement>('[role="option"]')[active]?.focus();
+  }, [expanded, active]);
 
   useEffect(() => {
     if (!open) return;
@@ -89,31 +130,40 @@ export function SettingsSelect<V extends string | number>({
 
   function pick(next: V) {
     onChange(next);
-    setOpen(false);
+    close();
   }
 
-  const renderOption = (option: SettingsSelectOption<V>) => (
-    <OptionButton
-      key={option.value}
-      option={option}
-      selected={option.value === value}
-      onPick={pick}
-    />
-  );
+  const renderOption = (option: SettingsSelectOption<V>) => {
+    const index = options.indexOf(option);
+    return (
+      <OptionButton
+        key={option.value}
+        option={option}
+        selected={option.value === value}
+        active={index === active}
+        onFocus={() => setActiveIndex(index)}
+        onPick={pick}
+      />
+    );
+  };
 
   return (
     <span ref={rootRef} className="silo-settings-select-wrap">
       <button
+        ref={triggerRef}
         type="button"
         className="silo-settings-select-trigger"
         aria-label={ariaLabel}
         aria-haspopup="listbox"
-        aria-expanded={open}
+        aria-expanded={expanded}
         aria-controls={listboxId}
         disabled={disabled}
-        onClick={() => setOpen((isOpen) => !isOpen)}
+        onClick={() => (open ? close() : show())}
         onKeyDown={(event) => {
-          if (event.key === 'Escape') setOpen(false);
+          if (!['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) return;
+          event.preventDefault();
+          event.stopPropagation();
+          show(event.key === 'End' ? options.length - 1 : event.key === 'Home' ? 0 : undefined);
         }}
       >
         <span>{current?.label ?? placeholder ?? ''}</span>
@@ -121,12 +171,27 @@ export function SettingsSelect<V extends string | number>({
           <ChevronDownIcon />
         </span>
       </button>
-      {open && !disabled && (
+      {expanded && (
         <div
+          ref={listboxRef}
           id={listboxId}
           role="listbox"
           aria-label={ariaLabel}
           className="silo-settings-select-menu"
+          onKeyDown={(event) => {
+            if (['ArrowUp', 'ArrowDown', 'Home', 'End'].includes(event.key)) {
+              event.preventDefault();
+              event.stopPropagation();
+              setActiveIndex(nextOptionIndex(event.key, active, options.length));
+            } else if (event.key === 'Enter' || event.key === ' ') {
+              event.preventDefault();
+              event.stopPropagation();
+              const option = options[active];
+              if (option) pick(option.value);
+            } else if (event.key === 'Tab') {
+              close();
+            }
+          }}
         >
           {groups.map((group) =>
             group.label ? (

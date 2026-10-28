@@ -130,8 +130,8 @@ function FeatureToggleRow({
 const AI_HINT = 'Turn on AI in the AI tab';
 
 /**
- * The plugin-placed AI features (`GET /api/ai` -> `features[].plugin`). The
- * toggle is off-limits until AI is ready; the hint then replaces the description.
+ * The plugin-placed AI features (`GET /api/ai` -> `features[].plugin`).
+ * Turning a feature on requires AI readiness; turning it off is always available.
  */
 function AiFeatureRows({
   source,
@@ -164,7 +164,7 @@ function AiFeatureRows({
             : hint
         }
         on={on}
-        masterEnabled={sourceEnabled && ready}
+        masterEnabled={on || (sourceEnabled && ready)}
         loading={!settingsAi || updateSettings.isPending}
         onToggle={() =>
           settingsAi &&
@@ -343,6 +343,11 @@ export function PluginsTab() {
       </div>
 
       <SiloSettingsSection settings={settings} updateSettings={updateSettings} />
+      {updateSettings.error && (
+        <div role="alert" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink)', marginTop: 8 }}>
+          {updateSettings.error.message}
+        </div>
+      )}
     </>
   );
 }

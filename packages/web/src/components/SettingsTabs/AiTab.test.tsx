@@ -469,6 +469,92 @@ describe('AiTab', () => {
     expect(await screen.findByText('Choose a model.', { selector: 'div' })).toBeTruthy();
   });
 
+  it.each(['Test', 'Replace', 'Remove', 'Refresh'])(
+    'clears a failed refresh when %s starts on the same row',
+    async (action) => {
+      let requests = 0;
+      let finish: (response: Response) => void = () => {};
+      setup({
+        ai: aiFixture({ providers: [{ kind: 'fireworks', configured: true }] }),
+        providerRoute: () => {
+          requests += 1;
+          return requests === 1
+            ? jsonResponse({ error: 'quota', message: 'Refresh failed.' }, 502)
+            : new Promise<Response>((resolve) => {
+                finish = resolve;
+              });
+        },
+      });
+      fireEvent.click(await screen.findByRole('button', { name: 'Refresh Fireworks models' }));
+      expect((await screen.findByRole('alert')).textContent).toBe(
+        'Out of credit or over the limit',
+      );
+      fireEvent.click(
+        screen.getByRole('button', {
+          name: action === 'Refresh' ? 'Refresh Fireworks models' : `${action} Fireworks key`,
+        }),
+      );
+      await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+      if (action === 'Test' || action === 'Refresh') {
+        finish(jsonResponse({ ok: true }));
+        await waitFor(() =>
+          expect(screen.getByRole('button', { name: 'Test Fireworks key' })).toHaveProperty(
+            'disabled',
+            false,
+          ),
+        );
+        expect(screen.queryByRole('alert')).toBeNull();
+      } else if (action === 'Replace') {
+        fireEvent.change(screen.getByLabelText('Fireworks API key'), {
+          target: { value: TEST_KEY },
+        });
+        fireEvent.click(screen.getByRole('button', { name: 'Save & test' }));
+        await waitFor(() => expect(requests).toBe(2));
+        finish(jsonResponse({ provider: null, test: { ok: true } }));
+        await waitFor(() => expect(screen.queryByLabelText('Fireworks API key')).toBeNull());
+        expect(screen.queryByRole('alert')).toBeNull();
+      }
+    },
+  );
+
+  it('clears a failed Test result when Refresh starts', async () => {
+    let requests = 0;
+    setup({
+      ai: aiFixture({ providers: [{ kind: 'fireworks', configured: true }] }),
+      providerRoute: () => {
+        requests += 1;
+        return jsonResponse(requests === 1 ? { ok: false, code: 'network' } : { ok: true });
+      },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Test Fireworks key' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Network error');
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Fireworks models' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+
+  it('clears a refresh error on key submission when the replacement form is already open', async () => {
+    let finish: (response: Response) => void = () => {};
+    const { calls } = setup({
+      ai: aiFixture({ providers: [{ kind: 'fireworks', configured: true }] }),
+      providerRoute: (method) =>
+        method === 'POST'
+          ? jsonResponse({ error: 'quota', message: 'Refresh failed.' }, 502)
+          : new Promise<Response>((resolve) => {
+              finish = resolve;
+            }),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Replace Fireworks key' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh Fireworks models' }));
+    expect((await screen.findByRole('alert')).textContent).toBe('Out of credit or over the limit');
+    fireEvent.change(screen.getByLabelText('Fireworks API key'), { target: { value: TEST_KEY } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save & test' }));
+    await waitFor(() => expect(calls.some((call) => call.method === 'PUT')).toBe(true));
+    expect(screen.queryByRole('alert')).toBeNull();
+    finish(jsonResponse({ provider: null, test: { ok: true } }));
+    await waitFor(() => expect(screen.queryByLabelText('Fireworks API key')).toBeNull());
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
   it('disables the row and shows Testing… while a Test is pending, then refreshes', async () => {
     let release: (r: Response) => void = () => {};
     const { calls } = setup({

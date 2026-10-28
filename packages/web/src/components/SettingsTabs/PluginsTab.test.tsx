@@ -710,6 +710,45 @@ describe('PluginsTab AI titles toggle', () => {
     expect(screen.queryByRole('switch', { name: 'AI titles' })).toBeNull();
   });
 
+  it('allows turning titles off after the last usable key is removed', async () => {
+    const { getStore } = renderWithAi(true, true, { providers: [] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    await screen.findByText('Add a provider key and model in the AI tab');
+    const toggle = screen.getByRole('switch', { name: 'AI titles' });
+    expect(toggle).toHaveProperty('disabled', false);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(getStore().ai.features['x-post-title'].enabled).toBe(false));
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', true));
+  });
+
+  it('allows turning titles off when AI is disabled and retains the hint', async () => {
+    const { getStore } = renderWithAi(false, true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    expect(toggle).toHaveProperty('disabled', false);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(getStore().ai.features['x-post-title'].enabled).toBe(false));
+    expect(screen.getByText('Turn on AI in the AI tab')).toBeDefined();
+  });
+
+  it('shows a rejected settings PATCH as an inline alert and rolls back the toggle', async () => {
+    const { fetchMock, getStore } = renderWithAi(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', false));
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve(
+        jsonResponse({ error: 'forbidden', message: 'Only the owner can change settings.' }, 403),
+      ),
+    );
+    fireEvent.click(toggle);
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Only the owner can change settings.',
+    );
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
+    expect(getStore().ai.features['x-post-title'].enabled).toBe(false);
+  });
+
   it('enables the toggle when AI is ready and writes ai.features through settings', async () => {
     const { getStore } = renderWithAi(true);
     fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));

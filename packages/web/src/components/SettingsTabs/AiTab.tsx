@@ -87,10 +87,12 @@ const calloutStyle: CSSProperties = {
 function KeyForm({
   kind,
   save,
+  onStart,
   onClose,
 }: {
   kind: AiProviderKind;
   save: ReturnType<typeof useSaveAiKey>;
+  onStart: () => void;
   onClose: () => void;
 }) {
   const [apiKey, setApiKey] = useState('');
@@ -107,6 +109,7 @@ function KeyForm({
 
   const submit = () => {
     if (!apiKey.trim() || save.isPending) return;
+    onStart();
     setErrorText(null);
     const typed = apiKey.trim();
     // The field empties at submit. The key then lives only in mutation state until it settles.
@@ -243,6 +246,13 @@ function ProviderRow({
     wasOpen.current = formOpen;
   }, [formOpen]);
 
+  function resetRowMutations() {
+    test.reset();
+    remove.reset();
+    save.reset();
+    refresh.reset();
+  }
+
   const rowError =
     refreshErrorText(refresh.error) ??
     test.error?.message ??
@@ -269,7 +279,10 @@ function ProviderRow({
             className="silo-settings-btn"
             disabled={busy}
             aria-label={`${configured ? 'Replace' : 'Add'} ${name} key`}
-            onClick={() => setFormOpen(true)}
+            onClick={() => {
+              resetRowMutations();
+              setFormOpen(true);
+            }}
           >
             {configured ? 'Replace key' : 'Add key'}
           </button>
@@ -280,7 +293,7 @@ function ProviderRow({
               aria-label="Refresh Fireworks models"
               disabled={busy || unreadable}
               onClick={() => {
-                refresh.reset();
+                resetRowMutations();
                 refresh.mutate();
               }}
             >
@@ -295,7 +308,7 @@ function ProviderRow({
                 disabled={busy}
                 aria-label={`Test ${name} key`}
                 onClick={() => {
-                  test.reset();
+                  resetRowMutations();
                   test.mutate();
                 }}
               >
@@ -307,7 +320,7 @@ function ProviderRow({
                 disabled={busy}
                 aria-label={`Remove ${name} key`}
                 onClick={() => {
-                  remove.reset();
+                  resetRowMutations();
                   setConfirming(true);
                 }}
               >
@@ -322,7 +335,14 @@ function ProviderRow({
           {rowError}
         </div>
       )}
-      {formOpen && <KeyForm kind={kind} save={save} onClose={() => setFormOpen(false)} />}
+      {formOpen && (
+        <KeyForm
+          kind={kind}
+          save={save}
+          onStart={resetRowMutations}
+          onClose={() => setFormOpen(false)}
+        />
+      )}
       {confirming && (
         <ConfirmDialog
           title={`Remove ${name} key?`}
