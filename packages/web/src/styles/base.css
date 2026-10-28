@@ -15,6 +15,12 @@ body {
   padding: 0;
 }
 
+/* Thin, quiet scrollbars everywhere. `scrollbar-width` does not inherit, so it goes on `*`. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
 body {
   font-family: "Inter Variable", Inter, sans-serif;
   font-size: 16px;

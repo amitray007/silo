@@ -58,8 +58,6 @@
     #000 calc(100% - var(--fade-bottom)),
     transparent 100%
   );
-  scrollbar-width: thin;
-  scrollbar-color: var(--line-2) transparent;
 }
 .silo-scrim {
   display: none;
