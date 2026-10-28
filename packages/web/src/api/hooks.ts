@@ -5,6 +5,13 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import {
+  clearTitleReveal,
+  markTitleEdited,
+  registerTitleReveal,
+  transferTitleReveal,
+} from '../lib/titleReveals';
+import { deriveTitleFromUrl } from '../lib/url';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './client';
 import type {
   AccessTokensResponse,
@@ -396,6 +403,21 @@ function removeOptimisticLink(
   }
 }
 
+/** Snapshot titles before a save, including a dedup target with a different URL spelling. */
+function cachedTitleBaselines(queryClient: ReturnType<typeof useQueryClient>) {
+  const titles = new Map<string, string>();
+  const remember = (link: LinkJson) => {
+    titles.set(link.id, link.title ?? deriveTitleFromUrl(link.url));
+  };
+  for (const [, data] of queryClient.getQueriesData<LinkResponse>({ queryKey: ['link'] })) {
+    if (data?.link) remember(data.link);
+  }
+  for (const [, data] of queryClient.getQueriesData<LinksInfiniteData>({ queryKey: ['links'] })) {
+    for (const page of data?.pages ?? []) for (const link of page.links) remember(link);
+  }
+  return titles;
+}
+
 /**
  * The omnibar's capture mutation (`POST /api/links`, plan 011 V3-3) — the
  * web mutation layer's first `useMutation`. Wraps `apiPost` with v3's
@@ -429,11 +451,26 @@ export function useCaptureLink() {
     onMutate: async (input: CaptureRequest) => {
       await queryClient.cancelQueries({ queryKey: ['links'] });
       const optimisticLink = buildOptimisticLink(input);
+      const titles = cachedTitleBaselines(queryClient);
+      const baselineTitle = deriveTitleFromUrl(input.url);
+      registerTitleReveal(optimisticLink.id, baselineTitle);
       insertOptimisticLink(queryClient, optimisticLink);
-      return { optimisticLinkId: optimisticLink.id };
+      return { optimisticLinkId: optimisticLink.id, titles, baselineTitle };
+    },
+    onSuccess: ({ link }, _input, context) => {
+      if (!context) return;
+      transferTitleReveal(
+        context.optimisticLinkId,
+        link.id,
+        context.titles.get(link.id) ?? context.baselineTitle,
+        !context.titles.has(link.id),
+      );
     },
     onError: (_error, _input, context) => {
-      if (context?.optimisticLinkId) removeOptimisticLink(queryClient, context.optimisticLinkId);
+      if (context?.optimisticLinkId) {
+        clearTitleReveal(context.optimisticLinkId);
+        removeOptimisticLink(queryClient, context.optimisticLinkId);
+      }
     },
     onSettled: () => {
       // The ['links'] prefix invalidate below already covers queryKeys.links()
@@ -482,6 +519,9 @@ export function useEditLink(id: string) {
 
   return useMutation({
     mutationFn: (input: EditLinkRequest) => apiPatch<LinkResponse>(`/api/links/${id}`, input),
+    onMutate: (input: EditLinkRequest) => {
+      if (input.title !== undefined) markTitleEdited(id);
+    },
     // An edit only touches this link's own fields (title/description/note) —
     // never tag membership or live/trash counts — so neither tags nor counts
     // need to be invalidated here.
@@ -776,6 +816,8 @@ export function useRetryCapture(id: string) {
 
   return useMutation({
     mutationFn: () => apiPost<LinkResponse>(`/api/links/${id}/retry`, {}),
+    onMutate: () => registerTitleReveal(id, cachedTitleBaselines(queryClient).get(id)),
+    onError: (_error, _input, pending) => clearTitleReveal(id, pending),
     // A retry only resets this link's own captureStatus — never tag
     // membership or live/trash counts.
     onSettled: () => invalidateLinkQueries(queryClient),

@@ -1,33 +1,53 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import type { LinkJson } from '../api/types';
+import { clearTitleReveal, getTitleReveal, subscribeTitleReveals } from './titleReveals';
 import { deriveTitleFromUrl } from './url';
-
-type ShownTitle = { title: string; enriching: boolean; placeholder: boolean };
-
-// Survives row unmounts. Only an already-mounted row can consume a transition.
-const shownTitles = new Map<string, ShownTitle>();
 
 export function useTitleReveal(link: LinkJson) {
   const title = link.title ?? deriveTitleFromUrl(link.url);
   const enriching = link.captureStatus === 'enriching';
-  const placeholder =
-    !link.title || link.title === link.url || link.title === deriveTitleFromUrl(link.url);
-  const mountedId = useRef<string | null>(null);
+  const pending = useSyncExternalStore(
+    subscribeTitleReveals,
+    () => getTitleReveal(link.id),
+    () => undefined,
+  );
+  const previous = useRef<{ id: string; title: string; enriching: boolean } | null>(null);
   const [reveal, setReveal] = useState<{ id: string; title: string } | null>(null);
 
   useLayoutEffect(() => {
-    const previous = shownTitles.get(link.id);
-    const play =
-      mountedId.current === link.id &&
-      previous !== undefined &&
-      (previous.enriching || previous.placeholder) &&
+    const before = previous.current;
+    previous.current = { id: link.id, title, enriching };
+    if (pending?.kind === 'edit') {
+      setReveal(null);
+      return;
+    }
+    if (!pending) return;
+    pending.visible = true;
+    const allowInitialReveal = pending.allowInitialReveal;
+    pending.allowInitialReveal = false;
+    const mounted = before?.id === link.id;
+    pending.baselineTitle ??= title;
+    // A dedup capture can stay full throughout. Its unchanged save response
+    // is not a settlement signal; wait for a title change or the entry's TTL.
+    const settled =
       !enriching &&
-      previous.title !== title;
-
-    shownTitles.set(link.id, { title, enriching, placeholder });
-    mountedId.current = link.id;
-    setReveal(play ? { id: link.id, title } : null);
-  }, [link.id, title, enriching, placeholder]);
+      (!mounted ||
+        allowInitialReveal ||
+        before.enriching ||
+        before.title !== title ||
+        pending.baselineTitle !== title);
+    if (settled) {
+      clearTitleReveal(link.id);
+      setReveal(
+        (mounted || allowInitialReveal) && pending.baselineTitle !== title
+          ? { id: link.id, title }
+          : null,
+      );
+    }
+    return () => {
+      pending.visible = false;
+    };
+  }, [link.id, title, enriching, pending]);
 
   return reveal?.id === link.id && reveal.title === title;
 }

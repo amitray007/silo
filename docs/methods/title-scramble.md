@@ -34,20 +34,31 @@ every enrichment, AI title or not.
 - No new dependency. Silo does not use `motion`, so a small hook and component do the
   work: `useTitleReveal` and `ScrambleText` in `packages/web/src/components/`, or in
   `lib/` if a hook folder exists.
-- **Trigger rule:** a module-level map remembers, per link id, the last title shown
-  and whether the row was `enriching`. The effect plays when the stored state was
-  `enriching` (or the title was a placeholder) and the new state is settled with a
-  different title. A remount reads the map and does not replay. A title change while
-  not enriching (an edit, or an Enrich run that ended with the same title) does not
-  play. Enrich on a settled link sets `enriching`, so its new title does play.
+- **Trigger rule:** local web mutations register pending reveals in a module-level
+  store. Each entry expires after two minutes; the store holds at most 256 entries
+  and prunes on access. Capture registers its temporary id, then transfers the
+  pending reveal to the server id using the title shown at save time (URL,
+  placeholder or existing title). A visible temporary row can hand its reveal to
+  the new server row, even when enrichment has already finished. Enrich registers
+  the link id with its current title. A title edit clears the pending reveal and
+  leaves an expiring edit marker so a late capture response cannot animate it.
+  A mounted row consumes its entry when a different title is settled, and plays
+  once. It waits while enriching. A transition from enriching to settled with the
+  same title consumes the entry without animation. Dedup re-saves can stay `full`;
+  an unchanged save response waits for a title change or expiry because it does
+  not report enrichment completion. First loads and remounts never play, except
+  the explicit temporary-to-server handoff. Changes from another tab or MCP have
+  no local pending entry and do not animate. Changing reduced motion after a
+  reveal finishes, stops or is skipped never replays it.
 - **Performance:** only rows that change animate. Use one `requestAnimationFrame` loop
   per animating row and cancel it on unmount. Rows keep their truncation and height,
   so the list must not shift.
 
 ## Checks
 
-- Unit tests with fake timers: plays on enriching → settled with a new title; no play
-  on first render, on remount, on an edit, or on the same title; fades for Japanese and
+- Unit tests with fake timers: plays on fast capture, dedup re-save and Enrich with a new title; no play
+  on first load, on remount, on an edit, or on the same title; checks expiry and the
+  size cap; does not replay after reduced motion changes; fades for Japanese and
   Hindi; no animation with reduced motion; the accessible name is the final title.
 - Browser QA on 8797: paste real X posts and a normal link with AI on and off, and
   watch the rows in dark and light themes at desktop and phone widths.

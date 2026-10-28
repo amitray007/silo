@@ -2,6 +2,7 @@ import { act, cleanup, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LinkJson } from '../api/types';
+import { clearTitleReveal, registerTitleReveal } from '../lib/titleReveals';
 import { makeLink } from '../test/fixtures';
 import { ListRow } from './ListRow';
 
@@ -44,6 +45,7 @@ describe('list title enrichment reveal', () => {
       title: 'Original',
       captureStatus: 'enriching',
     });
+    registerTitleReveal(link.id, 'Original');
   });
 
   afterEach(() => {
@@ -112,25 +114,34 @@ describe('list title enrichment reveal', () => {
   });
 
   it.each([null, 'https://example.com', 'example.com'])(
-    'reveals a settled title replacing the placeholder %s',
+    'does not guess enrichment from the placeholder %s',
     (title) => {
       const { container, rerender } = render(
         <Row link={{ ...link, title, captureStatus: 'bare' }} />,
       );
       rerender(<Row link={{ ...link, title: 'Resolved title', captureStatus: 'partial' }} />);
-      expect(animatedText(container)).not.toBeNull();
+      expect(animatedText(container)).toBeNull();
     },
   );
 
   it('reveals another enrichment of a previously settled row', () => {
     const { container, rerender } = render(<Row link={{ ...link, captureStatus: 'full' }} />);
+    registerTitleReveal(link.id, 'Original');
     rerender(<Row link={link} />);
     rerender(<Row link={{ ...link, title: 'New enrichment', captureStatus: 'full' }} />);
     expect(animatedText(container)).not.toBeNull();
     act(() => vi.advanceTimersByTime(800));
+    registerTitleReveal(link.id, 'New enrichment');
     rerender(<Row link={{ ...link, title: 'New enrichment' }} />);
     rerender(<Row link={{ ...link, title: 'Another title', captureStatus: 'full' }} />);
     expect(animatedText(container)).not.toBeNull();
+  });
+
+  it('does not animate enrichment without a local mutation', () => {
+    clearTitleReveal(link.id);
+    const { container, rerender } = render(<Row link={link} />);
+    rerender(<Row link={{ ...link, title: 'From another tab', captureStatus: 'full' }} />);
+    expect(animatedText(container)).toBeNull();
   });
 
   it('does not animate a different link when the row instance is reused', () => {

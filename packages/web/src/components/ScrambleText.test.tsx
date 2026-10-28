@@ -43,6 +43,42 @@ describe('ScrambleText frames', () => {
     expect(container.textContent).toBe(text);
   });
 
+  it.each(['finished', 'interrupted', 'skipped'])(
+    'does not replay a %s reveal when reduced motion is turned off',
+    (state) => {
+      let reduced = state === 'skipped';
+      const listeners = new Set<() => void>();
+      const media = window.matchMedia('');
+      vi.mocked(window.matchMedia).mockImplementation((query) => ({
+        ...media,
+        media: query,
+        matches: reduced,
+        addEventListener: (_event: string, listener: EventListenerOrEventListenerObject) => {
+          listeners.add(listener as () => void);
+        },
+        removeEventListener: (_event: string, listener: EventListenerOrEventListenerObject) => {
+          listeners.delete(listener as () => void);
+        },
+      }));
+      const { container, rerender } = render(<ScrambleText text="Once only" reveal />);
+      if (state === 'finished') act(() => vi.advanceTimersByTime(800));
+      act(() => {
+        reduced = true;
+        for (const notify of listeners) notify();
+      });
+      act(() => {
+        reduced = false;
+        for (const notify of listeners) notify();
+      });
+      expect(container.querySelector('[aria-hidden="true"]')).toBeNull();
+      expect(container.textContent).toBe('Once only');
+      expect(vi.getTimerCount()).toBe(0);
+      // A later, distinct reveal still works.
+      rerender(<ScrambleText text="Next title" reveal />);
+      expect(container.querySelector('[aria-hidden="true"]')).not.toBeNull();
+    },
+  );
+
   it('cancels its frame loop when unmounted', () => {
     const { unmount } = render(<ScrambleText text="Final title" reveal />);
     expect(vi.getTimerCount()).toBe(1);

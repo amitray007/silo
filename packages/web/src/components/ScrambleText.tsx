@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState } from 'react';
+import { useLayoutEffect, useRef, useState } from 'react';
 import { useMediaQuery } from '../lib/breakpoints';
 
 const CHARACTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -36,9 +36,12 @@ export function ScrambleText({
 }) {
   const reducedMotion = useMediaQuery('(prefers-reduced-motion: reduce)');
   const [frame, setFrame] = useState<{ title: string; text: string; fade: boolean } | null>(null);
+  const handled = useRef({ text: '', reveal: false });
 
   useLayoutEffect(() => {
-    if (!reveal || reducedMotion) {
+    const fresh = reveal && (!handled.current.reveal || handled.current.text !== text);
+    handled.current = { text, reveal };
+    if (!fresh || reducedMotion) {
       setFrame(null);
       return;
     }
