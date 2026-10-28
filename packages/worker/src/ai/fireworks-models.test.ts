@@ -16,6 +16,7 @@ afterEach(() => vi.restoreAllMocks());
 
 describe('Fireworks live model list', () => {
   it('pages at the fixed URL with bearer auth, filters locally, and stores only public model fields', async () => {
+    const timeout = vi.spyOn(AbortSignal, 'timeout');
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockResolvedValueOnce(
@@ -58,11 +59,15 @@ describe('Fireworks live model list', () => {
     });
     expect(JSON.stringify(result)).not.toContain(KEY);
     expect(fetch).toHaveBeenCalledTimes(2);
+    expect(timeout).toHaveBeenCalledExactlyOnceWith(20000);
     const first = new URL(String(fetch.mock.calls[0]?.[0]));
     expect(first.origin + first.pathname).toBe(
       'https://api.fireworks.ai/v1/accounts/fireworks/models',
     );
     expect(first.searchParams.get('pageSize')).toBe('200');
+    for (const [url] of fetch.mock.calls) {
+      expect(new URL(String(url)).searchParams.get('filter')).toBe('supports_serverless=true');
+    }
     expect(first.searchParams.has('pageToken')).toBe(false);
     expect(new URL(String(fetch.mock.calls[1]?.[0])).searchParams.get('pageToken')).toBe(
       'next token+/=',
@@ -270,13 +275,13 @@ describe('Fireworks live model list', () => {
     expect(fetch).toHaveBeenCalledTimes(10);
   });
 
-  it('uses a 10 second deadline and maps timeout or network failure without exposing errors', async () => {
+  it('uses a 20 second deadline and maps timeout or network failure without exposing errors', async () => {
     const timeout = vi.spyOn(AbortSignal, 'timeout');
     const fetch = vi
       .fn<typeof globalThis.fetch>()
       .mockRejectedValue(new DOMException(KEY, 'TimeoutError'));
     expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({ ok: false, code: 'timeout' });
-    expect(timeout).toHaveBeenCalledWith(10000);
+    expect(timeout).toHaveBeenCalledWith(20000);
     fetch.mockRejectedValue(new TypeError('fetch failed'));
     expect(await createFireworksModelsFetcher(fetch)(KEY)).toEqual({ ok: false, code: 'network' });
   });

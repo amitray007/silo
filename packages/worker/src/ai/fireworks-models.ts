@@ -9,7 +9,7 @@ const MAX_PAGE_BYTES = 2 * 1024 * 1024;
 const MAX_MODELS = 500;
 const MAX_ID_LENGTH = 512;
 const MAX_LABEL_LENGTH = 256;
-const LIST_TIMEOUT_MS = 10_000;
+const LIST_TIMEOUT_MS = 20_000;
 
 const deprecationDateSchema = z
   .union([
@@ -115,6 +115,7 @@ async function fetchPage(
 ): Promise<z.infer<typeof pageSchema>> {
   const url = new URL(LIST_URL);
   url.searchParams.set('pageSize', '200');
+  url.searchParams.set('filter', 'supports_serverless=true');
   if (token) url.searchParams.set('pageToken', token);
   const response = await fetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },

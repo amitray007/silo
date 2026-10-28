@@ -19,6 +19,7 @@ export const aiProviders = pgTable('ai_providers', {
   lastTestCode: text('last_test_code'),
   models: jsonb('models').$type<{ id: string; label: string; contextLength: number | null }[]>(),
   modelsFetchedAt: timestamp('models_fetched_at', { withTimezone: true }),
+  modelsRefreshError: text('models_refresh_error'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()

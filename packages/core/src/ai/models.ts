@@ -37,8 +37,8 @@ export async function refreshFireworksModels(): Promise<AiModelsResult> {
     .update(aiProviders)
     .set(
       result.ok
-        ? { models: result.models, modelsFetchedAt: new Date() }
-        : { models: null, modelsFetchedAt: null },
+        ? { models: result.models, modelsFetchedAt: new Date(), modelsRefreshError: null }
+        : { modelsRefreshError: result.code },
     )
     .where(and(eq(aiProviders.kind, 'fireworks'), eq(aiProviders.encryptedKey, key.encryptedKey)))
     .returning({ kind: aiProviders.kind });

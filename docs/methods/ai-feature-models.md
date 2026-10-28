@@ -77,16 +77,24 @@ takes the provider kind.
   `none` and JSON schema turns reasoning output off anyway.
 - **Live list:**
   - Fetched with the stored key from `GET https://api.fireworks.ai/v1/accounts/fireworks/models`
-    with `pageSize=200` and `pageToken` paging.
+    with `pageSize=200`, `filter=supports_serverless=true`, and `pageToken` paging.
+    One 20-second deadline covers all pages and response bodies.
   - Filtered locally: `conversationConfig` set, `supportsServerless`, `state ===
-    'READY'`, and no past `deprecationDate`.
-  - Stored as `{ id, label, contextLength }[]` plus `fetched_at` in a new
-    `ai_providers.models` jsonb column.
-  - Refreshed on Save & test, and by a Refresh action on the Fireworks row. The list
-    is not a secret, but the API returns it only through the operator-only endpoints.
+    'READY'`, no past `deprecationDate`, no `EMBEDDING_MODEL` kind, and no
+    embedding or rerank name.
+  - Stored as `{ id, label, contextLength }[]` in `ai_providers.models` (jsonb),
+    with `models_fetched_at` and a nullable `models_refresh_error` code.
+  - Refreshed on Save & test, and by a Refresh action on the Fireworks row. Only a
+    successful fetch replaces the list and `models_fetched_at`, even if it is empty.
+    Failures preserve both and store a coded `modelsRefreshError`. All updates compare
+    the encrypted key so a replaced key cannot receive an older refresh result.
+  - `GET /api/ai` returns the stored list, timestamp, and refresh error without key
+    material. Refresh writes are operator-only. The row shows "Couldn't refresh the list"
+    after a failed refresh and keeps the stored models available.
 - **Key test:** refresh the live list first, then run the same 256-token test
   generation the other providers use on the default model. A list fetch alone would not prove
-  the key can run inference.
+  the key can run inference. If refresh fails, test the default from the stored list.
+  Report the generation result. With no stored model, report the refresh error code.
 - **Errors:**
 
   | Fireworks status | Code |

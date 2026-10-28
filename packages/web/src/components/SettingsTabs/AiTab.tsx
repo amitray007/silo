@@ -210,6 +210,7 @@ function FireworksModelsStatus({
   return (
     <div role="status" style={metaStyle}>
       {count} models · {age}
+      {provider?.modelsRefreshError && <div>Couldn't refresh the list</div>}
       {!count && <div>No models available. Refresh the list or test the key.</div>}
     </div>
   );

@@ -59,6 +59,7 @@ type Provider = {
   lastTest: { ok: boolean; at: string; code?: string } | null;
   models: { id: string; label: string; contextLength: number | null }[];
   modelsFetchedAt: string | null;
+  modelsRefreshError: string | null;
 };
 
 function aiFixture(opts: {
@@ -407,6 +408,26 @@ describe('AiTab', () => {
         }),
       ),
     );
+  });
+
+  it('shows the stale-list hint while retaining the stored models and age', async () => {
+    setup({
+      ai: aiFixture({
+        providers: [
+          {
+            kind: 'fireworks',
+            configured: true,
+            models: [{ id: 'stored-model', label: 'Stored model', contextLength: null }],
+            modelsFetchedAt: NOW,
+            modelsRefreshError: 'timeout',
+          },
+        ],
+      }),
+    });
+    const hint = await screen.findByText("Couldn't refresh the list");
+    expect(hint.closest('[role="status"]')?.textContent).toContain('1 models · updated just now');
+    fireEvent.click(await screen.findByRole('button', { name: 'AI titles model' }));
+    expect(screen.getByRole('option', { name: 'Stored model' })).toBeTruthy();
   });
 
   it('refreshes Fireworks through the operator route and disables that row while pending', async () => {

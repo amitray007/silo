@@ -155,6 +155,13 @@
       "when": 1793211330011,
       "tag": "0021_fireworks",
       "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793214452226,
+      "tag": "0022_fireworks_refresh_error",
+      "breakpoints": true
     }
   ]
 }

@@ -33,7 +33,11 @@ function providerJson(p: AiProviderSummary) {
   return {
     kind: p.kind,
     ...(p.kind === 'fireworks'
-      ? { models: p.models ?? [], modelsFetchedAt: p.modelsFetchedAt?.toISOString() ?? null }
+      ? {
+          models: p.models ?? [],
+          modelsFetchedAt: p.modelsFetchedAt?.toISOString() ?? null,
+          modelsRefreshError: p.modelsRefreshError ?? null,
+        }
       : {}),
     configured: p.configured,
     keyLast4: p.keyLast4,

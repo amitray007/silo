@@ -69,6 +69,9 @@ async function refreshForTest(): Promise<AiTestOutcome | undefined> {
   const refreshed = await refreshFireworksModels();
   if (refreshed.ok) return undefined;
   if (refreshed.code === 'unavailable') return { ok: false, code: 'unavailable' };
+  // A refresh failure does not prevent inference with the same key's stored default.
+  const stored = await resolveWithBlob('fireworks');
+  if (stored?.encryptedKey === key.encryptedKey) return undefined;
   const result = { ok: false, code: refreshed.code, latencyMs: Date.now() - started } as const;
   await recordAiTest('fireworks', result, key.encryptedKey);
   return result;

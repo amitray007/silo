@@ -3,6 +3,7 @@ import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
+import type { AiConnectionResult } from './tester.js';
 
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 const FIRST = { id: 'accounts/fireworks/models/first', label: 'First', contextLength: 1000 };
@@ -143,7 +144,7 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     const { models } = harness.mod();
     models.setAiModelsFetcher(async () => ({ ok: true, models: entries }));
     expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'provider_error' });
-    expect(await models.storedFireworksModels()).toEqual([]);
+    expect(await models.storedFireworksModels()).toEqual([FIRST, GLM]);
   });
 
   it('refreshes before key inference and uses GLM when listed, otherwise the first model', async () => {
@@ -193,24 +194,90 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     }
   });
 
-  it('clears a failed list and never runs inference; key replacement drops a stale list', async () => {
-    const { models, tester, providers } = harness.mod();
+  it.each(['timeout', 'network', 'provider_error', 'invalid_key'] as const)(
+    'keeps the list and timestamp after %s and reports generation results',
+    async (code) => {
+      const { models, tester, providers, settings } = harness.mod();
+      await prepare();
+      await settings.setSetting('ai', selection(GLM.id));
+      const before = (await providers.listAiProviders()).find((p) => p.kind === 'fireworks');
+      models.setAiModelsFetcher(async () => ({ ok: false, code }));
+      expect(await models.refreshFireworksModels()).toEqual({ ok: false, code });
+      const after = (await providers.listAiProviders()).find((p) => p.kind === 'fireworks');
+      expect(after).toMatchObject({
+        models: [FIRST, GLM],
+        modelsFetchedAt: before?.modelsFetchedAt,
+        modelsRefreshError: code,
+      });
+      expect((await settings.getSetting('ai')).features['x-post-title'].model?.id).toBe(GLM.id);
+      await settings.setSetting('ai', selection(GLM.id));
+      const inference = vi.fn<() => Promise<AiConnectionResult>>(async () => ({
+        ok: true,
+        latencyMs: 7,
+      }));
+      tester.setAiConnectionTester(inference);
+      expect(await tester.testAiProvider('fireworks')).toEqual({ ok: true, latencyMs: 7 });
+      expect(inference).toHaveBeenCalledWith(expect.objectContaining({ model: GLM }));
+      inference.mockResolvedValueOnce({ ok: false, code: 'quota', latencyMs: 9 });
+      expect(await tester.testAiProvider('fireworks')).toEqual({
+        ok: false,
+        code: 'quota',
+        latencyMs: 9,
+      });
+      expect(
+        (await providers.listAiProviders()).find((p) => p.kind === 'fireworks')?.lastTest,
+      ).toMatchObject({ ok: false, code: 'quota' });
+    },
+  );
+
+  it.each(['invalid_key', 'timeout', 'network', 'provider_error'] as const)(
+    'reports %s with no stored list and never runs inference',
+    async (code) => {
+      const { models, tester, providers } = harness.mod();
+      await providers.saveAiProviderKey('fireworks', 'fake-fireworks-1234');
+      models.setAiModelsFetcher(async () => ({ ok: false, code }));
+      const inference = vi.fn();
+      tester.setAiConnectionTester(inference);
+      expect(await tester.testAiProvider('fireworks')).toMatchObject({ ok: false, code });
+      expect(inference).not.toHaveBeenCalled();
+      expect(
+        (await providers.listAiProviders()).find((p) => p.kind === 'fireworks')?.lastTest,
+      ).toMatchObject({ ok: false, code });
+    },
+  );
+
+  it('replaces a good list with a successful empty list and clears its refresh error', async () => {
+    const { models, providers } = harness.mod();
     await prepare();
-    const inference = vi.fn(async () => ({ ok: true as const, latencyMs: 1 }));
-    tester.setAiConnectionTester(inference);
-    models.setAiModelsFetcher(async () => ({ ok: false, code: 'invalid_key' }));
-    expect(await tester.testAiProvider('fireworks')).toMatchObject({
-      ok: false,
-      code: 'invalid_key',
+    models.setAiModelsFetcher(async () => ({ ok: false, code: 'network' }));
+    await models.refreshFireworksModels();
+    models.setAiModelsFetcher(async () => ({ ok: true, models: [] }));
+    expect(await models.refreshFireworksModels()).toEqual({ ok: true, models: [] });
+    expect((await providers.listAiProviders()).find((p) => p.kind === 'fireworks')).toMatchObject({
+      models: [],
+      modelsFetchedAt: expect.any(Date),
+      modelsRefreshError: null,
     });
-    expect(inference).not.toHaveBeenCalled();
-    expect(await models.storedFireworksModels()).toEqual([]);
+  });
+
+  it.each([true, false])('key replacement drops a stale refresh (success=%s)', async (ok) => {
+    const { models, providers } = harness.mod();
+    await prepare();
     models.setAiModelsFetcher(async () => {
       await providers.saveAiProviderKey('fireworks', 'replaced-key-5678');
-      return { ok: true, models: [GLM] };
+      await harness.rawDb().execute(sql`
+        UPDATE ai_providers SET models = ${JSON.stringify([FIRST])}::jsonb,
+          models_fetched_at = '2026-10-29T00:00:00Z', models_refresh_error = NULL
+        WHERE kind = 'fireworks'
+      `);
+      return ok ? { ok: true, models: [GLM] } : { ok: false, code: 'network' };
     });
     expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'unavailable' });
-    expect(await models.storedFireworksModels()).toEqual([]);
+    expect((await providers.listAiProviders()).find((p) => p.kind === 'fireworks')).toMatchObject({
+      models: [FIRST],
+      modelsFetchedAt: new Date('2026-10-29T00:00:00Z'),
+      modelsRefreshError: null,
+    });
   });
 
   it('unavailable, malformed and thrown fetchers return fixed codes without leaking keys', async () => {
@@ -221,5 +288,6 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
       throw new Error('fake-fireworks-1234');
     });
     expect(await models.refreshFireworksModels()).toEqual({ ok: false, code: 'provider_error' });
+    expect(await models.storedFireworksModels()).toEqual([FIRST, GLM]);
   });
 });

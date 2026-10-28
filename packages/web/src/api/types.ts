@@ -292,6 +292,7 @@ type AiLiveModel = { id: string; label: string; contextLength: number | null };
 export type AiProviderJson = {
   models?: AiLiveModel[];
   modelsFetchedAt?: string | null;
+  modelsRefreshError?: AiTestCode | null;
   kind: AiProviderKind;
   configured: boolean;
   keyLast4: string | null;

@@ -36,9 +36,19 @@ describeIfPg('0021 Fireworks migration', () => {
       const upgrade = new Pool({ connectionString: database.url });
       await runMigrations(drizzle(upgrade), upgrade, './drizzle');
       expect(
-        (await check.query('SELECT encrypted_key, models, models_fetched_at FROM ai_providers'))
-          .rows,
-      ).toEqual([{ encrypted_key: 'old-ciphertext', models: null, models_fetched_at: null }]);
+        (
+          await check.query(
+            'SELECT encrypted_key, models, models_fetched_at, models_refresh_error FROM ai_providers',
+          )
+        ).rows,
+      ).toEqual([
+        {
+          encrypted_key: 'old-ciphertext',
+          models: null,
+          models_fetched_at: null,
+          models_refresh_error: null,
+        },
+      ]);
       await check.query(
         "INSERT INTO ai_providers (kind, encrypted_key, key_last4, models, models_fetched_at) VALUES ('fireworks', 'fake-ciphertext', '5678', '[]', now())",
       );

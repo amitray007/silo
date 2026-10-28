@@ -83,6 +83,7 @@ describeIfPg('/api/ai routes (integration)', () => {
         lastTest: null,
         models: [],
         modelsFetchedAt: null,
+        modelsRefreshError: null,
       },
     ]);
     expect(body.features).toEqual([
@@ -392,6 +393,31 @@ describeIfPg('/api/ai routes (integration)', () => {
           'x-post-title': { enabled: true, model: { provider: 'fireworks', id: model.id } },
         },
       };
+      expect(
+        (
+          await app.request('/api/settings', {
+            method: 'PATCH',
+            headers: json,
+            body: JSON.stringify({ ai }),
+          })
+        ).status,
+      ).toBe(200);
+      const fetchedAt = body.providers.find(
+        (p: { kind: string }) => p.kind === 'fireworks',
+      ).modelsFetchedAt;
+      setAiModelsFetcher(async () => ({ ok: false, code: 'timeout' }));
+      const failed = await app.request('/api/ai/providers/fireworks/models/refresh', {
+        method: 'POST',
+      });
+      expect(failed.status).toBe(502);
+      expect(await failed.json()).toMatchObject({ error: 'timeout' });
+      const stale = JSON.parse(await (await app.request('/api/ai')).text());
+      expect(stale.providers.find((p: { kind: string }) => p.kind === 'fireworks')).toMatchObject({
+        models: [model],
+        modelsFetchedAt: fetchedAt,
+        modelsRefreshError: 'timeout',
+      });
+      expect((await core.getAllSettings()).ai.features['x-post-title'].model?.id).toBe(model.id);
       expect(
         (
           await app.request('/api/settings', {
