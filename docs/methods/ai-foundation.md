@@ -290,9 +290,7 @@ palette, and ink primary buttons.
 3. **Model**: a select grouped by "Claude" and "ChatGPT", listing only the catalog
    models the provider reaches. Each option shows its label and tier ("fast",
    "balanced", "best").
-4. One quiet line: "Content a feature uses, such as post text, is sent to the
-   provider you choose."
-5. When `SILO_SECRET_KEY` is missing, one callout replaces sections 2 and 3: "Set
+4. When `SILO_SECRET_KEY` is missing, one callout replaces sections 2 and 3: "Set
    SILO_SECRET_KEY on the server to store keys", with the `openssl` command.
 
 No other screen changes in this slice.

@@ -464,9 +464,6 @@ export function AiTab() {
           patch={patch}
         />
       )}
-      <p style={{ ...rowDesc, marginTop: 16 }}>
-        Content a feature uses, such as post text, is sent to the provider you choose.
-      </p>
     </>
   );
 }
