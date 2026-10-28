@@ -7,7 +7,13 @@ import {
 import { BROWSER_USER_AGENT, browserAccept } from './profile.js';
 
 export interface RoutePort {
-  request(): { url(): string; method(): string; resourceType(): string };
+  request(): {
+    url(): string;
+    method(): string;
+    resourceType(): string;
+    isNavigationRequest(): boolean;
+    frame(): { parentFrame(): unknown | null };
+  };
   abort(): Promise<void>;
   fulfill(response: {
     status: number;
@@ -25,6 +31,11 @@ const ALLOWED_TYPES = new Set(['document', 'script', 'stylesheet', 'xhr', 'fetch
 function allowedRequest(request: ReturnType<RoutePort['request']>): boolean {
   if (request.method() !== 'GET' || !ALLOWED_TYPES.has(request.resourceType())) return false;
   try {
+    if (
+      request.resourceType() === 'document' &&
+      (!request.isNavigationRequest() || request.frame().parentFrame() !== null)
+    )
+      return false;
     const url = new URL(request.url());
     return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password;
   } catch {

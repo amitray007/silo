@@ -3,9 +3,15 @@ import { safeFetchBytes } from '../fetch/safe-fetch.js';
 import { BROWSER_USER_AGENT, browserAccept } from './profile.js';
 import { BrowserRoutes, type RoutePort } from './route.js';
 
-function route(url = 'https://example.org/a', type = 'document', method = 'GET') {
+function route(url = 'https://example.org/a', type = 'document', method = 'GET', subframe = false) {
   return {
-    request: () => ({ url: () => url, resourceType: () => type, method: () => method }),
+    request: () => ({
+      url: () => url,
+      resourceType: () => type,
+      method: () => method,
+      isNavigationRequest: () => type === 'document',
+      frame: () => ({ parentFrame: () => (subframe ? {} : null) }),
+    }),
     abort: vi.fn(async () => {}),
     fulfill: vi.fn(async (_response: Parameters<RoutePort['fulfill']>[0]) => {}),
   };
@@ -20,6 +26,34 @@ const response = (length: number) => ({
 afterEach(() => vi.useRealTimers());
 
 describe('browser request boundary', () => {
+  it('aborts embedded documents before fetching, while allowing main-frame navigations and redirects', async () => {
+    const fetch = vi.fn(async () => response(1));
+    const routes = new BrowserRoutes(new AbortController().signal, fetch);
+    const embedded = route('https://example.org/embed', 'document', 'GET', true);
+    await routes.handle(embedded);
+    expect(embedded.abort).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+    for (const url of ['https://example.org/start', 'https://example.org/redirected']) {
+      const main = route(url);
+      await routes.handle(main);
+      expect(main.fulfill).toHaveBeenCalledOnce();
+      expect(main.abort).not.toHaveBeenCalled();
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
+  });
+  it('fails closed when a document has no available frame', async () => {
+    const fetch = vi.fn(async () => response(1));
+    const request = route();
+    request.request = () => ({
+      ...route().request(),
+      frame: () => {
+        throw new Error('no frame');
+      },
+    });
+    await new BrowserRoutes(new AbortController().signal, fetch).handle(request);
+    expect(request.abort).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it.each([
     'file:///etc/passwd',
     'ftp://example.org',

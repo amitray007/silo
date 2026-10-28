@@ -137,6 +137,16 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
         req.url === '/article.js' ? 'application/javascript' : 'text/html',
       );
       switch (req.url) {
+        case '/frames-redirect':
+          res.writeHead(302, { location: '/frames' });
+          res.end();
+          break;
+        case '/frames':
+          res.end(`<main><article><h1>Article with embedded frames</h1><p>${article}</p>
+            <iframe src="/embedded-document"></iframe>
+            <iframe src="https://codepen.io/example/embed/abc123"></iframe>
+            </article></main>`);
+          break;
         case '/escape':
           res.end(`<main><article><h1>Isolation probes</h1><p>${article}</p></article></main><script>
           const worker = new SharedWorker(URL.createObjectURL(new Blob([
@@ -277,6 +287,24 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
     });
     expect(connections).toBe(1);
     expect(fixtureLog).toContain('GET /article.js');
+  }, 25_000);
+
+  it('renders the main article without fetching embedded documents and preserves embed placeholders', async () => {
+    const result = await reader.run(`${url}/frames-redirect`);
+    expect(result?.text).toContain('complete Reader');
+    expect(fixtureLog).toContain('GET /frames-redirect');
+    expect(fixtureLog).toContain('GET /frames');
+    expect(fixtureLog).not.toContain('GET /embedded-document');
+    expect(
+      fetch.mock.calls.some(
+        ([url]) => url.endsWith('/embedded-document') || url.includes('codepen.io'),
+      ),
+    ).toBe(false);
+    const { document } = parseHTML(result?.reader?.contentHtml ?? '');
+    expect(document.querySelectorAll('figure[data-silo-embed]')).toHaveLength(2);
+    expect(
+      document.querySelector('a[href="https://codepen.io/example/embed/abc123"]'),
+    ).not.toBeNull();
   }, 25_000);
 
   it('blocks loopback, metadata, WebSockets and POST before they reach their targets', async () => {
