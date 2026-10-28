@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useRefreshReader, useRetryCapture, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import { layoutMedia } from '../lib/breakpoints';
@@ -40,6 +41,13 @@ export function LinkMenuActions({
   const trash = useTrashLink();
   const retry = useRetryCapture(link.id);
   const refresh = useRefreshReader(link.id);
+  const refreshFailed = refresh.isError;
+  const resetRefresh = refresh.reset;
+  useEffect(() => {
+    if (!refreshFailed) return;
+    const timer = setTimeout(resetRefresh, 5000);
+    return () => clearTimeout(timer);
+  }, [refreshFailed, resetRefresh]);
   const tags = useLinkTags(link);
   const copyTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const tagsTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -94,11 +102,14 @@ export function LinkMenuActions({
             {refresh.isPending ? 'Refreshing…' : 'Refresh reader'}
           </MenuAction>
         )}
-      {refresh.isError && (
-        <div className="silo-toast" role="alert">
-          {refresh.error.message}
-        </div>
-      )}
+      {refresh.isError &&
+        // The menu surface is transformed, which would trap a fixed toast inside it.
+        createPortal(
+          <div className="silo-toast" role="alert">
+            {refresh.error.message}
+          </div>,
+          document.body,
+        )}
       {showEdit && (
         <MenuAction
           icon={<ReaderIcon name="edit" />}
