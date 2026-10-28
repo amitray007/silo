@@ -223,7 +223,10 @@ export async function recordEnrichment(
       // miss must not replace that text while its current Reader is retained.
       extractedText: sql`case when ${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null
         then ${links.extractedText} else coalesce(${parsed.text ?? null}, ${links.extractedText}) end`,
-      captureStatus: parsed.status,
+      // A run that began from a `full` link never leaves it below `full` (the
+      // floor is set by `requestEnrich`); the floor is cleared in the same write.
+      captureStatus: sql`case when ${links.enrichFloorStatus} = 'full' then 'full'::capture_status else ${parsed.status}::capture_status end`,
+      enrichFloorStatus: sql`null`,
       sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
       sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,
       // Every recorded attempt counts toward ENRICH_ATTEMPT_CAP, success or
@@ -248,8 +251,9 @@ export async function recordEnrichment(
 const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
 
 /**
- * Reset a LIVE, retryable link back to `enriching`, for a user-triggered retry
- * of a `partial`/`bare` capture — or to re-kick a link stranded at `enriching`
+ * Reset a LIVE, retryable link back to `enriching` for the SWEEP's re-kick
+ * (`trigger: 'sweep'`; owner-started runs use `requestEnrich` below) of a
+ * `partial`/`bare` capture — or to re-kick a link stranded at `enriching`
  * (plan R12). Core resets the status and calls the registered enqueuer in the same
  * transaction, so a successful retry cannot strand a link without a job.
  * The worker/queue implementation remains behind the core enqueue port.
@@ -258,9 +262,8 @@ const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
  * re-fetch. Live-scoped via `whereLive`: a trashed link is never resurrected.
  * Returns `null` if `linkId` doesn't exist, is trashed, or is already `full`.
  *
- * Also resets `enrich_attempts` to 0 (plan R3, U3): a user/agent-triggered
- * retry is a deliberate fresh start, not another automatic sweep re-kick — it
- * should get the full `ENRICH_ATTEMPT_CAP` budget again, not inherit whatever
+ * Also resets `enrich_attempts` to 0 (plan R3, U3): a re-kick is a fresh
+ * start that gets the full `ENRICH_ATTEMPT_CAP` budget again, not whatever
  * count a prior failing streak left behind.
  */
 export async function requestRetry(linkId: string): Promise<Link | null> {
@@ -273,9 +276,14 @@ export async function requestRetry(linkId: string): Promise<Link | null> {
  * accepts every status, `full` included, so the owner can re-run a complete
  * link (and ask the AI layer for a title again). It resets the status to
  * `enriching` and `enrich_attempts` to 0, and enqueues
- * `{ trigger: 'manual', previousStatus }` in the same transaction. The worker
- * uses `previousStatus` to keep a `full` link `full` if the re-run comes back
- * thin. Returns `null` if `linkId` doesn't exist or is trashed.
+ * `{ trigger: 'manual', previousStatus }` in the same transaction.
+ *
+ * It also stores the status it replaces in `enrich_floor_status`, unless the
+ * link is already `enriching`: a second click while a run is open keeps the
+ * first run's floor. `recordEnrichment` records `full` when the floor is `full`
+ * and clears it, so a `full` link never drops below `full` (the worker also
+ * keeps the old data and does not trash the link on a 404). Returns `null` if
+ * `linkId` doesn't exist or is trashed.
  */
 export async function requestEnrich(linkId: string): Promise<Link | null> {
   return resetToEnriching(linkId, 'manual');
@@ -294,14 +302,19 @@ async function resetToEnriching(
 ): Promise<Link | null> {
   return db.transaction(async (tx) => {
     const [current] = await tx
-      .select({ captureStatus: links.captureStatus })
+      .select({ captureStatus: links.captureStatus, floor: links.enrichFloorStatus })
       .from(links)
       .where(whereLive(eq(links.id, linkId)))
       .for('update');
     if (!current || (allowed && !allowed.includes(current.captureStatus))) return null;
     const [updated] = await tx
       .update(links)
-      .set({ captureStatus: 'enriching', enrichAttempts: 0 })
+      .set({
+        captureStatus: 'enriching',
+        enrichAttempts: 0,
+        enrichFloorStatus:
+          current.captureStatus === 'enriching' ? current.floor : current.captureStatus,
+      })
       .where(eq(links.id, linkId))
       .returning();
     if (!updated) return null;
@@ -369,6 +382,7 @@ export async function settleGiveUp(linkId: string): Promise<Link | null> {
     .update(links)
     .set({
       captureStatus: 'bare',
+      enrichFloorStatus: null,
       title: sql`coalesce(${links.title}, ${row.url})`,
       siteName: sql`coalesce(${links.siteName}, ${domain ?? null})`,
     })

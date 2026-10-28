@@ -41,6 +41,12 @@ export const links = pgTable(
     // backfills every existing row; the migration then marks edited twitter titles
     // as 'user'. The write rules live in `recordEnrichment`'s single UPDATE.
     titleSource: titleSource('title_source').notNull().default('page'),
+
+    // The status a link must not drop below while an owner-started enrichment
+    // runs (set by `requestEnrich` from the status it replaces, kept by a second
+    // click while `enriching`). `recordEnrichment` records `full` when this is
+    // `full`, and clears it in the same UPDATE. NULL when no such run is open.
+    enrichFloorStatus: captureStatus('enrich_floor_status'),
     description: text('description'),
     imageUrl: text('image_url'),
     siteName: text('site_name'),

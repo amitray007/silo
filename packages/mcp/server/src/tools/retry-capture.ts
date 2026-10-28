@@ -91,7 +91,7 @@ export function registerRetryCapture(server: McpServer): void {
         );
       }
 
-      // `requestRetry` returns a bare `Link` (no `tags`) — re-fetch via
+      // `requestEnrich` returns a bare `Link` (no `tags`) — re-fetch via
       // `getById` to hydrate tags before shaping, same pattern `edit_link`
       // established.
       const link = await getById(id);

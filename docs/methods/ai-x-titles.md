@@ -73,9 +73,18 @@ New column `links.title_source`: enum `title_source` = `page | ai | user`,
 The rule lives in the SQL `CASE` of the single `recordEnrichment` UPDATE, so an edit
 made while enrichment runs still wins.
 
-Migration backfill: existing twitter rows with a title that does not end in ` on X`
-or ` / X` get `'user'`, because those were probably edited. All other rows get
-`'page'`. The builder checks the real title shapes in the dev database first.
+Migration backfill (user edits always win). The fetched page title is stored
+nowhere else, so the rule is a shape test. A row gets `'user'` when its title is
+not null, is not equal to its url, and is not a twitter page-title shape. Every
+other row gets `'page'`.
+
+- A title equal to the url is the give-up fallback (`settleGiveUp`), not an edit.
+- A twitter page title ends in ` on X` or ` / X`, or reads `Name on X: "post text"`.
+  Real dev data: `Andrej Karpathy (@karpathy) on X`.
+- Any other twitter title was probably edited.
+- Any non-twitter title that differs from its url may have been edited, so it is
+  `'user'`. This makes Enrich keep the existing title on every row saved before
+  this slice.
 
 The API and MCP link shapes do not expose `title_source` in this slice.
 
@@ -98,9 +107,17 @@ All of these must hold:
   `enriching`, resets `enrich_attempts`, and enqueues
   `{ linkId, trigger: 'manual', previousStatus }` in one transaction.
 - `requestRetry` keeps its current rules for the sweep (`trigger: 'sweep'`).
-- No downgrade: when `previousStatus` was `full` and the new result is `partial` or
-  `bare`, the worker records `full`. The don't-clobber writes already keep the earlier
-  good title, text and image, so `full` still describes what is stored.
+- No downgrade, stored on the row: `links.enrich_floor_status` (nullable, the capture
+  status enum). `requestEnrich` sets it to the status it replaces, unless the link is
+  already `enriching`, so a second click keeps the first run's floor. `recordEnrichment`
+  records `full` when the floor is `full` and clears the floor in the same UPDATE;
+  `settleGiveUp` clears it too. The worker reads the floor from the row (the payload's
+  `previousStatus` is only a hint). When the floor is `full` and the re-run comes back
+  thin, the worker skips the Reader write and writes no title, description, image or text
+  (source data may update). A confirmed 404 or 410 does not trash a link whose floor is
+  `full`: it stays `full` with its old data.
+- A manual or sweep job that finds its link no longer `enriching` is a duplicate of a
+  finished run (a double click queues two jobs) and does nothing.
 - `RowMenu` shows Enrich for every status, labelled "Re-enrich" while `enriching` as
   today. `retry_capture`'s description gains "also re-runs enrichment on a complete
   link".
@@ -187,7 +204,7 @@ gate 2. CI runs only the deterministic tests.
 
 | Unit | Content | Focused checks |
 | --- | --- | --- |
-| X1 | `title_source`, migration, write rules | pg tests: an edit during enrichment wins; a retry keeps a user title; AI replaces page but not user; backfill on a copy of dev data |
+| X1 | `title_source`, migration, write rules | pg tests: an edit during enrichment wins; a retry keeps a user title; AI replaces page but not user; backfill test in `migrate.test.ts` |
 | X2 | `requestEnrich`, job payload, no-downgrade, Enrich always shown, MCP description | Enrich on a `full` link that comes back `partial` stays `full`; sweep still skips `full`; the web menu shows Enrich on a `full` row |
 | X3 | feature registration, prompt, sanitizer, fixtures, `enrichLink` integration, Twitter toggle, eval script | mock model: title written with source `ai`; fail → page title; `off` → no call; `'user'` → no call; sweep keeps an AI title; manual asks again; sanitizer table |
 

@@ -58,13 +58,6 @@ export interface EnrichLinkDeps {
   getPluginsSetting: () => Promise<SettingsMap['plugins']>;
 }
 
-/**
- * The job context when a caller supplies none (and for queued jobs from before
- * the payload had one): the most cautious values, a sweep re-kick of a link
- * that was `enriching`.
- */
-const SWEEP_JOB: EnrichJobData = { trigger: 'sweep', previousStatus: 'enriching' };
-
 const defaultDeps: EnrichLinkDeps = {
   safeFetch: (url) => safeFetch(url, { accept: HTML_ACCEPT }),
   extract,
@@ -143,13 +136,10 @@ function mapSafeFetchFailureToStatus(
 async function recordThenMaybeSettle(
   linkId: string,
   result: Parameters<typeof recordEnrichment>[1],
-  previousStatus: EnrichJobData['previousStatus'],
 ): Promise<void> {
-  // No downgrade: a re-run of a `full` link that comes back thin stays `full`.
-  // The don't-clobber writes already keep its earlier title, text and image,
-  // so `full` still describes what is stored.
-  const status = previousStatus === 'full' ? 'full' : result.status;
-  const updated = await recordEnrichment(linkId, { ...result, status });
+  // No downgrade: `recordEnrichment` records `full` for a run whose floor
+  // (`enrich_floor_status`) is `full`, so `updated.captureStatus` is `full` here.
+  const updated = await recordEnrichment(linkId, result);
   if (updated && updated.captureStatus !== 'full' && updated.enrichAttempts >= ENRICH_ATTEMPT_CAP) {
     await settleGiveUp(linkId);
   }
@@ -250,12 +240,18 @@ function twitterTextFields(sourceData: SourceData | undefined): { text?: string 
 export async function enrichLink(
   linkId: string,
   deps: EnrichLinkDeps = defaultDeps,
-  job: EnrichJobData = SWEEP_JOB,
+  job?: EnrichJobData,
 ): Promise<void> {
   const link = await getById(linkId);
   if (!link) {
     return;
   }
+  if (isFinishedRunDuplicate(link.captureStatus, job)) {
+    return;
+  }
+  // The row decides, not the payload: `enrich_floor_status` is set by the
+  // request in the same transaction and survives job loss and double clicks.
+  const holdFull = link.enrichFloorStatus === 'full';
 
   const enabledPlugins = await deps.getPluginsSetting().catch(() => SETTINGS_DEFAULTS.plugins);
 
@@ -286,21 +282,19 @@ export async function enrichLink(
   // rate-limited, 5xx, timeout, DNS, etc.) still flows to the existing
   // `mapSafeFetchFailureToStatus` -> `recordEnrichment` degraded path below —
   // those mean "couldn't fetch right now", not "doesn't exist".
-  if (!fetchResult.ok && fetchResult.reason === 'not-found') {
+  // A re-run of a `full` link (floor `full`) never trashes it: it takes the
+  // degraded branch below and stays `full` with its old data.
+  if (!fetchResult.ok && fetchResult.reason === 'not-found' && !holdFull) {
     await softDelete(linkId);
     return;
   }
 
   if (!fetchResult.ok) {
-    await recordThenMaybeSettle(
-      linkId,
-      {
-        status: mapSafeFetchFailureToStatus(fetchResult.reason),
-        ...postText,
-        ...(sourceData ? { sourceData } : {}),
-      },
-      job.previousStatus,
-    );
+    await recordThenMaybeSettle(linkId, {
+      status: mapSafeFetchFailureToStatus(fetchResult.reason),
+      ...postText,
+      ...(sourceData ? { sourceData } : {}),
+    });
     return;
   }
 
@@ -319,20 +313,61 @@ export async function enrichLink(
     contentType: fetchResult.contentType,
     signal: AbortSignal.timeout(60_000),
   });
+  await recordExtraction(link, extracted, selected, {
+    sourceData,
+    holdFull,
+    fetchedAt,
+  });
+}
+
+type ExtractionRecord = {
+  sourceData: SourceData | undefined;
+  holdFull: boolean;
+  fetchedAt: Date;
+};
+
+/** Record a successful fetch + extract, including the Reader (see `enrichLink`). */
+async function recordExtraction(
+  link: { id: string; sourceKind: string },
+  extracted: ExtractResult,
+  selected: ReaderExtraction,
+  { sourceData, holdFull, fetchedAt }: ExtractionRecord,
+): Promise<void> {
+  const linkId = link.id;
   updateRenderedStatus(extracted, selected);
   if (link.sourceKind === 'youtube') extracted.status = 'partial';
+  // A held `full` link whose re-run comes back thin keeps everything it has:
+  // no Reader write, and no title, description, image or text from the thin
+  // result (only the source data and the status, which stays `full`).
+  if (holdFull && extracted.status !== 'full') {
+    await recordThenMaybeSettle(linkId, {
+      status: extracted.status,
+      ...(sourceData ? { sourceData } : {}),
+    });
+    return;
+  }
   if (link.sourceKind !== 'twitter') await recordReader(linkId, selected, fetchedAt);
   const { reader: _reader, readerFailed: _readerFailed, text, ...stored } = extracted;
   // Reader writes own search text, including empty results and rejected older captures.
-  await recordThenMaybeSettle(
-    linkId,
-    {
-      ...stored,
-      ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
-      ...(sourceData ? { sourceData } : {}),
-    },
-    job.previousStatus,
-  );
+  await recordThenMaybeSettle(linkId, {
+    ...stored,
+    ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
+    ...(sourceData ? { sourceData } : {}),
+  });
+}
+
+/**
+ * A manual or sweep run always starts from `enriching` (the request sets it).
+ * A job that finds another status is a duplicate of a run that already
+ * finished (a second Enrich click queues a second job), so it must not run: a
+ * thin result would overwrite the first run's good one. Direct calls without a
+ * job context and capture-triggered jobs (a re-save of a complete link) run.
+ */
+function isFinishedRunDuplicate(
+  status: CaptureStatus | 'enriching',
+  job: EnrichJobData | undefined,
+): boolean {
+  return job !== undefined && job.trigger !== 'capture' && status !== 'enriching';
 }
 
 function updateRenderedStatus(extracted: ExtractResult, selected: ReaderExtraction): void {

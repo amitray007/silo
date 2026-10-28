@@ -142,8 +142,9 @@ export {
 } from './links/enqueue.js';
 // Enrichment write path (increment 3, U4): recordEnrichment writes an
 // enrichment result (metadata + terminal capture_status) onto a live link;
-// requestRetry resets a live link back to `enriching` for a user-triggered
-// retry. Both are live-scoped — trashed links are never touched/resurrected.
+// requestEnrich resets a live link back to `enriching` for an owner-started
+// run (any status); requestRetry is the sweep's re-kick. All are
+// live-scoped — trashed links are never touched/resurrected.
 // The actual fetch/extract/enqueue is the worker's job (U2/U3/U5).
 export type { EnrichmentResult } from './links/enrichment.js';
 export {

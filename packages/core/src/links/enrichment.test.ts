@@ -805,6 +805,75 @@ describeIfPg('enrichment operations (integration)', () => {
     });
   });
 
+  describe('enrich floor (enrich_floor_status)', () => {
+    async function floorOf(id: string) {
+      const rows = await rawDb.execute<{
+        capture_status: string;
+        enrich_floor_status: string | null;
+      }>(sql`select capture_status, enrich_floor_status from links where id = ${id}`);
+      return rows.rows[0];
+    }
+
+    async function fullLink(path: string) {
+      const link = await linksOps.createLink({ url: `https://ex.com/${path}`, sourceKind: 'link' });
+      await enrichmentOps.recordEnrichment(link.id, { title: 'T', status: 'full' });
+      return link.id;
+    }
+
+    it('requestEnrich stores the replaced status; a second click keeps the first floor', async () => {
+      const id = await fullLink('floor-double');
+      await enrichmentOps.requestEnrich(id);
+      expect(await floorOf(id)).toEqual({
+        capture_status: 'enriching',
+        enrich_floor_status: 'full',
+      });
+      await enrichmentOps.requestEnrich(id);
+      expect(await floorOf(id)).toEqual({
+        capture_status: 'enriching',
+        enrich_floor_status: 'full',
+      });
+    });
+
+    it('recordEnrichment records full for a full floor and clears it', async () => {
+      const id = await fullLink('floor-record');
+      await enrichmentOps.requestEnrich(id);
+      const result = await enrichmentOps.recordEnrichment(id, { status: 'partial' });
+      expect(result?.captureStatus).toBe('full');
+      expect(result?.enrichFloorStatus).toBeNull();
+      // The next run has no floor: a thin result is recorded as is.
+      const next = await enrichmentOps.recordEnrichment(id, { status: 'bare' });
+      expect(next?.captureStatus).toBe('bare');
+    });
+
+    it('a partial floor does not hold the status', async () => {
+      const link = await linksOps.createLink({
+        url: 'https://ex.com/floor-partial',
+        sourceKind: 'link',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      await enrichmentOps.requestEnrich(link.id);
+      expect(await floorOf(link.id)).toEqual({
+        capture_status: 'enriching',
+        enrich_floor_status: 'partial',
+      });
+      const result = await enrichmentOps.recordEnrichment(link.id, { status: 'bare' });
+      expect(result?.captureStatus).toBe('bare');
+      expect(result?.enrichFloorStatus).toBeNull();
+    });
+
+    it('settleGiveUp clears the floor', async () => {
+      const link = await linksOps.createLink({
+        url: 'https://ex.com/floor-settle',
+        sourceKind: 'link',
+      });
+      await rawDb.execute(
+        sql`update links set enrich_floor_status = 'partial' where id = ${link.id}`,
+      );
+      await enrichmentOps.settleGiveUp(link.id);
+      expect((await floorOf(link.id))?.enrich_floor_status).toBeNull();
+    });
+  });
+
   describe('enrichJobSchema', () => {
     it('accepts a full payload', async () => {
       const { enrichJobSchema } = await import('./enqueue.js');

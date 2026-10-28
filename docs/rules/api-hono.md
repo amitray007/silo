@@ -129,7 +129,7 @@ whitelist — no route ever returns a raw `LinkWithTags`.
 | `/tags` (standalone create)        | POST   | 201 `{name}`    | 400 `validation_error`     | blank/whitespace name; case-insensitive idempotent (canonical name)  |
 | `/links/:id/trash`                 | POST   | 200 `{link}` (tags `[]`) | 404 `not_found`  | unknown OR already-trashed (indistinguishable — honest message)      |
 | `/links/:id/restore`               | POST   | 200 `{outcome, link}` | 404 `{outcome:'not_found'}` | `outcome`: `restored` \| `merged` — see below                  |
-| `/links/:id/retry`                 | POST   | 200 `{link}` (status `enriching`) | 404 `not_found` | unknown, trashed, or already `full` (never downgrades a good capture) |
+| `/links/:id/retry`                 | POST   | 200 `{link}` (status `enriching`) | 404 `not_found` | unknown or trashed; any live status re-runs, and a `full` link stays `full` |
 | `/trash/:id` (hard-delete one)     | DELETE | 204 (no body)   | 404 `not_found`            | TRASHED-ONLY guard — a live id is a no-op 404, live row untouched     |
 | `/trash` (empty all)               | DELETE | 200 `{deleted}` | —                           | hard-deletes every currently-trashed link, regardless of age          |
 | `/ingest`                          | POST   | 201 `{link, deduped}` | 401 `unauthorized`, 400 `invalid_url`/`validation_error` | TOKEN-GATED (see below) — the only route this API auths |
