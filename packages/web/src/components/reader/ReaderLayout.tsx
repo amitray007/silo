@@ -24,6 +24,10 @@ function awaitingDetail(detail: { isFetching: boolean; data: unknown }): boolean
 }
 
 /** Each route supplies its loaded pages. The reader never owns a second list. */
+function listLabel(title: string): string {
+  return title.startsWith('Feeds / ') ? title : `${title} links`;
+}
+
 export function ReaderLayout({
   links,
   loading = false,
@@ -110,7 +114,7 @@ export function ReaderLayout({
         <section
           tabIndex={-1}
           className="silo-listpane"
-          aria-label={`${title} links`}
+          aria-label={listLabel(title)}
           inert={fullWindow && Boolean(selectedId)}
         >
           {children}

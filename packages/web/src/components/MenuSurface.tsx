@@ -58,6 +58,18 @@ function refreshShortcut(event: React.KeyboardEvent<HTMLElement>): void {
   refresh.click();
 }
 
+function trapMenuTab(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key !== 'Tab') return;
+  const controls = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>('input, button:not(:disabled), a[href]'),
+  );
+  const next = event.shiftKey ? controls.at(-1) : controls[0];
+  if (document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
+    event.preventDefault();
+    next?.focus({ preventScroll: true });
+  }
+}
+
 export function MenuSurface({
   children,
   className = '',
@@ -82,6 +94,7 @@ export function MenuSurface({
   const closing = useMenuClosing();
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
+  const tabbing = useRef(false);
   close.current = onClose;
   const phone = sheet && matchMedia(layoutMedia.phone).matches;
   useEffect(() => {
@@ -115,6 +128,7 @@ export function MenuSurface({
       document.removeEventListener('mousedown', pointer);
       document.removeEventListener('keydown', keyboard, true);
       if (
+        !tabbing.current &&
         trigger instanceof HTMLElement &&
         trigger.isConnected &&
         (!document.activeElement ||
@@ -147,18 +161,11 @@ export function MenuSurface({
           event.stopPropagation();
           onClose();
         }
-        if (phone && event.key === 'Tab') {
-          const controls = Array.from(
-            event.currentTarget.querySelectorAll<HTMLElement>(
-              'input, button:not(:disabled), a[href]',
-            ),
-          );
-          const next = event.shiftKey ? controls.at(-1) : controls[0];
-          if (document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
-            event.preventDefault();
-            next?.focus({ preventScroll: true });
-          }
+        if (!phone && role === 'menu' && event.key === 'Tab') {
+          tabbing.current = true;
+          onClose();
         }
+        if (phone) trapMenuTab(event);
       }}
     >
       <div className="silo-menu-grab" />

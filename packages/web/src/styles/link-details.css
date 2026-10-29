@@ -206,8 +206,8 @@
   color: var(--mut);
 }
 .silo-menu-item:focus-visible {
-  outline: 1px solid var(--line-2);
-  outline-offset: -1px;
+  outline: 2px solid var(--fnt);
+  outline-offset: -2px;
 }
 .silo-menu-danger,
 .silo-menu-danger .silo-menu-icon {
@@ -1047,7 +1047,6 @@ button.silo-note-text {
   }
 }
 
-.silo-edit-field > .silo-field:focus-visible,
 .silo-capture-form input:focus-visible,
 .silo-tag-tokens:focus-within {
   outline: none;

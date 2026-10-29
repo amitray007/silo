@@ -96,3 +96,29 @@ describe('feed subscription UI', () => {
     expect(screen.getByRole('dialog', { name: 'Add feed' })).toBeTruthy();
   });
 });
+
+it('keeps the focused submit control during lookup and focuses the URL after failure', async () => {
+  let reject: ((value: Response) => void) | undefined;
+  const pending = new Promise<Response>((resolve) => {
+    reject = resolve;
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => pending),
+  );
+  mount(<AddFeedDialog onClose={vi.fn()} onSubscribed={vi.fn()} />);
+  const input = screen.getByLabelText('Website or feed URL') as HTMLInputElement;
+  fireEvent.change(input, { target: { value: 'https://example.com' } });
+  const submit = screen.getByRole('button', { name: 'Subscribe' }) as HTMLButtonElement;
+  submit.focus();
+  fireEvent.click(submit);
+  await waitFor(() => expect(input.readOnly).toBe(true));
+  expect(input.getAttribute('aria-busy')).toBe('true');
+  expect(submit.disabled).toBe(false);
+  expect(submit.getAttribute('aria-disabled')).toBe('true');
+  expect(document.activeElement).toBe(submit);
+  fireEvent.click(submit);
+  reject?.(json({ error: 'feed_not_found', message: 'No feed found.' }, 422));
+  await screen.findByRole('alert');
+  await waitFor(() => expect(document.activeElement).toBe(input));
+});

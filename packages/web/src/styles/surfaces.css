@@ -68,10 +68,7 @@
 .silo-edit-fields > label {
   display: block;
 }
-.silo-field:focus-visible {
-  border-color: var(--line-2);
-  box-shadow: 0 0 0 3px var(--hov);
-}
+
 .silo-edit-footer-btn,
 .silo-edit-save-btn,
 .silo-confirm-btn {
@@ -2010,5 +2007,14 @@
     max-height: 70dvh;
     border-radius: var(--s2) var(--s2) 0 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+}
+
+@media (forced-colors: active) {
+  .silo-edit-save-btn,
+  .silo-settings-hero-btn-primary,
+  .silo-menu-surface,
+  .silo-modal-panel {
+    border: 1px solid CanvasText;
   }
 }

@@ -23,7 +23,9 @@ function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void
       icon={<Chip domain={deriveDomain(feed.siteUrl ?? feed.feedUrl)} size={16} />}
       meta={
         <>
-          {formatCount(feed.inboxCount)}
+          <span role="img" aria-label={`${feed.inboxCount} in Inbox`}>
+            {formatCount(feed.inboxCount)}
+          </span>
           {feed.status !== 'active' && (
             <span
               className="silo-feed-warning"

@@ -749,22 +749,9 @@ select {
   transform: scale(0.97);
 }
 
-/* Small bordered text inputs across the app (EditModal's title/description/
-   tags-find/note fields, RowMenu's + EditModal's tags fly-out find inputs,
-   the sidebar's find-a-tag/new-tag inputs) — every one of them set inline
-   `outline: 'none'` with NO compensating focus indicator at all (Rams
-   review, SERIOUS: 2.4.7 focus outline removed with nothing replacing it —
-   an inline `outline:none` beats the global `:focus-visible` rule since
-   inline styles always win the cascade, so these fields were focusable but
-   silently, invisibly so). This restores a real, visible focus state — a
-   `--ghost` border + a soft matching ring, the same "the border IS the ring"
-   language the Omnibar already uses for its own JS-tracked `focused` prop —
-   without reintroducing the browser's default (usually blue, theme-
-   mismatched) outline ring on top of it. */
 .silo-field:focus-visible {
-  outline: none;
-  border-color: var(--ghost);
-  box-shadow: 0 0 0 3px rgba(133, 121, 95, 0.18);
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {

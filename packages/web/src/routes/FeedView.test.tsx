@@ -148,7 +148,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   localStorage.clear();
 });
-const list = () => within(screen.getByRole('region', { name: 'Feeds / Publisher links' }));
+const list = () => within(screen.getByRole('region', { name: 'Feeds / Publisher' }));
 const reader = () => within(screen.getByRole('region', { name: 'Link reader' }));
 
 it('groups publisher dates, moves rows between tabs and updates the sidebar Inbox count', async () => {

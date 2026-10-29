@@ -60,7 +60,12 @@ export function MobileBar({ onSearch }: { onSearch: () => void }) {
       </button>
       <MenuPresence>
         {open && (
-          <MenuSurface sheet={false} className="silo-mobile-more" onClose={() => setOpen(false)}>
+          <MenuSurface
+            label="More"
+            sheet={false}
+            className="silo-mobile-more"
+            onClose={() => setOpen(false)}
+          >
             <MenuAction
               icon={<ReaderIcon name="trash" />}
               onClick={() => {

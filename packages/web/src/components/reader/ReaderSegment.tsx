@@ -53,6 +53,7 @@ export function SegmentTabs<T extends string>({
           aria-controls={`${id}-panel`}
           key={value}
           aria-selected={tab === value}
+          tabIndex={tab === value ? 0 : -1}
           disabled={disabled}
           onClick={() => setTab(value)}
           onKeyDown={(event) => {

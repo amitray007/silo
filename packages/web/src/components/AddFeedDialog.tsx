@@ -24,6 +24,7 @@ export function AddFeedDialog({
     subscribe.mutate(
       { url: url.trim(), syncRecents },
       {
+        onError: () => input.current?.focus(),
         onSuccess: ({ feed }) => {
           onClose();
           onSubscribed();
@@ -44,7 +45,8 @@ export function AddFeedDialog({
           ref={input}
           id="feed-url"
           className="silo-field"
-          disabled={subscribe.isPending}
+          readOnly={subscribe.isPending}
+          aria-busy={subscribe.isPending}
           type="url"
           required
           maxLength={8192}
@@ -72,7 +74,7 @@ export function AddFeedDialog({
           Sync recents
         </label>
         <div className="silo-modal-footer">
-          <button className="silo-edit-save-btn" type="submit" disabled={subscribe.isPending}>
+          <button className="silo-edit-save-btn" type="submit" aria-disabled={subscribe.isPending}>
             {subscribe.isPending ? 'Subscribing…' : 'Subscribe'}
           </button>
         </div>
