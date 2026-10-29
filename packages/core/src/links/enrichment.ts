@@ -25,7 +25,13 @@ export const ENRICH_FIELD_DESCRIPTIONS = {
     'Writes full text and Reader view. Fetches and extracts the page and may render it in Chrome; skips source API and AI title.',
 } as const satisfies Record<(typeof ENRICH_FIELDS)[number], string>;
 
-export const enrichFieldSchema = z.enum(ENRICH_FIELDS);
+// Zod enums have one description slot; JSON Schema choices carry each field's description.
+export const enrichFieldSchema = z.enum(ENRICH_FIELDS).meta({
+  oneOf: ENRICH_FIELDS.map((field) => ({
+    const: field,
+    description: ENRICH_FIELD_DESCRIPTIONS[field],
+  })),
+});
 export type EnrichField = z.infer<typeof enrichFieldSchema>;
 export type EnrichOptions = { fields?: readonly EnrichField[] };
 
@@ -71,7 +77,7 @@ export const FIELD_MAX = {
 
 /**
  * Max enrichment attempts before a link is given up on (plan R2/R4, U3).
- * `recordEnrichment` increments `enrich_attempts` on every recorded attempt;
+ * `recordEnrichment` increments `enrich_attempts` on every recorded full attempt;
  * once a link hits this cap without reaching `full`, `sweep-enriching`
  * (`findStrandedEnriching`) stops re-kicking it and the worker settles it via
  * `settleGiveUp` instead of retrying forever.
@@ -291,7 +297,7 @@ export async function requestRetry(linkId: string): Promise<Link | null> {
  * and MCP `retry_capture`. Unlike `requestRetry` (the sweep's re-kick) it
  * accepts every status, `full` included, so the owner can re-run a complete
  * link (and ask the AI layer for a title again). It resets the status to
- * `enriching` and `enrich_attempts` to 0, and enqueues
+ * `enriching` and resets `enrich_attempts` for a full run, and enqueues
  * `{ trigger: 'manual', previousStatus }` in the same transaction.
  *
  * It also stores the status it replaces in `enrich_floor_status`, unless the

@@ -135,5 +135,130 @@ describeMcpTool(
         await assertUntouched();
       });
     }
+
+    it('tools/list exposes the field enum, per-choice descriptions, costs and the X example', async () => {
+      const { client, core } = getContext();
+      const { tools } = await client.listTools();
+      const tool = tools.find((entry) => entry.name === 'retry_capture');
+      expect(tool?.inputSchema.properties?.fields).toMatchObject({
+        type: 'array',
+        minItems: 1,
+        items: {
+          type: 'string',
+          enum: ['title', 'metadata', 'source', 'reader'],
+          oneOf: [
+            { const: 'title', description: core.ENRICH_FIELD_DESCRIPTIONS.title },
+            { const: 'metadata', description: core.ENRICH_FIELD_DESCRIPTIONS.metadata },
+            { const: 'source', description: core.ENRICH_FIELD_DESCRIPTIONS.source },
+            { const: 'reader', description: core.ENRICH_FIELD_DESCRIPTIONS.reader },
+          ],
+        },
+      });
+      expect(tool?.inputSchema.required ?? []).not.toContain('fields');
+      expect(tool?.description).toContain('Leave fields out for a full run');
+      expect(tool?.description).toContain('X title backfill');
+      expect(client.getInstructions()).toContain('retry_capture fields');
+      for (const description of Object.values(core.ENRICH_FIELD_DESCRIPTIONS)) {
+        expect(tool?.description).toContain(description);
+      }
+    });
+
+    it('passes requested fields to core and names them in the success text', async () => {
+      const { client, core } = getContext();
+      const id = await seedLink(getContext, 'https://example.org/targeted-single', {
+        status: 'partial',
+      });
+      const result = await client.callTool({
+        name: 'retry_capture',
+        arguments: { id, fields: ['title', 'reader'] },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(await core.getById(id)).toMatchObject({
+        enrichFields: ['title', 'reader'],
+        enrichFloorStatus: 'partial',
+        captureStatus: 'enriching',
+      });
+      expect(result.content).toEqual([
+        expect.objectContaining({
+          text: expect.stringContaining('Re-enriching title, reader for 1 link'),
+        }),
+      ]);
+      expect(result.content).toEqual([
+        expect.objectContaining({
+          text: expect.stringContaining('AI off or unavailable means no title change'),
+        }),
+      ]);
+      expectNoLeakedFields(result.structuredContent);
+    });
+
+    it('passes fields through the bulk core operation and counts only successful ids', async () => {
+      const { client, core } = getContext();
+      const id = await seedLink(getContext, 'https://example.org/targeted-bulk', {
+        status: 'bare',
+      });
+      const missing = '00000000-0000-0000-0000-000000000000';
+      const result = await client.callTool({
+        name: 'retry_capture',
+        arguments: { ids: [id, missing], fields: ['source'] },
+      });
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toMatchObject({
+        batch: true,
+        results: [
+          { id, ok: true },
+          { id: missing, ok: false },
+        ],
+      });
+      expect((await core.getById(id))?.enrichFields).toEqual(['source']);
+      expect(result.content).toEqual([
+        expect.objectContaining({
+          text: expect.stringContaining('Re-enriching source for 1 link'),
+        }),
+      ]);
+    });
+
+    it('omitting fields passes no restriction and widens a pending narrow run to full', async () => {
+      const { client, core } = getContext();
+      const id = await seedLink(getContext, 'https://example.org/targeted-to-full', {
+        status: 'partial',
+      });
+      await core.requestEnrich(id, { fields: ['title'] });
+      const result = await client.callTool({ name: 'retry_capture', arguments: { id } });
+      expect(result.isError).toBeFalsy();
+      expect((await core.getById(id))?.enrichFields).toBeNull();
+    });
+
+    it('omitting fields in bulk keeps the existing full-run behavior', async () => {
+      const { client, core } = getContext();
+      const id = await seedLink(getContext, 'https://example.org/targeted-to-full-bulk', {
+        status: 'partial',
+      });
+      await core.requestEnrich(id, { fields: ['title'] });
+      const result = await client.callTool({ name: 'retry_capture', arguments: { ids: [id] } });
+      expect(result.isError).toBeFalsy();
+      expect((await core.getById(id))?.enrichFields).toBeNull();
+    });
+
+    it.each([['foo'], []])(
+      'rejects invalid fields %j without changing the link',
+      async (...fields) => {
+        const { client, core } = getContext();
+        const id = await seedLink(
+          getContext,
+          `https://example.org/invalid-field-${fields.length}`,
+          {
+            status: 'partial',
+          },
+        );
+        const result = await client.callTool({ name: 'retry_capture', arguments: { id, fields } });
+        expect(result.isError).toBe(true);
+        expect((await core.getById(id))?.captureStatus).toBe('partial');
+        if (fields.length) {
+          const error = JSON.stringify(result.content);
+          for (const field of ['title', 'metadata', 'source', 'reader'])
+            expect(error).toContain(field);
+        }
+      },
+    );
   },
 );

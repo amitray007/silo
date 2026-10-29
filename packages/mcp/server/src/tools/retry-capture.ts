@@ -1,6 +1,14 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { getById, requestEnrich, retryCaptureMany } from '@silo/core';
+import {
+  ENRICH_FIELD_DESCRIPTIONS,
+  ENRICH_FIELDS,
+  type EnrichField,
+  enrichFieldSchema,
+  getById,
+  requestEnrich,
+  retryCaptureMany,
+} from '@silo/core';
 import { z } from 'zod';
 import {
   bulkItemResultShape,
@@ -38,21 +46,27 @@ export function registerRetryCapture(server: McpServer): void {
     {
       title: 'Retry capture',
       description:
-        'Re-run enrichment for one or more links whose capture was degraded ' +
-        "(captureStatus 'partial' or 'bare') or is stuck 'enriching' — " +
-        "resets status back to 'enriching' so the worker re-fetches and " +
-        're-extracts in the background. This also re-runs enrichment on a ' +
-        "complete link (status 'full'): it stays 'full' with its old data if " +
-        'the re-run comes back thin. Pass `id` for ONE link, or `ids` ' +
-        'for MANY in one call (if both are given, `ids` wins) — the batch ' +
-        'call returns a `results` array (`{ id, ok, reason? }`) so one bad ' +
-        'id never blocks the rest. Does nothing for an unknown or trashed ' +
-        'link. Enrichment runs ' +
-        'ASYNCHRONOUSLY, same as capture_link: after calling retry_capture, ' +
-        'call get_link with the id(s) shortly after to see whether the ' +
-        're-capture succeeded. Typical loop: capture_link -> get_link shows ' +
-        "'partial'/'bare' -> retry_capture -> get_link again.",
+        'Re-run enrichment for live links, including complete links. ' +
+        'Pass id for one link or ids for a batch of up to 500; ids wins if both are given. ' +
+        'Unknown or trashed links are not changed. Batch results report each id separately. ' +
+        'Leave fields out for a full run. A narrow run writes only the requested fields, ' +
+        'keeps user-edited titles and restores the previous capture status. ' +
+        'Enrichment runs asynchronously; call get_link with the id(s) shortly after to see the result.\n\n' +
+        '| Field | Writes and work |\n| --- | --- |\n' +
+        ENRICH_FIELDS.map((field) => `| ${field} | ${ENRICH_FIELD_DESCRIPTIONS[field]} |`).join(
+          '\n',
+        ) +
+        '\n\nX title backfill: retry_capture { ids: [<saved X post ids>], fields: ["title"] } ' +
+        'uses stored post text without fetching x.com or rendering Reader. ' +
+        'If AI titles are off or unavailable, X title writes nothing; enable AI titles before retrying.',
       inputSchema: {
+        fields: z
+          .array(enrichFieldSchema)
+          .min(1)
+          .optional()
+          .describe(
+            'Re-enrich only these fields. Leave out for a full run. See each choice for writes and work.',
+          ),
         id: z.uuid().optional().describe('The link id (uuid) to retry (single-link mode).'),
         ids: z
           .array(z.uuid())
@@ -63,13 +77,15 @@ export function registerRetryCapture(server: McpServer): void {
       },
       outputSchema: retryCaptureOutputSchema,
     },
-    async ({ id, ids }): Promise<CallToolResult> => {
+    async ({ id, ids, fields }): Promise<CallToolResult> => {
       if (ids !== undefined) {
-        const outcome = await runBulkGuarded(() => retryCaptureMany(ids));
+        const outcome = await runBulkGuarded(() =>
+          fields === undefined ? retryCaptureMany(ids) : retryCaptureMany(ids, { fields }),
+        );
         if (!outcome.ok) return outcome.error;
         const results = outcome.value.map(toBulkItemResult);
         return {
-          content: [{ type: 'text', text: toBulkTextSummary('Retry capture', results) }],
+          content: [{ type: 'text', text: batchText(fields, results) }],
           structuredContent: { found: false, batch: true, results },
         };
       }
@@ -83,7 +99,8 @@ export function registerRetryCapture(server: McpServer): void {
         };
       }
 
-      const retried = await requestEnrich(id);
+      const retried =
+        fields === undefined ? await requestEnrich(id) : await requestEnrich(id, { fields });
       if (!retried) {
         return notFoundResult(
           `Could not retry link ${id} — it's either unknown or trashed. Use ` +
@@ -110,12 +127,35 @@ export function registerRetryCapture(server: McpServer): void {
         };
       }
 
-      return foundResult(
-        link,
-        `Retrying capture for ${id} — status reset to 'enriching'. The ` +
-          'worker will re-fetch and re-extract in the background; call ' +
-          'get_link with this id shortly to see the result.',
-      );
+      return foundResult(link, singleText(id, fields));
     },
+  );
+}
+
+function targetedText(fields: readonly EnrichField[], count: number): string {
+  const titleNote = fields.includes('title')
+    ? ' For X title, AI off or unavailable means no title change; enable AI titles before retrying.'
+    : '';
+  return `Re-enriching ${fields.join(', ')} for ${count} ${count === 1 ? 'link' : 'links'}.${titleNote}`;
+}
+
+function batchText(
+  fields: readonly EnrichField[] | undefined,
+  results: ReturnType<typeof toBulkItemResult>[],
+): string {
+  const summary = toBulkTextSummary('Retry capture', results);
+  if (!fields) return summary;
+  const count = results.filter((result) => result.ok).length;
+  return `${targetedText(fields, count)}\n${summary}\nCall get_link with the id(s) shortly to see the result.`;
+}
+
+function singleText(id: string, fields: readonly EnrichField[] | undefined): string {
+  if (fields) {
+    return `${targetedText(fields, 1)} Call get_link with id ${id} shortly to see the result.`;
+  }
+  return (
+    `Retrying capture for ${id} - status reset to 'enriching'. The ` +
+    'worker will re-fetch and re-extract in the background; call ' +
+    'get_link with this id shortly to see the result.'
   );
 }
