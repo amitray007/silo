@@ -7,6 +7,7 @@ import { enqueueEnrichment } from './enqueue.js';
 import type { Executor, Link } from './executor.js';
 import { assertLibraryWrite } from './library-write.js';
 import { whereFeed, whereLibrary } from './live.js';
+import { mergeCaptureFields } from './merge-content.js';
 import {
   decodeListCursor,
   effectiveLimit,
@@ -255,12 +256,10 @@ async function mergeIntoExisting(
       notes: mergedNotes,
       sourceKind: nextSourceKind,
       sourceData: nextSourceData,
-      title: input.title ?? existing.title,
-      titleSource: mergedTitleSource(existing.titleSource, input.title),
-      description: input.description ?? existing.description,
-      imageUrl: input.imageUrl ?? existing.imageUrl,
-      siteName: input.siteName ?? existing.siteName,
-      extractedText: input.extractedText ?? existing.extractedText,
+      ...mergeCaptureFields(existing, {
+        ...input,
+        titleSource: mergedTitleSource(existing.titleSource, input.title),
+      }),
       addedBy: mergedOrigin(existing.addedBy, input.origin),
       // `source` is DELIBERATELY absent from this SET clause (first-write-
       // sticky, capture-source slice): unlike `addedBy` above (agent-sticky —

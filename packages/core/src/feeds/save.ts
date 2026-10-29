@@ -2,6 +2,7 @@ import { db, links } from '@silo/db';
 import { and, desc, eq, isNull } from 'drizzle-orm';
 import { enqueueEnrichment } from '../links/enqueue.js';
 import type { Link, Tx } from '../links/executor.js';
+import { bestCaptureStatus, mergeCaptureFields } from '../links/merge-content.js';
 
 export type SaveFeedPostResult =
   | { id: string; outcome: 'created' | 'existing' | 'revived' }
@@ -30,6 +31,34 @@ function copiedContent(post: Link) {
   };
 }
 
+function revivedContent(existing: Link, post: Link) {
+  const titleOwner = existing.titleSource === 'user' || post.title === null ? existing : post;
+  const reader = post.contentHtml === null ? existing : post;
+  return {
+    ...copiedContent(post),
+    ...mergeCaptureFields(existing, {
+      ...post,
+      title: titleOwner.title,
+      titleSource: titleOwner.titleSource,
+    }),
+    contentHtml: reader.contentHtml,
+    contentImages: reader.contentImages,
+    readerVersion: reader.readerVersion,
+    readerCapturedAt: reader.readerCapturedAt,
+    readerRenderPending: reader.readerRenderPending,
+    sourceData: post.sourceData ?? existing.sourceData,
+    captureStatus: bestCaptureStatus(
+      existing.captureStatus,
+      existing.enrichFloorStatus,
+      post.captureStatus,
+      post.enrichFloorStatus,
+    ),
+    enrichFloorStatus: existing.enrichFloorStatus,
+    deletedAt: null,
+    enrichAttempts: 0,
+  };
+}
+
 async function saveWith(tx: Tx, feedId: string, postId: string): Promise<SaveFeedPostResult> {
   // Serialize saves of this post, including the saved pointer and enqueue decision.
   const [post] = await tx.select().from(links).where(eq(links.id, postId)).for('update');
@@ -44,12 +73,12 @@ async function saveWith(tx: Tx, feedId: string, postId: string): Promise<SaveFee
     .limit(1)
     .for('update');
   let id = existing?.id;
+  let captureStatus = post.captureStatus;
   const outcome = existing ? (existing.deletedAt ? 'revived' : 'existing') : 'created';
   if (existing?.deletedAt) {
-    await tx
-      .update(links)
-      .set({ ...copiedContent(post), deletedAt: null, enrichAttempts: 0 })
-      .where(eq(links.id, existing.id));
+    const content = revivedContent(existing, post);
+    captureStatus = content.captureStatus;
+    await tx.update(links).set(content).where(eq(links.id, existing.id));
   } else if (!existing) {
     const [created] = await tx
       .insert(links)
@@ -64,8 +93,10 @@ async function saveWith(tx: Tx, feedId: string, postId: string): Promise<SaveFee
   }
   if (!id) throw new Error('saveFeedPost: no pond link');
   await tx.update(links).set({ savedLinkId: id }).where(eq(links.id, postId));
-  if (outcome !== 'existing' && post.captureStatus === 'enriching') {
-    await enqueueEnrichment(tx, id, { trigger: 'capture', previousStatus: 'enriching' });
+  const needsEnrichment =
+    outcome === 'revived' ? captureStatus !== 'full' : captureStatus === 'enriching';
+  if (outcome !== 'existing' && needsEnrichment) {
+    await enqueueEnrichment(tx, id, { trigger: 'capture', previousStatus: captureStatus });
   }
   return { id, outcome };
 }

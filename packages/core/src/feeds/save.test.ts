@@ -118,6 +118,90 @@ describe('Save to Home on real Postgres', () => {
     expect(await core.getById(row.id)).toMatchObject({ savedLinkId: id });
     expect(await core.getById(id)).toMatchObject({ captureStatus: 'full' });
   });
+  it('keeps an owner-renamed title when a feed post revives the Home link', async () => {
+    const core = h.mod();
+    const row = await post();
+    const pond = await core.createLink({ url: row.url, sourceKind: 'link' });
+    await core.editLink(pond.id, { title: 'My custom title' });
+    await core.softDelete(pond.id);
+    await h.rawDb().execute(sql`update links set capture_status = 'full' where id = ${row.id}`);
+    const enqueue = vi.fn(async () => {});
+    core.setEnrichmentEnqueuer(enqueue);
+    expect(await core.saveFeedPost(row.feedId ?? '', row.id)).toEqual({
+      id: pond.id,
+      outcome: 'revived',
+    });
+    expect(await core.getById(pond.id)).toMatchObject({
+      title: 'My custom title',
+      titleSource: 'user',
+      captureStatus: 'full',
+    });
+    expect(enqueue).not.toHaveBeenCalled();
+  });
+  it.each(['bare', 'partial'] as const)(
+    'keeps full Home content when a %s feed post revives it',
+    async (status) => {
+      const core = h.mod();
+      const row = await post();
+      const pond = await core.createLink({ url: row.url, sourceKind: 'link' });
+      await h.rawDb().execute(sql`update links set capture_status = 'full',
+        title = 'Original title', title_source = 'page', description = 'Description',
+        image_url = 'https://example.com/cover.jpg', site_name = 'Original site',
+        extracted_text = 'Full text', content_html = '<p>Full text</p>',
+        content_images = '[]', reader_version = 5, reader_captured_at = '2026-10-29T00:00:00Z'
+        where id = ${pond.id}`);
+      await core.softDelete(pond.id);
+      await h.rawDb().execute(sql`update links set capture_status = ${status}, title = null
+        where id = ${row.id}`);
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      expect(await core.saveFeedPost(row.feedId ?? '', row.id)).toEqual({
+        id: pond.id,
+        outcome: 'revived',
+      });
+      expect(await core.getById(pond.id)).toMatchObject({
+        title: 'Original title',
+        titleSource: 'page',
+        description: 'Description',
+        imageUrl: 'https://example.com/cover.jpg',
+        siteName: 'Original site',
+        extractedText: 'Full text',
+        captureStatus: 'full',
+      });
+      const stored = await h.rawDb().execute(sql`select content_html, reader_version,
+        reader_captured_at from links where id = ${pond.id}`);
+      expect(stored.rows[0]).toMatchObject({
+        content_html: '<p>Full text</p>',
+        reader_version: 5,
+      });
+      expect(new Date(String(stored.rows[0]?.reader_captured_at)).toISOString()).toBe(
+        '2026-10-29T00:00:00.000Z',
+      );
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
+  it('enqueues a revived incomplete merge with its preserved status', async () => {
+    const core = h.mod();
+    const row = await post();
+    const pond = await core.createLink({ url: row.url, sourceKind: 'link' });
+    await h.rawDb().execute(sql`update links set capture_status = 'partial',
+      extracted_text = 'Existing text' where id = ${pond.id}`);
+    await core.softDelete(pond.id);
+    await h.rawDb().execute(sql`update links set capture_status = 'bare' where id = ${row.id}`);
+    const enqueue = vi.fn(async () => {});
+    core.setEnrichmentEnqueuer(enqueue);
+    await core.saveFeedPost(row.feedId ?? '', row.id);
+    expect(await core.getById(pond.id)).toMatchObject({
+      captureStatus: 'partial',
+      extractedText: 'Existing text',
+      titleSource: 'page',
+    });
+    expect(enqueue).toHaveBeenCalledTimes(1);
+    expect(enqueue).toHaveBeenCalledWith(expect.anything(), pond.id, {
+      trigger: 'capture',
+      previousStatus: 'partial',
+    });
+  });
   it('enqueues only a new or revived enriching copy, and repeated/concurrent saves are idempotent', async () => {
     const core = h.mod();
     const row = await post();
