@@ -320,6 +320,9 @@ importers:
       '@silo/mcp-server':
         specifier: workspace:*
         version: link:../mcp/server
+      '@silo/queue':
+        specifier: workspace:*
+        version: link:../queue
       '@silo/worker':
         specifier: workspace:*
         version: link:../worker

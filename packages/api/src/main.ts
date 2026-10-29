@@ -1,5 +1,5 @@
 import { serve } from '@hono/node-server';
-import { createBoss, ensureEnrichLinkQueue, registerEnqueuer } from '@silo/queue';
+import { startEnqueuer } from '@silo/queue';
 import { createApp } from './app.js';
 
 /**
@@ -30,9 +30,10 @@ import { createApp } from './app.js';
  * registers it too. Without this, every HTTP-captured link enqueues nothing
  * and is stranded at `enriching` forever (the worker never sees a job,
  * because none was ever sent). `@silo/queue` (shared with `@silo/worker`)
- * gives us the same `createBoss`/`ensureEnrichLinkQueue`/`registerEnqueuer`
- * trio the worker uses — the API registers ONCE at startup, before `serve()`
- * accepts its first request, so no capture can race ahead of the seam going
+ * gives us `startEnqueuer`, which wraps the same
+ * `createBoss`/`ensureEnrichLinkQueue`/`registerEnqueuer` trio the worker
+ * uses — the API registers ONCE at startup, before `serve()` accepts its
+ * first request, so no capture can race ahead of the seam going
  * live. The API's boss is a PRODUCER ONLY: it calls `boss.send()` (via the
  * registered enqueuer) but never `boss.work()`s — consuming stays the
  * worker's job.
@@ -74,58 +75,6 @@ function readHost(): string {
   return raw !== undefined && raw !== '' ? raw : LOOPBACK_HOST;
 }
 
-/**
- * Start the enrichment enqueuer: connect a producer-only pg-boss, ensure the
- * queue exists, and register core's enqueue seam. Returns the started `boss`
- * on success so it can be stopped gracefully on shutdown, or `undefined` if
- * startup failed — the caller decides how loud to be and whether to keep
- * serving (see the RELIABILITY note above the module doc comment).
- */
-async function startEnqueuer(): Promise<ReturnType<typeof createBoss> | undefined> {
-  // Declared outside the try so the catch can stop a boss that already
-  // STARTED before a LATER step (ensureEnrichLinkQueue / registerEnqueuer)
-  // threw — otherwise that started instance's DB connections/listeners leak
-  // for the process lifetime, since main() only ever holds the returned value
-  // (review fix, was: `const boss` scoped inside try).
-  let boss: ReturnType<typeof createBoss> | undefined;
-  try {
-    boss = createBoss();
-    boss.on('error', (error) => {
-      // Mirror the worker's own pg-boss error handling: log rather than let
-      // an unhandled 'error' event crash the process.
-      console.error('[silo/api] pg-boss error:', error);
-    });
-    await boss.start();
-    await ensureEnrichLinkQueue(boss);
-    registerEnqueuer(boss);
-    console.error(
-      '[silo/api] enrichment enqueuer registered — captures will enqueue for enrichment.',
-    );
-    return boss;
-  } catch (error) {
-    // LOUD, repeated, impossible-to-miss: a mis-wired/degraded enqueuer must
-    // never fail silently (that is exactly the bug this file exists to fix).
-    // We degrade rather than crash: captures still save, they just won't
-    // auto-enqueue until the enqueuer comes up (a restart, once the
-    // underlying issue — e.g. Postgres unreachable — clears).
-    const banner = '========================================================================';
-    console.error(banner);
-    console.error('[silo/api] FATAL-FOR-ENRICHMENT: failed to start the enrichment enqueuer.');
-    console.error(
-      '[silo/api] The API will keep serving (captures still save), but NEW LINKS ' +
-        'WILL NOT ENRICH until this is fixed and the process is restarted.',
-    );
-    console.error('[silo/api] Underlying error:', error);
-    console.error(banner);
-    // boss.start() may have already succeeded before the failing step — stop
-    // it (non-graceful is fine, it never began working jobs) so a degraded
-    // startup doesn't leak the open connection. Swallow any stop error: we're
-    // already on the failure path and about to return `undefined` regardless.
-    await boss?.stop({ graceful: false }).catch(() => {});
-    return undefined;
-  }
-}
-
 async function main(): Promise<void> {
   const port = readPort();
   const hostname = readHost();
@@ -143,7 +92,7 @@ async function main(): Promise<void> {
   // Register the enqueuer BEFORE serve() so the very first request that
   // creates a link can enqueue it — no window where a capture could race
   // ahead of the seam going live.
-  const boss = await startEnqueuer();
+  const boss = await startEnqueuer('[silo/api]');
 
   const server = serve({ fetch: app.fetch, port, hostname }, (info) => {
     console.error(`[silo/api] listening on ${info.address}:${info.port}`);

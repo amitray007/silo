@@ -1,3 +1,4 @@
+import { startEnqueuer } from '@silo/queue';
 import { startMcpHttpServer } from './mcp-http.js';
 
 /**
@@ -16,6 +17,12 @@ import { startMcpHttpServer } from './mcp-http.js';
  * silent double-execution, not a crash, so it would go unnoticed until data
  * corruption or duplicate side effects surfaced. This process's only job is
  * the listener, so it never imports `@silo/worker` at all.
+ *
+ * It DOES register a producer-only enqueuer (`@silo/queue`'s `startEnqueuer`)
+ * before it listens. Core's enqueue seam is process-local and a no-op until
+ * registered, so without it `capture_link` and `retry_capture` here flip a
+ * link to `enriching` and send no job — the api's worker only picked those up
+ * when the stranded-link sweep re-kicked them ~15 minutes later.
  *
  * Fail-fast, not fail-open: unlike `main.ts` (where a bad
  * `SILO_MCP_HTTP_PORT`/missing token degrades to "stdio MCP still works"),
@@ -143,6 +150,9 @@ export function readMcpHttpConfig(
   };
 }
 
+/** How long a graceful stop may take before the process exits anyway. */
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+
 async function main(): Promise<void> {
   const result = readMcpHttpConfig();
   if (!result.ok) {
@@ -151,6 +161,9 @@ async function main(): Promise<void> {
     return;
   }
   const { port, token, host, extraAllowedHosts, publicMcpUrl, publicApiUrl } = result.config;
+
+  // Before listening, so no tool call can race ahead of the seam going live.
+  const boss = await startEnqueuer('[silo-mcp-http]');
 
   const httpServer = startMcpHttpServer({
     port,
@@ -182,12 +195,28 @@ async function main(): Promise<void> {
     if (stopping) return;
     stopping = true;
     console.error(`[silo-mcp-http] received ${signal}, stopping gracefully...`);
+    // An open SSE stream or a slow tool call would hold `close()` forever;
+    // exit after a bounded wait instead of waiting for the orchestrator's kill.
+    setTimeout(() => {
+      console.error('[silo-mcp-http] shutdown timed out, exiting.');
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS).unref();
+    // Close the listener first, then the boss: a tool call still in flight
+    // must not send on a stopping boss.
     httpServer.close((closeError) => {
+      let exitCode = 0;
       if (closeError) {
         console.error('[silo-mcp-http] error closing listener:', closeError);
+        exitCode = 1;
       }
-      process.exit(0);
+      (boss?.stop({ graceful: true }) ?? Promise.resolve())
+        .catch((error: unknown) => {
+          console.error('[silo-mcp-http] error stopping enqueuer boss:', error);
+          exitCode = 1;
+        })
+        .finally(() => process.exit(exitCode));
     });
+    httpServer.closeIdleConnections();
   };
 
   process.on('SIGTERM', shutdown);

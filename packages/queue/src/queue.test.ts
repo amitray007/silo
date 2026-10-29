@@ -36,10 +36,11 @@ describeIfPg('transactional enqueue (integration)', () => {
     core = await import('@silo/core');
     queueMod = await import('./queue.js');
 
-    boss = queueMod.createBoss();
-    await boss.start();
-    await queueMod.ensureEnrichLinkQueue(boss);
-    queueMod.registerEnqueuer(boss);
+    // The producer-only path the api and mcp processes use: if it failed to
+    // register the seam, every enqueue assertion below would see zero jobs.
+    const started = await queueMod.startEnqueuer('[queue-test]');
+    if (!started) throw new Error('startEnqueuer failed against the test database');
+    boss = started;
 
     inspectPool = new Pool({ connectionString: dbUrl });
   });

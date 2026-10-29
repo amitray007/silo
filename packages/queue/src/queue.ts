@@ -160,3 +160,46 @@ export function registerEnqueuer(boss: PgBoss): void {
     );
   });
 }
+
+/**
+ * Start a PRODUCER-ONLY enqueuer for a process that saves links but does not
+ * run the worker: connect pg-boss, ensure the queue, register core's enqueue
+ * seam. The api dev entrypoint and the `mcp` container's HTTP listener both
+ * need this — without it, core's seam stays a no-op and every capture or
+ * `retry_capture` in that process flips a link to `enriching` with no job
+ * behind it, until the sweep re-kicks it ~15 minutes later.
+ *
+ * Degrades rather than crashes: on failure it logs a loud banner, stops any
+ * boss that already started, and returns `undefined` so the caller keeps
+ * serving (links still save; they just wait for the sweep). On success it
+ * returns the started boss so the caller can stop it on shutdown, AFTER it
+ * stops accepting requests (a send on a stopping boss throws).
+ */
+export async function startEnqueuer(logPrefix: string): Promise<PgBoss | undefined> {
+  let boss: PgBoss | undefined;
+  try {
+    boss = createBoss();
+    boss.on('error', (error) => {
+      console.error(`${logPrefix} pg-boss error:`, error);
+    });
+    await boss.start();
+    await ensureEnrichLinkQueue(boss);
+    registerEnqueuer(boss);
+    console.error(
+      `${logPrefix} enrichment enqueuer registered — captures will enqueue for enrichment.`,
+    );
+    return boss;
+  } catch (error) {
+    const banner = '========================================================================';
+    console.error(banner);
+    console.error(`${logPrefix} FATAL-FOR-ENRICHMENT: failed to start the enrichment enqueuer.`);
+    console.error(
+      `${logPrefix} This process will keep serving (captures still save), but NEW LINKS ` +
+        'WILL NOT ENRICH until the sweep re-kicks them or the process restarts.',
+    );
+    console.error(`${logPrefix} Underlying error:`, error);
+    console.error(banner);
+    await boss?.stop({ graceful: false }).catch(() => {});
+    return undefined;
+  }
+}
