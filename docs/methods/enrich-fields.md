@@ -6,7 +6,7 @@ metadata extraction, the Reader render (sometimes in Chrome) and the AI title. A
 backfill of AI titles for 2,800 X posts pays for all of that, while the AI title
 needs only the post text Silo already stored.
 
-**Status: method file, waiting for gate 1.**
+**Status: approved (full send, 2026-10-29); built.**
 
 ## Behavior
 
@@ -17,7 +17,7 @@ needs only the post text Silo already stored.
 | Field | Writes | Work done | Skips |
 |-------|--------|-----------|-------|
 | `title` | `title`, `title_source` | X post with AI ready: AI title from the stored post text. Other links: page fetch and metadata extraction. | Reader render; for X also the page fetch |
-| `metadata` | title, description, image, site name | Page fetch and metadata extraction (X: post data from the source API) | Reader render |
+| `metadata` | title, description, image, site name | Page fetch and metadata extraction. X: description, image and site name from the source API, no title. | Reader render |
 | `source` | `source_data` (X post text and author, HN points, GitHub stats, YouTube details) | The source's own API only | Page fetch, extraction, Reader |
 | `reader` | full text, Reader view | Page fetch, extraction, Reader render | Source API, AI title |
 

@@ -220,7 +220,7 @@ describeIfPg('targeted enrichment worker (integration)', () => {
     expect(injected.safeFetch).not.toHaveBeenCalled();
     expect(injected.runXPostTitle).not.toHaveBeenCalled();
     expect(await core.getById(id)).toMatchObject({
-      title: 'Fresh post',
+      title: 'Original page title',
       description: 'Fresh post',
       imageUrl: 'https://i.test/post.png',
       siteName: 'X',

@@ -19,7 +19,7 @@ export const ENRICH_FIELD_DESCRIPTIONS = {
   title:
     'Writes title and title_source. X uses AI with stored post text (source API if missing), with no page fetch or Reader; AI off writes nothing. Other links fetch page metadata.',
   metadata:
-    'Writes title, description, image and site name. Fetches page metadata, or the source API for X; skips Reader.',
+    'Writes title, description, image and site name. Fetches page metadata; for X, the source API supplies description, image and site name (no title); skips Reader.',
   source: 'Writes source_data. Calls only the source API; skips page fetch, Reader and AI title.',
   reader:
     'Writes full text and Reader view. Fetches and extracts the page and may render it in Chrome; skips source API and AI title.',

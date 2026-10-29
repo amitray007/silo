@@ -484,12 +484,14 @@ async function narrowSource(
   return deps.enrichSource(link.sourceKind, link.url, plugins).catch(() => undefined);
 }
 
-/** Source API data supplies X metadata without fetching x.com. */
+/**
+ * Source API data supplies X metadata without fetching x.com. No title: on X only
+ * the AI writes a title, and the post text is not one.
+ */
 function twitterMetadata(source: SourceData | undefined): ExtractResult {
   if (source?.kind !== 'twitter') return { status: 'bare' };
   return {
     status: 'partial',
-    title: source.text,
     description: source.text,
     siteName: 'X',
     ...(source.thumbnailUrl ? { imageUrl: source.thumbnailUrl } : {}),
