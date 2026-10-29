@@ -53,28 +53,10 @@ export function ListRow({
   const [compact] = useCompactLinks();
   const revealTitle = useTitleReveal(link);
   const anchorRef = useRef<HTMLSpanElement>(null);
-  const [hovered, setHovered] = useState(false);
+  const { hovered, enter, leave } = useRowHover(onEnter, onLeave);
   const reader = useReaderSelection();
   const domain = deriveDomain(link.url);
   const selected = reader?.selectedId === link.id;
-  // Hover and focus belong to the whole row, actions included. Events that
-  // bubble from the menu portal, or move between the row and its actions, are
-  // not enter/leave.
-  const enter = (event: SyntheticEvent<HTMLElement>) => {
-    if (!event.currentTarget.contains(event.target as Node)) return;
-    const from = (event as { relatedTarget?: EventTarget | null }).relatedTarget;
-    if (event.type === 'focus' && from instanceof Node && event.currentTarget.contains(from))
-      return;
-    setHovered(true);
-    onEnter?.(event);
-  };
-  const leave = (event: SyntheticEvent<HTMLElement>) => {
-    if (!event.currentTarget.contains(event.target as Node)) return;
-    const to = (event as { relatedTarget?: EventTarget | null }).relatedTarget;
-    if (event.type === 'blur' && to instanceof Node && event.currentTarget.contains(to)) return;
-    setHovered(false);
-    onLeave?.();
-  };
   const actionTabIndex = !reader || selected ? 0 : -1;
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: hover and focus tracking only; the link and buttons inside carry the interaction.
@@ -132,20 +114,97 @@ export function ListRow({
         {link.notes && <span className="silo-row-note">"{link.notes}"</span>}
         <RowNoteIcon notes={link.notes} compact={compact} />
       </a>
-      <span className="silo-row-actions">
-        <button
-          type="button"
-          className="silo-reader-iconbtn"
-          tabIndex={actionTabIndex}
-          aria-label="Open original"
-          title="Open original"
-          onClick={(event) => {
-            event.stopPropagation();
-            window.open(link.url, '_blank', 'noopener,noreferrer');
-          }}
-        >
-          <ReaderIcon name="arrowUpRight" />
-        </button>
+      <RowActions
+        link={link}
+        actionTabIndex={actionTabIndex}
+        busy={busy}
+        purge={purge}
+        onRemove={onRemove}
+        onDelete={onDelete}
+        menuOpen={menuOpen}
+        toggleMenu={toggleMenu}
+        onMenu={onMenu}
+      />
+      {error && (
+        <span className="silo-toast" role="alert">
+          {error}
+        </span>
+      )}
+      <MenuPresence>{menu(anchorRef.current)}</MenuPresence>
+    </span>
+  );
+}
+
+function isInternalFocus(event: SyntheticEvent<HTMLElement>): boolean {
+  const related = (event as { relatedTarget?: EventTarget | null }).relatedTarget;
+  return (
+    (event.type === 'focus' || event.type === 'blur') &&
+    related instanceof Node &&
+    event.currentTarget.contains(related)
+  );
+}
+
+function useRowHover(
+  onEnter: ((event: SyntheticEvent<HTMLElement>) => void) | undefined,
+  onLeave: (() => void) | undefined,
+) {
+  const [hovered, setHovered] = useState(false);
+  // Hover and focus belong to the whole row, actions included. Events that
+  // bubble from the menu portal, or move between the row and its actions, are
+  // not enter/leave.
+  const enter = (event: SyntheticEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.target as Node)) return;
+    if (isInternalFocus(event)) return;
+    setHovered(true);
+    onEnter?.(event);
+  };
+  const leave = (event: SyntheticEvent<HTMLElement>) => {
+    if (!event.currentTarget.contains(event.target as Node)) return;
+    if (isInternalFocus(event)) return;
+    setHovered(false);
+    onLeave?.();
+  };
+  return { hovered, enter, leave };
+}
+
+function RowActions({
+  link,
+  actionTabIndex,
+  busy,
+  purge,
+  onRemove,
+  onDelete,
+  menuOpen,
+  toggleMenu,
+  onMenu,
+}: {
+  link: LinkJson;
+  actionTabIndex: number;
+  busy: boolean;
+  purge: number | undefined;
+  onRemove: () => void;
+  onDelete: (() => void) | undefined;
+  menuOpen: boolean;
+  toggleMenu: () => void;
+  onMenu: (() => void) | undefined;
+}) {
+  const feedPost = link.source === 'feed';
+  return (
+    <span className="silo-row-actions">
+      <button
+        type="button"
+        className="silo-reader-iconbtn"
+        tabIndex={actionTabIndex}
+        aria-label="Open original"
+        title="Open original"
+        onClick={(event) => {
+          event.stopPropagation();
+          window.open(link.url, '_blank', 'noopener,noreferrer');
+        }}
+      >
+        <ReaderIcon name="arrowUpRight" />
+      </button>
+      {!feedPost && (
         <button
           type="button"
           className="silo-reader-iconbtn"
@@ -160,22 +219,24 @@ export function ListRow({
         >
           <ReaderIcon name={purge === undefined ? 'trash' : 'restore'} />
         </button>
-        {onDelete && (
-          <button
-            type="button"
-            className="silo-reader-iconbtn"
-            tabIndex={actionTabIndex}
-            aria-label="Delete forever"
-            title="Delete forever"
-            disabled={busy}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDelete();
-            }}
-          >
-            <ReaderIcon name="trash" />
-          </button>
-        )}
+      )}
+      {onDelete && (
+        <button
+          type="button"
+          className="silo-reader-iconbtn"
+          tabIndex={actionTabIndex}
+          aria-label="Delete forever"
+          title="Delete forever"
+          disabled={busy}
+          onClick={(event) => {
+            event.stopPropagation();
+            onDelete();
+          }}
+        >
+          <ReaderIcon name="trash" />
+        </button>
+      )}
+      {!feedPost && (
         <button
           type="button"
           className="silo-rowmore silo-reader-iconbtn"
@@ -193,13 +254,7 @@ export function ListRow({
         >
           <ReaderIcon name="more" />
         </button>
-      </span>
-      {error && (
-        <span className="silo-toast" role="alert">
-          {error}
-        </span>
       )}
-      <MenuPresence>{menu(anchorRef.current)}</MenuPresence>
     </span>
   );
 }

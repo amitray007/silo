@@ -28,6 +28,9 @@ import type {
   CreatedAccessTokenJson,
   EditLinkRequest,
   EmptyTrashResponse,
+  FeedPostsResponse,
+  FeedResponse,
+  FeedsResponse,
   FrameHint,
   LinkJson,
   LinkResponse,
@@ -40,6 +43,8 @@ import type {
   SavedLinksResponse,
   SearchResponse,
   SettingsMap,
+  SubscribeFeedRequest,
+  SubscribeFeedResponse,
   TagsResponse,
   TrashLinkJson,
   TrashResponse,
@@ -57,6 +62,9 @@ import type {
  * (plan 008 W4 scope note) and will key off these same builders.
  */
 export const queryKeys = {
+  feeds: () => ['feeds'] as const,
+  feed: (id: string) => ['feed', id] as const,
+  feedPosts: (id: string) => ['feed-posts', id] as const,
   counts: () => ['counts'] as const,
   tags: () => ['tags'] as const,
   /**
@@ -1091,5 +1099,46 @@ export function useFrameHint(id: string, enabled: boolean) {
     enabled,
     retry: false,
     staleTime: 0,
+  });
+}
+
+export function useFeeds() {
+  return useQuery({
+    queryKey: queryKeys.feeds(),
+    queryFn: () => apiGet<FeedsResponse>('/api/feeds'),
+    refetchInterval: 60000,
+  });
+}
+export function useFeed(id: string) {
+  return useQuery({
+    queryKey: queryKeys.feed(id),
+    queryFn: () => apiGet<FeedResponse>(`/api/feeds/${id}`),
+    enabled: Boolean(id),
+    refetchInterval: 60000,
+  });
+}
+export function useFeedPosts(id: string, enabled = true) {
+  return useInfiniteQuery({
+    queryKey: queryKeys.feedPosts(id),
+    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
+      apiGet<FeedPostsResponse>(
+        `/api/feeds/${id}/posts${pageParam ? `?cursor=${encodeURIComponent(pageParam)}` : ''}`,
+      ),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page: FeedPostsResponse) => page.nextCursor,
+    enabled: enabled && Boolean(id),
+    refetchInterval: (query) => (hasEnrichingLink(query.state.data) ? 1500 : 60000),
+  });
+}
+export function useSubscribeFeed() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (input: SubscribeFeedRequest) =>
+      apiPost<SubscribeFeedResponse>('/api/feeds', input),
+    onSuccess: (result) => {
+      client.setQueryData(queryKeys.feed(result.feed.id), { feed: result.feed });
+      void client.invalidateQueries({ queryKey: queryKeys.feeds() });
+      void client.invalidateQueries({ queryKey: queryKeys.feedPosts(result.feed.id) });
+    },
   });
 }

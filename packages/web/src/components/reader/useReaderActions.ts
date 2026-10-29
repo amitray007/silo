@@ -45,7 +45,7 @@ export function useReaderActions(
   }
 
   function act(kind: 'trash' | 'restore' | 'delete') {
-    if (!link || busy) return;
+    if (!link || busy || link.source === 'feed') return;
     const mutation = { trash, restore, delete: remove }[kind];
     const target = link.id;
     mutation.mutate(target, {
@@ -68,7 +68,8 @@ export function useReaderActions(
     confirmingDelete,
     cancelDelete: () => setConfirmingDelete(false),
     confirmDelete: () => act('delete'),
-    edit: (focus: 'title' | 'note' | 'tags' = 'title') => !trashed && link && openEdit(link, focus),
+    edit: (focus: 'title' | 'note' | 'tags' = 'title') =>
+      !trashed && link && link.source !== 'feed' && openEdit(link, focus),
     open: () => {
       const url = link && originalUrl(link.url);
       if (url) window.open(url, '_blank', 'noopener,noreferrer');

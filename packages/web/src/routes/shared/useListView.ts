@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import type { ApiError } from '../../api/client';
-import { useInfiniteLinks } from '../../api/hooks';
+import { useFeedPosts, useInfiniteLinks } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 
 /**
@@ -36,9 +36,12 @@ export interface ListViewState {
   fetchNextPage: () => Promise<LinkJson[]>;
 }
 
-export function useListView(tag?: string): ListViewState {
-  const { data, isLoading, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
-    useInfiniteLinks(tag);
+export function useListView(tag?: string, feedId?: string): ListViewState {
+  const library = useInfiniteLinks(tag, { enabled: !feedId });
+  const feed = useFeedPosts(feedId ?? '', Boolean(feedId));
+  const { data, isLoading, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } = feedId
+    ? feed
+    : library;
 
   const links = data?.pages.flatMap((page) => page.links) ?? [];
 

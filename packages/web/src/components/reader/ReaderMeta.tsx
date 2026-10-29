@@ -31,7 +31,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
                 <span>#</span>
                 {tag}
               </Link>
-              {!trashed && (
+              {!trashed && link.source !== 'feed' && (
                 <button
                   type="button"
                   aria-label={`Remove tag ${tag}`}
@@ -43,7 +43,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
               )}
             </span>
           ))}
-          {!trashed && (
+          {!trashed && link.source !== 'feed' && (
             <div className="silo-meta-tag-anchor">
               <button
                 type="button"
@@ -74,7 +74,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
           {membership.error}
         </div>
       )}
-      <ReaderNote key={link.id} link={link} trashed={trashed} />
+      {link.source !== 'feed' && <ReaderNote key={link.id} link={link} trashed={trashed} />}
     </>
   );
 }

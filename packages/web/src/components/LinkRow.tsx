@@ -35,7 +35,9 @@ export function LinkRow({ link }: { link: LinkJson }) {
       error={trash.isError ? "Couldn't move this link to trash. Try again." : undefined}
       onRemove={() => trash.mutate(link.id)}
       menuOpen={menuOpen}
-      toggleMenu={() => toggleMenu(link.id)}
+      toggleMenu={() => {
+        if (link.source !== 'feed') toggleMenu(link.id);
+      }}
       menu={(anchor) =>
         menuOpen && (
           <RowPopover anchor={anchor} onDismiss={closeMenu}>

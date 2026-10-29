@@ -2,6 +2,7 @@ import { Route, Routes } from 'react-router';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { LoginGate } from './auth/LoginGate';
 import { AppFrame } from './components';
+import { FeedView } from './routes/FeedView';
 import { LibraryView } from './routes/LibraryView';
 import { NotFoundView } from './routes/NotFoundView';
 import { SettingsView } from './routes/SettingsView';
@@ -19,6 +20,7 @@ function AppRoutes() {
     <Routes>
       <Route element={<AppFrame />}>
         <Route path="/" element={<LibraryView />} />
+        <Route path="/feeds/:id" element={<FeedView />} />
         <Route path="/trash" element={<TrashView />} />
         <Route path="/tags/:name" element={<TagView />} />
         <Route path="/settings/*" element={<SettingsView />} />

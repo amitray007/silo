@@ -947,3 +947,48 @@ select {
 .silo-theme-switching *::after {
   transition: none !important;
 }
+
+.silo-feed-description {
+  color: var(--mut);
+  font-size: var(--text-sm);
+  line-height: 1.5;
+}
+.silo-feed-form {
+  display: grid;
+  gap: var(--s3);
+  margin-top: var(--s4);
+}
+.silo-feed-form > label {
+  font-weight: 500;
+  font-size: var(--text-sm);
+}
+.silo-feed-form > input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--ink);
+  font: inherit;
+}
+.silo-feed-checkbox {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 40px;
+}
+.silo-feed-error {
+  color: var(--warn);
+  font-size: var(--text-sm);
+}
+
+#silo-feed-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 4px 8px 8px;
+}
+#silo-feed-list > .silo-nav-item {
+  --nav-color: var(--fnt);
+}

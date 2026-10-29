@@ -55,10 +55,12 @@ function ReaderActions({
   actions,
   disabled,
   trashed,
+  feedPost,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
+  feedPost: boolean;
 }) {
   return (
     <div className="silo-reader-tools">
@@ -69,12 +71,14 @@ function ReaderActions({
         onClick={actions.open}
         disabled={disabled}
       />
-      <IconButton
-        name={trashed ? 'restore' : 'trash'}
-        label={trashed ? 'Restore' : 'Move to trash'}
-        onClick={trashed ? actions.restore : actions.trash}
-        disabled={disabled || actions.busy}
-      />
+      {!feedPost && (
+        <IconButton
+          name={trashed ? 'restore' : 'trash'}
+          label={trashed ? 'Restore' : 'Move to trash'}
+          onClick={trashed ? actions.restore : actions.trash}
+          disabled={disabled || actions.busy}
+        />
+      )}
     </div>
   );
 }
@@ -492,19 +496,26 @@ export function ReaderPane({
               )}
               {!phone && (
                 <div className="silo-reader-inline-actions">
-                  <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
+                  <ReaderActions
+                    actions={actions}
+                    disabled={!link}
+                    trashed={trashed}
+                    feedPost={link?.source === 'feed'}
+                  />
                 </div>
               )}
-              <ReaderMore
-                key={selectedId}
-                actions={actions}
-                disabled={!link}
-                trashed={trashed}
-                link={link}
-                original={shownOriginal}
-                open={openMenu === 'more'}
-                setOpen={(open) => setOpenMenu(open ? 'more' : null)}
-              />
+              {link?.source !== 'feed' && (
+                <ReaderMore
+                  key={selectedId}
+                  actions={actions}
+                  disabled={!link}
+                  trashed={trashed}
+                  link={link}
+                  original={shownOriginal}
+                  open={openMenu === 'more'}
+                  setOpen={(open) => setOpenMenu(open ? 'more' : null)}
+                />
+              )}
             </div>
           </>
         )}

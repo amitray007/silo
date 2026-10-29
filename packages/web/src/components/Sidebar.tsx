@@ -10,6 +10,7 @@ import { LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
+import { SidebarFeeds } from './SidebarFeeds';
 import { SidebarTags } from './SidebarTags';
 
 const noop = () => {};
@@ -164,6 +165,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           onNavigate={onNavigate}
         />
       </div>
+      <SidebarFeeds onNavigate={onNavigate} />
       <SidebarTags
         tags={tags}
         loading={tagsLoading}

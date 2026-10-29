@@ -112,6 +112,7 @@ function renderReader({
     const reads: Record<string, () => Response> = {
       '/api/auth/check': () => json({ authRequired: false }),
       '/api/settings': () => json(state.settings),
+      '/api/feeds': () => json({ feeds: [] }),
       '/api/tags': () => json({ tags: [{ name: 'mcp', count: tagCount ?? state.live.length }] }),
       '/api/counts': () =>
         json({
