@@ -78,7 +78,7 @@ export function ThemeToggle() {
               fontSize: 'var(--text-sm)',
               fontWeight: active ? 500 : 400,
               cursor: 'pointer',
-              color: active ? 'var(--ink)' : 'var(--ghost)',
+              color: active ? 'var(--ink)' : 'var(--fnt)',
               background: active ? 'var(--hov)' : 'transparent',
               transform: 'scale(1)',
             }}

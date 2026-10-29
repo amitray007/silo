@@ -1804,6 +1804,18 @@
 :root[data-theme="dark"] .silo-model-picker-popover {
   --model-popover-bg: color-mix(in oklch, var(--bg2), var(--ink) 4%);
 }
+/* Tertiary text fails on this lifted fill and its highlight, so it uses --mut. */
+:root[data-theme="dark"]
+  .silo-model-picker-popover
+  :is(
+    [cmdk-group-heading],
+    [cmdk-empty],
+    .silo-model-count,
+    .silo-model-option-meta,
+    .silo-model-context
+  ) {
+  color: var(--mut);
+}
 .silo-model-picker-popover .silo-palette-input {
   height: 36px;
   min-height: 36px;
