@@ -6,6 +6,7 @@ import { HeaderActionButton } from '../components/HeaderActionButton';
 import { TrashIcon } from '../components/NavIcons';
 import { PasteCaptureButton } from '../components/PasteCaptureButton';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
+import { TagMenu } from '../components/TagMenu';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
@@ -101,6 +102,7 @@ export function TagView() {
         headerSlot={
           <>
             <PasteCaptureButton tags={[tag]} />
+            <TagMenu tag={tag} />
             <DeleteTagButton tag={tag} />
           </>
         }

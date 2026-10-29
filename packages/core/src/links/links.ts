@@ -1201,7 +1201,12 @@ export async function editLink(id: string, input: EditLinkInput): Promise<Link |
  * `name` — a later `addTagWith(..., 'ai')` when `AI` already exists reuses
  * the existing row untouched, it does not overwrite `name`.
  */
-async function addTagWith(exec: Executor, linkId: string, tagName: string): Promise<void> {
+async function addTagWith(
+  exec: Executor,
+  linkId: string,
+  tagName: string,
+  retry = true,
+): Promise<void> {
   const name = tagName.trim();
   if (!name) return;
   const normalizedKey = normalizeTagKey(name);
@@ -1222,9 +1227,12 @@ async function addTagWith(exec: Executor, linkId: string, tagName: string): Prom
         .from(tags)
         .where(eq(tags.normalizedKey, normalizedKey))
         .limit(1)
+        .for('share')
     )[0]?.id;
   if (!tagId) {
-    throw new Error(`addTag: could not resolve tag "${name}"`);
+    if (!retry) throw new Error(`addTag: could not resolve tag "${name}"`);
+    await addTagWith(exec, linkId, name, false);
+    return;
   }
   await exec.insert(linkTags).values({ linkId, tagId }).onConflictDoNothing();
 }
@@ -1233,17 +1241,12 @@ async function addTagWith(exec: Executor, linkId: string, tagName: string): Prom
  * Attach `tagName` to `linkId`, creating the tag row if it doesn't exist yet
  * (keyed case-insensitively on `normalized_key`). Idempotent.
  *
- * Unlike `createLink`, this runs on the bare `db` executor, NOT in a
- * transaction: the tag insert and the `link_tags` insert are two separate
- * auto-committed statements. A crash between them can leave a newly-created
- * tag row with no `link_tags` referencing it — a harmless orphaned (unattached)
- * tag, not corruption. This is intentional and consistent with the existing
- * design where a tag row's lifetime is independent of any link (see
- * `removeTag`, which likewise never deletes the tag row).
+ * The transaction keeps the resolved tag locked until the association exists,
+ * so a concurrent rename/merge moves that association before deleting the tag.
  */
 export async function addTag(linkId: string, tagName: string): Promise<void> {
   await assertLibraryWrite(linkId);
-  await addTagWith(db, linkId, tagName);
+  await db.transaction((tx) => addTagWith(tx, linkId, tagName));
 }
 
 /**

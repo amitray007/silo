@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
+import { useTags } from '../api/hooks';
 import { TagMenu } from './TagMenu';
 
 afterEach(() => {
@@ -61,4 +62,75 @@ it('asks before merging and sends merge only after confirmation', async () => {
   fireEvent.click(within(confirm).getByRole('button', { name: 'Merge tags' }));
   await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
   expect(JSON.parse(fetch.mock.calls[1]?.[1]?.body as string).merge).toBe(true);
+});
+
+it('opens header actions without a context gesture and restores focus after cancel', async () => {
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <MemoryRouter>
+        <TagMenu tag="Phone" />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  const trigger = screen.getByRole('button', { name: 'Tag actions' });
+  trigger.focus();
+  fireEvent.click(trigger);
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  const dialog = screen.getByRole('dialog', { name: 'Rename tag' });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+});
+it('restores focus to the sidebar link after rename cancel', async () => {
+  mount();
+  const row = screen.getByRole('link', { name: 'Old' });
+  fireEvent.contextMenu(row);
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(document.activeElement).toBe(row));
+});
+
+it('restores focus to the renamed sidebar row after a delayed tag refresh', async () => {
+  let name = 'Old';
+  let releaseTags = () => {};
+  const refreshed = new Promise<void>((resolve) => {
+    releaseTags = resolve;
+  });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        name = 'Renamed';
+        return new Response(JSON.stringify({ name, merged: false }));
+      }
+      if (name === 'Renamed') await refreshed;
+      return new Response(JSON.stringify({ tags: [{ name, count: 1 }] }));
+    }),
+  );
+  function SidebarTags() {
+    const { data } = useTags();
+    return data?.tags.map((tag) => (
+      <TagMenu key={tag.name} tag={tag.name}>
+        <a href={`/tags/${tag.name}`}>{tag.name}</a>
+      </TagMenu>
+    ));
+  }
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <MemoryRouter initialEntries={['/tags/Old']}>
+        <SidebarTags />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  fireEvent.contextMenu(await screen.findByRole('link', { name: 'Old' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  const dialog = screen.getByRole('dialog', { name: 'Rename tag' });
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Renamed' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+  await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  expect(screen.getByRole('link', { name: 'Old' })).toBeTruthy();
+  releaseTags();
+  const row = await screen.findByRole('link', { name: 'Renamed' });
+  await waitFor(() => expect(document.activeElement).toBe(row));
 });

@@ -69,6 +69,7 @@ export function ModalShell({
   describedBy,
   focusPanel = false,
   anchored = false,
+  returnFocus,
 }: {
   /** Preferred width, capped to the available viewport. */
   width: number;
@@ -93,10 +94,14 @@ export function ModalShell({
   describedBy?: string;
   focusPanel?: boolean;
   anchored?: boolean;
+  /** Resolve a persistent trigger after a menu or renamed sidebar row unmounts. */
+  returnFocus?: () => HTMLElement | null | Promise<HTMLElement | null>;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
   const backdropPress = useRef(false);
+  const restoreFocus = useRef(returnFocus);
+  restoreFocus.current = returnFocus;
 
   useEffect(() => {
     ensureModalityListeners();
@@ -108,6 +113,14 @@ export function ModalShell({
     const openedViaKeyboard = lastWasKeyboard;
     panelRef.current?.focus();
     return () => {
+      if (restoreFocus.current) {
+        requestAnimationFrame(() => {
+          void Promise.resolve(restoreFocus.current?.()).then((target) => {
+            if (target?.isConnected) target.focus({ preventScroll: true });
+          });
+        });
+        return;
+      }
       if (!openedViaKeyboard) return;
       const trigger = triggerRef.current;
       if (trigger instanceof HTMLElement && document.contains(trigger)) {

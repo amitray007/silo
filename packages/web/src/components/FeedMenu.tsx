@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from 'react';
+import { type ReactNode, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { useRefreshFeed, useRenameFeed, useUnsubscribeFeed } from '../api/hooks';
@@ -13,6 +13,7 @@ import { copyLabel, useCopyFlash } from './SettingsTabs/copyFlash';
 import { SidebarContextMenu } from './SidebarContextMenu';
 
 export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactNode }) {
+  const trigger = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [confirm, setConfirm] = useState(false);
@@ -47,6 +48,7 @@ export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactN
           </SidebarContextMenu>
         ) : (
           <button
+            ref={trigger}
             type="button"
             className="silo-reader-iconbtn"
             aria-label="Feed actions"
@@ -129,6 +131,7 @@ export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactN
       </div>
       {renaming && (
         <RenameDialog
+          returnFocus={() => anchor ?? trigger.current}
           title="Rename feed"
           initialValue={feed.title}
           hint="Clear the name to use the publisher’s title."

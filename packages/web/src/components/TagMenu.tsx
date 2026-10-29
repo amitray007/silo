@@ -1,8 +1,9 @@
-import { type ReactNode, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { type ReactNode, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useMatch, useNavigate } from 'react-router';
 import { ApiError } from '../api/client';
-import { useDeleteTag, useRenameTag } from '../api/hooks';
+import { queryKeys, useDeleteTag, useRenameTag } from '../api/hooks';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
@@ -11,7 +12,10 @@ import { RowPopover } from './RowPopover';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SidebarContextMenu } from './SidebarContextMenu';
 
-export function TagMenu({ tag, children }: { tag: string; children: ReactNode }) {
+export function TagMenu({ tag, children }: { tag: string; children?: ReactNode }) {
+  const queryClient = useQueryClient();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const renamedTag = useRef(tag);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [open, setOpen] = useState(false);
   const [renaming, setRenaming] = useState(false);
@@ -27,6 +31,7 @@ export function TagMenu({ tag, children }: { tag: string; children: ReactNode })
       { name: tag, newName, merge },
       {
         onSuccess: (result) => {
+          renamedTag.current = result.name;
           setRenaming(false);
           setMergeName(null);
           if (current?.toLowerCase() === tag.toLowerCase())
@@ -40,46 +45,85 @@ export function TagMenu({ tag, children }: { tag: string; children: ReactNode })
   }
   return (
     <>
-      <SidebarContextMenu
-        onOpen={(row) => {
-          setAnchor(row);
-          setOpen(true);
-        }}
-      >
-        {children}
-      </SidebarContextMenu>
-      <RowPopover anchor={anchor} onDismiss={close}>
-        <MenuPresence>
-          {open && (
-            <MenuSurface label="Tag actions" onClose={close}>
-              <MenuAction
-                icon={<ReaderIcon name="edit" />}
-                onClick={() => {
-                  close();
-                  rename.reset();
-                  setRenaming(true);
-                }}
+      <div className={children ? undefined : 'silo-reader-more'}>
+        {children ? (
+          <SidebarContextMenu
+            onOpen={(row) => {
+              setAnchor(row);
+              setOpen(true);
+            }}
+          >
+            {children}
+          </SidebarContextMenu>
+        ) : (
+          <button
+            ref={trigger}
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label="Tag actions"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <ReaderIcon name="more" />
+          </button>
+        )}
+        <RowPopover anchor={anchor} onDismiss={close}>
+          <MenuPresence>
+            {open && (
+              <MenuSurface
+                label="Tag actions"
+                className={children ? '' : 'silo-reader-more-menu'}
+                onClose={close}
               >
-                Rename
-              </MenuAction>
-              <div className="silo-menu-separator" />
-              <MenuAction
-                danger
-                icon={<ReaderIcon name="trash" />}
-                onClick={() => {
-                  close();
-                  remove.reset();
-                  setConfirmDelete(true);
-                }}
-              >
-                Delete
-              </MenuAction>
-            </MenuSurface>
-          )}
-        </MenuPresence>
-      </RowPopover>
+                <MenuAction
+                  icon={<ReaderIcon name="edit" />}
+                  onClick={() => {
+                    close();
+                    rename.reset();
+                    setRenaming(true);
+                  }}
+                >
+                  Rename
+                </MenuAction>
+                <div className="silo-menu-separator" />
+                <MenuAction
+                  danger
+                  icon={<ReaderIcon name="trash" />}
+                  onClick={() => {
+                    close();
+                    remove.reset();
+                    setConfirmDelete(true);
+                  }}
+                >
+                  Delete
+                </MenuAction>
+              </MenuSurface>
+            )}
+          </MenuPresence>
+        </RowPopover>
+      </div>
       {renaming && (
         <RenameDialog
+          returnFocus={async () => {
+            if (!anchor) return trigger.current;
+            // A rename replaces the name-keyed sidebar row after its query refresh.
+            // Join that refresh before resolving the new row, without cancelling it.
+            if (renamedTag.current !== tag) {
+              await queryClient.refetchQueries(
+                { queryKey: queryKeys.tags() },
+                { cancelRefetch: false },
+              );
+              await new Promise(requestAnimationFrame);
+            }
+            if (anchor.isConnected) return anchor;
+            return (
+              Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]')).find(
+                (link) =>
+                  link.getAttribute('href') === `/tags/${encodeURIComponent(renamedTag.current)}`,
+              ) ?? null
+            );
+          }}
           title="Rename tag"
           initialValue={tag}
           pending={rename.isPending}

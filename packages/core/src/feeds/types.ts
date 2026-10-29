@@ -34,5 +34,8 @@ export function getFeedResolver(): FeedResolver | undefined {
 /** Accept publisher hostnames while preserving explicit schemes for edge validation. */
 export function normalizeFeedUrl(url: string): string {
   const value = url.trim();
-  return /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
+  const hasScheme =
+    value.includes('://') ||
+    /^(?:mailto|javascript|data|tel|sms|urn|about|blob|file|http|https|ftp):/i.test(value);
+  return hasScheme ? value : `https://${value}`;
 }

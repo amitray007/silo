@@ -4,6 +4,7 @@ import { ModalHeader, ModalShell } from './ModalShell';
 
 export function RenameDialog({
   title,
+  returnFocus,
   initialValue,
   pending,
   error,
@@ -12,6 +13,7 @@ export function RenameDialog({
   onSave,
 }: {
   title: string;
+  returnFocus: () => HTMLElement | null | Promise<HTMLElement | null>;
   initialValue: string;
   pending: boolean;
   error?: string | undefined;
@@ -30,7 +32,7 @@ export function RenameDialog({
     if (error) input.current?.focus();
   }, [error]);
   return createPortal(
-    <ModalShell width={420} ariaLabel={title} onClose={onClose} anchored>
+    <ModalShell width={420} ariaLabel={title} onClose={onClose} returnFocus={returnFocus} anchored>
       <ModalHeader title={title} onClose={onClose} />
       <form
         className="silo-rename-form"

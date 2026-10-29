@@ -27,6 +27,18 @@ describe('feed API against Postgres', () => {
     });
     expect((await app.request('/api/feeds', request('example.com'))).status).toBe(422);
     expect(resolvedUrl).toBe('https://example.com');
+    for (const url of ['example.com:8080/feed', 'localhost:8080']) {
+      expect((await app.request('/api/feeds', request(url))).status).toBe(422);
+      expect(resolvedUrl).toBe(`https://${url}`);
+    }
+    for (const url of [
+      'javascript:alert(1)',
+      'data:text/plain,feed',
+      'mailto:owner@example.com',
+      'ftp://example.com/feed',
+    ]) {
+      expect((await app.request('/api/feeds', request(url))).status).toBe(400);
+    }
     const missing = await app.request('/api/feeds', request('https://example.com'));
     expect(missing.status).toBe(422);
     expect(await missing.json()).toMatchObject({ error: 'feed_not_found' });

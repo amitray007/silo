@@ -96,11 +96,12 @@ export function MenuSurface({
   const closing = useMenuClosing();
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
-  const tabbing = useRef(false);
+  const triggerRef = useRef<Element | null>(null);
   close.current = onClose;
   const phone = sheet && matchMedia(layoutMedia.phone).matches;
   useEffect(() => {
     const trigger = document.activeElement;
+    triggerRef.current = trigger;
     const panel = ref.current;
     const boundary = panel?.parentElement?.classList.contains('silo-menu-presence')
       ? panel.parentElement.parentElement
@@ -130,7 +131,6 @@ export function MenuSurface({
       document.removeEventListener('mousedown', pointer);
       document.removeEventListener('keydown', keyboard, true);
       if (
-        !tabbing.current &&
         trigger instanceof HTMLElement &&
         trigger.isConnected &&
         (!document.activeElement ||
@@ -164,8 +164,10 @@ export function MenuSurface({
           onClose();
         }
         if (!phone && role === 'menu' && event.key === 'Tab') {
-          tabbing.current = true;
+          event.preventDefault();
           onClose();
+          if (triggerRef.current instanceof HTMLElement)
+            triggerRef.current.focus({ preventScroll: true });
         }
         if (phone) trapMenuTab(event);
       }}

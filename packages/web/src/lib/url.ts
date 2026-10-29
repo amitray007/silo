@@ -45,5 +45,8 @@ export function looksLikeUrl(value: string): boolean {
 
 export function normalizeFeedUrl(url: string): string {
   const value = url.trim();
-  return /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
+  const hasScheme =
+    value.includes('://') ||
+    /^(?:mailto|javascript|data|tel|sms|urn|about|blob|file|http|https|ftp):/i.test(value);
+  return hasScheme ? value : `https://${value}`;
 }
