@@ -56,6 +56,11 @@ input::placeholder,
 textarea::placeholder {
   color: var(--fnt);
 }
+/* Dark inputs and raised fills are lighter than the ground, where --fnt
+   drops under 4.5:1 (docs/design/tokens.md, Home audit). */
+:root[data-theme="dark"] :is(input, textarea)::placeholder {
+  color: var(--mut);
+}
 
 /* Accessibility floor: focus ring is NEVER amber. */
 a:focus-visible,

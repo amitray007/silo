@@ -197,6 +197,13 @@
   .silo-menu-item:hover {
     background: var(--menu-highlight);
   }
+  :root[data-theme="dark"] .silo-menu-item:hover kbd {
+    color: var(--mut);
+  }
+}
+/* --fnt fails on the dark menu highlight, so the key hint brightens with it. */
+:root[data-theme="dark"] .silo-menu-item:is(:focus, .is-current, [aria-current="true"]) kbd {
+  color: var(--mut);
 }
 .silo-menu-item:focus-visible {
   outline: 1px solid var(--line-2);
