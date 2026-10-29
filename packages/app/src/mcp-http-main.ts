@@ -203,20 +203,25 @@ async function main(): Promise<void> {
     }, SHUTDOWN_TIMEOUT_MS).unref();
     // Close the listener first, then the boss: a tool call still in flight
     // must not send on a stopping boss.
-    httpServer.close((closeError) => {
+    void (async () => {
       let exitCode = 0;
-      if (closeError) {
-        console.error('[silo-mcp-http] error closing listener:', closeError);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          httpServer.close((closeError) => (closeError ? reject(closeError) : resolve()));
+          httpServer.closeIdleConnections();
+        });
+      } catch (error: unknown) {
+        console.error('[silo-mcp-http] error closing listener:', error);
         exitCode = 1;
       }
-      (boss?.stop({ graceful: true }) ?? Promise.resolve())
-        .catch((error: unknown) => {
-          console.error('[silo-mcp-http] error stopping enqueuer boss:', error);
-          exitCode = 1;
-        })
-        .finally(() => process.exit(exitCode));
-    });
-    httpServer.closeIdleConnections();
+      try {
+        await boss?.stop({ graceful: true });
+      } catch (error: unknown) {
+        console.error('[silo-mcp-http] error stopping enqueuer boss:', error);
+        exitCode = 1;
+      }
+      process.exit(exitCode);
+    })();
   };
 
   process.on('SIGTERM', shutdown);

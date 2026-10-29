@@ -164,10 +164,9 @@ export function registerEnqueuer(boss: PgBoss): void {
 /**
  * Start a PRODUCER-ONLY enqueuer for a process that saves links but does not
  * run the worker: connect pg-boss, ensure the queue, register core's enqueue
- * seam. The api dev entrypoint and the `mcp` container's HTTP listener both
- * need this — without it, core's seam stays a no-op and every capture or
- * `retry_capture` in that process flips a link to `enriching` with no job
- * behind it, until the sweep re-kicks it ~15 minutes later.
+ * seam. Without it, core's seam stays a no-op in that process and every
+ * capture or re-enrich flips a link to `enriching` with no job behind it,
+ * until the stranded-link sweep re-kicks it.
  *
  * Degrades rather than crashes: on failure it logs a loud banner, stops any
  * boss that already started, and returns `undefined` so the caller keeps
