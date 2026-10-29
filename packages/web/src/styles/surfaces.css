@@ -1886,6 +1886,9 @@
   color: var(--fnt);
   font-variant-numeric: tabular-nums;
 }
+.silo-model-chip[aria-pressed="true"] .silo-model-count {
+  color: var(--mut);
+}
 .silo-model-chip:focus-visible {
   outline: 2px solid var(--fnt);
   outline-offset: -2px;

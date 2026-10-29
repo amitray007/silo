@@ -50,6 +50,18 @@ describe('NavItem', () => {
     expect(screen.getByText('12')).toBeDefined();
   });
 
+  it('uses tabular numerals for counts on active and inactive rows', () => {
+    render(
+      <>
+        <NavItem label="Library" href="/" meta={12} active />
+        <NavItem label="Trash" href="/trash" meta={3} />
+      </>,
+    );
+    for (const count of ['12', '3']) {
+      expect(screen.getByText(count).style.fontVariantNumeric).toBe('tabular-nums');
+    }
+  });
+
   it('is keyboard-focusable', () => {
     render(<NavItem label="Trash" href="/trash" />);
     const link = screen.getByRole('link', { name: /trash/i });

@@ -13,7 +13,7 @@
   --sel: color-mix(in oklch, oklch(97% 0 0), oklch(14.5% 0 0) 4%);
   --ink: oklch(14.5% 0 0);
   --mut: oklch(43.9% 0 0);
-  --fnt: oklch(55.6% 0 0);
+  --fnt: oklch(53% 0 0);
   --ghost: oklch(70.8% 0 0);
   --btn: oklch(26.9% 0 0);
   --btn-ink: oklch(99.11% 0 0);
@@ -108,7 +108,7 @@
   --sel: color-mix(in oklch, oklch(26.9% 0 0), oklch(99.11% 0 0) 5%);
   --ink: oklch(97% 0 0);
   --mut: oklch(70.8% 0 0);
-  --fnt: oklch(55.6% 0 0);
+  --fnt: oklch(60% 0 0);
   --btn: oklch(92.2% 0 0);
   --btn-ink: oklch(20.5% 0 0);
   --favicon-plate: oklch(92.2% 0 0);

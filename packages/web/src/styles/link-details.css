@@ -652,6 +652,9 @@
   color: var(--ink);
   background: var(--sel);
 }
+.silo-meta-tag:hover a span {
+  color: var(--mut);
+}
 /* The remove control takes no room at rest, so idle chips stay balanced. */
 .silo-meta-tag button {
   display: grid;

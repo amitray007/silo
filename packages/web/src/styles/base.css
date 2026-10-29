@@ -908,3 +908,30 @@ select {
   top: 59.615385%;
   opacity: 0.46;
 }
+
+@media (forced-colors: active) {
+  .silo-nav-item[aria-current="page"],
+  .silo-link-row[data-active="true"] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+
+  .silo-nav-item[aria-current="page"]:focus-visible,
+  .silo-link-row[data-active="true"]:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .silo-reader-segment-chip {
+    outline: 1px solid Highlight;
+  }
+
+  .silo-search-kbd,
+  .silo-mobile-bar {
+    border: 1px solid CanvasText;
+  }
+
+  .silo-brand-mark {
+    forced-color-adjust: none;
+  }
+}

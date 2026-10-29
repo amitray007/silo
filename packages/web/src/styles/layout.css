@@ -181,6 +181,7 @@
   text-overflow: ellipsis;
 }
 .silo-pane-count {
+  font-variant-numeric: tabular-nums;
   margin-left: 2px;
   font-size: 12px;
   color: var(--fnt);
@@ -289,6 +290,9 @@
   gap: 6px;
   align-items: center;
   min-width: 0;
+}
+.silo-link-row:is([data-active="true"], :active) .silo-row-meta {
+  color: var(--mut);
 }
 .silo-row-meta > span:first-child {
   white-space: nowrap;
@@ -1209,6 +1213,10 @@
   .silo-reader-tag:hover {
     background: var(--sel);
   }
+  button.silo-reader-notecard:hover > span:first-child,
+  .silo-reader-tag:hover span {
+    color: var(--mut);
+  }
 }
 @media (max-width: 640px) {
   .silo-sidebar {
@@ -1708,6 +1716,7 @@ div.silo-reader-notecard {
   z-index: 20;
 }
 .silo-collection-count {
+  font-variant-numeric: tabular-nums;
   margin-left: auto;
   padding-left: 16px;
   color: var(--ghost);
@@ -1973,10 +1982,10 @@ div.silo-reader-notecard {
   --fade-bottom: 20px;
 }
 #silo-tag-list > .silo-nav-item {
-  --nav-color: var(--ghost);
+  --nav-color: var(--fnt);
 }
 #silo-tag-list > .silo-nav-item .silo-nav-icon {
-  color: var(--ghost);
+  color: var(--fnt);
 }
 #silo-tag-list > .silo-nav-item > span:nth-child(2) {
   flex: none;
@@ -2211,6 +2220,7 @@ div.silo-reader-notecard {
   cursor: pointer;
 }
 .silo-mobile-bar-button:is([aria-current="page"], [aria-expanded="true"]) {
+  background: var(--sel);
   color: var(--ink);
 }
 .silo-mobile-bar-button .silo-reader-icon {
