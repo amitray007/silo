@@ -4,6 +4,8 @@ import { enqueueEnrichment } from '../links/enqueue.js';
 import type { Link, Tx } from '../links/executor.js';
 import { bestCaptureStatus, mergeCaptureFields } from '../links/merge-content.js';
 
+const SAVE_SOURCE = { user: 'web', agent: 'mcp' } as const;
+
 export type SaveFeedPostResult =
   | { id: string; outcome: 'created' | 'existing' | 'revived' }
   | { error: 'not_found' | 'not_feed_post' };
@@ -61,7 +63,12 @@ function revivedContent(existing: Link, post: Link) {
   };
 }
 
-async function saveWith(tx: Tx, feedId: string, postId: string): Promise<SaveFeedPostResult> {
+async function saveWith(
+  tx: Tx,
+  feedId: string,
+  postId: string,
+  origin: 'user' | 'agent',
+): Promise<SaveFeedPostResult> {
   // Serialize saves of this post, including the saved pointer and enqueue decision.
   const [post] = await tx.select().from(links).where(eq(links.id, postId)).for('update');
   if (!post || post.deletedAt) return { error: 'not_found' };
@@ -86,9 +93,8 @@ async function saveWith(tx: Tx, feedId: string, postId: string): Promise<SaveFee
       .insert(links)
       .values({
         ...copiedContent(post),
-        // This is an explicit manual save in the web app, not automatic feed capture.
-        source: 'web',
-        addedBy: 'user',
+        source: SAVE_SOURCE[origin],
+        addedBy: origin,
       })
       .returning({ id: links.id });
     id = created?.id;
@@ -111,14 +117,18 @@ async function saveWith(tx: Tx, feedId: string, postId: string): Promise<SaveFee
 }
 
 /** The pond partial unique index arbitrates races with other saves and normal captures. */
-export async function saveFeedPost(feedId: string, postId: string): Promise<SaveFeedPostResult> {
+export async function saveFeedPost(
+  feedId: string,
+  postId: string,
+  origin: 'user' | 'agent' = 'user',
+): Promise<SaveFeedPostResult> {
   try {
-    return await db.transaction((tx) => saveWith(tx, feedId, postId));
+    return await db.transaction((tx) => saveWith(tx, feedId, postId, origin));
   } catch (error) {
     const cause =
       error instanceof Error ? (error.cause as { code?: string; constraint?: string }) : undefined;
     if (cause?.code !== '23505' || cause.constraint !== 'links_canonical_url_library_unique_idx')
       throw error;
-    return db.transaction((tx) => saveWith(tx, feedId, postId));
+    return db.transaction((tx) => saveWith(tx, feedId, postId, origin));
   }
 }

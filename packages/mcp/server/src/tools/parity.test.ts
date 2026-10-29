@@ -3,11 +3,12 @@ import { expect, it } from 'vitest';
 import { describeMcpTool, seedLink } from './test-support/mcp-server-harness.js';
 
 describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
-  it('registers exactly the expected tools, the four new ones included', async () => {
+  it('registers exactly the expected tools, including feed subscriptions and triage', async () => {
     const { client } = getContext();
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
       'add_link_tag',
+      'archive_feed_post',
       'capture_link',
       'create_tag',
       'delete_tag',
@@ -16,6 +17,8 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       'find_related',
       'get_link',
       'hard_delete_link',
+      'list_feed_posts',
+      'list_feeds',
       'list_links',
       'list_tags',
       'list_trash',
@@ -23,8 +26,12 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       'remove_link_tag',
       'restore_link',
       'retry_capture',
+      'save_feed_post',
       'search_links',
+      'subscribe_feed',
       'trash_link',
+      'unarchive_feed_post',
+      'unsubscribe_feed',
     ]);
   });
 

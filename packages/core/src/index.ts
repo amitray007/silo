@@ -100,6 +100,7 @@ export {
   listDueFeeds,
   listFeedPosts,
   listFeeds,
+  listFeedsPage,
   pollFeed,
   subscribeFeed,
 } from './feeds/feeds.js';

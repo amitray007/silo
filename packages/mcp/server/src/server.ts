@@ -5,6 +5,7 @@ import { registerCreateTag } from './tools/create-tag.js';
 import { registerDeleteTag } from './tools/delete-tag.js';
 import { registerEditLink } from './tools/edit-link.js';
 import { registerExportLinks } from './tools/export-links.js';
+import { registerFeedTools } from './tools/feeds.js';
 import { registerFindRelated } from './tools/find-related.js';
 import { registerGetLink } from './tools/get-link.js';
 import { registerHardDeleteLink } from './tools/hard-delete-link.js';
@@ -84,6 +85,7 @@ export function createSiloMcpServer(): McpServer {
   registerListTrash(server);
 
   registerRefreshReader(server);
+  registerFeedTools(server);
 
   return server;
 }

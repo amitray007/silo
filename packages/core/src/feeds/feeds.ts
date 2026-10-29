@@ -49,6 +49,30 @@ export type Feed = Pick<
 export function listFeeds(): Promise<Feed[]> {
   return db.select(feedColumns).from(feeds).orderBy(asc(feeds.createdAt), asc(feeds.id));
 }
+
+/** Bounded feed discovery for agents, ordered by subscription time and id. */
+export async function listFeedsPage(page: PageParams = {}) {
+  const limit = effectiveLimit(page.limit);
+  const cursor = page.cursor ? decodeListCursor(page.cursor) : undefined;
+  const rows = await db
+    .select({ feed: feedColumns, sortDate: sql<string>`${feeds.createdAt}::text` })
+    .from(feeds)
+    .where(
+      cursor
+        ? sql`(${feeds.createdAt}, ${feeds.id}) > (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
+        : undefined,
+    )
+    .orderBy(asc(feeds.createdAt), asc(feeds.id))
+    .limit(limit + 1);
+  const visible = rows.slice(0, limit);
+  const last = visible.at(-1);
+  return {
+    feeds: visible.map((row) => row.feed),
+    ...(rows.length > limit && last
+      ? { nextCursor: encodeListCursor(last.sortDate, last.feed.id) }
+      : {}),
+  };
+}
 export async function getFeed(id: string): Promise<Feed | null> {
   const [row] = await db.select(feedColumns).from(feeds).where(eq(feeds.id, id));
   return row ?? null;

@@ -27,6 +27,10 @@ import { startMcpHttpServer } from './mcp-http.js';
  * transport connects, and a stray stdout write would corrupt the protocol.
  */
 async function main(): Promise<void> {
+  // Worker diagnostics must never enter the stdio JSON-RPC stream.
+  console.log = console.error;
+  console.info = console.error;
+  console.debug = console.error;
   const worker = await startWorker();
   console.error('[silo] worker started (enqueuer registered, enrichment loop running)');
   // The MCP `refresh_reader` tool needs a Reader refresher in this process.
