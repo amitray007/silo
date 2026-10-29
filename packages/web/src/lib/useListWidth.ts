@@ -1,6 +1,6 @@
 import { useSyncExternalStore } from 'react';
 
-export const DEFAULT_LIST_WIDTH = 360;
+export const DEFAULT_LIST_WIDTH = 384;
 export const MIN_LIST_WIDTH = 280;
 export const MAX_LIST_WIDTH = 720;
 const KEY = 'silo.listWidth';

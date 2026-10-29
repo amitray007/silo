@@ -1122,3 +1122,11 @@ select {
   line-height: 20px;
   font-weight: 500;
 }
+
+.silo-feed-tabs > .silo-reader-segment {
+  width: 100%;
+}
+.silo-feed-tabs .silo-reader-segment > button {
+  flex: 1;
+  min-width: 0;
+}

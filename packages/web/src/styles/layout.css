@@ -92,7 +92,7 @@
   min-height: 0;
 }
 .silo-listpane {
-  width: 360px;
+  width: 384px;
   flex: none;
   min-width: 0;
   display: flex;
@@ -104,7 +104,7 @@
   display: none;
   position: absolute;
   inset-block: 0;
-  left: clamp(280px, var(--list-w, 360px), calc(100% - 420px));
+  left: clamp(280px, var(--list-w, 384px), calc(100% - 420px));
   width: 8px;
   margin-left: -4px;
   z-index: 24;
@@ -1275,7 +1275,7 @@
 }
 @media (min-width: 1024px) {
   .silo-listpane {
-    width: clamp(280px, var(--list-w, 360px), calc(100% - 420px));
+    width: clamp(280px, var(--list-w, 384px), calc(100% - 420px));
   }
   .silo-readerpane {
     min-width: 420px;
@@ -1943,6 +1943,7 @@ div.silo-reader-notecard {
   box-shadow: 0 0 0 0.5px var(--line);
 }
 .silo-tags-header {
+  min-height: 24px;
   gap: 0;
   margin: 0;
   padding: 0;

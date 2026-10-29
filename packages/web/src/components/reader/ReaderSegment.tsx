@@ -30,8 +30,10 @@ export function SegmentTabs<T extends string>({
       if (!button || !chip.current || !root.current) return;
       const box = button.getBoundingClientRect();
       const origin = root.current.getBoundingClientRect();
-      chip.current.style.width = `${box.width}px`;
-      chip.current.style.transform = `translateX(${box.left - origin.left - 2}px)`;
+      // Measure layout width so the centered press scale cannot shrink or shift the chip.
+      const width = Number.parseFloat(getComputedStyle(button).width) || box.width;
+      chip.current.style.width = `${width}px`;
+      chip.current.style.transform = `translateX(${box.left - origin.left - 2 - (width - box.width) / 2}px)`;
     };
     update();
     void document.fonts?.ready.then(update);
