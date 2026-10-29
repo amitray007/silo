@@ -2036,6 +2036,7 @@ div.silo-reader-notecard {
   }
 }
 .silo-tags-header .silo-icon-btn-sm svg {
+  stroke-width: 1.875;
   width: 16px;
   height: 16px;
 }
@@ -2259,6 +2260,7 @@ div.silo-reader-notecard {
   color: var(--ink);
 }
 .silo-mobile-bar-button .silo-reader-icon {
+  stroke-width: 1.0714;
   width: 28px;
   height: 28px;
 }
