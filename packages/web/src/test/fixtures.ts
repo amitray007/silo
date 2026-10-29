@@ -20,6 +20,7 @@ export function makeLink(overrides: Partial<LinkJson> = {}): LinkJson {
     captureStatus: 'full',
     addedBy: 'user',
     source: 'unknown',
+    feedId: null,
     notes: null,
     tags: [],
     createdAt: '2026-07-05T12:00:00.000Z',

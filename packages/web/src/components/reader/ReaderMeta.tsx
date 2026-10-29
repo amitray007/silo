@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { useEditLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
+import { isFeedPost } from '../../lib/isFeedPost';
 import { relativeTimeFromNow } from '../../lib/relativeTime';
 import { deriveDomain } from '../../lib/url';
 import { Chip } from '../Chip';
@@ -31,7 +32,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
                 <span>#</span>
                 {tag}
               </Link>
-              {!trashed && link.source !== 'feed' && (
+              {!trashed && !isFeedPost(link) && (
                 <button
                   type="button"
                   aria-label={`Remove tag ${tag}`}
@@ -43,7 +44,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
               )}
             </span>
           ))}
-          {!trashed && link.source !== 'feed' && (
+          {!trashed && !isFeedPost(link) && (
             <div className="silo-meta-tag-anchor">
               <button
                 type="button"
@@ -74,7 +75,7 @@ export function ReaderMeta({ link, trashed }: { link: LinkJson; trashed: boolean
           {membership.error}
         </div>
       )}
-      {link.source !== 'feed' && <ReaderNote key={link.id} link={link} trashed={trashed} />}
+      {!isFeedPost(link) && <ReaderNote key={link.id} link={link} trashed={trashed} />}
     </>
   );
 }

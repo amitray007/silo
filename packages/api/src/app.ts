@@ -2,7 +2,7 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { InvalidCursorError } from '@silo/core';
+import { FeedPostNotEditableError, InvalidCursorError } from '@silo/core';
 import { Hono } from 'hono';
 import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
@@ -298,6 +298,9 @@ export function createApp(): Hono {
   app.notFound((c) => c.json(errorBody('not_found', 'Not found'), 404));
 
   app.onError((error, c) => {
+    if (error instanceof FeedPostNotEditableError) {
+      return c.json(errorBody(error.code, error.message), 409);
+    }
     if (error instanceof InvalidCursorError) {
       return c.json(errorBody('invalid_cursor', error.message), 400);
     }

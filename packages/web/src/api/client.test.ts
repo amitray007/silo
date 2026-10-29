@@ -44,6 +44,7 @@ const linkFixture: LinkJson = {
   captureStatus: 'full',
   addedBy: 'user',
   source: 'web',
+  feedId: null,
   notes: null,
   tags: ['mcp'],
   createdAt: '2026-07-01T00:00:00.000Z',

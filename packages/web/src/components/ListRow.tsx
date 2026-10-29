@@ -1,5 +1,6 @@
 import { type ReactNode, type SyntheticEvent, useRef, useState } from 'react';
 import type { LinkJson } from '../api/types';
+import { isFeedPost } from '../lib/isFeedPost';
 import { relativeTimeFromNow } from '../lib/relativeTime';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { useCompactLinks } from '../lib/useCompactLinks';
@@ -188,7 +189,7 @@ function RowActions({
   toggleMenu: () => void;
   onMenu: (() => void) | undefined;
 }) {
-  const feedPost = link.source === 'feed';
+  const feedPost = isFeedPost(link);
   return (
     <span className="silo-row-actions">
       <button

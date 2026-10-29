@@ -63,6 +63,7 @@ export type LinkJson = {
   captureStatus: 'enriching' | 'full' | 'partial' | 'bare';
   addedBy: 'user' | 'agent';
   source: CaptureSource;
+  feedId: string | null;
   notes: string | null;
   tags: string[];
   createdAt: string;
@@ -133,6 +134,7 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
     captureStatus: link.captureStatus,
     addedBy: link.addedBy,
     source: link.source,
+    feedId: link.feedId,
     notes: link.notes,
     tags: link.tags,
     createdAt: link.createdAt.toISOString(),

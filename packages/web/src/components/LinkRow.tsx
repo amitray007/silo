@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { useSettings, useTrashLink } from '../api/hooks';
 import type { LinkJson, SettingsMap } from '../api/types';
+import { isFeedPost } from '../lib/isFeedPost';
 import { isHoverCapable } from '../lib/pointer';
 import { useHoverPreview } from './HoverPreviewContext';
 import { ListRow } from './ListRow';
@@ -36,7 +37,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
       onRemove={() => trash.mutate(link.id)}
       menuOpen={menuOpen}
       toggleMenu={() => {
-        if (link.source !== 'feed') toggleMenu(link.id);
+        if (!isFeedPost(link)) toggleMenu(link.id);
       }}
       menu={(anchor) =>
         menuOpen && (

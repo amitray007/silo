@@ -130,7 +130,9 @@ describe('feeds on real Postgres', () => {
     expect((await h.mod().searchTrash('riversecret')).results).toEqual([]);
     expect(await h.mod().countTrash()).toBe(0);
     expect(await h.mod().emptyTrash()).toBe(0);
-    expect(await h.mod().hardDelete(post.id)).toBe(false);
+    await expect(h.mod().hardDelete(post.id)).rejects.toMatchObject({
+      code: 'feed_post_not_editable',
+    });
   });
   it('enqueues atomically, and rolls the seen-set back when enqueue fails', async () => {
     const { feed, resolved } = await subscribe([], false);

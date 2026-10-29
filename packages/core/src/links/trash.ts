@@ -1,5 +1,6 @@
 import { db, links } from '@silo/db';
 import { and, desc, sql } from 'drizzle-orm';
+import { assertLibraryWrite } from './library-write.js';
 import type { SearchPage } from './links.js';
 import { buildSnippetHeadline, tagSearchVector } from './links.js';
 import { whereLibrary } from './live.js';
@@ -198,6 +199,7 @@ export async function getCounts(): Promise<Counts> {
  * discipline at the single-row scale.
  */
 export async function hardDelete(id: string): Promise<boolean> {
+  await assertLibraryWrite(id);
   const deleted = await db.execute<{ id: string }>(sql`
     delete from ${links}
     where ${links.id} = ${id}

@@ -248,6 +248,7 @@ export function registerLinksWriteRoutes(app: Hono): void {
         sourceKind: body.sourceKind ?? 'link',
         origin: 'user',
       };
+      if (body.source !== undefined) input.source = body.source;
       if (body.tags !== undefined) input.tags = body.tags;
       if (body.note !== undefined) input.notes = body.note;
       return input;

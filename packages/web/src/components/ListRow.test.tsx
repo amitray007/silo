@@ -300,3 +300,11 @@ describe('row semantics and keyboard', () => {
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
 });
+
+it.each([
+  [{ source: 'feed', feedId: null }, true],
+  [{ source: 'web', feedId: 'feed-123' }, false],
+] as const)('uses membership for library actions: %j', (fields, editable) => {
+  render(<Row link={makeLink(fields)} />);
+  expect(screen.queryByRole('button', { name: /more|actions|menu/i }) !== null).toBe(editable);
+});

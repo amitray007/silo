@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useDeleteNow, useRestoreLink, useTrashLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
+import { isFeedPost } from '../../lib/isFeedPost';
 import { isTextEntryElement } from '../../lib/usePasteCapture';
 import { useRowMenu } from '../RowMenuContext';
 
@@ -45,7 +46,7 @@ export function useReaderActions(
   }
 
   function act(kind: 'trash' | 'restore' | 'delete') {
-    if (!link || busy || link.source === 'feed') return;
+    if (!link || busy || isFeedPost(link)) return;
     const mutation = { trash, restore, delete: remove }[kind];
     const target = link.id;
     mutation.mutate(target, {
@@ -69,7 +70,7 @@ export function useReaderActions(
     cancelDelete: () => setConfirmingDelete(false),
     confirmDelete: () => act('delete'),
     edit: (focus: 'title' | 'note' | 'tags' = 'title') =>
-      !trashed && link && link.source !== 'feed' && openEdit(link, focus),
+      !trashed && link && !isFeedPost(link) && openEdit(link, focus),
     open: () => {
       const url = link && originalUrl(link.url);
       if (url) window.open(url, '_blank', 'noopener,noreferrer');

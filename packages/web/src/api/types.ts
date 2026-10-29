@@ -138,6 +138,7 @@ export type LinkJson = {
   captureStatus: CaptureStatus;
   addedBy: AddedBy;
   source: CaptureSource;
+  feedId: string | null;
   notes: string | null;
   tags: string[];
   createdAt: string;

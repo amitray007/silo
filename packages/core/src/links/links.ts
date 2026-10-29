@@ -5,6 +5,7 @@ import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Executor, Link } from './executor.js';
+import { assertLibraryWrite } from './library-write.js';
 import { whereFeed, whereLibrary } from './live.js';
 import {
   decodeListCursor,
@@ -1176,6 +1177,7 @@ export type EditLinkInput = {
  * which branch runs.
  */
 export async function editLink(id: string, input: EditLinkInput): Promise<Link | null> {
+  await assertLibraryWrite(id);
   const patch: Partial<Pick<Link, 'title' | 'titleSource' | 'description' | 'notes'>> = {};
   if (input.title !== undefined) {
     patch.title = input.title;
@@ -1243,8 +1245,7 @@ async function addTagWith(exec: Executor, linkId: string, tagName: string): Prom
  * `removeTag`, which likewise never deletes the tag row).
  */
 export async function addTag(linkId: string, tagName: string): Promise<void> {
-  const link = await getRawById(linkId);
-  if (link?.feedId) throw new Error('Save a feed post to Home before adding tags.');
+  await assertLibraryWrite(linkId);
   await addTagWith(db, linkId, tagName);
 }
 
@@ -1254,6 +1255,7 @@ export async function addTag(linkId: string, tagName: string): Promise<void> {
  * itself is never deleted (may be used elsewhere).
  */
 export async function removeTag(linkId: string, tagName: string): Promise<void> {
+  await assertLibraryWrite(linkId);
   const name = tagName.trim();
   if (!name) return;
   const normalizedKey = normalizeTagKey(name);
@@ -1264,6 +1266,7 @@ export async function removeTag(linkId: string, tagName: string): Promise<void> 
 
 /** Soft-delete: move a live link to trash by setting `deleted_at`. */
 export async function softDelete(id: string, feedId?: string | null): Promise<Link | null> {
+  if (!feedId) await assertLibraryWrite(id);
   const [updated] = await db
     .update(links)
     .set({ deletedAt: new Date() })
@@ -1293,6 +1296,7 @@ export type RestoreResult =
  * retry so a concurrent softDelete of the colliding row doesn't leak a 23505.
  */
 export async function restore(id: string): Promise<RestoreResult> {
+  await assertLibraryWrite(id);
   for (let attempt = 0; attempt < 3; attempt++) {
     const [trashedRow] = await db
       .select()

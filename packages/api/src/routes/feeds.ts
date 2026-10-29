@@ -50,7 +50,6 @@ export function registerFeedRoutes(app: Hono): void {
       ...result,
       links: result.links.map((link) => ({
         ...toLinkJson(link),
-        feedId: link.feedId,
         publishedAt: link.publishedAt?.toISOString() ?? null,
       })),
     });

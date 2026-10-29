@@ -2,6 +2,7 @@ import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } fr
 import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
+import { isFeedPost } from '../../lib/isFeedPost';
 import { deriveTitleFromUrl } from '../../lib/url';
 import { useHideOnScroll } from '../../lib/useHideOnScroll';
 import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
@@ -500,11 +501,11 @@ export function ReaderPane({
                     actions={actions}
                     disabled={!link}
                     trashed={trashed}
-                    feedPost={link?.source === 'feed'}
+                    feedPost={isFeedPost(link)}
                   />
                 </div>
               )}
-              {link?.source !== 'feed' && (
+              {!isFeedPost(link) && (
                 <ReaderMore
                   key={selectedId}
                   actions={actions}
