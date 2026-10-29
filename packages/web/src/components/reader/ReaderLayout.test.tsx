@@ -392,6 +392,20 @@ describe('list pane resizing', () => {
 });
 
 describe('reader selection and history', () => {
+  it('keeps the reader head empty until selection and after closing', async () => {
+    const { container } = renderReader();
+    await waitFor(() => expect(container.querySelector('.silo-reader-head')).not.toBeNull());
+    const head = container.querySelector('.silo-reader-head');
+    expect(head?.querySelectorAll('button, [role="tab"]').length).toBe(0);
+    await selectFirst();
+    expect(reader().getByRole<HTMLButtonElement>('tab', { name: 'Reader' }).disabled).toBe(false);
+    fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
+    expect(reader().getByRole('tab', { name: 'Live' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(reader().getByRole('button', { name: 'Close reader' }));
+    await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
+    expect(head?.childElementCount).toBe(0);
+  });
+
   it.each(['/?link=a', '/tags/mcp?link=a', '/trash?link=a'])(
     'returns to the same reader URL after visiting Settings from %s',
     async (route) => {

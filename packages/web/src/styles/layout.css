@@ -468,6 +468,12 @@
   font-family: inherit;
   cursor: pointer;
 }
+.silo-reader-segment:has(button:disabled) {
+  opacity: 0.5;
+}
+.silo-reader-segment button:disabled {
+  cursor: default;
+}
 .silo-reader-segment button[aria-selected="true"] {
   background: none;
   color: var(--ink);
