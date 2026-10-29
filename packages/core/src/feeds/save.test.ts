@@ -180,6 +180,34 @@ describe('Save to Home on real Postgres', () => {
       expect(enqueue).not.toHaveBeenCalled();
     },
   );
+  it.each(['twitter', 'hacker_news'])(
+    'keeps rich %s source data when a bare post revives Home',
+    async (kind) => {
+      const core = h.mod();
+      const row = await post();
+      const pond = await core.createLink({ url: row.url, sourceKind: 'link' });
+      const data = { kind, title: 'Rich source', score: 42 };
+      await h
+        .rawDb()
+        .execute(sql`update links set source_kind = ${kind}, source_data = ${JSON.stringify(data)}::jsonb,
+      capture_status = 'full' where id = ${pond.id}`);
+      await core.softDelete(pond.id);
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      await core.saveFeedPost(row.feedId ?? '', row.id);
+      const saved = await h
+        .rawDb()
+        .execute(
+          sql`select source_kind, source_data, capture_status from links where id = ${pond.id}`,
+        );
+      expect(saved.rows[0]).toMatchObject({
+        source_kind: kind,
+        source_data: data,
+        capture_status: 'full',
+      });
+      expect(enqueue).not.toHaveBeenCalled();
+    },
+  );
   it('enqueues a revived incomplete merge with its preserved status', async () => {
     const core = h.mod();
     const row = await post();

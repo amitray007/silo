@@ -437,6 +437,7 @@ export type SavedLinksResponse = { saved: string[] };
 export type LinkTitlesResponse = { titles: Record<string, string> };
 
 export type FeedJson = {
+  lastPolledAt?: string | null;
   id: string;
   title: string;
   feedUrl: string;

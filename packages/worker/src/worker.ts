@@ -19,9 +19,8 @@ import {
   ensureEnrichLinkQueue,
   logDlqDepth,
   registerEnqueuer,
+  registerFeedPollEnqueuer,
 } from '@silo/queue';
-import { sql } from 'drizzle-orm';
-import { fromDrizzle } from 'pg-boss';
 import { prepareAiAtStartup } from './ai/startup.js';
 import { closeBrowserReader } from './browser/reader.js';
 import { runEnrichJob } from './enrich-job.js';
@@ -75,6 +74,7 @@ export async function startWorker(): Promise<WorkerHandle> {
   // in THIS process (or any process that imported and registered) enqueue
   // transactionally. (The API process, when it exists, registers the same way.)
   registerEnqueuer(boss);
+  const enqueueFeedPoll = await registerFeedPollEnqueuer(boss);
 
   // Register the three scheduled maintenance jobs (scheduling-jobs slice):
   // purge-trash (daily), sweep-enriching (~5min), dlq-alert (~10min). Each
@@ -100,9 +100,7 @@ export async function startWorker(): Promise<WorkerHandle> {
   );
 
   return {
-    enqueueFeedPoll: async (tx, feedId) => {
-      await boss.send('poll-feed', { feedId }, { singletonKey: feedId, db: fromDrizzle(tx, sql) });
-    },
+    enqueueFeedPoll,
     stop: async () => {
       await boss.stop({ graceful: true });
       await closeBrowserReader();

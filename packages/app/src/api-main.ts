@@ -75,7 +75,6 @@ function readHost(): string {
 async function startWorkerOrDegrade(): Promise<WorkerHandle | undefined> {
   try {
     const worker = await startWorker();
-    setFeedPollEnqueuer(worker.enqueueFeedPoll);
     console.error('[silo/app:api] worker started (enqueuer registered, enrichment loop running)');
     return worker;
   } catch (error) {

@@ -70,6 +70,32 @@ describeIfPg('transactional enqueue (integration)', () => {
     return rows.rows[0]?.n ?? 0;
   }
 
+  it('a producer alone creates the poll queue and refresh enqueues one transactional job', async () => {
+    core.setFeedResolver(async () => ({
+      feedUrl: 'https://example.com/producer.rss',
+      siteUrl: 'https://example.com',
+      title: 'Producer',
+      format: 'rss',
+      entries: [],
+      intervalSeconds: 3600,
+    }));
+    try {
+      const result = await core.subscribeFeed({
+        url: 'https://example.com/producer.rss',
+        syncRecents: false,
+      });
+      if ('error' in result) throw new Error(result.error);
+      expect(await core.refreshFeed(result.feed.id)).toEqual({ id: result.feed.id });
+      expect(await core.refreshFeed(result.feed.id)).toEqual({ id: result.feed.id });
+      const jobs = await inspectPool.query(
+        "select singleton_key from pgboss.job where name = 'poll-feed'",
+      );
+      expect(jobs.rows).toEqual([{ singleton_key: result.feed.id }]);
+    } finally {
+      core.setFeedResolver(undefined);
+      await inspectPool.query('delete from feeds');
+    }
+  });
   it('createLink enqueues exactly one enrich-link job for the new link', async () => {
     const link = await core.createLink({ url: 'https://example.com/enq', sourceKind: 'link' });
     expect(await activeJobCount(link.id)).toBe(1);

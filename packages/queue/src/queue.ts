@@ -25,7 +25,12 @@
  * queries must never contend with the app's query pool.
  */
 
-import { ENRICH_LINK_QUEUE as CORE_ENRICH_LINK_QUEUE, setEnrichmentEnqueuer } from '@silo/core';
+import {
+  ENRICH_LINK_QUEUE as CORE_ENRICH_LINK_QUEUE,
+  type FeedPollEnqueuer,
+  setEnrichmentEnqueuer,
+  setFeedPollEnqueuer,
+} from '@silo/core';
 import { sql } from 'drizzle-orm';
 import { fromDrizzle, PgBoss } from 'pg-boss';
 
@@ -161,6 +166,16 @@ export function registerEnqueuer(boss: PgBoss): void {
   });
 }
 
+/** Register a producer only. Poll consumption stays in the worker. */
+export async function registerFeedPollEnqueuer(boss: PgBoss): Promise<FeedPollEnqueuer> {
+  await boss.createQueue('poll-feed', { policy: 'stately' });
+  const enqueue: FeedPollEnqueuer = async (tx, feedId) => {
+    await boss.send('poll-feed', { feedId }, { singletonKey: feedId, db: fromDrizzle(tx, sql) });
+  };
+  setFeedPollEnqueuer(enqueue);
+  return enqueue;
+}
+
 /**
  * Start a PRODUCER-ONLY enqueuer for a process that saves links but does not
  * run the worker: connect pg-boss, ensure the queue, register core's enqueue
@@ -184,6 +199,7 @@ export async function startEnqueuer(logPrefix: string): Promise<PgBoss | undefin
     await boss.start();
     await ensureEnrichLinkQueue(boss);
     registerEnqueuer(boss);
+    await registerFeedPollEnqueuer(boss);
     console.error(
       `${logPrefix} enrichment enqueuer registered — captures will enqueue for enrichment.`,
     );

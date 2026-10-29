@@ -15,6 +15,7 @@ import {
   useEmptyTrash,
   useInfiniteLinks,
   useLinksByTag,
+  useRefreshFeed,
   useRemoveTag,
   useRestoreLink,
   useRetryCapture,
@@ -1305,5 +1306,48 @@ describe('useRetryCapture', () => {
     expect(invalidatedKeys).toContainEqual(['link']);
     expect(invalidatedKeys).not.toContainEqual(queryKeys.counts());
     expect(invalidatedKeys).not.toContainEqual(queryKeys.tags());
+  });
+});
+
+describe('feed refresh feedback', () => {
+  it('waits for the worker and refetches posts until lastPolledAt changes', async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(queryKeys.feed('feed'), { feed: { id: 'feed', lastPolledAt: null } });
+    let reads = 0;
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) =>
+      jsonResponse(
+        init?.method === 'POST'
+          ? { id: 'feed' }
+          : { feed: { id: 'feed', lastPolledAt: ++reads === 2 ? '2026-10-29T12:00:00Z' : null } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useRefreshFeed(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    try {
+      act(() => result.current.mutate('feed'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(result.current.isPending).toBe(true);
+      expect(reads).toBe(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4000);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(reads).toBe(2);
+      expect(result.current.isSuccess).toBe(true);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.feedPosts('feed') });
+    } finally {
+      client.clear();
+      vi.useRealTimers();
+    }
   });
 });

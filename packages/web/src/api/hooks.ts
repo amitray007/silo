@@ -1154,13 +1154,24 @@ export function useSubscribeFeed() {
 export function useRefreshFeed() {
   const client = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiPost<{ id: string }>(`/api/feeds/${id}/refresh`, {}),
-    onSuccess: async (_result, id) => {
-      await Promise.all([
-        client.invalidateQueries({ queryKey: queryKeys.feeds() }),
-        client.invalidateQueries({ queryKey: queryKeys.feed(id) }),
-        client.invalidateQueries({ queryKey: queryKeys.feedPosts(id) }),
-      ]);
+    mutationFn: async (id: string) => {
+      const before = client.getQueryData<FeedResponse>(queryKeys.feed(id))?.feed.lastPolledAt;
+      const result = await apiPost<{ id: string }>(`/api/feeds/${id}/refresh`, {});
+      // The response accepts a job; it does not mean the worker has polled yet.
+      for (let attempt = 0; attempt < 5; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 2000));
+        const current = await client.fetchQuery({
+          queryKey: queryKeys.feed(id),
+          queryFn: () => apiGet<FeedResponse>(`/api/feeds/${id}`),
+          staleTime: 0,
+        });
+        await Promise.all([
+          client.invalidateQueries({ queryKey: queryKeys.feeds() }),
+          client.invalidateQueries({ queryKey: queryKeys.feedPosts(id) }),
+        ]);
+        if (current.feed.lastPolledAt !== before) break;
+      }
+      return result;
     },
   });
 }

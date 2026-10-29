@@ -252,13 +252,13 @@ it('saves from the Reader and reports save failures without filling the bookmark
 });
 
 it.each(['failing', 'gone'] as const)(
-  'shows %s errors in the header, menu and accessible sidebar warning',
+  'shows %s errors in the header and accessible sidebar warning',
   async (status) => {
     mount({ status, lastError: 'The feed returned HTTP 410.' });
     await screen.findByText('Today post');
     const warning = screen.getByRole('img', { name: 'The feed returned HTTP 410.' });
     expect(warning.getAttribute('title')).toBe('The feed returned HTTP 410.');
-    expect(screen.getByRole('link', { name: /Publisher/ }).textContent).not.toContain('2');
+    expect(screen.getByRole('link', { name: /Publisher/ }).textContent).toContain('2');
     expect(screen.getByRole('status').textContent).toContain(
       status === 'gone' ? 'stopped updating' : "Couldn't update",
     );
@@ -266,7 +266,7 @@ it.each(['failing', 'gone'] as const)(
     trigger.focus();
     fireEvent.click(trigger);
     const menu = await screen.findByRole('menu', { name: 'Feed actions' });
-    expect(within(menu).getByText('The feed returned HTTP 410.')).toBeDefined();
+    expect(within(menu).queryByText('The feed returned HTTP 410.')).toBeNull();
     await waitFor(() => expect(document.activeElement?.textContent).toContain('Refresh now'));
     fireEvent.keyDown(menu, { key: 'End' });
     expect(document.activeElement?.textContent).toContain('Unsubscribe');
@@ -290,7 +290,7 @@ it('copies the feed URL with success and failure feedback, then requests a refre
   fireEvent.click(screen.getByRole('menuitem', { name: 'Copied' }));
   await screen.findByRole('menuitem', { name: "Couldn't copy" });
   fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh now' }));
-  await screen.findByText('Refresh requested.');
+  await screen.findByText('Refreshing…');
   expect(fetchMock).toHaveBeenCalledWith(
     '/api/feeds/feed/refresh',
     expect.objectContaining({ method: 'POST' }),

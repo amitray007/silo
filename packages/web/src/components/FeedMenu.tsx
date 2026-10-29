@@ -22,9 +22,9 @@ export function FeedMenu({ feed }: { feed: FeedJson }) {
           {refresh.error.message}
         </span>
       )}
-      {refresh.isSuccess && (
+      {refresh.isPending && (
         <span role="status" className="silo-feed-description">
-          Refresh requested.
+          Refreshing…
         </span>
       )}
       <div className="silo-reader-more">
@@ -53,7 +53,7 @@ export function FeedMenu({ feed }: { feed: FeedJson }) {
                   refresh.mutate(feed.id);
                 }}
               >
-                {refresh.isPending ? 'Requesting refresh…' : 'Refresh now'}
+                {refresh.isPending ? 'Refreshing…' : 'Refresh now'}
               </MenuAction>
               <MenuAction
                 icon={<ReaderIcon name="clipboard" />}
@@ -61,9 +61,6 @@ export function FeedMenu({ feed }: { feed: FeedJson }) {
               >
                 {copyLabel(copied, 'Copy feed URL')}
               </MenuAction>
-              {feed.status !== 'active' && feed.lastError && (
-                <p className="silo-feed-menu-error">{feed.lastError}</p>
-              )}
               <div className="silo-menu-separator" />
               <MenuAction
                 icon={<ReaderIcon name="trash" />}

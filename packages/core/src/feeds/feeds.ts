@@ -28,13 +28,22 @@ const feedColumns = {
   format: feeds.format,
   status: feeds.status,
   lastError: feeds.lastError,
+  lastPolledAt: feeds.lastPolledAt,
   createdAt: feeds.createdAt,
   inboxCount: sql<number>`(select count(*)::integer from links as posts where posts.feed_id = feeds.id and posts.deleted_at is null and posts.archived_at is null)`,
   postCount: sql<number>`(select count(*)::integer from links as posts where posts.feed_id = feeds.id and posts.deleted_at is null)`,
 };
 export type Feed = Pick<
   FeedRow,
-  'id' | 'title' | 'feedUrl' | 'siteUrl' | 'format' | 'status' | 'lastError' | 'createdAt'
+  | 'id'
+  | 'title'
+  | 'feedUrl'
+  | 'siteUrl'
+  | 'format'
+  | 'status'
+  | 'lastError'
+  | 'lastPolledAt'
+  | 'createdAt'
 > & { postCount: number; inboxCount: number };
 
 export function listFeeds(): Promise<Feed[]> {

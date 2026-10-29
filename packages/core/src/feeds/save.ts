@@ -34,6 +34,7 @@ function copiedContent(post: Link) {
 function revivedContent(existing: Link, post: Link) {
   const titleOwner = existing.titleSource === 'user' || post.title === null ? existing : post;
   const reader = post.contentHtml === null ? existing : post;
+  const source = existing.sourceKind === 'link' && post.sourceKind !== 'link' ? post : existing;
   return {
     ...copiedContent(post),
     ...mergeCaptureFields(existing, {
@@ -46,7 +47,8 @@ function revivedContent(existing: Link, post: Link) {
     readerVersion: reader.readerVersion,
     readerCapturedAt: reader.readerCapturedAt,
     readerRenderPending: reader.readerRenderPending,
-    sourceData: post.sourceData ?? existing.sourceData,
+    sourceKind: source.sourceKind,
+    sourceData: source.sourceData,
     captureStatus: bestCaptureStatus(
       existing.captureStatus,
       existing.enrichFloorStatus,
