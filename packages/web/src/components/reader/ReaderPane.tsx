@@ -57,21 +57,37 @@ function ReaderActions({
   disabled,
   trashed,
   feedPost,
+  archived,
+  compact,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
   feedPost: boolean;
+  archived: boolean;
+  compact: boolean;
 }) {
   return (
     <div className="silo-reader-tools">
-      <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
-      <IconButton
-        name="external"
-        label="Open original"
-        onClick={actions.open}
-        disabled={disabled}
-      />
+      {!compact && (
+        <>
+          <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
+          <IconButton
+            name="external"
+            label="Open original"
+            onClick={actions.open}
+            disabled={disabled}
+          />
+        </>
+      )}
+      {feedPost && (
+        <IconButton
+          name={archived ? 'unarchive' : 'archive'}
+          label={archived ? 'Unarchive' : 'Archive'}
+          onClick={actions.archive}
+          disabled={disabled || actions.busy}
+        />
+      )}
       {!feedPost && (
         <IconButton
           name={trashed ? 'restore' : 'trash'}
@@ -117,7 +133,7 @@ function ReaderMore({
       <MenuPresence>
         {open && (
           <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
-            {!trashed && (
+            {!trashed && !actions.feedPost && (
               <MenuAction
                 icon={<ReaderIcon name="edit" />}
                 shortcut="e"
@@ -336,6 +352,10 @@ function panelSemantics(id: string, tab: string, selected: boolean) {
   return selected ? { role: 'tabpanel', 'aria-labelledby': `${id}-${tab}` } : {};
 }
 
+function showReaderActions(phone: boolean, link: LinkJson | undefined): boolean {
+  return !phone || isFeedPost(link);
+}
+
 export function ReaderPane({
   link,
   selectedId,
@@ -364,6 +384,7 @@ export function ReaderPane({
   loading: boolean;
 }) {
   const phone = useMediaQuery(layoutMedia.phone);
+  const showActions = showReaderActions(phone, link);
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const original = useOriginal(link, tab === 'original');
   const shownOriginal = tab === 'original' && link ? original : undefined;
@@ -495,13 +516,15 @@ export function ReaderPane({
                   setOpen={(open) => setOpenMenu(open ? 'settings' : null)}
                 />
               )}
-              {!phone && (
-                <div className="silo-reader-inline-actions">
+              {showActions && (
+                <div className="silo-reader-inline-actions" data-feed={isFeedPost(link)}>
                   <ReaderActions
                     actions={actions}
                     disabled={!link}
                     trashed={trashed}
                     feedPost={isFeedPost(link)}
+                    archived={Boolean(link?.archivedAt)}
+                    compact={phone}
                   />
                 </div>
               )}

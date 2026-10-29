@@ -21,7 +21,7 @@ function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void
       variant="tag"
       active={active}
       icon={<Chip domain={deriveDomain(feed.siteUrl ?? feed.feedUrl)} size={16} />}
-      meta={formatCount(feed.postCount)}
+      meta={formatCount(feed.inboxCount)}
       onClick={(event) => {
         if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
           return;

@@ -1,8 +1,7 @@
 import type { ReactNode } from 'react';
 import type { LinkJson } from '../../api/types';
 import { DayGroup } from '../../components/DayGroup';
-import { LinkRow } from '../../components/LinkRow';
-import { bucketByDay } from '../../lib/buckets';
+import { bucketByDay, bucketFeedPosts } from '../../lib/buckets';
 import { useIntersectionPrefetch } from '../../lib/useIntersectionPrefetch';
 import { ErrorState, LoadingState } from './ListStates';
 import type { ListViewState } from './useListView';
@@ -34,14 +33,12 @@ function LinkListBody({
 
   if (links.length === 0) return <>{emptyState}</>;
 
-  const groups = bucketByDay(links);
+  const groups = plain ? bucketFeedPosts(links) : bucketByDay(links);
   return (
     <div style={{ flex: 1 }}>
-      {plain
-        ? links.map((link) => <LinkRow key={link.id} link={link} />)
-        : groups.map((group) => (
-            <DayGroup key={group.label} label={group.label} links={group.items} />
-          ))}
+      {groups.map((group) => (
+        <DayGroup key={group.label} label={group.label} links={group.items} />
+      ))}
 
       {/* Prefetch sentinel — sits just above the foot so the observer fires before the user reaches the button. Renders nothing visible. */}
       <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />

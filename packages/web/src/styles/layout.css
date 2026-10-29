@@ -2233,7 +2233,10 @@ div.silo-reader-notecard {
   container-type: inline-size;
 }
 @container (max-width: 420px) {
-  .silo-reader-inline-actions {
+  .silo-reader-inline-actions:not([data-feed="true"]) {
+    display: none;
+  }
+  .silo-reader-inline-actions[data-feed="true"] .silo-reader-tools > button:not(:last-child) {
     display: none;
   }
 }

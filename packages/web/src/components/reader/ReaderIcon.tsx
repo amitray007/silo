@@ -15,6 +15,8 @@ const paths = {
   external: 'M14 3h7v7M21 3 10 14M10 5H3v16h16v-7',
   arrowUpRight: 'M7 17 17 7M8.5 7H17v8.5',
   trash: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6',
+  archive: 'M4 8h16v13H4zM3 3h18v5H3zM9 12h6',
+  unarchive: 'M4 8h16v13H4zM3 3h18v5H3zM12 18v-7m-3 3 3-3 3 3',
   restore: 'M4 12a8 8 0 1 0 2-5M4 3v5h5',
   plus: 'M12 5v14M5 12h14',
   minus: 'M5 12h14',

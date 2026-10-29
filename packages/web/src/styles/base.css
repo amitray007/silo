@@ -992,3 +992,8 @@ select {
 #silo-feed-list > .silo-nav-item {
   --nav-color: var(--fnt);
 }
+
+.silo-feed-tabs {
+  display: flex;
+  padding: var(--s2) var(--s3);
+}

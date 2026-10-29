@@ -139,6 +139,8 @@ export type LinkJson = {
   addedBy: AddedBy;
   source: CaptureSource;
   feedId: string | null;
+  publishedAt?: string | null;
+  archivedAt?: string | null;
   notes: string | null;
   tags: string[];
   createdAt: string;
@@ -442,6 +444,7 @@ export type FeedJson = {
   status: 'active' | 'failing' | 'gone';
   lastError: string | null;
   postCount: number;
+  inboxCount: number;
   createdAt: string;
 };
 export type FeedsResponse = { feeds: FeedJson[] };
@@ -452,3 +455,5 @@ export type FeedPostsResponse = {
 };
 export type SubscribeFeedRequest = { url: string; syncRecents: boolean };
 export type SubscribeFeedResponse = FeedResponse & { deduped: boolean };
+
+export type FeedTab = 'inbox' | 'archive';

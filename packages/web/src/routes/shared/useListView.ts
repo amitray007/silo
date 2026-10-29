@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import type { ApiError } from '../../api/client';
 import { useFeedPosts, useInfiniteLinks } from '../../api/hooks';
-import type { LinkJson } from '../../api/types';
+import type { FeedTab, LinkJson } from '../../api/types';
 
 /**
  * The shared list-view orchestration behind `LibraryView` (`/`) and `TagView`
@@ -36,9 +36,9 @@ export interface ListViewState {
   fetchNextPage: () => Promise<LinkJson[]>;
 }
 
-export function useListView(tag?: string, feedId?: string): ListViewState {
+export function useListView(tag?: string, feedId?: string, tab: FeedTab = 'inbox'): ListViewState {
   const library = useInfiniteLinks(tag, { enabled: !feedId });
-  const feed = useFeedPosts(feedId ?? '', Boolean(feedId));
+  const feed = useFeedPosts(feedId ?? '', Boolean(feedId), tab);
   const { data, isLoading, isError, error, hasNextPage, isFetchingNextPage, fetchNextPage } = feedId
     ? feed
     : library;

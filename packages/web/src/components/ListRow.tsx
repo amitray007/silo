@@ -190,6 +190,15 @@ function RowActions({
   onMenu: (() => void) | undefined;
 }) {
   const feedPost = isFeedPost(link);
+  const archive = link.archivedAt ? 'unarchive' : 'archive';
+  const label = feedPost
+    ? link.archivedAt
+      ? 'Unarchive'
+      : 'Archive'
+    : purge === undefined
+      ? 'Move to trash'
+      : 'Restore';
+  const icon = feedPost ? archive : purge === undefined ? 'trash' : 'restore';
   return (
     <span className="silo-row-actions">
       <button
@@ -205,22 +214,20 @@ function RowActions({
       >
         <ReaderIcon name="arrowUpRight" />
       </button>
-      {!feedPost && (
-        <button
-          type="button"
-          className="silo-reader-iconbtn"
-          tabIndex={actionTabIndex}
-          aria-label={purge === undefined ? 'Move to trash' : 'Restore'}
-          title={purge === undefined ? 'Move to trash' : 'Restore'}
-          disabled={busy}
-          onClick={(event) => {
-            event.stopPropagation();
-            onRemove();
-          }}
-        >
-          <ReaderIcon name={purge === undefined ? 'trash' : 'restore'} />
-        </button>
-      )}
+      <button
+        type="button"
+        className="silo-reader-iconbtn"
+        tabIndex={actionTabIndex}
+        aria-label={label}
+        title={label}
+        disabled={busy}
+        onClick={(event) => {
+          event.stopPropagation();
+          onRemove();
+        }}
+      >
+        <ReaderIcon name={icon} />
+      </button>
       {onDelete && (
         <button
           type="button"

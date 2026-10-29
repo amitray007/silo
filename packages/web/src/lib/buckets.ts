@@ -206,3 +206,17 @@ export function purgeCountdownDays(
   const remainingMs = purgeAt - now.getTime();
   return Math.max(0, Math.floor(remainingMs / MS_PER_DAY));
 }
+
+/** Feed dates use the publisher's date, with local calendar-day boundaries. */
+export function bucketFeedPosts(links: LinkJson[], now = new Date()): DayBucket[] {
+  const labels = ['Today', 'This week', 'Earlier'] as const;
+  return labels
+    .map((label) => ({
+      label,
+      items: links.filter((link) => {
+        const delta = calendarDayDelta(new Date(link.publishedAt ?? link.createdAt), now);
+        return (delta <= 0 ? 'Today' : delta <= 6 ? 'This week' : 'Earlier') === label;
+      }),
+    }))
+    .filter((group) => group.items.length > 0);
+}

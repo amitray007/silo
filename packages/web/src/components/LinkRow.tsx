@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useSettings, useTrashLink } from '../api/hooks';
+import { useSettings, useTrashLink, useTriageFeedPost } from '../api/hooks';
 import type { LinkJson, SettingsMap } from '../api/types';
 import { isFeedPost } from '../lib/isFeedPost';
 import { isHoverCapable } from '../lib/pointer';
@@ -29,12 +29,22 @@ export function LinkRow({ link }: { link: LinkJson }) {
   }, [menuOpen, scheduleHide, link.id]);
   const source = link.sourceData;
   const trash = useTrashLink();
+  const triage = useTriageFeedPost();
+  const feedPost = isFeedPost(link);
   return (
     <ListRow
       link={link}
-      busy={trash.isPending}
-      error={trash.isError ? "Couldn't move this link to trash. Try again." : undefined}
-      onRemove={() => trash.mutate(link.id)}
+      busy={trash.isPending || triage.isPending}
+      error={
+        triage.error?.message ??
+        (trash.isError ? "Couldn't move this link to trash. Try again." : undefined)
+      }
+      onRemove={() => {
+        if (feedPost && !link.feedId) return;
+        if (feedPost && link.feedId)
+          triage.mutate({ feedId: link.feedId, postId: link.id, archived: !link.archivedAt });
+        else trash.mutate(link.id);
+      }}
       menuOpen={menuOpen}
       toggleMenu={() => {
         if (!isFeedPost(link)) toggleMenu(link.id);

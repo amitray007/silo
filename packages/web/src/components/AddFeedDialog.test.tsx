@@ -32,6 +32,7 @@ const feed = {
   siteUrl: 'https://example.com',
   feedUrl: 'https://example.com/rss',
   postCount: 12,
+  inboxCount: 12,
   status: 'active',
   lastError: null,
   format: 'rss',

@@ -31,6 +31,7 @@ import type {
   FeedPostsResponse,
   FeedResponse,
   FeedsResponse,
+  FeedTab,
   FrameHint,
   LinkJson,
   LinkResponse,
@@ -64,7 +65,8 @@ import type {
 export const queryKeys = {
   feeds: () => ['feeds'] as const,
   feed: (id: string) => ['feed', id] as const,
-  feedPosts: (id: string) => ['feed-posts', id] as const,
+  feedPosts: (id: string, tab?: FeedTab) =>
+    tab ? (['feed-posts', id, tab] as const) : (['feed-posts', id] as const),
   counts: () => ['counts'] as const,
   tags: () => ['tags'] as const,
   /**
@@ -1118,12 +1120,12 @@ export function useFeed(id: string) {
     refetchInterval: 60000,
   });
 }
-export function useFeedPosts(id: string, enabled = true) {
+export function useFeedPosts(id: string, enabled = true, tab: FeedTab = 'inbox') {
   return useInfiniteQuery({
-    queryKey: queryKeys.feedPosts(id),
+    queryKey: queryKeys.feedPosts(id, tab),
     queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
       apiGet<FeedPostsResponse>(
-        `/api/feeds/${id}/posts${pageParam ? `?cursor=${encodeURIComponent(pageParam)}` : ''}`,
+        `/api/feeds/${id}/posts?tab=${tab}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`,
       ),
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page: FeedPostsResponse) => page.nextCursor,
@@ -1140,6 +1142,33 @@ export function useSubscribeFeed() {
       client.setQueryData(queryKeys.feed(result.feed.id), { feed: result.feed });
       void client.invalidateQueries({ queryKey: queryKeys.feeds() });
       void client.invalidateQueries({ queryKey: queryKeys.feedPosts(result.feed.id) });
+    },
+  });
+}
+
+export function useTriageFeedPost() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      feedId,
+      postId,
+      archived,
+    }: {
+      feedId: string;
+      postId: string;
+      archived: boolean;
+    }) =>
+      apiPost<{ id: string; archivedAt: string | null }>(
+        `/api/feeds/${feedId}/posts/${postId}/${archived ? 'archive' : 'unarchive'}`,
+        {},
+      ),
+    onSuccess: async (_result, { feedId, postId }) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.feedPosts(feedId) }),
+        client.invalidateQueries({ queryKey: queryKeys.feeds() }),
+        client.invalidateQueries({ queryKey: queryKeys.feed(feedId) }),
+        client.invalidateQueries({ queryKey: queryKeys.link(postId) }),
+      ]);
     },
   });
 }

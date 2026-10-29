@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDeleteNow, useRestoreLink, useTrashLink } from '../../api/hooks';
+import { useDeleteNow, useRestoreLink, useTrashLink, useTriageFeedPost } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { isFeedPost } from '../../lib/isFeedPost';
 import { isTextEntryElement } from '../../lib/usePasteCapture';
@@ -22,6 +22,7 @@ export function useReaderActions(
   const trash = useTrashLink();
   const restore = useRestoreLink();
   const remove = useDeleteNow();
+  const triage = useTriageFeedPost();
   const { openEdit } = useRowMenu();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notice, setNotice] = useState({ id, message: '' });
@@ -33,7 +34,7 @@ export function useReaderActions(
     const timer = setTimeout(() => setNotice({ id: notice.id, message: '' }), FEEDBACK_MS);
     return () => clearTimeout(timer);
   }, [notice]);
-  const busy = trash.isPending || restore.isPending || remove.isPending;
+  const busy = trash.isPending || restore.isPending || remove.isPending || triage.isPending;
 
   async function copy() {
     if (!link) return;
@@ -62,6 +63,19 @@ export function useReaderActions(
   return {
     busy,
     feedback,
+    feedPost: Boolean(link && isFeedPost(link)),
+    archive: () => {
+      if (!link?.feedId || busy) return;
+      const target = link.id;
+      triage.mutate(
+        { feedId: link.feedId, postId: target, archived: !link.archivedAt },
+        {
+          onError: (error) => {
+            if (currentId.current === target) setFeedback(error.message);
+          },
+        },
+      );
+    },
     copy,
     trash: () => act('trash'),
     restore: () => act('restore'),
@@ -104,7 +118,7 @@ export function useReaderKeyboard({
     if (selected)
       Object.assign(commands, {
         Escape: close,
-        e: trashed ? undefined : () => actions.edit(),
+        e: actions.feedPost ? actions.archive : trashed ? undefined : () => actions.edit(),
         o: actions.open,
         c: actions.copy,
         r: toggleTab,
