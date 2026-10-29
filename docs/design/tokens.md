@@ -132,4 +132,6 @@ Row hover uses `--row-hover`; controls use `--icon-hover`. The reader segment ch
 
 Tertiary text (`--fnt`) departs from the shiori table on purpose. Shiori uses neutral 500 in both themes. That fails WCAG 1.4.3 for small text: 4.18:1 on the dark ground and 3.78:1 on the dark segment track. Silo uses oklch 53% in light and 60% in dark. Measured: light 5.15:1 on `--bg` and 4.84:1 on `--hov`; dark 5.01:1 on `--bg` and 4.54:1 on `--hov`. Both values still fail on the selected fill `--sel` (about 4.39:1 light and 3.39:1 dark), so text on `--sel` uses `--mut` instead of `--fnt`. The `--ghost` trade-off above is unchanged. In dark, the same applies on the lifted fills where `--fnt` measures 3.8-4.2:1: input placeholders, the model picker, and key hints on a highlighted menu item. The theme toggle's off label uses `--fnt`, not `--ghost`.
 
+Danger text (`--warn`) is Tailwind red 700 in light and red 400 in dark, so labels such as "Move to trash" clear 4.5:1 on every fill they sit on (red 500 measured 3.3-4.0:1). Buttons with white text on red use `--danger-fill`: red 700 in light (6.42:1) and red 600 in dark (4.77:1).
+
 The two icon-button radii are intended, not drift. The list `+` and the row action buttons use 8px. The reader toolbar buttons and the sidebar collapse button use 6px, as `shiori-match.md` lists them ("radius 6 or 8 as listed").

@@ -104,8 +104,8 @@
   opacity: 0.7;
 }
 .silo-confirm-btn {
-  background: var(--warn);
-  border-color: var(--warn);
+  background: var(--danger-fill);
+  border-color: var(--danger-fill);
   color: var(--solid-ink);
   font-weight: 600;
 }

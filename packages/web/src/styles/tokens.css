@@ -22,7 +22,10 @@
   --mark: #f26b1d;
   --markt: #b8480a;
   --accent-soft: #fff1e6;
-  --warn: oklch(63.7% 0.237 25.331);
+  /* Red 700: danger text clears 4.5:1 on --bg, --hov and --danger-soft. */
+  --warn: oklch(50.5% 0.213 27.518);
+  /* Fill behind white text, such as the confirm button. */
+  --danger-fill: var(--warn);
   --danger-soft: #fdecea;
   --solid-ink: #ffffff;
   --logo-tile: #f6f6f5;
@@ -113,6 +116,9 @@
   --btn-ink: oklch(20.5% 0 0);
   --favicon-plate: oklch(92.2% 0 0);
   --accent-soft: #2a1709;
+  /* Red 400 for text on the dark fills; red 600 behind white text. */
+  --warn: oklch(70.4% 0.191 22.216);
+  --danger-fill: oklch(57.7% 0.245 27.325);
   --danger-soft: #2a0f0d;
   --markt: #ff9a52;
   --ring: 0 0 0 0.5px oklch(14.5% 0 0 / 70%);
