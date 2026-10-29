@@ -45,6 +45,31 @@ export function applyThemeToDocument(theme: Theme, root: HTMLElement = document.
   }
 }
 
+const pendingThemeFrames = new WeakMap<HTMLElement, number>();
+
+/** Applies a user theme change without cross-fading individual elements. */
+export function switchThemeOnDocument(theme: Theme, root: HTMLElement = document.documentElement) {
+  const pendingFrame = pendingThemeFrames.get(root);
+  if (pendingFrame !== undefined) cancelAnimationFrame(pendingFrame);
+
+  root.classList.add('silo-theme-switching');
+  applyThemeToDocument(theme, root);
+  // Commit the new colors while transitions are suppressed.
+  void root.offsetWidth;
+  pendingThemeFrames.set(
+    root,
+    requestAnimationFrame(() => {
+      pendingThemeFrames.set(
+        root,
+        requestAnimationFrame(() => {
+          root.classList.remove('silo-theme-switching');
+          pendingThemeFrames.delete(root);
+        }),
+      );
+    }),
+  );
+}
+
 export function persistTheme(theme: Theme, storage: Pick<Storage, 'setItem'> = localStorage) {
   try {
     storage.setItem(THEME_STORAGE_KEY, theme);

@@ -125,3 +125,11 @@ Body and nav use weight 400. Row titles, pane titles, section labels, menus, and
 Pass 2 in `docs/methods/shiori-match.md` overrides the earlier recipes. Inter Variable is self-hosted through `@fontsource-variable/inter` (OFL-1.1), at weights 400, 500, and 600. Reader body text is 16px with a 28px line height. Icons use a 20px box, a 24-unit viewBox, and a 1.5px rounded stroke.
 
 Row hover uses `--row-hover`; controls use `--icon-hover`. The reader segment chip uses `--segment-on` and the full control shadow. Dark inputs use neutral 800 and the low contrast shadow. Focus outlines use tertiary text at 2px with a 2px offset. Settings remains silo's modal with its own tabs and Compact links preference.
+
+## Home audit, 2026-10-29
+
+`docs/methods/home-ui-audit.md` records the audit and its decisions.
+
+Tertiary text (`--fnt`) departs from the shiori table on purpose. Shiori uses neutral 500 in both themes. That fails WCAG 1.4.3 for small text: 4.18:1 on the dark ground and 3.78:1 on the dark segment track. Silo uses oklch 53% in light and 60% in dark. Measured: light 5.15:1 on `--bg` and 4.84:1 on `--hov`; dark 5.01:1 on `--bg` and 4.54:1 on `--hov`. Both values still fail on the selected fill `--sel` (about 4.39:1 light and 3.39:1 dark), so text on `--sel` uses `--mut` instead of `--fnt`. The `--ghost` trade-off above is unchanged.
+
+The two icon-button radii are intended, not drift. The list `+` and the row action buttons use 8px. The reader toolbar buttons and the sidebar collapse button use 6px, as `shiori-match.md` lists them ("radius 6 or 8 as listed").

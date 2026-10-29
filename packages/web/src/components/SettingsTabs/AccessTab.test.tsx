@@ -245,7 +245,7 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     renderTab();
 
     expect(await screen.findByText('Access tokens')).toBeDefined();
-    expect(screen.getByText(/Named tokens an agent can use to connect/i)).toBeDefined();
+    expect(screen.getByText(/One per device or tool/i)).toBeDefined();
   });
 
   it('renders the token list from a mocked useAccessTokens (names + prefixes shown)', async () => {
@@ -279,9 +279,7 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
   it('shows the empty state when there are no tokens', async () => {
     renderTab({ tokens: [] });
 
-    expect(
-      await screen.findByText('No tokens yet — create one to let an agent connect.'),
-    ).toBeDefined();
+    expect(await screen.findByText('No tokens yet.')).toBeDefined();
   });
 
   it('shows skeleton rows (not nothing) while the token list is loading', () => {
@@ -309,7 +307,7 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     // Neither the empty state nor any real token row has rendered — only the
     // loading container(s), carrying the a11y contract.
     expect(screen.getAllByRole('status', { name: 'Loading…' }).length).toBeGreaterThan(0);
-    expect(screen.queryByText('No tokens yet — create one to let an agent connect.')).toBeNull();
+    expect(screen.queryByText('No tokens yet.')).toBeNull();
   });
 
   it('does not show the raw token anywhere in the list rows', async () => {
@@ -359,7 +357,7 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
     // The raw token appears once, in the reveal field — the name input is
     // swapped out for the reveal, so it's no longer on screen.
     expect(await screen.findByText('silo_freshraw0987654321zzzz')).toBeDefined();
-    expect(screen.getByText(/copy this now/i)).toBeDefined();
+    expect(screen.getByText(/copy it now/i)).toBeDefined();
     expect(screen.queryByPlaceholderText(/laptop cli, raycast/i)).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
@@ -445,7 +443,7 @@ describe('AccessTab (HTTP MCP + named access tokens)', () => {
       renderTab();
 
       expect(await screen.findByText('Connected apps')).toBeDefined();
-      expect(screen.getByText(/Apps that connected over OAuth/i)).toBeDefined();
+      expect(screen.getByText(/Apps connected over OAuth/i)).toBeDefined();
     });
 
     it('shows the empty state when no apps are connected', async () => {

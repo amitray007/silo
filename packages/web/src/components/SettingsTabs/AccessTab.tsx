@@ -129,7 +129,7 @@ function CreateTokenForm() {
     return (
       <div style={{ padding: '16px 0', borderBottom: '1px solid var(--line)' }}>
         <div style={rowLabel}>New token created</div>
-        <div style={rowDesc}>Copy this now — you won't see it again.</div>
+        <div style={rowDesc}>Copy it now. You won't see it again.</div>
         <div
           style={{
             display: 'flex',
@@ -175,7 +175,6 @@ function CreateTokenForm() {
   return (
     <div style={{ padding: '16px 0', borderBottom: '1px solid var(--line)' }}>
       <div style={rowLabel}>New token</div>
-      <div style={rowDesc}>Name it for the device or tool that will use it.</div>
       <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
         <input
           type="text"
@@ -245,9 +244,7 @@ function AccessTokensSection() {
       <div style={settingsRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Access tokens</div>
-          <div style={rowDesc}>
-            Named tokens an agent can use to connect. Create one per device/tool; revoke any time.
-          </div>
+          <div style={rowDesc}>One per device or tool. Revoke any time.</div>
         </div>
       </div>
       <CreateTokenForm />
@@ -260,7 +257,7 @@ function AccessTokensSection() {
       )}
       {!isLoading && tokens && tokens.length === 0 && (
         <div style={settingsRow}>
-          <div style={rowDesc}>No tokens yet — create one to let an agent connect.</div>
+          <div style={rowDesc}>No tokens yet.</div>
         </div>
       )}
       {tokens?.map((token) => (
@@ -364,10 +361,7 @@ function ConnectedAppsSection() {
       <div style={settingsRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Connected apps</div>
-          <div style={rowDesc}>
-            Apps that connected over OAuth (Claude, ChatGPT) — one row per app, even if it
-            reconnected more than once.
-          </div>
+          <div style={rowDesc}>Apps connected over OAuth, such as Claude and ChatGPT.</div>
         </div>
         {clients && clients.length > 0 && (
           <div style={{ display: 'flex', gap: 8 }}>
@@ -450,7 +444,7 @@ export function AccessTab() {
     <>
       <SettingsHero
         title="MCP access"
-        description="Let an agent add, search, and read your links — over HTTP, with the API key inserted. No AI lives inside silo; the mind sits on top, over MCP."
+        description="Let an agent add, search, and read your links over MCP."
         primaryAction={
           <button
             type="button"
@@ -466,8 +460,7 @@ export function AccessTab() {
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>MCP access</div>
           <div style={rowDesc}>
-            When off, agents can't reach silo over HTTP even with the API key. The stdio MCP client
-            is unaffected.
+            Off blocks agents over HTTP, even with a token. Local stdio clients still work.
           </div>
         </div>
         <ToggleSwitch

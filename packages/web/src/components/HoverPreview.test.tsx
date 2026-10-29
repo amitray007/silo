@@ -11,6 +11,8 @@ import {
   youtubeSourceData,
 } from '../test/fixtures';
 import { HoverPreview } from './HoverPreview';
+import { HoverPreviewProvider, useHoverPreview } from './HoverPreviewContext';
+import { ListRow } from './ListRow';
 
 const position = { top: 20, left: 40 };
 
@@ -45,6 +47,36 @@ function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins'], linkPre
 }
 
 describe('HoverPreview', () => {
+  it('keeps the preview open when pointermove lands on a row action', async () => {
+    const link = makeLink({ title: 'Preview remains open' });
+    function Row() {
+      const { scheduleShow } = useHoverPreview();
+      return (
+        <ListRow
+          link={link}
+          busy={false}
+          onRemove={vi.fn()}
+          menuOpen={false}
+          toggleMenu={vi.fn()}
+          menu={() => null}
+          onEnter={(event) => scheduleShow(link, event.currentTarget.getBoundingClientRect())}
+        />
+      );
+    }
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <HoverPreviewProvider>
+          <Row />
+        </HoverPreviewProvider>
+      </QueryClientProvider>,
+    );
+    fireEvent.mouseEnter(screen.getByRole('link', { name: /Preview remains open/ }));
+    const previewLink = await screen.findByRole('link', { name: 'Open' });
+    fireEvent.pointerMove(screen.getByRole('button', { name: 'More actions' }));
+    expect(screen.getByRole('link', { name: 'Open' })).toBe(previewLink);
+  });
+
   it('renders the generic variant: title, no tag line or note when absent', () => {
     renderPreview(makeLink({ title: 'A great read', tags: [], notes: null }));
     expect(screen.getByText('A great read')).toBeDefined();

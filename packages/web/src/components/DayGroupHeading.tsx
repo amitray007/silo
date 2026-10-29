@@ -1,3 +1,3 @@
 export function DayGroupHeading({ label }: { label: string }) {
-  return <p className="silo-daylabel">{label}</p>;
+  return <h2 className="silo-daylabel">{label}</h2>;
 }

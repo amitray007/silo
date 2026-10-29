@@ -1,10 +1,11 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   applyThemeToDocument,
   persistTheme,
   readStoredTheme,
   readSystemTheme,
   resolveInitialTheme,
+  switchThemeOnDocument,
   THEME_STORAGE_KEY,
 } from './theme';
 
@@ -133,5 +134,50 @@ describe('persistTheme', () => {
         },
       }),
     ).not.toThrow();
+  });
+});
+
+describe('theme switch transitions', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) =>
+      window.setTimeout(() => callback(performance.now()), 16),
+    );
+    vi.stubGlobal('cancelAnimationFrame', (id: number) => window.clearTimeout(id));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it('does not suppress transitions for the initial application', () => {
+    const root = document.createElement('html');
+    applyThemeToDocument('dark', root);
+    expect(root.classList.contains('silo-theme-switching')).toBe(false);
+  });
+
+  it('suppresses transitions until two frames after a switch', () => {
+    const root = document.createElement('html');
+    switchThemeOnDocument('dark', root);
+    expect(root.getAttribute('data-theme')).toBe('dark');
+    expect(root.classList.contains('silo-theme-switching')).toBe(true);
+    vi.advanceTimersByTime(16);
+    expect(root.classList.contains('silo-theme-switching')).toBe(true);
+    vi.advanceTimersByTime(16);
+    expect(root.classList.contains('silo-theme-switching')).toBe(false);
+  });
+
+  it.each([0, 16])('restarts suppression when toggled again after %i ms', (delay) => {
+    const root = document.createElement('html');
+    switchThemeOnDocument('dark', root);
+    vi.advanceTimersByTime(delay);
+    switchThemeOnDocument('light', root);
+    expect(root.hasAttribute('data-theme')).toBe(false);
+    vi.advanceTimersByTime(16);
+    expect(root.classList.contains('silo-theme-switching')).toBe(true);
+    vi.advanceTimersByTime(16);
+    expect(root.classList.contains('silo-theme-switching')).toBe(false);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

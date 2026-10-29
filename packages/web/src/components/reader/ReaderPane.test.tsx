@@ -12,13 +12,19 @@ import { useReaderActions } from './useReaderActions';
 const link = makeLink({ id: 'toolbar', extractedText: 'Saved article text.' });
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
 
-function Pane({ value = link }: { value?: LinkJson }) {
+function Pane({
+  value = link,
+  selectedId = value?.id ?? null,
+}: {
+  value?: LinkJson | null;
+  selectedId?: string | null;
+}) {
   const [tab, setTab] = useState<'reader' | 'original'>('reader');
-  const actions = useReaderActions(value, false, () => {});
+  const actions = useReaderActions(value ?? undefined, false, () => {});
   return (
     <ReaderPane
-      link={value}
-      selectedId={value.id}
+      link={value ?? undefined}
+      selectedId={selectedId}
       tab={tab}
       setTab={setTab}
       close={() => {}}
@@ -28,12 +34,12 @@ function Pane({ value = link }: { value?: LinkJson }) {
       actions={actions}
       trashed={false}
       purgeWindowDays={30}
-      loading={false}
+      loading={Boolean(selectedId) && !value}
     />
   );
 }
 
-function show() {
+function show(value: LinkJson | null = link, selectedId?: string | null) {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
     String(input).includes('/frame')
       ? json({ mode: 'direct', darkTheme: false })
@@ -41,16 +47,19 @@ function show() {
   );
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  const tree = (value: LinkJson) => (
+  const tree = (value: LinkJson | null) => (
     <QueryClientProvider client={client}>
       <MemoryRouter>
         <RowMenuProvider>
-          <Pane value={value} />
+          <Pane
+            value={value}
+            selectedId={selectedId === undefined ? (value?.id ?? null) : selectedId}
+          />
         </RowMenuProvider>
       </MemoryRouter>
     </QueryClientProvider>
   );
-  const view = render(tree(link));
+  const view = render(tree(value));
   return { ...view, fetchMock, select: (value: LinkJson) => view.rerender(tree(value)) };
 }
 
@@ -78,6 +87,25 @@ function scrollPane(container: HTMLElement) {
   };
   return { scroller, head, scroll };
 }
+
+it('keeps an empty header band with no selection', () => {
+  const { container } = show(null);
+  const head = container.querySelector('.silo-reader-head');
+  expect(head).not.toBeNull();
+  expect(head?.childElementCount).toBe(0);
+  expect(screen.queryByRole('button')).toBeNull();
+  expect(screen.queryByRole('tab')).toBeNull();
+});
+
+it('disables both segment tabs while the selected link loads', () => {
+  show(null, 'loading');
+  expect(screen.getByRole('status').textContent).toBe('Loading link…');
+  for (const tab of screen.getAllByRole('tab')) {
+    expect((tab as HTMLButtonElement).disabled).toBe(true);
+  }
+  expect(screen.getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe('true');
+  expect(screen.getByRole('button', { name: 'Close reader' })).toBeDefined();
+});
 
 it('reveals on toolbar focus and stays shown until focus leaves', async () => {
   const { container } = show();

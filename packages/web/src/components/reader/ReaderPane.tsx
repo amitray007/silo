@@ -326,6 +326,11 @@ function useHeadHidden({
   return { hidden: scrolledAway || liveHidden, liveHead };
 }
 
+/** The scroll region is a tab panel only while the head shows the Reader/Live tabs. */
+function panelSemantics(id: string, tab: string, selected: boolean) {
+  return selected ? { role: 'tabpanel', 'aria-labelledby': `${id}-${tab}` } : {};
+}
+
 export function ReaderPane({
   link,
   selectedId,
@@ -449,41 +454,60 @@ export function ReaderPane({
           if (!event.currentTarget.contains(event.relatedTarget)) setHeaderFocused(false);
         }}
       >
-        <div className="silo-reader-navigation" role="toolbar" aria-label="Reader navigation">
-          <div className="silo-reader-tools">
-            <IconButton name="close" label="Close reader" onClick={close} disabled={!selectedId} />
-            <IconButton name="up" label="Previous" onClick={() => step(-1)} disabled={index <= 0} />
-            <IconButton name="down" label="Next" onClick={() => step(1)} disabled={!canGoNext} />
-          </div>
-        </div>
-        <div className="silo-reader-viewtools">
-          <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
-        </div>
-        <div className="silo-reader-right">
-          {link && (
-            <ReaderSettings
-              key={`settings-${selectedId}-${tab}`}
-              original={shownOriginal}
-              open={openMenu === 'settings'}
-              setOpen={(open) => setOpenMenu(open ? 'settings' : null)}
-            />
-          )}
-          {!phone && (
-            <div className="silo-reader-inline-actions">
-              <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
+        {selectedId && (
+          <>
+            <div className="silo-reader-navigation" role="toolbar" aria-label="Reader navigation">
+              <div className="silo-reader-tools">
+                <IconButton
+                  name="close"
+                  label="Close reader"
+                  onClick={close}
+                  disabled={!selectedId}
+                />
+                <IconButton
+                  name="up"
+                  label="Previous"
+                  onClick={() => step(-1)}
+                  disabled={index <= 0}
+                />
+                <IconButton
+                  name="down"
+                  label="Next"
+                  onClick={() => step(1)}
+                  disabled={!canGoNext}
+                />
+              </div>
             </div>
-          )}
-          <ReaderMore
-            key={selectedId}
-            actions={actions}
-            disabled={!link}
-            trashed={trashed}
-            link={link}
-            original={shownOriginal}
-            open={openMenu === 'more'}
-            setOpen={(open) => setOpenMenu(open ? 'more' : null)}
-          />
-        </div>
+            <div className="silo-reader-viewtools">
+              <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
+            </div>
+            <div className="silo-reader-right">
+              {link && (
+                <ReaderSettings
+                  key={`settings-${selectedId}-${tab}`}
+                  original={shownOriginal}
+                  open={openMenu === 'settings'}
+                  setOpen={(open) => setOpenMenu(open ? 'settings' : null)}
+                />
+              )}
+              {!phone && (
+                <div className="silo-reader-inline-actions">
+                  <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
+                </div>
+              )}
+              <ReaderMore
+                key={selectedId}
+                actions={actions}
+                disabled={!link}
+                trashed={trashed}
+                link={link}
+                original={shownOriginal}
+                open={openMenu === 'more'}
+                setOpen={(open) => setOpenMenu(open ? 'more' : null)}
+              />
+            </div>
+          </>
+        )}
       </div>
       {actions.feedback && (
         <div className="silo-toast" role="status">
@@ -500,9 +524,8 @@ export function ReaderPane({
         data-original={tab === 'original'}
         data-head={liveHead}
         ref={scrollRef}
-        role="tabpanel"
         id={`${id}-panel`}
-        aria-labelledby={`${id}-${tab}`}
+        {...panelSemantics(id, tab, Boolean(selectedId))}
       >
         {content}
       </div>

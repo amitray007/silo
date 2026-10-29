@@ -225,7 +225,7 @@ describe('LinkRow', () => {
 
   it('the ⋯ button opens the row menu without navigating (stopPropagation on mousedown+click)', () => {
     renderRow(<LinkRow link={link()} />);
-    const optionsButton = screen.getByTitle('Options');
+    const optionsButton = screen.getByTitle('More actions');
     fireEvent.click(optionsButton);
     expect(screen.getByText('Move to trash')).toBeDefined();
   });
@@ -549,7 +549,7 @@ describe('LinkRow hover preview', () => {
 
   it('is suppressed while this row’s ⋯ menu is open', () => {
     renderHoverRow(<LinkRow link={link({ title: 'A post' })} />);
-    fireEvent.click(screen.getByTitle('Options'));
+    fireEvent.click(screen.getByTitle('More actions'));
     expect(screen.getByText('Move to trash')).toBeDefined();
 
     fireEvent.mouseEnter(screen.getByRole('link', { name: /A post/ }));
@@ -569,7 +569,7 @@ describe('LinkRow hover preview', () => {
     });
     expect(screen.getByText('Open')).toBeDefined();
 
-    fireEvent.click(screen.getByTitle('Options'));
+    fireEvent.click(screen.getByTitle('More actions'));
     // The dismiss goes through the same `scheduleHide` path as a normal
     // mouse-leave (140ms) — opening the menu doesn't special-case an
     // instant close, it just guarantees a hide gets scheduled.

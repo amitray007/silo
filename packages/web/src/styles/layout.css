@@ -30,7 +30,7 @@
   justify-content: space-between;
   height: 44px;
   flex: none;
-  padding: 0 12px;
+  padding: 0 10px 0 12px;
 }
 .silo-sidebar-grow {
   flex: 1;
@@ -164,6 +164,7 @@
   padding: 0 6px 0 16px;
 }
 .silo-panehead {
+  border-bottom: 0.5px solid var(--line);
   gap: 12px;
   /* 24px puts the pane title on the same edge as the day labels and row icons. */
   padding-left: 24px;
@@ -181,6 +182,7 @@
   text-overflow: ellipsis;
 }
 .silo-pane-count {
+  font-variant-numeric: tabular-nums;
   margin-left: 2px;
   font-size: 12px;
   color: var(--fnt);
@@ -200,7 +202,6 @@
   min-height: 0;
   overscroll-behavior: contain;
   padding: 12px 12px 128px;
-  border-top: 0.5px solid var(--line);
 }
 .silo-content-col {
   min-height: 0;
@@ -210,6 +211,7 @@
   font-size: 14px;
   line-height: 20px;
   font-weight: 400;
+  letter-spacing: normal;
   color: var(--ghost);
   padding: 24px 12px 4px;
   margin: 0;
@@ -288,6 +290,9 @@
   gap: 6px;
   align-items: center;
   min-width: 0;
+}
+.silo-link-row:is([data-active="true"], :active) .silo-row-meta {
+  color: var(--mut);
 }
 .silo-row-meta > span:first-child {
   white-space: nowrap;
@@ -462,6 +467,12 @@
   border: 0;
   font-family: inherit;
   cursor: pointer;
+}
+.silo-reader-segment:has(button:disabled) {
+  opacity: 0.5;
+}
+.silo-reader-segment button:disabled {
+  cursor: default;
 }
 .silo-reader-segment button[aria-selected="true"] {
   background: none;
@@ -865,10 +876,17 @@
     margin 160ms var(--ease-out),
     opacity 160ms ease;
 }
-.silo-player-volume:is(:hover, :focus-within) .silo-player-level {
+.silo-player-volume:is(:focus-within) .silo-player-level {
   width: 72px;
   margin: 0 6px 0 2px;
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-player-volume:hover .silo-player-level {
+    width: 72px;
+    margin: 0 6px 0 2px;
+    opacity: 1;
+  }
 }
 @media (max-width: 640px) {
   .silo-player-speed,
@@ -928,7 +946,8 @@
 }
 .silo-reader-stats {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 32px;
   margin: 12px 0 0;
   padding: 0 4px;
   list-style: none;
@@ -1193,10 +1212,10 @@
   background: white;
 }
 @media (hover: hover) and (pointer: fine) {
-  .silo-link-row:hover {
+  .silo-row-wrap:hover > .silo-link-row {
     background: var(--hov);
   }
-  .silo-link-row[data-active="true"]:hover {
+  .silo-row-wrap:hover > .silo-link-row[data-active="true"] {
     background: var(--sel);
   }
   .silo-reader-iconbtn:not(:disabled):hover,
@@ -1207,6 +1226,10 @@
   button.silo-reader-notecard:hover,
   .silo-reader-tag:hover {
     background: var(--sel);
+  }
+  button.silo-reader-notecard:hover > span:first-child,
+  .silo-reader-tag:hover span {
+    color: var(--mut);
   }
 }
 @media (max-width: 640px) {
@@ -1707,6 +1730,7 @@ div.silo-reader-notecard {
   z-index: 20;
 }
 .silo-collection-count {
+  font-variant-numeric: tabular-nums;
   margin-left: auto;
   padding-left: 16px;
   color: var(--ghost);
@@ -1748,7 +1772,7 @@ div.silo-reader-notecard {
   position: static;
   opacity: 1;
 }
-.silo-link-row:has(:where(.silo-row-actions) :focus-visible) .silo-row-actions,
+.silo-row-actions:has(:focus-visible),
 .silo-row-actions:has([aria-expanded="true"]) {
   opacity: 1;
   pointer-events: auto;
@@ -1756,7 +1780,7 @@ div.silo-reader-notecard {
 .silo-row-note-icon {
   position: absolute;
   right: 8px;
-  top: 14px;
+  top: 12px;
   color: var(--fnt);
 }
 .silo-link-row:has(.silo-row-note-icon) .silo-row-titleline {
@@ -1783,13 +1807,13 @@ div.silo-reader-notecard {
   box-shadow: var(--menu-shadow);
 }
 @media (hover: hover) and (pointer: fine) {
-  .silo-link-row:hover .silo-row-actions {
+  .silo-row-wrap:hover > .silo-row-actions {
     opacity: 1;
     pointer-events: auto;
   }
 }
 @media (hover: none) {
-  .silo-link-row .silo-row-actions {
+  .silo-row-wrap .silo-row-actions {
     display: none;
     background: none;
   }
@@ -1847,7 +1871,7 @@ div.silo-reader-notecard {
   font-size: inherit;
   line-height: inherit;
 }
-@media (max-width: 639px) {
+@media (max-width: 640px) {
   .silo-reader > h2 {
     font-size: 24px;
   }
@@ -1889,14 +1913,21 @@ div.silo-reader-notecard {
   color: inherit;
   text-decoration: none;
 }
-.silo-logo-link:hover {
-  background: var(--hov);
+@media (hover: hover) and (pointer: fine) {
+  .silo-logo-link:hover {
+    background: var(--hov);
+  }
 }
 .silo-sidebar-brandrow > button {
   opacity: 0;
 }
-.silo-sidebar:is(:hover, :focus-within) .silo-sidebar-brandrow > button {
+.silo-sidebar:is(:focus-within) .silo-sidebar-brandrow > button {
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-sidebar:hover .silo-sidebar-brandrow > button {
+    opacity: 1;
+  }
 }
 .silo-search-kbd {
   display: inline-flex;
@@ -1950,9 +1981,11 @@ div.silo-reader-notecard {
 .silo-tags-toggle .silo-section-caret[data-expanded="false"] {
   transform: rotate(-90deg);
 }
-.silo-tags-toggle:hover .silo-tags-label,
-.silo-tags-toggle:hover .silo-section-caret {
-  color: var(--mut);
+@media (hover: hover) and (pointer: fine) {
+  .silo-tags-toggle:hover .silo-tags-label,
+  .silo-tags-toggle:hover .silo-section-caret {
+    color: var(--mut);
+  }
 }
 #silo-tag-list {
   display: flex;
@@ -1972,10 +2005,10 @@ div.silo-reader-notecard {
   --fade-bottom: 20px;
 }
 #silo-tag-list > .silo-nav-item {
-  --nav-color: var(--ghost);
+  --nav-color: var(--fnt);
 }
 #silo-tag-list > .silo-nav-item .silo-nav-icon {
-  color: var(--ghost);
+  color: var(--fnt);
 }
 #silo-tag-list > .silo-nav-item > span:nth-child(2) {
   flex: none;
@@ -1991,19 +2024,30 @@ div.silo-reader-notecard {
   color: var(--fnt) !important;
   transition:
     opacity 150ms var(--ease-out),
-    color 150ms var(--ease-out);
+    color 150ms var(--ease-out),
+    transform 0.15s var(--ease-out);
 }
-.silo-tags-header .silo-icon-btn-sm:hover,
 .silo-tags-header .silo-icon-btn-sm[aria-expanded="true"] {
   color: var(--ink) !important;
 }
+@media (hover: hover) and (pointer: fine) {
+  .silo-tags-header .silo-icon-btn-sm:hover {
+    color: var(--ink) !important;
+  }
+}
 .silo-tags-header .silo-icon-btn-sm svg {
+  stroke-width: 1.875;
   width: 16px;
   height: 16px;
 }
-.silo-tags:is(:hover, :focus-within) .silo-icon-btn-sm,
+.silo-tags:is(:focus-within) .silo-icon-btn-sm,
 .silo-tags-header .silo-icon-btn-sm[aria-expanded="true"] {
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-tags:hover .silo-icon-btn-sm {
+    opacity: 1;
+  }
 }
 .silo-row-iconwrap {
   display: flex;
@@ -2017,10 +2061,6 @@ div.silo-reader-notecard {
 .silo-link-row[data-compact="true"] {
   gap: 12px;
 }
-.silo-row-wrap {
-  padding-top: 1px;
-}
-
 .silo-reader-icon {
   width: 20px;
   height: 20px;
@@ -2039,9 +2079,19 @@ div.silo-reader-notecard {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .silo-link-row:hover:not([data-active="true"]) {
+  .silo-row-wrap:hover > .silo-link-row:not([data-active="true"]) {
     background: var(--row-hover);
   }
+  /* --fnt fails on the dark row-hover fill, so the meta line darkens with it. */
+  .silo-row-wrap:hover > .silo-link-row .silo-row-meta {
+    color: var(--mut);
+  }
+}
+.silo-row-wrap:has(> .silo-row-actions :focus-visible) > .silo-link-row:not([data-active="true"]) {
+  background: var(--row-hover);
+}
+.silo-row-wrap:has(> .silo-row-actions :focus-visible) > .silo-link-row .silo-row-meta {
+  color: var(--mut);
 }
 
 .silo-capture-heading {
@@ -2152,9 +2202,11 @@ div.silo-reader-notecard {
     transform 180ms var(--ease-out),
     width 180ms var(--ease-out);
 }
-.silo-reader-segment button:hover:not([aria-selected="true"]) {
-  background: var(--row-hover);
-  color: var(--mut);
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-segment button:hover:not([aria-selected="true"]) {
+    background: var(--row-hover);
+    color: var(--mut);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .silo-reader-segment-chip {
@@ -2162,7 +2214,7 @@ div.silo-reader-notecard {
   }
 }
 
-.silo-link-row[data-active="true"] .silo-row-actions {
+.silo-link-row[data-active="true"] + .silo-row-actions {
   background: linear-gradient(to right, transparent, var(--sel) 40px);
 }
 
@@ -2211,9 +2263,11 @@ div.silo-reader-notecard {
   cursor: pointer;
 }
 .silo-mobile-bar-button:is([aria-current="page"], [aria-expanded="true"]) {
+  background: var(--sel);
   color: var(--ink);
 }
 .silo-mobile-bar-button .silo-reader-icon {
+  stroke-width: 1.0714;
   width: 28px;
   height: 28px;
 }
@@ -2280,12 +2334,26 @@ div.silo-reader-notecard {
   box-shadow: var(--segment-shadow);
   color: var(--ink);
 }
-.silo-reader-settings [role="radio"][aria-checked="true"]:hover {
-  background: var(--segment-on);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-settings [role="radio"][aria-checked="true"]:hover {
+    background: var(--segment-on);
+    color: var(--ink);
+  }
 }
 
 .silo-reader > .silo-player-surface {
   max-width: 636px;
   margin-inline: auto;
+}
+
+@media not ((hover: hover) and (pointer: fine)) {
+  .silo-sidebar-brandrow > button,
+  .silo-tags .silo-icon-btn-sm {
+    opacity: 1;
+  }
+  .silo-player-volume .silo-player-level {
+    width: 72px;
+    margin: 0 6px 0 2px;
+    opacity: 1;
+  }
 }

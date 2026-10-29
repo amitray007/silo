@@ -171,13 +171,12 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
       <ModalHeader title="Connect over MCP" onClose={onClose} />
       <div className="silo-modal-body silo-mcp-body">
         <div style={{ ...rowDesc, marginBottom: 18 }}>
-          Connect an agent to silo over MCP. Fill in your API token (create one below in Access
-          tokens).
+          Replace <code style={copyRowCode}>&lt;YOUR_SILO_API_TOKEN&gt;</code> with a token from
+          Access tokens.
         </div>
         <div style={{ ...groupNote, marginBottom: 20 }}>
-          Claude and ChatGPT connect via OAuth instead — add silo as a custom connector and paste
-          just the URL above; no header needed. The manual bearer setup below is for a script, curl,
-          or an MCP client without OAuth support.
+          Claude and ChatGPT: add silo as a custom connector with only the URL. They sign in with
+          OAuth and need no token.
         </div>
 
         {/* On a real (non-localhost) host with no SILO_PUBLIC_MCP_URL set, `url`
@@ -201,7 +200,7 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
               manual / Cursor / raw-HTTP setup — the inset panel makes that "one
               unit, not three options" reading explicit. */}
             <div style={groupHeading}>Connection</div>
-            <div style={groupNote}>Use these three together to add silo manually.</div>
+            <div style={groupNote}>Use all three together.</div>
             <div style={connectionGroup}>
               <CopyField label="URL" value={url ?? ''} loading={isLoading} />
               <div style={fieldBlock}>
@@ -221,7 +220,6 @@ export function McpSetupDialog({ onClose }: { onClose: () => void }) {
             {/* Each of these is a COMPLETE config on its own — an alternative to
               assembling the group above, not part of it. */}
             <div style={groupHeading}>Or paste a ready-made config</div>
-            <div style={groupNote}>Each of these is complete on its own.</div>
             <CopyField
               label="Claude Code CLI"
               value={claudeCodeCliCommand(url ?? '')}

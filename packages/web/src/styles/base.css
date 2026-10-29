@@ -15,6 +15,15 @@ body {
   padding: 0;
 }
 
+html {
+  -webkit-tap-highlight-color: transparent;
+}
+
+button,
+a {
+  touch-action: manipulation;
+}
+
 /* Thin, quiet scrollbars everywhere. `scrollbar-width` does not inherit, so it goes on `*`. */
 * {
   scrollbar-width: thin;
@@ -68,7 +77,8 @@ select {
     background 0.14s ease,
     color 0.14s ease,
     border-color 0.14s ease,
-    box-shadow 0.14s ease;
+    box-shadow 0.14s ease,
+    transform 0.15s var(--ease-out);
 }
 
 /* Library row (plan 010): the whole row is a link; hover needs real CSS
@@ -558,12 +568,11 @@ select {
 
 /* Sidebar nav rows (Library/Trash/tags/Settings) — the ACTIVE state already
    had its own ink-on-raised-bg treatment (inline, in NavItem.tsx); this adds
-   the missing INACTIVE hover/press feedback so every row — not just the
+   the missing INACTIVE hover feedback so every row — not just the
    current one — reads as clickable (emil-design-eng.md consistency pass).
    Hover uses `--hov` (never `--bg`, which is reserved for the active pill),
    so a hovered-but-inactive row stays visually distinct from the current
-   page. `:active` here only applies while NOT the active row — pressing the
-   already-active row has nothing to press feedback toward. The resting
+   page. The resting
    `background: transparent` lives HERE (not inline) — review fix
    (CodeRabbit): NavItem.tsx used to set it inline for the inactive case,
    which (inline styles always beating CSS regardless of specificity) fully
@@ -591,10 +600,6 @@ select {
   }
 }
 
-.silo-nav-item:active:not([aria-current="page"]) {
-  transform: scale(0.99);
-}
-
 /* Theme toggle segments (light/dark) — previously no hover/press feedback,
    the segmented control just snapped between active/inactive with no
    in-between affordance (emil-design-eng.md consistency pass). */
@@ -609,10 +614,6 @@ select {
   .silo-theme-toggle-btn:hover:not([aria-pressed="true"]) {
     color: var(--ink);
   }
-}
-
-.silo-theme-toggle-btn:active {
-  transform: scale(0.95);
 }
 
 /* Tag toggle rows (RowMenu's tags fly-out + EditModal's tags picker) —
@@ -641,10 +642,6 @@ select {
   .silo-icon-btn-sm:hover {
     background: var(--hov);
   }
-}
-
-.silo-icon-btn-sm:active {
-  transform: scale(0.92);
 }
 
 /* Sidebar text-only affordances ("+N more"/"show less", "+ new tag") — had a
@@ -907,4 +904,41 @@ select {
 .silo-brand-mark i:nth-child(3) {
   top: 59.615385%;
   opacity: 0.46;
+}
+
+@media (forced-colors: active) {
+  .silo-nav-item[aria-current="page"],
+  .silo-link-row[data-active="true"] {
+    outline: 1px solid Highlight;
+    outline-offset: -1px;
+  }
+
+  .silo-nav-item[aria-current="page"]:focus-visible,
+  .silo-link-row[data-active="true"]:focus-visible {
+    outline: 2px solid Highlight;
+    outline-offset: 2px;
+  }
+
+  .silo-reader-segment-chip {
+    outline: 1px solid Highlight;
+  }
+
+  .silo-search-kbd,
+  .silo-mobile-bar {
+    border: 1px solid CanvasText;
+  }
+
+  .silo-brand-mark {
+    forced-color-adjust: none;
+  }
+}
+
+/* Keep all theme colors in sync during a user theme switch. */
+.silo-theme-switching,
+.silo-theme-switching::before,
+.silo-theme-switching::after,
+.silo-theme-switching *,
+.silo-theme-switching *::before,
+.silo-theme-switching *::after {
+  transition: none !important;
 }

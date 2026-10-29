@@ -87,7 +87,7 @@ export function ReaderLayout({
       );
       (row ?? rootRef.current?.querySelector<HTMLElement>('.silo-listpane'))?.focus();
     }
-    const activeRow = document.activeElement?.closest('.silo-link-row');
+    const activeRow = document.activeElement?.closest('.silo-row-wrap');
     if (selectedId && activeRow && !matchMedia(layoutMedia.fullWindowReader).matches) {
       rootRef.current
         ?.querySelector<HTMLElement>(`[data-link-id="${CSS.escape(selectedId)}"]`)

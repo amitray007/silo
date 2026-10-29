@@ -68,6 +68,7 @@ export function NavItem({
         <span
           style={{
             marginLeft: 'auto',
+            fontVariantNumeric: 'tabular-nums',
             lineHeight: '16px',
             fontSize: 'var(--text-xs)',
             fontWeight: 400,

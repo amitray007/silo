@@ -14,6 +14,11 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
+/** The row's wrapper holds both the link and its action buttons. */
+function rowWrap(title: HTMLElement) {
+  return title.closest('.silo-row-wrap') as HTMLElement;
+}
+
 /** Trash uses the same menu, hover-preview, and query providers as Library. */
 function renderTrashView(fetchImpl: typeof fetch) {
   vi.stubGlobal('fetch', fetchImpl);
@@ -107,11 +112,16 @@ describe('TrashView', () => {
 
       await waitFor(() => expect(screen.getByText('Restore me')).toBeDefined());
       if (action === 'menu') {
-        fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+        fireEvent.click(
+          within(rowWrap(screen.getByText('Restore me'))).getByRole('button', {
+            name: 'More actions',
+          }),
+        );
         fireEvent.click(screen.getByRole('menuitem', { name: 'Restore' }));
       } else {
-        const row = screen.getByText('Restore me').closest('a') as HTMLElement;
-        fireEvent.click(within(row).getByRole('button', { name: 'Restore' }));
+        fireEvent.click(
+          within(rowWrap(screen.getByText('Restore me'))).getByRole('button', { name: 'Restore' }),
+        );
       }
 
       await waitFor(() =>
@@ -146,7 +156,11 @@ describe('TrashView', () => {
 
       await waitFor(() => expect(screen.getByText('Delete me')).toBeDefined());
       if (action === 'menu') {
-        fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+        fireEvent.click(
+          within(document.querySelector('.silo-row-wrap') as HTMLElement).getByRole('button', {
+            name: 'More actions',
+          }),
+        );
         fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
       } else fireEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
       expect(fetchImpl).not.toHaveBeenCalledWith(
@@ -156,7 +170,11 @@ describe('TrashView', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(screen.queryByRole('alertdialog')).toBeNull();
       if (action === 'menu') {
-        fireEvent.click(screen.getByRole('button', { name: 'Options' }));
+        fireEvent.click(
+          within(document.querySelector('.silo-row-wrap') as HTMLElement).getByRole('button', {
+            name: 'More actions',
+          }),
+        );
         fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
       } else fireEvent.click(screen.getByRole('button', { name: 'Delete forever' }));
       fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));

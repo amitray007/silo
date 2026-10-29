@@ -22,7 +22,7 @@ function renderWithProviders(ui: ReactNode) {
 describe('DayGroup', () => {
   it('renders the label in the token style', () => {
     renderWithProviders(<DayGroup label="Today" links={[]} />);
-    const label = screen.getByText('Today');
+    const label = screen.getByRole('heading', { level: 2, name: 'Today' });
     expect(label.className).toBe('silo-daylabel');
   });
 
