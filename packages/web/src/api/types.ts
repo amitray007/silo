@@ -141,6 +141,7 @@ export type LinkJson = {
   feedId: string | null;
   publishedAt?: string | null;
   archivedAt?: string | null;
+  savedLinkId?: string | null;
   notes: string | null;
   tags: string[];
   createdAt: string;

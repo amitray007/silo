@@ -20,6 +20,16 @@ const feed = {
   lastError: null,
   createdAt: '2026-10-29T00:00:00Z',
 };
+function writePost(posts: LinkJson[], path: string) {
+  const post = posts.find((post) => post.id === path.split('/')[5]);
+  if (!post) return json({ error: 'not_found' }, 404);
+  if (path.endsWith('/save')) {
+    post.savedLinkId = 'saved';
+    return json({ id: 'saved', outcome: 'created' }, 201);
+  }
+  post.archivedAt = path.endsWith('/unarchive') ? null : new Date().toISOString();
+  return json({ id: post.id, archivedAt: post.archivedAt });
+}
 function mount() {
   const today = new Date();
   const recent = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 12);
@@ -40,16 +50,20 @@ function mount() {
     const method = init?.method;
 
     if (method === 'POST' && path.startsWith('/api/feeds/feed/posts/')) {
-      const post = posts.find((post) => post.id === path.split('/')[5]);
-      if (!post) return json({ error: 'not_found' }, 404);
-      post.archivedAt = path.endsWith('/unarchive') ? null : new Date().toISOString();
-      return json({ id: post.id, archivedAt: post.archivedAt });
+      return writePost(posts, path);
     }
     const currentFeed = { ...feed, inboxCount: posts.filter((post) => !post.archivedAt).length };
     const reads: Record<string, () => Response> = {
       '/api/auth/check': () => json({ authRequired: false }),
       '/api/settings': () => json({ theme: 'light', plugins: {} }),
-      '/api/counts': () => json({ live: 0, trash: 0 }),
+      '/api/counts': () => json({ live: posts.some((post) => post.savedLinkId) ? 1 : 0, trash: 0 }),
+      '/api/links': () =>
+        json({
+          links: posts
+            .filter((post) => post.savedLinkId)
+            .map((post) => ({ ...post, id: 'saved', feedId: null })),
+        }),
+      '/api/links/saved': () => json({ link: makeLink({ id: 'saved', title: 'Home copy' }) }),
       '/api/tags': () => json({ tags: [] }),
       '/api/feeds': () => json({ feeds: [currentFeed] }),
       '/api/feeds/feed': () => json({ feed: currentFeed }),
@@ -165,4 +179,39 @@ it('keeps the post and count when archive fails and shows the API error', async 
   );
   expect(list().getByText('Today post')).toBeDefined();
   expect(screen.getByRole('link', { name: /Publisher/ }).textContent).toContain('2');
+});
+
+it('saves from a row, fills bookmarks in the row and Reader, updates Home and opens its copy', async () => {
+  const { fetchMock } = mount();
+  await screen.findByText('Today post');
+  fireEvent.click(list().getAllByRole('button', { name: 'Save to Home' })[0] as HTMLElement);
+  const saved = await list().findByRole('link', { name: 'Open saved' });
+  expect(saved.getAttribute('href')).toBe('/?link=saved');
+  expect(list().getByTitle('Saved to Home')).toBeDefined();
+  fireEvent.click(list().getByText('Today post'));
+  expect(await reader().findByRole('link', { name: 'Open saved' })).toBeDefined();
+  expect(reader().queryByRole('button', { name: 'Save to Home' })).toBeNull();
+  fireEvent.click(reader().getByRole('link', { name: 'Open saved' }));
+  await waitFor(() => expect(reader().getByRole('heading', { name: 'Home copy' })).toBeDefined());
+  expect(screen.getByRole('link', { name: /Library/ }).textContent).toContain('1');
+  expect(
+    fetchMock.mock.calls.filter(
+      ([url, init]) => String(url).endsWith('/save') && init?.method === 'POST',
+    ),
+  ).toHaveLength(1);
+});
+it('saves from the Reader and reports save failures without filling the bookmark', async () => {
+  const { fetchMock } = mount();
+  fireEvent.click(await screen.findByText('Today post'));
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).endsWith('/save')
+      ? Promise.resolve(json({ error: 'internal_error', message: 'Save failed. Try again.' }, 503))
+      : fetchMock(input, init),
+  );
+  fireEvent.click(await reader().findByRole('button', { name: 'Save to Home' }));
+  expect(await reader().findByText('Save failed. Try again.')).toBeDefined();
+  expect(reader().queryByRole('link', { name: 'Open saved' })).toBeNull();
+  vi.stubGlobal('fetch', fetchMock);
+  fireEvent.click(reader().getByRole('button', { name: 'Save to Home' }));
+  expect(await reader().findByRole('link', { name: 'Open saved' })).toBeDefined();
 });

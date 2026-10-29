@@ -8,6 +8,7 @@ import { useHideOnScroll } from '../../lib/useHideOnScroll';
 import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
 import { useHideWhileReading } from '../../lib/useHideWhileReading';
 import { useReaderWidth } from '../../lib/useReaderWidth';
+import { FeedSaveAction } from '../FeedSaveAction';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
@@ -59,6 +60,7 @@ function ReaderActions({
   feedPost,
   archived,
   compact,
+  link,
 }: {
   actions: Actions;
   disabled: boolean;
@@ -66,9 +68,10 @@ function ReaderActions({
   feedPost: boolean;
   archived: boolean;
   compact: boolean;
+  link: LinkJson | undefined;
 }) {
   return (
-    <div className="silo-reader-tools">
+    <div className="silo-reader-tools" data-compact={compact}>
       {!compact && (
         <>
           <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
@@ -79,6 +82,9 @@ function ReaderActions({
             disabled={disabled}
           />
         </>
+      )}
+      {feedPost && link && (
+        <FeedSaveAction link={link} save={actions.save} busy={disabled || actions.busy} />
       )}
       {feedPost && (
         <IconButton
@@ -525,6 +531,7 @@ export function ReaderPane({
                     feedPost={isFeedPost(link)}
                     archived={Boolean(link?.archivedAt)}
                     compact={phone}
+                    link={link}
                   />
                 </div>
               )}

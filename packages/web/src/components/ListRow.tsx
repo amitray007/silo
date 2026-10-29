@@ -6,6 +6,7 @@ import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
 import { useCompactLinks } from '../lib/useCompactLinks';
 import { useTitleReveal } from '../lib/useTitleReveal';
 import { Chip } from './Chip';
+import { FeedSaveAction } from './FeedSaveAction';
 import { MenuPresence } from './MenuPresence';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useReaderSelection } from './reader/ReaderSelection';
@@ -34,6 +35,7 @@ export function ListRow({
   children,
   onRemove,
   onDelete,
+  onSave,
   busy = false,
   error,
 }: {
@@ -48,6 +50,7 @@ export function ListRow({
   children?: ReactNode;
   onRemove: () => void;
   onDelete?: () => void;
+  onSave?: () => void;
   busy?: boolean;
   error?: string | undefined;
 }) {
@@ -100,6 +103,11 @@ export function ListRow({
             text={link.title ?? deriveTitleFromUrl(link.url)}
             reveal={revealTitle}
           />
+          {isFeedPost(link) && link.savedLinkId && (
+            <span className="silo-row-saved" title="Saved to Home">
+              <ReaderIcon name="bookmarkFilled" size={16} />
+            </span>
+          )}
         </span>
         <span className="silo-row-meta">
           <span>{domain}</span>
@@ -122,6 +130,7 @@ export function ListRow({
         purge={purge}
         onRemove={onRemove}
         onDelete={onDelete}
+        onSave={onSave}
         menuOpen={menuOpen}
         toggleMenu={toggleMenu}
         onMenu={onMenu}
@@ -175,6 +184,7 @@ function RowActions({
   purge,
   onRemove,
   onDelete,
+  onSave,
   menuOpen,
   toggleMenu,
   onMenu,
@@ -185,6 +195,7 @@ function RowActions({
   purge: number | undefined;
   onRemove: () => void;
   onDelete: (() => void) | undefined;
+  onSave: (() => void) | undefined;
   menuOpen: boolean;
   toggleMenu: () => void;
   onMenu: (() => void) | undefined;
@@ -200,7 +211,10 @@ function RowActions({
       : 'Restore';
   const icon = feedPost ? archive : purge === undefined ? 'trash' : 'restore';
   return (
-    <span className="silo-row-actions">
+    <span className="silo-row-actions" data-feed={feedPost}>
+      {feedPost && onSave && (
+        <FeedSaveAction link={link} save={onSave} busy={busy} tabIndex={actionTabIndex} />
+      )}
       <button
         type="button"
         className="silo-reader-iconbtn"

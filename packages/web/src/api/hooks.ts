@@ -499,7 +499,10 @@ function invalidateLinkQueries(
 ): void {
   queryClient.invalidateQueries({ queryKey: ['links'] });
   queryClient.invalidateQueries({ queryKey: ['link'] });
-  if (affects.counts) queryClient.invalidateQueries({ queryKey: ['saved-links'] });
+  if (affects.counts) {
+    queryClient.invalidateQueries({ queryKey: ['saved-links'] });
+    queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+  }
   if (affects.tags) queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
   if (affects.counts) queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
 }
@@ -727,6 +730,8 @@ function insertIntoTrashCache(
 
 /** The shared settle tail for every trash-lifecycle mutation below: the trash list itself, plus `counts` (live/trash tallies) — trash mutations never touch tag counts. */
 function invalidateTrashQueries(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+  queryClient.invalidateQueries({ queryKey: ['link'] });
   queryClient.invalidateQueries({ queryKey: ['saved-links'] });
   queryClient.invalidateQueries({ queryKey: queryKeys.trash() });
   queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
@@ -1168,6 +1173,24 @@ export function useTriageFeedPost() {
         client.invalidateQueries({ queryKey: queryKeys.feeds() }),
         client.invalidateQueries({ queryKey: queryKeys.feed(feedId) }),
         client.invalidateQueries({ queryKey: queryKeys.link(postId) }),
+      ]);
+    },
+  });
+}
+
+export function useSaveFeedPost() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({ feedId, postId }: { feedId: string; postId: string }) =>
+      apiPost<{ id: string; outcome: 'created' | 'existing' | 'revived' }>(
+        `/api/feeds/${feedId}/posts/${postId}/save`,
+        {},
+      ),
+    onSuccess: async (_result, { feedId }) => {
+      invalidateLinkQueries(client, { counts: true, tags: true });
+      await Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.feedPosts(feedId) }),
+        client.invalidateQueries({ queryKey: queryKeys.trash() }),
       ]);
     },
   });

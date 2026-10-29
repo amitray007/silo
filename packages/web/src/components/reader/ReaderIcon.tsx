@@ -54,6 +54,7 @@ export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size
   return (
     <svg
       className="silo-reader-icon"
+      data-filled={name === 'bookmarkFilled'}
       width={size}
       height={size}
       viewBox="0 0 24 24"

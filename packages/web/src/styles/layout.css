@@ -2236,7 +2236,9 @@ div.silo-reader-notecard {
   .silo-reader-inline-actions:not([data-feed="true"]) {
     display: none;
   }
-  .silo-reader-inline-actions[data-feed="true"] .silo-reader-tools > button:not(:last-child) {
+  .silo-reader-inline-actions[data-feed="true"]
+    .silo-reader-tools[data-compact="false"]
+    > button:nth-child(-n + 2) {
     display: none;
   }
 }
@@ -2359,4 +2361,29 @@ div.silo-reader-notecard {
     margin: 0 6px 0 2px;
     opacity: 1;
   }
+}
+
+.silo-row-saved {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--fnt);
+}
+@media (hover: none) {
+  .silo-row-wrap .silo-row-actions[data-feed="true"] {
+    display: flex;
+    opacity: 1;
+    pointer-events: auto;
+    background: linear-gradient(to right, transparent, var(--bg) 40px);
+  }
+  .silo-row-actions[data-feed="true"] > :not(:first-child) {
+    display: none;
+  }
+  .silo-row-actions[data-feed="true"] .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.silo-reader-icon[data-filled="true"] {
+  fill: currentColor;
 }

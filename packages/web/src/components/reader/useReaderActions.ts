@@ -1,5 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { useDeleteNow, useRestoreLink, useTrashLink, useTriageFeedPost } from '../../api/hooks';
+import {
+  useDeleteNow,
+  useRestoreLink,
+  useSaveFeedPost,
+  useTrashLink,
+  useTriageFeedPost,
+} from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { isFeedPost } from '../../lib/isFeedPost';
 import { isTextEntryElement } from '../../lib/usePasteCapture';
@@ -23,6 +29,7 @@ export function useReaderActions(
   const restore = useRestoreLink();
   const remove = useDeleteNow();
   const triage = useTriageFeedPost();
+  const save = useSaveFeedPost();
   const { openEdit } = useRowMenu();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notice, setNotice] = useState({ id, message: '' });
@@ -34,7 +41,8 @@ export function useReaderActions(
     const timer = setTimeout(() => setNotice({ id: notice.id, message: '' }), FEEDBACK_MS);
     return () => clearTimeout(timer);
   }, [notice]);
-  const busy = trash.isPending || restore.isPending || remove.isPending || triage.isPending;
+  const busy =
+    trash.isPending || restore.isPending || remove.isPending || triage.isPending || save.isPending;
 
   async function copy() {
     if (!link) return;
@@ -64,6 +72,18 @@ export function useReaderActions(
     busy,
     feedback,
     feedPost: Boolean(link && isFeedPost(link)),
+    save: () => {
+      if (!link?.feedId || busy) return;
+      const target = link.id;
+      save.mutate(
+        { feedId: link.feedId, postId: target },
+        {
+          onError: (error) => {
+            if (currentId.current === target) setFeedback(error.message);
+          },
+        },
+      );
+    },
     archive: () => {
       if (!link?.feedId || busy) return;
       const target = link.id;
