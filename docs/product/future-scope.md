@@ -34,6 +34,7 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 ### Deliberate agent-native boundary
 
 - `empty_trash` stays human-only because bulk permanent deletion cannot be undone.
+- **`refresh_reader` on the `mcp-http` container.** That container runs no worker, so the tool returns an error there; it works in the turnkey `silo` app. Closing it means queuing the refresh for the api container's worker and returning "queued". Agents still get the page text through `get_link`.
 
 - **AI settings over MCP (deliberate exception).** Provider keys and AI settings are human-only: the web session or the operator token may change them, and no MCP tool manages them, because the key is a secret. Keep this exception unless an agent-safe design (no key ever crosses MCP) is found.
 
