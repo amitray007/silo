@@ -4,8 +4,9 @@ name: Extensions
 # gate already type-checks, tests, and builds these packages as part of the
 # turbo graph — this workflow adds the extension-specific value that gate can't:
 # `ray lint` (Raycast store rejection checks), Chrome manifest sanity, and a
-# downloadable Chrome Web Store zip on every green run. It runs only when
-# extension code (or its shared deps / lockfile) changes, so it stays quick.
+# downloadable Chrome Web Store zip on every green run. Both jobs are required
+# checks on `main`, so every PR runs this workflow; the jobs skip (and report
+# success) unless extension code (or its shared deps / lockfile) changed.
 
 on:
   push:
@@ -17,11 +18,6 @@ on:
       - ".github/workflows/extensions.yml"
   pull_request:
     branches: [main]
-    paths:
-      - "extensions/**"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
-      - ".github/workflows/extensions.yml"
 
 permissions:
   contents: read
@@ -31,8 +27,32 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: extension changes
+    runs-on: ubuntu-latest
+    outputs:
+      extensions: ${{ steps.diff.outputs.extensions }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      # Push runs are already path-filtered by the trigger above.
+      - id: diff
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        # Fails closed: a missing base or a failed diff runs the jobs.
+        run: |
+          extensions=true
+          if [ -n "$BASE_SHA" ] && files=$(git diff --name-only "$BASE_SHA"...HEAD) &&
+            ! grep -qE '^(extensions/|pnpm-lock\.yaml$|pnpm-workspace\.yaml$|\.github/workflows/extensions\.yml$)' <<< "$files"; then
+            extensions=false
+          fi
+          echo "extensions=$extensions" >> "$GITHUB_OUTPUT"
+
   chrome:
     name: chrome · typecheck · test · build
+    needs: changes
+    if: needs.changes.outputs.extensions == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -82,6 +102,8 @@ jobs:
 
   raycast:
     name: raycast · typecheck · test · lint · build
+    needs: changes
+    if: needs.changes.outputs.extensions == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
