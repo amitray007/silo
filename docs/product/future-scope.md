@@ -49,6 +49,7 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **A field picker in the web app's Enrich menu** - the web keeps the full run; only MCP takes `fields`.
 - **`fields` on the REST bulk route and the CLI.**
 - **A `favicon` field** - site icons load lazily through `/api/favicon` today.
+- **Re-save then narrow-request race** - a re-save of a settled link queues a full run without showing `enriching`; a narrow `retry_capture` that lands before the worker starts that job narrows it, so that re-save skips its source/Reader refresh. Nothing is lost. Fixing it means re-saves flip to `enriching` (a visible web change).
 
 ### Browser process isolation
 
