@@ -14,6 +14,21 @@ import { sourceDataSchema } from './source-data.js';
  */
 const enrichmentStatus = z.enum(['full', 'partial', 'bare']);
 
+export const ENRICH_FIELDS = ['title', 'metadata', 'source', 'reader'] as const;
+export const ENRICH_FIELD_DESCRIPTIONS = {
+  title:
+    'Writes title and title_source. X uses AI with stored post text (source API if missing), with no page fetch or Reader; AI off writes nothing. Other links fetch page metadata.',
+  metadata:
+    'Writes title, description, image and site name. Fetches page metadata, or the source API for X; skips Reader.',
+  source: 'Writes source_data. Calls only the source API; skips page fetch, Reader and AI title.',
+  reader:
+    'Writes full text and Reader view. Fetches and extracts the page and may render it in Chrome; skips source API and AI title.',
+} as const satisfies Record<(typeof ENRICH_FIELDS)[number], string>;
+
+export const enrichFieldSchema = z.enum(ENRICH_FIELDS);
+export type EnrichField = z.infer<typeof enrichFieldSchema>;
+export type EnrichOptions = { fields?: readonly EnrichField[] };
+
 /**
  * The enrichment result shape written back by `recordEnrichment`.
  *
@@ -227,13 +242,14 @@ export async function recordEnrichment(
       // floor is set by `requestEnrich`); the floor is cleared in the same write.
       captureStatus: sql`case when ${links.enrichFloorStatus} = 'full' then 'full'::capture_status else ${parsed.status}::capture_status end`,
       enrichFloorStatus: sql`null`,
+      enrichFields: null,
       sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
       sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,
-      // Every recorded attempt counts toward ENRICH_ATTEMPT_CAP, success or
+      // Full attempts count toward ENRICH_ATTEMPT_CAP, success or
       // not — this is the only write path a real enrichment attempt goes
       // through, so incrementing here (rather than at the worker call site)
       // can't be bypassed or double-counted by a caller.
-      enrichAttempts: sql`${links.enrichAttempts} + 1`,
+      enrichAttempts: sql`case when ${links.enrichFields} is null then ${links.enrichAttempts} + 1 else ${links.enrichAttempts} end`,
     })
     .where(whereLive(eq(links.id, linkId)))
     .returning();
@@ -285,8 +301,11 @@ export async function requestRetry(linkId: string): Promise<Link | null> {
  * keeps the old data and does not trash the link on a 404). Returns `null` if
  * `linkId` doesn't exist or is trashed.
  */
-export async function requestEnrich(linkId: string): Promise<Link | null> {
-  return resetToEnriching(linkId, 'manual');
+export async function requestEnrich(
+  linkId: string,
+  options: EnrichOptions = {},
+): Promise<Link | null> {
+  return resetToEnriching(linkId, 'manual', undefined, options);
 }
 
 /**
@@ -299,19 +318,27 @@ async function resetToEnriching(
   linkId: string,
   trigger: EnrichTrigger,
   allowed?: ReadonlyArray<Link['captureStatus']>,
+  options: EnrichOptions = {},
 ): Promise<Link | null> {
   return db.transaction(async (tx) => {
     const [current] = await tx
-      .select({ captureStatus: links.captureStatus, floor: links.enrichFloorStatus })
+      .select({
+        captureStatus: links.captureStatus,
+        floor: links.enrichFloorStatus,
+        fields: links.enrichFields,
+        attempts: links.enrichAttempts,
+      })
       .from(links)
       .where(whereLive(eq(links.id, linkId)))
       .for('update');
     if (!current || (allowed && !allowed.includes(current.captureStatus))) return null;
+    const fields = mergeEnrichFields(current, options.fields);
     const [updated] = await tx
       .update(links)
       .set({
         captureStatus: 'enriching',
-        enrichAttempts: 0,
+        enrichFields: fields,
+        enrichAttempts: fields === null ? 0 : current.attempts,
         enrichFloorStatus:
           current.captureStatus === 'enriching' ? current.floor : current.captureStatus,
       })
@@ -321,6 +348,17 @@ async function resetToEnriching(
     await enqueueEnrichment(tx, linkId, { trigger, previousStatus: current.captureStatus });
     return updated;
   });
+}
+
+/** A pending full run wins over every narrower request, including capture jobs. */
+function mergeEnrichFields(
+  current: { captureStatus: Link['captureStatus']; fields: string[] | null },
+  fields: EnrichOptions['fields'],
+): string[] | null {
+  const requested = fields ? [...new Set(fields)] : null;
+  if (current.captureStatus !== 'enriching') return requested;
+  if (current.fields === null || requested === null) return null;
+  return [...new Set([...current.fields, ...requested])];
 }
 
 /**

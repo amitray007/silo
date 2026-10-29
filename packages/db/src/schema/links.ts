@@ -47,6 +47,8 @@ export const links = pgTable(
     // click while `enriching`). `recordEnrichment` records `full` when this is
     // `full`, and clears it in the same UPDATE. NULL when no such run is open.
     enrichFloorStatus: captureStatus('enrich_floor_status'),
+    // NULL runs the full pipeline; a set limits the pending run to these fields.
+    enrichFields: text('enrich_fields').array(),
     description: text('description'),
     imageUrl: text('image_url'),
     siteName: text('site_name'),

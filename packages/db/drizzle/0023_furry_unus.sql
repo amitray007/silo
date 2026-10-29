@@ -1,0 +1,1 @@
+ALTER TABLE "links" ADD COLUMN "enrich_fields" text[];

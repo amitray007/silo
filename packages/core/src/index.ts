@@ -140,9 +140,12 @@ export {
 // run (any status); requestRetry is the sweep's re-kick. All are
 // live-scoped — trashed links are never touched/resurrected.
 // The actual fetch/extract/enqueue is the worker's job (U2/U3/U5).
-export type { EnrichmentResult } from './links/enrichment.js';
+export type { EnrichField, EnrichmentResult, EnrichOptions } from './links/enrichment.js';
 export {
   ENRICH_ATTEMPT_CAP,
+  ENRICH_FIELD_DESCRIPTIONS,
+  ENRICH_FIELDS,
+  enrichFieldSchema,
   enrichmentResultSchema,
   recordEnrichment,
   requestEnrich,
