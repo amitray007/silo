@@ -520,3 +520,27 @@ it('flags a reader-thread failure while keeping page metadata', async () => {
     log.mockRestore();
   }
 });
+
+describe('extract - metadata only', () => {
+  it('extracts metadata without starting the Reader parser', async () => {
+    const parser = await import('./reader-worker.js');
+    const reader = vi.spyOn(parser, 'extractPage');
+    try {
+      const result = await extract({
+        url: URL_UNDER_TEST,
+        html: `<html><head><title>Metadata title</title><meta name="description" content="Metadata description"></head><body><article>${'Article prose. '.repeat(100)}</article></body></html>`,
+        contentType: 'text/html',
+        reader: false,
+      });
+      expect(result).toMatchObject({
+        title: 'Metadata title',
+        description: 'Metadata description',
+      });
+      expect(result.text).toBeUndefined();
+      expect(result.reader).toBeUndefined();
+      expect(reader).not.toHaveBeenCalled();
+    } finally {
+      reader.mockRestore();
+    }
+  });
+});

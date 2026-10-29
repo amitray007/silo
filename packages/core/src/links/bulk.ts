@@ -1,4 +1,4 @@
-import { requestEnrich } from './enrichment.js';
+import { type EnrichOptions, requestEnrich } from './enrichment.js';
 import {
   addTag,
   type CreateLinkInput,
@@ -195,10 +195,13 @@ export async function restoreMany(ids: ReadonlyArray<string>): Promise<BulkItemR
  * `retry_capture` tool's own not-found message, so an agent driving this in
  * bulk gets the same explanation it would from the single-id tool.
  */
-export async function retryCaptureMany(ids: ReadonlyArray<string>): Promise<BulkItemResult[]> {
+export async function retryCaptureMany(
+  ids: ReadonlyArray<string>,
+  options: EnrichOptions = {},
+): Promise<BulkItemResult[]> {
   return runBulk(
     ids,
-    (id) => requestEnrich(id),
+    (id) => requestEnrich(id, options),
     (id, updated: Link | null) =>
       updated
         ? { id, ok: true }

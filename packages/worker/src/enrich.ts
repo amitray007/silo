@@ -13,7 +13,13 @@
  * job (see `worker.ts`).
  */
 
-import type { EnrichJobData, ReaderExtraction, SettingsMap, SourceData } from '@silo/core';
+import type {
+  EnrichJobData,
+  LinkSummaryWithTags,
+  ReaderExtraction,
+  SettingsMap,
+  SourceData,
+} from '@silo/core';
 import {
   ENRICH_ATTEMPT_CAP,
   getById,
@@ -23,9 +29,11 @@ import {
   SETTINGS_DEFAULTS,
   settleGiveUp,
   softDelete,
+  sourceDataSchema,
 } from '@silo/core';
 import type { AiRunResult } from './ai/run.js';
 import { runAiFeature } from './ai/run.js';
+import { planEnrich } from './enrich-plan.js';
 import { enrichSource } from './enrich-source/index.js';
 import { xPostTitle } from './enrich-source/twitter-title/index.js';
 import type { XPostTitleInput } from './enrich-source/twitter-title/prompt.js';
@@ -60,6 +68,7 @@ export interface EnrichLinkDeps {
    * `enrichLink` call (not per source) — see the call site below.
    */
   getPluginsSetting: () => Promise<SettingsMap['plugins']>;
+  selectReader?: typeof selectReader;
   /**
    * Asks the optional AI layer for an X post's title (`x-post-title`). Never
    * throws; `off` means AI or the feature is off. Defaults to the real runner;
@@ -148,14 +157,17 @@ function mapSafeFetchFailureToStatus(
  * so the cap logic exists in exactly one place.
  */
 async function recordThenMaybeSettle(
-  linkId: string,
+  link: Pick<LinkSummaryWithTags, 'id' | 'enrichRequestSeq' | 'enrichFields'>,
   result: Parameters<typeof recordEnrichment>[1],
 ): Promise<void> {
   // No downgrade: `recordEnrichment` records `full` for a run whose floor
   // (`enrich_floor_status`) is `full`, so `updated.captureStatus` is `full` here.
-  const updated = await recordEnrichment(linkId, result);
+  const updated = await recordEnrichment(link.id, result, {
+    startedSeq: link.enrichRequestSeq,
+    startedFields: link.enrichFields,
+  });
   if (updated && updated.captureStatus !== 'full' && updated.enrichAttempts >= ENRICH_ATTEMPT_CAP) {
-    await settleGiveUp(linkId);
+    await settleGiveUp(link.id);
   }
 }
 
@@ -332,6 +344,20 @@ export async function enrichLink(
   if (isFinishedSweepDuplicate(link.captureStatus, job)) {
     return;
   }
+  const plan = planEnrich(link);
+  if (plan !== null) {
+    await enrichSelectedFields(link, plan, deps);
+    return;
+  }
+  await enrichFullLink(link, deps, job);
+}
+
+async function enrichFullLink(
+  link: LinkSummaryWithTags,
+  deps: EnrichLinkDeps,
+  job: EnrichJobData | undefined,
+): Promise<void> {
+  const linkId = link.id;
   // The row decides, not the payload. A run is held at `full` when its floor
   // (`enrich_floor_status`, set by the owner's Enrich request) is `full`, or
   // when the link is already `full` at job start (a re-save of a complete link,
@@ -390,7 +416,7 @@ export async function enrichLink(
     }
 
     if (!fetchResult.ok) {
-      await recordThenMaybeSettle(linkId, {
+      await recordThenMaybeSettle(link, {
         status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
         ...aiTitleFields(await aiTitlePromise),
         ...postText,
@@ -409,11 +435,16 @@ export async function enrichLink(
     );
     Object.assign(extracted, postText);
 
-    const selected = await selectReader(link.sourceKind, extracted, youtube, {
-      url: fetchResult.finalUrl,
-      contentType: fetchResult.contentType,
-      signal: AbortSignal.timeout(60_000),
-    });
+    const selected = await (deps.selectReader ?? selectReader)(
+      link.sourceKind,
+      extracted,
+      youtube,
+      {
+        url: fetchResult.finalUrl,
+        contentType: fetchResult.contentType,
+        signal: AbortSignal.timeout(60_000),
+      },
+    );
     await recordExtraction(link, extracted, selected, {
       sourceData,
       holdFull,
@@ -423,6 +454,162 @@ export async function enrichLink(
   } finally {
     // Early returns and capture failures must also stop pending AI work.
     aiController.abort();
+  }
+}
+
+type NarrowLink = Pick<
+  LinkSummaryWithTags,
+  | 'id'
+  | 'url'
+  | 'sourceKind'
+  | 'sourceData'
+  | 'titleSource'
+  | 'captureStatus'
+  | 'enrichFloorStatus'
+  | 'enrichFields'
+  | 'enrichRequestSeq'
+>;
+type EnrichPlan = NonNullable<ReturnType<typeof planEnrich>>;
+
+function storedSource(link: NarrowLink): SourceData | undefined {
+  const parsed = sourceDataSchema.safeParse(link.sourceData);
+  return parsed.success ? parsed.data : undefined;
+}
+
+async function narrowSource(
+  link: NarrowLink,
+  plan: EnrichPlan,
+  deps: EnrichLinkDeps,
+): Promise<SourceData | undefined> {
+  const stored = storedSource(link);
+  const missingPost = plan.aiTitle && (stored?.kind !== 'twitter' || !stored.text.trim());
+  if (!plan.source && !missingPost) return stored;
+  const plugins = await deps.getPluginsSetting().catch(() => SETTINGS_DEFAULTS.plugins);
+  return deps.enrichSource(link.sourceKind, link.url, plugins).catch(() => undefined);
+}
+
+/**
+ * Source API data supplies X metadata without fetching x.com. No title: on X only
+ * the AI writes a title, and the post text is not one.
+ */
+function twitterMetadata(source: SourceData | undefined): ExtractResult {
+  if (source?.kind !== 'twitter') return { status: 'bare' };
+  return {
+    status: 'partial',
+    description: source.text,
+    siteName: 'X',
+    ...(source.thumbnailUrl ? { imageUrl: source.thumbnailUrl } : {}),
+  };
+}
+
+function narrowMetadata(plan: EnrichPlan, extracted: ExtractResult) {
+  const { title, description, imageUrl, siteName } = extracted;
+  return {
+    ...(plan.title && title !== undefined ? { title } : {}),
+    ...(plan.metadata && description !== undefined ? { description } : {}),
+    ...(plan.metadata && imageUrl !== undefined ? { imageUrl } : {}),
+    ...(plan.metadata && siteName !== undefined ? { siteName } : {}),
+  };
+}
+
+/** A narrow run restores the floor and writes only the columns its fields own. */
+async function enrichSelectedFields(
+  link: NarrowLink,
+  plan: EnrichPlan,
+  deps: EnrichLinkDeps,
+): Promise<void> {
+  const run = { startedSeq: link.enrichRequestSeq, startedFields: link.enrichFields };
+  const floor = link.enrichFloorStatus ?? link.captureStatus;
+  const status = floor === 'enriching' ? 'bare' : floor;
+  const fetchedAt = new Date();
+  const [source, fetched] = await Promise.all([
+    narrowSource(link, plan, deps),
+    plan.fetch ? deps.safeFetch(link.url) : undefined,
+  ]);
+  if (fetched && !fetched.ok) {
+    await recordEnrichment(link.id, { status }, run);
+    return;
+  }
+  const extracted = fetched
+    ? await deps.extract({
+        url: fetched.finalUrl,
+        html: fetched.html,
+        contentType: fetched.contentType,
+        reader: plan.reader,
+      })
+    : twitterMetadata(plan.metadata ? source : undefined);
+  await recordNarrowReader(link, plan, deps, extracted, fetched, fetchedAt);
+  const aiTitle = await narrowAiTitle(link, plan, source, deps);
+  await recordEnrichment(
+    link.id,
+    { status, ...narrowResultFields(link, plan, extracted, source), ...aiTitleFields(aiTitle) },
+    run,
+  );
+}
+
+function narrowResultFields(
+  link: NarrowLink,
+  plan: EnrichPlan,
+  extracted: ExtractResult,
+  source: SourceData | undefined,
+) {
+  const metadata =
+    link.sourceKind === 'twitter' ? twitterMetadata(plan.metadata ? source : undefined) : extracted;
+  return {
+    ...narrowMetadata(plan, metadata),
+    ...(plan.reader && link.sourceKind === 'twitter' && extracted.text !== undefined
+      ? { text: extracted.text }
+      : {}),
+    ...(plan.writeSource && source ? { sourceData: source } : {}),
+  };
+}
+
+async function recordNarrowReader(
+  link: NarrowLink,
+  plan: EnrichPlan,
+  deps: EnrichLinkDeps,
+  extracted: ExtractResult,
+  fetched: Extract<SafeFetchResult, { ok: true }> | undefined,
+  fetchedAt: Date,
+): Promise<void> {
+  if (plan.reader && fetched) {
+    const youtube =
+      link.sourceKind === 'youtube'
+        ? extractYouTubeWatch(fetched.html, fetched.finalUrl)
+        : undefined;
+    const selected = await (deps.selectReader ?? selectReader)(
+      link.sourceKind,
+      extracted,
+      youtube,
+      {
+        url: fetched.finalUrl,
+        contentType: fetched.contentType,
+        signal: AbortSignal.timeout(60_000),
+      },
+    );
+    if (link.sourceKind !== 'twitter') await recordReader(link.id, selected, fetchedAt);
+  }
+}
+
+async function narrowAiTitle(
+  link: NarrowLink,
+  plan: EnrichPlan,
+  source: SourceData | undefined,
+  deps: EnrichLinkDeps,
+): Promise<string | undefined> {
+  if (!plan.aiTitle) return undefined;
+  // Row fields are an owner's request even if queue dedup kept an older payload.
+  const input = aiTitleInput(link, source, {
+    trigger: 'manual',
+    previousStatus: link.captureStatus,
+  });
+  const run = deps.runXPostTitle ?? defaultDeps.runXPostTitle;
+  if (!input || !run) return undefined;
+  const controller = new AbortController();
+  try {
+    return await startAiTitle(input, run, controller);
+  } finally {
+    controller.abort();
   }
 }
 
@@ -436,7 +623,7 @@ type ExtractionRecord = {
 
 /** Record a successful fetch + extract, including the Reader (see `enrichLink`). */
 async function recordExtraction(
-  link: { id: string; sourceKind: string },
+  link: Pick<LinkSummaryWithTags, 'id' | 'sourceKind' | 'enrichRequestSeq' | 'enrichFields'>,
   extracted: ExtractResult,
   selected: ReaderExtraction,
   { sourceData, holdFull, fetchedAt, aiTitle }: ExtractionRecord,
@@ -449,7 +636,7 @@ async function recordExtraction(
   // result (only the source data and the status, which stays `full`). A
   // successful AI title is the exception: the post text is fresh, so it is written.
   if (holdFull && extracted.status !== 'full') {
-    await recordThenMaybeSettle(linkId, {
+    await recordThenMaybeSettle(link, {
       status: 'full',
       ...aiTitleFields(aiTitle),
       ...(sourceData ? { sourceData } : {}),
@@ -459,7 +646,7 @@ async function recordExtraction(
   if (link.sourceKind !== 'twitter') await recordReader(linkId, selected, fetchedAt);
   const { reader: _reader, readerFailed: _readerFailed, text, ...stored } = extracted;
   // Reader writes own search text, including empty results and rejected older captures.
-  await recordThenMaybeSettle(linkId, {
+  await recordThenMaybeSettle(link, {
     ...stored,
     ...aiTitleFields(aiTitle),
     ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
