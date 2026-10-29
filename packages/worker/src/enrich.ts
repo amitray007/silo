@@ -385,7 +385,7 @@ export async function enrichLink(
     // A re-run of a `full` link (floor `full`) never trashes it: it takes the
     // degraded branch below and stays `full` with its old data.
     if (!fetchResult.ok && fetchResult.reason === 'not-found' && !holdFull) {
-      await softDelete(linkId);
+      await softDelete(linkId, link.feedId);
       return;
     }
 

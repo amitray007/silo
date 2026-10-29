@@ -26,6 +26,7 @@
     "defuddle": "0.19.6",
     "dompurify": "catalog:",
     "drizzle-orm": "catalog:",
+    "feedsmith": "^3.0.1",
     "ipaddr.js": "catalog:",
     "jsdom": "catalog:",
     "linkedom": "^0.18.14",

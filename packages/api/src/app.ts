@@ -15,6 +15,7 @@ import { registerContentImageRoutes } from './routes/content-image.js';
 import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
+import { registerFeedRoutes } from './routes/feeds.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
@@ -227,6 +228,7 @@ export function createApp(): Hono {
   api.use('*', corsMiddleware());
   registerPageViewHeaders(api);
   api.use('*', generalTokenAuth);
+  registerFeedRoutes(api);
   registerLinksRoutes(api);
   registerLinksSavedRoutes(api);
   registerLinksTitlesRoutes(api);

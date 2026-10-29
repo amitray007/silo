@@ -1,7 +1,7 @@
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { readTokenEnv } from '@silo/core';
 import { createSiloMcpServer } from '@silo/mcp-server';
-import { registerLiveReader, startWorker } from '@silo/worker';
+import { registerFeedResolver, registerLiveReader, startWorker } from '@silo/worker';
 import { startMcpHttpServer } from './mcp-http.js';
 
 /**
@@ -30,6 +30,7 @@ async function main(): Promise<void> {
   const worker = await startWorker();
   console.error('[silo] worker started (enqueuer registered, enrichment loop running)');
   // The MCP `refresh_reader` tool needs a Reader refresher in this process.
+  const feedResolver = registerFeedResolver();
   const liveReader = registerLiveReader();
 
   const server = createSiloMcpServer();
@@ -110,6 +111,7 @@ async function main(): Promise<void> {
     console.error(`[silo] received ${signal}, stopping gracefully...`);
     (async () => {
       liveReader.close();
+      feedResolver.close();
       try {
         await worker.stop();
       } catch (error: unknown) {

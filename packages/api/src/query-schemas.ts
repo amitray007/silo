@@ -197,3 +197,9 @@ export const batchCaptureBodySchema = z.object({
   note: z.string().optional(),
   sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
 });
+
+export const feedIdParamSchema = z.object({ id: z.uuid() });
+export const subscribeFeedSchema = z.object({
+  url: z.url({ protocol: /^https?$/ }).max(8192),
+  syncRecents: z.boolean(),
+});

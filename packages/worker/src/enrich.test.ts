@@ -76,6 +76,29 @@ describeIfPg('enrichLink (integration)', () => {
     };
   }
 
+  it('a missing feed post settles into its own trash without leaking into library trash', async () => {
+    const result = await pool.query<{ id: string }>(
+      "insert into feeds (feed_url, title, format, next_poll_at) values ('https://example.com/missing-post-feed', 'Publisher', 'rss', now()) returning id",
+    );
+    const feed = result.rows[0];
+    if (!feed) throw new Error('missing feed');
+    const post = await core.createFeedPost({
+      feedId: feed.id,
+      url: 'https://example.com/missing-feed-post',
+    });
+    if (!post) throw new Error('missing post');
+    await enrichMod.enrichLink(
+      post.id,
+      stubDeps({ ok: false, reason: 'not-found', detail: '404' }),
+    );
+    expect(await core.getById(post.id)).toBeNull();
+    expect(
+      (await pool.query('select deleted_at from links where id = $1', [post.id])).rows[0]
+        ?.deleted_at,
+    ).not.toBeNull();
+    expect((await core.listTrash()).links.map((row) => row.id)).not.toContain(post.id);
+  });
+
   async function newLink(url: string): Promise<string> {
     const link = await core.createLink({ url, sourceKind: 'link' });
     return link.id;

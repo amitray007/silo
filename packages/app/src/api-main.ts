@@ -3,6 +3,7 @@ import { createApp } from '@silo/api';
 import {
   closeBrowserReader,
   registerAiConnectionTester,
+  registerFeedResolver,
   registerLinkTitles,
   registerLiveReader,
   registerPageViewer,
@@ -110,6 +111,7 @@ async function main(): Promise<void> {
   const viewer = registerPageViewer();
   const titles = registerLinkTitles();
   const aiTester = registerAiConnectionTester();
+  const feedResolver = registerFeedResolver();
   const liveReader = registerLiveReader();
   const siteIcons = registerSiteIcons();
   const worker = await startWorkerOrDegrade();
@@ -142,6 +144,7 @@ async function main(): Promise<void> {
         titles.close();
         aiTester.close();
         liveReader.close();
+        feedResolver.close();
         siteIcons.close();
         await viewer.close();
         await worker?.stop();

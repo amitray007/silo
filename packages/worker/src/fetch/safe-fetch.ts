@@ -88,6 +88,8 @@ export type SafeFetchFailureReason =
 export type SafeFetchBytesResult =
   | {
       ok: true;
+      notModified?: true;
+      permanentRedirect?: true;
       bytes: Uint8Array;
       contentType: string | undefined;
       finalUrl: string;
@@ -99,6 +101,8 @@ export type SafeFetchBytesResult =
   | {
       ok: false;
       reason: SafeFetchFailureReason;
+      status?: number;
+      responseHeaders?: Record<string, string>;
       /** Extra detail for logging/debugging; never user-facing. */
       detail?: string;
     };
@@ -135,6 +139,7 @@ const defaultResolver: Resolver = (hostname) =>
 export interface SafeFetchOptions {
   /** Trusted caller profile only; never copy publisher request headers. */
   userAgent?: string;
+  headers?: Record<string, string>;
   accept?: string;
   /** Public application metadata selected by trusted callers, never request credentials. */
   responseHeaderNames?: readonly string[];
@@ -293,10 +298,11 @@ function buildPinnedAgent(hostname: string, pinnedIp: string, family: number): A
 
 /** Outcome of a single hop: either a terminal result, or a redirect to follow. */
 type HopOutcome =
-  | { kind: 'redirect'; nextUrl: string }
+  | { kind: 'redirect'; nextUrl: string; permanent: boolean }
   | { kind: 'done'; result: SafeFetchBytesResult };
 
 interface HopContext {
+  headers: Record<string, string>;
   userAgent: string;
   accept: string;
   responseHeaderNames: readonly string[];
@@ -366,9 +372,17 @@ async function performHop(currentUrl: string, ctx: HopContext): Promise<HopOutco
  * torn down (in `performHop`'s finally) after we are done with the body.
  */
 async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Promise<HopOutcome> {
-  const response = await requestOnce(url, agent, ctx.controller, ctx.accept, ctx.userAgent);
+  const response = await requestOnce(
+    url,
+    agent,
+    ctx.controller,
+    ctx.accept,
+    ctx.userAgent,
+    ctx.headers,
+  );
 
   if (
+    response.status !== 304 &&
     response.status >= 300 &&
     response.status < 400 &&
     (!ctx.includeHttpErrors || [301, 302, 303, 307, 308].includes(response.status))
@@ -383,12 +397,24 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
     if (response.status === 404 || response.status === 410) {
       return {
         kind: 'done',
-        result: { ok: false, reason: 'not-found', detail: String(response.status) },
+        result: {
+          ok: false,
+          reason: 'not-found',
+          detail: String(response.status),
+          status: response.status,
+          responseHeaders: selectedHeaders(response, ctx.responseHeaderNames),
+        },
       };
     }
     return {
       kind: 'done',
-      result: { ok: false, reason: 'http-error', detail: String(response.status) },
+      result: {
+        ok: false,
+        reason: 'http-error',
+        detail: String(response.status),
+        status: response.status,
+        responseHeaders: selectedHeaders(response, ctx.responseHeaderNames),
+      },
     };
   }
 
@@ -403,6 +429,7 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
     result: {
       ok: true,
       bytes: body.bytes,
+      ...notModifiedFlag(response.status),
       contentType,
       finalUrl: url.toString(),
       status: response.status,
@@ -448,7 +475,11 @@ function interpretRedirect(
   // back to the top on the next hop, which fully re-validates (scheme +
   // DNS + IP classification + pinning) before connecting — a redirect can
   // never skip the gate.
-  return { kind: 'redirect', nextUrl: new URL(location, currentUrl).toString() };
+  return {
+    kind: 'redirect',
+    nextUrl: new URL(location, currentUrl).toString(),
+    permanent: response.status === 301 || response.status === 308,
+  };
 }
 
 async function requestOnce(
@@ -457,6 +488,7 @@ async function requestOnce(
   controller: AbortController,
   accept: string,
   userAgent: string,
+  headers: Record<string, string>,
 ): Promise<UndiciResponse> {
   // Deliberately `undici`'s own `fetch`, NOT Node's global `fetch`. Node's
   // native fetch is built on its own internally-bundled undici, which is a
@@ -472,6 +504,7 @@ async function requestOnce(
     redirect: 'manual',
     signal: controller.signal,
     headers: {
+      ...headers,
       'user-agent': userAgent,
       accept,
       'accept-language': FETCH_ACCEPT_LANGUAGE,
@@ -510,10 +543,12 @@ async function fetchBody(
 
   try {
     let currentUrl = rawUrl;
+    let permanentRedirect = false;
 
     for (let hop = 0; hop <= maxRedirects; hop++) {
       const outcome = await performHop(currentUrl, {
         resolver,
+        headers: conditionalHeaders(options.headers),
         includeHttpErrors,
         responseHeaderNames: options.responseHeaderNames ?? [],
         accept: options.accept ?? '*/*',
@@ -525,8 +560,9 @@ async function fetchBody(
         allowLoopbackForTests,
       });
       if (outcome.kind === 'done') {
-        return outcome.result;
+        return withPermanentRedirect(outcome.result, permanentRedirect);
       }
+      permanentRedirect = permanentRedirect || outcome.permanent;
       currentUrl = outcome.nextUrl;
     }
 
@@ -651,4 +687,36 @@ function decodeBody(bytes: Uint8Array, contentType: string | undefined): string 
     // than treated as a hard failure.
     return new TextDecoder('utf-8').decode(bytes);
   }
+}
+
+function conditionalHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  return Object.fromEntries(
+    Object.entries(headers)
+      .map(([name, value]) => [name.toLowerCase(), value] as const)
+      .filter(
+        ([name, value]) =>
+          ['if-none-match', 'if-modified-since'].includes(name) && !/[\r\n]/.test(value),
+      ),
+  );
+}
+
+function selectedHeaders(
+  response: UndiciResponse,
+  names: readonly string[],
+): Record<string, string> {
+  return Object.fromEntries(
+    names
+      .filter((name) => response.headers.has(name))
+      .map((name) => [name, response.headers.get(name) ?? '']),
+  );
+}
+
+function notModifiedFlag(status: number): { notModified?: true } {
+  return status === 304 ? { notModified: true } : {};
+}
+function withPermanentRedirect(
+  result: SafeFetchBytesResult,
+  permanent: boolean,
+): SafeFetchBytesResult {
+  return result.ok && permanent ? { ...result, permanentRedirect: true } : result;
 }
