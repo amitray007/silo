@@ -446,7 +446,7 @@ describeIfPg('GET /api/trash (integration)', () => {
       const body = (await res.json()) as { link: { captureStatus: string } };
       expect(body.link.captureStatus).toBe('enriching');
       // Internal columns stay out of the API shape.
-      expect(body.link).not.toHaveProperty('titleSource');
+      expect(body.link).toHaveProperty('titleSource', 'page');
       expect(body.link).not.toHaveProperty('enrichFloorStatus');
     });
 

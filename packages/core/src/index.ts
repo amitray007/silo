@@ -251,6 +251,8 @@ export { findStrandedEnriching, restoreHeldFull } from './links/sweep.js';
 // counts, e.g. "ai 23" — see tags.ts for the zero-count/ordering decisions.
 export type { TagCount } from './links/tags.js';
 export { createTag, deleteTag, listTagsWithCounts } from './links/tags.js';
+// Title provenance values come from the database enum.
+export { TITLE_SOURCES } from './links/title-source.js';
 export { type LinkTitleFetcher, linkTitles, setLinkTitleFetcher } from './links/titles.js';
 // Trash reads + counts (plan 007, C2): listTrash is the ONE read in this
 // package deliberately NOT scoped through `whereLive` — see trash.ts's doc

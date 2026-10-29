@@ -120,6 +120,7 @@ export type LinkJson = {
   id: string;
   url: string;
   title: string | null;
+  titleSource?: 'page' | 'ai' | 'user';
   description: string | null;
   imageUrl: string | null;
   siteName: string | null;

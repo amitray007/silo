@@ -52,6 +52,8 @@ export type LinkJson = {
   id: string;
   url: string;
   title: string | null;
+  /** Who wrote the title: page, optional AI, or user (person or agent, never replaced). */
+  titleSource: LinkSummaryWithTags['titleSource'];
   description: string | null;
   imageUrl: string | null;
   siteName: string | null;
@@ -121,6 +123,7 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
     id: link.id,
     url: link.url,
     title: link.title,
+    titleSource: link.titleSource,
     description: link.description,
     imageUrl: link.imageUrl,
     siteName: link.siteName,

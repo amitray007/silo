@@ -54,6 +54,7 @@ describeIfPg('link-json (integration)', () => {
     expect(json.id).toBe(link.id);
     expect(json.url).toBe(link.url);
     expect(json.title).toBe('A title');
+    expect(json.titleSource).toBe(link.titleSource);
     expect(json.description).toBe('A description');
     expect(json.sourceKind).toBe('link');
     expect(json.captureStatus).toBe('enriching');
@@ -74,6 +75,20 @@ describeIfPg('link-json (integration)', () => {
     // via explicit field-by-field construction, so these keys shouldn't exist.
     expectNoLeakedFields(json);
     expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
+  });
+
+  it('preserves user title provenance in API JSON', async () => {
+    const core = harness.mod();
+    const { toLinkJson } = await import('./link-json.js');
+    const created = await core.createLink({
+      url: 'https://example.com/title-source',
+      sourceKind: 'link',
+    });
+    await core.editLink(created.id, { title: 'User title' });
+    const link = await core.getById(created.id);
+    expect(link).toBeDefined();
+    if (!link) throw new Error('Expected saved link');
+    expect(toLinkJson(link).titleSource).toBe('user');
   });
 
   it('toTrashLinkJson adds deletedAt as an ISO string for a trashed link', async () => {
