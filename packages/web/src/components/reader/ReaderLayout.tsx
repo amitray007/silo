@@ -25,7 +25,7 @@ function awaitingDetail(detail: { isFetching: boolean; data: unknown }): boolean
 
 /** Each route supplies its loaded pages. The reader never owns a second list. */
 function listLabel(title: string): string {
-  return title.startsWith('Feeds / ') ? title : `${title} links`;
+  return title === 'Feeds' || title.startsWith('Feeds / ') ? title : `${title} links`;
 }
 
 export function ReaderLayout({

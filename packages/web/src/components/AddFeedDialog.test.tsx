@@ -89,9 +89,9 @@ describe('feed subscription UI', () => {
     expect(link.getAttribute('href')).toBe('/feeds/feed-id');
     expect(link.textContent).toContain('12');
     expect(link.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=example.com');
-    fireEvent.click(screen.getByRole('button', { name: 'Feeds' }));
-    expect(screen.queryByRole('link')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Feeds' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle feeds' }));
+    expect(screen.queryByRole('link', { name: /A publisher/ })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Toggle feeds' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add feed' }));
     expect(screen.getByRole('dialog', { name: 'Add feed' })).toBeTruthy();
   });

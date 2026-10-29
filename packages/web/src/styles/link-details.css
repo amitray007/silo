@@ -963,8 +963,12 @@ button.silo-note-text {
 }
 .silo-modal-panel:not(.silo-modal-panel-settings) {
   position: relative;
-  width: min(var(--modal-width), 90vw);
-  max-height: calc(100dvh - 32px);
+}
+@media (min-width: 641px) {
+  .silo-modal-panel-sheet {
+    width: min(var(--modal-width), 90vw);
+    max-height: calc(100dvh - 32px);
+  }
 }
 .silo-modal-header .silo-settings-close {
   position: absolute;
@@ -1071,5 +1075,14 @@ button.silo-note-text {
     width: 16px;
     margin-left: 2px;
     opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .silo-modal-panel-sheet:has(.silo-feed-form) {
+    min-height: min(420px, 92dvh);
+  }
+  .silo-modal-header .silo-settings-close {
+    top: 17px;
   }
 }

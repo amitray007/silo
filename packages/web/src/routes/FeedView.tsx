@@ -1,5 +1,5 @@
-import { useId } from 'react';
-import { useParams, useSearchParams } from 'react-router';
+import { useId, useState } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router';
 import type { ApiError } from '../api/client';
 import { useFeed } from '../api/hooks';
 import { FeedMenu } from '../components/FeedMenu';
@@ -9,6 +9,26 @@ import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
 import { EmptyState, ErrorState } from './shared/ListStates';
 import { useListView } from './shared/useListView';
+
+function FeedHeading({ title }: { title: string }) {
+  const [expanded, setExpanded] = useState(false);
+  return (
+    <span className="silo-feed-heading">
+      <Link to="/feeds" className="silo-feed-breadcrumb">
+        Feeds /
+      </Link>
+      <button
+        type="button"
+        className="silo-feed-title"
+        title={title}
+        aria-expanded={expanded}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span data-expanded={expanded}>{title}</span>
+      </button>
+    </span>
+  );
+}
 
 export function FeedView() {
   const { id = '' } = useParams<{ id: string }>();
@@ -29,7 +49,7 @@ export function FeedView() {
     >
       <ContentFrame
         headerSlot={feed.data ? <FeedMenu key={id} feed={feed.data.feed} /> : null}
-        title={title}
+        title={<FeedHeading key={id} title={feed.data?.feed.title ?? 'Feed'} />}
         count={
           tab === 'inbox'
             ? feed.data?.feed.inboxCount

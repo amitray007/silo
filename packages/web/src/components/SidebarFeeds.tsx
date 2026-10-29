@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useMatch, useNavigate } from 'react-router';
+import { Link, useMatch, useNavigate } from 'react-router';
 import { useFeeds } from '../api/hooks';
 import type { FeedJson } from '../api/types';
 import { formatCount } from '../lib/formatCount';
@@ -56,15 +56,18 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
   return (
     <div className="silo-tags">
       <div className="silo-tags-header">
-        <div className="silo-tags-title">
+        <div className="silo-tags-title silo-feeds-section-title">
+          <Link to="/feeds" className="silo-tags-label" onClick={onNavigate}>
+            Feeds
+          </Link>
           <button
             type="button"
             className="silo-tags-toggle"
+            aria-label="Toggle feeds"
             aria-expanded={expanded}
             aria-controls="silo-feed-list"
             onClick={() => setExpanded(!expanded)}
           >
-            <span className="silo-tags-label">Feeds</span>
             <svg
               width="10"
               height="10"
@@ -100,7 +103,10 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
             variant="tag"
             label="Add feed"
             icon={<ReaderIcon name="plus" />}
-            onClick={() => setAdding(true)}
+            onClick={() => {
+              setAdding(true);
+              onNavigate();
+            }}
           />
         </div>
       )}

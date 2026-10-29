@@ -55,7 +55,7 @@ function menuAction(
   }
   return undefined;
 }
-function mount(options: MenuOptions = {}) {
+function mount(options: MenuOptions = {}, route = '/feeds/feed') {
   let subscribed = true;
   const today = new Date();
   const recent = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 12);
@@ -135,7 +135,7 @@ function mount(options: MenuOptions = {}) {
       }
     >
       <ThemeProvider>
-        <MemoryRouter initialEntries={['/feeds/feed']}>
+        <MemoryRouter initialEntries={[route]}>
           <App />
         </MemoryRouter>
       </ThemeProvider>
@@ -340,4 +340,38 @@ it('keeps the confirmation and feed when unsubscribe fails', async () => {
     'Could not unsubscribe.',
   );
   expect(screen.getByRole('link', { name: /Publisher/ })).toBeDefined();
+});
+
+it('opens all feeds from the breadcrumb and adds a feed through a body portal', async () => {
+  mount();
+  await screen.findByText('Today post');
+  fireEvent.click(screen.getByRole('link', { name: 'Feeds /' }));
+  const region = await screen.findByRole('region', { name: 'Feeds' });
+  expect(within(region).getByRole('heading', { name: 'Feeds' })).toBeDefined();
+  expect(
+    within(region)
+      .getByRole('link', { name: /Publisher/ })
+      .getAttribute('href'),
+  ).toBe('/feeds/feed');
+  fireEvent.click(within(region).getByRole('button', { name: 'Add feed' }));
+  expect(screen.getByRole('dialog', { name: 'Add feed' }).parentElement?.parentElement).toBe(
+    document.body,
+  );
+});
+it('shows the all-feeds empty state and keeps Add feed available', async () => {
+  const { fetchMock } = mount({}, '/feeds');
+  vi.stubGlobal('fetch', (input: RequestInfo | URL, init?: RequestInit) =>
+    String(input) === '/api/feeds' ? Promise.resolve(json({ feeds: [] })) : fetchMock(input, init),
+  );
+  expect(await screen.findByText('No feeds yet')).toBeDefined();
+  expect(
+    within(screen.getByRole('region', { name: 'Feeds' })).getByRole('button', { name: 'Add feed' }),
+  ).toBeDefined();
+});
+it('exposes the complete feed title and allows the header title to expand', async () => {
+  mount();
+  const title = await screen.findByRole('button', { name: 'Publisher' });
+  expect(title.getAttribute('aria-expanded')).toBe('false');
+  fireEvent.click(title);
+  expect(title.getAttribute('aria-expanded')).toBe('true');
 });

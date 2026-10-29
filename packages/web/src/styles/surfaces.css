@@ -621,7 +621,7 @@
   .silo-modal-panel-sheet {
     width: 100%;
     max-height: 92%;
-    border-radius: 20px 20px 0 0;
+    border-radius: 12px 12px 0 0;
     border-bottom: 0;
     padding-bottom: env(safe-area-inset-bottom, 0px);
     animation: siloSheetIn 0.24s var(--ease-drawer);

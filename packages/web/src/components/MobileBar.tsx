@@ -67,6 +67,15 @@ export function MobileBar({ onSearch }: { onSearch: () => void }) {
             onClose={() => setOpen(false)}
           >
             <MenuAction
+              icon={<ReaderIcon name="rss" />}
+              onClick={() => {
+                setOpen(false);
+                navigate('/feeds');
+              }}
+            >
+              Feeds
+            </MenuAction>
+            <MenuAction
               icon={<ReaderIcon name="trash" />}
               onClick={() => {
                 setOpen(false);

@@ -1,4 +1,5 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { useSubscribeFeed } from '../api/hooks';
 import { normalizeFeedUrl } from '../lib/url';
@@ -34,7 +35,7 @@ export function AddFeedDialog({
       },
     );
   }
-  return (
+  return createPortal(
     <ModalShell anchored width={460} ariaLabel="Add feed" onClose={onClose}>
       <ModalHeader title="Add feed" onClose={onClose} />
       <p className="silo-feed-description">
@@ -86,6 +87,7 @@ export function AddFeedDialog({
           </button>
         </div>
       </form>
-    </ModalShell>
+    </ModalShell>,
+    document.body,
   );
 }
