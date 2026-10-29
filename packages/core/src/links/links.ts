@@ -175,6 +175,14 @@ function mergedOrigin(
 }
 
 /**
+ * Title ownership on a dedup merge: an explicit title (import, agent) is the
+ * owner's, so enrichment must not replace it; otherwise the source is kept.
+ */
+function mergedTitleSource(existing: Link['titleSource'], title: string | undefined) {
+  return title !== undefined ? 'user' : existing;
+}
+
+/**
  * Read-modify-write merge of `input` into the existing row `existing` (which
  * may be live OR trashed — a trashed match is revived by clearing
  * `deleted_at`). Unions tags, appends notes, and folds in freshly-provided
@@ -247,6 +255,7 @@ async function mergeIntoExisting(
       sourceKind: nextSourceKind,
       sourceData: nextSourceData,
       title: input.title ?? existing.title,
+      titleSource: mergedTitleSource(existing.titleSource, input.title),
       description: input.description ?? existing.description,
       imageUrl: input.imageUrl ?? existing.imageUrl,
       siteName: input.siteName ?? existing.siteName,
@@ -409,7 +418,10 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
         const existing = await findExistingForDedup(tx, input.url);
         if (existing) {
           const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
-          await enqueueEnrichment(tx, merged.id);
+          await enqueueEnrichment(tx, merged.id, {
+            trigger: 'capture',
+            previousStatus: merged.captureStatus,
+          });
           return merged;
         }
       }
@@ -419,6 +431,8 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
           url: input.url,
           canonicalUrl: storedCanonicalUrl,
           title: input.title,
+          // An explicit title (import, agent) is the owner's: enrichment must not replace it.
+          ...(input.title !== undefined ? { titleSource: 'user' as const } : {}),
           description: input.description,
           imageUrl: input.imageUrl,
           siteName: input.siteName,
@@ -437,7 +451,10 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (input.tags && input.tags.length > 0) {
         await attachTags(tx, inserted.id, input.tags);
       }
-      await enqueueEnrichment(tx, inserted.id);
+      await enqueueEnrichment(tx, inserted.id, {
+        trigger: 'capture',
+        previousStatus: 'enriching',
+      });
       return inserted;
     });
   } catch (error) {
@@ -453,7 +470,10 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
         throw error;
       }
       const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
-      await enqueueEnrichment(tx, merged.id);
+      await enqueueEnrichment(tx, merged.id, {
+        trigger: 'capture',
+        previousStatus: merged.captureStatus,
+      });
       return merged;
     });
   }
@@ -1156,8 +1176,12 @@ export type EditLinkInput = {
  * which branch runs.
  */
 export async function editLink(id: string, input: EditLinkInput): Promise<Link | null> {
-  const patch: Partial<Pick<Link, 'title' | 'description' | 'notes'>> = {};
-  if (input.title !== undefined) patch.title = input.title;
+  const patch: Partial<Pick<Link, 'title' | 'titleSource' | 'description' | 'notes'>> = {};
+  if (input.title !== undefined) {
+    patch.title = input.title;
+    // An edited title is the owner's: enrichment (page or AI) never replaces it.
+    patch.titleSource = 'user';
+  }
   if (input.description !== undefined) patch.description = input.description;
   if (input.notes !== undefined) patch.notes = input.notes;
   if (Object.keys(patch).length === 0) {

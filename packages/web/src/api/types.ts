@@ -258,10 +258,80 @@ export type SettingsMap = {
     // `packages/core/src/settings/schema.ts`'s doc comment.
     twitter: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
   };
+  /** Optional AI layer; mirrors core's `settingsSchema.ai`. The key is never a setting. */
+  ai: {
+    enabled: boolean;
+    features: Record<
+      string,
+      { enabled: boolean; model: { provider: AiProviderKind; id: string } | null }
+    >;
+  };
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
 export type UpdateSettingsRequest = Partial<SettingsMap>;
+
+export type AiProviderKind = 'anthropic' | 'openai' | 'gateway' | 'fireworks';
+
+/** Stable failure codes a connection test reports (plus `unavailable`: the test could not run). */
+export type AiTestCode =
+  | 'invalid_key'
+  | 'no_access'
+  | 'model_not_found'
+  | 'quota'
+  | 'rate_limited'
+  | 'timeout'
+  | 'network'
+  | 'provider_error'
+  | 'unavailable';
+
+export type AiTestResult = { ok: boolean; code?: AiTestCode; latencyMs?: number };
+
+type AiLiveModel = {
+  id: string;
+  label: string;
+  owner?: string;
+  createdAt?: string;
+  contextWindow?: number;
+  maxOutputTokens?: number;
+  structuredOutput: 'native' | 'unknown';
+  reasoning: { type: AiProviderKind; thinking?: string; effort?: string; budgetTokens?: number };
+};
+
+export type AiProviderJson = {
+  models?: AiLiveModel[];
+  defaultModel?: string | null;
+  modelsFetchedAt?: string | null;
+  modelsRefreshError?: AiTestCode | null;
+  kind: AiProviderKind;
+  configured: boolean;
+  keyLast4: string | null;
+  /** False only when a key is stored but the server cannot decrypt it. */
+  keyReadable: boolean;
+  lastTest: { ok: boolean; at: string; code: AiTestCode | null } | null;
+};
+
+/** `GET /api/ai` response. No key ever appears here, only the last four characters. */
+export type AiSettingsResponse = {
+  status: {
+    enabled: boolean;
+    secretKey: 'ok' | 'missing' | 'invalid';
+    features: Record<
+      string,
+      {
+        ready: boolean;
+        reason: string | null;
+        provider: AiProviderKind | null;
+        model: string | null;
+      }
+    >;
+  };
+  providers: AiProviderJson[];
+  features: { id: string; label: string; description: string; plugin: string | null }[];
+};
+
+/** `PUT /api/ai/providers/:kind` response. */
+export type SaveAiKeyResponse = { provider: AiProviderJson | null; test: AiTestResult };
 
 /**
  * Mirrors `ErrorEnvelope` in `packages/api/src/app.ts` — every non-2xx JSON

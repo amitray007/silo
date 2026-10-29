@@ -1,4 +1,5 @@
 import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react';
+import { useEscapeLayer } from '../lib/useEscapeLayer';
 
 /**
  * Tracks whether the user's most recent interaction was via keyboard, so
@@ -12,26 +13,6 @@ import { type CSSProperties, type ReactNode, useEffect, useRef } from 'react';
  */
 let lastWasKeyboard = false;
 let modalityListenersAttached = false;
-
-/**
- * Mount-order stack of every currently-open `ModalShell` instance, keyed by a
- * per-instance id — lets each instance's Escape handler ask "am I the
- * topmost?" (the MCP-setup-over-Settings stacked-dialog case, `AccessTab.tsx`
- * → `McpSetupDialog.tsx`). Capture-phase `document` listeners fire in
- * ADD order regardless of `stopPropagation` — `stopPropagation` only stops an
- * event from reaching OTHER nodes, not sibling listeners registered on the
- * SAME node (`document`, here) — so the naive fix (each `ModalShell`
- * `stopPropagation`s its own Escape listener) does NOT make an
- * later-mounted/inner modal's Escape "win" over an earlier-mounted/outer
- * one's; the outer one's listener still runs first and still closes. Instead
- * every instance consults this stack and only calls its own `onClose` when
- * it's the LAST (most-recently-mounted, i.e. topmost) entry — the same
- * "newest wins" precedent `AppFrame.tsx`'s `RowMenuLayer` already uses for
- * Edit-vs-Settings-vs-palette mutual exclusion, just generalized so it works
- * for ANY stacked `ModalShell` pair without each caller having to hand-wire
- * its own mutual-exclusion effect.
- */
-let openModalStack: symbol[] = [];
 
 function ensureModalityListeners(): void {
   if (modalityListenersAttached || typeof document === 'undefined') return;
@@ -102,8 +83,7 @@ export function ModalShell({
    * A caller that stacks ON TOP of another `ModalShell` (e.g.
    * `McpSetupDialog` opening over `SettingsModal`) passes something higher
    * (50) so it paints above the lower modal's scrim instead of underneath
-   * it. See the `openModalStack` comment above for how Escape ALSO resolves
-   * the stacked case (z-index alone only fixes paint order, not Escape).
+   * it. Escape priority is handled by `useEscapeLayer` alongside child popovers.
    */
   zIndex?: number;
   variant?: 'sheet' | 'settings';
@@ -114,12 +94,6 @@ export function ModalShell({
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
-  // This instance's identity in `openModalStack` — a fresh `symbol` per
-  // mount (not the `onClose` reference, which callers may recreate every
-  // render) so "am I topmost" is stable across re-renders of the same
-  // open modal.
-  const stackId = useRef<symbol>(undefined);
-  if (stackId.current === undefined) stackId.current = Symbol('modal');
 
   useEffect(() => {
     ensureModalityListeners();
@@ -143,33 +117,7 @@ export function ModalShell({
     if (focusPanel) panelRef.current?.focus();
   }, [focusPanel]);
 
-  // Push/pop this instance onto the shared open-modal stack (see the
-  // `openModalStack` doc comment above `ensureModalityListeners`) so its
-  // Escape handler below can tell whether it's the topmost open `ModalShell`.
-  useEffect(() => {
-    const id = stackId.current as symbol;
-    openModalStack = [...openModalStack, id];
-    return () => {
-      openModalStack = openModalStack.filter((entry) => entry !== id);
-    };
-  }, []);
-
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      // Only the TOPMOST (most-recently-mounted) open `ModalShell` closes on
-      // Escape — an outer modal (e.g. Settings) sits earlier in the stack
-      // than a dialog stacked on top of it (e.g. the MCP setup dialog) and
-      // must stay open. `stopPropagation` (kept for any DOM-tree listeners,
-      // e.g. `AppFrame`'s bubble-phase `RowMenuLayer` handler) does NOT
-      // achieve this on its own — see the stack comment for why.
-      if (openModalStack[openModalStack.length - 1] !== stackId.current) return;
-      event.stopPropagation();
-      onClose();
-    };
-    document.addEventListener('keydown', onKeyDown, true);
-    return () => document.removeEventListener('keydown', onKeyDown, true);
-  }, [onClose]);
+  useEscapeLayer(true, onClose);
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: scrim dismiss is pointer-only convenience — Escape (handled by the document listener above) is the keyboard-equivalent close path, matching v3.

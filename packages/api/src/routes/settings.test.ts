@@ -25,6 +25,12 @@ type SettingsBody = {
   mcpAccess: boolean;
   linkPreviewImages: boolean;
   hoverPreview: boolean;
+  ai: {
+    enabled: boolean;
+    provider: 'anthropic' | 'openai' | 'gateway' | null;
+    model: string | null;
+    features: Record<string, boolean>;
+  };
   plugins: {
     hacker_news: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
     github: { enabled: boolean; hover: boolean; palette: boolean };
@@ -58,6 +64,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       mcpAccess: true,
       linkPreviewImages: true,
       hoverPreview: false,
+      ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
       plugins: {
         hacker_news: { enabled: true, inline: true, hover: true, palette: true },
         github: { enabled: true, hover: true, palette: true },
@@ -76,6 +83,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     // Top-level: exactly the allowlisted keys, nothing else (e.g. no
     // stray internal/db-row field like `updatedAt` could leak through).
     expect(Object.keys(body).sort()).toEqual([
+      'ai',
       'hoverPreview',
       'linkPreviewImages',
       'mcpAccess',

@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
-import { useSettings, useUpdateSettings } from '../../api/hooks';
+import { useAi, useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
+import { aiModelLabel, defaultAiFeatureModel } from '../../lib/aiModels';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
@@ -124,6 +125,67 @@ function FeatureToggleRow({
       <ToggleSwitch on={on} disabled={disabled} onToggle={onToggle} label={name} />
     </div>
   );
+}
+
+const AI_HINT = 'Turn on AI in the AI tab';
+
+/**
+ * The plugin-placed AI features (`GET /api/ai` -> `features[].plugin`).
+ * Turning a feature on requires AI readiness; turning it off is always available.
+ */
+function AiFeatureRows({
+  source,
+  sourceEnabled,
+  settings,
+  updateSettings,
+}: {
+  source: PluginSource;
+  sourceEnabled: boolean;
+  settings: SettingsMap | undefined;
+  updateSettings: ReturnType<typeof useUpdateSettings>;
+}) {
+  const { data: ai } = useAi();
+  const features = (ai?.features ?? []).filter((feature) => feature.plugin === source);
+  const settingsAi = settings?.ai;
+  const aiEnabled = ai?.status?.enabled === true && ai.status.secretKey === 'ok';
+  const ready = aiEnabled && defaultAiFeatureModel(ai) !== null;
+  const hint = aiEnabled ? 'Add a provider key and model in the AI tab' : AI_HINT;
+  return features.map((feature) => {
+    const on =
+      settingsAi?.features[feature.id as keyof typeof settingsAi.features]?.enabled === true;
+    return (
+      <FeatureToggleRow
+        key={feature.id}
+        name={feature.label}
+        desc={
+          ready && ai
+            ? (aiModelLabel(ai, settingsAi?.features[feature.id]?.model ?? null) ??
+              feature.description)
+            : hint
+        }
+        on={on}
+        masterEnabled={on || (sourceEnabled && ready)}
+        loading={!settingsAi || updateSettings.isPending}
+        onToggle={() =>
+          settingsAi &&
+          updateSettings.mutate({
+            ai: {
+              ...settingsAi,
+              features: {
+                ...settingsAi.features,
+                [feature.id]: {
+                  enabled: !on,
+                  model:
+                    settingsAi.features[feature.id]?.model ??
+                    (!on && ai ? defaultAiFeatureModel(ai) : null),
+                },
+              },
+            },
+          })
+        }
+      />
+    );
+  });
 }
 
 function SiloSettingsSection({
@@ -266,6 +328,14 @@ export function PluginsTab() {
                       }
                     />
                   ))}
+                {expanded && (
+                  <AiFeatureRows
+                    source={source.key}
+                    sourceEnabled={state.enabled}
+                    settings={settings}
+                    updateSettings={updateSettings}
+                  />
+                )}
               </div>
             </div>
           );
@@ -273,6 +343,11 @@ export function PluginsTab() {
       </div>
 
       <SiloSettingsSection settings={settings} updateSettings={updateSettings} />
+      {updateSettings.error && (
+        <div role="alert" style={{ fontSize: 'var(--text-sm)', color: 'var(--ink)', marginTop: 8 }}>
+          {updateSettings.error.message}
+        </div>
+      )}
     </>
   );
 }

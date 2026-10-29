@@ -207,6 +207,11 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
   return apiRequest<T>(path, 'POST', body);
 }
 
+/** `PUT`s `body` as JSON to `path`. Same `ApiError` contract as `apiPost`. */
+export function apiPut<T>(path: string, body: unknown): Promise<T> {
+  return apiRequest<T>(path, 'PUT', body);
+}
+
 /**
  * `PATCH`es `body` as JSON to `path` — added alongside `apiPost` for later
  * mutation slices (e.g. V3-4's edit-link `PATCH /api/links/:id`) since it's

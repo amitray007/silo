@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useRefreshReader, useRetryCapture, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import { layoutMedia } from '../lib/breakpoints';
+import { deriveTitleFromUrl } from '../lib/url';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
 import { useRowMenu } from './RowMenuContext';
@@ -39,7 +40,7 @@ export function LinkMenuActions({
   const [tagsOpen, setTagsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const trash = useTrashLink();
-  const retry = useRetryCapture(link.id);
+  const retry = useRetryCapture(link.id, link.title ?? deriveTitleFromUrl(link.url));
   const refresh = useRefreshReader(link.id);
   const refreshFailed = refresh.isError;
   const resetRefresh = refresh.reset;
@@ -162,17 +163,15 @@ export function LinkMenuActions({
           )}
         </MenuPresence>
       </div>
-      {link.captureStatus !== 'full' && (
-        <MenuAction
-          icon={<ReaderIcon name="refresh" />}
-          onClick={() => {
-            closeMenu();
-            retry.mutate();
-          }}
-        >
-          {link.captureStatus === 'enriching' ? 'Re-enrich' : 'Enrich'}
-        </MenuAction>
-      )}
+      <MenuAction
+        icon={<ReaderIcon name="refresh" />}
+        onClick={() => {
+          closeMenu();
+          retry.mutate();
+        }}
+      >
+        {link.captureStatus === 'enriching' ? 'Re-enrich' : 'Enrich'}
+      </MenuAction>
       <div className="silo-menu-separator" />
       <MenuAction
         icon={<ReaderIcon name="trash" />}

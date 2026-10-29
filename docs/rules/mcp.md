@@ -6,8 +6,9 @@
 
 `@silo/mcp-server` is a **thin MCP adapter over `@silo/core`** (see
 [`architecture.md`](architecture.md)). Each tool translates `MCP tool params ↔
-core call ↔ MCP result` and nothing more. **No AI lives inside silo** — the tools
-are read/write primitives; every intelligent act (search strategy, synthesis,
+core call ↔ MCP result` and nothing more. The tools are read/write primitives; silo's
+optional AI features (see [`ai.md`](ai.md)) never run through MCP, and no tool manages AI
+settings or keys; every intelligent act (search strategy, synthesis,
 recommendation) is the external agent's, performed over these primitives.
 
 ## Do

@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AiProviderJson, SettingsMap } from '../../api/types';
 import { PluginsTab } from './PluginsTab';
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -601,5 +602,273 @@ describe('PluginsTab source disclosures', () => {
       const toggle = await screen.findByTitle(/Link preview images/i);
       expect(toggle).toHaveProperty('disabled', true);
     });
+  });
+});
+
+describe('PluginsTab AI titles toggle', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const feature = {
+    id: 'x-post-title',
+    label: 'AI titles',
+    description: 'Short titles written by your AI model',
+    plugin: 'twitter',
+  };
+
+  function aiSettings(on = false) {
+    return {
+      ...defaultSettings(),
+      ai: {
+        enabled: true,
+        features: {
+          'x-post-title': {
+            enabled: on,
+            model: null as SettingsMap['ai']['features'][string]['model'],
+          },
+        },
+      },
+    };
+  }
+
+  function provider(kind: AiProviderJson['kind'], keyReadable = true): AiProviderJson {
+    const id =
+      kind === 'openai'
+        ? 'gpt-5-mini'
+        : kind === 'fireworks'
+          ? 'accounts/fireworks/models/glm-5p3-flash'
+          : 'claude-haiku-5-5';
+    return {
+      kind,
+      configured: true,
+      keyReadable,
+      keyLast4: '1234',
+      lastTest: null,
+      defaultModel: id,
+      models: [
+        {
+          id,
+          label: kind === 'openai' ? 'GPT-5 mini' : 'Claude Haiku 5.5',
+          structuredOutput: 'native',
+          reasoning: { type: kind },
+        },
+      ],
+    };
+  }
+
+  function renderWithAi(
+    ready: boolean,
+    on = false,
+    opts: {
+      providers?: AiProviderJson[];
+      model?: SettingsMap['ai']['features'][string]['model'];
+    } = {},
+  ) {
+    let store: ReturnType<typeof aiSettings> = aiSettings(on);
+    store.ai.features['x-post-title'].model = opts.model ?? null;
+    const fetchMock = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url.includes('/api/settings')) {
+        if (init?.method === 'PATCH') {
+          store = { ...store, ...JSON.parse((init.body as string) ?? '{}') };
+        }
+        return Promise.resolve(jsonResponse(store));
+      }
+      if (url.includes('/api/ai')) {
+        return Promise.resolve(
+          jsonResponse({
+            status: { enabled: ready, secretKey: 'ok', features: {} },
+            providers: opts.providers ?? [provider('anthropic')],
+            features: [feature],
+          }),
+        );
+      }
+      return Promise.resolve(jsonResponse({}));
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <PluginsTab />
+      </QueryClientProvider>,
+    );
+    return { fetchMock, getStore: () => store };
+  }
+
+  it('shows the toggle disabled with a hint until AI is ready', async () => {
+    renderWithAi(false);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    await screen.findByText('Turn on AI in the AI tab');
+    expect((toggle as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByText('Short titles written by your AI model')).toBeNull();
+  });
+
+  it('does not show the toggle under another source', async () => {
+    renderWithAi(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'GitHub' }));
+    await screen.findByRole('switch', { name: 'On hover (preview card)' });
+    expect(screen.queryByRole('switch', { name: 'AI titles' })).toBeNull();
+  });
+
+  it('allows turning titles off after the last usable key is removed', async () => {
+    const { getStore } = renderWithAi(true, true, { providers: [] });
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    await screen.findByText('Add a provider key and model in the AI tab');
+    const toggle = screen.getByRole('switch', { name: 'AI titles' });
+    expect(toggle).toHaveProperty('disabled', false);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(getStore().ai.features['x-post-title'].enabled).toBe(false));
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', true));
+  });
+
+  it('allows turning titles off when AI is disabled and retains the hint', async () => {
+    const { getStore } = renderWithAi(false, true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    expect(toggle).toHaveProperty('disabled', false);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(getStore().ai.features['x-post-title'].enabled).toBe(false));
+    expect(screen.getByText('Turn on AI in the AI tab')).toBeDefined();
+  });
+
+  it('shows a rejected settings PATCH as an inline alert and rolls back the toggle', async () => {
+    const { fetchMock, getStore } = renderWithAi(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', false));
+    fetchMock.mockImplementationOnce(() =>
+      Promise.resolve(
+        jsonResponse({ error: 'forbidden', message: 'Only the owner can change settings.' }, 403),
+      ),
+    );
+    fireEvent.click(toggle);
+    expect((await screen.findByRole('alert')).textContent).toBe(
+      'Only the owner can change settings.',
+    );
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('false'));
+    expect(getStore().ai.features['x-post-title'].enabled).toBe(false);
+  });
+
+  it('enables the toggle when AI is ready and writes ai.features through settings', async () => {
+    const { getStore } = renderWithAi(true);
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    await screen.findByText('Short titles written by your AI model');
+    const toggle = (await screen.findByRole('switch', { name: 'AI titles' })) as HTMLButtonElement;
+    await waitFor(() => expect(toggle.disabled).toBe(false));
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(getStore().ai).toEqual({
+        enabled: true,
+        features: {
+          'x-post-title': {
+            enabled: true,
+            model: { provider: 'anthropic', id: 'claude-haiku-5-5' },
+          },
+        },
+      }),
+    );
+  });
+  it.each([
+    {
+      kinds: ['anthropic', 'openai', 'gateway', 'fireworks'] as const,
+      expected: 'anthropic',
+      id: 'claude-haiku-5-5',
+    },
+    { kinds: ['openai', 'gateway', 'fireworks'] as const, expected: 'openai', id: 'gpt-5-mini' },
+    { kinds: ['gateway', 'fireworks'] as const, expected: 'gateway', id: 'claude-haiku-5-5' },
+    {
+      kinds: ['fireworks'] as const,
+      expected: 'fireworks',
+      id: 'accounts/fireworks/models/glm-5p3-flash',
+    },
+  ])('uses the first readable provider default: $expected', async ({ kinds, expected, id }) => {
+    const providers: AiProviderJson[] = kinds.map((kind) => ({
+      ...provider(kind),
+      models: [
+        {
+          id: 'other',
+          label: 'Other',
+          structuredOutput: 'native' as const,
+          reasoning: { type: 'fireworks' as const },
+        },
+        {
+          id: 'accounts/fireworks/models/glm-5p3-flash',
+          label: 'GLM 5.3 Flash',
+          structuredOutput: 'native' as const,
+          reasoning: { type: 'fireworks' as const },
+        },
+      ],
+    }));
+    const { getStore } = renderWithAi(true, false, { providers });
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', false));
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(getStore().ai.features['x-post-title']).toEqual({
+        enabled: true,
+        model: { provider: expected, id },
+      }),
+    );
+  });
+
+  it('skips unreadable keys and uses the first live Fireworks model without the preferred model', async () => {
+    const { getStore } = renderWithAi(true, false, {
+      providers: [
+        provider('anthropic', false),
+        {
+          ...provider('fireworks'),
+          defaultModel: 'first-live',
+          models: [
+            {
+              id: 'first-live',
+              label: 'First live',
+              structuredOutput: 'native' as const,
+              reasoning: { type: 'fireworks' as const },
+            },
+          ],
+        },
+      ],
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', false));
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(getStore().ai.features['x-post-title'].model).toEqual({
+        provider: 'fireworks',
+        id: 'first-live',
+      }),
+    );
+    expect(await screen.findByText('First live via Fireworks')).toBeTruthy();
+  });
+
+  it('shows the chosen model and preserves it when enabling and disabling', async () => {
+    const model = { provider: 'anthropic' as const, id: 'claude-haiku-5-5' };
+    const { getStore } = renderWithAi(true, false, { model });
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    expect(await screen.findByText('Claude Haiku 5.5 via Anthropic')).toBeTruthy();
+    const toggle = screen.getByRole('switch', { name: 'AI titles' });
+    fireEvent.click(toggle);
+    await waitFor(() => expect(toggle.getAttribute('aria-checked')).toBe('true'));
+    await waitFor(() => expect(toggle).toHaveProperty('disabled', false));
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(getStore().ai.features['x-post-title']).toEqual({ enabled: false, model }),
+    );
+  });
+
+  it('keeps the toggle disabled without a usable provider model', async () => {
+    renderWithAi(true, false, {
+      providers: [{ ...provider('fireworks'), defaultModel: null, models: [] }],
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Twitter / X' }));
+    expect(await screen.findByRole('switch', { name: 'AI titles' })).toHaveProperty(
+      'disabled',
+      true,
+    );
   });
 });

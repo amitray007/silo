@@ -1,0 +1,8 @@
+fix(web): repair model picker focus, availability, and positioning
+
+Keep Tab inside the picker, retain empty provider chips, and show missing
+choices with a warning. Open on the current model and keep the panel
+steady while filtering above its trigger. Reserve space for the Settings
+close button when content scrolls.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>

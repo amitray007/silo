@@ -292,7 +292,9 @@ export function registerCaptureLink(server: McpServer): void {
         'ASYNCHRONOUSLY in the background — a single-`url` call returns ' +
         "immediately with the link in captureStatus 'enriching'; call " +
         '`get_link` with the returned id later to see the enriched result ' +
-        'once captureStatus becomes full, partial, or bare. Optionally ' +
+        'once captureStatus becomes full, partial, or bare. Capture takes ' +
+        'no title; a title set later with `edit_link` is kept permanently ' +
+        '(later page or AI titles will not replace it). Optionally ' +
         'attach `tags` and a `note` at capture time (applied to every URL ' +
         'in a batch call). Re-capturing a URL that is already saved ' +
         'REVIVES/UPDATES the existing link instead of creating a duplicate: ' +

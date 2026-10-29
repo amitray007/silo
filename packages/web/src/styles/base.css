@@ -15,6 +15,12 @@ body {
   padding: 0;
 }
 
+/* Thin, quiet scrollbars everywhere. `scrollbar-width` does not inherit, so it goes on `*`. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-2) transparent;
+}
+
 body {
   font-family: "Inter Variable", Inter, sans-serif;
   font-size: 16px;
@@ -316,6 +322,29 @@ select {
 
 .silo-settings-select-option[aria-selected="true"] {
   background: var(--surface-active);
+}
+
+.silo-settings-select-trigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+.silo-settings-select-menu {
+  max-height: min(320px, 60vh);
+  overflow-y: auto;
+}
+
+.silo-settings-select-option {
+  white-space: nowrap;
+}
+
+.silo-settings-select-group-label {
+  padding: 8px 10px 4px;
+  color: var(--fnt);
+  font-size: var(--text-xs);
+  font-weight: 500;
+  line-height: 1;
 }
 
 .silo-settings-select-check {

@@ -1,4 +1,31 @@
 import { z } from 'zod';
+import { AI_FEATURES, type AiFeatureDef, type AiFeatureId } from '../ai/features.js';
+import { AI_PROVIDER_KINDS } from '../ai/model-types.js';
+
+const registeredFeatureIds: ReadonlySet<string> = new Set(
+  (AI_FEATURES as readonly AiFeatureDef[]).map((f) => f.id),
+);
+
+/** Each feature owns its consent and explicit model selection. */
+const aiFeatureSchema = z
+  .object({
+    enabled: z.boolean(),
+    model: z
+      .object({ provider: z.enum(AI_PROVIDER_KINDS), id: z.string().min(1) })
+      .strict()
+      .nullable(),
+  })
+  .strict();
+
+const aiFeaturesSchema = z.record(z.string(), aiFeatureSchema).superRefine((features, ctx) => {
+  for (const id of Object.keys(features)) {
+    if (!registeredFeatureIds.has(id)) {
+      ctx.addIssue({ code: 'custom', message: `unknown AI feature: ${id}`, path: [id] });
+    }
+  }
+}) as unknown as z.ZodType<Record<AiFeatureId, z.infer<typeof aiFeatureSchema>>>;
+
+const aiSchema = z.object({ enabled: z.boolean(), features: aiFeaturesSchema }).strict();
 
 /**
  * The settings allowlist (plan 016) — every KNOWN key this store accepts,
@@ -94,6 +121,7 @@ const settingsSchema = {
         .strict(),
     })
     .strict(),
+  ai: aiSchema,
 } as const;
 
 /** The allowlisted setting keys — `Object.keys(settingsSchema)` at the type level. */
@@ -118,6 +146,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     youtube: { enabled: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },
   },
+  ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
 };
 
 /** `true` when `key` is one of the allowlisted setting keys. */
@@ -246,8 +275,61 @@ export function normalizePluginsValue(raw: unknown): unknown {
   };
 }
 
+/** Only stored reads accept the old global selection and boolean flags. */
+function normalizeAiValue(raw: unknown, stored: boolean): unknown {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) return raw;
+  const value = raw as Record<string, unknown>;
+  const flags = value.features;
+  if (flags === null || typeof flags !== 'object' || Array.isArray(flags)) return raw;
+  const features: Record<string, unknown> = Object.fromEntries(
+    [...registeredFeatureIds].map((id) => [id, { enabled: false, model: null }]),
+  );
+  const legacy = stored && hasLegacySelection(value);
+  for (const [id, flag] of Object.entries(flags)) {
+    if (stored && !registeredFeatureIds.has(id)) continue;
+    const feature = convertLegacyFeature(flag, legacy ? value : undefined);
+    features[id] = feature;
+  }
+  if (legacy) {
+    const { provider: _provider, model: _model, ...rest } = value;
+    return { ...rest, features };
+  }
+  return { ...value, features };
+}
+
+function hasLegacySelection(value: Record<string, unknown>): boolean {
+  return 'provider' in value || 'model' in value;
+}
+
+function convertLegacyFeature(flag: unknown, legacy: Record<string, unknown> | undefined): unknown {
+  return legacy && typeof flag === 'boolean' ? { enabled: flag, model: legacyModel(legacy) } : flag;
+}
+
+function legacyModel(value: Record<string, unknown>): unknown {
+  const provider = AI_PROVIDER_KINDS.find((kind) => kind === value.provider);
+  return provider && typeof value.model === 'string' ? { provider, id: value.model } : null;
+}
+
 /** Validates `value` against the schema for `key`, throwing a `ZodError` on failure — the single boundary check every write path (`setSetting`, the PATCH route) runs through. Runs the plan-026 `plugins` legacy-shape migration (`normalizePluginsValue`) ahead of validation so a pre-026 stored blob upgrades instead of failing re-validation on read. */
 export function parseSettingValue<K extends SettingKey>(key: K, value: unknown): SettingValue<K> {
-  const coerced = key === 'plugins' ? normalizePluginsValue(value) : value;
+  const coerced = coerceForParse(key, value);
   return settingsSchema[key].parse(coerced) as SettingValue<K>;
+}
+
+function coerceForParse(key: SettingKey, value: unknown): unknown {
+  if (key === 'plugins') return normalizePluginsValue(value);
+  if (key === 'ai') return normalizeAiValue(value, false);
+  return value;
+}
+
+/**
+ * Read-side counterpart of `parseSettingValue`: repairs registry drift
+ * in a STORED value (see `normalizeAiValue`) before the same strict validation.
+ * Writes must keep using `parseSettingValue`.
+ */
+export function parseStoredSettingValue<K extends SettingKey>(
+  key: K,
+  raw: unknown,
+): SettingValue<K> {
+  return parseSettingValue(key, key === 'ai' ? normalizeAiValue(raw, true) : raw);
 }

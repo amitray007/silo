@@ -55,6 +55,15 @@ import { csrfFailure, isUnsafeRequest } from './csrf.js';
 import { hasValidSessionCookie } from './session-cookie.js';
 import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
 
+/** Which branch let the request through; `operatorOnly` reads it. */
+type AuthKind = 'open' | 'env_token' | 'db_token' | 'session';
+
+declare module 'hono' {
+  interface ContextVariableMap {
+    authKind: AuthKind;
+  }
+}
+
 /** Reads `SILO_API_TOKEN` fresh from the environment on every call — mirrors
  * `ingest-auth.ts`'s `configuredToken`; kept as a separate tiny wrapper
  * (rather than calling `readTokenEnv` inline at each call site) so a future
@@ -79,16 +88,19 @@ export async function generalTokenAuth(c: Context, next: Next): Promise<Response
   const expected = configuredToken();
   const authConfigured = expected !== undefined || readAppPassword() !== undefined;
   if (!authConfigured) {
+    c.set('authKind', 'open');
     await next();
     return undefined;
   }
 
   const presented = bearerToken(c);
   if (expected && presented && timingSafeEqual(presented, expected)) {
+    c.set('authKind', 'env_token');
     await next();
     return undefined;
   }
   if (presented && (await verifyAccessToken(presented))) {
+    c.set('authKind', 'db_token');
     await next();
     return undefined;
   }
@@ -97,6 +109,7 @@ export async function generalTokenAuth(c: Context, next: Next): Promise<Response
       const csrf = csrfFailure(c);
       if (csrf) return csrf;
     }
+    c.set('authKind', 'session');
     await next();
     return undefined;
   }

@@ -430,7 +430,7 @@ describeIfPg('GET /api/trash (integration)', () => {
       expect(body.link.id).toBe(created.id);
     });
 
-    it("retrying a 'full' link -> 404 (not retryable, a good capture isn't downgraded)", async () => {
+    it("retrying a 'full' link re-runs enrichment (owner-started Enrich accepts every status)", async () => {
       const { core, app } = harness.mod();
       const created = await core.createLink({
         url: 'https://example.com/retry-action-full',
@@ -442,12 +442,12 @@ describeIfPg('GET /api/trash (integration)', () => {
       });
 
       const res = await post(app, `/api/links/${created.id}/retry`);
-      await expect404Response(res);
-
-      // A good capture is never downgraded — confirm status is untouched.
-      const getRes = await app.request(`/api/links/${created.id}`);
-      const getBody = (await getRes.json()) as { link: { captureStatus: string } };
-      expect(getBody.link.captureStatus).toBe('full');
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { link: { captureStatus: string } };
+      expect(body.link.captureStatus).toBe('enriching');
+      // Internal columns stay out of the API shape.
+      expect(body.link).not.toHaveProperty('titleSource');
+      expect(body.link).not.toHaveProperty('enrichFloorStatus');
     });
 
     it('retrying an unknown id -> 404 not_found', async () => {
@@ -694,7 +694,7 @@ describeIfPg('GET /api/trash (integration)', () => {
       expect(detail.link.captureStatus).toBe('enriching');
     });
 
-    it('an already-full link in the batch -> ok:false for that item', async () => {
+    it('an already-full link in the batch is re-enriched (ok:true)', async () => {
       const { core, app } = harness.mod();
       const full = await core.createLink({
         url: 'https://example.com/u5-batch-retry-full',
@@ -705,7 +705,7 @@ describeIfPg('GET /api/trash (integration)', () => {
       const res = await postJson(app, '/api/links/batch/retry', { ids: [full.id] });
       expect(res.status).toBe(200);
       const body = (await res.json()) as { results: Array<{ id: string; ok: boolean }> };
-      expect(body.results[0]?.ok).toBe(false);
+      expect(body.results[0]?.ok).toBe(true);
     });
   });
 });

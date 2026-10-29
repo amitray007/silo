@@ -5,9 +5,22 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { apiDelete, apiGet, apiPatch, apiPost } from './client';
+import {
+  clearTitleReveal,
+  getTitleReveal,
+  markTitleEdited,
+  mountedTitleBaselines,
+  registerTitleReveal,
+  restoreTitleReveal,
+  transferTitleReveal,
+} from '../lib/titleReveals';
+import { deriveTitleFromUrl } from '../lib/url';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './client';
 import type {
   AccessTokensResponse,
+  AiProviderKind,
+  AiSettingsResponse,
+  AiTestResult,
   AppConfig,
   CaptureRequest,
   CaptureResponse,
@@ -23,6 +36,7 @@ import type {
   LiveReaderJson,
   OAuthClientsResponse,
   RestoreResponse,
+  SaveAiKeyResponse,
   SavedLinksResponse,
   SearchResponse,
   SettingsMap,
@@ -94,6 +108,7 @@ export const queryKeys = {
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
   settings: () => ['settings'] as const,
+  ai: () => ['ai'] as const,
   accessTokens: () => ['access-tokens'] as const,
   oauthClients: () => ['oauth-clients'] as const,
   appConfig: () => ['app-config'] as const,
@@ -424,11 +439,26 @@ export function useCaptureLink() {
     onMutate: async (input: CaptureRequest) => {
       await queryClient.cancelQueries({ queryKey: ['links'] });
       const optimisticLink = buildOptimisticLink(input);
+      const titles = mountedTitleBaselines();
+      const baselineTitle = deriveTitleFromUrl(input.url);
+      registerTitleReveal(optimisticLink.id, baselineTitle);
       insertOptimisticLink(queryClient, optimisticLink);
-      return { optimisticLinkId: optimisticLink.id };
+      return { optimisticLinkId: optimisticLink.id, titles, baselineTitle };
+    },
+    onSuccess: ({ link }, _input, context) => {
+      if (!context) return;
+      transferTitleReveal(
+        context.optimisticLinkId,
+        link.id,
+        context.titles.get(link.id) ?? context.baselineTitle,
+        !mountedTitleBaselines().has(link.id),
+      );
     },
     onError: (_error, _input, context) => {
-      if (context?.optimisticLinkId) removeOptimisticLink(queryClient, context.optimisticLinkId);
+      if (context?.optimisticLinkId) {
+        clearTitleReveal(context.optimisticLinkId);
+        removeOptimisticLink(queryClient, context.optimisticLinkId);
+      }
     },
     onSettled: () => {
       // The ['links'] prefix invalidate below already covers queryKeys.links()
@@ -477,6 +507,9 @@ export function useEditLink(id: string) {
 
   return useMutation({
     mutationFn: (input: EditLinkRequest) => apiPatch<LinkResponse>(`/api/links/${id}`, input),
+    onMutate: (input: EditLinkRequest) => {
+      if (input.title !== undefined) markTitleEdited(id);
+    },
     // An edit only touches this link's own fields (title/description/note) —
     // never tag membership or live/trash counts — so neither tags nor counts
     // need to be invalidated here.
@@ -766,11 +799,19 @@ export function useEmptyTrash() {
  * indicator/mark already re-renders correctly off a fresh `links` fetch, so
  * there's nothing worth optimistically patching.
  */
-export function useRetryCapture(id: string) {
+export function useRetryCapture(id: string, baselineTitle?: string) {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: () => apiPost<LinkResponse>(`/api/links/${id}/retry`, {}),
+    onMutate: () => {
+      const previous = getTitleReveal(id);
+      const pending = registerTitleReveal(id, baselineTitle ?? mountedTitleBaselines().get(id));
+      return { previous, pending };
+    },
+    onError: (_error, _input, context) => {
+      if (context) restoreTitleReveal(id, context.pending, context.previous);
+    },
     // A retry only resets this link's own captureStatus — never tag
     // membership or live/trash counts.
     onSettled: () => invalidateLinkQueries(queryClient),
@@ -842,6 +883,73 @@ export function useUpdateSettings() {
       queryClient.setQueryData(queryKeys.settings(), settings);
     },
     onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      // AI readiness (enabled, provider, resolved model) derives from these settings.
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+    },
+  });
+}
+
+/** `GET /api/ai`: readiness, provider rows (last four characters only), stored model lists. */
+export function useAi() {
+  return useQuery({
+    queryKey: queryKeys.ai(),
+    queryFn: () => apiGet<AiSettingsResponse>('/api/ai'),
+  });
+}
+
+/** Operator-only refresh; the server stores the live list before responding. */
+export function useRefreshAiModels(kind: AiProviderKind) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost(`/api/ai/providers/${kind}/models/refresh`, {}),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+      queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+    },
+  });
+}
+
+/**
+ * `PUT /api/ai/providers/:kind`. The typed key lives only in mutation variables,
+ * so the cache entry is dropped at once (`gcTime: 0`) and callers `reset()` it.
+ */
+export function useSaveAiKey(kind: AiProviderKind) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    gcTime: 0,
+    mutationFn: (apiKey: string) =>
+      apiPut<SaveAiKeyResponse>(`/api/ai/providers/${kind}`, { apiKey }),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+      if (kind === 'fireworks') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      }
+    },
+  });
+}
+
+/** `POST /api/ai/providers/:kind/test`. */
+export function useTestAiKey(kind: AiProviderKind) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<AiTestResult>(`/api/ai/providers/${kind}/test`, {}),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
+      if (kind === 'fireworks') {
+        queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+      }
+    },
+  });
+}
+
+/** `DELETE /api/ai/providers/:kind`. Settings can change too (the provider may fall back). */
+export function useRemoveAiKey(kind: AiProviderKind) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiDelete<void>(`/api/ai/providers/${kind}`),
+    onSettled: () => {
+      queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
       queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
     },
   });

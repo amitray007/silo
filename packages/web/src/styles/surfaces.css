@@ -243,20 +243,24 @@
 .silo-modal-panel-settings {
   position: relative;
   height: var(--modal-height);
-  flex-direction: row;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  grid-template-rows: 48px minmax(0, 1fr);
   overflow: hidden;
 }
 .silo-modal-panel-settings > .silo-modal-header {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 1;
-  padding: 0;
+  grid-column: 2;
+  grid-row: 1;
+  justify-content: flex-end;
+  padding: 8px;
+  background: var(--bg2);
 }
 .silo-modal-panel-settings > .silo-modal-header h2 {
   display: none;
 }
 .silo-settings-tabs {
+  grid-column: 1;
+  grid-row: 1 / 3;
   width: 200px;
   flex: none;
   display: flex;
@@ -288,11 +292,14 @@
   background: var(--sel);
 }
 .silo-settings-panel {
+  grid-column: 2;
+  grid-row: 2;
+  min-height: 0;
   flex: 1;
   min-width: 0;
   overflow: auto;
   overscroll-behavior: contain;
-  padding: 22px 28px;
+  padding: 0 28px 22px;
 }
 .silo-settings-panel > h3 {
   margin: 0 32px 4px 0;
@@ -352,6 +359,95 @@
 .silo-toggle:disabled {
   opacity: 0.4;
   cursor: default;
+}
+/* Provider radios in Settings > AI: a real input, drawn as an ink-on-neutral circle. */
+.silo-radio {
+  appearance: none;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  border: 1.5px solid var(--line-2);
+  border-radius: 50%;
+  background: var(--bg2);
+  cursor: pointer;
+  transition:
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+.silo-radio:checked {
+  border-color: var(--ink);
+  background: var(--ink);
+  box-shadow: inset 0 0 0 3.5px var(--bg2);
+}
+.silo-radio:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.silo-ai-provider-copy {
+  flex: 1;
+  min-width: 0;
+}
+.silo-ai-provider-name,
+.silo-ai-provider-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-ai-provider-warning {
+  color: var(--warn);
+}
+.silo-ai-provider-actions {
+  flex: none;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+}
+.silo-settings-btn.silo-ai-provider-primary {
+  min-width: 76px;
+  text-align: center;
+  justify-content: center;
+}
+.silo-settings-btn.silo-ai-provider-more {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
+  padding: 0;
+}
+.silo-ai-provider-more > .silo-reader-icon {
+  width: 16px;
+  height: 16px;
+}
+.silo-ai-provider-menu .silo-menu-grab {
+  display: none;
+}
+/* RowPopover uses an inline library z-index; Settings menus sit above its modal. */
+.silo-row-menu-portal:has(.silo-ai-provider-menu) {
+  /* biome-ignore lint/complexity/noImportantStyles: override RowPopover's library-only inline z-index without changing shared menus. */
+  z-index: 50 !important;
+}
+@media (max-width: 640px) {
+  .silo-settings-btn.silo-ai-provider-more {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+  }
+  /* The settings touch-target rule would stretch the radio, but never the logo tile. */
+  .silo-settings-panel .silo-radio {
+    min-height: 0;
+  }
+  .silo-ai-provider-meta {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
 }
 .silo-row-menu-portal {
   width: 216px;
@@ -567,6 +663,7 @@
     padding: 0;
   }
   .silo-modal-panel-settings {
+    display: flex;
     width: 100%;
     height: 100%;
     max-height: 100%;
@@ -1569,4 +1666,332 @@
 }
 .silo-reader-diagram svg marker path {
   fill: var(--mut);
+}
+
+.silo-ai-feature-copy {
+  flex: 1;
+  min-width: 140px;
+}
+/* A compact floating menu, portalled outside the modal scroll area. */
+.silo-model-picker {
+  display: inline-flex;
+  max-width: 100%;
+  min-width: 0;
+}
+.silo-model-picker-trigger {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  width: 320px;
+  min-width: min(240px, 100%);
+  max-width: 100%;
+  height: 34px;
+  min-height: var(--s8);
+  padding: var(--s1-5) var(--s2-5);
+  border: 1px solid var(--line);
+  border-radius: var(--s2);
+  background: var(--input-bg);
+  box-shadow: var(--input-shadow);
+  font-size: var(--text-base);
+  line-height: var(--s5);
+}
+.silo-model-picker-trigger:focus-visible,
+.silo-model-picker-trigger[aria-expanded="true"] {
+  border-color: var(--line-2);
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
+}
+.silo-model-picker-trigger:disabled {
+  border-color: var(--line);
+  background: var(--input-bg);
+  color: var(--mut);
+  cursor: not-allowed;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-model-picker-trigger:hover:not(:disabled) {
+    background: var(--input-bg);
+    border-color: var(--line-2);
+  }
+}
+.silo-model-trigger-copy {
+  display: flex;
+  flex: 1;
+  gap: var(--s1);
+  min-width: 0;
+  text-align: left;
+  font-weight: 500;
+}
+.silo-model-picker-trigger .silo-model-trigger-copy > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-model-via,
+.silo-model-chevron {
+  color: var(--mut);
+  font-weight: 400;
+}
+.silo-model-trigger-copy > .silo-model-via {
+  flex: none;
+  white-space: pre;
+}
+.silo-model-chevron {
+  display: inline-flex;
+  flex: none;
+  margin-left: auto;
+}
+.silo-model-chevron > svg {
+  width: var(--s4);
+  height: var(--s4);
+}
+.silo-model-picker-trigger[aria-expanded="true"] .silo-model-chevron {
+  transform: rotate(180deg);
+}
+.silo-model-missing {
+  color: var(--warn);
+  font-size: 12px;
+  font-weight: 400;
+}
+.silo-model-missing-header {
+  flex: none;
+  margin: 0;
+  padding: 8px 12px 0;
+  overflow-wrap: anywhere;
+}
+.silo-model-trigger-copy > .silo-model-missing {
+  display: flex;
+}
+.silo-model-missing-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-model-missing-id + span {
+  flex: none;
+  white-space: pre;
+}
+.silo-model-picker-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+}
+.silo-model-picker-scrim {
+  display: none;
+}
+.silo-model-picker-popover {
+  --model-popover-bg: var(--bg2);
+  position: fixed;
+  top: var(--model-top);
+  bottom: var(--model-bottom);
+  left: var(--model-left);
+  width: var(--model-width);
+  max-height: var(--model-height);
+  height: var(--model-fixed-height, auto);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: var(--s2);
+  background: var(--model-popover-bg);
+  color: var(--ink);
+  box-shadow: var(--menu-shadow);
+  pointer-events: auto;
+  font-size: 14px;
+}
+:root[data-theme="dark"] .silo-model-picker-popover {
+  --model-popover-bg: color-mix(in oklch, var(--bg2), var(--ink) 4%);
+}
+.silo-model-picker-popover .silo-palette-input {
+  height: 36px;
+  min-height: 36px;
+  gap: var(--s2);
+  padding: 0 var(--s3);
+}
+.silo-model-picker-popover .silo-palette-input > svg {
+  flex: none;
+  width: var(--s4);
+  height: var(--s4);
+}
+.silo-model-picker-popover .silo-palette-input input {
+  height: 36px;
+  font-size: var(--text-sm);
+}
+.silo-model-picker-popover [cmdk-root] {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+.silo-model-picker-popover [cmdk-list] {
+  max-height: 320px;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--s1);
+}
+.silo-model-picker-popover [cmdk-group-heading] {
+  display: flex;
+  align-items: center;
+  gap: var(--s1-5);
+  padding: var(--s2) var(--s2) var(--s1);
+  color: var(--fnt);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: var(--s4);
+}
+.silo-model-picker-popover [cmdk-empty] {
+  padding: 24px 12px;
+  text-align: center;
+  color: var(--fnt);
+}
+.silo-model-chip {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 26px;
+  min-height: 26px;
+  border: 0;
+  border-radius: 8px;
+  padding: 0 var(--s2);
+  background: transparent;
+  color: var(--mut);
+  font: inherit;
+  font-size: 12px;
+  line-height: 16px;
+  cursor: pointer;
+}
+.silo-model-provider-chips {
+  display: flex;
+  flex: none;
+  gap: 4px;
+  overflow-x: auto;
+  min-width: 0;
+  margin: 0;
+  border: 0;
+  padding: var(--s1-5);
+  border-bottom: 0.5px solid var(--line);
+}
+.silo-model-chip {
+  min-width: 40px;
+  white-space: nowrap;
+}
+.silo-model-chip[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.silo-model-count {
+  color: var(--fnt);
+  font-variant-numeric: tabular-nums;
+}
+.silo-model-chip:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: -2px;
+}
+.silo-palette-row.silo-model-option {
+  height: 44px;
+  min-height: 44px;
+  padding: 5px var(--s2);
+  border-radius: var(--s1-5);
+}
+.silo-model-option[aria-selected="true"] {
+  background: var(--menu-highlight);
+  box-shadow: var(--menu-highlight-shadow);
+}
+.silo-model-option-copy {
+  flex: 1;
+  min-width: 0;
+}
+.silo-model-option-heading {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  line-height: 18px;
+}
+.silo-model-option-label {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--text-sm);
+  font-weight: 500;
+}
+.silo-model-option-label,
+.silo-model-option-meta {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-model-option-meta {
+  display: flex;
+  gap: 4px;
+  color: var(--fnt);
+  font-size: 12px;
+  line-height: 16px;
+}
+.silo-model-id {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-model-owner {
+  flex: none;
+  max-width: 40%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.silo-model-id + .silo-model-owner::before {
+  content: " · ";
+}
+.silo-model-context,
+.silo-model-check {
+  flex: none;
+  color: var(--fnt);
+  font-size: 12px;
+}
+.silo-model-check {
+  width: 14px;
+  color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-model-chip:hover {
+    background: var(--hov);
+    color: var(--ink);
+  }
+  .silo-model-option:hover {
+    background: var(--menu-highlight);
+    box-shadow: var(--menu-highlight-shadow);
+  }
+}
+@media (max-width: 640px) {
+  .silo-model-picker,
+  .silo-model-picker-trigger {
+    width: 100%;
+    max-width: 100%;
+  }
+  .silo-model-picker-trigger {
+    height: var(--s10);
+    min-height: var(--s10);
+  }
+  .silo-model-picker-scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    border: 0;
+    background: var(--scrim);
+    backdrop-filter: blur(4px);
+    pointer-events: auto;
+  }
+  .silo-model-picker-popover {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: 100%;
+    height: auto;
+    max-height: 70dvh;
+    border-radius: var(--s2) var(--s2) 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "ai_providers" ADD COLUMN "models_refresh_error" text;

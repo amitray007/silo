@@ -1,12 +1,14 @@
 import { ModalHeader, ModalShell } from './ModalShell';
 import { type SettingsTab, useSettings } from './SettingsContext';
 import { AccessTab } from './SettingsTabs/AccessTab';
+import { AiTab } from './SettingsTabs/AiTab';
 import { ImportExportTab } from './SettingsTabs/ImportExportTab';
 import { PluginsTab } from './SettingsTabs/PluginsTab';
 import { PreferencesTab } from './SettingsTabs/PreferencesTab';
 
 const TABS: { key: SettingsTab; name: string }[] = [
   { key: 'plugins', name: 'Plugins' },
+  { key: 'ai', name: 'AI' },
   { key: 'prefs', name: 'Preferences' },
   { key: 'import', name: 'Import & export' },
   { key: 'access', name: 'Access' },
@@ -64,6 +66,7 @@ function SettingsTabStrip({
 
 const TAB_DESCRIPTIONS: Record<SettingsTab, string> = {
   plugins: 'Choose the details silo captures and shows for each source.',
+  ai: 'Optional AI features, using your own provider key.',
   prefs: 'How silo looks and how long it keeps things.',
   import: 'Move your library in and out.',
   access: 'Connect agents and other tools to silo.',
@@ -73,6 +76,8 @@ function ActiveTabPanel({ tab }: { tab: SettingsTab }) {
   switch (tab) {
     case 'plugins':
       return <PluginsTab />;
+    case 'ai':
+      return <AiTab />;
     case 'prefs':
       return <PreferencesTab />;
     case 'import':

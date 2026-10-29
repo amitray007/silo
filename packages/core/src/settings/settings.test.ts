@@ -52,6 +52,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -223,6 +224,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -257,6 +259,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -295,6 +298,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -308,6 +312,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
+        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -318,6 +323,51 @@ describeIfPg('settings store (integration, plan 016)', () => {
       // And it's actually persisted, not just returned.
       expect(await ops.getSetting('theme')).toBe('dark');
       expect(await ops.getSetting('mcpAccess')).toBe(false);
+    });
+  });
+
+  describe('ai setting drift on read', () => {
+    it('rejects a null feature without overwriting an enabled feature', async () => {
+      const ai = {
+        enabled: true,
+        features: {
+          'x-post-title': {
+            enabled: true,
+            model: null,
+          },
+        },
+      };
+      await ops.setSetting('ai', ai);
+      await expect(
+        ops.updateSettings({
+          theme: 'dark',
+          ai: { enabled: true, features: { 'x-post-title': null } },
+        }),
+      ).rejects.toThrow();
+      expect(await ops.getSetting('ai')).toEqual(ai);
+      expect(await ops.getSetting('theme')).toBe('system');
+    });
+
+    const drifted = {
+      enabled: true,
+      features: {
+        retired_feature: { enabled: true, model: { provider: 'anthropic', id: 'retired-model' } },
+      },
+    };
+
+    it('nulls a retired model and drops a retired feature, keeping enabled and provider', async () => {
+      await rawDb.execute(
+        sql`INSERT INTO settings (key, value) VALUES ('ai', ${JSON.stringify(drifted)}::jsonb)`,
+      );
+      expect(await ops.getSetting('ai')).toEqual({
+        enabled: true,
+        features: { 'x-post-title': { enabled: false, model: null } },
+      });
+      expect((await ops.getAllSettings()).ai.enabled).toBe(true);
+    });
+
+    it('setSetting still rejects the same blob', async () => {
+      await expect(ops.setSetting('ai', drifted)).rejects.toThrow();
     });
   });
 });

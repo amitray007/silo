@@ -74,6 +74,30 @@ describeIfPg('transactional enqueue (integration)', () => {
     expect(await activeJobCount(link.id)).toBe(1);
   });
 
+  it('the job payload carries the trigger and previous status (capture, then manual)', async () => {
+    const link = await core.createLink({ url: 'https://example.com/payload', sourceKind: 'link' });
+    const payloadOf = async () =>
+      (
+        await inspectPool.query(
+          `select data from pgboss.job where name = 'enrich-link' and data->>'linkId' = $1`,
+          [link.id],
+        )
+      ).rows[0]?.data;
+    expect(await payloadOf()).toEqual({
+      linkId: link.id,
+      trigger: 'capture',
+      previousStatus: 'enriching',
+    });
+    await inspectPool.query(`delete from pgboss.job where data->>'linkId' = $1`, [link.id]);
+    await core.recordEnrichment(link.id, { status: 'full' });
+    await core.requestEnrich(link.id);
+    expect(await payloadOf()).toEqual({
+      linkId: link.id,
+      trigger: 'manual',
+      previousStatus: 'full',
+    });
+  });
+
   it('re-saving the same link does not stack a second active job (singletonKey)', async () => {
     const first = await core.createLink({ url: 'https://example.com/dedup', sourceKind: 'link' });
     // Re-save (tracking-param variant dedups to the same canonical -> same link).

@@ -178,13 +178,13 @@ describeIfPg('bulk write + batch-read ops (integration, U3)', () => {
     it('all-succeed: resets every retryable link back to enriching', async () => {
       const ids = await seedLinks('https://example.com/bulk-retry', 2);
       // Fresh links start at captureStatus 'enriching' already (a retryable
-      // status per requestRetry's RETRYABLE_STATUSES), so this exercises the
+      // status; requestEnrich accepts every live status), so this exercises the
       // real reset path without needing a separate recordEnrichment setup.
       const results = await ops.retryCaptureMany(ids);
       expect(results).toEqual(ids.map((id) => ({ id, ok: true })));
     });
 
-    it('mixed good+bad ids: a fully-captured (status full) link and a nonexistent id both report ok:false', async () => {
+    it('mixed good+bad ids: a full link is re-enriched (ok:true) and a nonexistent id reports ok:false', async () => {
       const [retryableId, fullId] = await seedLinks('https://example.com/bulk-retry-mixed', 2);
       if (!retryableId || !fullId) throw new Error('seed failed');
       await ops.recordEnrichment(fullId, { status: 'full', title: 'Done' });
@@ -193,7 +193,7 @@ describeIfPg('bulk write + batch-read ops (integration, U3)', () => {
 
       const byId = new Map(results.map((r) => [r.id, r]));
       expect(byId.get(retryableId)).toEqual({ id: retryableId, ok: true });
-      expect(byId.get(fullId)?.ok).toBe(false);
+      expect(byId.get(fullId)).toEqual({ id: fullId, ok: true });
       expect(byId.get(NONEXISTENT_ID)?.ok).toBe(false);
     });
 

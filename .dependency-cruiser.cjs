@@ -34,6 +34,19 @@ module.exports = {
       },
       to: { path: '^packages/db/' },
     },
+    {
+      name: 'adapters-no-ai-credential',
+      comment:
+        'Adapters (web/api/mcp) must never reach the decrypted AI provider key. ' +
+        '@silo/core/ai-credential is for the worker and the app composition root only. ' +
+        'Carve-out: *.test.ts and test-support/ files (stub connection tester).',
+      severity: 'error',
+      from: {
+        path: '^packages/(web|api|mcp)/',
+        pathNot: ['\\.test\\.tsx?$', '(^|/)test-support/'],
+      },
+      to: { path: '^packages/core/src/ai/credential\\.ts$' },
+    },
     // Adapters (web/api/mcp) and the worker service may not import each other,
     // nor the composition root (`@silo/app`). Shared behavior belongs in
     // `@silo/core`. Only `@silo/app` (the composition root — see below) is

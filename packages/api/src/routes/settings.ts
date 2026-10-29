@@ -1,6 +1,7 @@
-import { getAllSettings, updateSettings } from '@silo/core';
+import { AI_PROVIDER_KINDS, getAllSettings, updateSettings } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
+import { operatorOnlyFailure } from '../operator-only.js';
 
 /**
  * `PATCH /api/settings` body schema — every field OPTIONAL (an empty body is
@@ -70,6 +71,26 @@ const settingsPatchBodySchema = z
       })
       .strict()
       .optional(),
+    // AI foundation: shape only. Core checks that `model` is in the stored list the
+    // `provider` can reach and that every `features` key is registered.
+    ai: z
+      .object({
+        enabled: z.boolean(),
+        features: z.record(
+          z.string(),
+          z
+            .object({
+              enabled: z.boolean(),
+              model: z
+                .object({ provider: z.enum(AI_PROVIDER_KINDS), id: z.string().min(1) })
+                .strict()
+                .nullable(),
+            })
+            .strict(),
+        ),
+      })
+      .strict()
+      .optional(),
   })
   .strict();
 
@@ -100,6 +121,10 @@ export function registerSettingsRoutes(app: Hono): void {
 
   app.patch('/settings', async (c) => {
     const body = settingsPatchBodySchema.parse(await c.req.json().catch(() => ({})));
+    if (body.ai !== undefined) {
+      const denied = operatorOnlyFailure(c);
+      if (denied) return denied;
+    }
     const settings = await updateSettings(body);
     return c.json(settings);
   });

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { normalizePluginsValue, parseSettingValue, SETTINGS_DEFAULTS } from './schema.js';
+import {
+  normalizePluginsValue,
+  parseSettingValue,
+  parseStoredSettingValue,
+  SETTINGS_DEFAULTS,
+} from './schema.js';
 
 /**
  * Unit tests for the `plugins` schema + its plan-026 legacy-shape migration
@@ -249,5 +254,91 @@ describe('hoverPreview schema and default', () => {
 
   it.each(['true', 1, null, undefined, {}])('rejects non-boolean %j', (value) => {
     expect(() => parseSettingValue('hoverPreview', value)).toThrow();
+  });
+});
+
+describe('ai setting', () => {
+  const selection = (provider: string, id: string) => ({
+    enabled: true,
+    features: { 'x-post-title': { enabled: true, model: { provider, id } } },
+  });
+  it('defaults off with no selected model', () => {
+    expect(parseSettingValue('ai', SETTINGS_DEFAULTS.ai)).toEqual({
+      enabled: false,
+      features: { 'x-post-title': { enabled: false, model: null } },
+    });
+  });
+  it('parses model ids without a static list and rejects invalid shapes', () => {
+    expect(parseSettingValue('ai', selection('anthropic', 'claude-sonnet-5-5'))).toEqual(
+      selection('anthropic', 'claude-sonnet-5-5'),
+    );
+    expect(() => parseSettingValue('ai', selection('gateway', ''))).toThrow();
+    expect(() => parseSettingValue('ai', selection('unknown', 'model'))).toThrow();
+  });
+  it('converts legacy booleans and the global selection only on reads', () => {
+    const old = {
+      enabled: true,
+      provider: 'anthropic',
+      model: 'claude-haiku-5-5',
+      features: { 'x-post-title': true, retired: true },
+    };
+    expect(parseStoredSettingValue('ai', old)).toEqual(selection('anthropic', 'claude-haiku-5-5'));
+    expect(() => parseSettingValue('ai', old)).toThrow();
+  });
+  it('fills missing features off, drops retired features on read and rejects them on write', () => {
+    const stored = { enabled: true, features: { retired: { enabled: true, model: null } } };
+    expect(parseStoredSettingValue('ai', stored)).toEqual({
+      enabled: true,
+      features: { 'x-post-title': { enabled: false, model: null } },
+    });
+    expect(() => parseSettingValue('ai', stored)).toThrow();
+    expect(parseSettingValue('ai', { enabled: true, features: {} })).toEqual({
+      enabled: true,
+      features: { 'x-post-title': { enabled: false, model: null } },
+    });
+  });
+  it('rejects an explicit null feature instead of filling its default', () => {
+    expect(() =>
+      parseSettingValue('ai', {
+        enabled: true,
+        features: { 'x-post-title': null },
+      }),
+    ).toThrow();
+  });
+  it.each(['anthropic', 'openai', 'gateway'])(
+    'keeps a legacy null selection for %s unselected',
+    (provider) => {
+      const old = { enabled: true, provider, model: null, features: { 'x-post-title': true } };
+      expect(parseStoredSettingValue('ai', old)).toEqual({
+        enabled: true,
+        features: { 'x-post-title': { enabled: true, model: null } },
+      });
+      expect(() => parseSettingValue('ai', old)).toThrow();
+    },
+  );
+  it('keeps a null legacy provider unselected', () => {
+    expect(
+      parseStoredSettingValue('ai', {
+        enabled: true,
+        provider: null,
+        model: null,
+        features: { 'x-post-title': true },
+      }),
+    ).toEqual({ enabled: true, features: { 'x-post-title': { enabled: true, model: null } } });
+  });
+  it('retains ids for stored-list validation in the settings store', () => {
+    expect(parseStoredSettingValue('ai', selection('anthropic', 'future-model'))).toEqual(
+      selection('anthropic', 'future-model'),
+    );
+  });
+  it('rejects malformed shapes and unknown properties', () => {
+    for (const value of [
+      'x',
+      { enabled: true },
+      { ...SETTINGS_DEFAULTS.ai, extra: 1 },
+      { enabled: true, features: { 'x-post-title': true } },
+    ]) {
+      expect(() => parseSettingValue('ai', value)).toThrow();
+    }
   });
 });

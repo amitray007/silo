@@ -2,6 +2,7 @@ import { serve } from '@hono/node-server';
 import { createApp } from '@silo/api';
 import {
   closeBrowserReader,
+  registerAiConnectionTester,
   registerLinkTitles,
   registerLiveReader,
   registerPageViewer,
@@ -108,6 +109,7 @@ async function main(): Promise<void> {
   // could create a link, so no capture can race ahead of it.
   const viewer = registerPageViewer();
   const titles = registerLinkTitles();
+  const aiTester = registerAiConnectionTester();
   const liveReader = registerLiveReader();
   const siteIcons = registerSiteIcons();
   const worker = await startWorkerOrDegrade();
@@ -138,6 +140,7 @@ async function main(): Promise<void> {
       }
       try {
         titles.close();
+        aiTester.close();
         liveReader.close();
         siteIcons.close();
         await viewer.close();

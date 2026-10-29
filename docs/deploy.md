@@ -59,8 +59,20 @@ docker compose -f docker-compose.prod.yml up --build
 |---|---|---|
 | `SILO_APP_PASSWORD` | api | the web-UI login password — set this or the UI is open. **≥16 chars** (`openssl rand -hex 32`); see `.env.example`. |
 | `SILO_SESSION_SECRET` | api | cookie-signing secret (falls back to `SILO_APP_PASSWORD` if unset) |
+| `SILO_SECRET_KEY` | api | optional; encrypts AI provider keys at rest (`openssl rand -base64 32`). Unset: AI features cannot be set up; everything else works |
+| `SILO_SECRET_KEY_PREVIOUS` | api | only during key rotation (see below) |
 | `SILO_PUBLIC_MCP_URL` | api | the exact MCP URL the "Copy config" button hands out (see below) |
 | `SILO_MCP_ALLOWED_HOSTS` | mcp | your mcp hostname(s), comma-separated — REQUIRED behind a proxy (see below) |
+
+### Rotating `SILO_SECRET_KEY`
+
+1. Set `SILO_SECRET_KEY_PREVIOUS` to the current value and `SILO_SECRET_KEY` to a new one.
+2. Restart the api container. The worker re-encrypts every stored provider key under
+   the new key and logs one line with the count.
+3. Remove `SILO_SECRET_KEY_PREVIOUS` and restart again.
+
+If the key is lost, stored provider keys cannot be read. Settings > AI then says
+"Key can't be read. Add it again."
 
 Migrations run automatically on the **api** container's boot
 (`db:migrate` before the server starts) — idempotent, safe on every restart.

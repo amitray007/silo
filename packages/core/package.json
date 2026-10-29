@@ -6,6 +6,7 @@
   "license": "MIT",
   "exports": {
     ".": "./src/index.ts",
+    "./ai-credential": "./src/ai/credential.ts",
     "./capture": "./src/capture.ts",
     "./view-scroll": "./src/links/view-scroll.ts"
   },

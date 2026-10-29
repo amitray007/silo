@@ -1,6 +1,7 @@
 import { db, links } from '@silo/db';
-import { sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { ENRICH_ATTEMPT_CAP } from './enrichment.js';
+import { whereLive } from './live.js';
 
 /**
  * Options for `findStrandedEnriching`.
@@ -104,4 +105,27 @@ export async function findStrandedEnriching(
   `);
 
   return rows.rows.map((row) => ({ id: row.id }));
+}
+
+/**
+ * Settle a stranded link whose open run is held at `full` (its
+ * `enrich_floor_status` is `full`): set it back to `full` and clear the floor,
+ * instead of re-kicking a run that already cannot lower it. A complete link
+ * whose re-run keeps failing would otherwise cycle through the sweep forever.
+ * Returns `true` when it restored the link, `false` when the link has no
+ * `full` floor (or is trashed, or no longer `enriching`).
+ */
+export async function restoreHeldFull(linkId: string): Promise<boolean> {
+  const restored = await db
+    .update(links)
+    .set({ captureStatus: 'full', enrichFloorStatus: null })
+    .where(
+      whereLive(
+        eq(links.id, linkId),
+        eq(links.captureStatus, 'enriching'),
+        eq(links.enrichFloorStatus, 'full'),
+      ),
+    )
+    .returning({ id: links.id });
+  return restored.length > 0;
 }

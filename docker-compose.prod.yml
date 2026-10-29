@@ -93,6 +93,9 @@ services:
       PORT: '8787'
       SILO_APP_PASSWORD: ${SILO_APP_PASSWORD:-}
       SILO_SESSION_SECRET: ${SILO_SESSION_SECRET:-}
+      # Optional: encrypts AI provider keys at rest (openssl rand -base64 32).
+      SILO_SECRET_KEY: ${SILO_SECRET_KEY:-}
+      SILO_SECRET_KEY_PREVIOUS: ${SILO_SECRET_KEY_PREVIOUS:-}
       SILO_API_TOKEN: ${SILO_API_TOKEN:-}
       SILO_ALLOWED_ORIGINS: ${SILO_ALLOWED_ORIGINS:-}
       # The public MCP endpoint the "Copy config" button hands out. Set this to

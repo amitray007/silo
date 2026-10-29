@@ -27,6 +27,7 @@ const settings: SettingsMap = {
   mcpAccess: true,
   linkPreviewImages: true,
   hoverPreview: true,
+  ai: { enabled: false, features: {} },
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },
@@ -800,6 +801,7 @@ describe('reader keyboard and phone toolbar', () => {
       'Copy linkc',
       'Refresh readerr',
       'Tags',
+      'Enrich',
       'Move to trash⌫',
     ]);
     expect(document.activeElement).toBe(items[0]);

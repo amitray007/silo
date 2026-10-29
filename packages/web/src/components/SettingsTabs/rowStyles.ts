@@ -24,6 +24,12 @@ export const settingsRow: CSSProperties = {
   flexWrap: 'wrap',
 };
 
+/** Provider rows keep the logo, copy, and actions on one line at every width. */
+export const providerRow: CSSProperties = {
+  ...settingsRow,
+  flexWrap: 'nowrap',
+};
+
 /** The roomier row + the `--line` divider under it (every row except a tab's last). */
 export const settingsRowDivided: CSSProperties = {
   ...settingsRow,
@@ -45,4 +51,16 @@ export const rowDesc: CSSProperties = {
   marginTop: 3,
   lineHeight: 'var(--lh-snug)',
   textWrap: 'pretty',
+};
+
+/** A text input or select in a settings row (Access tab name field, AI tab key and model fields). */
+export const settingsField: CSSProperties = {
+  boxSizing: 'border-box',
+  border: '1px solid var(--line)',
+  borderRadius: 8,
+  background: 'var(--bg2)',
+  color: 'var(--ink)',
+  fontFamily: 'inherit',
+  fontSize: 'var(--text-sm)',
+  padding: '8px 12px',
 };

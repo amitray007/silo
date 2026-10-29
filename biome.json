@@ -68,6 +68,7 @@
               "options": {
                 "paths": {
                   "@silo/db": "Adapters (web/api/mcp) must not import @silo/db directly; only @silo/core owns data access.",
+                  "@silo/core/ai-credential": "Adapters (web/api/mcp) must never reach the decrypted AI key; use aiStatus and listAiProviders from @silo/core.",
                   "@silo/web": "Adapter packages must not depend on each other; share code through @silo/core.",
                   "@silo/api": "Adapter packages must not depend on each other; share code through @silo/core.",
                   "@silo/mcp-server": "Adapter packages must not depend on each other; share code through @silo/core.",
@@ -135,6 +136,13 @@
               "level": "error",
               "options": {
                 "paths": {
+                  "@silo/db": "Adapters (web/api/mcp) must not import @silo/db directly; only @silo/core owns data access.",
+                  "@silo/core/ai-credential": "Adapters (web/api/mcp) must never reach the decrypted AI key; use aiStatus and listAiProviders from @silo/core.",
+                  "@silo/web": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/api": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/mcp-server": "Adapter packages must not depend on each other; share code through @silo/core.",
+                  "@silo/worker": "Adapters must not depend on the worker; only the @silo/app composition root wires them together.",
+                  "@silo/app": "Nothing may import the @silo/app composition root; it is the top-level entrypoint that wires the others.",
                   "@silo/queue": "@silo/queue is server-side pg-boss plumbing for the enrichment enqueuer; only @silo/api and @silo/worker register it. web/mcp must not import it."
                 }
               }

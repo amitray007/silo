@@ -516,4 +516,89 @@ describeIfPg('migrate (integration)', () => {
       database.drop();
     }
   });
+
+  /**
+   * 0020 backfill (AI titles slice): `title_source` defaults to 'page'; a title
+   * that is probably the owner's edit becomes 'user'. A url-as-title (the
+   * give-up fallback) and the x.com page-title shapes stay 'page'.
+   */
+  it("title_source: backfills edited titles to 'user', keeps page-title shapes as 'page'; the floor column defaults to null", async () => {
+    const realDrizzleDir = path.resolve('./drizzle');
+    const journal = JSON.parse(
+      readFileSync(path.join(realDrizzleDir, 'meta/_journal.json'), 'utf8'),
+    ) as { entries: Array<{ tag: string }> };
+    const index = journal.entries.findIndex((entry) => entry.tag === '0020_title_source');
+    expect(index).toBeGreaterThan(0);
+    const preEntries = journal.entries.slice(0, index);
+
+    const tempDir = mkdtempSync(path.join(tmpdir(), 'silo-pre-title-source-migrations-'));
+    try {
+      mkdirSync(path.join(tempDir, 'meta'), { recursive: true });
+      writeFileSync(
+        path.join(tempDir, 'meta/_journal.json'),
+        JSON.stringify({ ...journal, entries: preEntries }),
+      );
+      for (const entry of preEntries) {
+        writeFileSync(
+          path.join(tempDir, `${entry.tag}.sql`),
+          readFileSync(path.join(realDrizzleDir, `${entry.tag}.sql`)),
+        );
+      }
+
+      const database = createDisposableDatabase('silo_title_source_migration_test');
+      try {
+        const prePool = new Pool({ connectionString: database.url });
+        await runMigrations(drizzle(prePool), prePool, tempDir);
+
+        const seedPool = new Pool({ connectionString: database.url });
+        const seedDb = drizzle(seedPool);
+        const x = 'https://x.com/a/status';
+        await seedDb.execute(
+          sql`insert into links (url, canonical_url, title, source_kind) values
+              (${`${x}/1`}, ${`${x}/1`}, 'Name (@a) on X', 'twitter'),
+              (${`${x}/2`}, ${`${x}/2`}, 'Name on X: "hello"', 'twitter'),
+              (${`${x}/3`}, ${`${x}/3`}, 'hello / X', 'twitter'),
+              (${`${x}/4`}, ${`${x}/4`}, ${`${x}/4`}, 'twitter'),
+              (${`${x}/5`}, ${`${x}/5`}, 'My own note', 'twitter'),
+              (${`${x}/6`}, ${`${x}/6`}, null, 'twitter'),
+              ('https://example.com/a', 'https://example.com/a', 'https://example.com/a', 'link'),
+              ('https://example.com/b', 'https://example.com/b', 'An article', 'link'),
+              ('https://example.com/c', 'https://example.com/c', null, 'link')`,
+        );
+
+        const upgradePool = new Pool({ connectionString: database.url });
+        await runMigrations(drizzle(upgradePool), upgradePool, './drizzle');
+
+        const after = await seedDb.execute<{
+          url: string;
+          title_source: string;
+          enrich_floor_status: string | null;
+        }>(sql`select url, title_source, enrich_floor_status from links order by url`);
+        const byUrl = Object.fromEntries(after.rows.map((row) => [row.url, row.title_source]));
+        expect(byUrl).toEqual({
+          [`${x}/1`]: 'page',
+          [`${x}/2`]: 'page',
+          [`${x}/3`]: 'page',
+          [`${x}/4`]: 'page',
+          [`${x}/5`]: 'user',
+          [`${x}/6`]: 'page',
+          'https://example.com/a': 'page',
+          'https://example.com/b': 'user',
+          'https://example.com/c': 'page',
+        });
+        expect(after.rows.every((row) => row.enrich_floor_status === null)).toBe(true);
+
+        const enumValues = await seedDb.execute<{ enumlabel: string }>(
+          sql`select e.enumlabel from pg_type t join pg_enum e on e.enumtypid = t.oid
+              where t.typname = 'title_source' order by e.enumsortorder`,
+        );
+        expect(enumValues.rows.map((r) => r.enumlabel)).toEqual(['page', 'ai', 'user']);
+        await seedPool.end();
+      } finally {
+        database.drop();
+      }
+    } finally {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  });
 });

@@ -18,6 +18,7 @@
 // Enrichment job (U5): the `enrich-link` handler's business logic — fetch ->
 // extract -> recordEnrichment, with injectable seams for testing. See
 // enrich.ts's doc comment for the resolve-vs-throw contract pg-boss relies on.
+export { registerAiConnectionTester } from './ai/index.js';
 export { closeBrowserReader } from './browser/reader.js';
 export { type EnrichLinkDeps, enrichLink } from './enrich.js';
 // NOTE: embedded-json.ts's `recoverEmbeddedJson`/`EmbeddedJsonResult` are

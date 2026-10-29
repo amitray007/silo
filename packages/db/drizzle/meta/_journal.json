@@ -134,6 +134,34 @@
       "when": 1793139183110,
       "tag": "0018_reader_render_pending",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1793191447848,
+      "tag": "0019_ai_providers",
+      "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1793205545173,
+      "tag": "0020_title_source",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1793211330011,
+      "tag": "0021_fireworks",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1793214452226,
+      "tag": "0022_fireworks_refresh_error",
+      "breakpoints": true
     }
   ]
 }

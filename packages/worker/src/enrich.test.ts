@@ -704,6 +704,174 @@ describeIfPg('enrichLink (integration)', () => {
     });
   });
 
+  describe('no downgrade of a full link (Enrich on every link)', () => {
+    const okFetch = (url: string): SafeFetchResult => ({
+      ok: true,
+      html: '<html></html>',
+      contentType: 'text/html',
+      finalUrl: url,
+      status: 200,
+    });
+    const manualFull = { trigger: 'manual', previousStatus: 'full' } as const;
+
+    /** A full link with good data, then an owner Enrich click (status enriching, floor full). */
+    async function clickedEnrich(url: string): Promise<string> {
+      const id = await newLink(url);
+      await core.recordEnrichment(id, {
+        title: 'Good title',
+        description: 'Good description',
+        imageUrl: 'https://example.com/good.png',
+        text: 'x'.repeat(400),
+        status: 'full',
+      });
+      await core.requestEnrich(id);
+      return id;
+    }
+
+    it('a manual re-run that comes back partial stays full and keeps all its data', async () => {
+      const id = await clickedEnrich('https://example.com/rerun-partial');
+      await enrichMod.enrichLink(
+        id,
+        stubDeps(okFetch(id), {
+          title: 'Thin title',
+          description: 'Thin description',
+          imageUrl: 'https://example.com/thin.png',
+          text: 'thin',
+          status: 'partial',
+        }),
+        manualFull,
+      );
+      const link = await core.getById(id);
+      expect(link?.captureStatus).toBe('full');
+      expect(link?.title).toBe('Good title');
+      expect(link?.description).toBe('Good description');
+      expect(link?.imageUrl).toBe('https://example.com/good.png');
+      expect(link?.extractedText).toBe('x'.repeat(400));
+      expect(link?.enrichFloorStatus).toBeNull();
+    });
+
+    it('a manual re-run whose fetch fails stays full', async () => {
+      const id = await clickedEnrich('https://example.com/rerun-down');
+      await enrichMod.enrichLink(
+        id,
+        stubDeps({ ok: false, reason: 'http-error', detail: '503' }),
+        manualFull,
+      );
+      expect((await core.getById(id))?.captureStatus).toBe('full');
+    });
+
+    it('a manual re-run of a full link whose URL now returns 404 or 410 stays full and is not trashed', async () => {
+      const id = await clickedEnrich('https://example.com/rerun-gone');
+      await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'not-found' }), manualFull);
+      const link = await core.getById(id);
+      expect(link?.deletedAt).toBeNull();
+      expect(link?.captureStatus).toBe('full');
+      expect(link?.title).toBe('Good title');
+    });
+
+    it('a manual re-run that comes back full replaces the data', async () => {
+      const id = await clickedEnrich('https://example.com/rerun-better');
+      await enrichMod.enrichLink(
+        id,
+        stubDeps(okFetch(id), { title: 'Newer title', text: 'y'.repeat(400), status: 'full' }),
+        manualFull,
+      );
+      const link = await core.getById(id);
+      expect(link?.title).toBe('Newer title');
+      expect(link?.captureStatus).toBe('full');
+    });
+
+    it('a second job from a double click runs and the finished link stays full', async () => {
+      const id = await clickedEnrich('https://example.com/double-click');
+      await core.requestEnrich(id); // second click while enriching keeps the floor
+      expect((await core.getById(id))?.enrichFloorStatus).toBe('full');
+      await enrichMod.enrichLink(
+        id,
+        stubDeps(okFetch(id), { title: 'First run', text: 'z'.repeat(400), status: 'full' }),
+        manualFull,
+      );
+      const second = vi.fn();
+      const deps = stubDeps(okFetch(id), { title: 'Thin', status: 'partial' });
+      deps.safeFetch = async (url) => {
+        second(url);
+        return okFetch(url);
+      };
+      await enrichMod.enrichLink(id, deps, { trigger: 'manual', previousStatus: 'enriching' });
+      expect(second).toHaveBeenCalled();
+      const link = await core.getById(id);
+      expect(link?.captureStatus).toBe('full');
+      expect(link?.title).toBe('First run');
+    });
+
+    it('a sweep job that finds a finished link does nothing', async () => {
+      const id = await newLink('https://example.com/sweep-dup');
+      await core.recordEnrichment(id, { title: 'Done', status: 'full' });
+      const fetchSpy = vi.fn();
+      const deps = stubDeps(okFetch(id), { status: 'partial' });
+      deps.safeFetch = async (url) => {
+        fetchSpy(url);
+        return okFetch(url);
+      };
+      await enrichMod.enrichLink(id, deps, { trigger: 'sweep', previousStatus: 'enriching' });
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('a re-save (capture job) of a full link that comes back thin stays full with its data', async () => {
+      const id = await newLink('https://example.com/resave-thin');
+      await core.recordEnrichment(id, {
+        title: 'Good title',
+        description: 'Good description',
+        text: 'x'.repeat(400),
+        status: 'full',
+      });
+      await core.createLink({ url: 'https://example.com/resave-thin', sourceKind: 'link' });
+      await enrichMod.enrichLink(
+        id,
+        stubDeps(okFetch(id), {
+          title: 'Thin',
+          description: 'Thin',
+          text: 'thin',
+          status: 'partial',
+        }),
+        { trigger: 'capture', previousStatus: 'full' },
+      );
+      const link = await core.getById(id);
+      expect(link?.captureStatus).toBe('full');
+      expect(link?.title).toBe('Good title');
+      expect(link?.description).toBe('Good description');
+      expect(link?.extractedText).toBe('x'.repeat(400));
+    });
+
+    it('a re-save (capture job) of a full link whose URL 404s is not trashed', async () => {
+      const id = await newLink('https://example.com/resave-gone');
+      await core.recordEnrichment(id, { title: 'Good title', status: 'full' });
+      await enrichMod.enrichLink(id, stubDeps({ ok: false, reason: 'not-found' }), {
+        trigger: 'capture',
+        previousStatus: 'full',
+      });
+      const link = await core.getById(id);
+      expect(link?.deletedAt).toBeNull();
+      expect(link?.captureStatus).toBe('full');
+    });
+
+    it('a previously partial link is still recorded as partial', async () => {
+      const id = await newLink('https://example.com/rerun-was-partial');
+      await core.recordEnrichment(id, { status: 'partial' });
+      await core.requestEnrich(id);
+      await enrichMod.enrichLink(id, stubDeps(okFetch(id), { status: 'partial' }), {
+        trigger: 'manual',
+        previousStatus: 'partial',
+      });
+      expect((await core.getById(id))?.captureStatus).toBe('partial');
+    });
+
+    it('with no job context a thin result is recorded as is', async () => {
+      const id = await newLink('https://example.com/no-job-context');
+      await enrichMod.enrichLink(id, stubDeps(okFetch(id), { status: 'partial' }));
+      expect((await core.getById(id))?.captureStatus).toBe('partial');
+    });
+  });
+
   describe('404-trash + attempt-cap give-up (plan 025 U4)', () => {
     it('a confirmed 404/410 (reason: not-found) silently trashes the link, never records a status', async () => {
       const id = await newLink('https://example.com/vanished');

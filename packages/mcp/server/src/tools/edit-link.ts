@@ -22,6 +22,8 @@ export function registerEditLink(server: McpServer): void {
         "Update a saved link's title, description, and/or note. Only the " +
         'fields you pass are changed; omitted fields are left as-is (an ' +
         'edit with no fields is a no-op that returns the link unchanged). ' +
+        'A title you set here is kept permanently: later page or AI titles ' +
+        'will not replace it. ' +
         "Cannot change the link's url, sourceKind, or tags — use " +
         '`add_link_tag`/`remove_link_tag` for tags. Returns a clean ' +
         'not-found result (not an error) if the id is unknown or the link ' +

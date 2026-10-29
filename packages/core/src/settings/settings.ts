@@ -1,14 +1,35 @@
-import { db, settings } from '@silo/db';
-import { eq } from 'drizzle-orm';
+import { aiProviders, db, settings } from '@silo/db';
+import { eq, inArray } from 'drizzle-orm';
+import { z } from 'zod';
+import { parseStoredModels, storedProviderModels } from '../ai/model-store.js';
 import type { Executor } from '../links/executor.js';
 import {
   isSettingKey,
   parseSettingValue,
+  parseStoredSettingValue,
   SETTINGS_DEFAULTS,
   type SettingKey,
   type SettingsMap,
   type SettingValue,
 } from './schema.js';
+
+// Only migrates pre-live-list settings that used catalog ids for Gateway models.
+const LEGACY_GATEWAY_IDS = new Map([
+  ['claude-haiku-5-5', 'anthropic/claude-haiku-5.5'],
+  ['claude-sonnet-5-5', 'anthropic/claude-sonnet-5.5'],
+  ['claude-opus-5-5', 'anthropic/claude-opus-5.5'],
+  ['claude-fable-5-1', 'anthropic/claude-fable-5.1'],
+  ['gpt-6-luna', 'openai/gpt-6-luna'],
+  ['gpt-6.1-terra', 'openai/gpt-6.1-terra'],
+  ['gpt-6.1-sol', 'openai/gpt-6.1-sol'],
+  ['gpt-6-astra', 'openai/gpt-6-astra'],
+]);
+
+function migrateGatewaySelections(ai: SettingValue<'ai'>): void {
+  for (const { model } of Object.values(ai.features)) {
+    if (model?.provider === 'gateway') model.id = LEGACY_GATEWAY_IDS.get(model.id) ?? model.id;
+  }
+}
 
 /**
  * Settings ops (plan 016) — the ONLY `core` module that touches
@@ -28,12 +49,25 @@ import {
  * corrupted row degrades to that one key's default rather than surfacing an
  * uncaught 500 on an otherwise-unrelated read.
  */
-function parseSettingValueSafely<K extends SettingKey>(
+async function parseSettingValueSafely<K extends SettingKey>(
   key: K,
   value: unknown,
-): SettingValue<K> | undefined {
+  executor: Executor = db,
+  repairModels = true,
+): Promise<SettingValue<K> | undefined> {
   try {
-    return parseSettingValue(key, value);
+    const parsed = parseStoredSettingValue(key, value);
+    if (key === 'ai') migrateGatewaySelections(parsed as SettingValue<'ai'>);
+    if (key === 'ai' && repairModels) {
+      const ai = parsed as SettingValue<'ai'>;
+      for (const feature of Object.values(ai.features)) {
+        const model = feature.model;
+        if (!model) continue;
+        const models = await storedProviderModels(model.provider, executor);
+        if (!models.some((m) => m.id === model.id)) feature.model = null;
+      }
+    }
+    return parsed;
   } catch {
     return undefined;
   }
@@ -56,11 +90,14 @@ function parseSettingValueSafely<K extends SettingKey>(
  * tightened in a later slice can't silently keep serving a value that would
  * no longer validate.
  */
-export async function getSetting<K extends SettingKey>(key: K): Promise<SettingValue<K>> {
-  const [row] = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+export async function getSetting<K extends SettingKey>(
+  key: K,
+  executor: Executor = db,
+): Promise<SettingValue<K>> {
+  const [row] = await executor.select().from(settings).where(eq(settings.key, key)).limit(1);
   if (!row) return SETTINGS_DEFAULTS[key];
 
-  const parsed = parseSettingValueSafely(key, row.value);
+  const parsed = await parseSettingValueSafely(key, row.value, executor);
   return parsed ?? SETTINGS_DEFAULTS[key];
 }
 
@@ -74,8 +111,8 @@ export async function getSetting<K extends SettingKey>(key: K): Promise<SettingV
  * Takes an optional `Executor` (the pooled `db` singleton, or a transaction
  * handle — same shared type `links.ts`'s `createLink` uses) so
  * `updateSettings` can run every key's write inside ONE transaction; direct
- * callers (a future single-key write path) can omit it and get the plain
- * pooled `db`.
+ * callers can omit it. AI writes use a transaction so the live-list row
+ * stays locked from selection validation through persistence.
  */
 export async function setSetting<K extends SettingKey>(
   key: K,
@@ -83,6 +120,22 @@ export async function setSetting<K extends SettingKey>(
   executor: Executor = db,
 ): Promise<void> {
   const parsed = parseSettingValue(key, value);
+  if (key === 'ai') {
+    migrateGatewaySelections(parsed as SettingValue<'ai'>);
+    await executor.transaction(async (tx) => {
+      await validateProviderSelection(parsed as SettingValue<'ai'>, tx);
+      await persistSetting(key, parsed, tx);
+    });
+  } else {
+    await persistSetting(key, parsed, executor);
+  }
+}
+
+async function persistSetting<K extends SettingKey>(
+  key: K,
+  parsed: SettingValue<K>,
+  executor: Executor,
+): Promise<void> {
   await executor
     .insert(settings)
     .values({ key, value: parsed })
@@ -103,7 +156,7 @@ export async function getAllSettings(): Promise<SettingsMap> {
   const result = { ...SETTINGS_DEFAULTS };
   for (const key of Object.keys(SETTINGS_DEFAULTS) as SettingKey[]) {
     if (!stored.has(key)) continue;
-    const parsed = parseSettingValueSafely(key, stored.get(key));
+    const parsed = await parseSettingValueSafely(key, stored.get(key));
     if (parsed !== undefined) {
       (result as Record<SettingKey, unknown>)[key] = parsed;
     }
@@ -152,4 +205,47 @@ export async function updateSettings(patch: Record<string, unknown>): Promise<Se
   });
 
   return getAllSettings();
+}
+
+async function validateProviderSelection(
+  ai: SettingValue<'ai'>,
+  executor: Executor,
+): Promise<void> {
+  const selections = Object.entries(ai.features).filter(([, f]) => f.model !== null);
+  if (!selections.length) return;
+  // Lock in provider order to prevent deadlocks between multi-feature writes.
+  const rows = await executor
+    .select({ kind: aiProviders.kind, models: aiProviders.models })
+    .from(aiProviders)
+    .where(
+      inArray(
+        aiProviders.kind,
+        selections.flatMap(([, f]) => (f.model ? [f.model.provider] : [])),
+      ),
+    )
+    .orderBy(aiProviders.kind)
+    .for('share');
+  const byKind = new Map(rows.map((row) => [row.kind, parseStoredModels(row.kind, row.models)]));
+  z.unknown()
+    .superRefine((_value, ctx) => {
+      for (const [id, feature] of selections) {
+        const model = feature.model;
+        if (model && !(byKind.get(model.provider) ?? []).some((m) => m.id === model.id)) {
+          ctx.addIssue({
+            code: 'custom',
+            message: 'model is not in the stored provider list',
+            path: ['features', id, 'model'],
+          });
+        }
+      }
+    })
+    .parse(ai);
+}
+
+/** Internal readiness read retains the selection so an unloaded list gets its own reason. */
+export async function getAiSettingForStatus(): Promise<SettingValue<'ai'>> {
+  const [row] = await db.select().from(settings).where(eq(settings.key, 'ai')).limit(1);
+  return row
+    ? ((await parseSettingValueSafely('ai', row.value, db, false)) ?? SETTINGS_DEFAULTS.ai)
+    : SETTINGS_DEFAULTS.ai;
 }

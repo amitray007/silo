@@ -1,5 +1,29 @@
 export const name = '@silo/core';
 
+export type { AiErrorCode, AiFeatureDef, AiFeatureId, AiPluginKind } from './ai/features.js';
+export { AI_ERROR_CODES, AI_FEATURES } from './ai/features.js';
+// AI foundation (optional AI layer): live model lists, feature registry,
+// encrypted provider keys, readiness, and the connection-test port. Adapters use
+// `aiStatus` and `listAiProviders` (key-free). Anything that hands out the
+// plaintext key lives in the `@silo/core/ai-credential` subpath, which adapters
+// must not import (Biome + dependency-cruiser enforce it).
+export type { AiLiveModel, AiProviderKind } from './ai/model-types.js';
+export { AI_PROVIDER_KINDS, defaultModelFor, newestModels } from './ai/model-types.js';
+export { refreshProviderModels, refreshStaleProviderModels } from './ai/models.js';
+export type { AiProviderSummary } from './ai/providers.js';
+export {
+  InvalidAiApiKeyError,
+  listAiProviders,
+  recordAiTest,
+  reencryptAiProviders,
+  removeAiProvider,
+  saveAiProviderKey,
+} from './ai/providers.js';
+export { SecretKeyMissingError, secretKeyStatus } from './ai/secret-box.js';
+export type { AiNotReadyReason, AiStatus } from './ai/status.js';
+export { aiStatus, isAiFeatureOn } from './ai/status.js';
+export type { AiTestOutcome } from './ai/tester.js';
+export { testAiProvider } from './ai/tester.js';
 // Web-login primitives (web-auth cookie upgrade, U1): the human
 // `SILO_APP_PASSWORD` check + the `silo_session` signed-cookie secret/name/
 // value/max-age constants, shared by `@silo/api`'s login/logout routes and
@@ -102,23 +126,26 @@ export { detectSource } from './links/detect-source.js';
 // registered enqueuer (no-op by default). The worker registers the real
 // pg-boss send at startup via setEnrichmentEnqueuer — this keeps core free of
 // any @silo/worker dependency (dependency flows adapter -> core).
-export type { EnrichmentEnqueuer } from './links/enqueue.js';
+export type { EnrichJobData, EnrichmentEnqueuer, EnrichTrigger } from './links/enqueue.js';
 export {
   ENRICH_LINK_QUEUE,
   enqueueEnrichment,
+  enrichJobSchema,
   resetEnrichmentEnqueuer,
   setEnrichmentEnqueuer,
 } from './links/enqueue.js';
 // Enrichment write path (increment 3, U4): recordEnrichment writes an
 // enrichment result (metadata + terminal capture_status) onto a live link;
-// requestRetry resets a live link back to `enriching` for a user-triggered
-// retry. Both are live-scoped — trashed links are never touched/resurrected.
+// requestEnrich resets a live link back to `enriching` for an owner-started
+// run (any status); requestRetry is the sweep's re-kick. All are
+// live-scoped — trashed links are never touched/resurrected.
 // The actual fetch/extract/enqueue is the worker's job (U2/U3/U5).
 export type { EnrichmentResult } from './links/enrichment.js';
 export {
   ENRICH_ATTEMPT_CAP,
   enrichmentResultSchema,
   recordEnrichment,
+  requestEnrich,
   requestRetry,
   settleGiveUp,
 } from './links/enrichment.js';
@@ -219,7 +246,7 @@ export {
 // the caller's (the worker's scheduled job) job, keeping core free of any
 // pg-boss dependency. See sweep.ts's doc comment for the full split rationale.
 export type { FindStrandedEnrichingOptions, StrandedLink } from './links/sweep.js';
-export { findStrandedEnriching } from './links/sweep.js';
+export { findStrandedEnriching, restoreHeldFull } from './links/sweep.js';
 // Tag list with live-link counts (plan 007, C3): the sidebar's per-tag
 // counts, e.g. "ai 23" — see tags.ts for the zero-count/ordering decisions.
 export type { TagCount } from './links/tags.js';

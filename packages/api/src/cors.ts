@@ -75,7 +75,7 @@ export function readAllowedOrigins(): string[] {
  * match in the allowlist) correctly denies nothing that mattered: same-
  * origin/non-browser callers were never gated by CORS to begin with.
  *
- * Methods: GET/POST/PATCH/DELETE (the full verb surface this API uses —
+ * Methods: GET/POST/PUT/PATCH/DELETE (the full verb surface this API uses —
  * see `docs/rules/api-hono.md`'s route table). Headers: `Content-Type`
  * (every JSON body) + `Authorization` (so the general bearer token —
  * `general-auth.ts` — can be sent cross-origin once a deployment sets
@@ -87,7 +87,7 @@ export function corsMiddleware(): MiddlewareHandler {
       const allowed = readAllowedOrigins();
       return allowed.includes(origin) ? origin : undefined;
     },
-    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
     allowHeaders: ['Content-Type', 'Authorization', 'X-Silo-CSRF'],
     credentials: true,
   });

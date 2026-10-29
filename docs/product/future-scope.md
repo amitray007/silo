@@ -36,6 +36,15 @@ Silo's binding rule is *any action a user can take, an agent can also take*. The
 - **`refresh_reader` MCP tool** - expose the stored Reader refresh action already available in the web menu and HTTP API.
 - **Permanent delete over MCP** — `core.hardDelete(id)` (one trashed link) and `core.emptyTrash()` (all trashed links) exist and are exposed over HTTP (`DELETE /api/trash/:id`, `DELETE /api/trash`) and used by the web Trash view, but there is **no MCP tool** for either. So a human can permanently delete via the web, an agent cannot. Closing it means adding `hard_delete_link` and/or `empty_trash` MCP tools. **Design carefully — these are PERMANENT/irreversible**: strong "irreversible, trashed-only" tool descriptions, keep core's trashed-only guard, and consider whether the bulk `empty_trash` should stay human-only while the agent gets only the targeted `hard_delete_link` (a deliberate is-this-safe-for-an-agent decision, not an automatic parity fill).
 
+- **AI settings over MCP (deliberate exception).** Provider keys and AI settings are human-only: the web session or the operator token may change them, and no MCP tool manages them, because the key is a secret. Keep this exception unless an agent-safe design (no key ever crosses MCP) is found.
+
+### Optional AI (surfaced building the AI foundation, 2026-10-28)
+- **ChatGPT subscription as a provider** - via OpenAI's "Sign in with ChatGPT" (SIWC), not ACP. Parked until the SIWC SDK ships on npm and OpenAI says how plan usage applies to unattended jobs. [Issue #104](https://github.com/amitray007/silo/issues/104).
+- **Per-feature model choice** - today one model serves every AI feature.
+- **A chat view** - would add `streamAiChat` beside `runAiFeature` on the same provider layer.
+- **AI titles for other sources** - X posts come first (`docs/methods/ai-x-titles.md`).
+- **A dependency-cruiser that reads TypeScript 7** - `pnpm boundaries` cruises only 9 JS modules today because depcruise does not support TypeScript 7 yet; Biome carries the import rules meanwhile.
+
 ### Browser process isolation
 
 - Enable Chromium sandbox + Playwright seccomp profile, verified under Docker.

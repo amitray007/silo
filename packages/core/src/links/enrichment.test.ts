@@ -591,7 +591,10 @@ describeIfPg('enrichment operations (integration)', () => {
       core.setEnrichmentEnqueuer(enqueue);
       try {
         expect((await enrichmentOps.requestRetry(link.id))?.captureStatus).toBe('enriching');
-        expect(enqueue).toHaveBeenCalledWith(expect.anything(), link.id);
+        expect(enqueue).toHaveBeenCalledWith(expect.anything(), link.id, {
+          trigger: 'sweep',
+          previousStatus: 'partial',
+        });
         await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
         enqueue.mockRejectedValueOnce(new Error('queue down'));
         await expect(enrichmentOps.requestRetry(link.id)).rejects.toThrow('queue down');
@@ -679,6 +682,235 @@ describeIfPg('enrichment operations (integration)', () => {
     });
   });
 
+  describe('requestEnrich', () => {
+    async function seedEnriched(path: string, status: 'full' | 'partial' | 'bare') {
+      const link = await linksOps.createLink({ url: `https://ex.com/${path}`, sourceKind: 'link' });
+      await enrichmentOps.recordEnrichment(link.id, { title: 'T', status });
+      return link.id;
+    }
+
+    it('resets a full link to enriching, resets attempts, and enqueues manual with previousStatus full', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('enrich-full', 'full');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        const result = await enrichmentOps.requestEnrich(id);
+        expect(result?.captureStatus).toBe('enriching');
+        expect(result?.enrichAttempts).toBe(0);
+        expect(enqueue).toHaveBeenCalledWith(expect.anything(), id, {
+          trigger: 'manual',
+          previousStatus: 'full',
+        });
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('accepts partial, bare and enriching, passing each as previousStatus', async () => {
+      const core = await import('@silo/core');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        for (const status of ['partial', 'bare'] as const) {
+          const id = await seedEnriched(`enrich-${status}`, status);
+          expect((await enrichmentOps.requestEnrich(id))?.captureStatus).toBe('enriching');
+          expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), id, {
+            trigger: 'manual',
+            previousStatus: status,
+          });
+        }
+        const stuck = await linksOps.createLink({
+          url: 'https://ex.com/enrich-stuck',
+          sourceKind: 'link',
+        });
+        expect((await enrichmentOps.requestEnrich(stuck.id))?.captureStatus).toBe('enriching');
+        expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), stuck.id, {
+          trigger: 'manual',
+          previousStatus: 'enriching',
+        });
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('returns null for a trashed or unknown link and enqueues nothing', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('enrich-trashed', 'full');
+      await linksOps.softDelete(id);
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        expect(await enrichmentOps.requestEnrich(id)).toBeNull();
+        expect(
+          await enrichmentOps.requestEnrich('00000000-0000-0000-0000-000000000000'),
+        ).toBeNull();
+        expect(await isTrashed(id)).toBe(true);
+        expect(enqueue).not.toHaveBeenCalled();
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('rolls the status back when the enqueue fails', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('enrich-rollback', 'full');
+      core.setEnrichmentEnqueuer(async () => {
+        throw new Error('queue down');
+      });
+      try {
+        await expect(enrichmentOps.requestEnrich(id)).rejects.toThrow('queue down');
+        expect((await linksOps.getById(id))?.captureStatus).toBe('full');
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('requestRetry (the sweep) still skips a full link and enqueues nothing', async () => {
+      const core = await import('@silo/core');
+      const id = await seedEnriched('sweep-skips-full', 'full');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        expect(await enrichmentOps.requestRetry(id)).toBeNull();
+        expect(enqueue).not.toHaveBeenCalled();
+        expect((await linksOps.getById(id))?.captureStatus).toBe('full');
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+
+    it('createLink enqueues trigger capture, for a new link and for a dedup merge', async () => {
+      const core = await import('@silo/core');
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      try {
+        const link = await linksOps.createLink({
+          url: 'https://ex.com/enq-capture',
+          sourceKind: 'link',
+        });
+        expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), link.id, {
+          trigger: 'capture',
+          previousStatus: 'enriching',
+        });
+        await enrichmentOps.recordEnrichment(link.id, { status: 'full' });
+        await linksOps.createLink({ url: 'https://ex.com/enq-capture', sourceKind: 'link' });
+        expect(enqueue).toHaveBeenLastCalledWith(expect.anything(), link.id, {
+          trigger: 'capture',
+          previousStatus: 'full',
+        });
+      } finally {
+        core.resetEnrichmentEnqueuer();
+      }
+    });
+  });
+
+  describe('enrich floor (enrich_floor_status)', () => {
+    async function floorOf(id: string) {
+      const rows = await rawDb.execute<{
+        capture_status: string;
+        enrich_floor_status: string | null;
+      }>(sql`select capture_status, enrich_floor_status from links where id = ${id}`);
+      return rows.rows[0];
+    }
+
+    async function fullLink(path: string) {
+      const link = await linksOps.createLink({ url: `https://ex.com/${path}`, sourceKind: 'link' });
+      await enrichmentOps.recordEnrichment(link.id, { title: 'T', status: 'full' });
+      return link.id;
+    }
+
+    it('requestEnrich stores the replaced status; a second click keeps the first floor', async () => {
+      const id = await fullLink('floor-double');
+      await enrichmentOps.requestEnrich(id);
+      expect(await floorOf(id)).toEqual({
+        capture_status: 'enriching',
+        enrich_floor_status: 'full',
+      });
+      await enrichmentOps.requestEnrich(id);
+      expect(await floorOf(id)).toEqual({
+        capture_status: 'enriching',
+        enrich_floor_status: 'full',
+      });
+    });
+
+    it('recordEnrichment records full for a full floor and clears it', async () => {
+      const id = await fullLink('floor-record');
+      await enrichmentOps.requestEnrich(id);
+      const result = await enrichmentOps.recordEnrichment(id, { status: 'partial' });
+      expect(result?.captureStatus).toBe('full');
+      expect(result?.enrichFloorStatus).toBeNull();
+      // The next run has no floor: a thin result is recorded as is.
+      const next = await enrichmentOps.recordEnrichment(id, { status: 'bare' });
+      expect(next?.captureStatus).toBe('bare');
+    });
+
+    it('a partial floor does not hold the status', async () => {
+      const link = await linksOps.createLink({
+        url: 'https://ex.com/floor-partial',
+        sourceKind: 'link',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      await enrichmentOps.requestEnrich(link.id);
+      expect(await floorOf(link.id)).toEqual({
+        capture_status: 'enriching',
+        enrich_floor_status: 'partial',
+      });
+      const result = await enrichmentOps.recordEnrichment(link.id, { status: 'bare' });
+      expect(result?.captureStatus).toBe('bare');
+      expect(result?.enrichFloorStatus).toBeNull();
+    });
+
+    it('settleGiveUp clears the floor', async () => {
+      const link = await linksOps.createLink({
+        url: 'https://ex.com/floor-settle',
+        sourceKind: 'link',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      await rawDb.execute(
+        sql`update links set enrich_floor_status = 'partial' where id = ${link.id}`,
+      );
+      await enrichmentOps.settleGiveUp(link.id);
+      expect((await floorOf(link.id))?.enrich_floor_status).toBeNull();
+    });
+  });
+
+  describe('settleGiveUp and a click that landed after the attempt', () => {
+    it('does not overwrite a link that was reset to enriching', async () => {
+      const link = await linksOps.createLink({
+        url: 'https://ex.com/settle-click',
+        sourceKind: 'link',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      await enrichmentOps.requestEnrich(link.id);
+      expect(await enrichmentOps.settleGiveUp(link.id)).toBeNull();
+      expect((await linksOps.getById(link.id))?.captureStatus).toBe('enriching');
+    });
+  });
+
+  describe('enrichJobSchema', () => {
+    it('accepts a full payload', async () => {
+      const { enrichJobSchema } = await import('./enqueue.js');
+      expect(
+        enrichJobSchema.parse({ linkId: 'a', trigger: 'manual', previousStatus: 'full' }),
+      ).toEqual({ linkId: 'a', trigger: 'manual', previousStatus: 'full' });
+    });
+
+    it('treats a legacy or invalid payload as a sweep of an enriching link', async () => {
+      const { enrichJobSchema } = await import('./enqueue.js');
+      const safe = { linkId: 'a', trigger: 'sweep', previousStatus: 'enriching' };
+      expect(enrichJobSchema.parse({ linkId: 'a' })).toEqual(safe);
+      expect(enrichJobSchema.parse({ linkId: 'a', trigger: 'bogus', previousStatus: 7 })).toEqual(
+        safe,
+      );
+    });
+
+    it('rejects a payload with no linkId', async () => {
+      const { enrichJobSchema } = await import('./enqueue.js');
+      expect(enrichJobSchema.safeParse({ trigger: 'manual' }).success).toBe(false);
+    });
+  });
+
   describe('enrich_attempts — increment + reset', () => {
     it('recordEnrichment increments enrich_attempts by 1 each call (0 -> 1 -> 2)', async () => {
       const created = await linksOps.createLink({
@@ -721,6 +953,7 @@ describeIfPg('enrichment operations (integration)', () => {
       expect(created.title).toBeNull();
       expect(created.siteName).toBeNull();
 
+      await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
       const settled = await enrichmentOps.settleGiveUp(created.id);
 
       expect(settled).not.toBeNull();
@@ -743,6 +976,7 @@ describeIfPg('enrichment operations (integration)', () => {
         sourceKind: 'link',
       });
 
+      await enrichmentOps.recordEnrichment(created.id, { status: 'partial' });
       const settled = await enrichmentOps.settleGiveUp(created.id);
 
       expect(settled).not.toBeNull();
@@ -772,6 +1006,139 @@ describeIfPg('enrichment operations (integration)', () => {
     it('returns null for a random uuid', async () => {
       const result = await enrichmentOps.settleGiveUp('00000000-0000-0000-0000-000000000000');
       expect(result).toBeNull();
+    });
+  });
+
+  describe('title ownership (title_source)', () => {
+    async function titleState(id: string) {
+      const rows = await rawDb.execute<{ title: string | null; title_source: string }>(
+        sql`select title, title_source from links where id = ${id}`,
+      );
+      return rows.rows[0];
+    }
+
+    async function newLink(path: string) {
+      return linksOps.createLink({ url: `https://ex.com/${path}`, sourceKind: 'link' });
+    }
+
+    it('defaults to page and lets a page title land', async () => {
+      const link = await newLink('ts-page');
+      await enrichmentOps.recordEnrichment(link.id, { title: 'Page Title', status: 'full' });
+      expect(await titleState(link.id)).toEqual({ title: 'Page Title', title_source: 'page' });
+    });
+
+    it('editLink with a title sets user; description and notes edits do not', async () => {
+      const link = await newLink('ts-edit');
+      await linksOps.editLink(link.id, { notes: 'a note', description: 'a desc' });
+      expect((await titleState(link.id))?.title_source).toBe('page');
+      await linksOps.editLink(link.id, { title: 'Mine' });
+      expect(await titleState(link.id)).toEqual({ title: 'Mine', title_source: 'user' });
+    });
+
+    it('createLink with an explicit title is user; without one is page', async () => {
+      const explicit = await linksOps.createLink({
+        url: 'https://ex.com/ts-create-explicit',
+        title: 'Imported',
+        sourceKind: 'link',
+      });
+      expect(await titleState(explicit.id)).toEqual({ title: 'Imported', title_source: 'user' });
+      const plain = await newLink('ts-create-plain');
+      expect((await titleState(plain.id))?.title_source).toBe('page');
+    });
+
+    it('a dedup merge with an explicit title sets user; a merge without one keeps the source', async () => {
+      const link = await newLink('ts-merge');
+      await linksOps.createLink({ url: 'https://ex.com/ts-merge', sourceKind: 'link' });
+      expect((await titleState(link.id))?.title_source).toBe('page');
+      await linksOps.createLink({
+        url: 'https://ex.com/ts-merge',
+        title: 'Merged Title',
+        sourceKind: 'link',
+      });
+      expect(await titleState(link.id)).toEqual({ title: 'Merged Title', title_source: 'user' });
+      await linksOps.createLink({ url: 'https://ex.com/ts-merge', sourceKind: 'link' });
+      expect(await titleState(link.id)).toEqual({ title: 'Merged Title', title_source: 'user' });
+    });
+
+    it('an edit made after enrichment started wins over the page title that lands next', async () => {
+      const link = await newLink('ts-race');
+      // The worker has fetched and holds a page title; the owner edits; the worker writes.
+      await linksOps.editLink(link.id, { title: 'Edited During Enrichment' });
+      const result = await enrichmentOps.recordEnrichment(link.id, {
+        title: 'Late Page Title',
+        description: 'later desc',
+        status: 'full',
+      });
+      expect(result?.title).toBe('Edited During Enrichment');
+      expect(result?.description).toBe('later desc');
+      expect(result?.titleSource).toBe('user');
+    });
+
+    it('a retry keeps a user title and an AI title cannot replace it', async () => {
+      const link = await newLink('ts-retry');
+      await linksOps.editLink(link.id, { title: 'Mine' });
+      await enrichmentOps.recordEnrichment(link.id, { title: 'Page', status: 'full' });
+      await enrichmentOps.recordEnrichment(link.id, {
+        title: 'AI Title',
+        titleSource: 'ai',
+        status: 'full',
+      });
+      expect(await titleState(link.id)).toEqual({ title: 'Mine', title_source: 'user' });
+    });
+
+    it('an AI title replaces a page title and sets ai', async () => {
+      const link = await newLink('ts-ai');
+      await enrichmentOps.recordEnrichment(link.id, { title: 'Page', status: 'full' });
+      await enrichmentOps.recordEnrichment(link.id, {
+        title: 'AI Title',
+        titleSource: 'ai',
+        status: 'full',
+      });
+      expect(await titleState(link.id)).toEqual({ title: 'AI Title', title_source: 'ai' });
+    });
+
+    it('a later page title does not replace an AI title; another AI title does', async () => {
+      const link = await newLink('ts-ai-keep');
+      await enrichmentOps.recordEnrichment(link.id, {
+        title: 'AI One',
+        titleSource: 'ai',
+        status: 'full',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { title: 'Page Again', status: 'full' });
+      expect(await titleState(link.id)).toEqual({ title: 'AI One', title_source: 'ai' });
+      await enrichmentOps.recordEnrichment(link.id, {
+        title: 'AI Two',
+        titleSource: 'ai',
+        status: 'full',
+      });
+      expect(await titleState(link.id)).toEqual({ title: 'AI Two', title_source: 'ai' });
+    });
+
+    it('a result without a title keeps title and source, even with titleSource ai', async () => {
+      const link = await newLink('ts-notitle');
+      await enrichmentOps.recordEnrichment(link.id, {
+        title: 'AI One',
+        titleSource: 'ai',
+        status: 'full',
+      });
+      await enrichmentOps.recordEnrichment(link.id, { titleSource: 'ai', status: 'partial' });
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      expect(await titleState(link.id)).toEqual({ title: 'AI One', title_source: 'ai' });
+      const blank = await newLink('ts-notitle-page');
+      await enrichmentOps.recordEnrichment(blank.id, { titleSource: 'ai', status: 'partial' });
+      expect(await titleState(blank.id)).toEqual({ title: null, title_source: 'page' });
+    });
+
+    it('settleGiveUp fills an empty title only and leaves the source alone', async () => {
+      const link = await newLink('ts-settle');
+      await enrichmentOps.recordEnrichment(link.id, { status: 'partial' });
+      await enrichmentOps.settleGiveUp(link.id);
+      expect((await titleState(link.id))?.title_source).toBe('page');
+      const edited = await newLink('ts-settle-user');
+      await linksOps.editLink(edited.id, { title: 'Mine' });
+      await enrichmentOps.recordEnrichment(edited.id, { status: 'partial' });
+      await enrichmentOps.settleGiveUp(edited.id);
+      expect(await titleState(edited.id)).toEqual({ title: 'Mine', title_source: 'user' });
     });
   });
 

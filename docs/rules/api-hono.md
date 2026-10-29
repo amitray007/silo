@@ -129,7 +129,7 @@ whitelist — no route ever returns a raw `LinkWithTags`.
 | `/tags` (standalone create)        | POST   | 201 `{name}`    | 400 `validation_error`     | blank/whitespace name; case-insensitive idempotent (canonical name)  |
 | `/links/:id/trash`                 | POST   | 200 `{link}` (tags `[]`) | 404 `not_found`  | unknown OR already-trashed (indistinguishable — honest message)      |
 | `/links/:id/restore`               | POST   | 200 `{outcome, link}` | 404 `{outcome:'not_found'}` | `outcome`: `restored` \| `merged` — see below                  |
-| `/links/:id/retry`                 | POST   | 200 `{link}` (status `enriching`) | 404 `not_found` | unknown, trashed, or already `full` (never downgrades a good capture) |
+| `/links/:id/retry`                 | POST   | 200 `{link}` (status `enriching`) | 404 `not_found` | unknown or trashed; any live status re-runs, and a `full` link stays `full` |
 | `/trash/:id` (hard-delete one)     | DELETE | 204 (no body)   | 404 `not_found`            | TRASHED-ONLY guard — a live id is a no-op 404, live row untouched     |
 | `/trash` (empty all)               | DELETE | 200 `{deleted}` | —                           | hard-deletes every currently-trashed link, regardless of age          |
 | `/ingest`                          | POST   | 201 `{link, deduped}` | 401 `unauthorized`, 400 `invalid_url`/`validation_error` | TOKEN-GATED (see below) — the only route this API auths |
@@ -174,6 +174,17 @@ completely untouched. This is deliberate: "wrong id" and "not trashed" both
 collapse to the same safe outcome, because the alternative (trying to
 distinguish them) would require a second query that a concurrent trash/
 restore could race anyway — the atomic guard is the only thing that matters.
+
+### AI settings (`/api/ai`)
+
+`GET /api/ai` (status, providers with `keyLast4`, model catalog, features) is open to
+any authenticated caller; it holds no secret. `PUT /api/ai/providers/:kind` (save a
+key, then test it), `POST /api/ai/providers/:kind/test` and
+`DELETE /api/ai/providers/:kind` go through `operatorOnly` (`src/operator-only.ts`), as
+does `PATCH /api/settings` when its body carries `ai`. `operatorOnly` allows the web
+session (CSRF still applies), the env `SILO_API_TOKEN`, or no-auth-configured
+localhost; a named access token gets `403 operator_only`. `generalTokenAuth` records
+which credential passed in `c.get('authKind')`. See [`ai.md`](ai.md).
 
 ## Auth (no auth BY DEFAULT — v1 is localhost, single-user — with two gates)
 

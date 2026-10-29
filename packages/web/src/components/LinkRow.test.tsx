@@ -42,6 +42,7 @@ function renderRow(ui: ReactNode, plugins?: SettingsMap['plugins'], hoverPreview
       linkPreviewImages: true,
       hoverPreview: hoverPreview ?? false,
       plugins: plugins ?? DEFAULT_PLUGINS,
+      ai: { enabled: false, features: {} },
     } satisfies SettingsMap);
   }
   const utils = render(

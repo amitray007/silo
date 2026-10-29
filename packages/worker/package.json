@@ -12,12 +12,17 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "dev": "tsx --env-file-if-exists=../../.env src/worker.ts",
+    "eval:x-titles": "tsx src/enrich-source/twitter-title/eval.ts",
     "start": "tsx src/worker.ts",
     "test": "vitest run --no-file-parallelism"
   },
   "dependencies": {
+    "@ai-sdk/anthropic": "4.0.90",
+    "@ai-sdk/fireworks": "3.0.83",
+    "@ai-sdk/openai": "4.0.104",
     "@silo/core": "workspace:*",
     "@silo/queue": "workspace:*",
+    "ai": "7.0.155",
     "defuddle": "0.19.6",
     "dompurify": "catalog:",
     "drizzle-orm": "catalog:",

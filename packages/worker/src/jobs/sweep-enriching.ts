@@ -7,7 +7,12 @@
  * instead of polling forever — closing the risk plan 014's review flagged.
  */
 
-import { enqueueEnrichment, findStrandedEnriching, requestRetry } from '@silo/core';
+import {
+  enqueueEnrichment,
+  findStrandedEnriching,
+  requestRetry,
+  restoreHeldFull,
+} from '@silo/core';
 import { db } from '@silo/db';
 import type { PgBoss } from 'pg-boss';
 
@@ -64,6 +69,11 @@ export async function runSweepEnriching(): Promise<{ found: number; reenqueued: 
   let reenqueued = 0;
   for (const { id } of stranded) {
     try {
+      // A run held at `full` that keeps failing is put back to `full`, not
+      // re-kicked forever.
+      if (await restoreHeldFull(id)) {
+        continue;
+      }
       // requestRetry is live-scoped and only accepts partial/bare/enriching —
       // it returns null if the link vanished (trashed/deleted) between the
       // find and here, which is fine: nothing to re-enqueue for it.
@@ -72,7 +82,7 @@ export async function runSweepEnriching(): Promise<{ found: number; reenqueued: 
         continue;
       }
       await db.transaction(async (tx) => {
-        await enqueueEnrichment(tx, id);
+        await enqueueEnrichment(tx, id, { trigger: 'sweep', previousStatus: 'enriching' });
       });
       reenqueued += 1;
     } catch (error) {

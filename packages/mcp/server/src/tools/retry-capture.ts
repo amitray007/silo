@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import { getById, requestRetry, retryCaptureMany } from '@silo/core';
+import { getById, requestEnrich, retryCaptureMany } from '@silo/core';
 import { z } from 'zod';
 import {
   bulkItemResultShape,
@@ -19,17 +19,17 @@ const retryCaptureOutputSchema = {
 
 /**
  * Registers `retry_capture` on `server`: parse (Zod) -> one
- * `core.requestRetry` call (single) or `core.retryCaptureMany` (batch) ->
+ * `core.requestEnrich` call (single) or `core.retryCaptureMany` (batch) ->
  * (on success) re-fetch via `getById` to hydrate tags -> shape the MCP
  * result. Same shape as `edit_link` (`edit-link.ts`'s doc comment):
- * `core.requestRetry` returns a bare `Link` (no `tags`), so a successful
+ * `core.requestEnrich` returns a bare `Link` (no `tags`), so a successful
  * single-id retry re-fetches before shaping rather than echoing the bare row.
  *
  * One-or-many (agent-navigation slice U4): `id`/`ids` precedence mirrors
  * `add_link_tag`'s — `ids` wins if both given.
  *
  * Closes an agent-native parity gap (scope.html Now-tier): a human UI can
- * retry a degraded capture, and core already has `requestRetry` (U4) — this
+ * retry a degraded capture, and core has `requestEnrich` — this
  * is the MCP wrapper so an agent has the same capability.
  */
 export function registerRetryCapture(server: McpServer): void {
@@ -41,12 +41,13 @@ export function registerRetryCapture(server: McpServer): void {
         'Re-run enrichment for one or more links whose capture was degraded ' +
         "(captureStatus 'partial' or 'bare') or is stuck 'enriching' — " +
         "resets status back to 'enriching' so the worker re-fetches and " +
-        're-extracts in the background. Pass `id` for ONE link, or `ids` ' +
+        're-extracts in the background. This also re-runs enrichment on a ' +
+        "complete link (status 'full'): it stays 'full' with its old data if " +
+        'the re-run comes back thin. Pass `id` for ONE link, or `ids` ' +
         'for MANY in one call (if both are given, `ids` wins) — the batch ' +
         'call returns a `results` array (`{ id, ok, reason? }`) so one bad ' +
-        'id never blocks the rest. Does nothing for a link that is already ' +
-        "fully captured (status 'full'), unknown, or trashed — a good " +
-        'capture is never downgraded by a retry. Enrichment runs ' +
+        'id never blocks the rest. Does nothing for an unknown or trashed ' +
+        'link. Enrichment runs ' +
         'ASYNCHRONOUSLY, same as capture_link: after calling retry_capture, ' +
         'call get_link with the id(s) shortly after to see whether the ' +
         're-capture succeeded. Typical loop: capture_link -> get_link shows ' +
@@ -82,16 +83,15 @@ export function registerRetryCapture(server: McpServer): void {
         };
       }
 
-      const retried = await requestRetry(id);
+      const retried = await requestEnrich(id);
       if (!retried) {
         return notFoundResult(
-          `Could not retry link ${id} — it's either unknown, trashed, or ` +
-            "already fully captured (status 'full', nothing to retry). Use " +
+          `Could not retry link ${id} — it's either unknown or trashed. Use ` +
             'get_link to check its current status, or list_links to find it.',
         );
       }
 
-      // `requestRetry` returns a bare `Link` (no `tags`) — re-fetch via
+      // `requestEnrich` returns a bare `Link` (no `tags`) — re-fetch via
       // `getById` to hydrate tags before shaping, same pattern `edit_link`
       // established.
       const link = await getById(id);

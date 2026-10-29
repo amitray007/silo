@@ -26,10 +26,42 @@
  * commit or roll back together (plan R1).
  */
 
-import type { Tx } from './executor.js';
+import { z } from 'zod';
+import type { Link, Tx } from './executor.js';
 
 /** Mirrors `ENRICH_LINK_QUEUE` in `packages/queue/src/queue.ts` — the canonical definition. */
 export const ENRICH_LINK_QUEUE = 'enrich-link';
+
+/**
+ * Who started an enrichment run: `capture` (a paste, import or re-save),
+ * `manual` (the owner's Enrich click or MCP `retry_capture`), `sweep` (the
+ * stranded-link re-kick). The worker reads it to decide how much to trust the
+ * run (an AI title is only re-asked for on `manual`).
+ */
+const enrichTriggerSchema = z.enum(['capture', 'manual', 'sweep']);
+export type EnrichTrigger = z.infer<typeof enrichTriggerSchema>;
+
+/** The enrichment-specific part of the `enrich-link` job payload (the queue adds `linkId`). */
+export type EnrichJobData = {
+  trigger: EnrichTrigger;
+  /** The link's capture status when the run was requested. A hint only: the worker reads the row (`enrich_floor_status`, `capture_status`). */
+  previousStatus: Link['captureStatus'];
+};
+
+const captureStatusSchema = z.enum(['enriching', 'full', 'partial', 'bare']);
+
+/**
+ * Validates the `enrich-link` job payload on the work side. Jobs already in the
+ * queue from before this payload existed carry only `linkId`: a missing or
+ * unknown `trigger` becomes `sweep` and a missing or unknown `previousStatus`
+ * becomes `enriching`, the two values that can never replace a good title or
+ * downgrade a `full` link.
+ */
+export const enrichJobSchema = z.object({
+  linkId: z.string().min(1),
+  trigger: enrichTriggerSchema.catch('sweep'),
+  previousStatus: captureStatusSchema.catch('enriching'),
+});
 
 /**
  * Enqueues an enrichment job for `linkId` on an OPEN TRANSACTION `tx`. Typed as
@@ -39,7 +71,7 @@ export const ENRICH_LINK_QUEUE = 'enrich-link';
  * that invariant. Making the type `Tx`-only turns the invariant into a
  * compile-time guarantee rather than a convention.
  */
-export type EnrichmentEnqueuer = (tx: Tx, linkId: string) => Promise<void>;
+export type EnrichmentEnqueuer = (tx: Tx, linkId: string, data?: EnrichJobData) => Promise<void>;
 
 /**
  * The default enqueuer: does nothing, but warns ONCE (outside tests) the first
@@ -91,6 +123,10 @@ export function resetEnrichmentEnqueuer(): void {
  * never stacks a second job, so this is safe to call on every create AND every
  * dedup-merge unconditionally.
  */
-export async function enqueueEnrichment(tx: Tx, linkId: string): Promise<void> {
-  await enqueuer(tx, linkId);
+export async function enqueueEnrichment(
+  tx: Tx,
+  linkId: string,
+  data?: EnrichJobData,
+): Promise<void> {
+  await enqueuer(tx, linkId, data);
 }

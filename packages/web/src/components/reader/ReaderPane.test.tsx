@@ -182,6 +182,7 @@ it('keeps only five controls inline and orders Edit and Reload before existing m
     'Copy linkc',
     'Refresh readerr',
     'Tags',
+    'Enrich',
     'Move to trash⌫',
   ]);
   expect(screen.queryByRole('menuitem', { name: 'Reload page' })).toBeNull();
@@ -202,6 +203,7 @@ it('keeps only five controls inline and orders Edit and Reload before existing m
     'Copy linkc',
     'Refresh readerr',
     'Tags',
+    'Enrich',
     'Move to trash⌫',
   ]);
   const edit = within(menu).getByRole('menuitem', { name: 'Edit' });

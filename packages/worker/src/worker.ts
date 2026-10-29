@@ -19,8 +19,9 @@ import {
   logDlqDepth,
   registerEnqueuer,
 } from '@silo/queue';
+import { prepareAiAtStartup } from './ai/startup.js';
 import { closeBrowserReader } from './browser/reader.js';
-import { enrichLink } from './enrich.js';
+import { runEnrichJob } from './enrich-job.js';
 import { closeReaderPool } from './extract/reader-worker.js';
 import { registerScheduledJobs } from './jobs/index.js';
 
@@ -56,6 +57,10 @@ export async function startWorker(): Promise<WorkerHandle> {
   });
 
   await boss.start();
+
+  // Fire and forget: AI housekeeping must never delay or fail startup (it never throws).
+  void prepareAiAtStartup();
+
   await ensureEnrichLinkQueue(boss);
 
   // Surface any dead-lettered enrichments (stranded links) at startup — the DLQ
@@ -76,7 +81,7 @@ export async function startWorker(): Promise<WorkerHandle> {
   // process.
   await registerScheduledJobs(boss);
 
-  await boss.work<{ linkId: string }>(
+  await boss.work<unknown>(
     ENRICH_LINK_QUEUE,
     { batchSize: 1, localConcurrency: LOCAL_CONCURRENCY },
     async ([job]) => {
@@ -86,7 +91,7 @@ export async function startWorker(): Promise<WorkerHandle> {
       if (!job) {
         return;
       }
-      await enrichLink(job.data.linkId);
+      await runEnrichJob(job.data);
     },
   );
 
