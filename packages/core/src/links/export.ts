@@ -39,6 +39,7 @@ type ExportedLink = {
   url: string;
   canonicalUrl: string;
   title: string | null;
+  titleSource: Link['titleSource'];
   description: string | null;
   imageUrl: string | null;
   siteName: string | null;
@@ -67,6 +68,7 @@ function toExportedLink(link: LinkSummaryWithTags): ExportedLink {
     url: link.url,
     canonicalUrl: link.canonicalUrl,
     title: link.title,
+    titleSource: link.titleSource,
     description: link.description,
     imageUrl: link.imageUrl,
     siteName: link.siteName,
