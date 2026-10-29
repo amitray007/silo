@@ -41,7 +41,7 @@ export function RenameDialog({
           if (!pending) onSave(value.trim());
         }}
       >
-        <label className="silo-edit-field" htmlFor={id}>
+        <label htmlFor={id}>
           Name
           <input
             ref={input}

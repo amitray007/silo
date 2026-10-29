@@ -14,7 +14,7 @@ export function FeedsView() {
   const feeds = useFeeds();
   const [adding, setAdding] = useState(false);
   return (
-    <ReaderLayout links={[]} title="Feeds">
+    <ReaderLayout links={[]} title="Feeds" emptyMessage="Pick a feed to read its posts.">
       <ContentFrame
         title="Feeds"
         headerSlot={

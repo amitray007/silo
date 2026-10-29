@@ -1,4 +1,4 @@
-import { type ReactNode, useRef, useState } from 'react';
+import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { useRefreshFeed, useRenameFeed, useUnsubscribeFeed } from '../api/hooks';
@@ -19,6 +19,13 @@ export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactN
   const [confirm, setConfirm] = useState(false);
   const [renaming, setRenaming] = useState(false);
   const refresh = useRefreshFeed();
+  const refreshFailed = refresh.isError;
+  const resetRefresh = refresh.reset;
+  useEffect(() => {
+    if (!refreshFailed) return;
+    const timer = setTimeout(resetRefresh, 5000);
+    return () => clearTimeout(timer);
+  }, [refreshFailed, resetRefresh]);
   const rename = useRenameFeed(feed.id);
   const unsubscribe = useUnsubscribeFeed();
   const { copied, copyText } = useCopyFlash();
@@ -26,20 +33,22 @@ export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactN
   const close = () => setOpen(false);
   return (
     <>
-      {refresh.isError && (
-        <span role="alert" className="silo-feed-error">
-          {refresh.error.message}
-        </span>
-      )}
-      {refresh.isPending && (
-        <span role="status" className="silo-feed-description">
-          Refreshing…
-        </span>
-      )}
+      {(refresh.isError || refresh.isPending) &&
+        createPortal(
+          <div
+            role={refresh.isError ? 'alert' : 'status'}
+            className="silo-toast"
+            style={{ color: 'var(--ink)' }}
+          >
+            {refresh.isError ? refresh.error.message : 'Refreshing…'}
+          </div>,
+          document.body,
+        )}
       <div className={children ? undefined : 'silo-reader-more'}>
         {children ? (
           <SidebarContextMenu
             onOpen={(row) => {
+              if (refreshFailed) resetRefresh();
               setAnchor(row);
               setOpen(true);
             }}
@@ -54,7 +63,10 @@ export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactN
             aria-label="Feed actions"
             aria-haspopup="menu"
             aria-expanded={open}
-            onClick={() => setOpen(!open)}
+            onClick={() => {
+              if (refreshFailed) resetRefresh();
+              setOpen(!open);
+            }}
           >
             <ReaderIcon name="more" />
           </button>

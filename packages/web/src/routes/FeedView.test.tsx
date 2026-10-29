@@ -306,13 +306,18 @@ it('copies the feed URL with success and failure feedback, then requests a refre
     expect.objectContaining({ method: 'POST' }),
   );
 });
-it('shows refresh errors without reporting success', async () => {
+it('shows refresh errors outside the layout and clears them when the menu reopens', async () => {
   mount({ refreshError: true });
   await screen.findByText('Today post');
   fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Refresh now' }));
-  expect((await screen.findByRole('alert')).textContent).toContain('Feed refresh is unavailable.');
+  const alert = await screen.findByRole('alert');
+  expect(alert.textContent).toContain('Feed refresh is unavailable.');
+  expect(alert.parentElement).toBe(document.body);
   expect(screen.queryByText('Refresh requested.')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  await screen.findByRole('menuitem', { name: 'Refresh now' });
+  expect(screen.queryByRole('alert')).toBeNull();
 });
 it('confirms unsubscribe, removes the sidebar feed, goes Home and keeps a saved copy', async () => {
   const { posts, fetchMock } = mount();

@@ -362,6 +362,20 @@ function showReaderActions(phone: boolean, link: LinkJson | undefined): boolean 
   return !phone || isFeedPost(link);
 }
 
+function EmptyReader({ message, trashed }: { message: string | undefined; trashed: boolean }) {
+  return (
+    <div className="silo-empty-reader">
+      <div>
+        <ReaderIcon name="sidebar" />
+        <p>{message ?? 'Select a link to read'}</p>
+        {!message && (
+          <span>Use ↑ ↓ or j k to move through your {trashed ? 'trash' : 'library'}.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ReaderPane({
   link,
   selectedId,
@@ -375,6 +389,7 @@ export function ReaderPane({
   trashed,
   purgeWindowDays,
   loading,
+  emptyMessage,
 }: {
   link: LinkJson | undefined;
   selectedId: string | null;
@@ -388,6 +403,7 @@ export function ReaderPane({
   trashed: boolean;
   purgeWindowDays: number;
   loading: boolean;
+  emptyMessage?: string | undefined;
 }) {
   const phone = useMediaQuery(layoutMedia.phone);
   const showActions = showReaderActions(phone, link);
@@ -428,15 +444,7 @@ export function ReaderPane({
     resetKey: `${selectedId}-${tab}`,
   });
 
-  let content: ReactNode = (
-    <div className="silo-empty-reader">
-      <div>
-        <ReaderIcon name="sidebar" />
-        <p>Select a link to read</p>
-        <span>Use ↑ ↓ or j k to move through your {trashed ? 'trash' : 'library'}.</span>
-      </div>
-    </div>
-  );
+  let content: ReactNode = <EmptyReader message={emptyMessage} trashed={trashed} />;
   if (loading)
     content = (
       <div className="silo-empty-reader" role="status">

@@ -1168,12 +1168,16 @@
   padding: 6px 14px;
   clip-path: none;
 }
-.silo-edit-footer-btn,
-.silo-edit-save-btn,
-.silo-confirm-btn,
 .silo-settings-btn {
   font-size: 13px;
   line-height: 19.5px;
+  border: 0;
+}
+.silo-edit-footer-btn,
+.silo-edit-save-btn,
+.silo-confirm-btn {
+  font-size: 14px;
+  line-height: 20px;
   border: 0;
 }
 .silo-edit-footer-btn {

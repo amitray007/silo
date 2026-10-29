@@ -948,7 +948,8 @@ select {
   font-weight: 500;
   font-size: var(--text-sm);
 }
-.silo-feed-form > input {
+.silo-feed-form > input,
+.silo-rename-form .silo-field {
   width: 100%;
   box-sizing: border-box;
   padding: var(--s2) var(--s3);
@@ -1030,6 +1031,7 @@ select {
   gap: 4px;
 }
 .silo-feeds-section-title > a {
+  padding-left: 8px;
   text-decoration: none;
 }
 .silo-feeds-row {
@@ -1066,6 +1068,7 @@ select {
 .silo-panehead:has(.silo-feed-heading) h1 {
   min-width: 0;
   white-space: normal;
+  overflow: visible;
 }
 .silo-feed-heading {
   line-height: 20px;

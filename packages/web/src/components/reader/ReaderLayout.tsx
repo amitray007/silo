@@ -34,6 +34,7 @@ export function ReaderLayout({
   trashed = false,
   purgeWindowDays = 30,
   title,
+  emptyMessage,
   children,
   hasNextPage = false,
   fetchNextPage,
@@ -43,6 +44,7 @@ export function ReaderLayout({
   trashed?: boolean;
   purgeWindowDays?: number;
   title: string;
+  emptyMessage?: string;
   children: ReactNode;
   hasNextPage?: boolean;
   fetchNextPage?: () => Promise<LinkJson[]>;
@@ -133,6 +135,7 @@ export function ReaderLayout({
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
           loading={Boolean(selectedId) && (loading || awaitingDetail(detail))}
+          emptyMessage={emptyMessage}
         />
         <ReaderDeleteDialog actions={actions} link={resolved ?? previous.current} />
       </div>
