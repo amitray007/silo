@@ -19,8 +19,7 @@ Every feed post is a real Silo link: enriched, searchable, taggable, and readabl
    and `docs/foundation.md:10` cut the read-later queue. Inbox / Archive exists only inside
    a feed view, to clear a feed's new posts. It has no unread dot, no "read" state, and no
    Home-level queue. Amend both lines to say so.
-3. **Feed membership is not a tag.** (This replaces the earlier chat suggestion of one tag
-   per feed.) A tag per feed would fill the Tags sidebar and break when the owner deletes
+3. **Feed membership is not a tag.** A tag per feed would fill the Tags sidebar and break when the owner deletes
    the tag. Membership lives in `feed_entries` instead.
 4. **Feed posts show in Home too**, like Shiori (its Home 40 includes the feed's 25).
    Alternative: hide feed posts from Home until the owner favorites, tags, or notes them.
@@ -44,7 +43,7 @@ Every feed post is a real Silo link: enriched, searchable, taggable, and readabl
 
 ## New dependency
 
-**`feedsmith` 3.x** (MIT, updated 2026-09, deps: `fast-xml-parser`, `entities`). One
+`feedsmith` 3.x (MIT, updated 2026-09, deps: `fast-xml-parser`, `entities`). One
 `parseFeed()` call detects and parses RSS 0.9x/2.0, Atom 0.3/1.0, RDF/RSS 1.0, and JSON
 Feed 1.0/1.1, with TypeScript types and namespace support (Dublin Core, Media RSS,
 content, iTunes, YouTube). Rejected: `rss-parser` (last release 2023, no JSON Feed);
@@ -151,17 +150,17 @@ Feed Inbox = the feed's live links with `archived_at` null; Archive = not null.
 
 ## Slices (each one goes through the full review protocol before the next)
 
-1. **Subscribe and poll, end to end.** Migration, core feed module, resolver + parser in
+1. Subscribe and poll, end to end. Migration, core feed module, resolver + parser in
    the worker, `poll-feeds-due` + `poll-feed` jobs, `safeFetch` changes, API
    `GET/POST/DELETE /api/feeds` and `GET /api/feeds/:id/links`. Web: sidebar "Feeds"
    section with counts, "Add feed" dialog (URL + Sync recents), feed view as a plain list
    with the breadcrumb `Feeds / <title>`. QA on real feeds (list below).
-2. **Inbox / Archive.** `archived_at`, archive endpoints, Inbox / Archive tabs, Today /
+2. Inbox / Archive. `archived_at`, archive endpoints, Inbox / Archive tabs, Today /
    This week / Older grouping by `published_at`, archive action in the row menu and reader
    toolbar. Sidebar count = Inbox count.
-3. **MCP.** Tools `list_feeds`, `subscribe_feed`, `unsubscribe_feed`, and a `feed` filter
+3. MCP. Tools `list_feeds`, `subscribe_feed`, `unsubscribe_feed`, and a `feed` filter
    on the existing list/search tools. Update `tools/parity.test.ts`.
-4. **Feed menu.** The `...` menu on a feed view: refresh now, show last error, unsubscribe
+4. Feed menu. The `...` menu on a feed view: refresh now, show last error, unsubscribe
    (confirm dialog), copy feed URL.
 
 ## QA feeds (real, checked 2026-10-29)
