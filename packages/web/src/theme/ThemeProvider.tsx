@@ -1,5 +1,11 @@
 import { createContext, type ReactNode, useCallback, useContext, useMemo, useState } from 'react';
-import { applyThemeToDocument, persistTheme, resolveInitialTheme, type Theme } from './theme';
+import {
+  applyThemeToDocument,
+  persistTheme,
+  resolveInitialTheme,
+  switchThemeOnDocument,
+  type Theme,
+} from './theme';
 
 interface ThemeContextValue {
   theme: Theme;
@@ -27,14 +33,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
 
   const setTheme = useCallback((next: Theme) => {
     setThemeState(next);
-    applyThemeToDocument(next);
+    switchThemeOnDocument(next);
     persistTheme(next);
   }, []);
 
   const toggle = useCallback(() => {
     setThemeState((current) => {
       const next = current === 'light' ? 'dark' : 'light';
-      applyThemeToDocument(next);
+      switchThemeOnDocument(next);
       persistTheme(next);
       return next;
     });

@@ -932,3 +932,13 @@ select {
     forced-color-adjust: none;
   }
 }
+
+/* Keep all theme colors in sync during a user theme switch. */
+.silo-theme-switching,
+.silo-theme-switching::before,
+.silo-theme-switching::after,
+.silo-theme-switching *,
+.silo-theme-switching *::before,
+.silo-theme-switching *::after {
+  transition: none !important;
+}
