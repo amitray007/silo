@@ -108,6 +108,7 @@ export function registerTrashLink(server: McpServer): void {
           id: deleted.id,
           url: deleted.url,
           title: deleted.title,
+          titleSource: deleted.titleSource,
           description: deleted.description,
           imageUrl: deleted.imageUrl,
           siteName: deleted.siteName,

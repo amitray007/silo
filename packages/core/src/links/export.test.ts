@@ -173,6 +173,10 @@ describeIfPg('exportLinks (integration)', () => {
 
       const jsonNoTags = jsonParsed.links.find((l: { id: string }) => l.id === noTagsLink.id);
       expect(jsonNoTags.tags).toEqual([]);
+      // Title provenance: an explicit title is the owner's; no title is the page's.
+      expect(jsonNoTags.titleSource).toBe('user');
+      const jsonGithub = jsonParsed.links.find((l: { id: string }) => l.id === githubLink.id);
+      expect(jsonGithub.titleSource).toBe('page');
 
       // Omitted internal lifecycle fields never appear in the exported object.
       expect(jsonTwitter).not.toHaveProperty('deletedAt');

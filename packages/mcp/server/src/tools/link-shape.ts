@@ -1,5 +1,5 @@
 import type { LinkSummaryWithTags } from '@silo/core';
-import { CAPTURE_SOURCES, sourceDataSchema } from '@silo/core';
+import { CAPTURE_SOURCES, sourceDataSchema, TITLE_SOURCES } from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -43,6 +43,11 @@ export const baseLinkShape = {
   id: z.uuid(),
   url: z.string(),
   title: z.string().nullable(),
+  titleSource: z
+    .enum(TITLE_SOURCES)
+    .describe(
+      'Who wrote the title: page (the page itself), ai (an optional AI feature), user (set by a person or agent, never replaced).',
+    ),
   description: z.string().nullable(),
   imageUrl: z.string().nullable(),
   siteName: z.string().nullable(),
@@ -118,6 +123,7 @@ export function toBaseLinkContent(link: LinkSummaryWithTags): BaseLinkContent {
     id: link.id,
     url: link.url,
     title: link.title,
+    titleSource: link.titleSource,
     description: link.description,
     imageUrl: link.imageUrl,
     siteName: link.siteName,

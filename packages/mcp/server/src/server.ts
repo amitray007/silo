@@ -7,7 +7,11 @@ import { registerEditLink } from './tools/edit-link.js';
 import { registerExportLinks } from './tools/export-links.js';
 import { registerFindRelated } from './tools/find-related.js';
 import { registerGetLink } from './tools/get-link.js';
+import { registerHardDeleteLink } from './tools/hard-delete-link.js';
 import { registerListLinks } from './tools/list-links.js';
+import { registerListTags } from './tools/list-tags.js';
+import { registerListTrash } from './tools/list-trash.js';
+import { registerRefreshReader } from './tools/refresh-reader.js';
 import { registerRemoveLinkTag } from './tools/remove-link-tag.js';
 import { registerRestoreLink } from './tools/restore-link.js';
 import { registerRetryCapture } from './tools/retry-capture.js';
@@ -71,6 +75,14 @@ export function createSiloMcpServer(): McpServer {
   // adding a new one (see docs/superpowers/specs/2026-07-12-richer-query-
   // filters-design.md's guiding constraint).
   registerFindRelated(server);
+
+  registerHardDeleteLink(server);
+
+  registerListTags(server);
+
+  registerListTrash(server);
+
+  registerRefreshReader(server);
 
   return server;
 }

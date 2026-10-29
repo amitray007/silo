@@ -78,10 +78,11 @@ human can do in the web UI — they call the same core, so the two views never d
                         background worker  ── enrich · purge · sweep · retry
 ```
 
-An agent operates silo through **12 MCP tools**:
+An agent operates silo through **18 MCP tools**:
 
 `capture_link` · `get_link` · `search_links` · `list_links` · `edit_link` · `create_tag` ·
-`add_link_tag` · `remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` · `retry_capture`
+`add_link_tag` · `remove_link_tag` · `delete_tag` · `trash_link` · `restore_link` · `retry_capture` ·
+`export_links` · `find_related` · `refresh_reader` · `list_tags` · `list_trash` · `hard_delete_link`
 
 A background worker runs alongside: it enriches new captures, purges old trash on a cycle
 (7 / 30 / 90 days), re-enqueues anything stranded mid-enrichment, and watches the dead-letter
@@ -235,7 +236,7 @@ packages/
   db/          Postgres schema, migrations, queries (Drizzle)
   worker/      background enrichment + scheduled jobs (purge / sweep / DLQ) ─▶ core
   queue/       pg-boss setup shared by the worker and API                   ─▶ core
-  mcp/server/  MCP adapter — 12 tools                                       ─▶ core
+  mcp/server/  MCP adapter — 18 tools                                       ─▶ core
   api/         HTTP adapter (Hono) — REST + OAuth server                    ─▶ core
   web/         React SPA (Vite, "Oat" design) — talks to the API over HTTP
   app/         composition root — runs the MCP server + worker as `silo`

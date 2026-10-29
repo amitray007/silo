@@ -32,6 +32,7 @@ export const foundLinkOutputShape = {
   id: baseLinkShape.id.optional(),
   url: baseLinkShape.url.optional(),
   title: baseLinkShape.title.optional(),
+  titleSource: baseLinkShape.titleSource.optional(),
   description: baseLinkShape.description.optional(),
   imageUrl: baseLinkShape.imageUrl.optional(),
   siteName: baseLinkShape.siteName.optional(),
