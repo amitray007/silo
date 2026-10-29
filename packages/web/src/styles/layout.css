@@ -876,10 +876,17 @@
     margin 160ms var(--ease-out),
     opacity 160ms ease;
 }
-.silo-player-volume:is(:hover, :focus-within) .silo-player-level {
+.silo-player-volume:is(:focus-within) .silo-player-level {
   width: 72px;
   margin: 0 6px 0 2px;
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-player-volume:hover .silo-player-level {
+    width: 72px;
+    margin: 0 6px 0 2px;
+    opacity: 1;
+  }
 }
 @media (max-width: 640px) {
   .silo-player-speed,
@@ -1906,14 +1913,21 @@ div.silo-reader-notecard {
   color: inherit;
   text-decoration: none;
 }
-.silo-logo-link:hover {
-  background: var(--hov);
+@media (hover: hover) and (pointer: fine) {
+  .silo-logo-link:hover {
+    background: var(--hov);
+  }
 }
 .silo-sidebar-brandrow > button {
   opacity: 0;
 }
-.silo-sidebar:is(:hover, :focus-within) .silo-sidebar-brandrow > button {
+.silo-sidebar:is(:focus-within) .silo-sidebar-brandrow > button {
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-sidebar:hover .silo-sidebar-brandrow > button {
+    opacity: 1;
+  }
 }
 .silo-search-kbd {
   display: inline-flex;
@@ -1967,9 +1981,11 @@ div.silo-reader-notecard {
 .silo-tags-toggle .silo-section-caret[data-expanded="false"] {
   transform: rotate(-90deg);
 }
-.silo-tags-toggle:hover .silo-tags-label,
-.silo-tags-toggle:hover .silo-section-caret {
-  color: var(--mut);
+@media (hover: hover) and (pointer: fine) {
+  .silo-tags-toggle:hover .silo-tags-label,
+  .silo-tags-toggle:hover .silo-section-caret {
+    color: var(--mut);
+  }
 }
 #silo-tag-list {
   display: flex;
@@ -2008,19 +2024,29 @@ div.silo-reader-notecard {
   color: var(--fnt) !important;
   transition:
     opacity 150ms var(--ease-out),
-    color 150ms var(--ease-out);
+    color 150ms var(--ease-out),
+    transform 0.15s var(--ease-out);
 }
-.silo-tags-header .silo-icon-btn-sm:hover,
 .silo-tags-header .silo-icon-btn-sm[aria-expanded="true"] {
   color: var(--ink) !important;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-tags-header .silo-icon-btn-sm:hover {
+    color: var(--ink) !important;
+  }
 }
 .silo-tags-header .silo-icon-btn-sm svg {
   width: 16px;
   height: 16px;
 }
-.silo-tags:is(:hover, :focus-within) .silo-icon-btn-sm,
+.silo-tags:is(:focus-within) .silo-icon-btn-sm,
 .silo-tags-header .silo-icon-btn-sm[aria-expanded="true"] {
   opacity: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-tags:hover .silo-icon-btn-sm {
+    opacity: 1;
+  }
 }
 .silo-row-iconwrap {
   display: flex;
@@ -2168,9 +2194,11 @@ div.silo-reader-notecard {
     transform 180ms var(--ease-out),
     width 180ms var(--ease-out);
 }
-.silo-reader-segment button:hover:not([aria-selected="true"]) {
-  background: var(--row-hover);
-  color: var(--mut);
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-segment button:hover:not([aria-selected="true"]) {
+    background: var(--row-hover);
+    color: var(--mut);
+  }
 }
 @media (prefers-reduced-motion: reduce) {
   .silo-reader-segment-chip {
@@ -2297,12 +2325,26 @@ div.silo-reader-notecard {
   box-shadow: var(--segment-shadow);
   color: var(--ink);
 }
-.silo-reader-settings [role="radio"][aria-checked="true"]:hover {
-  background: var(--segment-on);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-settings [role="radio"][aria-checked="true"]:hover {
+    background: var(--segment-on);
+    color: var(--ink);
+  }
 }
 
 .silo-reader > .silo-player-surface {
   max-width: 636px;
   margin-inline: auto;
+}
+
+@media not ((hover: hover) and (pointer: fine)) {
+  .silo-sidebar-brandrow > button,
+  .silo-tags .silo-icon-btn-sm {
+    opacity: 1;
+  }
+  .silo-player-volume .silo-player-level {
+    width: 72px;
+    margin: 0 6px 0 2px;
+    opacity: 1;
+  }
 }

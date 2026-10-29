@@ -42,8 +42,10 @@
   padding: 0 0 0 12px;
   border-radius: 8px;
 }
-.silo-related-row:hover {
-  background: var(--row-hover);
+@media (hover: hover) and (pointer: fine) {
+  .silo-related-row:hover {
+    background: var(--row-hover);
+  }
 }
 .silo-related-link {
   display: flex;
@@ -98,8 +100,10 @@
   font: inherit;
   cursor: pointer;
 }
-.silo-related-bookmark:hover {
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-related-bookmark:hover {
+    color: var(--ink);
+  }
 }
 .silo-related-bookmark:disabled {
   cursor: default;
@@ -185,9 +189,14 @@
   font-size: 11px;
   color: var(--fnt);
 }
-.silo-menu-item:is(:hover, :focus, .is-current),
+.silo-menu-item:is(:focus, .is-current),
 .silo-menu-item[aria-current="true"] {
   background: var(--menu-highlight);
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-menu-item:hover {
+    background: var(--menu-highlight);
+  }
 }
 .silo-menu-item:focus-visible {
   outline: 1px solid var(--line-2);
@@ -197,8 +206,13 @@
 .silo-menu-danger .silo-menu-icon {
   color: var(--warn);
 }
-.silo-menu-danger:is(:hover, :focus-visible) {
+.silo-menu-danger:is(:focus-visible) {
   background: var(--danger-soft);
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-menu-danger:hover {
+    background: var(--danger-soft);
+  }
 }
 .silo-menu-item:disabled {
   color: var(--fnt);
@@ -322,8 +336,10 @@
   color: var(--warn);
   border-color: transparent;
 }
-.silo-quiet-danger:hover {
-  background: var(--danger-soft);
+@media (hover: hover) and (pointer: fine) {
+  .silo-quiet-danger:hover {
+    background: var(--danger-soft);
+  }
 }
 .silo-url-card {
   margin: 16px 28px 0;
@@ -450,9 +466,11 @@
   background: none;
   cursor: pointer;
 }
-.silo-tag-token button:hover {
-  background: var(--sel);
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-tag-token button:hover {
+    background: var(--sel);
+    color: var(--ink);
+  }
 }
 .silo-tag-tokens input {
   flex: 1;
@@ -648,12 +666,16 @@
 .silo-meta-tag a span {
   color: var(--fnt);
 }
-.silo-meta-tag:hover {
-  color: var(--ink);
-  background: var(--sel);
+@media (hover: hover) and (pointer: fine) {
+  .silo-meta-tag:hover {
+    color: var(--ink);
+    background: var(--sel);
+  }
 }
-.silo-meta-tag:hover a span {
-  color: var(--mut);
+@media (hover: hover) and (pointer: fine) {
+  .silo-meta-tag:hover a span {
+    color: var(--mut);
+  }
 }
 /* The remove control takes no room at rest, so idle chips stay balanced. */
 .silo-meta-tag button {
@@ -669,19 +691,35 @@
   padding: 0;
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s var(--ease-out);
+  transition:
+    opacity 0.15s var(--ease-out),
+    transform 0.15s var(--ease-out);
 }
-.silo-meta-tag:is(:hover, :focus-within) {
+.silo-meta-tag:is(:focus-within) {
   padding-right: 4px;
 }
-.silo-meta-tag:is(:hover, :focus-within) button {
+@media (hover: hover) and (pointer: fine) {
+  .silo-meta-tag:hover {
+    padding-right: 4px;
+  }
+}
+.silo-meta-tag:is(:focus-within) button {
   width: 16px;
   margin-left: 2px;
   opacity: 1;
 }
-.silo-meta-tag button:hover {
-  color: var(--ink);
-  background: var(--icon-hover);
+@media (hover: hover) and (pointer: fine) {
+  .silo-meta-tag:hover button {
+    width: 16px;
+    margin-left: 2px;
+    opacity: 1;
+  }
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-meta-tag button:hover {
+    color: var(--ink);
+    background: var(--icon-hover);
+  }
 }
 /* .silo-reader-icon pins icons to 16px; the chip needs a smaller, lighter glyph. */
 .silo-meta-tag svg {
@@ -707,9 +745,11 @@
   font-weight: 500;
   cursor: pointer;
 }
-.silo-meta-add:hover {
-  border-style: solid;
-  color: var(--ink);
+@media (hover: hover) and (pointer: fine) {
+  .silo-meta-add:hover {
+    border-style: solid;
+    color: var(--ink);
+  }
 }
 .silo-meta-add svg {
   width: 13px;
@@ -926,8 +966,10 @@ button.silo-note-text {
   right: 16px;
   border: 0;
 }
-.silo-modal-header .silo-settings-close:hover {
-  background: var(--icon-hover);
+@media (hover: hover) and (pointer: fine) {
+  .silo-modal-header .silo-settings-close:hover {
+    background: var(--icon-hover);
+  }
 }
 .silo-modal-header .silo-settings-close svg {
   width: 20px;
@@ -1014,4 +1056,15 @@ button.silo-note-text {
 :root[data-theme="dark"] .silo-tag-tokens,
 :root[data-theme="dark"] .silo-capture-form input {
   border: 0;
+}
+
+@media not ((hover: hover) and (pointer: fine)) {
+  .silo-meta-tag {
+    padding-right: 4px;
+  }
+  .silo-meta-tag button {
+    width: 16px;
+    margin-left: 2px;
+    opacity: 1;
+  }
 }
