@@ -13,6 +13,12 @@ describe('Chip', () => {
     expect(container.firstElementChild?.getAttribute('data-state')).toBe('loaded');
   });
 
+  it('omits the dark tone when the icon pixels cannot be read', () => {
+    const { container } = render(<Chip domain="tbray.org" />);
+    fireEvent.load(container.querySelector('img') as HTMLImageElement);
+    expect(container.firstElementChild?.hasAttribute('data-tone')).toBe(false);
+  });
+
   it('shows a neutral globe when the site has no icon', () => {
     const { container } = render(<Chip domain="tbray.org" />);
     fireEvent.error(container.querySelector('img') as HTMLImageElement);

@@ -341,6 +341,15 @@
 .silo-letter-chip[data-state="pending"] img {
   opacity: 0;
 }
+/* Dark art on a transparent background would vanish on the dark theme: give it a light plate. */
+:root[data-theme="dark"] .silo-letter-chip[data-tone="dark"] {
+  background: var(--favicon-plate);
+}
+:root[data-theme="dark"] .silo-letter-chip[data-tone="dark"] img {
+  inset: 12%;
+  width: 76%;
+  height: 76%;
+}
 /* A capture in flight blinks the favicon; the list row sweeps instead. */
 .silo-reader-source[data-capturing] .silo-letter-chip {
   animation: siloPulse 1.6s ease-in-out infinite;
