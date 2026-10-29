@@ -1,5 +1,5 @@
 {
-  "id": "b34e0d0b-a79f-4c18-a8ac-76667b78a01b",
+  "id": "4b588991-8125-4072-92b6-07d8a45b375a",
   "prevId": "a5cdd7f0-1284-4bcf-9fd1-07e538e1a503",
   "version": "7",
   "dialect": "postgresql",
@@ -316,6 +316,13 @@
           "type": "text[]",
           "primaryKey": false,
           "notNull": false
+        },
+        "enrich_request_seq": {
+          "name": "enrich_request_seq",
+          "type": "integer",
+          "primaryKey": false,
+          "notNull": true,
+          "default": 0
         },
         "description": {
           "name": "description",

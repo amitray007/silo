@@ -113,6 +113,15 @@ export const enrichmentResultSchema = z.object({
 
 export type EnrichmentResult = z.infer<typeof enrichmentResultSchema>;
 
+type EnrichmentRun = { startedSeq: number; startedFields: readonly string[] | null };
+
+function enrichmentCompletion(run: EnrichmentRun | undefined) {
+  return {
+    completedRequest: run ? sql`${links.enrichRequestSeq} = ${run.startedSeq}` : sql`true`,
+    fullAttempt: run ? sql`${run.startedFields === null}` : sql`${links.enrichFields} is null`,
+  };
+}
+
 /**
  * Truncate a string to `max` chars (or pass through undefined). This makes the
  * enrichment write TOTAL: a pathological over-limit field (e.g. TS docs' 3698-char
@@ -168,6 +177,7 @@ function clampToMax(value: string | undefined, max: number): string | undefined 
 export async function recordEnrichment(
   linkId: string,
   result: EnrichmentResult,
+  run?: EnrichmentRun,
 ): Promise<Link | null> {
   // Clamp every string field to its ceiling BEFORE validating, so an
   // over-limit value (e.g. TS docs' base64 data: URI og:image) is truncated
@@ -210,6 +220,8 @@ export async function recordEnrichment(
   const incomingTitle = parsed.title ?? null;
   const incomingTitleSource = parsed.titleSource ?? 'page';
   const sourceDataJson = parsed.sourceData ? JSON.stringify(parsed.sourceData) : null;
+  // Legacy callers consume the current request; workers consume only the one they read.
+  const { completedRequest, fullAttempt } = enrichmentCompletion(run);
 
   // Single atomic UPDATE with the don't-clobber fallback expressed as
   // `COALESCE(newValue, column)` in SQL — the fallback reads each column's
@@ -244,18 +256,18 @@ export async function recordEnrichment(
       // miss must not replace that text while its current Reader is retained.
       extractedText: sql`case when ${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null
         then ${links.extractedText} else coalesce(${parsed.text ?? null}, ${links.extractedText}) end`,
-      // A run that began from a `full` link never leaves it below `full` (the
-      // floor is set by `requestEnrich`); the floor is cleared in the same write.
-      captureStatus: sql`case when ${links.enrichFloorStatus} = 'full' then 'full'::capture_status else ${parsed.status}::capture_status end`,
-      enrichFloorStatus: sql`null`,
-      enrichFields: null,
+      // A newer request keeps its fields and floor until its successor records.
+      captureStatus: sql`case when not (${completedRequest}) then 'enriching'::capture_status
+        when ${links.enrichFloorStatus} = 'full' then 'full'::capture_status else ${parsed.status}::capture_status end`,
+      enrichFloorStatus: sql`case when ${completedRequest} then null else ${links.enrichFloorStatus} end`,
+      enrichFields: sql`case when ${completedRequest} then null else ${links.enrichFields} end`,
       sourceKind: sql`coalesce(${parsed.sourceData?.kind ?? null}, ${links.sourceKind})`,
       sourceData: sql`coalesce(${sourceDataJson}::jsonb, ${links.sourceData})`,
       // Full attempts count toward ENRICH_ATTEMPT_CAP, success or
       // not — this is the only write path a real enrichment attempt goes
       // through, so incrementing here (rather than at the worker call site)
       // can't be bypassed or double-counted by a caller.
-      enrichAttempts: sql`case when ${links.enrichFields} is null then ${links.enrichAttempts} + 1 else ${links.enrichAttempts} end`,
+      enrichAttempts: sql`case when ${fullAttempt} then ${links.enrichAttempts} + 1 else ${links.enrichAttempts} end`,
     })
     .where(whereLive(eq(links.id, linkId)))
     .returning();
@@ -344,6 +356,7 @@ async function resetToEnriching(
       .set({
         captureStatus: 'enriching',
         enrichFields: fields,
+        enrichRequestSeq: sql`${links.enrichRequestSeq} + 1`,
         enrichAttempts: fields === null ? 0 : current.attempts,
         enrichFloorStatus:
           current.captureStatus === 'enriching' ? current.floor : current.captureStatus,

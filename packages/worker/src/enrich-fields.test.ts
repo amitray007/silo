@@ -120,6 +120,33 @@ describeIfPg('targeted enrichment worker (integration)', () => {
     });
   });
 
+  it('records the started request and keeps the successor narrow with its original floor', async () => {
+    const id = await seed('active-title', true);
+    const started = await core.requestEnrich(id, { fields: ['title'] });
+    const injected = deps();
+    injected.runXPostTitle.mockImplementationOnce(async () => {
+      await core.requestEnrich(id, { fields: ['source'] });
+      return { ok: true, value: 'Updated title' };
+    });
+    await worker.enrichLink(id, injected);
+    expect(await core.getById(id)).toMatchObject({
+      title: 'Updated title',
+      enrichRequestSeq: (started?.enrichRequestSeq ?? 0) + 1,
+      enrichFields: ['title', 'source'],
+      enrichFloorStatus: 'partial',
+      captureStatus: 'enriching',
+      enrichAttempts: 1,
+    });
+    await worker.enrichLink(id, injected);
+    expect(injected.safeFetch).not.toHaveBeenCalled();
+    expect(await core.getById(id)).toMatchObject({
+      enrichFields: null,
+      enrichFloorStatus: null,
+      captureStatus: 'partial',
+      enrichAttempts: 1,
+    });
+  });
+
   it('missing X text calls only the source API before AI and does not write source_data', async () => {
     const id = await seed('1002', true, false);
     await core.requestEnrich(id, { fields: ['title'] });

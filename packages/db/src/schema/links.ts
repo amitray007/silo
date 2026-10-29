@@ -49,6 +49,8 @@ export const links = pgTable(
     enrichFloorStatus: captureStatus('enrich_floor_status'),
     // NULL runs the full pipeline; a set limits the pending run to these fields.
     enrichFields: text('enrich_fields').array(),
+    // Each request advances this so an active run cannot clear its successor.
+    enrichRequestSeq: integer('enrich_request_seq').notNull().default(0),
     description: text('description'),
     imageUrl: text('image_url'),
     siteName: text('site_name'),

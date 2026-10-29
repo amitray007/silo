@@ -157,14 +157,17 @@ function mapSafeFetchFailureToStatus(
  * so the cap logic exists in exactly one place.
  */
 async function recordThenMaybeSettle(
-  linkId: string,
+  link: Pick<LinkSummaryWithTags, 'id' | 'enrichRequestSeq' | 'enrichFields'>,
   result: Parameters<typeof recordEnrichment>[1],
 ): Promise<void> {
   // No downgrade: `recordEnrichment` records `full` for a run whose floor
   // (`enrich_floor_status`) is `full`, so `updated.captureStatus` is `full` here.
-  const updated = await recordEnrichment(linkId, result);
+  const updated = await recordEnrichment(link.id, result, {
+    startedSeq: link.enrichRequestSeq,
+    startedFields: link.enrichFields,
+  });
   if (updated && updated.captureStatus !== 'full' && updated.enrichAttempts >= ENRICH_ATTEMPT_CAP) {
-    await settleGiveUp(linkId);
+    await settleGiveUp(link.id);
   }
 }
 
@@ -413,7 +416,7 @@ async function enrichFullLink(
     }
 
     if (!fetchResult.ok) {
-      await recordThenMaybeSettle(linkId, {
+      await recordThenMaybeSettle(link, {
         status: holdFull ? 'full' : mapSafeFetchFailureToStatus(fetchResult.reason),
         ...aiTitleFields(await aiTitlePromise),
         ...postText,
@@ -464,6 +467,7 @@ type NarrowLink = Pick<
   | 'captureStatus'
   | 'enrichFloorStatus'
   | 'enrichFields'
+  | 'enrichRequestSeq'
 >;
 type EnrichPlan = NonNullable<ReturnType<typeof planEnrich>>;
 
@@ -514,6 +518,7 @@ async function enrichSelectedFields(
   plan: EnrichPlan,
   deps: EnrichLinkDeps,
 ): Promise<void> {
+  const run = { startedSeq: link.enrichRequestSeq, startedFields: link.enrichFields };
   const floor = link.enrichFloorStatus ?? link.captureStatus;
   const status = floor === 'enriching' ? 'bare' : floor;
   const fetchedAt = new Date();
@@ -522,7 +527,7 @@ async function enrichSelectedFields(
     plan.fetch ? deps.safeFetch(link.url) : undefined,
   ]);
   if (fetched && !fetched.ok) {
-    await recordEnrichment(link.id, { status });
+    await recordEnrichment(link.id, { status }, run);
     return;
   }
   const extracted = fetched
@@ -535,11 +540,11 @@ async function enrichSelectedFields(
     : twitterMetadata(plan.metadata ? source : undefined);
   await recordNarrowReader(link, plan, deps, extracted, fetched, fetchedAt);
   const aiTitle = await narrowAiTitle(link, plan, source, deps);
-  await recordEnrichment(link.id, {
-    status,
-    ...narrowResultFields(link, plan, extracted, source),
-    ...aiTitleFields(aiTitle),
-  });
+  await recordEnrichment(
+    link.id,
+    { status, ...narrowResultFields(link, plan, extracted, source), ...aiTitleFields(aiTitle) },
+    run,
+  );
 }
 
 function narrowResultFields(
@@ -618,7 +623,7 @@ type ExtractionRecord = {
 
 /** Record a successful fetch + extract, including the Reader (see `enrichLink`). */
 async function recordExtraction(
-  link: { id: string; sourceKind: string },
+  link: Pick<LinkSummaryWithTags, 'id' | 'sourceKind' | 'enrichRequestSeq' | 'enrichFields'>,
   extracted: ExtractResult,
   selected: ReaderExtraction,
   { sourceData, holdFull, fetchedAt, aiTitle }: ExtractionRecord,
@@ -631,7 +636,7 @@ async function recordExtraction(
   // result (only the source data and the status, which stays `full`). A
   // successful AI title is the exception: the post text is fresh, so it is written.
   if (holdFull && extracted.status !== 'full') {
-    await recordThenMaybeSettle(linkId, {
+    await recordThenMaybeSettle(link, {
       status: 'full',
       ...aiTitleFields(aiTitle),
       ...(sourceData ? { sourceData } : {}),
@@ -641,7 +646,7 @@ async function recordExtraction(
   if (link.sourceKind !== 'twitter') await recordReader(linkId, selected, fetchedAt);
   const { reader: _reader, readerFailed: _readerFailed, text, ...stored } = extracted;
   // Reader writes own search text, including empty results and rejected older captures.
-  await recordThenMaybeSettle(linkId, {
+  await recordThenMaybeSettle(link, {
     ...stored,
     ...aiTitleFields(aiTitle),
     ...(link.sourceKind === 'twitter' && text !== undefined ? { text } : {}),
