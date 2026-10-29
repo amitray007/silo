@@ -51,7 +51,7 @@ describe('feed subscription UI', () => {
     const input = screen.getByLabelText('Website or feed URL');
     await waitFor(() => expect(document.activeElement).toBe(input));
     expect((screen.getByLabelText('Sync recents') as HTMLInputElement).checked).toBe(true);
-    fireEvent.change(input, { target: { value: 'https://example.com' } });
+    fireEvent.change(input, { target: { value: 'example.com' } });
     fireEvent.click(screen.getByRole('button', { name: 'Subscribe' }));
     await waitFor(() => expect(close).toHaveBeenCalledOnce());
     expect(subscribed).toHaveBeenCalledOnce();
@@ -59,7 +59,7 @@ describe('feed subscription UI', () => {
       url: 'https://example.com',
       syncRecents: true,
     });
-    expect(screen.getByTestId('path').textContent).toBe('/feeds/feed-id');
+    await waitFor(() => expect(screen.getByTestId('path').textContent).toBe('/feeds/feed-id'));
   });
   it('keeps lookup errors inline, allows recents off, and closes on Escape', async () => {
     const fetch = vi

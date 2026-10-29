@@ -68,6 +68,7 @@ export function ModalShell({
   onKeyDown,
   describedBy,
   focusPanel = false,
+  anchored = false,
 }: {
   /** Preferred width, capped to the available viewport. */
   width: number;
@@ -91,9 +92,11 @@ export function ModalShell({
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   describedBy?: string;
   focusPanel?: boolean;
+  anchored?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
+  const backdropPress = useRef(false);
 
   useEffect(() => {
     ensureModalityListeners();
@@ -123,8 +126,14 @@ export function ModalShell({
     // biome-ignore lint/a11y/useKeyWithClickEvents: scrim dismiss is pointer-only convenience — Escape (handled by the document listener above) is the keyboard-equivalent close path, matching v3.
     // biome-ignore lint/a11y/noStaticElementInteractions: same — a non-interactive click guard, not a control.
     <div
-      onClick={onClose}
-      className={`silo-modal-layer silo-modal-layer-${variant}${role === 'alertdialog' ? ' silo-confirm-layer' : ''}`}
+      onPointerDown={(event) => {
+        backdropPress.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (backdropPress.current && event.target === event.currentTarget) onClose();
+        backdropPress.current = false;
+      }}
+      className={`silo-modal-layer${anchored ? ' silo-modal-layer-anchored' : ''} silo-modal-layer-${variant}${role === 'alertdialog' ? ' silo-confirm-layer' : ''}`}
       style={{ zIndex }}
     >
       {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is restricted to dialog or alertdialog; both support aria-modal. */}

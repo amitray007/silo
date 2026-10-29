@@ -1,5 +1,5 @@
 import type { PageParams } from '@silo/core';
-import { CAPTURE_SOURCES, sourceDataSchema } from '@silo/core';
+import { CAPTURE_SOURCES, normalizeFeedUrl, sourceDataSchema } from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -201,7 +201,10 @@ export const batchCaptureBodySchema = z.object({
 
 export const feedIdParamSchema = z.object({ id: z.uuid() });
 export const subscribeFeedSchema = z.object({
-  url: z.url({ protocol: /^https?$/ }).max(8192),
+  url: z
+    .string()
+    .transform(normalizeFeedUrl)
+    .pipe(z.url({ protocol: /^https?$/ }).max(8192)),
   syncRecents: z.boolean(),
 });
 

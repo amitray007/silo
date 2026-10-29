@@ -12,6 +12,10 @@
   -webkit-backdrop-filter: var(--scrim-blur);
   animation: siloFade 0.15s var(--ease-out);
 }
+.silo-modal-layer-anchored {
+  align-items: flex-start;
+  padding-top: min(20vh, 200px);
+}
 .silo-confirm-layer {
   padding-top: 16px;
 }
@@ -602,7 +606,7 @@
   .silo-settings-tab:hover {
     background: var(--hov);
   }
-  .silo-edit-save-btn:hover {
+  .silo-edit-save-btn:not(:disabled):not([aria-disabled="true"]):hover {
     background: var(--btn);
     border-color: var(--btn);
     opacity: 0.88;
@@ -1238,7 +1242,7 @@
   box-shadow: var(--toast-shadow);
 }
 @media (prefers-reduced-motion: no-preference) {
-  .silo-frame button:active:not(:disabled):not(.silo-nav-item),
+  .silo-frame button:active:not(:disabled):not([aria-disabled="true"]):not(.silo-nav-item),
   button.silo-menu-item:active:not(:disabled),
   a.silo-reader-iconbtn:active {
     transform: scale(0.96);
@@ -1272,7 +1276,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .silo-frame button:active:not(:disabled):not(.silo-nav-item),
+  .silo-frame button:active:not(:disabled):not([aria-disabled="true"]):not(.silo-nav-item),
   button.silo-menu-item:active:not(:disabled),
   a.silo-reader-iconbtn:active {
     transform: none;
@@ -2013,8 +2017,24 @@
 @media (forced-colors: active) {
   .silo-edit-save-btn,
   .silo-settings-hero-btn-primary,
-  .silo-menu-surface,
+  .silo-menu-surface.silo-popover,
   .silo-modal-panel {
     border: 1px solid CanvasText;
+  }
+}
+
+.silo-edit-save-btn,
+.silo-settings-hero-btn-primary,
+.silo-confirm-btn {
+  font-size: 14px;
+  line-height: 20px;
+}
+.silo-edit-save-btn:is(:disabled, [aria-disabled="true"]) {
+  cursor: default;
+  opacity: 0.5;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .silo-edit-save-btn:not(:disabled):not([aria-disabled="true"]):active {
+    transform: scale(0.96);
   }
 }

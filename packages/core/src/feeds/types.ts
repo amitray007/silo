@@ -30,3 +30,9 @@ export function setFeedResolver(next: FeedResolver | undefined): void {
 export function getFeedResolver(): FeedResolver | undefined {
   return resolver;
 }
+
+/** Accept publisher hostnames while preserving explicit schemes for edge validation. */
+export function normalizeFeedUrl(url: string): string {
+  const value = url.trim();
+  return /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
+}

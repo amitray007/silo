@@ -232,7 +232,6 @@ select {
 
 .silo-settings-btn:active:not(:disabled) {
   background: var(--surface-active);
-  transform: scale(0.97);
 }
 
 .silo-settings-btn:disabled {
@@ -289,7 +288,6 @@ select {
 
 .silo-settings-select-trigger:active {
   background: var(--surface-active);
-  transform: scale(0.97);
 }
 
 .silo-settings-select-trigger:focus-visible {
@@ -726,15 +724,14 @@ select {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .silo-edit-save-btn:hover {
+  .silo-edit-save-btn:not(:disabled):not([aria-disabled="true"]):hover {
     background: var(--surface-hover);
     border-color: var(--ghost);
   }
 }
 
-.silo-edit-save-btn:active {
+.silo-edit-save-btn:not(:disabled):not([aria-disabled="true"]):active {
   background: var(--surface-active);
-  transform: scale(0.97);
 }
 
 /* RowMenu's action rows (tags/open/copy/edit/trash) — press feedback via the
@@ -936,6 +933,7 @@ select {
 }
 
 .silo-feed-description {
+  margin: 0;
   color: var(--mut);
   font-size: var(--text-sm);
   line-height: 1.5;
@@ -946,6 +944,7 @@ select {
   margin-top: var(--s4);
 }
 .silo-feed-form > label {
+  line-height: 20px;
   font-weight: 500;
   font-size: var(--text-sm);
 }
@@ -954,10 +953,14 @@ select {
   box-sizing: border-box;
   padding: var(--s2) var(--s3);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 8px;
   background: var(--bg);
+  box-shadow: var(--input-shadow);
   color: var(--ink);
   font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  min-height: 40px;
 }
 .silo-feed-checkbox {
   display: flex;
@@ -966,6 +969,7 @@ select {
   min-height: 40px;
 }
 .silo-feed-error {
+  margin: 0;
   color: var(--warn);
   font-size: var(--text-sm);
 }
@@ -1000,4 +1004,23 @@ select {
   color: var(--fnt);
   font-size: var(--text-sm);
   overflow-wrap: anywhere;
+}
+
+.silo-feed-description + .silo-feed-form {
+  margin-top: 16px;
+}
+.silo-modal-header + .silo-feed-description {
+  margin-top: 8px;
+}
+.silo-feed-form > input[aria-invalid="true"] {
+  border-color: var(--warn);
+}
+.silo-feed-checkbox input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  accent-color: var(--toggle-on);
+}
+.silo-feed-subscribe {
+  min-width: 120px;
 }

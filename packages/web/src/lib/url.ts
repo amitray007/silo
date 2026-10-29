@@ -42,3 +42,8 @@ export function looksLikeUrl(value: string): boolean {
   if (/^https?:\/\/\S+$/i.test(trimmed)) return true;
   return /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(trimmed);
 }
+
+export function normalizeFeedUrl(url: string): string {
+  const value = url.trim();
+  return /^[a-z][a-z\d+.-]*:/i.test(value) ? value : `https://${value}`;
+}

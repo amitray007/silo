@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useSubscribeFeed } from '../api/hooks';
+import { normalizeFeedUrl } from '../lib/url';
 import { ModalHeader, ModalShell } from './ModalShell';
 
 export function AddFeedDialog({
@@ -22,7 +23,7 @@ export function AddFeedDialog({
     event.preventDefault();
     if (subscribe.isPending) return;
     subscribe.mutate(
-      { url: url.trim(), syncRecents },
+      { url: normalizeFeedUrl(url), syncRecents },
       {
         onError: () => input.current?.focus(),
         onSuccess: ({ feed }) => {
@@ -34,7 +35,7 @@ export function AddFeedDialog({
     );
   }
   return (
-    <ModalShell width={460} ariaLabel="Add feed" onClose={onClose}>
+    <ModalShell anchored width={460} ariaLabel="Add feed" onClose={onClose}>
       <ModalHeader title="Add feed" onClose={onClose} />
       <p className="silo-feed-description">
         Automatically save links from your favorite websites and publishers.
@@ -47,7 +48,9 @@ export function AddFeedDialog({
           className="silo-field"
           readOnly={subscribe.isPending}
           aria-busy={subscribe.isPending}
-          type="url"
+          type="text"
+          inputMode="url"
+          autoComplete="url"
           required
           maxLength={8192}
           value={url}
@@ -74,7 +77,11 @@ export function AddFeedDialog({
           Sync recents
         </label>
         <div className="silo-modal-footer">
-          <button className="silo-edit-save-btn" type="submit" aria-disabled={subscribe.isPending}>
+          <button
+            className="silo-edit-save-btn silo-feed-subscribe"
+            type="submit"
+            aria-disabled={subscribe.isPending}
+          >
             {subscribe.isPending ? 'Subscribing…' : 'Subscribe'}
           </button>
         </div>

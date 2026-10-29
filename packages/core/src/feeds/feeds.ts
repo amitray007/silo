@@ -16,6 +16,7 @@ import {
   type FeedEntry,
   type FeedPollResult,
   getFeedResolver,
+  normalizeFeedUrl,
   type ResolvedFeed,
 } from './types.js';
 
@@ -131,7 +132,7 @@ export async function subscribeFeed(input: {
   if (!resolver) return { error: 'feeds_unavailable' };
   let resolved: ResolvedFeed | null;
   try {
-    resolved = await resolver(input.url);
+    resolved = await resolver(normalizeFeedUrl(input.url));
   } catch (error) {
     console.error('[silo/core] subscribe-feed: resolver failed:', error);
     return { error: 'feeds_unavailable' };

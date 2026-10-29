@@ -20,7 +20,13 @@ describe('feed API against Postgres', () => {
   it('returns 503 with no resolver, 422 for no feed, and 400 for invalid input', async () => {
     const { app, core } = h.mod();
     expect((await app.request('/api/feeds', request('https://example.com'))).status).toBe(503);
-    core.setFeedResolver(async () => null);
+    let resolvedUrl = '';
+    core.setFeedResolver(async (url) => {
+      resolvedUrl = url;
+      return null;
+    });
+    expect((await app.request('/api/feeds', request('example.com'))).status).toBe(422);
+    expect(resolvedUrl).toBe('https://example.com');
     const missing = await app.request('/api/feeds', request('https://example.com'));
     expect(missing.status).toBe(422);
     expect(await missing.json()).toMatchObject({ error: 'feed_not_found' });

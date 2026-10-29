@@ -3,6 +3,7 @@ import {
   deleteFeed,
   listFeedPosts,
   listFeedsPage,
+  normalizeFeedUrl,
   type PageParams,
   saveFeedPost,
   setFeedPostArchived,
@@ -106,7 +107,13 @@ function registerFeedSubscription(server: McpServer): void {
     {
       description:
         'Subscribe to an HTTP(S) feed or site URL. syncRecents (default true) captures the newest 20 posts; false starts with future posts only. Posts enrich asynchronously and stay outside the library until save_feed_post.',
-      inputSchema: { url: z.url({ protocol: /^https?$/ }), syncRecents: z.boolean().default(true) },
+      inputSchema: {
+        url: z
+          .string()
+          .transform(normalizeFeedUrl)
+          .pipe(z.url({ protocol: /^https?$/ }).max(8192)),
+        syncRecents: z.boolean().default(true),
+      },
       outputSchema: { feed: z.object(feedShape).optional(), deduped: z.boolean().optional() },
     },
     (input) =>
