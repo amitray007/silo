@@ -5,10 +5,11 @@
  * name/DLQ name/job options (the single source of truth), the `createBoss()`
  * connection factory, `ensureEnrichLinkQueue()`, `logDlqDepth()`, and
  * `registerEnqueuer()` — the seam that wires `@silo/core`'s injectable
- * enqueuer to a real, started `PgBoss` instance.
+ * enqueuer to a real, started `PgBoss` instance — and `startEnqueuer()`, the
+ * producer-only startup built on them.
  *
- * Both `@silo/worker` (send + work) and `@silo/api` (send only, the
- * producer) import this package rather than each other — see
+ * `@silo/worker` (send + work), `@silo/api` and `@silo/app`'s MCP listener
+ * (send only, producers) import this package rather than each other — see
  * `docs/rules/architecture.md` for the boundary this preserves.
  */
 export {
@@ -19,4 +20,5 @@ export {
   ensureEnrichLinkQueue,
   logDlqDepth,
   registerEnqueuer,
+  startEnqueuer,
 } from './queue.js';

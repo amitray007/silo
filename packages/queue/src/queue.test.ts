@@ -5,7 +5,7 @@ import {
 } from '@silo/db/test-support/disposable-database';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { Pool } from 'pg';
-import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 /**
  * Integration tests for the transactional enqueue (U5, plan R1/R2; moved from
@@ -36,10 +36,11 @@ describeIfPg('transactional enqueue (integration)', () => {
     core = await import('@silo/core');
     queueMod = await import('./queue.js');
 
-    boss = queueMod.createBoss();
-    await boss.start();
-    await queueMod.ensureEnrichLinkQueue(boss);
-    queueMod.registerEnqueuer(boss);
+    // The producer-only path the api and mcp processes use: if it failed to
+    // register the seam, every enqueue assertion below would see zero jobs.
+    const started = await queueMod.startEnqueuer('[queue-test]');
+    if (!started) throw new Error('startEnqueuer failed against the test database');
+    boss = started;
 
     inspectPool = new Pool({ connectionString: dbUrl });
   });
@@ -138,6 +139,25 @@ describeIfPg('transactional enqueue (integration)', () => {
     }
     expect(attempts).toBeGreaterThanOrEqual(1);
     expect(dlqCount).toBe(1);
+  });
+
+  it('startEnqueuer degrades to undefined and keeps the live seam when pg-boss cannot connect', async () => {
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const previous = process.env.WORKER_DATABASE_URL;
+    // Nothing listens on port 1, so boss.start() fails fast.
+    process.env.WORKER_DATABASE_URL = 'postgres://silo:silo@127.0.0.1:1/silo';
+    try {
+      expect(await queueMod.startEnqueuer('[queue-test]')).toBeUndefined();
+      expect(
+        errors.mock.calls.some(([line]) => String(line).includes('FATAL-FOR-ENRICHMENT')),
+      ).toBe(true);
+    } finally {
+      process.env.WORKER_DATABASE_URL = previous;
+      errors.mockRestore();
+    }
+    // The failed start never registered, so the enqueuer from beforeAll still sends.
+    const link = await core.createLink({ url: 'https://example.com/degraded', sourceKind: 'link' });
+    expect(await activeJobCount(link.id)).toBe(1);
   });
 
   it('a rolled-back createLink transaction leaves NO enrich job (job + row are atomic)', async () => {

@@ -25,6 +25,7 @@
     "@silo/api": "workspace:*",
     "@silo/core": "workspace:*",
     "@silo/mcp-server": "workspace:*",
+    "@silo/queue": "workspace:*",
     "@silo/worker": "workspace:*"
   },
   "devDependencies": {
