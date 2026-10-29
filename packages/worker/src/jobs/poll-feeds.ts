@@ -12,11 +12,25 @@ export async function registerFeedJobs(boss: PgBoss): Promise<void> {
     { tz: 'UTC', singletonKey: 'poll-feeds-due', singletonSeconds: 240 },
   );
   await boss.work('poll-feeds-due', async () => {
-    for (const feedId of await listDueFeeds()) {
-      await boss.send('poll-feed', { feedId }, { singletonKey: feedId });
+    try {
+      for (const feedId of await listDueFeeds()) {
+        try {
+          await boss.send('poll-feed', { feedId }, { singletonKey: feedId });
+        } catch (error) {
+          console.error('[silo/worker] poll-feeds-due: enqueue failed:', error);
+        }
+      }
+    } catch (error) {
+      console.error('[silo/worker] poll-feeds-due: job failed (will retry next cron tick):', error);
     }
   });
   await boss.work<{ feedId: string }>('poll-feed', { batchSize: 1 }, async (jobs) => {
-    for (const job of jobs) await pollFeed(job.data.feedId, fetchFeedPoll);
+    for (const job of jobs) {
+      try {
+        await pollFeed(job.data.feedId, fetchFeedPoll);
+      } catch (error) {
+        console.error('[silo/worker] poll-feed: job failed (will retry next cron tick):', error);
+      }
+    }
   });
 }

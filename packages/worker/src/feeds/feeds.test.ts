@@ -1,5 +1,5 @@
 import type { FeedRow } from '@silo/core';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { cleanTitle, parseFeedBody, pollInterval } from './parse.js';
 import { type FeedFetcher, fetchFeedPoll, resolveFeed } from './resolve.js';
 
@@ -190,5 +190,78 @@ describe('conditional polling', () => {
         responseHeaders: { 'retry-after': '7200' },
       })),
     ).toMatchObject({ kind: 'failure', retryAfterSeconds: 7200 });
+  });
+});
+
+describe('feed failure boundaries', () => {
+  it('shares a 15 second deadline across discovery requests', async () => {
+    vi.useFakeTimers();
+    try {
+      const timeouts: number[] = [];
+      const result = await resolveFeed('https://example.com/blog', async (url, options) => {
+        timeouts.push(options.timeoutMs ?? -1);
+        vi.setSystemTime(Date.now() + (options.timeoutMs ?? 10000));
+        return response(url, '<html></html>', 'text/html');
+      });
+      expect(result).toBeNull();
+      expect(timeouts).toEqual([10000, 5000]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+  it('preserves a 60 minute TTL on 304 with shorter max-age and honors longer hints', async () => {
+    const initial = await resolveFeed('https://example.com/feed', async (url) =>
+      response(url, rss.replace('<ttl>30</ttl>', '<ttl>60</ttl>')),
+    );
+    expect(initial?.intervalSeconds).toBe(3600);
+    const row = { ...initial, pollIntervalSeconds: initial?.intervalSeconds } as FeedRow;
+    for (const [headers, seconds] of [
+      [{ 'cache-control': 'max-age=600' }, 3600],
+      [{ 'cache-control': 'max-age=7200' }, 7200],
+      [{ 'retry-after': '999999' }, 86400],
+    ] as const) {
+      expect(
+        await fetchFeedPoll(row, async (url) => ({
+          ...response(url, ''),
+          notModified: true,
+          status: 304,
+          responseHeaders: headers,
+        })),
+      ).toMatchObject({ kind: 'not-modified', intervalSeconds: seconds });
+    }
+  });
+  it('rejects an HTML body returned with HTTP 200', async () => {
+    expect(
+      await fetchFeedPoll({ feedUrl: 'https://example.com/feed' } as FeedRow, async (url) =>
+        response(url, '<html><body>Oops</body></html>', 'text/html'),
+      ),
+    ).toEqual({ kind: 'failure', message: 'The response is not a valid feed.' });
+  });
+  it.each([
+    ['blocked-ip', undefined, 'This feed resolves to a blocked address.'],
+    ['http-error', 503, 'The feed returned HTTP 503.'],
+    ['timeout', undefined, 'The feed request timed out.'],
+    ['body-too-large', undefined, 'The feed is too large.'],
+  ] as const)('keeps %s details out of owner-facing errors', async (reason, status, message) => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const result = await fetchFeedPoll(
+        { feedUrl: 'https://example.com/feed', pollIntervalSeconds: 3600 } as FeedRow,
+        async () => ({
+          ok: false,
+          reason,
+          ...(status ? { status } : {}),
+          detail: 'resolved 192.168.10.4',
+        }),
+      );
+      expect(result).toMatchObject({ kind: 'failure', message });
+      expect(JSON.stringify(result)).not.toContain('192.168.10.4');
+      expect(log).toHaveBeenCalledWith(
+        expect.any(String),
+        expect.objectContaining({ detail: 'resolved 192.168.10.4' }),
+      );
+    } finally {
+      log.mockRestore();
+    }
   });
 });

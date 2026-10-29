@@ -95,7 +95,13 @@ export async function subscribeFeed(input: {
 }): Promise<SubscribeFeedResult> {
   const resolver = getFeedResolver();
   if (!resolver) return { error: 'feeds_unavailable' };
-  const resolved = await resolver(input.url);
+  let resolved: ResolvedFeed | null;
+  try {
+    resolved = await resolver(input.url);
+  } catch (error) {
+    console.error('[silo/core] subscribe-feed: resolver failed:', error);
+    return { error: 'feeds_unavailable' };
+  }
   if (!resolved) return { error: 'feed_not_found' };
   const result = await db.transaction(async (tx) => {
     const [inserted] = await tx
@@ -166,46 +172,40 @@ export async function listDueFeeds(now = new Date()): Promise<string[]> {
   return rows.map((row) => row.id);
 }
 
-/** Row lock serializes polls across workers and makes seen keys, captures, and schedule atomic. */
+/** Fetch without holding a connection; the locked recheck discards stale results. */
 export async function pollFeed(
   id: string,
   fetchFeed: (feed: FeedRow) => Promise<FeedPollResult>,
   now = new Date(),
 ): Promise<void> {
+  const [snapshot] = await db.select().from(feeds).where(eq(feeds.id, id));
+  if (!snapshot || !isDue(snapshot, now)) return;
+  let result: FeedPollResult;
+  try {
+    result = await fetchFeed(snapshot);
+  } catch (error) {
+    console.error('[silo/core] poll-feed: fetch failed:', error);
+    result = { kind: 'failure', message: 'Could not fetch this feed.' };
+  }
   await db.transaction(async (tx) => {
     const [row] = await tx.select().from(feeds).where(eq(feeds.id, id)).for('update');
-    if (!row || row.status === 'gone' || row.nextPollAt > now) return;
-    const result = await fetchFeed(row);
-    if (result.kind === 'failure') {
-      const failures = row.consecutiveFailures + 1;
-      const delay = Math.min(
-        86400,
-        Math.max(row.pollIntervalSeconds * 2 ** failures, result.retryAfterSeconds ?? 0),
-      );
-      await tx
-        .update(feeds)
-        .set({
-          status: result.gone || failures >= 10 ? 'gone' : 'failing',
-          consecutiveFailures: failures,
-          lastError: result.message,
-          lastPolledAt: now,
-          nextPollAt: new Date(now.getTime() + delay * 1000),
-        })
-        .where(eq(feeds.id, id));
+    if (!row || !isDue(row, now) || !samePoll(row, snapshot)) return;
+    const captured = await capturePoll(tx, row.id, result);
+    if (captured.kind === 'failure') {
+      await recordFailure(tx, row, captured, now);
       return;
     }
     const interval =
-      result.kind === 'modified'
-        ? result.feed.intervalSeconds
-        : (result.intervalSeconds ?? row.pollIntervalSeconds);
-    if (result.kind === 'modified') await captureEntries(tx, id, result.feed.entries, 50, false);
+      captured.kind === 'modified'
+        ? captured.feed.intervalSeconds
+        : (captured.intervalSeconds ?? row.pollIntervalSeconds);
+    const metadata = await pollMetadata(tx, row, captured);
     await tx
       .update(feeds)
       .set({
-        ...successfulMetadata(result),
+        ...metadata,
         status: 'active',
         consecutiveFailures: 0,
-        lastError: null,
         lastPolledAt: now,
         lastSuccessAt: now,
         pollIntervalSeconds: interval,
@@ -213,6 +213,76 @@ export async function pollFeed(
       })
       .where(eq(feeds.id, id));
   });
+}
+
+function isDue(row: FeedRow, now: Date): boolean {
+  return row.status !== 'gone' && row.nextPollAt <= now;
+}
+function samePoll(row: FeedRow, snapshot: FeedRow): boolean {
+  return (
+    row.nextPollAt.getTime() === snapshot.nextPollAt.getTime() &&
+    row.updatedAt.getTime() === snapshot.updatedAt.getTime()
+  );
+}
+async function capturePoll(tx: Tx, id: string, result: FeedPollResult): Promise<FeedPollResult> {
+  if (result.kind !== 'modified') return result;
+  try {
+    await tx.transaction((savepoint) =>
+      captureEntries(savepoint, id, result.feed.entries, 50, false),
+    );
+    return result;
+  } catch (error) {
+    console.error('[silo/core] poll-feed: capture failed:', error);
+    return { kind: 'failure', message: 'Could not capture feed posts.' };
+  }
+}
+async function recordFailure(
+  tx: Tx,
+  row: FeedRow,
+  result: Extract<FeedPollResult, { kind: 'failure' }>,
+  now: Date,
+): Promise<void> {
+  const failures = row.consecutiveFailures + 1;
+  const delay = Math.min(
+    86400,
+    Math.max(row.pollIntervalSeconds * 2 ** failures, result.retryAfterSeconds ?? 0),
+  );
+  await tx
+    .update(feeds)
+    .set({
+      status: result.gone || failures >= 10 ? 'gone' : 'failing',
+      consecutiveFailures: failures,
+      lastError: result.message,
+      lastPolledAt: now,
+      nextPollAt: new Date(now.getTime() + delay * 1000),
+    })
+    .where(eq(feeds.id, row.id));
+}
+
+const REDIRECT_CONFLICT = 'This feed now redirects to a feed you already follow.';
+async function pollMetadata(
+  tx: Tx,
+  row: FeedRow,
+  result: Exclude<FeedPollResult, { kind: 'failure' }>,
+) {
+  const metadata = successfulMetadata(result);
+  if (result.kind !== 'modified' || result.feed.feedUrl === row.feedUrl)
+    return { ...metadata, lastError: null };
+  const target = result.feed.feedUrl;
+  const [existing] = await tx.select({ id: feeds.id }).from(feeds).where(eq(feeds.feedUrl, target));
+  if (existing) return { ...metadata, feedUrl: row.feedUrl, lastError: REDIRECT_CONFLICT };
+  // A concurrent subscription can claim the URL after the check. Roll back only this update.
+  try {
+    await tx.transaction(async (savepoint) => {
+      await savepoint.update(feeds).set({ feedUrl: target }).where(eq(feeds.id, row.id));
+    });
+  } catch (error) {
+    const cause =
+      error instanceof Error ? (error.cause as { constraint?: string } | undefined) : undefined;
+    if (cause?.constraint !== 'feeds_feed_url_unique') throw error;
+    return { ...metadata, feedUrl: row.feedUrl, lastError: REDIRECT_CONFLICT };
+  }
+  return { ...metadata, lastError: null };
 }
 
 function successfulMetadata(result: Exclude<FeedPollResult, { kind: 'failure' }>) {

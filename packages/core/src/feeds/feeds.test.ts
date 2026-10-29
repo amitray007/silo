@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 import type { FeedEntry, ResolvedFeed } from './types.js';
 
@@ -139,12 +139,55 @@ describe('feeds on real Postgres', () => {
     });
     await due(feed.id);
     const updated = { ...resolved, entries: [{ id: 'new', url: 'https://example.com/new' }] };
-    await expect(
-      h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated })),
-    ).rejects.toThrow('queue down');
+    await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated }));
+    expect(await h.mod().getFeed(feed.id)).toMatchObject({
+      status: 'failing',
+      lastError: 'Could not capture feed posts.',
+    });
+    expect((await h.mod().listFeedPosts(feed.id)).links).toEqual([]);
+    const seen = await h
+      .rawDb()
+      .execute(sql`select * from feed_entries where feed_id = ${feed.id}`);
+    expect(seen.rows).toEqual([]);
+    await due(feed.id);
     h.mod().resetEnrichmentEnqueuer();
     await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated }));
     expect((await h.mod().getFeed(feed.id))?.postCount).toBe(1);
+  });
+  it('rolls back a database capture error to the savepoint and commits the failure', async () => {
+    const { feed, resolved } = await subscribe([]);
+    await due(feed.id);
+    await h
+      .rawDb()
+      .execute(
+        sql`alter table links add constraint reject_qa_post check (url <> 'https://example.com/reject-qa-post')`,
+      );
+    try {
+      await h.mod().pollFeed(feed.id, async () => ({
+        kind: 'modified',
+        feed: {
+          ...resolved,
+          entries: [
+            { id: 'first', url: 'https://example.com/first', publishedAt: new Date('2026-10-29') },
+            {
+              id: 'bad',
+              url: 'https://example.com/reject-qa-post',
+              publishedAt: new Date('2026-10-28'),
+            },
+          ],
+        },
+      }));
+      expect(await h.mod().getFeed(feed.id)).toMatchObject({
+        status: 'failing',
+        postCount: 0,
+        lastError: 'Could not capture feed posts.',
+      });
+      expect(
+        (await h.rawDb().execute(sql`select * from feed_entries where feed_id = ${feed.id}`)).rows,
+      ).toEqual([]);
+    } finally {
+      await h.rawDb().execute(sql`alter table links drop constraint reject_qa_post`);
+    }
   });
   it('caps each poll at 50 new posts without losing the remaining entries; refreshes title and link', async () => {
     const { feed, resolved } = await subscribe([], false);
@@ -188,6 +231,128 @@ describe('feeds on real Postgres', () => {
       .mod()
       .pollFeed(other.feed.id, async () => ({ kind: 'failure', message: '410', gone: true }));
     expect((await h.mod().getFeed(other.feed.id))?.status).toBe('gone');
+  });
+
+  it('keeps the old URL when a redirect targets another subscription, and still captures', async () => {
+    const first = await subscribe([]);
+    const second = await subscribe([]);
+    await due(first.feed.id);
+    await h.mod().pollFeed(first.feed.id, async () => ({
+      kind: 'modified',
+      feed: {
+        ...first.resolved,
+        feedUrl: second.feed.feedUrl,
+        title: 'Renamed',
+        entries: [{ url: 'https://example.com/redirect-post' }],
+      },
+    }));
+    expect(await h.mod().getFeed(first.feed.id)).toMatchObject({
+      feedUrl: first.feed.feedUrl,
+      title: 'Renamed',
+      postCount: 1,
+      status: 'active',
+      lastError: 'This feed now redirects to a feed you already follow.',
+    });
+    expect(await h.mod().getFeed(second.feed.id)).toMatchObject({
+      feedUrl: second.feed.feedUrl,
+      postCount: 0,
+    });
+  });
+  it('commits failure accounting when the fetcher throws', async () => {
+    const { feed } = await subscribe([]);
+    await due(feed.id);
+    const now = new Date();
+    await h.mod().pollFeed(
+      feed.id,
+      async () => {
+        throw new Error('private upstream detail');
+      },
+      now,
+    );
+    const result = await h.rawDb().execute(sql`select * from feeds where id = ${feed.id}`);
+    expect(result.rows[0]).toMatchObject({
+      consecutive_failures: 1,
+      status: 'failing',
+      last_error: 'Could not fetch this feed.',
+    });
+    expect(new Date(String(result.rows[0]?.next_poll_at)).getTime()).toBe(now.getTime() + 7200000);
+  });
+  it('skips not-due and gone feeds without fetching', async () => {
+    const { feed } = await subscribe([]);
+    const fetcher = vi.fn(async () => ({ kind: 'not-modified' as const }));
+    await h.mod().pollFeed(feed.id, fetcher);
+    await due(feed.id);
+    await h.rawDb().execute(sql`update feeds set status = 'gone' where id = ${feed.id}`);
+    await h.mod().pollFeed(feed.id, fetcher);
+    expect(fetcher).not.toHaveBeenCalled();
+  });
+  it('fetches without a transaction lock and discards stale concurrent results', async () => {
+    const { feed, resolved } = await subscribe([]);
+    await due(feed.id);
+    await h.mod().pollFeed(feed.id, async () => {
+      // A second connection must be able to update this row while the fetch is pending.
+      await h.rawDb().transaction(async (tx) => {
+        await tx.execute(sql`set local lock_timeout = '200ms'`);
+        await tx.execute(
+          sql`update feeds set next_poll_at = '2100-01-01', title = 'Concurrent' where id = ${feed.id}`,
+        );
+      });
+      return {
+        kind: 'modified',
+        feed: { ...resolved, entries: [{ url: 'https://example.com/stale' }] },
+      };
+    });
+    expect(await h.mod().getFeed(feed.id)).toMatchObject({ title: 'Concurrent', postCount: 0 });
+  });
+  it('applies just one concurrent poll and one failure increment', async () => {
+    const { feed } = await subscribe([]);
+    await due(feed.id);
+    let release: () => void = () => {};
+    const ready = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    let entered = 0;
+    const fetcher = async () => {
+      if (++entered === 2) release();
+      await ready;
+      return { kind: 'failure' as const, message: 'HTTP 500' };
+    };
+    await Promise.all([h.mod().pollFeed(feed.id, fetcher), h.mod().pollFeed(feed.id, fetcher)]);
+    const result = await h
+      .rawDb()
+      .execute(sql`select consecutive_failures from feeds where id = ${feed.id}`);
+    expect(result.rows[0]?.consecutive_failures).toBe(1);
+  });
+  it('honors longer Retry-After and caps the delay at 24 hours', async () => {
+    const { feed } = await subscribe([]);
+    const now = new Date();
+    for (const [retryAfterSeconds, expected] of [
+      [10800, 10800],
+      [999999, 86400],
+    ] as const) {
+      await due(feed.id);
+      await h
+        .mod()
+        .pollFeed(
+          feed.id,
+          async () => ({ kind: 'failure', message: 'HTTP 429', retryAfterSeconds }),
+          now,
+        );
+      const result = await h
+        .rawDb()
+        .execute(sql`select next_poll_at from feeds where id = ${feed.id}`);
+      expect(new Date(String(result.rows[0]?.next_poll_at)).getTime()).toBe(
+        now.getTime() + (expected ?? 0) * 1000,
+      );
+    }
+  });
+  it('maps a thrown resolver to a defined result', async () => {
+    h.mod().setFeedResolver(async () => {
+      throw new Error('resolver down');
+    });
+    expect(await h.mod().subscribeFeed({ url: 'https://example.com', syncRecents: true })).toEqual({
+      error: 'feeds_unavailable',
+    });
   });
   it('uses publisher IDs, canonical fallback, and skips absent or unsafe links', () => {
     expect(

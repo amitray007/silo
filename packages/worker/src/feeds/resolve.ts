@@ -1,6 +1,11 @@
 import { type FeedPollResult, type FeedRow, type ResolvedFeed, setFeedResolver } from '@silo/core';
 import { parseHTML } from 'linkedom';
-import { type SafeFetchOptions, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
+import {
+  DEFAULT_TIMEOUT_MS,
+  type SafeFetchOptions,
+  type SafeFetchResult,
+  safeFetch,
+} from '../fetch/safe-fetch.js';
 import { cleanTitle, httpUrl, type ParsedFeed, parseFeedBody, pollInterval } from './parse.js';
 
 const FEED_ACCEPT =
@@ -59,12 +64,18 @@ export async function resolveFeed(
 
 function discoveryFetcher(fetcher: FeedFetcher) {
   let remaining = 8;
+  const deadline = Date.now() + 15_000;
   const visited = new Set<string>();
   return async (candidate: string) => {
-    if (!remaining || visited.has(candidate)) return null;
+    const timeoutMs = Math.min(DEFAULT_TIMEOUT_MS, deadline - Date.now());
+    if (!remaining || timeoutMs <= 0 || visited.has(candidate)) return null;
     remaining--;
     visited.add(candidate);
-    return fetcher(candidate, { accept: FEED_ACCEPT, responseHeaderNames: RESPONSE_HEADERS });
+    return fetcher(candidate, {
+      accept: FEED_ACCEPT,
+      responseHeaderNames: RESPONSE_HEADERS,
+      timeoutMs,
+    });
   };
 }
 
@@ -117,7 +128,7 @@ export async function fetchFeedPoll(
   if (response.notModified)
     return {
       kind: 'not-modified',
-      intervalSeconds: pollInterval(headers, undefined, feed.pollIntervalSeconds),
+      intervalSeconds: pollInterval(headers, feed.pollIntervalSeconds / 60),
       ...(headers.etag ? { etag: headers.etag } : {}),
       ...(headers['last-modified'] ? { lastModified: headers['last-modified'] } : {}),
     };
@@ -153,12 +164,32 @@ function pollFailure(
   response: Extract<SafeFetchResult, { ok: false }>,
   interval: number,
 ): FeedPollResult {
+  console.error('[silo/worker] poll-feed: fetch failed:', response);
   return {
     kind: 'failure',
-    message: response.detail ?? response.reason,
+    message: failureMessage(response),
     ...(response.status === 410 ? { gone: true } : {}),
     ...(response.responseHeaders?.['retry-after']
       ? { retryAfterSeconds: pollInterval(response.responseHeaders, undefined, interval) }
       : {}),
   };
+}
+
+function failureMessage(response: Extract<SafeFetchResult, { ok: false }>): string {
+  switch (response.reason) {
+    case 'blocked-ip':
+    case 'blocked-scheme':
+      return 'This feed resolves to a blocked address.';
+    case 'timeout':
+      return 'The feed request timed out.';
+    case 'body-too-large':
+      return 'The feed is too large.';
+    case 'http-error':
+    case 'not-found':
+      return response.status
+        ? `The feed returned HTTP ${response.status}.`
+        : 'The feed was not found.';
+    default:
+      return 'Could not fetch this feed.';
+  }
 }

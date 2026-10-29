@@ -331,6 +331,27 @@ describe('safeFetch — redirects', () => {
     }
   });
 
+  it.each([301, 302])(
+    'reports permanent redirects only for permanent status %s',
+    async (status) => {
+      handler = (req, res) => {
+        if (req.url === '/start') {
+          res.writeHead(status, { location: '/end' });
+          res.end();
+          return;
+        }
+        res.writeHead(200, { 'content-type': 'application/xml' });
+        res.end('<rss/>');
+      };
+      const result = await safeFetch(`http://example.test:${port}/start`, {
+        resolver: loopbackResolver(),
+        allowLoopbackForTests: true,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.permanentRedirect).toBe(status === 301 ? true : undefined);
+    },
+  );
+
   it('blocks a redirect to a private/internal host at the redirect hop (does not follow)', async () => {
     handler = (_req, res) => {
       res.writeHead(302, { location: 'http://internal-service.test/secret' });
