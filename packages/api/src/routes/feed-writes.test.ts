@@ -39,6 +39,53 @@ async function state(id: string) {
 }
 
 describe('feed posts reject library API writes', () => {
+  it('archives and unarchives through the feed scope, validates tabs and updates Inbox counts', async () => {
+    const { app, core } = h.mod();
+    const { id, feedId } = await seedPost();
+    const base = `/api/feeds/${feedId}`;
+    expect((await app.request(`${base}/posts?tab=trash`)).status).toBe(400);
+    expect((await app.request(`${base}/posts/invalid/archive`, { method: 'POST' })).status).toBe(
+      400,
+    );
+    const archived = await app.request(`${base}/posts/${id}/archive`, { method: 'POST' });
+    expect(archived.status).toBe(200);
+    expect(await archived.json()).toMatchObject({ id, archivedAt: expect.any(String) });
+    expect(await (await app.request(`${base}/posts`)).json()).toMatchObject({ links: [] });
+    expect(await (await app.request(`${base}/posts?tab=archive`)).json()).toMatchObject({
+      links: [expect.objectContaining({ id, archivedAt: expect.any(String) })],
+    });
+    expect(await (await app.request(base)).json()).toMatchObject({
+      feed: { inboxCount: 0, postCount: 1 },
+    });
+    expect(
+      await (await app.request(`${base}/posts/${id}/unarchive`, { method: 'POST' })).json(),
+    ).toEqual({ id, archivedAt: null });
+    expect(await (await app.request(`${base}/posts`)).json()).toMatchObject({
+      links: [expect.objectContaining({ id, archivedAt: null })],
+    });
+    const feeds = (await (await app.request('/api/feeds')).json()) as {
+      feeds: { id: string; inboxCount: number }[];
+    };
+    expect(feeds.feeds.find((row) => row.id === feedId)?.inboxCount).toBe(1);
+    const pond = await core.createLink({
+      url: `https://example.com/${randomUUID()}`,
+      sourceKind: 'link',
+    });
+    for (const action of ['archive', 'unarchive']) {
+      expect(
+        (await app.request(`${base}/posts/${pond.id}/${action}`, { method: 'POST' })).status,
+      ).toBe(409);
+      expect(
+        (await app.request(`${base}/posts/${randomUUID()}/${action}`, { method: 'POST' })).status,
+      ).toBe(404);
+      expect(
+        (await app.request(`/api/feeds/${randomUUID()}/posts/${id}/${action}`, { method: 'POST' }))
+          .status,
+      ).toBe(404);
+    }
+    expect((await state(pond.id)).row[0]).toMatchObject({ archived_at: null });
+    await h.mod().pool.query('delete from links where id = $1', [pond.id]);
+  });
   it.each([
     ['POST', 'tags', { tag: 'Forbidden' }, false],
     ['DELETE', 'tags/:tag', undefined, false],

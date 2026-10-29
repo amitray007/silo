@@ -204,3 +204,8 @@ export const subscribeFeedSchema = z.object({
   url: z.url({ protocol: /^https?$/ }).max(8192),
   syncRecents: z.boolean(),
 });
+
+export const feedPostParamSchema = feedIdParamSchema.extend({ postId: z.uuid() });
+export const feedPostsQuerySchema = pageQuerySchema.extend({
+  tab: z.enum(['inbox', 'archive']).default('inbox'),
+});

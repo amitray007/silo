@@ -30,6 +30,67 @@ describe('feeds on real Postgres', () => {
   async function due(id: string) {
     await h.rawDb().execute(sql`update feeds set next_poll_at = '2000-01-01' where id = ${id}`);
   }
+  it('moves posts between paginated tabs, counts only Inbox, and preserves Archive after polling', async () => {
+    const { feed, resolved } = await subscribe(
+      Array.from({ length: 4 }, (_, i) => ({
+        id: `triage-${i}`,
+        url: `https://example.com/triage-${i}`,
+        publishedAt: new Date(2026, 9, 20 + i),
+      })),
+    );
+    const posts = (await h.mod().listFeedPosts(feed.id)).links;
+    const first = posts[0];
+    const second = posts[1];
+    if (!first || !second) throw new Error('missing posts');
+    const archived = await h.mod().setFeedPostArchived(feed.id, first.id, true);
+    expect(archived).toMatchObject({ id: first.id, archivedAt: expect.any(Date) });
+    expect(await h.mod().setFeedPostArchived(feed.id, first.id, true)).toEqual(archived);
+    await h.mod().setFeedPostArchived(feed.id, second.id, true);
+    expect(await h.mod().getFeed(feed.id)).toMatchObject({ postCount: 4, inboxCount: 2 });
+    expect((await h.mod().listFeeds()).find((row) => row.id === feed.id)?.inboxCount).toBe(2);
+    const page = await h.mod().listFeedPosts(feed.id, { tab: 'archive', limit: 1 });
+    expect(page.links.map((row) => row.id)).toEqual([first.id]);
+    expect(page.nextCursor).toBeDefined();
+    if (!page.nextCursor) throw new Error('missing cursor');
+    const next = await h
+      .mod()
+      .listFeedPosts(feed.id, { tab: 'archive', cursor: page.nextCursor, limit: 1 });
+    expect(next.links.map((row) => row.id)).toEqual([second.id]);
+    await due(feed.id);
+    await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: resolved }));
+    expect((await h.mod().listFeedPosts(feed.id)).links.map((row) => row.id)).not.toContain(
+      first.id,
+    );
+    expect(await h.mod().setFeedPostArchived(feed.id, first.id, false)).toEqual({
+      id: first.id,
+      archivedAt: null,
+    });
+    expect((await h.mod().getFeed(feed.id))?.inboxCount).toBe(3);
+  });
+  it('returns typed errors for absent, library, cross-feed and deleted posts without changing them', async () => {
+    const { feed } = await subscribe([{ url: 'https://example.com/triage-invalid' }]);
+    const post = (await h.mod().listFeedPosts(feed.id)).links[0];
+    if (!post) throw new Error('missing post');
+    const pond = await h
+      .mod()
+      .createLink({ url: `https://example.com/${randomUUID()}`, sourceKind: 'link' });
+    for (const archived of [true, false]) {
+      expect(await h.mod().setFeedPostArchived(feed.id, randomUUID(), archived)).toEqual({
+        error: 'not_found',
+      });
+      expect(await h.mod().setFeedPostArchived(feed.id, pond.id, archived)).toEqual({
+        error: 'not_feed_post',
+      });
+      expect(await h.mod().setFeedPostArchived(randomUUID(), post.id, archived)).toEqual({
+        error: 'not_found',
+      });
+    }
+    expect(await h.mod().getById(post.id)).toMatchObject({ archivedAt: null });
+    await h.rawDb().execute(sql`update links set deleted_at = now() where id = ${post.id}`);
+    expect(await h.mod().setFeedPostArchived(feed.id, post.id, true)).toEqual({
+      error: 'not_found',
+    });
+  });
   it('reports unavailable and not found honestly', async () => {
     expect(await h.mod().subscribeFeed({ url: 'https://example.com', syncRecents: true })).toEqual({
       error: 'feeds_unavailable',

@@ -103,6 +103,7 @@ export {
   pollFeed,
   subscribeFeed,
 } from './feeds/feeds.js';
+export { setFeedPostArchived } from './feeds/triage.js';
 export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
 export { setFeedResolver } from './feeds/types.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants

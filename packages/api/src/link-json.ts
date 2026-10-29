@@ -64,6 +64,8 @@ export type LinkJson = {
   addedBy: 'user' | 'agent';
   source: CaptureSource;
   feedId: string | null;
+  archivedAt: string | null;
+  publishedAt: string | null;
   notes: string | null;
   tags: string[];
   createdAt: string;
@@ -135,6 +137,8 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
     addedBy: link.addedBy,
     source: link.source,
     feedId: link.feedId,
+    archivedAt: link.archivedAt?.toISOString() ?? null,
+    publishedAt: link.publishedAt?.toISOString() ?? null,
     notes: link.notes,
     tags: link.tags,
     createdAt: link.createdAt.toISOString(),

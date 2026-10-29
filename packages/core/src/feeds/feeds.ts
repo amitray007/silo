@@ -1,5 +1,5 @@
 import { db, feedEntries, feeds, links } from '@silo/db';
-import { and, asc, desc, eq, inArray, lte, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { canonicalize } from '../links/canonicalize.js';
 import type { Tx } from '../links/executor.js';
 import { createFeedPost } from '../links/links.js';
@@ -29,12 +29,13 @@ const feedColumns = {
   status: feeds.status,
   lastError: feeds.lastError,
   createdAt: feeds.createdAt,
+  inboxCount: sql<number>`(select count(*)::integer from links as posts where posts.feed_id = feeds.id and posts.deleted_at is null and posts.archived_at is null)`,
   postCount: sql<number>`(select count(*)::integer from links as posts where posts.feed_id = feeds.id and posts.deleted_at is null)`,
 };
 export type Feed = Pick<
   FeedRow,
   'id' | 'title' | 'feedUrl' | 'siteUrl' | 'format' | 'status' | 'lastError' | 'createdAt'
-> & { postCount: number };
+> & { postCount: number; inboxCount: number };
 
 export function listFeeds(): Promise<Feed[]> {
   return db.select(feedColumns).from(feeds).orderBy(asc(feeds.createdAt), asc(feeds.id));
@@ -137,7 +138,10 @@ export async function subscribeFeed(input: {
   return { feed, deduped: result.deduped };
 }
 
-export async function listFeedPosts(feedId: string, page: PageParams = {}) {
+export async function listFeedPosts(
+  feedId: string,
+  page: PageParams & { tab?: 'inbox' | 'archive' } = {},
+) {
   const limit = effectiveLimit(page.limit);
   const cursor = page.cursor ? decodeListCursor(page.cursor) : undefined;
   const date = sql`coalesce(${links.publishedAt}, ${links.createdAt})`;
@@ -147,7 +151,13 @@ export async function listFeedPosts(feedId: string, page: PageParams = {}) {
   const rows = await db
     .select({ link: listColumns, sortDate: sql<string>`${date}::text` })
     .from(links)
-    .where(whereFeed(feedId, after))
+    .where(
+      whereFeed(
+        feedId,
+        page.tab === 'archive' ? isNotNull(links.archivedAt) : isNull(links.archivedAt),
+        after,
+      ),
+    )
     .orderBy(desc(date), desc(links.id))
     .limit(limit + 1);
   const visible = rows.slice(0, limit);

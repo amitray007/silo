@@ -1,9 +1,17 @@
-import { deleteFeed, getFeed, listFeedPosts, listFeeds, subscribeFeed } from '@silo/core';
+import {
+  deleteFeed,
+  getFeed,
+  listFeedPosts,
+  listFeeds,
+  setFeedPostArchived,
+  subscribeFeed,
+} from '@silo/core';
 import type { Hono } from 'hono';
 import { toLinkJson } from '../link-json.js';
 import {
   feedIdParamSchema,
-  pageQuerySchema,
+  feedPostParamSchema,
+  feedPostsQuerySchema,
   subscribeFeedSchema,
   toPageParams,
 } from '../query-schemas.js';
@@ -40,18 +48,34 @@ export function registerFeedRoutes(app: Hono): void {
       ? c.body(null, 204)
       : c.json({ error: 'not_found', message: 'Feed not found.' }, 404);
   });
+  for (const action of ['archive', 'unarchive'] as const) {
+    app.post(`/feeds/:id/posts/:postId/${action}`, async (c) => {
+      const { id, postId } = feedPostParamSchema.parse(c.req.param());
+      const result = await setFeedPostArchived(id, postId, action === 'archive');
+      if ('error' in result)
+        return c.json(
+          {
+            error: result.error,
+            message:
+              result.error === 'not_feed_post'
+                ? 'This link is not a feed post.'
+                : 'Feed post not found.',
+          },
+          result.error === 'not_feed_post' ? 409 : 404,
+        );
+      return c.json(result);
+    });
+  }
   app.get('/feeds/:id/posts', async (c) => {
     const { id } = feedIdParamSchema.parse(c.req.param());
-    const page = toPageParams(pageQuerySchema.parse(c.req.query()));
+    const query = feedPostsQuerySchema.parse(c.req.query());
+    const page = { ...toPageParams(query), tab: query.tab };
     if (!(await getFeed(id)))
       return c.json({ error: 'not_found', message: 'Feed not found.' }, 404);
     const result = await listFeedPosts(id, page);
     return c.json({
       ...result,
-      links: result.links.map((link) => ({
-        ...toLinkJson(link),
-        publishedAt: link.publishedAt?.toISOString() ?? null,
-      })),
+      links: result.links.map(toLinkJson),
     });
   });
 }
