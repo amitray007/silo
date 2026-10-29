@@ -115,7 +115,7 @@ describeIfPg('links schema (integration)', () => {
     const cause = (error as Error).cause;
     expect((cause as { code?: string } | undefined)?.code).toBe('23505');
     expect((cause as { message?: string } | undefined)?.message).toMatch(
-      /links_canonical_url_live_unique_idx/,
+      /links_canonical_url_library_unique_idx/,
     );
   });
 

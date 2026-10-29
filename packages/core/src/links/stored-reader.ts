@@ -2,7 +2,6 @@ import { db, links } from '@silo/db';
 import { and, eq, ne, or, sql } from 'drizzle-orm';
 import { READER_VERSION, type ReaderContent, readerContentSchema } from '../capture.js';
 import { FIELD_MAX } from './enrichment.js';
-import { whereLive } from './live.js';
 
 export type ReaderExtraction =
   | { status: 'reader'; reader: ReaderContent; text?: string; renderPending?: boolean }
@@ -27,7 +26,7 @@ export async function getStoredReader(id: string): Promise<StoredReader | undefi
   const [row] = await db
     .select(readerColumns)
     .from(links)
-    .where(whereLive(eq(links.id, id), ne(links.sourceKind, 'twitter')));
+    .where(and(sql`${links.deletedAt} is null`, eq(links.id, id), ne(links.sourceKind, 'twitter')));
   if (row?.readerVersion !== READER_VERSION || !row.contentHtml) return undefined;
   return {
     contentHtml: row.contentHtml,
@@ -53,7 +52,8 @@ export async function recordReader(
     .update(links)
     .set(readerUpdate(result, reader, fetchedAt))
     .where(
-      whereLive(
+      and(
+        sql`${links.deletedAt} is null`,
         and(
           eq(links.id, id),
           ne(links.sourceKind, 'twitter'),
@@ -164,7 +164,7 @@ async function recordRefresh(
   const [existing] = await db
     .select({ id: links.id })
     .from(links)
-    .where(whereLive(eq(links.id, id)));
+    .where(and(sql`${links.deletedAt} is null`, eq(links.id, id)));
   return { status: existing ? 'no_reader' : 'not_found' };
 }
 
@@ -190,7 +190,7 @@ export function refreshReader(id: string): Promise<RefreshResult> {
     const [link] = await db
       .select({ id: links.id, url: links.url, sourceKind: links.sourceKind })
       .from(links)
-      .where(whereLive(eq(links.id, id)));
+      .where(and(sql`${links.deletedAt} is null`, eq(links.id, id)));
     return link;
   });
 }
@@ -205,7 +205,8 @@ export async function runReaderBackfill(
     .select({ id: links.id, url: links.url, sourceKind: links.sourceKind })
     .from(links)
     .where(
-      whereLive(
+      and(
+        sql`${links.deletedAt} is null`,
         and(
           or(
             sql`${links.readerVersion} is null`,
@@ -232,7 +233,8 @@ export async function runReaderBackfill(
           .update(links)
           .set({ readerCapturedAt: fetchedAt, updatedAt: sql`${links.updatedAt}` })
           .where(
-            whereLive(
+            and(
+              sql`${links.deletedAt} is null`,
               and(
                 eq(links.id, link.id),
                 or(

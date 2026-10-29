@@ -5,7 +5,7 @@ import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Executor, Link } from './executor.js';
-import { whereLive } from './live.js';
+import { whereFeed, whereLibrary } from './live.js';
 import {
   decodeListCursor,
   effectiveLimit,
@@ -295,7 +295,7 @@ async function findExistingForDedup(exec: Executor, url: string): Promise<Link |
   const [row] = await exec
     .select()
     .from(links)
-    .where(eq(links.canonicalUrl, canonical))
+    .where(and(eq(links.canonicalUrl, canonical), sql`${links.feedId} is null`))
     .orderBy(sql`${links.deletedAt} is null desc`)
     .limit(1);
   return row ?? null;
@@ -487,7 +487,7 @@ export async function findByCanonicalUrl(url: string): Promise<Link | null> {
   const [row] = await db
     .select()
     .from(links)
-    .where(whereLive(eq(links.canonicalUrl, canonical)))
+    .where(whereLibrary(eq(links.canonicalUrl, canonical)))
     .limit(1);
   return row ?? null;
 }
@@ -497,7 +497,7 @@ async function getRawById(id: string): Promise<Link | null> {
   const [row] = await db
     .select()
     .from(links)
-    .where(whereLive(eq(links.id, id)))
+    .where(and(eq(links.id, id), sql`${links.deletedAt} is null`))
     .limit(1);
   return row ?? null;
 }
@@ -579,7 +579,7 @@ export async function getById(
   const [row] = await db
     .select(listColumns)
     .from(links)
-    .where(whereLive(eq(links.id, id)))
+    .where(and(eq(links.id, id), sql`${links.deletedAt} is null`))
     .limit(1);
   if (!row) return null;
   const [hydrated] = await hydrateTags(db, [row]);
@@ -687,7 +687,7 @@ const createdAtText = sql<string>`${links.createdAt}::text`;
 /**
  * Keyset predicate for `list`'s `(created_at, id)` DESC ordering: rows
  * strictly "after" the cursor row, i.e. `created_at < c.createdAt OR
- * (created_at = c.createdAt AND id < c.id)`. Composable with `whereLive` and
+ * (created_at = c.createdAt AND id < c.id)`. Composable with `whereLibrary` and
  * the tag/status filter branches via `and(...)`.
  *
  * `createdAtText` (a full-microsecond-precision string) is cast back to
@@ -747,7 +747,7 @@ function requiredTagKeys(filter: { tag?: string; tags?: string[] }): string[] {
  * (multi-tag AND, agent-navigation slice U1). Each `EXISTS` is independently
  * correlated on `links.id` (rather than a single join + `HAVING count(...)
  * = N`), which composes directly with `list`/`search`'s existing
- * `whereLive(...conditions)` flat-conditions-array style with no `GROUP BY`
+ * `whereLibrary(...conditions)` flat-conditions-array style with no `GROUP BY`
  * restructuring of a query that already selects whole-row columns.
  */
 function requiredTagConditions(tagKeys: ReadonlyArray<string>): ReturnType<typeof sql>[] {
@@ -795,7 +795,7 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
   const rows = await db
     .select({ link: listColumns, createdAtText })
     .from(links)
-    .where(whereLive(...conditions))
+    .where(whereLibrary(...conditions))
     .orderBy(desc(links.createdAt), desc(links.id))
     .limit(limit + 1);
 
@@ -1062,7 +1062,7 @@ export async function search(
   // description -> title) and the fixed headline options. `runUnionSearch`
   // now returns rows ALREADY shaped as `SearchResultRow` (extractedText
   // stripped, snippet + rank attached), so this returns its result directly.
-  return runUnionSearch(whereLive(), tagSearchVector, query, tagScopeCondition, page, {
+  return runUnionSearch(whereLibrary(), tagSearchVector, query, tagScopeCondition, page, {
     extraConditions,
     sort,
     snippetFor: (tsQuery) => buildSnippetHeadline(tsQuery),
@@ -1132,18 +1132,18 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
     db
       .select({ total: sql<string>`count(*)` })
       .from(links)
-      .where(whereLive(...sharedConditions)),
+      .where(whereLibrary(...sharedConditions)),
     db
       .select({ source: links.sourceKind, count: sql<string>`count(*)` })
       .from(links)
-      .where(whereLive(...sharedConditions))
+      .where(whereLibrary(...sharedConditions))
       .groupBy(links.sourceKind),
     db
       .select({ tag: tags.name, count: sql<string>`count(distinct ${links.id})` })
       .from(links)
       .innerJoin(linkTags, eq(linkTags.linkId, links.id))
       .innerJoin(tags, eq(tags.id, linkTags.tagId))
-      .where(whereLive(...sharedConditions))
+      .where(whereLibrary(...sharedConditions))
       .groupBy(tags.id, tags.name)
       .orderBy(desc(sql`count(distinct ${links.id})`), asc(tags.name))
       .limit(TOP_TAGS_LIMIT),
@@ -1190,7 +1190,7 @@ export async function editLink(id: string, input: EditLinkInput): Promise<Link |
   const [updated] = await db
     .update(links)
     .set(patch)
-    .where(whereLive(eq(links.id, id)))
+    .where(whereLibrary(eq(links.id, id)))
     .returning();
   return updated ?? null;
 }
@@ -1243,6 +1243,8 @@ async function addTagWith(exec: Executor, linkId: string, tagName: string): Prom
  * `removeTag`, which likewise never deletes the tag row).
  */
 export async function addTag(linkId: string, tagName: string): Promise<void> {
+  const link = await getRawById(linkId);
+  if (link?.feedId) throw new Error('Save a feed post to Home before adding tags.');
   await addTagWith(db, linkId, tagName);
 }
 
@@ -1261,11 +1263,11 @@ export async function removeTag(linkId: string, tagName: string): Promise<void> 
 }
 
 /** Soft-delete: move a live link to trash by setting `deleted_at`. */
-export async function softDelete(id: string): Promise<Link | null> {
+export async function softDelete(id: string, feedId?: string | null): Promise<Link | null> {
   const [updated] = await db
     .update(links)
     .set({ deletedAt: new Date() })
-    .where(whereLive(eq(links.id, id)))
+    .where(feedId ? whereFeed(feedId, eq(links.id, id)) : whereLibrary(eq(links.id, id)))
     .returning();
   return updated ?? null;
 }
@@ -1295,7 +1297,9 @@ export async function restore(id: string): Promise<RestoreResult> {
     const [trashedRow] = await db
       .select()
       .from(links)
-      .where(and(eq(links.id, id), sql`${links.deletedAt} is not null`))
+      .where(
+        and(eq(links.id, id), sql`${links.deletedAt} is not null`, sql`${links.feedId} is null`),
+      )
       .limit(1);
     if (!trashedRow) return { status: 'not_found' };
 
@@ -1303,7 +1307,9 @@ export async function restore(id: string): Promise<RestoreResult> {
       const [restored] = await db
         .update(links)
         .set({ deletedAt: null })
-        .where(and(eq(links.id, id), sql`${links.deletedAt} is not null`))
+        .where(
+          and(eq(links.id, id), sql`${links.deletedAt} is not null`, sql`${links.feedId} is null`),
+        )
         .returning();
       if (!restored) {
         // Someone else restored/changed it between our read and update; retry.
@@ -1317,7 +1323,7 @@ export async function restore(id: string): Promise<RestoreResult> {
         const [liveCollision] = await tx
           .select()
           .from(links)
-          .where(whereLive(eq(links.canonicalUrl, trashedRow.canonicalUrl)))
+          .where(whereLibrary(eq(links.canonicalUrl, trashedRow.canonicalUrl)))
           .limit(1);
         // Collider was trashed by a concurrent op before we looked it up — the
         // slot is now free; fall out to retry the plain restore.
@@ -1378,4 +1384,47 @@ export async function restore(id: string): Promise<RestoreResult> {
   // Exhausted retries under sustained contention; report not_found rather than
   // throwing a raw driver error (extremely unlikely for a single-user store).
   return { status: 'not_found' };
+}
+
+/** Capture into one feed, using the same canonicalizer and enrichment transaction as Home. */
+export async function createFeedPost(
+  input: { feedId: string; url: string; title?: string; publishedAt?: Date | null },
+  executor?: import('./executor.js').Tx,
+): Promise<Link | null> {
+  const write = async (tx: import('./executor.js').Tx) => {
+    const { canonical, ok } = canonicalize(input.url);
+    if (!ok) return null;
+    const [inserted] = await tx
+      .insert(links)
+      .values({
+        feedId: input.feedId,
+        url: input.url,
+        canonicalUrl: canonical,
+        title: input.title,
+        titleSource: 'page',
+        publishedAt: input.publishedAt,
+        sourceKind: detectSource(input.url).kind,
+        sourceData: { kind: 'link' },
+        source: 'feed',
+        addedBy: 'user',
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (inserted) {
+      await enqueueEnrichment(tx, inserted.id, { trigger: 'capture', previousStatus: 'enriching' });
+      return inserted;
+    }
+    const [existing] = await tx
+      .select()
+      .from(links)
+      .where(
+        and(
+          eq(links.feedId, input.feedId),
+          eq(links.canonicalUrl, canonical),
+          sql`${links.deletedAt} is null`,
+        ),
+      );
+    return existing ?? null;
+  };
+  return executor ? write(executor) : db.transaction(write);
 }

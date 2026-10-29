@@ -2,7 +2,7 @@ import { db, links } from '@silo/db';
 import { desc } from 'drizzle-orm';
 import { stringify as stringifyYaml } from 'yaml';
 import type { Link } from './executor.js';
-import { whereLive } from './live.js';
+import { whereLibrary } from './live.js';
 import { hydrateTags, type LinkSummaryWithTags, listColumns } from './pagination.js';
 
 /** The three export output formats (design spec: full-library snapshot). */
@@ -211,7 +211,7 @@ export async function exportLinks(opts?: { format?: ExportFormat }): Promise<Exp
   const rows = await db
     .select(listColumns)
     .from(links)
-    .where(whereLive())
+    .where(whereLibrary())
     .orderBy(desc(links.createdAt), desc(links.id));
   const hydrated = await hydrateTags(db, rows);
   const exportedLinks = hydrated.map(toExportedLink);

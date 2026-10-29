@@ -1,10 +1,10 @@
 import { db, links } from '@silo/db';
-import { eq, ne, sql } from 'drizzle-orm';
+import { and, eq, ne, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { READER_VERSION } from '../capture.js';
 import { type EnrichTrigger, enqueueEnrichment } from './enqueue.js';
 import type { Link } from './links.js';
-import { whereLive } from './live.js';
+
 import { sourceDataSchema } from './source-data.js';
 
 /**
@@ -235,7 +235,7 @@ export async function recordEnrichment(
       // can't be bypassed or double-counted by a caller.
       enrichAttempts: sql`${links.enrichAttempts} + 1`,
     })
-    .where(whereLive(eq(links.id, linkId)))
+    .where(and(sql`${links.deletedAt} is null`, eq(links.id, linkId)))
     .returning();
 
   return updated ?? null;
@@ -304,7 +304,7 @@ async function resetToEnriching(
     const [current] = await tx
       .select({ captureStatus: links.captureStatus, floor: links.enrichFloorStatus })
       .from(links)
-      .where(whereLive(eq(links.id, linkId)))
+      .where(and(sql`${links.deletedAt} is null`, eq(links.id, linkId)))
       .for('update');
     if (!current || (allowed && !allowed.includes(current.captureStatus))) return null;
     const [updated] = await tx
@@ -372,7 +372,7 @@ export async function settleGiveUp(linkId: string): Promise<Link | null> {
   const [row] = await db
     .select({ url: links.url })
     .from(links)
-    .where(whereLive(eq(links.id, linkId)))
+    .where(and(sql`${links.deletedAt} is null`, eq(links.id, linkId)))
     .limit(1);
   if (!row) return null;
 
@@ -388,7 +388,13 @@ export async function settleGiveUp(linkId: string): Promise<Link | null> {
     })
     // `enriching` is excluded: an Enrich click that landed after the attempt was
     // recorded has started a new run, and settling would overwrite it to `bare`.
-    .where(whereLive(eq(links.id, linkId), ne(links.captureStatus, 'enriching')))
+    .where(
+      and(
+        sql`${links.deletedAt} is null`,
+        eq(links.id, linkId),
+        ne(links.captureStatus, 'enriching'),
+      ),
+    )
     .returning();
 
   return updated ?? null;

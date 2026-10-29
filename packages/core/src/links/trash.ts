@@ -2,6 +2,7 @@ import { db, links } from '@silo/db';
 import { and, desc, sql } from 'drizzle-orm';
 import type { SearchPage } from './links.js';
 import { buildSnippetHeadline, tagSearchVector } from './links.js';
+import { whereLibrary } from './live.js';
 import {
   decodeTrashCursor,
   effectiveLimit,
@@ -76,7 +77,7 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
   const cursor = page.cursor !== undefined ? decodeTrashCursor(page.cursor) : undefined;
   const cursorCondition = cursor ? afterTrashCursor(cursor.deletedAt, cursor.id) : undefined;
 
-  const trashedCondition = sql`${links.deletedAt} is not null`;
+  const trashedCondition = sql`${links.deletedAt} is not null and ${links.feedId} is null`;
   const where = cursorCondition ? and(trashedCondition, cursorCondition) : trashedCondition;
 
   const rows = await db
@@ -125,7 +126,7 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
  * not tied to which predicate produced it).
  */
 export async function searchTrash(query: string, page: PageParams = {}): Promise<SearchPage> {
-  const trashedCondition = sql`${links.deletedAt} is not null`;
+  const trashedCondition = sql`${links.deletedAt} is not null and ${links.feedId} is null`;
   // `snippet` (agent-navigation slice U2): same query-focused `ts_headline`
   // excerpt live `search` returns — see `buildSnippetHeadline`'s doc comment.
   // No `filter`/`sort` params here (main's agent-navigation slice only added
@@ -138,10 +139,7 @@ export async function searchTrash(query: string, page: PageParams = {}): Promise
 
 /** Count of LIVE links (`deleted_at IS NULL`) — the sidebar's total count. */
 export async function countLive(): Promise<number> {
-  const [row] = await db
-    .select({ count: sql<string>`count(*)` })
-    .from(links)
-    .where(sql`${links.deletedAt} is null`);
+  const [row] = await db.select({ count: sql<string>`count(*)` }).from(links).where(whereLibrary());
   return Number(row?.count ?? 0);
 }
 
@@ -150,7 +148,7 @@ export async function countTrash(): Promise<number> {
   const [row] = await db
     .select({ count: sql<string>`count(*)` })
     .from(links)
-    .where(sql`${links.deletedAt} is not null`);
+    .where(sql`${links.deletedAt} is not null and ${links.feedId} is null`);
   return Number(row?.count ?? 0);
 }
 
@@ -173,7 +171,8 @@ export async function getCounts(): Promise<Counts> {
       live: sql<string>`count(*) filter (where ${links.deletedAt} is null)`,
       trash: sql<string>`count(*) filter (where ${links.deletedAt} is not null)`,
     })
-    .from(links);
+    .from(links)
+    .where(sql`${links.feedId} is null`);
   return { live: Number(row?.live ?? 0), trash: Number(row?.trash ?? 0) };
 }
 
@@ -203,6 +202,7 @@ export async function hardDelete(id: string): Promise<boolean> {
     delete from ${links}
     where ${links.id} = ${id}
       and ${links.deletedAt} is not null
+      and ${links.feedId} is null
     returning id
   `);
   return deleted.rows.length > 0;
@@ -225,6 +225,7 @@ export async function emptyTrash(): Promise<number> {
   const deleted = await db.execute<{ id: string }>(sql`
     delete from ${links}
     where ${links.deletedAt} is not null
+      and ${links.feedId} is null
     returning id
   `);
   return deleted.rows.length;

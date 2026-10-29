@@ -388,6 +388,7 @@ describeIfPg('migrate (integration)', () => {
           'raycast',
           'chrome',
           'ingest',
+          'feed',
           'unknown',
         ]);
 

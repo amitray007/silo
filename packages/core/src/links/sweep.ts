@@ -1,7 +1,6 @@
 import { db, links } from '@silo/db';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { ENRICH_ATTEMPT_CAP } from './enrichment.js';
-import { whereLive } from './live.js';
 
 /**
  * Options for `findStrandedEnriching`.
@@ -120,7 +119,8 @@ export async function restoreHeldFull(linkId: string): Promise<boolean> {
     .update(links)
     .set({ captureStatus: 'full', enrichFloorStatus: null })
     .where(
-      whereLive(
+      and(
+        sql`${links.deletedAt} is null`,
         eq(links.id, linkId),
         eq(links.captureStatus, 'enriching'),
         eq(links.enrichFloorStatus, 'full'),

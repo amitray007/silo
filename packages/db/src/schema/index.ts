@@ -4,9 +4,12 @@ export {
   aiProviderKind,
   captureSource,
   captureStatus,
+  feedFormat,
+  feedStatus,
   linkOrigin,
   titleSource,
 } from './enums.js';
+export { feedEntries, feeds } from './feeds.js';
 export { linkTags } from './link-tags.js';
 export { links } from './links.js';
 export { oauthClients } from './oauth-clients.js';

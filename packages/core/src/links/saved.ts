@@ -1,7 +1,7 @@
 import { db, links } from '@silo/db';
 import { inArray } from 'drizzle-orm';
 import { canonicalize } from './canonicalize.js';
-import { whereLive } from './live.js';
+import { whereLibrary } from './live.js';
 
 /** Match at most 50 input URLs to live canonical URLs in one query. */
 export async function findSavedUrls(urls: readonly string[]): Promise<string[]> {
@@ -15,7 +15,7 @@ export async function findSavedUrls(urls: readonly string[]): Promise<string[]> 
     .select({ canonicalUrl: links.canonicalUrl })
     .from(links)
     .where(
-      whereLive(inArray(links.canonicalUrl, [...new Set(candidates.map((c) => c.canonical))])),
+      whereLibrary(inArray(links.canonicalUrl, [...new Set(candidates.map((c) => c.canonical))])),
     );
   const saved = new Set(rows.map((row) => row.canonicalUrl));
   return candidates.filter((candidate) => saved.has(candidate.canonical)).map(({ url }) => url);

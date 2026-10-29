@@ -92,6 +92,19 @@ export {
   verifyAccessToken,
 } from './auth/tokens.js';
 export { READER_HTML_MAX_BYTES, READER_VERSION, type ReaderContent } from './capture.js';
+export type { Feed, FeedRow } from './feeds/feeds.js';
+export {
+  deleteFeed,
+  entryIdentity,
+  getFeed,
+  listDueFeeds,
+  listFeedPosts,
+  listFeeds,
+  pollFeed,
+  subscribeFeed,
+} from './feeds/feeds.js';
+export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
+export { setFeedResolver } from './feeds/types.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
 // of the single-id write ops above, modeled on `import.ts`'s sequential-
 // bulk-with-per-item-results pattern (see bulk.ts's module doc comment).
@@ -197,6 +210,7 @@ export type {
 export {
   addTag,
   countLinks,
+  createFeedPost,
   createLink,
   editLink,
   findByCanonicalUrl,
