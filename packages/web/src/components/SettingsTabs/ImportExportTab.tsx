@@ -285,9 +285,7 @@ export function ImportExportTab() {
       <div style={settingsRow}>
         <div style={{ flex: 1 }}>
           <div style={rowLabel}>Export</div>
-          <div style={rowDesc}>
-            Your whole library — JSON or YAML (full backup) or CSV (flat list)
-          </div>
+          <div style={rowDesc}>Your whole library</div>
         </div>
         <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <ExportFormatDropdown value={format} onChange={setFormat} />
