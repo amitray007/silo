@@ -103,6 +103,7 @@ export {
   pollFeed,
   subscribeFeed,
 } from './feeds/feeds.js';
+export { saveFeedPost } from './feeds/save.js';
 export { setFeedPostArchived } from './feeds/triage.js';
 export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
 export { setFeedResolver } from './feeds/types.js';

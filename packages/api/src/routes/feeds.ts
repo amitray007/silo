@@ -3,6 +3,7 @@ import {
   getFeed,
   listFeedPosts,
   listFeeds,
+  saveFeedPost,
   setFeedPostArchived,
   subscribeFeed,
 } from '@silo/core';
@@ -66,6 +67,22 @@ export function registerFeedRoutes(app: Hono): void {
       return c.json(result);
     });
   }
+  app.post('/feeds/:id/posts/:postId/save', async (c) => {
+    const { id, postId } = feedPostParamSchema.parse(c.req.param());
+    const result = await saveFeedPost(id, postId);
+    if ('error' in result)
+      return c.json(
+        {
+          error: result.error,
+          message:
+            result.error === 'not_feed_post'
+              ? 'This link is not a feed post.'
+              : 'Feed post not found.',
+        },
+        result.error === 'not_feed_post' ? 409 : 404,
+      );
+    return c.json(result, result.outcome === 'created' ? 201 : 200);
+  });
   app.get('/feeds/:id/posts', async (c) => {
     const { id } = feedIdParamSchema.parse(c.req.param());
     const query = feedPostsQuerySchema.parse(c.req.query());
