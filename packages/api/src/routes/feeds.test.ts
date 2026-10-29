@@ -6,7 +6,10 @@ const h = setupPgHarness('silo_api_feeds', async () => ({
   core: await import('@silo/core'),
   app: (await import('../app.js')).createApp(),
 }));
-afterEach(() => h.mod().core.setFeedResolver(undefined));
+afterEach(() => {
+  h.mod().core.setFeedResolver(undefined);
+  h.mod().core.setFeedPollEnqueuer(undefined);
+});
 const request = (url: string, syncRecents = true) => ({
   method: 'POST',
   headers: { 'content-type': 'application/json' },
@@ -106,4 +109,34 @@ describe('feed API against Postgres', () => {
       feed: { postCount: 0 },
     });
   });
+});
+
+it('refresh returns 400, 404, 503, and 202 through the core enqueuer', async () => {
+  const { app, core } = h.mod();
+  core.setFeedResolver(async () => ({
+    feedUrl: 'https://example.com/refresh.rss',
+    siteUrl: 'https://example.com',
+    title: 'Refresh',
+    format: 'rss',
+    intervalSeconds: 3600,
+    entries: [],
+  }));
+  const result = await core.subscribeFeed({ url: 'https://example.com', syncRecents: false });
+  if ('error' in result) throw new Error(result.error);
+  const path = `/api/feeds/${result.feed.id}/refresh`;
+  expect((await app.request('/api/feeds/invalid/refresh', { method: 'POST' })).status).toBe(400);
+  expect((await app.request(`/api/feeds/${randomUUID()}/refresh`, { method: 'POST' })).status).toBe(
+    404,
+  );
+  const unavailable = await app.request(path, { method: 'POST' });
+  expect(unavailable.status).toBe(503);
+  expect(await unavailable.json()).toMatchObject({ error: 'feeds_unavailable' });
+  const queued: string[] = [];
+  core.setFeedPollEnqueuer(async (_tx, id) => {
+    queued.push(id);
+  });
+  const accepted = await app.request(path, { method: 'POST' });
+  expect(accepted.status).toBe(202);
+  expect(await accepted.json()).toEqual({ id: result.feed.id });
+  expect(queued).toEqual([result.feed.id]);
 });

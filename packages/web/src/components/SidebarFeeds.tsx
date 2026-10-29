@@ -21,7 +21,20 @@ function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void
       variant="tag"
       active={active}
       icon={<Chip domain={deriveDomain(feed.siteUrl ?? feed.feedUrl)} size={16} />}
-      meta={formatCount(feed.inboxCount)}
+      meta={
+        feed.status === 'active' ? (
+          formatCount(feed.inboxCount)
+        ) : (
+          <span
+            className="silo-feed-warning"
+            role="img"
+            aria-label={feed.lastError ?? 'Feed unavailable'}
+            title={feed.lastError ?? 'Feed unavailable'}
+          >
+            <ReaderIcon name="warning" size={14} />
+          </span>
+        )
+      }
       onClick={(event) => {
         if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
           return;

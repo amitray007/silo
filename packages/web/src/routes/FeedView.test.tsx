@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
 import { App } from '../App';
-import type { LinkJson } from '../api/types';
+import type { FeedJson, LinkJson } from '../api/types';
 import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
 
@@ -30,7 +30,33 @@ function writePost(posts: LinkJson[], path: string) {
   post.archivedAt = path.endsWith('/unarchive') ? null : new Date().toISOString();
   return json({ id: post.id, archivedAt: post.archivedAt });
 }
-function mount() {
+type MenuOptions = {
+  status?: FeedJson['status'];
+  lastError?: string;
+  refreshError?: boolean;
+  unsubscribeError?: boolean;
+};
+function menuAction(
+  path: string,
+  method: string | undefined,
+  options: MenuOptions,
+  onUnsubscribe: () => void,
+) {
+  if (method === 'POST' && path === '/api/feeds/feed/refresh') {
+    return options.refreshError
+      ? json({ error: 'feeds_unavailable', message: 'Feed refresh is unavailable.' }, 503)
+      : json({ id: 'feed' }, 202);
+  }
+  if (method === 'DELETE' && path === '/api/feeds/feed') {
+    if (options.unsubscribeError)
+      return json({ error: 'internal_error', message: 'Could not unsubscribe.' }, 500);
+    onUnsubscribe();
+    return new Response(null, { status: 204 });
+  }
+  return undefined;
+}
+function mount(options: MenuOptions = {}) {
+  let subscribed = true;
   const today = new Date();
   const recent = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 12);
   const posts: LinkJson[] = [
@@ -48,11 +74,20 @@ function mount() {
     const url = new URL(String(input), 'http://silo.test');
     const path = url.pathname;
     const method = init?.method;
+    const action = menuAction(path, method, options, () => {
+      subscribed = false;
+    });
+    if (action) return action;
 
     if (method === 'POST' && path.startsWith('/api/feeds/feed/posts/')) {
       return writePost(posts, path);
     }
-    const currentFeed = { ...feed, inboxCount: posts.filter((post) => !post.archivedAt).length };
+    const currentFeed = {
+      ...feed,
+      status: options.status ?? 'active',
+      lastError: options.lastError ?? null,
+      inboxCount: posts.filter((post) => !post.archivedAt).length,
+    };
     const reads: Record<string, () => Response> = {
       '/api/auth/check': () => json({ authRequired: false }),
       '/api/settings': () => json({ theme: 'light', plugins: {} }),
@@ -65,7 +100,7 @@ function mount() {
         }),
       '/api/links/saved': () => json({ link: makeLink({ id: 'saved', title: 'Home copy' }) }),
       '/api/tags': () => json({ tags: [] }),
-      '/api/feeds': () => json({ feeds: [currentFeed] }),
+      '/api/feeds': () => json({ feeds: subscribed ? [currentFeed] : [] }),
       '/api/feeds/feed': () => json({ feed: currentFeed }),
       '/api/feeds/feed/posts': () =>
         json({
@@ -214,4 +249,95 @@ it('saves from the Reader and reports save failures without filling the bookmark
   vi.stubGlobal('fetch', fetchMock);
   fireEvent.click(reader().getByRole('button', { name: 'Save to Home' }));
   expect(await reader().findByRole('link', { name: 'Open saved' })).toBeDefined();
+});
+
+it.each(['failing', 'gone'] as const)(
+  'shows %s errors in the header, menu and accessible sidebar warning',
+  async (status) => {
+    mount({ status, lastError: 'The feed returned HTTP 410.' });
+    await screen.findByText('Today post');
+    const warning = screen.getByRole('img', { name: 'The feed returned HTTP 410.' });
+    expect(warning.getAttribute('title')).toBe('The feed returned HTTP 410.');
+    expect(screen.getByRole('link', { name: /Publisher/ }).textContent).not.toContain('2');
+    expect(screen.getByRole('status').textContent).toContain(
+      status === 'gone' ? 'stopped updating' : "Couldn't update",
+    );
+    const trigger = screen.getByRole('button', { name: 'Feed actions' });
+    trigger.focus();
+    fireEvent.click(trigger);
+    const menu = await screen.findByRole('menu', { name: 'Feed actions' });
+    expect(within(menu).getByText('The feed returned HTTP 410.')).toBeDefined();
+    await waitFor(() => expect(document.activeElement?.textContent).toContain('Refresh now'));
+    fireEvent.keyDown(menu, { key: 'End' });
+    expect(document.activeElement?.textContent).toContain('Unsubscribe');
+    fireEvent.keyDown(menu, { key: 'Escape' });
+    await waitFor(() => expect(screen.queryByRole('menu', { name: 'Feed actions' })).toBeNull());
+    await waitFor(() =>
+      expect(document.activeElement?.getAttribute('aria-label')).toBe('Feed actions'),
+    );
+  },
+);
+it('copies the feed URL with success and failure feedback, then requests a refresh', async () => {
+  const copy = vi.fn().mockResolvedValue(undefined);
+  Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { writeText: copy } });
+  const { fetchMock } = mount();
+  await screen.findByText('Today post');
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Copy feed URL' }));
+  await screen.findByRole('menuitem', { name: 'Copied' });
+  expect(copy).toHaveBeenCalledWith('https://example.com/rss');
+  copy.mockRejectedValueOnce(new Error('permission denied'));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Copied' }));
+  await screen.findByRole('menuitem', { name: "Couldn't copy" });
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Refresh now' }));
+  await screen.findByText('Refresh requested.');
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/feeds/feed/refresh',
+    expect.objectContaining({ method: 'POST' }),
+  );
+});
+it('shows refresh errors without reporting success', async () => {
+  mount({ refreshError: true });
+  await screen.findByText('Today post');
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Refresh now' }));
+  expect((await screen.findByRole('alert')).textContent).toContain('Feed refresh is unavailable.');
+  expect(screen.queryByText('Refresh requested.')).toBeNull();
+});
+it('confirms unsubscribe, removes the sidebar feed, goes Home and keeps a saved copy', async () => {
+  const { posts, fetchMock } = mount();
+  const first = posts[0];
+  if (first) first.savedLinkId = 'saved';
+  await screen.findByText('Today post');
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Unsubscribe' }));
+  const dialog = await screen.findByRole('alertdialog', { name: 'Unsubscribe from feed?' });
+  expect(dialog.textContent).toContain('Links saved to Home stay');
+  expect(fetchMock.mock.calls.some(([, init]) => init?.method === 'DELETE')).toBe(false);
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }));
+  await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull());
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Unsubscribe' }));
+  fireEvent.click(
+    within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Unsubscribe' }),
+  );
+  await waitFor(() => expect(screen.queryByRole('link', { name: /Publisher/ })).toBeNull());
+  await screen.findByRole('button', { name: 'Library' });
+  await screen.findByText('Today post');
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/feeds/feed',
+    expect.objectContaining({ method: 'DELETE' }),
+  );
+});
+it('keeps the confirmation and feed when unsubscribe fails', async () => {
+  mount({ unsubscribeError: true });
+  await screen.findByText('Today post');
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Unsubscribe' }));
+  const dialog = await screen.findByRole('alertdialog');
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Unsubscribe' }));
+  expect((await within(dialog).findByRole('alert')).textContent).toContain(
+    'Could not unsubscribe.',
+  );
+  expect(screen.getByRole('link', { name: /Publisher/ })).toBeDefined();
 });

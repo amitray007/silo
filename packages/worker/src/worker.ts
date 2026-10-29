@@ -12,6 +12,7 @@
  * destructures `([job]) => ...` to make the v12 contract explicit.
  */
 
+import type { FeedPollEnqueuer } from '@silo/core';
 import {
   createBoss,
   ENRICH_LINK_QUEUE,
@@ -19,6 +20,8 @@ import {
   logDlqDepth,
   registerEnqueuer,
 } from '@silo/queue';
+import { sql } from 'drizzle-orm';
+import { fromDrizzle } from 'pg-boss';
 import { prepareAiAtStartup } from './ai/startup.js';
 import { closeBrowserReader } from './browser/reader.js';
 import { runEnrichJob } from './enrich-job.js';
@@ -30,6 +33,7 @@ const LOCAL_CONCURRENCY = 5;
 
 /** A running worker instance, returned by `startWorker()`. */
 export interface WorkerHandle {
+  enqueueFeedPoll: FeedPollEnqueuer;
   /** Stops the worker gracefully, waiting for any in-flight job (bounded by pg-boss's own timeout). */
   stop: () => Promise<void>;
 }
@@ -96,6 +100,9 @@ export async function startWorker(): Promise<WorkerHandle> {
   );
 
   return {
+    enqueueFeedPoll: async (tx, feedId) => {
+      await boss.send('poll-feed', { feedId }, { singletonKey: feedId, db: fromDrizzle(tx, sql) });
+    },
     stop: async () => {
       await boss.stop({ graceful: true });
       await closeBrowserReader();

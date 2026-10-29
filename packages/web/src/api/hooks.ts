@@ -1151,6 +1151,35 @@ export function useSubscribeFeed() {
   });
 }
 
+export function useRefreshFeed() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiPost<{ id: string }>(`/api/feeds/${id}/refresh`, {}),
+    onSuccess: async (_result, id) => {
+      await Promise.all([
+        client.invalidateQueries({ queryKey: queryKeys.feeds() }),
+        client.invalidateQueries({ queryKey: queryKeys.feed(id) }),
+        client.invalidateQueries({ queryKey: queryKeys.feedPosts(id) }),
+      ]);
+    },
+  });
+}
+
+export function useUnsubscribeFeed() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiDelete<void>(`/api/feeds/${id}`),
+    onSuccess: (_result, id) => {
+      client.setQueryData<FeedsResponse>(queryKeys.feeds(), (data) =>
+        data ? { feeds: data.feeds.filter((feed) => feed.id !== id) } : data,
+      );
+      client.removeQueries({ queryKey: queryKeys.feed(id) });
+      client.removeQueries({ queryKey: queryKeys.feedPosts(id) });
+      void client.invalidateQueries({ queryKey: queryKeys.feeds() });
+    },
+  });
+}
+
 export function useTriageFeedPost() {
   const client = useQueryClient();
   return useMutation({

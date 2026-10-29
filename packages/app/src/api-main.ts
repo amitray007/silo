@@ -1,5 +1,6 @@
 import { serve } from '@hono/node-server';
 import { createApp } from '@silo/api';
+import { setFeedPollEnqueuer } from '@silo/core';
 import {
   closeBrowserReader,
   registerAiConnectionTester,
@@ -74,6 +75,7 @@ function readHost(): string {
 async function startWorkerOrDegrade(): Promise<WorkerHandle | undefined> {
   try {
     const worker = await startWorker();
+    setFeedPollEnqueuer(worker.enqueueFeedPoll);
     console.error('[silo/app:api] worker started (enqueuer registered, enrichment loop running)');
     return worker;
   } catch (error) {
@@ -124,6 +126,7 @@ async function main(): Promise<void> {
   const shutdown = (signal: NodeJS.Signals) => {
     if (stopping) return;
     stopping = true;
+    setFeedPollEnqueuer(undefined);
     console.error(`[silo/app:api] received ${signal}, stopping gracefully...`);
     (async () => {
       // Close the SERVER first — stop accepting new connections and let

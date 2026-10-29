@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { runMigrations } from '@silo/db/migrate';
 import {
   createDisposableDatabase,
@@ -180,6 +181,37 @@ describeIfPg('startWorker (integration)', () => {
       await expect(handle.stop()).resolves.toBeUndefined();
       await expect(handle.stop()).resolves.toBeUndefined();
     } finally {
+      core.resetEnrichmentEnqueuer();
+    }
+  }, 60_000);
+  it('queues manual feed polls transactionally with the feed singleton key', async () => {
+    const { startWorker } = await import('./worker.js');
+    const { db } = await import('@silo/db');
+    const worker = await startWorker();
+    const feedId = randomUUID();
+    const count = async () => {
+      const result = await inspectPool.query(
+        "select singleton_key from pgboss.job where name = 'poll-feed' and data->>'feedId' = $1",
+        [feedId],
+      );
+      return result.rows;
+    };
+    try {
+      await expect(
+        db.transaction(async (tx) => {
+          await worker.enqueueFeedPoll(tx, feedId);
+          expect(await count()).toEqual([]);
+          throw new Error('rollback');
+        }),
+      ).rejects.toThrow('rollback');
+      expect(await count()).toEqual([]);
+      await db.transaction(async (tx) => {
+        await worker.enqueueFeedPoll(tx, feedId);
+        await worker.enqueueFeedPoll(tx, feedId);
+      });
+      expect(await count()).toEqual([{ singleton_key: feedId }]);
+    } finally {
+      await worker.stop();
       core.resetEnrichmentEnqueuer();
     }
   }, 60_000);

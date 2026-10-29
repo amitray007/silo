@@ -2,6 +2,7 @@ import { useId } from 'react';
 import { useParams, useSearchParams } from 'react-router';
 import type { ApiError } from '../api/client';
 import { useFeed } from '../api/hooks';
+import { FeedMenu } from '../components/FeedMenu';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { SegmentTabs } from '../components/reader/ReaderSegment';
 import { ListBody } from './shared/ListBodies';
@@ -27,7 +28,7 @@ export function FeedView() {
       fetchNextPage={view.fetchNextPage}
     >
       <ContentFrame
-        headerSlot={null}
+        headerSlot={feed.data ? <FeedMenu key={id} feed={feed.data.feed} /> : null}
         title={title}
         count={
           tab === 'inbox'
@@ -38,6 +39,14 @@ export function FeedView() {
         }
         fadeKey={id}
       >
+        {feed.data && feed.data.feed.status !== 'active' && (
+          <p role="status" className="silo-feed-notice">
+            {feed.data.feed.status === 'gone'
+              ? 'This feed has stopped updating.'
+              : "Couldn't update this feed."}
+            {feed.data.feed.lastError && <> {feed.data.feed.lastError}</>}
+          </p>
+        )}
         <div className="silo-feed-tabs">
           <SegmentTabs
             id={tabsId}

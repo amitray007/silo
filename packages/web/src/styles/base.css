@@ -997,3 +997,20 @@ select {
   display: flex;
   padding: var(--s2) var(--s3);
 }
+
+.silo-feed-warning {
+  display: inline-flex;
+  color: var(--warn);
+  vertical-align: middle;
+}
+.silo-feed-menu .silo-menu-item {
+  font-weight: 500;
+}
+.silo-feed-notice,
+.silo-feed-menu-error {
+  margin: 0;
+  padding: var(--s2) var(--s3);
+  color: var(--fnt);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}

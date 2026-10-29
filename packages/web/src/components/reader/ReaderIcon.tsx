@@ -1,4 +1,5 @@
 const paths = {
+  warning: 'M12 3 2 21h20L12 3ZM12 9v5M12 17h.01',
   sliders:
     'M3 6h4m6 0h8M3 18h9m6 0h3M13 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0M18 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
   note: 'M5 3h14v13l-5 5H5zM14 16h5M14 16v5M8 8h8M8 12h6',

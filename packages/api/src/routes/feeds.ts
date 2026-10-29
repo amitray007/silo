@@ -3,6 +3,7 @@ import {
   getFeed,
   listFeedPosts,
   listFeeds,
+  refreshFeed,
   saveFeedPost,
   setFeedPostArchived,
   subscribeFeed,
@@ -48,6 +49,19 @@ export function registerFeedRoutes(app: Hono): void {
     return (await deleteFeed(id))
       ? c.body(null, 204)
       : c.json({ error: 'not_found', message: 'Feed not found.' }, 404);
+  });
+  app.post('/feeds/:id/refresh', async (c) => {
+    const { id } = feedIdParamSchema.parse(c.req.param());
+    const result = await refreshFeed(id);
+    if (!('error' in result)) return c.json(result, 202);
+    const unavailable = result.error === 'feeds_unavailable';
+    return c.json(
+      {
+        error: result.error,
+        message: unavailable ? 'Feed refresh is unavailable. Try again later.' : 'Feed not found.',
+      },
+      unavailable ? 503 : 404,
+    );
   });
   for (const action of ['archive', 'unarchive'] as const) {
     app.post(`/feeds/:id/posts/:postId/${action}`, async (c) => {
