@@ -37,7 +37,8 @@ export function createSiloMcpServer(): McpServer {
         'captured (metadata, extracted text, tags) and let you capture new ' +
         'ones. All intelligence — search strategy, synthesis, ' +
         'recommendations, deciding what to capture/tag — is yours to ' +
-        'perform over these primitives; silo only holds the data.',
+        'perform over these primitives; silo only holds the data. ' +
+        'Use retry_capture fields for fast targeted re-enrichment; leave fields out for a full run.',
     },
   );
 

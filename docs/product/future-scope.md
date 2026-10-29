@@ -45,6 +45,12 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **AI titles for other sources** - X posts come first (`docs/methods/ai-x-titles.md`).
 - **A dependency-cruiser that reads TypeScript 7** - `pnpm boundaries` cruises only 9 JS modules today because depcruise does not support TypeScript 7 yet; Biome carries the import rules meanwhile.
 
+### Field-scoped enrichment (surfaced planning `docs/methods/enrich-fields.md`, 2026-10-29)
+- **A field picker in the web app's Enrich menu** - the web keeps the full run; only MCP takes `fields`.
+- **`fields` on the REST bulk route and the CLI.**
+- **A `favicon` field** - site icons load lazily through `/api/favicon` today.
+- **Re-save then narrow-request race** - a re-save of a settled link queues a full run without showing `enriching`; a narrow `retry_capture` that lands before the worker starts that job narrows it, so that re-save skips its source/Reader refresh. Nothing is lost. Fixing it means re-saves flip to `enriching` (a visible web change).
+
 ### Browser process isolation
 
 - Enable Chromium sandbox + Playwright seccomp profile, verified under Docker.

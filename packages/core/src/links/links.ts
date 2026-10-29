@@ -202,6 +202,7 @@ async function mergeIntoExisting(
   input: CreateLinkInput,
   sourceData: SourceData,
   resolvedSourceKind: string,
+  requestCapture = false,
 ): Promise<Link> {
   const mergedNotes = mergeNotes(existing.notes, input.notes);
 
@@ -238,21 +239,18 @@ async function mergeIntoExisting(
   // metadata fields, not to this atomic sourceData swap.
   const shouldAdoptDetectedSource =
     !input.sourceData && resolvedSourceKind !== 'link' && existing.sourceKind === 'link';
-  const nextSourceKind = input.sourceData
-    ? resolvedSourceKind
-    : shouldAdoptDetectedSource
-      ? resolvedSourceKind
-      : existing.sourceKind;
-  const nextSourceData = input.sourceData
-    ? sourceData
-    : shouldAdoptDetectedSource
-      ? sourceData
-      : existing.sourceData;
+  const nextSourceKind =
+    input.sourceData || shouldAdoptDetectedSource ? resolvedSourceKind : existing.sourceKind;
+  const nextSourceData =
+    input.sourceData || shouldAdoptDetectedSource ? sourceData : existing.sourceData;
 
   const [updated] = await exec
     .update(links)
     .set({
       deletedAt: null,
+      ...(requestCapture
+        ? { enrichFields: null, enrichRequestSeq: sql`${links.enrichRequestSeq} + 1` }
+        : {}),
       notes: mergedNotes,
       sourceKind: nextSourceKind,
       sourceData: nextSourceData,
@@ -417,7 +415,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (ok) {
         const existing = await findExistingForDedup(tx, input.url);
         if (existing) {
-          const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
+          const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind, true);
           await enqueueEnrichment(tx, merged.id, {
             trigger: 'capture',
             previousStatus: merged.captureStatus,
@@ -469,7 +467,7 @@ export async function createLink(input: CreateLinkInput): Promise<Link> {
       if (!existing) {
         throw error;
       }
-      const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind);
+      const merged = await mergeIntoExisting(tx, existing, input, sourceData, sourceKind, true);
       await enqueueEnrichment(tx, merged.id, {
         trigger: 'capture',
         previousStatus: merged.captureStatus,

@@ -135,6 +135,7 @@ export function expectNoLeakedFields(obj: unknown): void {
   expect(obj).not.toHaveProperty('canonicalUrl');
   expect(obj).not.toHaveProperty('deletedAt');
   expect(obj).not.toHaveProperty('enrichFloorStatus');
+  expect(obj).not.toHaveProperty('enrichFields');
 }
 
 /**

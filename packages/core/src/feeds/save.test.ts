@@ -213,7 +213,7 @@ describe('Save to Home on real Postgres', () => {
     const row = await post();
     const pond = await core.createLink({ url: row.url, sourceKind: 'link' });
     await h.rawDb().execute(sql`update links set capture_status = 'partial',
-      extracted_text = 'Existing text' where id = ${pond.id}`);
+      extracted_text = 'Existing text', enrich_fields = ARRAY['source'], enrich_request_seq = 7 where id = ${pond.id}`);
     await core.softDelete(pond.id);
     await h.rawDb().execute(sql`update links set capture_status = 'bare' where id = ${row.id}`);
     const enqueue = vi.fn(async () => {});
@@ -223,11 +223,29 @@ describe('Save to Home on real Postgres', () => {
       captureStatus: 'partial',
       extractedText: 'Existing text',
       titleSource: 'page',
+      enrichFields: null,
+      enrichRequestSeq: 8,
     });
     expect(enqueue).toHaveBeenCalledTimes(1);
     expect(enqueue).toHaveBeenCalledWith(expect.anything(), pond.id, {
       trigger: 'capture',
       previousStatus: 'partial',
+    });
+  });
+  it('gives a saved copy its own full enrichment request instead of the post request', async () => {
+    const core = h.mod();
+    const row = await post();
+    expect(await core.getById(row.id)).toMatchObject({ enrichFields: null, enrichRequestSeq: 0 });
+    await h
+      .rawDb()
+      .execute(
+        sql`update links set enrich_fields = ARRAY['source'], enrich_request_seq = 7 where id = ${row.id}`,
+      );
+    const id = savedId(await core.saveFeedPost(row.feedId ?? '', row.id));
+    expect(await core.getById(id)).toMatchObject({ enrichFields: null, enrichRequestSeq: 0 });
+    expect(await core.getById(row.id)).toMatchObject({
+      enrichFields: ['source'],
+      enrichRequestSeq: 7,
     });
   });
   it('enqueues only a new or revived enriching copy, and repeated/concurrent saves are idempotent', async () => {

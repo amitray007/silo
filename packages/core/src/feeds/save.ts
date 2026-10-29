@@ -1,5 +1,5 @@
 import { db, links } from '@silo/db';
-import { and, desc, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { enqueueEnrichment } from '../links/enqueue.js';
 import type { Link, Tx } from '../links/executor.js';
 import { bestCaptureStatus, mergeCaptureFields } from '../links/merge-content.js';
@@ -98,6 +98,13 @@ async function saveWith(tx: Tx, feedId: string, postId: string): Promise<SaveFee
   const needsEnrichment =
     outcome === 'revived' ? captureStatus !== 'full' : captureStatus === 'enriching';
   if (outcome !== 'existing' && needsEnrichment) {
+    if (outcome === 'revived') {
+      // Reviving requests a full capture, independent of a pre-trash narrow request.
+      await tx
+        .update(links)
+        .set({ enrichFields: null, enrichRequestSeq: sql`${links.enrichRequestSeq} + 1` })
+        .where(eq(links.id, id));
+    }
     await enqueueEnrichment(tx, id, { trigger: 'capture', previousStatus: captureStatus });
   }
   return { id, outcome };

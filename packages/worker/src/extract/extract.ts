@@ -71,6 +71,8 @@ export interface ExtractInput {
   url: string;
   html: string;
   contentType: string | undefined;
+  /** False extracts metadata without starting the Reader parser. */
+  reader?: boolean;
 }
 
 /** `text/html; charset=utf-8` -> `text/html`. Compares case-insensitively. */
@@ -203,6 +205,7 @@ export async function extract(input: ExtractInput): Promise<ExtractResult> {
   // A Reader failure falls back to metadata only, so a page that always fails still settles
   // (retry only counts recorded attempts). The Reader HTML is built live when a link opens.
   const fields = await runMetascraper(url, html);
+  if (input.reader === false) return buildResult(fields, undefined);
   try {
     const page = await extractPage(
       html,
