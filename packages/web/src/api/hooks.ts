@@ -1158,18 +1158,23 @@ export function useRefreshFeed() {
       const before = client.getQueryData<FeedResponse>(queryKeys.feed(id))?.feed.lastPolledAt;
       const result = await apiPost<{ id: string }>(`/api/feeds/${id}/refresh`, {});
       // The response accepts a job; it does not mean the worker has polled yet.
-      for (let attempt = 0; attempt < 5; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
-        const current = await client.fetchQuery({
-          queryKey: queryKeys.feed(id),
-          queryFn: () => apiGet<FeedResponse>(`/api/feeds/${id}`),
-          staleTime: 0,
-        });
-        await Promise.all([
-          client.invalidateQueries({ queryKey: queryKeys.feeds() }),
-          client.invalidateQueries({ queryKey: queryKeys.feedPosts(id) }),
-        ]);
-        if (current.feed.lastPolledAt !== before) break;
+      // A failed check only stops the wait: the refresh itself was accepted.
+      try {
+        for (let attempt = 0; attempt < 5; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+          const current = await client.fetchQuery({
+            queryKey: queryKeys.feed(id),
+            queryFn: () => apiGet<FeedResponse>(`/api/feeds/${id}`),
+            staleTime: 0,
+          });
+          await Promise.all([
+            client.invalidateQueries({ queryKey: queryKeys.feeds() }),
+            client.invalidateQueries({ queryKey: queryKeys.feedPosts(id) }),
+          ]);
+          if (current.feed.lastPolledAt !== before) break;
+        }
+      } catch {
+        // Stop waiting; the next scheduled refetch shows the result.
       }
       return result;
     },

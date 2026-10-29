@@ -134,8 +134,10 @@ function registerFeedSubscription(server: McpServer): void {
   server.registerTool(
     'unsubscribe_feed',
     {
+      title: 'Unsubscribe from feed',
       description:
-        'Remove a subscription and all its feed posts. Copies saved to Home remain in the library.',
+        'Remove a subscription and permanently delete all its feed posts. This cannot be undone. Copies saved to Home remain in the library.',
+      annotations: { destructiveHint: true, idempotentHint: true },
       inputSchema: { feedId: postInput.feedId },
       outputSchema: { found: z.boolean() },
     },
