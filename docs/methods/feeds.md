@@ -23,11 +23,12 @@ full text, Reader) inside that feed.
    `docs/methods/shiori-match.md:32`.
 2. Feed posts show only in their own feed view. They never appear in Home, Tags, library
    search, library counts, or the library Trash.
-3. Each feed has its own Inbox, Archive, and Trash. Archive is triage inside a feed, not a
-   read-later queue: no unread dot, no "read" state, nothing at Home level. Amend
+3. Each feed has an Inbox and an Archive, and no Trash (changed 2026-10-29: the owner
+   archives what they are done with; unsubscribe removes the rest). Archive is triage inside
+   a feed, not a read-later queue: no unread dot, no "read" state, nothing at Home level. Amend
    `docs/product/scope.html:330` and `docs/foundation.md:10` to say so.
 4. Save copies a post into Home. The library link is a separate row; it keeps everything
-   after the owner archives, trashes, or unsubscribes the feed post. The feed post shows a
+   after the owner archives the feed post or unsubscribes the feed. The feed post shows a
    filled bookmark once saved.
 5. Feed posts get the full capture pipeline: the same enrichment job, Reader, favicon, title
    rules, and optional AI title as a library link.
@@ -100,7 +101,7 @@ hand-rolled XML parsing (repeats a mature package). Install in `packages/worker`
   then live once in the pond and once per feed.
 - Add a check constraint: `archived_at` and `saved_link_id` are null when `feed_id` is null.
 
-`feed_entries` - the seen-set, kept in the DB so a trashed or purged post never returns
+`feed_entries` - the seen-set, kept in the DB so a removed post never returns
 (lesson from `ingest-x-sync-truthful-count.md`).
 
 | column | type | note |
@@ -183,14 +184,11 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
 | action | effect |
 | --- | --- |
 | Archive / Unarchive | set or clear `archived_at`; moves between Inbox and Archive |
-| Trash | set `deleted_at`; the post moves to that feed's Trash tab |
-| Restore | clear `deleted_at`; back to Inbox or Archive |
 | Save to Home | create a pond link with the post's URL, copying title, description, image, site name, extracted text, Reader HTML, and capture status (no second fetch; enqueue enrichment only if the post is still `enriching`). If the URL is already in the pond, link to it instead. Set `saved_link_id`. A trashed pond link with that URL is revived, as a normal capture does. |
 | Open saved | from a saved post, go to its pond link |
 
-- Feed Trash auto-purges on the same retention as the library trash. Extend `purgeTrash` to
-  cover feed posts; `feed_entries` keeps the key, so a purged post never returns.
-- "Empty Trash" in a feed's Trash tab hard-deletes that feed's trashed posts only.
+- Feed posts have no Trash. Library trash routes (`DELETE /api/links/:id`, trash, restore,
+  purge) reject a feed post with `feed_post_not_editable`, and `purgeTrash` stays pond-only.
 - Unsubscribe (`DELETE /api/feeds/:id`, confirm dialog): delete the feed; its posts and
   `feed_entries` go with it through the cascade. Pond copies stay.
 
@@ -205,11 +203,11 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
   "Subscribe" button. While the lookup runs, the button shows progress; errors show inline
   under the input. On success, close and open the new feed.
 - Feed view: breadcrumb `Feeds / <full title>`, `...` menu (refresh now, copy feed URL,
-  last error when failing, unsubscribe), and tabs Inbox · Archive · Trash. Rows grouped by
+  last error when failing, unsubscribe), and tabs Inbox · Archive. Rows grouped by
   `published_at`: Today, This week, Earlier. Row: favicon + title, as in the screenshot; a
   filled bookmark on saved posts.
-- Reader on a feed post: the existing Reader, with toolbar actions Archive, Save to Home
-  (bookmark), and Trash. Up/down steps through the current tab's list.
+- Reader on a feed post: the existing Reader, with toolbar actions Archive (Unarchive in the
+  Archive tab) and Save to Home (bookmark). Up/down steps through the current tab's list.
 
 ## `safeFetch` changes
 
@@ -228,8 +226,8 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
    and `poll-feed`, `safeFetch` changes, API `GET/POST/DELETE /api/feeds` and
    `GET /api/feeds/:id/posts`. Web: sidebar Feeds section, Add feed dialog, feed view as
    one list, Reader on a feed post. QA on the real feeds below.
-2. Triage. Inbox / Archive / Trash tabs, archive / trash / restore / empty, date grouping,
-   feed-trash purge, sidebar count = Inbox count.
+2. Triage. Inbox / Archive tabs, archive / unarchive (row action, Reader toolbar, and the
+   `e` key), date grouping, sidebar count = Inbox count, and no trash path for feed posts.
 3. Save to Home. Copy into the pond, filled bookmark, "Open saved", toolbar action.
 4. Feed menu and failure states. Refresh now, last error, failing glyph, unsubscribe.
 5. MCP. `list_feeds`, `list_feed_posts`, `subscribe_feed`, `unsubscribe_feed`,
