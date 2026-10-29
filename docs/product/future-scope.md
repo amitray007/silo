@@ -64,3 +64,10 @@ Silo's binding rule is *any action a user can take, an agent can also take*. The
   (Troy Hunt's 400x147 Spotify badge, about 134px on the site) still shows
   at its natural size. Allowing images within the byte budget would fix it
   at the cost of slower renders.
+
+### CSS token sweep (surfaced by the home UI audit, 2026-10-29)
+
+- **Radius tokens.** The CSS has about 20 radius values and no radius token. Define tokens from the shiori values in use (4, 5, 6, 8, 12 and 16px, plus pills) and replace the literals. Keep the mixed 6px and 8px icon buttons; `tokens.md` records them as intended.
+- **Spacing and font-size literals.** The CSS has about 1,000 raw px values in box properties and 142 px font sizes, but few uses of the `--s*` and `--text-*` tokens. The half-pixel sizes (11.5, 12.5 and 13.5px) are the real drift; 13px and 15px are shiori sizes.
+- **The "⋯" icon.** Its dots render at 1.25px and look lighter than the other icons. A fix needs a redraw, for example three small circles.
+
