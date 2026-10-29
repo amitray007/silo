@@ -23,7 +23,9 @@ export function LinkIdentity({ link }: { link: LinkJson }) {
 function moveMenuFocus(event: React.KeyboardEvent<HTMLElement>) {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
   const rows = Array.from(
-    event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]'),
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], [data-menu-readonly]',
+    ),
   );
   if (!rows.length) return;
   event.preventDefault();

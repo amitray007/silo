@@ -2,6 +2,7 @@ import { useId, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { ApiError } from '../api/client';
 import { useFeed } from '../api/hooks';
+import type { FeedJson } from '../api/types';
 import { FeedMenu } from '../components/FeedMenu';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
 import { SegmentTabs } from '../components/reader/ReaderSegment';
@@ -30,6 +31,15 @@ function FeedHeading({ title }: { title: string }) {
   );
 }
 
+function FeedCount({ feed, tab }: { feed: FeedJson; tab: 'inbox' | 'archive' }) {
+  const count = tab === 'inbox' ? feed.inboxCount : feed.postCount - feed.inboxCount;
+  return (
+    <span role="img" aria-label={`${count} in ${tab === 'inbox' ? 'Inbox' : 'Archive'}`}>
+      {count}
+    </span>
+  );
+}
+
 export function FeedView() {
   const { id = '' } = useParams<{ id: string }>();
   const [params, setParams] = useSearchParams();
@@ -50,13 +60,7 @@ export function FeedView() {
       <ContentFrame
         headerSlot={feed.data ? <FeedMenu key={id} feed={feed.data.feed} /> : null}
         title={<FeedHeading key={id} title={feed.data?.feed.title ?? 'Feed'} />}
-        count={
-          tab === 'inbox'
-            ? feed.data?.feed.inboxCount
-            : feed.data
-              ? feed.data.feed.postCount - feed.data.feed.inboxCount
-              : undefined
-        }
+        count={feed.data ? <FeedCount feed={feed.data.feed} tab={tab} /> : undefined}
         fadeKey={id}
       >
         {feed.data && feed.data.feed.status !== 'active' && (

@@ -1068,6 +1068,7 @@ select {
   white-space: normal;
 }
 .silo-feed-heading {
+  line-height: 20px;
   display: flex;
   align-items: baseline;
   gap: 4px;
@@ -1097,4 +1098,27 @@ select {
 }
 .silo-feed-title > span[data-expanded="true"] {
   -webkit-line-clamp: unset;
+}
+
+.silo-rename-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.silo-rename-form .silo-field {
+  display: block;
+  margin-top: 8px;
+}
+.silo-rename-form .silo-field[aria-invalid="true"] {
+  border-color: var(--warn);
+}
+.silo-feed-menu-error:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: -2px;
+}
+
+.silo-rename-form > label {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
 }

@@ -6,6 +6,7 @@ import { formatCount } from '../lib/formatCount';
 import { deriveDomain } from '../lib/url';
 import { AddFeedDialog } from './AddFeedDialog';
 import { Chip } from './Chip';
+import { FeedMenu } from './FeedMenu';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 
@@ -14,38 +15,40 @@ function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void
   const active = Boolean(useMatch(to));
   const navigate = useNavigate();
   return (
-    <NavItem
-      href={to}
-      title={feed.title}
-      label={feed.title}
-      variant="tag"
-      active={active}
-      icon={<Chip domain={deriveDomain(feed.siteUrl ?? feed.feedUrl)} size={16} />}
-      meta={
-        <>
-          <span role="img" aria-label={`${feed.inboxCount} in Inbox`}>
-            {formatCount(feed.inboxCount)}
-          </span>
-          {feed.status !== 'active' && (
-            <span
-              className="silo-feed-warning"
-              role="img"
-              aria-label={feed.lastError ?? 'Feed unavailable'}
-              title={feed.lastError ?? 'Feed unavailable'}
-            >
-              <ReaderIcon name="warning" size={14} />
+    <FeedMenu feed={feed}>
+      <NavItem
+        href={to}
+        title={feed.title}
+        label={feed.title}
+        variant="tag"
+        active={active}
+        icon={<Chip domain={deriveDomain(feed.siteUrl ?? feed.feedUrl)} size={16} />}
+        meta={
+          <>
+            <span role="img" aria-label={`${feed.inboxCount} in Inbox`}>
+              {formatCount(feed.inboxCount)}
             </span>
-          )}
-        </>
-      }
-      onClick={(event) => {
-        if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
-          return;
-        event.preventDefault();
-        navigate(to);
-        onNavigate();
-      }}
-    />
+            {feed.status !== 'active' && (
+              <span
+                className="silo-feed-warning"
+                role="img"
+                aria-label={feed.lastError ?? 'Feed unavailable'}
+                title={feed.lastError ?? 'Feed unavailable'}
+              >
+                <ReaderIcon name="warning" size={14} />
+              </span>
+            )}
+          </>
+        }
+        onClick={(event) => {
+          if (event.button || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)
+            return;
+          event.preventDefault();
+          navigate(to);
+          onNavigate();
+        }}
+      />
+    </FeedMenu>
   );
 }
 

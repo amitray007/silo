@@ -1,14 +1,17 @@
 import {
   deleteFeed,
+  feedTitleSchema,
   getFeed,
   listFeedPosts,
   listFeeds,
   refreshFeed,
+  renameFeed,
   saveFeedPost,
   setFeedPostArchived,
   subscribeFeed,
 } from '@silo/core';
 import type { Hono } from 'hono';
+import { z } from 'zod';
 import { toLinkJson } from '../link-json.js';
 import {
   feedIdParamSchema,
@@ -40,6 +43,14 @@ export function registerFeedRoutes(app: Hono): void {
   app.get('/feeds/:id', async (c) => {
     const { id } = feedIdParamSchema.parse(c.req.param());
     const feed = await getFeed(id);
+    return feed
+      ? c.json({ feed })
+      : c.json({ error: 'not_found', message: 'Feed not found.' }, 404);
+  });
+  app.patch('/feeds/:id', async (c) => {
+    const { id } = feedIdParamSchema.parse(c.req.param());
+    const { title } = z.object({ title: feedTitleSchema }).parse(await c.req.json());
+    const feed = await renameFeed(id, title);
     return feed
       ? c.json({ feed })
       : c.json({ error: 'not_found', message: 'Feed not found.' }, 404);

@@ -24,6 +24,8 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       'list_trash',
       'refresh_reader',
       'remove_link_tag',
+      'rename_feed',
+      'rename_tag',
       'restore_link',
       'retry_capture',
       'save_feed_post',

@@ -81,7 +81,7 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 
 - **OPML import and export.**
 - **Choose between feeds.** A page can advertise several feeds; Silo takes the first.
-- **Rename a feed, per-feed poll interval, auto-save rules.** For example, save every post that matches a keyword.
+- **Per-feed poll interval, auto-save rules.** For example, save every post that matches a keyword.
 - **Auto-archive and retention.** Archive old Inbox posts and cap stored posts per feed.
 - **WebSub push** instead of polling.
 - **Sites without a feed.** Watch page changes or sitemaps.

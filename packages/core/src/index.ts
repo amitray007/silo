@@ -105,6 +105,7 @@ export {
   subscribeFeed,
 } from './feeds/feeds.js';
 export { type FeedPollEnqueuer, refreshFeed, setFeedPollEnqueuer } from './feeds/refresh.js';
+export { feedTitleSchema, renameFeed } from './feeds/rename.js';
 export { saveFeedPost } from './feeds/save.js';
 export { setFeedPostArchived } from './feeds/triage.js';
 export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
@@ -240,6 +241,7 @@ export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
 // over a link's own tags + title terms — see related.ts's doc comment.
 export { findRelated } from './links/related.js';
+export { renameTag, tagTitleSchema } from './links/rename-tag.js';
 export { findSavedUrls } from './links/saved.js';
 export { findSiteIcons, type SiteIconFinder, setSiteIconFinder } from './links/site-icon.js';
 // Capture-source provenance (capture-source slice): the closed value set +

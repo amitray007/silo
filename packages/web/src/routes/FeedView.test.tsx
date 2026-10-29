@@ -55,8 +55,12 @@ function menuAction(
   }
   return undefined;
 }
+function restoredFeedTitle(title: string | null) {
+  return title ?? feed.title;
+}
 function mount(options: MenuOptions = {}, route = '/feeds/feed') {
   let subscribed = true;
+  let feedTitle = feed.title;
   const today = new Date();
   const recent = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 12);
   const posts: LinkJson[] = [
@@ -74,6 +78,11 @@ function mount(options: MenuOptions = {}, route = '/feeds/feed') {
     const url = new URL(String(input), 'http://silo.test');
     const path = url.pathname;
     const method = init?.method;
+    if (method === 'PATCH') {
+      const body = JSON.parse(String(init?.body)) as { title: string | null };
+      feedTitle = restoredFeedTitle(body.title);
+      return json({ feed: { ...feed, title: feedTitle } });
+    }
     const action = menuAction(path, method, options, () => {
       subscribed = false;
     });
@@ -84,6 +93,7 @@ function mount(options: MenuOptions = {}, route = '/feeds/feed') {
     }
     const currentFeed = {
       ...feed,
+      title: feedTitle,
       status: options.status ?? 'active',
       lastError: options.lastError ?? null,
       inboxCount: posts.filter((post) => !post.archivedAt).length,
@@ -266,8 +276,8 @@ it.each(['failing', 'gone'] as const)(
     trigger.focus();
     fireEvent.click(trigger);
     const menu = await screen.findByRole('menu', { name: 'Feed actions' });
-    expect(within(menu).queryByText('The feed returned HTTP 410.')).toBeNull();
-    await waitFor(() => expect(document.activeElement?.textContent).toContain('Refresh now'));
+    expect(within(menu).getByRole('note').textContent).toBe('The feed returned HTTP 410.');
+    await waitFor(() => expect(document.activeElement?.textContent).toContain('Rename'));
     fireEvent.keyDown(menu, { key: 'End' });
     expect(document.activeElement?.textContent).toContain('Unsubscribe');
     fireEvent.keyDown(menu, { key: 'Escape' });
@@ -374,4 +384,28 @@ it('exposes the complete feed title and allows the header title to expand', asyn
   expect(title.getAttribute('aria-expanded')).toBe('false');
   fireEvent.click(title);
   expect(title.getAttribute('aria-expanded')).toBe('true');
+});
+
+it('renames a feed from its sidebar keyboard menu and clears an owner title', async () => {
+  const { fetchMock } = mount();
+  const row = await screen.findByRole('link', { name: /Publisher/ });
+  fireEvent.keyDown(row, { key: 'F10', shiftKey: true });
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  const dialog = screen.getByRole('dialog', { name: 'Rename feed' });
+  fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Owner title' } });
+  fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
+  await screen.findByRole('button', { name: 'Owner title' });
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/feeds/feed',
+    expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: 'Owner title' }) }),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
+  fireEvent.change(screen.getByLabelText('Name'), { target: { value: '' } });
+  fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+  await screen.findByRole('button', { name: 'Publisher' });
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/feeds/feed',
+    expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: null }) }),
+  );
 });

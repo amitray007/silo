@@ -73,7 +73,8 @@ hand-rolled XML parsing (repeats a mature package). Install in `packages/worker`
 | `id` | uuid pk | |
 | `feed_url` | text not null, unique | the resolved feed URL, after autodiscovery |
 | `site_url` | text | the feed's home page; drives the favicon |
-| `title` | text not null | the sidebar title (see "Prepare the feed") |
+| `title` | text not null | the fetched title (see "Prepare the feed") |
+| `custom_title` | text | owner-set title; null uses the fetched title |
 | `description` | text | |
 | `format` | enum `feed_format`: `rss`, `atom`, `rdf`, `json` | |
 | `etag`, `last_modified` | text | for conditional GET |
@@ -141,16 +142,17 @@ counts, library trash, MCP `list_links` and `search_links`).
    `title`), with HTML entities decoded, tags stripped, and whitespace collapsed. If it is
    empty, use the site page's `og:site_name`, then its `<title>`, then the host. `site_url` =
    the feed's home link, else the page URL, else the feed origin; the icon is
-   `/api/favicon` for that host. The sidebar truncates with an ellipsis; the breadcrumb
-   shows the full title (as in the Shiori screenshot).
+   `/api/favicon` for that host. The sidebar truncates with an ellipsis; the header shows two title lines and can expand to show the full title.
 4. No feed found: `422 feed_not_found`; the dialog shows the message inline. Same
    `feed_url` already subscribed: `200 { deduped: true }` with the existing feed.
 5. Insert the feed. With `syncRecents`, capture the newest 20 entries. Without it, record
    every current entry in `feed_entries` and capture nothing, so only later posts arrive.
 
 **Refresh the feed's title**: each successful poll that returns 200 re-reads the feed title
-and site link and updates `title` and `site_url` when they changed (rename by the owner is
-parked; when it lands, an owner-set title wins).
+and site link and updates `title` and `site_url` when they change. The owner-set
+`custom_title` wins for display and is never changed by polling.
+`PATCH /api/feeds/:id { title }` sets a trimmed 1-200 character name; null restores
+the latest fetched title. MCP exposes the same operation as `rename_feed`.
 
 **Capture each new post**
 
@@ -194,16 +196,22 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
 
 ## UI
 
-- Sidebar: a "Feeds" section between the primary block and Tags, collapsible like Tags.
+- `/feeds`: all feeds, with favicon, title, Inbox count and a warning beside the count
+  when failing. The header has an Add feed button and an empty state. Phone navigation
+  includes Feeds in the More menu.
+- Sidebar: a "Feeds" section between the primary block and Tags, with a label
+  linking to `/feeds` and a separate collapse caret.
   Each row: favicon, title (ellipsis), Inbox count. A "+ Add feed" row at the end. A failing
-  feed shows a small warning glyph instead of the count.
+  feed shows a small warning glyph beside the count.
 - Add feed dialog (`ModalShell`): title "Add feed", the line "Automatically save links from
   your favorite websites and publishers.", one URL input (placeholder
   `https://theverge.com or feed URL`), a "Sync recents" checkbox (on by default), and a
   "Subscribe" button. While the lookup runs, the button shows progress; errors show inline
   under the input. On success, close and open the new feed.
-- Feed view: breadcrumb `Feeds / <full title>`, `...` menu (refresh now, copy feed URL,
-  last error when failing, unsubscribe), and tabs Inbox · Archive. Rows grouped by
+- Feed view: breadcrumb with a muted `Feeds /` link to `/feeds`, followed by the
+  title and `...` menu (Rename, Refresh now, Copy feed URL,
+  Open site when available, a keyboard-readable last error when failing, divider,
+  Unsubscribe in red), and tabs Inbox · Archive. Rows grouped by
   `published_at`: Today, This week, Earlier. Row: favicon + title, as in the screenshot; a
   filled bookmark on saved posts.
 - Reader on a feed post: the existing Reader, with toolbar actions Archive (Unarchive in the
@@ -254,10 +262,23 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
 
 - OPML import and export.
 - Choosing between several feeds a page advertises.
-- Rename a feed; per-feed poll interval; auto-save rules (for example, save every post
+- Per-feed poll interval; auto-save rules (for example, save every post
   with a keyword).
 - Auto-archive old Inbox posts; per-feed retention.
 - WebSub push instead of polling.
 - Sites without a feed: page-change or sitemap watching.
 - X accounts and lists (no free API, no RSS).
 - Using the feed's `content:encoded` as Reader text when the page fetch fails.
+
+## Sidebar menus and tag rename (2026-10-30)
+
+Right-click, Shift+F10 and the ContextMenu key open sidebar menus. Feeds use the
+same actions as the header menu. Tags have Rename, a divider, and Delete in red.
+Delete keeps the existing confirmation and leaves links in the library.
+
+`PATCH /api/tags/:name { name, merge? }` and MCP `rename_tag` rename a tag while
+keeping its link associations. Matching is case-insensitive. An existing target
+returns `409 tag_exists` without changes. After the owner confirms the merge,
+`merge: true` moves associations to that target and removes the old tag. A link
+that already has both tags keeps one target association. Trashed links keep their
+tags too.

@@ -23,7 +23,7 @@ import {
 export type FeedRow = typeof feeds.$inferSelect;
 const feedColumns = {
   id: feeds.id,
-  title: feeds.title,
+  title: sql<string>`coalesce(${feeds.customTitle}, ${feeds.title})`,
   feedUrl: feeds.feedUrl,
   siteUrl: feeds.siteUrl,
   format: feeds.format,

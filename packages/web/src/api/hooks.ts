@@ -1240,3 +1240,36 @@ export function useSaveFeedPost() {
     },
   });
 }
+
+export function useRenameFeed(id: string) {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: (title: string | null) => apiPatch<FeedResponse>(`/api/feeds/${id}`, { title }),
+    onSuccess: (data) => {
+      client.setQueryData(queryKeys.feed(id), data);
+      void client.invalidateQueries({ queryKey: queryKeys.feeds() });
+    },
+  });
+}
+export function useRenameTag() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      name,
+      newName,
+      merge = false,
+    }: {
+      name: string;
+      newName: string;
+      merge?: boolean;
+    }) =>
+      apiPatch<{ name: string; merged: boolean }>(`/api/tags/${encodeURIComponent(name)}`, {
+        name: newName,
+        merge,
+      }),
+    onSuccess: () => {
+      invalidateLinkQueries(client, { tags: true, counts: true });
+      void client.invalidateQueries({ queryKey: ['links-tag-only'] });
+    },
+  });
+}

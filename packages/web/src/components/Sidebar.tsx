@@ -12,6 +12,7 @@ import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
 import { SidebarFeeds } from './SidebarFeeds';
 import { SidebarTags } from './SidebarTags';
+import { TagMenu } from './TagMenu';
 
 const noop = () => {};
 
@@ -170,25 +171,26 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
         tags={tags}
         loading={tagsLoading}
         renderTagLink={(tag: TagCount) => (
-          <NavItemLink
-            key={tag.name}
-            to={`/tags/${encodeURIComponent(tag.name)}`}
-            // The `#` sits in NavItem's 18px icon slot (not inline in the
-            // label) so it aligns to the SAME left ledger column as the
-            // Library/Trash nav icons above and the `+ New tag` glyph below —
-            // one clean column, matching shiori's Tags spacing. Dim (--ghost)
-            // glyph, bright (--ink) label.
-            icon={
-              <>
-                <ReaderIcon name="hash" />
-                <span className="silo-sr-only">#</span>
-              </>
-            }
-            label={tag.name}
-            meta={tag.count > 0 ? formatCount(tag.count) : undefined}
-            variant="tag"
-            onNavigate={onNavigate}
-          />
+          <TagMenu key={tag.name} tag={tag.name}>
+            <NavItemLink
+              to={`/tags/${encodeURIComponent(tag.name)}`}
+              // The `#` sits in NavItem's 18px icon slot (not inline in the
+              // label) so it aligns to the SAME left ledger column as the
+              // Library/Trash nav icons above and the `+ New tag` glyph below —
+              // one clean column, matching shiori's Tags spacing. Dim (--ghost)
+              // glyph, bright (--ink) label.
+              icon={
+                <>
+                  <ReaderIcon name="hash" />
+                  <span className="silo-sr-only">#</span>
+                </>
+              }
+              label={tag.name}
+              meta={tag.count > 0 ? formatCount(tag.count) : undefined}
+              variant="tag"
+              onNavigate={onNavigate}
+            />
+          </TagMenu>
         )}
       />
 

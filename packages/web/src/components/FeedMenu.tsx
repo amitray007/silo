@@ -1,20 +1,28 @@
-import { useState } from 'react';
+import { type ReactNode, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
-import { useRefreshFeed, useUnsubscribeFeed } from '../api/hooks';
+import { useRefreshFeed, useRenameFeed, useUnsubscribeFeed } from '../api/hooks';
 import type { FeedJson } from '../api/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
+import { RenameDialog } from './RenameDialog';
+import { RowPopover } from './RowPopover';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { copyLabel, useCopyFlash } from './SettingsTabs/copyFlash';
+import { SidebarContextMenu } from './SidebarContextMenu';
 
-export function FeedMenu({ feed }: { feed: FeedJson }) {
+export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactNode }) {
   const [open, setOpen] = useState(false);
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [confirm, setConfirm] = useState(false);
+  const [renaming, setRenaming] = useState(false);
   const refresh = useRefreshFeed();
+  const rename = useRenameFeed(feed.id);
   const unsubscribe = useUnsubscribeFeed();
   const { copied, copyText } = useCopyFlash();
   const navigate = useNavigate();
+  const close = () => setOpen(false);
   return (
     <>
       {refresh.isError && (
@@ -27,73 +35,128 @@ export function FeedMenu({ feed }: { feed: FeedJson }) {
           Refreshing…
         </span>
       )}
-      <div className="silo-reader-more">
-        <button
-          type="button"
-          className="silo-reader-iconbtn"
-          aria-label="Feed actions"
-          aria-haspopup="menu"
-          aria-expanded={open}
-          onClick={() => setOpen(!open)}
-        >
-          <ReaderIcon name="more" />
-        </button>
-        <MenuPresence>
-          {open && (
-            <MenuSurface
-              label="Feed actions"
-              className="silo-reader-more-menu silo-feed-menu"
-              onClose={() => setOpen(false)}
-            >
-              <MenuAction
-                icon={<ReaderIcon name="refresh" />}
-                disabled={refresh.isPending}
-                onClick={() => {
-                  setOpen(false);
-                  refresh.mutate(feed.id);
-                }}
+      <div className={children ? undefined : 'silo-reader-more'}>
+        {children ? (
+          <SidebarContextMenu
+            onOpen={(row) => {
+              setAnchor(row);
+              setOpen(true);
+            }}
+          >
+            {children}
+          </SidebarContextMenu>
+        ) : (
+          <button
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label="Feed actions"
+            aria-haspopup="menu"
+            aria-expanded={open}
+            onClick={() => setOpen(!open)}
+          >
+            <ReaderIcon name="more" />
+          </button>
+        )}
+        <RowPopover anchor={anchor} onDismiss={close}>
+          <MenuPresence>
+            {open && (
+              <MenuSurface
+                label="Feed actions"
+                className={children ? 'silo-feed-menu' : 'silo-reader-more-menu silo-feed-menu'}
+                onClose={close}
               >
-                {refresh.isPending ? 'Refreshing…' : 'Refresh now'}
-              </MenuAction>
-              <MenuAction
-                icon={<ReaderIcon name="clipboard" />}
-                onClick={() => copyText(feed.feedUrl)}
-              >
-                {copyLabel(copied, 'Copy feed URL')}
-              </MenuAction>
-              <div className="silo-menu-separator" />
-              <MenuAction
-                icon={<ReaderIcon name="trash" />}
-                danger
-                onClick={() => {
-                  setOpen(false);
-                  unsubscribe.reset();
-                  setConfirm(true);
-                }}
-              >
-                Unsubscribe
-              </MenuAction>
-            </MenuSurface>
-          )}
-        </MenuPresence>
+                <MenuAction
+                  icon={<ReaderIcon name="edit" />}
+                  onClick={() => {
+                    close();
+                    rename.reset();
+                    setRenaming(true);
+                  }}
+                >
+                  Rename
+                </MenuAction>
+                <MenuAction
+                  icon={<ReaderIcon name="sync" />}
+                  disabled={refresh.isPending}
+                  onClick={() => {
+                    close();
+                    refresh.mutate(feed.id);
+                  }}
+                >
+                  {refresh.isPending ? 'Refreshing…' : 'Refresh now'}
+                </MenuAction>
+                <MenuAction
+                  icon={<ReaderIcon name="copy" />}
+                  onClick={() => copyText(feed.feedUrl)}
+                >
+                  {copyLabel(copied, 'Copy feed URL')}
+                </MenuAction>
+                {feed.siteUrl && (
+                  <MenuAction
+                    icon={<ReaderIcon name="arrowUpRight" />}
+                    href={feed.siteUrl}
+                    onClick={close}
+                  >
+                    Open site
+                  </MenuAction>
+                )}
+                {feed.status !== 'active' && feed.lastError && (
+                  <div
+                    role="note"
+                    tabIndex={-1}
+                    data-menu-readonly
+                    className="silo-feed-menu-error"
+                  >
+                    {feed.lastError}
+                  </div>
+                )}
+                <div className="silo-menu-separator" />
+                <MenuAction
+                  icon={<ReaderIcon name="trash" />}
+                  danger
+                  onClick={() => {
+                    close();
+                    unsubscribe.reset();
+                    setConfirm(true);
+                  }}
+                >
+                  Unsubscribe
+                </MenuAction>
+              </MenuSurface>
+            )}
+          </MenuPresence>
+        </RowPopover>
       </div>
-      {confirm && (
-        <ConfirmDialog
-          title="Unsubscribe from feed?"
-          item={feed.title}
-          action="Unsubscribe"
-          pending={unsubscribe.isPending}
-          onClose={() => setConfirm(false)}
-          onConfirm={() => unsubscribe.mutate(feed.id, { onSuccess: () => navigate('/') })}
-        >
-          This removes the feed and its posts. Links saved to Home stay in your library.
-          {unsubscribe.isError && (
-            <span role="alert" className="silo-feed-error">
-              {unsubscribe.error.message}
-            </span>
-          )}
-        </ConfirmDialog>
+      {renaming && (
+        <RenameDialog
+          title="Rename feed"
+          initialValue={feed.title}
+          hint="Clear the name to use the publisher’s title."
+          pending={rename.isPending}
+          error={rename.isError ? rename.error.message : undefined}
+          onClose={() => setRenaming(false)}
+          onSave={(value) => rename.mutate(value || null, { onSuccess: () => setRenaming(false) })}
+        />
       )}
+      {confirm &&
+        createPortal(
+          <ConfirmDialog
+            title="Unsubscribe from feed?"
+            item={feed.title}
+            action="Unsubscribe"
+            pending={unsubscribe.isPending}
+            onClose={() => setConfirm(false)}
+            onConfirm={() => unsubscribe.mutate(feed.id, { onSuccess: () => navigate('/') })}
+          >
+            This removes the feed and its posts. Links saved to Home stay in your library.
+            {unsubscribe.isError && (
+              <span role="alert" className="silo-feed-error">
+                {unsubscribe.error.message}
+              </span>
+            )}
+          </ConfirmDialog>,
+          document.body,
+        )}
     </>
   );
 }

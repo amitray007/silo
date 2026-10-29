@@ -8,6 +8,7 @@ export const feeds = pgTable(
     feedUrl: text('feed_url').notNull().unique(),
     siteUrl: text('site_url'),
     title: text('title').notNull(),
+    customTitle: text('custom_title'),
     description: text('description'),
     format: feedFormat('format').notNull(),
     etag: text('etag'),
