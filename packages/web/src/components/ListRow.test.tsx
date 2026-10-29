@@ -1,10 +1,11 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { StrictMode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LinkJson } from '../api/types';
 import { clearTitleReveal, registerTitleReveal } from '../lib/titleReveals';
 import { makeLink } from '../test/fixtures';
 import { ListRow } from './ListRow';
+import { ReaderSelectionContext } from './reader/ReaderSelection';
 
 function Row({ link }: { link: LinkJson }) {
   return (
@@ -213,5 +214,89 @@ describe('list title enrichment reveal', () => {
     expect(animatedText(container)).not.toBeNull();
     act(() => vi.advanceTimersByTime(800));
     expect(titleElement(container).textContent).toBe('Strict title');
+  });
+});
+
+describe('row semantics and keyboard', () => {
+  afterEach(cleanup);
+
+  function renderIn(selectedId: string | null | undefined, row: LinkJson) {
+    const ui = <Row link={row} />;
+    if (selectedId === undefined) return render(ui);
+    return render(
+      <ReaderSelectionContext.Provider value={{ selectedId, select: () => {} }}>
+        {ui}
+      </ReaderSelectionContext.Provider>,
+    );
+  }
+
+  it('keeps every button outside the row link', () => {
+    renderIn(null, makeLink({ id: 'sem-1', title: 'Plain title' }));
+    const row = screen.getByRole('link');
+    expect(row.querySelectorAll('button')).toHaveLength(0);
+    expect(screen.getAllByRole('button')).toHaveLength(3);
+  });
+
+  it('names the link by its title alone, and adds "Has note" when notes exist', () => {
+    const { unmount } = renderIn(
+      null,
+      makeLink({ id: 'sem-2', title: 'Plain title', notes: null }),
+    );
+    expect(screen.getByRole('link').getAttribute('href')).toBeTruthy();
+    expect(screen.getByRole('link', { name: /^Plain title/ }).textContent).not.toContain(
+      'Has note',
+    );
+    unmount();
+    renderIn(null, makeLink({ id: 'sem-3', title: 'Plain title', notes: 'remember' }));
+    expect(screen.getByRole('link', { name: /Plain title.*Has note/ })).toBeDefined();
+    expect(
+      screen.queryByRole('link', { name: /Open original|Move to trash|More actions/ }),
+    ).toBeNull();
+  });
+
+  it('names the menu button "More actions"', () => {
+    renderIn(null, makeLink({ id: 'sem-4' }));
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Options' })).toBeNull();
+  });
+
+  it.each([
+    ['another row is selected', 'other-row', -1],
+    ['no row is selected', null, -1],
+    ['this row is selected', 'sem-5', 0],
+    ['there is no reader context', undefined, 0],
+  ] as const)('sets the action tab stops when %s', (_name, selectedId, expected) => {
+    renderIn(selectedId, makeLink({ id: 'sem-5' }));
+    for (const button of screen.getAllByRole('button')) {
+      expect(button.tabIndex).toBe(expected);
+    }
+  });
+
+  it('keeps hover on the row while the pointer moves onto the actions', () => {
+    const onLeave = vi.fn();
+    const onEnter = vi.fn();
+    const row = makeLink({ id: 'sem-6' });
+    render(
+      <ListRow
+        link={row}
+        menuOpen={false}
+        toggleMenu={() => {}}
+        menu={() => null}
+        onRemove={() => {}}
+        onEnter={onEnter}
+        onLeave={onLeave}
+      />,
+    );
+    const anchor = screen.getByRole('link');
+    const button = screen.getByRole('button', { name: 'More actions' });
+    fireEvent.mouseEnter(anchor);
+    expect(onEnter).toHaveBeenCalledTimes(1);
+    fireEvent.mouseEnter(button, { relatedTarget: anchor });
+    expect(onLeave).not.toHaveBeenCalled();
+    fireEvent.focus(anchor);
+    fireEvent.blur(anchor, { relatedTarget: button });
+    expect(onLeave).not.toHaveBeenCalled();
+    fireEvent.blur(button, { relatedTarget: document.body });
+    expect(onLeave).toHaveBeenCalledTimes(1);
   });
 });

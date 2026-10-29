@@ -417,7 +417,9 @@ describe('reader selection and history', () => {
     fireEvent.focus(row);
     expect(row.querySelector('.silo-letter-chip')).toBe(favicon);
     expect(within(row).queryByRole('button', { name: /Select/ })).toBeNull();
-    fireEvent.click(within(row).getByRole('button', { name: 'Options' }));
+    fireEvent.click(
+      within(row.parentElement as HTMLElement).getByRole('button', { name: 'More actions' }),
+    );
     expect(screen.queryByRole('menuitem', { name: /Select/ })).toBeNull();
     expect(screen.getByRole('menuitem', { name: 'Move to trash' })).toBeDefined();
   });
@@ -886,6 +888,21 @@ describe('review regressions', () => {
     expect(reader().queryByRole('button', { name: 'Retry capture' })).toBeNull();
   });
 
+  it('moves focus from the selected row action to the next selected link', async () => {
+    const { container } = renderReader({ route: '/?link=a' });
+    await selected();
+    const first = container.querySelector('[data-link-id="a"]');
+    const second = container.querySelector('[data-link-id="b"]');
+    const wrap = first?.closest('.silo-row-wrap') as HTMLElement;
+    const action = within(wrap).getByRole('button', { name: 'More actions' });
+    act(() => action.focus());
+    expect(document.activeElement).toBe(action);
+    fireEvent.keyDown(action, { key: 'j' });
+    await selected('Second link');
+    expect(document.activeElement).toBe(second);
+    expect(action.tabIndex).toBe(-1);
+  });
+
   it('moves row focus with keyboard selection and keeps one row in the tab order', async () => {
     const { container } = renderReader();
     await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
@@ -941,7 +958,11 @@ describe('review regressions', () => {
       const row = container.querySelector<HTMLElement>(`[data-link-id="${id}"]`);
       fireEvent.click(row as HTMLElement);
       await selected(id === 'a' ? 'First link' : 'Second link');
-      fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
+      fireEvent.click(
+        within((row as HTMLElement).parentElement as HTMLElement).getByRole('button', {
+          name: 'More actions',
+        }),
+      );
       fireEvent.click(screen.getByText('Move to trash'));
       await waitFor(() => expect(screen.getByTestId('url').textContent).toBe(url));
       if (nextTitle) await selected(nextTitle);
@@ -967,7 +988,11 @@ describe('review regressions', () => {
       return original?.(input, init) as Promise<Response>;
     });
     const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
-    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
+    fireEvent.click(
+      within((row as HTMLElement).parentElement as HTMLElement).getByRole('button', {
+        name: 'More actions',
+      }),
+    );
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
     await waitFor(() => expect(container.querySelector('[data-link-id="a"]')).toBeNull());
@@ -994,7 +1019,11 @@ describe('review regressions', () => {
     });
     await selected();
     const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
-    fireEvent.click(within(row as HTMLElement).getByRole('button', { name: 'Options' }));
+    fireEvent.click(
+      within((row as HTMLElement).parentElement as HTMLElement).getByRole('button', {
+        name: 'More actions',
+      }),
+    );
     fireEvent.click(screen.getByRole('menuitem', { name: 'Delete now' }));
     fireEvent.click(screen.getByRole('button', { name: 'Confirm permanent deletion' }));
     await selected('Second link');
@@ -1021,7 +1050,9 @@ describe('review regressions', () => {
     const { container } = renderReader({ route: '/?link=a' });
     await selected();
     const row = container.querySelector<HTMLElement>('[data-link-id="a"]');
-    const options = within(row as HTMLElement).getByRole('button', { name: 'Options' });
+    const options = within((row as HTMLElement).parentElement as HTMLElement).getByRole('button', {
+      name: 'More actions',
+    });
     fireEvent.click(options);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(options.getAttribute('aria-expanded')).toBe('false');

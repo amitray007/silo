@@ -220,7 +220,8 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
   // no matching `scheduleHide` ever fires. The card then floats with the
   // pointer nowhere near it. This listener — armed ONLY while a preview is on
   // screen, so there's zero cost otherwise — watches raw pointer moves and,
-  // whenever the pointer is over NONE of a library link row (`.silo-link-row`),
+  // whenever the pointer is over NONE of a library row including its actions
+  // (`.silo-row-wrap`), a standalone link row (`.silo-link-row`),
   // a command-palette row (`.silo-palette-row`), or the preview card
   // (`.silo-popover`), closes the preview. That's the one signal the
   // per-element `mouseleave` handlers can drop; the row/card enter handlers
@@ -238,6 +239,7 @@ export function HoverPreviewProvider({ children }: { children: ReactNode }) {
     const onPointerMove = (event: PointerEvent) => {
       const target = event.target as Element | null;
       if (
+        target?.closest('.silo-row-wrap') ||
         target?.closest('.silo-link-row') ||
         target?.closest('.silo-palette-row') ||
         target?.closest('.silo-popover')

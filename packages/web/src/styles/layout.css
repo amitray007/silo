@@ -210,6 +210,7 @@
   font-size: 14px;
   line-height: 20px;
   font-weight: 400;
+  letter-spacing: normal;
   color: var(--ghost);
   padding: 24px 12px 4px;
   margin: 0;
@@ -1193,10 +1194,10 @@
   background: white;
 }
 @media (hover: hover) and (pointer: fine) {
-  .silo-link-row:hover {
+  .silo-row-wrap:hover > .silo-link-row {
     background: var(--hov);
   }
-  .silo-link-row[data-active="true"]:hover {
+  .silo-row-wrap:hover > .silo-link-row[data-active="true"] {
     background: var(--sel);
   }
   .silo-reader-iconbtn:not(:disabled):hover,
@@ -1748,7 +1749,7 @@ div.silo-reader-notecard {
   position: static;
   opacity: 1;
 }
-.silo-link-row:has(:where(.silo-row-actions) :focus-visible) .silo-row-actions,
+.silo-row-actions:has(:focus-visible),
 .silo-row-actions:has([aria-expanded="true"]) {
   opacity: 1;
   pointer-events: auto;
@@ -1783,13 +1784,13 @@ div.silo-reader-notecard {
   box-shadow: var(--menu-shadow);
 }
 @media (hover: hover) and (pointer: fine) {
-  .silo-link-row:hover .silo-row-actions {
+  .silo-row-wrap:hover > .silo-row-actions {
     opacity: 1;
     pointer-events: auto;
   }
 }
 @media (hover: none) {
-  .silo-link-row .silo-row-actions {
+  .silo-row-wrap .silo-row-actions {
     display: none;
     background: none;
   }
@@ -2017,10 +2018,6 @@ div.silo-reader-notecard {
 .silo-link-row[data-compact="true"] {
   gap: 12px;
 }
-.silo-row-wrap {
-  padding-top: 1px;
-}
-
 .silo-reader-icon {
   width: 20px;
   height: 20px;
@@ -2039,9 +2036,12 @@ div.silo-reader-notecard {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .silo-link-row:hover:not([data-active="true"]) {
+  .silo-row-wrap:hover > .silo-link-row:not([data-active="true"]) {
     background: var(--row-hover);
   }
+}
+.silo-row-wrap:has(> .silo-row-actions :focus-visible) > .silo-link-row:not([data-active="true"]) {
+  background: var(--row-hover);
 }
 
 .silo-capture-heading {
@@ -2162,7 +2162,7 @@ div.silo-reader-notecard {
   }
 }
 
-.silo-link-row[data-active="true"] .silo-row-actions {
+.silo-link-row[data-active="true"] + .silo-row-actions {
   background: linear-gradient(to right, transparent, var(--sel) 40px);
 }
 
