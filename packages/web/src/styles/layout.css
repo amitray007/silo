@@ -30,7 +30,7 @@
   justify-content: space-between;
   height: 44px;
   flex: none;
-  padding: 0 12px;
+  padding: 0 10px 0 12px;
 }
 .silo-sidebar-grow {
   flex: 1;
@@ -164,6 +164,7 @@
   padding: 0 6px 0 16px;
 }
 .silo-panehead {
+  border-bottom: 0.5px solid var(--line);
   gap: 12px;
   /* 24px puts the pane title on the same edge as the day labels and row icons. */
   padding-left: 24px;
@@ -201,7 +202,6 @@
   min-height: 0;
   overscroll-behavior: contain;
   padding: 12px 12px 128px;
-  border-top: 0.5px solid var(--line);
 }
 .silo-content-col {
   min-height: 0;
@@ -933,7 +933,8 @@
 }
 .silo-reader-stats {
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 32px;
   margin: 12px 0 0;
   padding: 0 4px;
   list-style: none;
@@ -1766,7 +1767,7 @@ div.silo-reader-notecard {
 .silo-row-note-icon {
   position: absolute;
   right: 8px;
-  top: 14px;
+  top: 12px;
   color: var(--fnt);
 }
 .silo-link-row:has(.silo-row-note-icon) .silo-row-titleline {
@@ -1857,7 +1858,7 @@ div.silo-reader-notecard {
   font-size: inherit;
   line-height: inherit;
 }
-@media (max-width: 639px) {
+@media (max-width: 640px) {
   .silo-reader > h2 {
     font-size: 24px;
   }
