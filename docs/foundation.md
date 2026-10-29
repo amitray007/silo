@@ -7,7 +7,7 @@ No **feature** increment is built until every item below is checked (Build philo
 ## Product foundation (decide first — no stack talk)
 - [x] The core capture → find-later loop is defined — paste link → rich metadata + full text → trusted list → tags/notes → search. (2026-07-03, scope map rev 6)
 - [x] Which sources get *first-class* treatment is decided — HN + Twitter via a plugin system built together with its first plugins; "first-class" = richer card from source-aware capture. "Just a link" is the universal floor.
-- [x] The read-later queue model is defined — **there isn't one.** Tags carry toread/done; queue cut deliberately.
+- [x] The read-later queue model is defined — **there isn't one.** Tags carry toread/done; queue cut deliberately. Feeds (2026-10-29) have a per-feed Inbox and Archive for triaging feed posts; it does not touch the library.
 - [ ] The "better-than-a-list" viewing UI is defined at a product level (what makes it good — not how it's built) ← **design phase, in progress**
 - [x] The MCP surface is defined at a product level — agent can add a link, list/filter/search items, read an item's details + notes; same operations the human UI uses. (Build staged as the immediate second increment.)
 - [x] What silo deliberately does NOT do is written down — anti-scope in `product/scope.html`: no required AI (optional AI features since 2026-10-28, off by default), not a file store, not a content archive, not every-site understanding, not harbor's everything-store, not multi-user.
