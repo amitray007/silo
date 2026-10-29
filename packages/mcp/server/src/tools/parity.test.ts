@@ -3,13 +3,29 @@ import { expect, it } from 'vitest';
 import { describeMcpTool, seedLink } from './test-support/mcp-server-harness.js';
 
 describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
-  it('lists all four new tools', async () => {
+  it('registers exactly the expected tools, the four new ones included', async () => {
     const { client } = getContext();
     const { tools } = await client.listTools();
-    expect(tools).toHaveLength(18);
-    expect(tools.map((tool) => tool.name)).toEqual(
-      expect.arrayContaining(['refresh_reader', 'list_tags', 'list_trash', 'hard_delete_link']),
-    );
+    expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'add_link_tag',
+      'capture_link',
+      'create_tag',
+      'delete_tag',
+      'edit_link',
+      'export_links',
+      'find_related',
+      'get_link',
+      'hard_delete_link',
+      'list_links',
+      'list_tags',
+      'list_trash',
+      'refresh_reader',
+      'remove_link_tag',
+      'restore_link',
+      'retry_capture',
+      'search_links',
+      'trash_link',
+    ]);
   });
 
   it('reads user and AI title provenance through get_link and list_links', async () => {

@@ -4,11 +4,11 @@ import { z } from 'zod';
 
 const errors = {
   no_reader:
-    'No Reader content on this page (X posts have none). Use get_link for its saved content.',
+    'No Reader content on this page (X posts have none). Use get_link for its saved extractedText.',
   fetch_failed:
     'Could not fetch the page; the saved Reader is kept. Try refresh_reader again later.',
   refresh_unavailable:
-    'Refresh needs the silo worker running in this process (run the turnkey silo app).',
+    'Refresh is not available on this MCP server: it needs the Reader worker in the same process. The turnkey silo app has it; a bare silo-mcp process or the separate mcp-http container does not. Use the web app Refresh reader action instead.',
 };
 
 export function registerRefreshReader(server: McpServer): void {
@@ -17,7 +17,7 @@ export function registerRefreshReader(server: McpServer): void {
     {
       title: 'Refresh Reader',
       description:
-        'Re-fetch one page to refresh its saved Reader. Never changes title, description, or tags. Use get_link for the link content.',
+        'Re-fetch one page to refresh its saved Reader (the formatted article view in the web app). Also updates the link extractedText from the new page text; never changes title, description, or tags. Works on the turnkey silo app; a bare silo-mcp process or the separate mcp-http container returns an error.',
       inputSchema: { id: z.uuid() },
       outputSchema: {
         refreshed: z.boolean().optional(),
@@ -34,7 +34,7 @@ export function registerRefreshReader(server: McpServer): void {
           content: [
             {
               type: 'text',
-              text: `Refreshed Reader for ${id}. Use get_link for the link content.`,
+              text: `Refreshed Reader for ${id}. Use get_link to read the updated extractedText.`,
             },
           ],
         };

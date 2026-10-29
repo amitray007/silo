@@ -7,12 +7,14 @@ import { snippetLinkShape, toSnippetLinkContent } from './link-shape.js';
 function toTrashContent(link: LinkSummaryWithTags | SearchResultRow) {
   return {
     ...toSnippetLinkContent('snippet' in link ? link : { ...link, snippet: null }),
-    deletedAt: link.deletedAt?.toISOString() ?? '',
+    deletedAt: link.deletedAt?.toISOString() ?? null,
     ...('rank' in link ? { rank: link.rank } : {}),
   };
 }
 
 function trashText(links: ReturnType<typeof toTrashContent>[], nextCursor?: string): string {
+  if (links.length === 0)
+    return 'No trashed links found. Use list_links or search_links for live links.';
   return [
     ...links.map((link) => `${link.id}: ${link.title ?? link.url}`),
     'Use restore_link to restore or hard_delete_link to permanently delete a trashed link.',
@@ -43,7 +45,7 @@ export function registerListTrash(server: McpServer): void {
         links: z.array(
           z.object({
             ...snippetLinkShape,
-            deletedAt: z.iso.datetime(),
+            deletedAt: z.iso.datetime().nullable(),
             rank: z.number().optional(),
           }),
         ),
