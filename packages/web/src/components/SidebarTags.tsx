@@ -2,10 +2,10 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
 import { useSidebarPagination } from '../lib/useSidebarPagination';
-import { SearchIcon } from './NavIcons';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
+import { SidebarFindButton, SidebarFindInput } from './SidebarFind';
 import { Skeleton } from './Skeleton';
 
 /**
@@ -71,16 +71,8 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
 
-  const findInputRef = useRef<HTMLInputElement>(null);
   const newTagInputRef = useRef<HTMLInputElement>(null);
   const createTag = useCreateTag();
-
-  // Focus the filter input the moment it opens (v3's `tagFindRef`/`onClick`
-  // focus behavior) — effect (not an inline autoFocus prop) so it re-focuses
-  // every time the button re-opens it, not just on first mount.
-  useEffect(() => {
-    if (findOpen) findInputRef.current?.focus();
-  }, [findOpen]);
 
   useEffect(() => {
     if (newTagOpen) newTagInputRef.current?.focus();
@@ -163,65 +155,13 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
           </button>
         </div>
         <span style={{ flex: 1 }} />
-        {/* The search icon shares the SAME right inset as the tag counts below
-            it: the header container and the NavItem tag rows both use --s2-5
-            right padding, and here the icon button carries NO negative margin
-            (removed) + zero right padding, so the 16px glyph's right edge lands
-            exactly on the count column's right edge — one consistent right rail
-            for "Tags 🔍" and every "# tag  N" below it (user feedback: align the
-            count with the Tags heading). The extra hit area is added to the
-            LEFT/vertical only, never the right, so it can't push the glyph off
-            that rail. */}
-        <button
-          type="button"
-          onClick={toggleTagFind}
-          title="Find a tag"
-          aria-label="Find a tag"
-          aria-expanded={findOpen}
-          className="silo-icon-btn-sm"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: 0,
-            background: 'none',
-            borderRadius: 6,
-            padding: 'var(--s1) 0 var(--s1) var(--s1)',
-            color: findOpen ? 'var(--ink)' : 'var(--mut)',
-            cursor: 'pointer',
-          }}
-        >
-          {/* The real magnifier SVG (matching the Omnibar's), not the thin
-              `⌕` Unicode glyph — that rendered undersized and inconsistent
-              across platforms (user feedback: "too small … use a better
-              search icon"). 16px, current stroke color. */}
-          <SearchIcon />
-        </button>
+        <SidebarFindButton label="Find a tag" open={findOpen} onClick={toggleTagFind} />
       </div>
 
       {expanded && (
         <div id="silo-tag-list" className="silo-tags-body">
           {findOpen && (
-            <input
-              ref={findInputRef}
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Find tag"
-              className="silo-field"
-              style={{
-                margin: '0 4px 3px',
-                padding: '4px 8px',
-                border: '1px solid var(--line)',
-                borderRadius: 7,
-                background: 'var(--bg)',
-                color: 'var(--ink)',
-                font: 'inherit',
-                fontSize: 'var(--sidebar-input-size, var(--text-sm))',
-                width: 'calc(100% - 8px)',
-                boxSizing: 'border-box',
-                transition: 'border-color .15s ease',
-              }}
-            />
+            <SidebarFindInput value={query} onChange={setQuery} placeholder="Find tag" />
           )}
 
           <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Tags">

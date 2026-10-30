@@ -11,6 +11,7 @@ import { FeedMenu } from './FeedMenu';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
+import { SidebarFindButton, SidebarFindInput } from './SidebarFind';
 
 function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void }) {
   const to = `/feeds/${feed.id}`;
@@ -57,13 +58,19 @@ function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void
 export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
   const [expanded, setExpanded] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [query, setQuery] = useState('');
   const feeds = useFeeds();
-  const rows = feeds.data?.feeds ?? [];
+  const trimmedQuery = query.trim().toLowerCase();
+  const rows = (feeds.data?.feeds ?? []).filter((feed) =>
+    feed.title.toLowerCase().includes(trimmedQuery),
+  );
   const activeId = useMatch('/feeds/:id')?.params.id;
   const page = useSidebarPagination(
     rows.length,
     rows.findIndex((feed) => feed.id === activeId),
     expanded,
+    trimmedQuery,
   );
   return (
     <div className="silo-tags" data-expanded={expanded}>
@@ -83,9 +90,21 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
             <SectionCaret expanded={expanded} />
           </button>
         </div>
+        <span style={{ flex: 1 }} />
+        <SidebarFindButton
+          label="Find a feed"
+          open={findOpen}
+          onClick={() => {
+            setFindOpen(!findOpen);
+            if (findOpen) setQuery('');
+          }}
+        />
       </div>
       {expanded && (
         <div id="silo-feed-list" className="silo-tags-body">
+          {findOpen && (
+            <SidebarFindInput value={query} onChange={setQuery} placeholder="Find feed" />
+          )}
           {feeds.isLoading && (
             <span className="silo-feed-description" role="status">
               Loading feeds…
