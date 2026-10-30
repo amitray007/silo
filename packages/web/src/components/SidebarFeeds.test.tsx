@@ -46,7 +46,9 @@ it('filters the complete feed list before paging, focuses the input and clears o
   expect(screen.queryByRole('status')).toBeNull();
   fireEvent.change(input, { target: { value: 'missing' } });
   expect(screen.queryByRole('link', { name: /Owner title/ })).toBeNull();
-  expect(screen.getByText('No matching feeds')).toBeDefined();
+  expect(screen.getByText('No feeds match "').closest('p')?.textContent).toBe(
+    'No feeds match "missing"',
+  );
   const toggle = screen.getByRole('button', { name: 'Toggle feeds' });
   toggle.focus();
   fireEvent.click(toggle);
@@ -57,8 +59,52 @@ it('filters the complete feed list before paging, focuses the input and clears o
   fireEvent.click(screen.getByRole('button', { name: 'Find a feed' }));
   expect(screen.queryByPlaceholderText('Find feed')).toBeNull();
   expect(screen.getByRole('link', { name: /Publisher 0/ })).toBeDefined();
-  expect(screen.queryByText('No matching feeds')).toBeNull();
+  expect(screen.queryByText('No feeds match "')).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: 'Find a feed' }));
   expect(screen.getByPlaceholderText('Find feed')).toHaveProperty('value', '');
   expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Find feed' }));
+});
+
+it('clears by button or Escape, then closes on empty Escape and restores toggle focus', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(() => Promise.resolve(new Response(JSON.stringify({ feeds: [] })))),
+  );
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <MemoryRouter>
+        <SidebarFeeds onNavigate={() => {}} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  const find = screen.getByRole('button', { name: 'Find a feed' });
+  fireEvent.click(find);
+  const input = screen.getByRole('textbox', { name: 'Find feed' });
+  expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+  fireEvent.change(input, { target: { value: 'News' } });
+  await screen.findByText('No feeds match "');
+  const clear = screen.getByRole('button', { name: 'Clear' });
+  clear.focus();
+  fireEvent.click(clear);
+  expect(input).toHaveProperty('value', '');
+  expect(document.activeElement).toBe(input);
+  expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+  expect(screen.queryByText('No feeds match "')).toBeNull();
+  fireEvent.change(input, { target: { value: 'News' } });
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(input).toHaveProperty('value', '');
+  expect(document.activeElement).toBe(input);
+  expect(find.getAttribute('aria-expanded')).toBe('true');
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(screen.queryByRole('textbox', { name: 'Find feed' })).toBeNull();
+  expect(document.activeElement).toBe(find);
+  expect(find.getAttribute('aria-expanded')).toBe('false');
+  fireEvent.click(find);
+  const emptyInput = screen.getByRole('textbox', { name: 'Find feed' });
+  expect(document.activeElement).toBe(emptyInput);
+  fireEvent.keyDown(emptyInput, { key: 'Escape' });
+  expect(screen.queryByRole('textbox', { name: 'Find feed' })).toBeNull();
+  expect(document.activeElement).toBe(find);
 });

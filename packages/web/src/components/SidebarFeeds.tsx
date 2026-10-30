@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useMatch, useNavigate } from 'react-router';
 import { useFeeds } from '../api/feedHooks';
 import type { FeedJson } from '../api/types';
@@ -11,7 +11,7 @@ import { FeedMenu } from './FeedMenu';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
-import { SidebarFindButton, SidebarFindInput } from './SidebarFind';
+import { SidebarFindButton, SidebarFindEmpty, SidebarFindInput } from './SidebarFind';
 
 function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void }) {
   const to = `/feeds/${feed.id}`;
@@ -61,6 +61,7 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
   const [findOpen, setFindOpen] = useState(false);
   const [autoFocusOnOpen, setAutoFocusOnOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const findButtonRef = useRef<HTMLButtonElement>(null);
   const feeds = useFeeds();
   const trimmedQuery = query.trim().toLowerCase();
   const rows = (feeds.data?.feeds ?? []).filter((feed) =>
@@ -96,6 +97,7 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
         </div>
         <span style={{ flex: 1 }} />
         <SidebarFindButton
+          ref={findButtonRef}
           label="Find a feed"
           open={findOpen}
           onClick={() => {
@@ -113,6 +115,10 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
               onChange={setQuery}
               placeholder="Find feed"
               autoFocusOnOpen={autoFocusOnOpen}
+              onClose={() => {
+                setFindOpen(false);
+                findButtonRef.current?.focus();
+              }}
             />
           )}
           {feeds.isLoading && (
@@ -127,7 +133,7 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
           )}
           <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Feed subscriptions">
             {feeds.isSuccess && trimmedQuery && rows.length === 0 && (
-              <p className="silo-feed-description">No matching feeds</p>
+              <SidebarFindEmpty kind="feeds" query={query} />
             )}
             {rows.slice(0, page.visibleCount).map((feed) => (
               <FeedLink key={feed.id} feed={feed} onNavigate={onNavigate} />

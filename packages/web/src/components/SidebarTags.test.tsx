@@ -29,7 +29,9 @@ it('focuses find only when opened by its button and explains an unmatched filter
   const input = screen.getByRole('textbox', { name: 'Find tag' });
   expect(document.activeElement).toBe(input);
   fireEvent.change(input, { target: { value: 'missing' } });
-  expect(screen.getByText('No matching tags')).toBeDefined();
+  expect(screen.getByText('No tags match "').closest('p')?.textContent).toBe(
+    'No tags match "missing"',
+  );
   expect(screen.queryByRole('link', { name: '#design' })).toBeNull();
   const toggle = screen.getByRole('button', { name: 'Tags' });
   toggle.focus();
@@ -39,11 +41,46 @@ it('focuses find only when opened by its button and explains an unmatched filter
   expect(document.activeElement).toBe(toggle);
   expect(screen.getByRole('textbox', { name: 'Find tag' })).toHaveProperty('value', 'missing');
   fireEvent.click(find);
-  expect(screen.queryByText('No matching tags')).toBeNull();
+  expect(screen.queryByText('No tags match "')).toBeNull();
   expect(screen.getByRole('link', { name: '#design' })).toBeDefined();
   fireEvent.click(find);
   expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Find tag' }));
   expect(screen.getByRole('textbox', { name: 'Find tag' })).toHaveProperty('value', '');
+});
+
+it('clears by button or Escape, then closes on empty Escape and restores toggle focus', () => {
+  renderSidebarTags(
+    <SidebarTags tags={[{ name: 'design', count: 1 }]} renderTagLink={renderTagLink} />,
+  );
+  const find = screen.getByRole('button', { name: 'Find a tag' });
+  fireEvent.click(find);
+  const input = screen.getByRole('textbox', { name: 'Find tag' });
+  expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+  fireEvent.change(input, { target: { value: 'Design' } });
+  const clear = screen.getByRole('button', { name: 'Clear' });
+  clear.focus();
+  fireEvent.click(clear);
+  expect(input).toHaveProperty('value', '');
+  expect(document.activeElement).toBe(input);
+  expect(screen.queryByRole('button', { name: 'Clear' })).toBeNull();
+  fireEvent.change(input, { target: { value: 'missing' } });
+  expect(screen.getByText('No tags match "')).toBeDefined();
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(input).toHaveProperty('value', '');
+  expect(document.activeElement).toBe(input);
+  expect(screen.queryByText('No tags match "')).toBeNull();
+  expect(screen.getByRole('link', { name: '#design' })).toBeDefined();
+  expect(find.getAttribute('aria-expanded')).toBe('true');
+  fireEvent.keyDown(input, { key: 'Escape' });
+  expect(screen.queryByRole('textbox', { name: 'Find tag' })).toBeNull();
+  expect(document.activeElement).toBe(find);
+  expect(find.getAttribute('aria-expanded')).toBe('false');
+  fireEvent.click(find);
+  const emptyInput = screen.getByRole('textbox', { name: 'Find tag' });
+  expect(document.activeElement).toBe(emptyInput);
+  fireEvent.keyDown(emptyInput, { key: 'Escape' });
+  expect(screen.queryByRole('textbox', { name: 'Find tag' })).toBeNull();
+  expect(document.activeElement).toBe(find);
 });
 
 describe('SidebarTags loading skeleton', () => {

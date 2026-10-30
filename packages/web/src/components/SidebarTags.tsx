@@ -5,7 +5,7 @@ import { useSidebarPagination } from '../lib/useSidebarPagination';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
-import { SidebarFindButton, SidebarFindInput } from './SidebarFind';
+import { SidebarFindButton, SidebarFindEmpty, SidebarFindInput } from './SidebarFind';
 import { Skeleton } from './Skeleton';
 
 /**
@@ -69,6 +69,7 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
   const [findOpen, setFindOpen] = useState(false);
   const [autoFocusOnOpen, setAutoFocusOnOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const findButtonRef = useRef<HTMLButtonElement>(null);
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
 
@@ -158,7 +159,12 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
           </button>
         </div>
         <span style={{ flex: 1 }} />
-        <SidebarFindButton label="Find a tag" open={findOpen} onClick={toggleTagFind} />
+        <SidebarFindButton
+          ref={findButtonRef}
+          label="Find a tag"
+          open={findOpen}
+          onClick={toggleTagFind}
+        />
       </div>
 
       {expanded && (
@@ -169,12 +175,16 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
               onChange={setQuery}
               placeholder="Find tag"
               autoFocusOnOpen={autoFocusOnOpen}
+              onClose={() => {
+                setFindOpen(false);
+                findButtonRef.current?.focus();
+              }}
             />
           )}
 
           <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Tags">
             {!loading && trimmedQuery && visibleTags.length === 0 && (
-              <p className="silo-feed-description">No matching tags</p>
+              <SidebarFindEmpty kind="tags" query={query} />
             )}
             {loading && tags.length === 0
               ? SKELETON_TAG_WIDTHS.map((width, i) => (

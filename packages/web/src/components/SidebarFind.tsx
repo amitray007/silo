@@ -1,36 +1,28 @@
-import { useEffect, useRef } from 'react';
-import { SearchIcon } from './NavIcons';
+import { type KeyboardEvent, type Ref, useEffect, useRef } from 'react';
+import { ReaderIcon } from './reader/ReaderIcon';
 
 export function SidebarFindButton({
   label,
   open,
   onClick,
+  ref,
 }: {
   label: string;
   open: boolean;
   onClick: () => void;
+  ref?: Ref<HTMLButtonElement>;
 }) {
   return (
     <button
+      ref={ref}
       type="button"
       onClick={onClick}
       title={label}
       aria-label={label}
       aria-expanded={open}
-      className="silo-icon-btn-sm"
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        border: 0,
-        background: 'none',
-        borderRadius: 6,
-        padding: 'var(--s1) 0 var(--s1) var(--s1)',
-        color: open ? 'var(--ink)' : 'var(--mut)',
-        cursor: 'pointer',
-      }}
+      className="silo-icon-btn-sm silo-sidebar-find-toggle"
     >
-      <SearchIcon />
+      <ReaderIcon name="search" />
     </button>
   );
 }
@@ -40,37 +32,67 @@ export function SidebarFindInput({
   onChange,
   placeholder,
   autoFocusOnOpen,
+  onClose,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
   autoFocusOnOpen: boolean;
+  onClose: () => void;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (autoFocusOnOpen) ref.current?.focus();
   }, [autoFocusOnOpen]);
+  function onKeyDown(event: KeyboardEvent) {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (value) {
+      onChange('');
+      ref.current?.focus();
+    } else {
+      onClose();
+    }
+  }
   return (
-    <input
-      ref={ref}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-      placeholder={placeholder}
-      aria-label={placeholder}
-      className="silo-field"
-      style={{
-        margin: '0 4px 3px',
-        padding: '4px 8px',
-        border: '1px solid var(--line)',
-        borderRadius: 7,
-        background: 'var(--bg)',
-        color: 'var(--ink)',
-        font: 'inherit',
-        fontSize: 'var(--sidebar-input-size, var(--text-sm))',
-        width: 'calc(100% - 8px)',
-        boxSizing: 'border-box',
-        transition: 'border-color .15s ease',
-      }}
-    />
+    <div className="silo-sidebar-find">
+      <span className="silo-sidebar-find-icon">
+        <ReaderIcon name="search" size={14} />
+      </span>
+      <input
+        ref={ref}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        onKeyDown={onKeyDown}
+        placeholder={placeholder}
+        aria-label={placeholder}
+        className="silo-sidebar-find-input"
+      />
+      {value && (
+        <button
+          type="button"
+          className="silo-sidebar-find-clear"
+          aria-label="Clear"
+          onKeyDown={onKeyDown}
+          onClick={() => {
+            onChange('');
+            ref.current?.focus();
+          }}
+        >
+          <ReaderIcon name="close" size={14} />
+        </button>
+      )}
+    </div>
+  );
+}
+
+export function SidebarFindEmpty({ kind, query }: { kind: 'feeds' | 'tags'; query: string }) {
+  return (
+    <p className="silo-sidebar-find-empty">
+      <span>No {kind} match &quot;</span>
+      <span className="silo-sidebar-find-query">{query.trim()}</span>
+      <span>&quot;</span>
+    </p>
   );
 }

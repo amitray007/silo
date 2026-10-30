@@ -2034,6 +2034,93 @@ div.silo-reader-notecard {
   flex-direction: column;
   gap: 2px;
 }
+.silo-sidebar-find-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  cursor: pointer;
+}
+.silo-sidebar-find {
+  position: relative;
+  margin-bottom: 3px;
+}
+.silo-sidebar-find-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  height: 28px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 0 28px;
+  background: var(--input-bg);
+  color: var(--ink);
+  font: inherit;
+  font-size: var(--sidebar-input-size, 13px);
+  font-weight: 400;
+  transition: border-color 150ms var(--ease-out);
+}
+.silo-sidebar-find-input:focus-visible {
+  border-color: var(--line-2);
+  outline: 2px solid var(--fnt);
+  outline-offset: -1px;
+}
+.silo-sidebar-find-icon {
+  position: absolute;
+  inset: 0 auto 0 8px;
+  display: flex;
+  align-items: center;
+  color: var(--fnt);
+  pointer-events: none;
+}
+.silo-sidebar-find-clear {
+  position: absolute;
+  inset: 3px 3px 3px auto;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  border: 0;
+  border-radius: 4px;
+  padding: 0;
+  background: none;
+  color: var(--fnt);
+  cursor: pointer;
+}
+.silo-sidebar-find-clear:focus-visible {
+  outline-offset: -2px;
+}
+.silo-sidebar-find-icon svg,
+.silo-sidebar-find-clear svg {
+  width: 14px;
+  height: 14px;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-sidebar-find-clear:hover {
+    background: var(--icon-hover);
+    color: var(--ink);
+  }
+}
+.silo-sidebar-find-empty {
+  display: flex;
+  min-width: 0;
+  margin: 6px 0 4px;
+  padding: 0 8px 0 29px;
+  color: var(--fnt);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+}
+.silo-sidebar-find-empty > span {
+  flex-shrink: 0;
+}
+.silo-sidebar-find-empty > .silo-sidebar-find-query {
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .silo-tag-scroll[data-more-above="true"] {
   --fade-top: 20px;
 }
