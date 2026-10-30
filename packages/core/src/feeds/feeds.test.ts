@@ -91,6 +91,33 @@ describe('feeds on real Postgres', () => {
       error: 'not_found',
     });
   });
+  it('stores feed media and keeps GUID identity when the enclosure URL changes', async () => {
+    const media = {
+      kind: 'feed_media' as const,
+      content: '<p>Episode show notes</p>',
+      description: 'Summary',
+      imageUrl: 'https://example.com/cover.jpg',
+      enclosureUrl: 'https://example.com/episode.mp3',
+    };
+    const entry = { id: 'opaque-episode-id', url: media.enclosureUrl, title: 'An episode', media };
+    const { feed, resolved } = await subscribe([entry]);
+    const [post] = (await h.mod().listFeedPosts(feed.id)).links;
+    expect(post).toMatchObject({
+      sourceKind: 'feed_media',
+      sourceData: media,
+      title: 'An episode',
+      captureStatus: 'enriching',
+    });
+    expect(h.mod().entryIdentity(entry)).toBe('opaque-episode-id');
+    await due(feed.id);
+    const core = h.mod();
+    await core.pollFeed(feed.id, async () => ({
+      kind: 'modified',
+      feed: { ...resolved, entries: [{ ...entry, url: 'https://example.com/changed.mp3' }] },
+    }));
+    expect((await h.mod().listFeedPosts(feed.id)).links.map((row) => row.id)).toEqual([post?.id]);
+  });
+
   it('reports unavailable and not found honestly', async () => {
     expect(await h.mod().subscribeFeed({ url: 'https://example.com', syncRecents: true })).toEqual({
       error: 'feeds_unavailable',

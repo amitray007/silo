@@ -145,7 +145,8 @@ export interface SafeFetchOptions {
   responseHeaderNames?: readonly string[];
   signal?: AbortSignal;
   maxRedirects?: number;
-  maxBodyBytes?: number;
+  /** Trusted profile may choose a streaming cap from the response MIME type. */
+  maxBodyBytes?: number | ((contentType: string | undefined) => number);
   /** Shared streaming cap for a group of related responses. */
   bodyBudget?: BodyByteBudget;
   timeoutMs?: number;
@@ -308,7 +309,7 @@ interface HopContext {
   responseHeaderNames: readonly string[];
   includeHttpErrors: boolean;
   resolver: Resolver;
-  maxBodyBytes: number;
+  maxBodyBytes: NonNullable<SafeFetchOptions['maxBodyBytes']>;
   bodyBudget: BodyByteBudget | undefined;
   controller: AbortController;
   isLastHop: boolean;
@@ -419,7 +420,12 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
   }
 
   const contentType = response.headers.get('content-type') ?? undefined;
-  const body = await readBodyWithCap(response, ctx.maxBodyBytes, ctx.controller, ctx.bodyBudget);
+  const body = await readBodyWithCap(
+    response,
+    responseBodyCap(ctx.maxBodyBytes, contentType),
+    ctx.controller,
+    ctx.bodyBudget,
+  );
   if (!body.ok) {
     return { kind: 'done', result: body };
   }
@@ -450,6 +456,13 @@ async function requestAndInterpret(url: URL, agent: Agent, ctx: HopContext): Pro
         : {}),
     },
   };
+}
+
+function responseBodyCap(
+  limit: NonNullable<SafeFetchOptions['maxBodyBytes']>,
+  contentType: string | undefined,
+): number {
+  return typeof limit === 'function' ? limit(contentType) : limit;
 }
 
 function interpretRedirect(

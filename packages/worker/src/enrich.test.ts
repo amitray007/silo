@@ -76,6 +76,94 @@ describeIfPg('enrichLink (integration)', () => {
     };
   }
 
+  it('captures feed media without page fetch, preserves show notes through refresh and Save to Home', async () => {
+    const feedResult = await pool.query<{ id: string }>(
+      "insert into feeds (feed_url, title, format, next_poll_at) values ('https://example.com/media-feed', 'Podcast', 'rss', now()) returning id",
+    );
+    const feed = feedResult.rows[0];
+    if (!feed) throw new Error('missing feed');
+    const source = {
+      kind: 'feed_media' as const,
+      content:
+        '<p>Searchable quasar show notes.</p><ul><li>A topic</li></ul><script>evil()</script><a href="javascript:evil()">Unsafe</a><img src="https://example.com/photo.jpg" onerror="evil()">',
+      description: '  <p>Short <b>episode</b> summary.</p>  ',
+      imageUrl: 'https://example.com/cover.jpg',
+      enclosureUrl: 'https://example.com/episode.mp3',
+    };
+    const post = await core.createFeedPost({
+      feedId: feed.id,
+      url: source.enclosureUrl,
+      title: 'Episode title',
+      publishedAt: new Date('2026-10-29'),
+      media: source,
+    });
+    if (!post) throw new Error('missing post');
+    const deps = stubDeps({ ok: false, reason: 'not-found' });
+    const fetch = vi.spyOn(deps, 'safeFetch');
+    const extract = vi.spyOn(deps, 'extract');
+    const sourceFetch = vi.spyOn(deps, 'enrichSource');
+    await enrichMod.enrichLink(post.id, deps);
+    const stored = await core.getById(post.id);
+    expect(stored).toMatchObject({
+      title: 'Episode title',
+      description: 'Short episode summary.',
+      imageUrl: source.imageUrl,
+      captureStatus: 'full',
+      sourceKind: 'feed_media',
+      sourceData: source,
+      extractedText: expect.stringContaining('Searchable quasar show notes.'),
+    });
+    const reader = await core.getStoredReader(post.id);
+    expect(reader?.contentHtml).toContain('<ul><li>A topic</li></ul>');
+    expect(reader?.contentHtml).toContain('https://example.com/episode.mp3');
+    expect(reader?.contentImages).toEqual(['https://example.com/photo.jpg']);
+    expect(reader?.contentHtml).not.toMatch(/script|onerror|javascript:|evil\(/);
+    const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+    const refresher = createReaderRefresher(() => {}, {
+      fetch: async () => {
+        throw new Error('must not fetch media');
+      },
+    });
+    const refreshed = await refresher(post, AbortSignal.timeout(30_000));
+    expect(refreshed).toMatchObject({
+      status: 'reader',
+      reader: { contentHtml: reader?.contentHtml },
+    });
+    const { createLiveReader } = await import('./reader/live-reader.js');
+    const live = createLiveReader({
+      fetch: async () => {
+        throw new Error('must not fetch media');
+      },
+    });
+    expect(await live(post, AbortSignal.timeout(30_000))).toMatchObject({
+      contentHtml: reader?.contentHtml,
+    });
+    const enqueue = vi.fn(async () => {});
+    core.setEnrichmentEnqueuer(enqueue);
+    const saved = await core.saveFeedPost(feed.id, post.id);
+    if ('error' in saved) throw new Error(saved.error);
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(await core.getStoredReader(saved.id)).toEqual(reader);
+    expect(await core.getById(saved.id)).toMatchObject({
+      feedId: null,
+      sourceKind: 'feed_media',
+      sourceData: source,
+      extractedText: stored?.extractedText,
+      captureStatus: 'full',
+    });
+    expect((await core.search('quasar')).results.map((l) => l.id)).toContain(saved.id);
+    // A retry or targeted Reader request must keep using the saved notes on the Home copy.
+    await core.requestEnrich(saved.id, { fields: ['reader'] });
+    await enrichMod.enrichLink(saved.id, deps, { trigger: 'manual', previousStatus: 'full' });
+    expect(await core.getStoredReader(saved.id)).toMatchObject({
+      contentHtml: reader?.contentHtml,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
+    expect(sourceFetch).not.toHaveBeenCalled();
+    core.resetEnrichmentEnqueuer();
+  }, 45_000);
+
   it('a missing feed post settles into its own trash without leaking into library trash', async () => {
     const result = await pool.query<{ id: string }>(
       "insert into feeds (feed_url, title, format, next_poll_at) values ('https://example.com/missing-post-feed', 'Publisher', 'rss', now()) returning id",

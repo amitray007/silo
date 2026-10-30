@@ -1,8 +1,11 @@
+import type { SourceData } from '../links/source-data.js';
+
 export type FeedEntry = {
   id?: string;
   url: string;
   title?: string;
   publishedAt?: Date | null;
+  media?: Extract<SourceData, { kind: 'feed_media' }>;
 };
 
 export type ResolvedFeed = {

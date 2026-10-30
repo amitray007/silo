@@ -69,6 +69,13 @@ type TweetThreadPost = {
  * is present elsewhere on the link.
  */
 export type SourceData =
+  | {
+      kind: 'feed_media';
+      content: string;
+      description?: string;
+      imageUrl?: string;
+      enclosureUrl?: string;
+    }
   | { kind: 'link' }
   | { kind: 'hacker_news'; points: number; comments: number; author: string }
   | {

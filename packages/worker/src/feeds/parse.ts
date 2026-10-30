@@ -1,6 +1,53 @@
 import type { FeedEntry, ResolvedFeed } from '@silo/core';
-import { type AnyFeed, parseFeed } from 'feedsmith';
+import { type AnyFeed, type MediaNs, parseFeed } from 'feedsmith';
 import { parseHTML } from 'linkedom';
+
+export const FEED_MAX_BODY_BYTES = 20 * 1024 * 1024;
+
+type Enclosure = { url?: string | undefined; type?: string | undefined };
+type EntryMedia = {
+  permalink?: string | undefined;
+  enclosures: Enclosure[];
+  content: string | undefined;
+  description: string | undefined;
+  image: string | undefined;
+};
+
+function mediaContents(media: MediaNs.ItemOrFeed | undefined): Enclosure[] {
+  return [...(media?.contents ?? []), ...(media?.groups ?? []).flatMap((g) => g.contents ?? [])];
+}
+
+function mediaImage(media: MediaNs.ItemOrFeed | undefined): string | undefined {
+  return (
+    media?.thumbnails?.[0]?.url ??
+    media?.contents?.[0]?.thumbnails?.[0]?.url ??
+    media?.groups?.[0]?.thumbnails?.[0]?.url ??
+    media?.groups?.[0]?.contents?.[0]?.thumbnails?.[0]?.url
+  );
+}
+
+/** Text constructs must stay text when handed to the HTML sanitizer. */
+function textHtml(value: string | undefined): string | undefined {
+  return value?.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function atomHtml(value: { value?: string; type?: string } | undefined): string | undefined {
+  return value?.type === 'html' || value?.type === 'xhtml' ? value.value : textHtml(value?.value);
+}
+
+function mediaData(options: EntryMedia, base: string): NonNullable<FeedEntry['media']> {
+  const imageUrl = httpUrl(options.image, base);
+  const enclosureUrl = options.enclosures.map((e) => httpUrl(e.url, base)).find(Boolean);
+  return {
+    kind: 'feed_media',
+    content: (options.content ?? '').slice(0, 1_048_576).replace(/[\uD800-\uDBFF]$/, ''),
+    ...(options.description
+      ? { description: options.description.slice(0, 20_000).replace(/[\uD800-\uDBFF]$/, '') }
+      : {}),
+    ...(imageUrl && imageUrl.length <= 65_536 ? { imageUrl } : {}),
+    ...(enclosureUrl && enclosureUrl.length <= 65_536 ? { enclosureUrl } : {}),
+  };
+}
 
 export function cleanTitle(value: string | { value: string } | undefined): string {
   if (!value) return '';
@@ -27,9 +74,14 @@ function entry(
   title: string | { value: string } | undefined,
   date: string | undefined,
   base: string,
+  media?: EntryMedia,
 ): FeedEntry[] {
-  const resolved = httpUrl(url, base);
+  const primary = httpUrl(url, base) ?? httpUrl(media?.permalink, base);
+  const enclosure = media?.enclosures.map((e) => httpUrl(e.url, base)).find(Boolean);
+  const resolved = primary ?? enclosure;
   if (!resolved) return [];
+  const isMedia =
+    media && (!primary || media.enclosures.some((e) => /^(audio|video)\//i.test(e.type ?? '')));
   const parsedDate = date ? new Date(date) : null;
   return [
     {
@@ -37,6 +89,7 @@ function entry(
       ...(id ? { id } : {}),
       ...(title ? { title: cleanTitle(title) } : {}),
       publishedAt: parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate : null,
+      ...(isMedia ? { media: mediaData(media, base) } : {}),
     },
   ];
 }
@@ -72,6 +125,17 @@ function parseAtom(feed: Extract<AnyFeed, { format: 'atom' }>['feed'], base: str
         item.title,
         item.published ?? item.updated,
         base,
+        {
+          enclosures: [
+            ...(item.links ?? [])
+              .filter((link) => link.rel === 'enclosure')
+              .map((link) => ({ ...link, url: link.href })),
+            ...mediaContents(item.media),
+          ],
+          content: atomHtml(item.content) ?? atomHtml(item.summary),
+          description: item.itunes?.summary ?? item.summary?.value,
+          image: item.itunes?.image ?? mediaImage(item.media),
+        },
       ),
     ),
   };
@@ -89,6 +153,12 @@ function parseJson(feed: Extract<AnyFeed, { format: 'json' }>['feed'], base: str
         item.title,
         item.date_published ?? item.date_modified,
         base,
+        {
+          enclosures: (item.attachments ?? []).map((a) => ({ ...a, type: a.mime_type })),
+          content: item.content_html ?? textHtml(item.content_text),
+          description: item.summary ?? item.content_text,
+          image: item.image ?? item.banner_image,
+        },
       ),
     ),
   };
@@ -98,7 +168,16 @@ function parseRss(feed: Extract<AnyFeed, { format: 'rss' }>['feed'], base: strin
     ...metadata('rss', feed.title, feed.link, base, feed.description),
     ...(feed.ttl !== undefined ? { ttlMinutes: feed.ttl } : {}),
     entries: (feed.items ?? []).flatMap((item) =>
-      entry(item.link, item.guid?.value, item.title, item.pubDate ?? item.dc?.dates?.[0], base),
+      entry(item.link, item.guid?.value, item.title, item.pubDate ?? item.dc?.dates?.[0], base, {
+        permalink:
+          item.guid?.isPermaLink !== false && /^https?:\/\//i.test(item.guid?.value ?? '')
+            ? item.guid?.value
+            : undefined,
+        enclosures: [...(item.enclosures ?? []), ...mediaContents(item.media)],
+        content: item.content?.encoded ?? item.description,
+        description: item.itunes?.summary ?? item.description,
+        image: item.itunes?.image ?? mediaImage(item.media),
+      }),
     ),
   };
 }
@@ -106,11 +185,19 @@ function parseRdf(feed: Extract<AnyFeed, { format: 'rdf' }>['feed'], base: strin
   return {
     ...metadata('rdf', feed.title, feed.link, base, feed.description),
     entries: (feed.items ?? []).flatMap((item) =>
-      entry(item.link, undefined, item.title, item.dc?.dates?.[0], base),
+      entry(item.link, undefined, item.title, item.dc?.dates?.[0], base, {
+        enclosures: mediaContents(item.media),
+        content: item.content?.encoded ?? item.description,
+        description: item.description,
+        image: mediaImage(item.media),
+      }),
     ),
   };
 }
 export function parseFeedBody(body: string, base: string): ParsedFeed | null {
+  // Feedsmith does not expose XMLParser limits. Reject DTDs before entity expansion,
+  // and bound input even for callers that do not use safeFetch. Keep all item IDs.
+  if (Buffer.byteLength(body) > FEED_MAX_BODY_BYTES || /<!DOCTYPE\b/i.test(body)) return null;
   try {
     const result = parseFeed(body);
     switch (result.format) {

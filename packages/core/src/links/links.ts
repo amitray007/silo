@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db, links, linkTags, tags } from '@silo/db';
 import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
+import type { FeedEntry } from '../feeds/types.js';
 import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
@@ -1392,7 +1393,7 @@ export async function restore(id: string): Promise<RestoreResult> {
 
 /** Capture into one feed, using the same canonicalizer and enrichment transaction as Home. */
 export async function createFeedPost(
-  input: { feedId: string; url: string; title?: string; publishedAt?: Date | null },
+  input: FeedEntry & { feedId: string },
   executor?: import('./executor.js').Tx,
 ): Promise<Link | null> {
   const write = async (tx: import('./executor.js').Tx) => {
@@ -1407,8 +1408,8 @@ export async function createFeedPost(
         title: input.title,
         titleSource: 'page',
         publishedAt: input.publishedAt,
-        sourceKind: detectSource(input.url).kind,
-        sourceData: { kind: 'link' },
+        sourceKind: input.media ? 'feed_media' : detectSource(input.url).kind,
+        sourceData: input.media ? sourceDataSchema.parse(input.media) : { kind: 'link' },
         source: 'feed',
         addedBy: 'user',
       })

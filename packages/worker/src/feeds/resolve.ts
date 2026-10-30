@@ -1,12 +1,27 @@
 import { type FeedPollResult, type FeedRow, type ResolvedFeed, setFeedResolver } from '@silo/core';
 import { parseHTML } from 'linkedom';
 import {
+  DEFAULT_MAX_BODY_BYTES,
   DEFAULT_TIMEOUT_MS,
   type SafeFetchOptions,
   type SafeFetchResult,
   safeFetch,
 } from '../fetch/safe-fetch.js';
-import { cleanTitle, httpUrl, type ParsedFeed, parseFeedBody, pollInterval } from './parse.js';
+import {
+  cleanTitle,
+  FEED_MAX_BODY_BYTES,
+  httpUrl,
+  type ParsedFeed,
+  parseFeedBody,
+  pollInterval,
+} from './parse.js';
+
+/** Unknown initial URLs may be feeds or discovery pages; HTML keeps its ordinary cap. */
+function feedBodyCap(contentType: string | undefined): number {
+  return /text\/html|application\/xhtml/i.test(contentType ?? '')
+    ? DEFAULT_MAX_BODY_BYTES
+    : FEED_MAX_BODY_BYTES;
+}
 
 const FEED_ACCEPT =
   'application/feed+json, application/atom+xml, application/rss+xml, application/xml;q=0.9, text/xml;q=0.9, text/html;q=0.8, */*;q=0.5';
@@ -66,7 +81,7 @@ function discoveryFetcher(fetcher: FeedFetcher) {
   let remaining = 8;
   const deadline = Date.now() + 15_000;
   const visited = new Set<string>();
-  return async (candidate: string) => {
+  return async (candidate: string, pageOnly = false) => {
     const timeoutMs = Math.min(DEFAULT_TIMEOUT_MS, deadline - Date.now());
     if (!remaining || timeoutMs <= 0 || visited.has(candidate)) return null;
     remaining--;
@@ -75,6 +90,7 @@ function discoveryFetcher(fetcher: FeedFetcher) {
       accept: FEED_ACCEPT,
       responseHeaderNames: RESPONSE_HEADERS,
       timeoutMs,
+      maxBodyBytes: pageOnly ? DEFAULT_MAX_BODY_BYTES : feedBodyCap,
     });
   };
 }
@@ -116,6 +132,7 @@ export async function fetchFeedPoll(
   fetcher: FeedFetcher = safeFetch,
 ): Promise<FeedPollResult> {
   const response = await fetcher(feed.feedUrl, {
+    maxBodyBytes: feedBodyCap,
     accept: FEED_ACCEPT,
     responseHeaderNames: RESPONSE_HEADERS,
     headers: {
@@ -138,7 +155,11 @@ export async function fetchFeedPoll(
   const prepared = parsed.title
     ? prepare(parsed, response, { url: feed.siteUrl ?? new URL(feed.feedUrl).origin, title: '' })
     : await prepareDirect(parsed, response, (url) =>
-        fetcher(url, { accept: FEED_ACCEPT, responseHeaderNames: RESPONSE_HEADERS }),
+        fetcher(url, {
+          accept: FEED_ACCEPT,
+          responseHeaderNames: RESPONSE_HEADERS,
+          maxBodyBytes: DEFAULT_MAX_BODY_BYTES,
+        }),
       );
   if (!response.permanentRedirect) prepared.feedUrl = feed.feedUrl;
   return { kind: 'modified', feed: prepared };
@@ -155,7 +176,7 @@ async function prepareDirect(
   fetchOne: ReturnType<typeof discoveryFetcher>,
 ) {
   if (!parsed.title && parsed.siteUrl) {
-    const site = await fetchOne(parsed.siteUrl);
+    const site = await fetchOne(parsed.siteUrl, true);
     if (site?.ok) return prepare(parsed, first, pageMetadata(site.html, site.finalUrl));
   }
   return prepare(parsed, first);

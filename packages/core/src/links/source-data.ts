@@ -1,5 +1,16 @@
 import { z } from 'zod';
 
+/** Publisher show notes are untrusted HTML. Only the worker's Reader sanitizer renders them. */
+const feedMediaSourceData = z
+  .object({
+    kind: z.literal('feed_media'),
+    content: z.string().max(1_048_576),
+    description: z.string().max(20_000).optional(),
+    imageUrl: z.httpUrl().max(65_536).optional(),
+    enclosureUrl: z.httpUrl().max(65_536).optional(),
+  })
+  .strict();
+
 /**
  * Per-source `source_data` payload, typed and validated by a Zod
  * discriminated union keyed on `kind`.
@@ -216,6 +227,7 @@ const youtubeSourceData = z
   .strict();
 
 export const sourceDataSchema = z.discriminatedUnion('kind', [
+  feedMediaSourceData,
   linkSourceData,
   hackerNewsSourceData,
   twitterSourceData,

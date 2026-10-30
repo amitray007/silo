@@ -2,6 +2,7 @@ import { type LiveReader, type ReaderContent, setLiveReader, setReaderRefresher 
 import { readerContentSchema } from '@silo/core/capture';
 import { type ExtractInput, type ExtractResult, extract } from '../extract/extract.js';
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
+import { readFeedMedia } from '../feeds/media.js';
 import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 import { createReaderRefresher } from './refresh-reader.js';
 
@@ -19,10 +20,14 @@ type Entry = { url: string; content: ReaderContent | undefined; expires: number 
  * unexpected (blocked fetch, parser timeout, schema mismatch) means "no Reader".
  */
 async function buildReader(
-  link: { url: string; sourceKind: string },
+  link: { id: string; url: string; sourceKind: string },
   fetch: Fetch,
   run: Extract,
 ): Promise<ReaderContent | undefined> {
+  if (link.sourceKind === 'feed_media') {
+    const result = await readFeedMedia(link.id, link.url, AbortSignal.timeout(30_000));
+    return result.status === 'reader' ? result.reader : undefined;
+  }
   const page = await fetch(link.url);
   if (!page.ok) return undefined;
   const youtube =

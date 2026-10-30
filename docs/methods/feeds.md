@@ -47,7 +47,8 @@ full text, Reader) inside that feed.
 - pg-boss scheduled jobs: `registerXJob(boss)` in `packages/worker/src/jobs/`
   (`purge-trash.ts` is the template; `singletonKey` as in `oauth-cleanup.ts`).
 - `safeFetch` (`packages/worker/src/fetch/safe-fetch.ts`): SSRF guard, pinned DNS, per-hop
-  redirect checks, 5 MB cap, 10 s timeout.
+  redirect checks, 5 MB default cap, 10 s timeout. Feed bodies use a 20 MB cap; HTML
+  autodiscovery and site metadata probes keep the 5 MB cap.
 - The core seam pattern: `setEnrichmentEnqueuer` and `registerLiveReader()` let the worker
   inject behavior into core in the same process. Feed lookup uses it.
 - `linkedom` (worker) for HTML autodiscovery and site metadata.
@@ -158,8 +159,17 @@ the latest fetched title. MCP exposes the same operation as `rename_feed`.
 
 - For each new entry: insert a `links` row with `feed_id`, `source: 'feed'`,
   `origin: 'user'`, `published_at`, and the entry title as the first title, then enqueue the
-  normal enrichment job. The post then gets metadata, full text, Reader HTML, and the title
+  normal enrichment job. Page posts get metadata, full text, Reader HTML, and the title
   rules (`title_source`, optional AI title when that feature is on) exactly like a pond link.
+- Podcast/media entries use `source_kind = feed_media` when the URL came from an enclosure
+  or an enclosure has an `audio/*` or `video/*` type. Store bounded publisher show notes in
+  `source_data`; the worker skips the page fetch and uses the existing Reader sanitizer
+  thread to produce Reader HTML and searchable text. The item title stays the title;
+  `itunes:summary` or the description supplies a plain-text description. Use `itunes:image`
+  or a Media RSS thumbnail when present. Keep an Open media link to the enclosure in the
+  Reader, including when the entry URL is a page. A completed media capture has `full`
+  status even for short show notes. Retry, Reader refresh and Home copies use the stored
+  show notes too. Save to Home copies the source payload, Reader and search text.
 - Add a `createFeedPost` function in core beside `createLink`; it shares canonicalization
   and enqueue, and dedups within the feed only.
 
@@ -179,7 +189,11 @@ the latest fetched title. MCP exposes the same operation as `rename_feed`.
   clamped to 15 min - 24 h.
 
 **Entry identity** (`entry_key`): RSS `guid`, Atom `id`, or JSON Feed `id` when present;
-otherwise the canonicalized entry link. An entry with no link is skipped.
+otherwise the canonicalized entry URL. Identity stays independent of which URL fallback
+was used. URL order: RSS link / Atom alternate / JSON Feed URL, then an HTTP(S) RSS
+GUID unless `isPermaLink="false"`, then an enclosure URL (RSS enclosure, Atom
+`rel="enclosure"`, JSON attachment, or Media RSS content). Skip entries without a valid
+HTTP(S) URL after these fallbacks.
 
 **Feed post actions**
 
@@ -219,6 +233,13 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
 
 ## `safeFetch` changes
 
+- Feed resolution and polling allow 20 MB, counted while streaming. HTML autodiscovery
+  and site metadata probes retain the 5 MB cap. All requests retain the SSRF checks,
+  pinned DNS, redirect validation and timeout. Parsing rejects bodies over 20 MB and
+  DTDs before XML entity expansion. Keep every item identity for the seen-set; do not
+  truncate the feed to the capture batch size. Store at most 1,048,576 characters of raw
+  show notes per media item; sanitized Reader HTML keeps its existing 1 MB limit.
+
 - Add `headers?: Record<string, string>` limited to an allowlist (`if-none-match`,
   `if-modified-since`).
 - Return `{ notModified: true }` for `304` instead of an `http-error` failure.
@@ -251,7 +272,8 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
 - HN via hnrss: `https://hnrss.org/frontpage`
 - JSON Feed: `https://www.jsonfeed.org/feed.json`
 - Shopify changelog (the screenshot's feed, path fallback): `https://shopify.dev/changelog`
-- Failure paths: a page with no feed, a 404, a private-IP URL, a 6 MB feed, malformed XML.
+- Failure paths: a page with no feed, a 404, a private-IP URL, a feed above 20 MB, a 6 MB HTML page, malformed XML.
+- Podcasts: `https://feeds.megaphone.fm/GLT1412515089` and `https://feeds.twit.tv/sn.xml`.
 
 ## Open questions
 
@@ -268,7 +290,8 @@ otherwise the canonicalized entry link. An entry with no link is skipped.
 - WebSub push instead of polling.
 - Sites without a feed: page-change or sitemap watching.
 - X accounts and lists (no free API, no RSS).
-- Using the feed's `content:encoded` as Reader text when the page fetch fails.
+- Using the feed's `content:encoded` as a fallback for ordinary page posts when the page fetch
+  fails. Media show notes are implemented above.
 
 ## Sidebar menus and tag rename (2026-10-30)
 

@@ -86,4 +86,5 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **WebSub push** instead of polling.
 - **Sites without a feed.** Watch page changes or sitemaps.
 - **X accounts and lists.** No free API and no RSS.
-- **Feed content as Reader text.** Use `content:encoded` when the page fetch fails.
+- **Feed content as Reader text for page posts.** Use `content:encoded` when a regular page
+  fetch fails. Podcast/media show notes already use the feed content as Reader text.

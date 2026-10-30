@@ -41,6 +41,8 @@ import type { CaptureStatus, ExtractInput, ExtractResult } from './extract/extra
 import { extract } from './extract/extract.js';
 import { FULL_TEXT_THRESHOLD } from './extract/extract-constants.js';
 import { extractYouTubeWatch } from './extract/youtube-watch.js';
+import { extractFeedMedia, feedMediaData } from './feeds/media.js';
+import { cleanTitle } from './feeds/parse.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 import { HTML_ACCEPT, safeFetch } from './fetch/safe-fetch.js';
 import { selectReader } from './reader/select-reader.js';
@@ -344,12 +346,33 @@ export async function enrichLink(
   if (isFinishedSweepDuplicate(link.captureStatus, job)) {
     return;
   }
+  if (link.sourceKind === 'feed_media') {
+    await enrichFeedMedia(link);
+    return;
+  }
   const plan = planEnrich(link);
   if (plan !== null) {
     await enrichSelectedFields(link, plan, deps);
     return;
   }
   await enrichFullLink(link, deps, job);
+}
+
+async function enrichFeedMedia(link: LinkSummaryWithTags): Promise<void> {
+  const media = feedMediaData(link.sourceData);
+  if (!media) throw new Error('Invalid stored feed media');
+  const plan = planEnrich(link);
+  const capturedAt = new Date();
+  if (plan === null || plan.reader) {
+    const reader = await extractFeedMedia(media, link.url, AbortSignal.timeout(30_000));
+    await recordReader(link.id, reader, capturedAt);
+  }
+  const metadata = plan === null || plan.metadata;
+  await recordThenMaybeSettle(link, {
+    status: 'full',
+    ...(metadata && media.description ? { description: cleanTitle(media.description) } : {}),
+    ...(metadata && media.imageUrl ? { imageUrl: media.imageUrl } : {}),
+  });
 }
 
 async function enrichFullLink(
