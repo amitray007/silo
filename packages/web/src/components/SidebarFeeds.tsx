@@ -4,6 +4,7 @@ import { useFeeds } from '../api/hooks';
 import type { FeedJson } from '../api/types';
 import { formatCount } from '../lib/formatCount';
 import { deriveDomain } from '../lib/url';
+import { useSidebarPagination } from '../lib/useSidebarPagination';
 import { AddFeedDialog } from './AddFeedDialog';
 import { Chip } from './Chip';
 import { FeedMenu } from './FeedMenu';
@@ -56,8 +57,15 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
   const [expanded, setExpanded] = useState(true);
   const [adding, setAdding] = useState(false);
   const feeds = useFeeds();
+  const rows = feeds.data?.feeds ?? [];
+  const activeId = useMatch('/feeds/:id')?.params.id;
+  const page = useSidebarPagination(
+    rows.length,
+    rows.findIndex((feed) => feed.id === activeId),
+    expanded,
+  );
   return (
-    <div className="silo-tags">
+    <div className="silo-tags" data-expanded={expanded}>
       <div className="silo-tags-header">
         <div className="silo-tags-title silo-feeds-section-title">
           <Link to="/feeds" className="silo-tags-label" onClick={onNavigate}>
@@ -85,7 +93,7 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
         </div>
       </div>
       {expanded && (
-        <div id="silo-feed-list">
+        <div id="silo-feed-list" className="silo-tags-body">
           {feeds.isLoading && (
             <span className="silo-feed-description" role="status">
               Loading feeds…
@@ -96,11 +104,14 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
               Couldn't load feeds.
             </p>
           )}
-          <div className="silo-tag-scroll">
-            {feeds.data?.feeds?.map((feed) => (
+          <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Feed subscriptions">
+            {rows.slice(0, page.visibleCount).map((feed) => (
               <FeedLink key={feed.id} feed={feed} onNavigate={onNavigate} />
             ))}
-          </div>
+            {page.hasMore && (
+              <div ref={page.sentinelRef} className="silo-sidebar-sentinel" aria-hidden="true" />
+            )}
+          </section>
           <NavItem
             title="Add feed"
             variant="tag"

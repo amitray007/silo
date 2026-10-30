@@ -167,6 +167,22 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: /trash/i })).toBeNull();
   });
 
+  it('reveals an active tag beyond page one with spaces and an encoded slash', async () => {
+    const names = Array.from({ length: 120 }, (_, i) => `Tag ${i}`);
+    names[90] = 'A tag / with spaces';
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      if (String(input) === '/api/tags')
+        return Promise.resolve(jsonResponse({ tags: tagCounts(names) }));
+      return Promise.resolve(jsonResponse({ live: 0, trash: 0 }));
+    });
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderSidebar([`/tags/${encodeURIComponent('A tag / with spaces')}`]);
+    const active = await screen.findByRole('link', { name: /A tag \/ with spaces/ });
+    expect(active.getAttribute('aria-current')).toBe('page');
+    expect(tagRowCount()).toBe(100);
+    expect(scroll.mock.instances).toContain(active);
+    scroll.mockRestore();
+  });
   it('an active tag row gets the same themed neutral state as Library/Trash', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);

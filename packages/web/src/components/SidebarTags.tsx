@@ -1,7 +1,7 @@
 import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
-import { useScrollEdges } from '../lib/useScrollEdges';
+import { useSidebarPagination } from '../lib/useSidebarPagination';
 import { SearchIcon } from './NavIcons';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
@@ -16,6 +16,7 @@ import { Skeleton } from './Skeleton';
  */
 interface SidebarTagsProps {
   tags: TagCount[];
+  activeTag?: string | undefined;
   /** True while `useTags()` is still loading (`Sidebar`'s own `isLoading`) — renders skeleton tag rows in place of `tags` (which is `[]` until it resolves) instead of a flash of empty. Defaults to `false` so existing callers/tests are unaffected. */
   loading?: boolean;
   renderTagLink: (tag: TagCount) => React.ReactNode;
@@ -55,15 +56,8 @@ function SkeletonTagRow({ labelWidth }: { labelWidth: string }) {
  * on top of routing/counts — this owns everything about "the tags list as an
  * interactive tool", `Sidebar` just supplies the tag data + a link renderer.
  *
- * Redesign (direct user feedback): the tag list used to truncate to the
- * first `TAG_SHOWN` tags behind a "+N more" toggle. It now renders EVERY
- * tag (filtered set included) inside its own fixed-`max-height`,
- * soft-scrollbar scroll region (`.silo-tag-scroll`, base.css) — a long tag
- * list scrolls independently instead of pushing Settings off-screen, and
- * nothing is hidden behind a click. Filtering (case-insensitive substring
- * match on `tagQ`) still narrows the list before it renders.
  */
-export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTagsProps) {
+export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }: SidebarTagsProps) {
   const [expanded, setExpanded] = useState(() => {
     try {
       return localStorage.getItem('silo.tagsExpanded') !== 'false';
@@ -78,7 +72,6 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
 
   const findInputRef = useRef<HTMLInputElement>(null);
   const newTagInputRef = useRef<HTMLInputElement>(null);
-  const tagScrollRef = useRef<HTMLDivElement>(null);
   const createTag = useCreateTag();
 
   // Focus the filter input the moment it opens (v3's `tagFindRef`/`onClick`
@@ -104,7 +97,12 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
   const visibleTags = trimmedQuery
     ? tags.filter((tag) => tag.name.toLowerCase().includes(trimmedQuery))
     : tags;
-  useScrollEdges(tagScrollRef, visibleTags.length);
+  const page = useSidebarPagination(
+    visibleTags.length,
+    visibleTags.findIndex((tag) => tag.name.toLowerCase() === activeTag?.toLowerCase()),
+    expanded,
+    trimmedQuery,
+  );
 
   function openNewTag() {
     setNewTagOpen(true);
@@ -142,7 +140,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
   }
 
   return (
-    <div className="silo-tags">
+    <div className="silo-tags" data-expanded={expanded}>
       <div className="silo-tags-header">
         <div className="silo-tags-title">
           <button
@@ -210,7 +208,7 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
       </div>
 
       {expanded && (
-        <div id="silo-tag-list">
+        <div id="silo-tag-list" className="silo-tags-body">
           {findOpen && (
             <input
               ref={findInputRef}
@@ -234,21 +232,17 @@ export function SidebarTags({ tags, loading = false, renderTagLink }: SidebarTag
             />
           )}
 
-          {/* The scrollable tag-list region (fix, direct user feedback): a window-sized
-          `max-height`, edge fades, and a soft scrollbar (`.silo-tag-scroll`) so a
-          long tag list scrolls in place instead of pushing Settings
-          off-screen — every tag (or every filtered match) renders here, no
-          truncation. While `useTags()` is still loading (`tags` is `[]`),
-          skeleton tag rows render in its place instead of a flash of empty —
-          the "Tags" header + find button above stay visible throughout. */}
-          <div ref={tagScrollRef} className="silo-tag-scroll">
+          <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Tags">
             {loading && tags.length === 0
               ? SKELETON_TAG_WIDTHS.map((width, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
                   <SkeletonTagRow key={i} labelWidth={width} />
                 ))
-              : visibleTags.map((tag) => renderTagLink(tag))}
-          </div>
+              : visibleTags.slice(0, page.visibleCount).map((tag) => renderTagLink(tag))}
+            {page.hasMore && (
+              <div ref={page.sentinelRef} className="silo-sidebar-sentinel" aria-hidden="true" />
+            )}
+          </section>
 
           {newTagOpen ? (
             <>

@@ -21,7 +21,8 @@
   padding: env(safe-area-inset-top, 0px) 0 0;
   border-right: 0.5px solid var(--line);
   background: transparent;
-  overflow: auto;
+  overflow: hidden;
+  min-height: 0;
   overscroll-behavior: contain;
 }
 .silo-sidebar-brandrow {
@@ -32,9 +33,12 @@
   flex: none;
   padding: 0 10px 0 12px;
 }
-.silo-sidebar-grow {
+.silo-sidebar-sections {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  min-height: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 .silo-nav-item {
   min-height: 32px;
@@ -45,9 +49,13 @@
   background: var(--sel);
   box-shadow: none;
 }
-/* Tags take the height the window can spare, keeping Settings in view. */
+/* Each list scrolls within its share of the sidebar. */
 .silo-tag-scroll {
-  max-height: max(160px, calc(100dvh - 300px));
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
   overflow-y: auto;
   --fade-top: 0px;
   --fade-bottom: 0px;
@@ -1674,9 +1682,36 @@ div.silo-reader-notecard {
   height: 20px;
 }
 .silo-tags {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 60px;
+  max-height: max-content;
   margin-top: 12px;
 }
+.silo-tags[data-expanded="false"] {
+  flex: none;
+  min-height: 0;
+}
+.silo-tags-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.silo-tags-body > :not(.silo-tag-scroll),
+.silo-tag-scroll > * {
+  flex-shrink: 0;
+}
+/* Keep absolutely positioned accessible labels inside their scrolled row. */
+.silo-tag-scroll .silo-nav-item {
+  position: relative;
+}
+.silo-sidebar-sentinel {
+  height: 1px;
+}
 .silo-tags-header {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
