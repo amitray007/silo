@@ -1,7 +1,14 @@
 import { Worker } from 'node:worker_threads';
+import type { EditorCode } from './code-editors.js';
 import type { PageContent } from './reader-page.js';
 
-type PageRequest = { html: string; url: string; description?: string; operation?: 'sanitize' };
+type PageRequest = {
+  html: string;
+  url: string;
+  description?: string;
+  operation?: 'sanitize';
+  codeEditors?: [string, EditorCode][];
+};
 type Reply = { ready?: boolean; result?: PageContent };
 
 /** Rejecting extraction lets the existing pg-boss retry/backoff and DLQ handle failures. */
@@ -22,8 +29,13 @@ export class ReaderPool {
     return this.enqueue({ html, url, ...(description ? { description } : {}) });
   }
 
-  sanitize(html: string, url: string, signal: AbortSignal): Promise<PageContent> {
-    return this.enqueue({ html, url, operation: 'sanitize' }, signal);
+  sanitize(
+    html: string,
+    url: string,
+    signal: AbortSignal,
+    codeEditors: [string, EditorCode][] = [],
+  ): Promise<PageContent> {
+    return this.enqueue({ html, url, operation: 'sanitize', codeEditors }, signal);
   }
 
   private enqueue(request: PageRequest, signal?: AbortSignal): Promise<PageContent> {
@@ -147,7 +159,8 @@ export function sanitizeRenderedPage(
   html: string,
   url: string,
   signal: AbortSignal,
+  codeEditors: [string, EditorCode][] = [],
 ): Promise<PageContent> {
   pool ??= new ReaderPool();
-  return pool.sanitize(html, url, signal);
+  return pool.sanitize(html, url, signal, codeEditors);
 }
