@@ -206,8 +206,8 @@
   color: var(--mut);
 }
 .silo-menu-item:focus-visible {
-  outline: 1px solid var(--line-2);
-  outline-offset: -1px;
+  outline: 2px solid var(--fnt);
+  outline-offset: -2px;
 }
 .silo-menu-danger,
 .silo-menu-danger .silo-menu-icon {
@@ -619,7 +619,7 @@
   }
   .silo-modal-footer > button {
     min-height: 44px;
-    font-size: 13px;
+    font-size: 14px;
     padding: 0 8px;
   }
   .silo-modal-footer .silo-quiet-danger {
@@ -868,7 +868,7 @@ button.silo-note-text {
 }
 
 @media (min-width: 641px) {
-  .silo-modal-layer-sheet {
+  .silo-modal-layer-sheet:not(.silo-modal-layer-anchored) {
     align-items: center;
     padding: 16px;
   }
@@ -963,13 +963,16 @@ button.silo-note-text {
 }
 .silo-modal-panel:not(.silo-modal-panel-settings) {
   position: relative;
-  border-radius: 16px;
-  width: min(var(--modal-width), 90vw);
-  max-height: calc(100dvh - 32px);
+}
+@media (min-width: 641px) {
+  .silo-modal-panel-sheet {
+    width: min(var(--modal-width), 90vw);
+    max-height: calc(100dvh - 32px);
+  }
 }
 .silo-modal-header .silo-settings-close {
   position: absolute;
-  top: 16px;
+  top: 21px;
   right: 16px;
   border: 0;
 }
@@ -1018,6 +1021,9 @@ button.silo-note-text {
 .silo-dialog-content .silo-modal-footer {
   padding: 0;
 }
+.silo-dialog-content .silo-feed-footer {
+  justify-content: space-between;
+}
 .silo-dialog-content .silo-confirm-content {
   padding: 0;
 }
@@ -1047,7 +1053,6 @@ button.silo-note-text {
   }
 }
 
-.silo-edit-field > .silo-field:focus-visible,
 .silo-capture-form input:focus-visible,
 .silo-tag-tokens:focus-within {
   outline: none;
@@ -1073,5 +1078,14 @@ button.silo-note-text {
     width: 16px;
     margin-left: 2px;
     opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .silo-modal-panel-sheet:has(.silo-feed-form) {
+    min-height: min(420px, 92dvh);
+  }
+  .silo-modal-header .silo-settings-close {
+    top: 17px;
   }
 }

@@ -276,6 +276,7 @@ describe('EditModal', () => {
     renderModal();
     const dialog = screen.getByRole('dialog');
     // The scrim is the dialog's parent (the fixed-inset backdrop div).
+    fireEvent.pointerDown(dialog.parentElement as HTMLElement);
     fireEvent.click(dialog.parentElement as HTMLElement);
     expect(screen.queryByRole('dialog')).toBeNull();
   });
@@ -307,6 +308,7 @@ describe('EditModal', () => {
     );
     const trigger = screen.getByText('trigger');
     trigger.focus();
+    fireEvent.keyDown(trigger, { key: 'Enter' });
     fireEvent.click(trigger);
 
     fireEvent.click(screen.getByText('Cancel'));

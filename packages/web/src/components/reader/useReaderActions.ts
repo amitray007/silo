@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSaveFeedPost, useTriageFeedPost } from '../../api/feedHooks';
 import { useDeleteNow, useRestoreLink, useTrashLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
+import { isFeedPost } from '../../lib/isFeedPost';
 import { isTextEntryElement } from '../../lib/usePasteCapture';
 import { useRowMenu } from '../RowMenuContext';
 
@@ -21,6 +23,8 @@ export function useReaderActions(
   const trash = useTrashLink();
   const restore = useRestoreLink();
   const remove = useDeleteNow();
+  const triage = useTriageFeedPost();
+  const save = useSaveFeedPost();
   const { openEdit } = useRowMenu();
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [notice, setNotice] = useState({ id, message: '' });
@@ -32,7 +36,8 @@ export function useReaderActions(
     const timer = setTimeout(() => setNotice({ id: notice.id, message: '' }), FEEDBACK_MS);
     return () => clearTimeout(timer);
   }, [notice]);
-  const busy = trash.isPending || restore.isPending || remove.isPending;
+  const busy =
+    trash.isPending || restore.isPending || remove.isPending || triage.isPending || save.isPending;
 
   async function copy() {
     if (!link) return;
@@ -45,7 +50,7 @@ export function useReaderActions(
   }
 
   function act(kind: 'trash' | 'restore' | 'delete') {
-    if (!link || busy) return;
+    if (!link || busy || isFeedPost(link)) return;
     const mutation = { trash, restore, delete: remove }[kind];
     const target = link.id;
     mutation.mutate(target, {
@@ -61,6 +66,31 @@ export function useReaderActions(
   return {
     busy,
     feedback,
+    feedPost: Boolean(link && isFeedPost(link)),
+    save: () => {
+      if (!link?.feedId || busy) return;
+      const target = link.id;
+      save.mutate(
+        { feedId: link.feedId, postId: target },
+        {
+          onError: (error) => {
+            if (currentId.current === target) setFeedback(error.message);
+          },
+        },
+      );
+    },
+    archive: () => {
+      if (!link?.feedId || busy) return;
+      const target = link.id;
+      triage.mutate(
+        { feedId: link.feedId, postId: target, archived: !link.archivedAt },
+        {
+          onError: (error) => {
+            if (currentId.current === target) setFeedback(error.message);
+          },
+        },
+      );
+    },
     copy,
     trash: () => act('trash'),
     restore: () => act('restore'),
@@ -68,7 +98,8 @@ export function useReaderActions(
     confirmingDelete,
     cancelDelete: () => setConfirmingDelete(false),
     confirmDelete: () => act('delete'),
-    edit: (focus: 'title' | 'note' | 'tags' = 'title') => !trashed && link && openEdit(link, focus),
+    edit: (focus: 'title' | 'note' | 'tags' = 'title') =>
+      !trashed && link && !isFeedPost(link) && openEdit(link, focus),
     open: () => {
       const url = link && originalUrl(link.url);
       if (url) window.open(url, '_blank', 'noopener,noreferrer');
@@ -102,7 +133,7 @@ export function useReaderKeyboard({
     if (selected)
       Object.assign(commands, {
         Escape: close,
-        e: trashed ? undefined : () => actions.edit(),
+        e: actions.feedPost ? actions.archive : trashed ? undefined : () => actions.edit(),
         o: actions.open,
         c: actions.copy,
         r: toggleTab,

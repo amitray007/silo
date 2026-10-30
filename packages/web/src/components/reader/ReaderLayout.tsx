@@ -24,12 +24,17 @@ function awaitingDetail(detail: { isFetching: boolean; data: unknown }): boolean
 }
 
 /** Each route supplies its loaded pages. The reader never owns a second list. */
+function listLabel(title: string): string {
+  return title === 'Feeds' || title.startsWith('Feeds / ') ? title : `${title} links`;
+}
+
 export function ReaderLayout({
   links,
   loading = false,
   trashed = false,
   purgeWindowDays = 30,
   title,
+  emptyMessage,
   children,
   hasNextPage = false,
   fetchNextPage,
@@ -39,6 +44,7 @@ export function ReaderLayout({
   trashed?: boolean;
   purgeWindowDays?: number;
   title: string;
+  emptyMessage?: string;
   children: ReactNode;
   hasNextPage?: boolean;
   fetchNextPage?: () => Promise<LinkJson[]>;
@@ -110,7 +116,7 @@ export function ReaderLayout({
         <section
           tabIndex={-1}
           className="silo-listpane"
-          aria-label={`${title} links`}
+          aria-label={listLabel(title)}
           inert={fullWindow && Boolean(selectedId)}
         >
           {children}
@@ -129,6 +135,7 @@ export function ReaderLayout({
           trashed={trashed}
           purgeWindowDays={purgeWindowDays}
           loading={Boolean(selectedId) && (loading || awaitingDetail(detail))}
+          emptyMessage={emptyMessage}
         />
         <ReaderDeleteDialog actions={actions} link={resolved ?? previous.current} />
       </div>

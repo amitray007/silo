@@ -77,3 +77,14 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **Spacing and font-size literals.** The CSS has about 1,000 raw px values in box properties and 142 px font sizes, but few uses of the `--s*` and `--text-*` tokens. The half-pixel sizes (11.5, 12.5 and 13.5px) are the real drift; 13px and 15px are shiori sizes.
 - **The "⋯" icon.** Its dots render at 1.25px and look lighter than the other icons. A fix needs a redraw, for example three small circles.
 
+### Feeds (parked from `docs/methods/feeds.md`, 2026-10-29)
+
+- **OPML import and export.**
+- **Choose between feeds.** A page can advertise several feeds; Silo takes the first.
+- **Per-feed poll interval, auto-save rules.** For example, save every post that matches a keyword.
+- **Auto-archive and retention.** Archive old Inbox posts and cap stored posts per feed.
+- **WebSub push** instead of polling.
+- **Sites without a feed.** Watch page changes or sitemaps.
+- **X accounts and lists.** No free API and no RSS.
+- **Feed content as Reader text for page posts.** Use `content:encoded` when a regular page
+  fetch fails. Podcast/media show notes already use the feed content as Reader text.

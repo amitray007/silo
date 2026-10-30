@@ -20,5 +20,6 @@ export {
   ensureEnrichLinkQueue,
   logDlqDepth,
   registerEnqueuer,
+  registerFeedPollEnqueuer,
   startEnqueuer,
 } from './queue.js';

@@ -68,6 +68,9 @@ export function ModalShell({
   onKeyDown,
   describedBy,
   focusPanel = false,
+  anchored = false,
+  returnFocus,
+  closing = false,
 }: {
   /** Preferred width, capped to the available viewport. */
   width: number;
@@ -91,9 +94,17 @@ export function ModalShell({
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
   describedBy?: string;
   focusPanel?: boolean;
+  anchored?: boolean;
+  /** Resolve a persistent trigger after a menu or renamed sidebar row unmounts. */
+  returnFocus?: () => HTMLElement | null | Promise<HTMLElement | null>;
+  /** Keep mounted during a caller-owned exit, then let the caller unmount. */
+  closing?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
+  const backdropPress = useRef(false);
+  const restoreFocus = useRef(returnFocus);
+  restoreFocus.current = returnFocus;
 
   useEffect(() => {
     ensureModalityListeners();
@@ -105,6 +116,14 @@ export function ModalShell({
     const openedViaKeyboard = lastWasKeyboard;
     panelRef.current?.focus();
     return () => {
+      if (restoreFocus.current) {
+        requestAnimationFrame(() => {
+          void Promise.resolve(restoreFocus.current?.()).then((target) => {
+            if (target?.isConnected) target.focus({ preventScroll: true });
+          });
+        });
+        return;
+      }
       if (!openedViaKeyboard) return;
       const trigger = triggerRef.current;
       if (trigger instanceof HTMLElement && document.contains(trigger)) {
@@ -123,8 +142,14 @@ export function ModalShell({
     // biome-ignore lint/a11y/useKeyWithClickEvents: scrim dismiss is pointer-only convenience — Escape (handled by the document listener above) is the keyboard-equivalent close path, matching v3.
     // biome-ignore lint/a11y/noStaticElementInteractions: same — a non-interactive click guard, not a control.
     <div
-      onClick={onClose}
-      className={`silo-modal-layer silo-modal-layer-${variant}${role === 'alertdialog' ? ' silo-confirm-layer' : ''}`}
+      onPointerDown={(event) => {
+        backdropPress.current = event.target === event.currentTarget;
+      }}
+      onClick={(event) => {
+        if (backdropPress.current && event.target === event.currentTarget) onClose();
+        backdropPress.current = false;
+      }}
+      className={`silo-modal-layer${anchored ? ' silo-modal-layer-anchored' : ''} silo-modal-layer-${variant}${role === 'alertdialog' ? ' silo-confirm-layer' : ''}${closing ? ' silo-modal-closing' : ''}`}
       style={{ zIndex }}
     >
       {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is restricted to dialog or alertdialog; both support aria-modal. */}

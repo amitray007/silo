@@ -112,6 +112,7 @@ function renderReader({
     const reads: Record<string, () => Response> = {
       '/api/auth/check': () => json({ authRequired: false }),
       '/api/settings': () => json(state.settings),
+      '/api/feeds': () => json({ feeds: [] }),
       '/api/tags': () => json({ tags: [{ name: 'mcp', count: tagCount ?? state.live.length }] }),
       '/api/counts': () =>
         json({
@@ -231,7 +232,7 @@ describe('list pane resizing', () => {
       this: HTMLElement,
     ) {
       if (this.classList.contains('silo-three-pane')) return new DOMRect(240, 0, paneWidth, 900);
-      if (this.classList.contains('silo-listpane')) return new DOMRect(240, 0, 360, 900);
+      if (this.classList.contains('silo-listpane')) return new DOMRect(240, 0, 384, 900);
       return measure.call(this);
     });
   });
@@ -281,19 +282,19 @@ describe('list pane resizing', () => {
     await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
     divider().focus();
     fireEvent.keyDown(divider(), { key: 'ArrowRight' });
-    expect(divider().getAttribute('aria-valuenow')).toBe('376');
-    expect(localStorage.getItem('silo.listWidth')).toBe('376');
+    expect(divider().getAttribute('aria-valuenow')).toBe('400');
+    expect(localStorage.getItem('silo.listWidth')).toBe('400');
     fireEvent.keyDown(divider(), { key: 'ArrowLeft' });
-    expect(divider().getAttribute('aria-valuenow')).toBe('360');
+    expect(divider().getAttribute('aria-valuenow')).toBe('384');
   });
 
   it('supports 64px shift steps and the Home and End bounds', async () => {
     renderReader();
     await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
     fireEvent.keyDown(divider(), { key: 'ArrowRight', shiftKey: true });
-    expect(divider().getAttribute('aria-valuenow')).toBe('424');
+    expect(divider().getAttribute('aria-valuenow')).toBe('448');
     fireEvent.keyDown(divider(), { key: 'ArrowLeft', shiftKey: true });
-    expect(divider().getAttribute('aria-valuenow')).toBe('360');
+    expect(divider().getAttribute('aria-valuenow')).toBe('384');
     fireEvent.keyDown(divider(), { key: 'Home' });
     expect(divider().getAttribute('aria-valuenow')).toBe('280');
     fireEvent.keyDown(divider(), { key: 'ArrowLeft' });
@@ -310,7 +311,7 @@ describe('list pane resizing', () => {
     await waitFor(() => expect(screen.getByText('First link')).toBeDefined());
     if (action === 'Enter') fireEvent.keyDown(divider(), { key: 'Enter' });
     else fireEvent.doubleClick(divider());
-    expect(divider().getAttribute('aria-valuenow')).toBe('360');
+    expect(divider().getAttribute('aria-valuenow')).toBe('384');
     expect(localStorage.getItem('silo.listWidth')).toBeNull();
   });
 
@@ -369,7 +370,7 @@ describe('list pane resizing', () => {
       expect(document.activeElement).not.toBe(handle);
       expect(document.documentElement.classList.contains('silo-list-resizing')).toBe(true);
       fireEvent.pointerMove(handle, { pointerId: 2, clientX: 900 });
-      expect(handle.getAttribute('aria-valuenow')).toBe('360');
+      expect(handle.getAttribute('aria-valuenow')).toBe('384');
       fireEvent.pointerMove(handle, { pointerId: 1, clientX: 740.4 });
       expect(handle.getAttribute('aria-valuenow')).toBe('500');
       expect(localStorage.getItem('silo.listWidth')).toBe('500');

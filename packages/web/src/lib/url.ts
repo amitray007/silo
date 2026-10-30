@@ -42,3 +42,11 @@ export function looksLikeUrl(value: string): boolean {
   if (/^https?:\/\/\S+$/i.test(trimmed)) return true;
   return /^[a-z0-9-]+(\.[a-z0-9-]+)+(\/\S*)?$/i.test(trimmed);
 }
+
+export function normalizeFeedUrl(url: string): string {
+  const value = url.trim();
+  const hasScheme =
+    value.includes('://') ||
+    /^(?:mailto|javascript|data|tel|sms|urn|about|blob|file|http|https|ftp):/i.test(value);
+  return hasScheme ? value : `https://${value}`;
+}

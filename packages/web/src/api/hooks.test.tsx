@@ -4,6 +4,7 @@ import type { ReactNode } from 'react';
 import { act } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { makeLink, makeTrashLink } from '../test/fixtures';
+import { useRefreshFeed } from './feedHooks';
 import {
   queryKeys,
   useAddTag,
@@ -1306,4 +1307,137 @@ describe('useRetryCapture', () => {
     expect(invalidatedKeys).not.toContainEqual(queryKeys.counts());
     expect(invalidatedKeys).not.toContainEqual(queryKeys.tags());
   });
+});
+
+describe('feed refresh feedback', () => {
+  it('aborts an in-flight poll and schedules no more work after unmount', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') return Promise.resolve(jsonResponse({ id: 'feed' }));
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) =>
+        signal?.addEventListener('abort', () => reject(new Error('aborted'))),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, unmount } = renderHook(() => useRefreshFeed(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    try {
+      act(() => result.current.mutate('feed'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(signal?.aborted).toBe(false);
+      unmount();
+      expect(signal?.aborted).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      client.clear();
+      vi.useRealTimers();
+    }
+  });
+  it('settles on acceptance and separately refetches until lastPolledAt changes', async () => {
+    vi.useFakeTimers();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    client.setQueryData(queryKeys.feed('feed'), { feed: { id: 'feed', lastPolledAt: null } });
+    let reads = 0;
+    const fetchMock = vi.fn(async (_input: unknown, init?: RequestInit) =>
+      jsonResponse(
+        init?.method === 'POST'
+          ? { id: 'feed' }
+          : { feed: { id: 'feed', lastPolledAt: ++reads === 2 ? '2026-10-29T12:00:00Z' : null } },
+      ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+    const invalidate = vi.spyOn(client, 'invalidateQueries');
+    const { result } = renderHook(() => useRefreshFeed(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    try {
+      act(() => result.current.mutate('feed'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(result.current.isPending).toBe(false);
+      expect(result.current.isRefreshing).toBe(true);
+      expect(reads).toBe(0);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(reads).toBe(1);
+      expect(result.current.isRefreshing).toBe(true);
+      expect(invalidate).not.toHaveBeenCalled();
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      expect(reads).toBe(2);
+      expect(result.current.isRefreshing).toBe(false);
+      expect(result.current.isSuccess).toBe(true);
+      expect(invalidate).toHaveBeenCalledTimes(2);
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.feeds() });
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.feedPosts('feed') });
+    } finally {
+      client.clear();
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('feed refresh without a completed poll', () => {
+  it.each(['unchanged', 'failed'] as const)(
+    'stops after %s polls without invalidating collections',
+    async (state) => {
+      vi.useFakeTimers();
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      client.setQueryData(queryKeys.feed('feed'), { feed: { id: 'feed', lastPolledAt: null } });
+      let reads = 0;
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(async (_input: unknown, init?: RequestInit) => {
+          if (init?.method === 'POST') return jsonResponse({ id: 'feed' });
+          reads++;
+          if (state === 'failed') throw new Error('offline');
+          return jsonResponse({ feed: { id: 'feed', lastPolledAt: null } });
+        }),
+      );
+      const invalidate = vi.spyOn(client, 'invalidateQueries');
+      const { result, unmount } = renderHook(() => useRefreshFeed(), {
+        wrapper: ({ children }: { children: ReactNode }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      });
+      try {
+        act(() => result.current.mutate('feed'));
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(1);
+        });
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(12000);
+        });
+        expect(reads).toBe(state === 'failed' ? 1 : 5);
+        expect(result.current.isRefreshing).toBe(false);
+        expect(invalidate).not.toHaveBeenCalled();
+      } finally {
+        unmount();
+        client.clear();
+        vi.useRealTimers();
+      }
+    },
+  );
 });

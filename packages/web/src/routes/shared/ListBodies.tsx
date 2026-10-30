@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import type { LinkJson } from '../../api/types';
 import { DayGroup } from '../../components/DayGroup';
-import { bucketByDay } from '../../lib/buckets';
+import { bucketByDay, bucketFeedPosts } from '../../lib/buckets';
 import { useIntersectionPrefetch } from '../../lib/useIntersectionPrefetch';
 import { ErrorState, LoadingState } from './ListStates';
 import type { ListViewState } from './useListView';
@@ -19,19 +19,21 @@ function LinkListBody({
   isFetchingNextPage,
   fetchNextPage,
   emptyState,
+  plain,
 }: {
   links: LinkJson[];
   hasNextPage: boolean | undefined;
   isFetchingNextPage: boolean;
   fetchNextPage: () => void;
   emptyState: ReactNode;
+  plain: boolean;
 }) {
   const canPrefetch = Boolean(hasNextPage) && !isFetchingNextPage;
   const sentinelRef = useIntersectionPrefetch(fetchNextPage, { enabled: canPrefetch });
 
   if (links.length === 0) return <>{emptyState}</>;
 
-  const groups = bucketByDay(links);
+  const groups = plain ? bucketFeedPosts(links) : bucketByDay(links);
   return (
     <div style={{ flex: 1 }}>
       {groups.map((group) => (
@@ -74,7 +76,7 @@ function LinkListBody({
  * the orchestration state from `useListView` plus the view-specific
  * `emptyState`, so neither route duplicates the branch logic.
  */
-export function ListBody(state: ListViewState, emptyState: ReactNode): ReactNode {
+export function ListBody(state: ListViewState, emptyState: ReactNode, plain = false): ReactNode {
   if (state.isLoading) return <LoadingState />;
   if (state.isError && state.error) return <ErrorState error={state.error} />;
   return (
@@ -84,6 +86,7 @@ export function ListBody(state: ListViewState, emptyState: ReactNode): ReactNode
       isFetchingNextPage={state.isFetchingNextPage}
       fetchNextPage={state.fetchNextPage}
       emptyState={emptyState}
+      plain={plain}
     />
   );
 }

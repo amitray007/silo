@@ -1,3 +1,4 @@
+import { registerFeedJobs } from './poll-feeds.js';
 /**
  * Registers all three scheduled maintenance jobs (scheduling-jobs slice) on a
  * STARTED `boss`. Called once from `startWorker()`. Each job's own module
@@ -38,6 +39,7 @@ export {
 } from './sweep-enriching.js';
 
 export async function registerScheduledJobs(boss: PgBoss): Promise<void> {
+  await registerFeedJobs(boss);
   await registerPurgeTrashJob(boss);
   await registerSweepEnrichingJob(boss);
   await registerReaderBackfillJob(boss);

@@ -16,7 +16,7 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 - The breakpoints live in `packages/web/src/lib/breakpoints.ts` and mirror
   `layout.css`. Change both together.
 - Reader pane (from 1024px): show sidebar, list, and reader side by side. The
-  list is 360px by default and resizable from 280px to 720px (persisted in
+  list is 384px by default and resizable from 280px to 720px (persisted in
   localStorage); the reader keeps at least 420px.
 - Docked sidebar (from 641px): the sidebar sits beside the list. `[` toggles it;
   persist that choice in localStorage. Below 1024px a selected link opens the

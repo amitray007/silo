@@ -232,7 +232,6 @@ select {
 
 .silo-settings-btn:active:not(:disabled) {
   background: var(--surface-active);
-  transform: scale(0.97);
 }
 
 .silo-settings-btn:disabled {
@@ -289,7 +288,6 @@ select {
 
 .silo-settings-select-trigger:active {
   background: var(--surface-active);
-  transform: scale(0.97);
 }
 
 .silo-settings-select-trigger:focus-visible {
@@ -726,15 +724,14 @@ select {
 }
 
 @media (hover: hover) and (pointer: fine) {
-  .silo-edit-save-btn:hover {
+  .silo-edit-save-btn:not(:disabled):not([aria-disabled="true"]):hover {
     background: var(--surface-hover);
     border-color: var(--ghost);
   }
 }
 
-.silo-edit-save-btn:active {
+.silo-edit-save-btn:not(:disabled):not([aria-disabled="true"]):active {
   background: var(--surface-active);
-  transform: scale(0.97);
 }
 
 /* RowMenu's action rows (tags/open/copy/edit/trash) — press feedback via the
@@ -749,22 +746,9 @@ select {
   transform: scale(0.97);
 }
 
-/* Small bordered text inputs across the app (EditModal's title/description/
-   tags-find/note fields, RowMenu's + EditModal's tags fly-out find inputs,
-   the sidebar's find-a-tag/new-tag inputs) — every one of them set inline
-   `outline: 'none'` with NO compensating focus indicator at all (Rams
-   review, SERIOUS: 2.4.7 focus outline removed with nothing replacing it —
-   an inline `outline:none` beats the global `:focus-visible` rule since
-   inline styles always win the cascade, so these fields were focusable but
-   silently, invisibly so). This restores a real, visible focus state — a
-   `--ghost` border + a soft matching ring, the same "the border IS the ring"
-   language the Omnibar already uses for its own JS-tracked `focused` prop —
-   without reintroducing the browser's default (usually blue, theme-
-   mismatched) outline ring on top of it. */
 .silo-field:focus-visible {
-  outline: none;
-  border-color: var(--ghost);
-  box-shadow: 0 0 0 3px rgba(133, 121, 95, 0.18);
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -946,4 +930,145 @@ select {
 .silo-theme-switching *::before,
 .silo-theme-switching *::after {
   transition: none !important;
+}
+
+.silo-rename-form .silo-field {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--s2) var(--s3);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg);
+  box-shadow: var(--input-shadow);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 20px;
+  min-height: 40px;
+}
+.silo-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  cursor: pointer;
+}
+.silo-checkbox > input {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  opacity: 0;
+}
+.silo-checkbox-box {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--bg);
+  transition:
+    border-color 150ms ease,
+    transform 150ms var(--ease-out);
+}
+.silo-checkbox-fill {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: var(--toggle-on);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 150ms ease,
+    transform 150ms var(--ease-out);
+}
+.silo-checkbox-box svg {
+  position: absolute;
+  inset: -1px;
+  width: 18px;
+  height: 18px;
+  color: var(--solid-ink);
+}
+.silo-checkbox-box path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition:
+    stroke-dashoffset 150ms var(--ease-out),
+    opacity 150ms ease;
+}
+.silo-checkbox > input:checked + .silo-checkbox-box {
+  border-color: var(--toggle-on);
+}
+.silo-checkbox > input:checked + .silo-checkbox-box .silo-checkbox-fill {
+  opacity: 1;
+  transform: scale(1);
+}
+.silo-checkbox > input:checked + .silo-checkbox-box path {
+  stroke-dashoffset: 0;
+  opacity: 1;
+}
+.silo-checkbox > input:focus-visible + .silo-checkbox-box {
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
+}
+.silo-checkbox:has(> input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-checkbox:hover > input:not(:disabled):not(:checked) + .silo-checkbox-box {
+    border-color: var(--fnt);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .silo-checkbox:active > input:not(:disabled) + .silo-checkbox-box {
+    transform: scale(0.95);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-checkbox-box,
+  .silo-checkbox-fill,
+  .silo-checkbox-box path {
+    transition: none !important;
+  }
+}
+@media (forced-colors: active) {
+  .silo-checkbox > input:checked + .silo-checkbox-box {
+    background: Highlight;
+    border-color: Highlight;
+  }
+  .silo-checkbox-box svg {
+    color: HighlightText;
+  }
+  /* The fill would be forced to Canvas and hide the Highlight box behind it. */
+  .silo-checkbox-fill {
+    display: none;
+  }
+}
+
+.silo-rename-form {
+  display: grid;
+  gap: 16px;
+  margin-top: 20px;
+}
+.silo-rename-form .silo-field {
+  display: block;
+  margin-top: 8px;
+}
+.silo-rename-form .silo-field[aria-invalid="true"] {
+  border-color: var(--warn);
+}
+
+.silo-rename-form > label {
+  font-size: 14px;
+  line-height: 20px;
+  font-weight: 500;
 }

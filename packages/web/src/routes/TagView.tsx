@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useNavigate, useParams } from 'react-router';
 import { useDeleteTag, useTags } from '../api/hooks';
-import { ConfirmDialog } from '../components/ConfirmDialog';
+import { DeleteTagDialog } from '../components/DeleteTagDialog';
 import { HeaderActionButton } from '../components/HeaderActionButton';
 import { TrashIcon } from '../components/NavIcons';
 import { PasteCaptureButton } from '../components/PasteCaptureButton';
 import { ReaderLayout } from '../components/reader/ReaderLayout';
+import { TagMenu } from '../components/TagMenu';
 import { ListBody } from './shared/ListBodies';
 import { ContentFrame } from './shared/ListHeader';
 import { EmptyState } from './shared/ListStates';
@@ -35,10 +36,8 @@ function DeleteTagButton({ tag }: { tag: string }) {
         ariaLabel="Delete this tag"
       />
       {confirming && (
-        <ConfirmDialog
-          title="Delete tag?"
-          item={`#${tag}`}
-          action="Delete tag"
+        <DeleteTagDialog
+          tag={tag}
           actionLabel="Confirm deleting this tag"
           pending={deleteTag.isPending}
           onClose={() => setConfirming(false)}
@@ -48,9 +47,7 @@ function DeleteTagButton({ tag }: { tag: string }) {
               onSettled: () => setConfirming(false),
             })
           }
-        >
-          The tag #{tag} will be removed from all links. Your links will be kept.
-        </ConfirmDialog>
+        />
       )}
     </>
   );
@@ -101,6 +98,7 @@ export function TagView() {
         headerSlot={
           <>
             <PasteCaptureButton tags={[tag]} />
+            <TagMenu tag={tag} />
             <DeleteTagButton tag={tag} />
           </>
         }

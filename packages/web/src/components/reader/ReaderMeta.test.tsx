@@ -7,13 +7,17 @@ import { ReaderMeta } from './ReaderMeta';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
-function show(trashed = false) {
+function show(
+  trashed = false,
+  membership: { source?: 'feed' | 'web'; feedId?: string | null } = {},
+) {
   const link = makeLink({
     id: 'meta',
     title: 'How to Work Hard',
     url: 'https://paulgraham.com/hwh.html',
     notes: 'Reread the section on effort.',
     tags: ['essays'],
+    ...membership,
   });
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
@@ -142,4 +146,12 @@ describe('Reader meta', () => {
     expect(screen.queryByRole('button')).toBeNull();
     expect(screen.getByText('Reread the section on effort.')).toBeDefined();
   });
+});
+
+it.each([
+  [{ source: 'feed', feedId: null }, true],
+  [{ source: 'web', feedId: 'feed-123' }, false],
+] as const)('uses membership for reader editing: %j', (fields, editable) => {
+  show(false, fields);
+  expect(screen.queryByRole('button', { name: 'Edit note' }) !== null).toBe(editable);
 });

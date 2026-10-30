@@ -92,6 +92,25 @@ export {
   verifyAccessToken,
 } from './auth/tokens.js';
 export { READER_HTML_MAX_BYTES, READER_VERSION, type ReaderContent } from './capture.js';
+export type { Feed, FeedRow } from './feeds/feeds.js';
+export {
+  deleteFeed,
+  entryIdentity,
+  feedExists,
+  getFeed,
+  listDueFeeds,
+  listFeedPosts,
+  listFeeds,
+  listFeedsPage,
+  pollFeed,
+  subscribeFeed,
+} from './feeds/feeds.js';
+export { type FeedPollEnqueuer, refreshFeed, setFeedPollEnqueuer } from './feeds/refresh.js';
+export { feedTitleSchema, renameFeed } from './feeds/rename.js';
+export { saveFeedPost } from './feeds/save.js';
+export { setFeedPostArchived } from './feeds/triage.js';
+export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
+export { normalizeFeedUrl, setFeedResolver } from './feeds/types.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
 // of the single-id write ops above, modeled on `import.ts`'s sequential-
 // bulk-with-per-item-results pattern (see bulk.ts's module doc comment).
@@ -172,6 +191,7 @@ export { EXPORT_VERSION, exportLinks, InvalidExportFormatError } from './links/e
 // validation/dedup contract.
 export type { ImportResult, ImportSkip } from './links/import.js';
 export { InvalidImportError, importLinks, MAX_IMPORT_LINKS } from './links/import.js';
+export { FeedPostNotEditableError } from './links/library-write.js';
 // Core link operations (U4): the typed data-access primitives the UI and
 // MCP adapters both call — create (dedup/merge), read, list, search, edit,
 // tag, trash/restore. See docs/rules/architecture.md — this is the one
@@ -200,6 +220,7 @@ export type {
 export {
   addTag,
   countLinks,
+  createFeedPost,
   createLink,
   editLink,
   findByCanonicalUrl,
@@ -221,6 +242,7 @@ export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
 // over a link's own tags + title terms — see related.ts's doc comment.
 export { findRelated } from './links/related.js';
+export { renameTag, tagTitleSchema } from './links/rename-tag.js';
 export { findSavedUrls } from './links/saved.js';
 export { findSiteIcons, type SiteIconFinder, setSiteIconFinder } from './links/site-icon.js';
 // Capture-source provenance (capture-source slice): the closed value set +
@@ -257,13 +279,9 @@ export { createTag, deleteTag, listTagsWithCounts } from './links/tags.js';
 // Title provenance values come from the database enum.
 export { TITLE_SOURCES } from './links/title-source.js';
 export { type LinkTitleFetcher, linkTitles, setLinkTitleFetcher } from './links/titles.js';
-// Trash reads + counts (plan 007, C2): listTrash is the ONE read in this
-// package deliberately NOT scoped through `whereLive` — see trash.ts's doc
-// comment for why it's quarantined in its own module. getCounts/countLive/
-// countTrash back the mockup's sidebar live/trash counts. searchTrash is the
-// trash-scoped mirror of `search` (Trash search slice) — same ranking/
-// pagination, reusing the live search's `SearchPage` type since the shape is
-// identical.
+// Trash reads select deleted library links through `whereTrashedLibrary`.
+// countLive/countTrash/getCounts use the same library boundary for sidebar counts.
+// searchTrash mirrors library search with the same ranking and pagination shape.
 // hardDelete/emptyTrash (plan 007, C3): DESTRUCTIVE, trashed-only targeted
 // deletes (the mockup's "delete now"/"empty now") — see trash.ts's doc
 // comments for the atomic WHERE-clause guard that makes a live link

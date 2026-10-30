@@ -1,4 +1,5 @@
 import { type EnrichOptions, requestEnrich } from './enrichment.js';
+import { FeedPostNotEditableError } from './library-write.js';
 import {
   addTag,
   type CreateLinkInput,
@@ -79,8 +80,13 @@ async function runBulk<T>(
   assertWithinBulkCap(ids.length);
   const results: BulkItemResult[] = [];
   for (const id of ids) {
-    const outcome = await op(id);
-    results.push(toResult(id, outcome));
+    try {
+      const outcome = await op(id);
+      results.push(toResult(id, outcome));
+    } catch (error) {
+      if (!(error instanceof FeedPostNotEditableError)) throw error;
+      results.push({ id, ok: false, reason: error.code });
+    }
   }
   return results;
 }

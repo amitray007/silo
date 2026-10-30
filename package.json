@@ -9,7 +9,7 @@
   "scripts": {
     "build": "turbo run build",
     "predev": "pnpm db:migrate || echo '[silo] db:migrate skipped (is Postgres up? run pnpm db:up) \u2014 starting dev anyway'",
-    "dev": "turbo run dev",
+    "dev": "turbo run dev --filter=!@silo/worker",
     "check-types": "turbo run check-types",
     "lint": "biome check .",
     "format": "biome check --write .",

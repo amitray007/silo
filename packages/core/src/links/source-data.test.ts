@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { sourceDataSchema } from './source-data.js';
+import { parseFeedMediaSourceData, sourceDataSchema } from './source-data.js';
 
 describe('sourceDataSchema', () => {
   describe('happy path', () => {
@@ -487,5 +487,41 @@ describe('sourceDataSchema', () => {
       ).toBe(false);
       expect(bad({ thumbnailUrl: 'h'.repeat(2_001) })).toBe(false);
     });
+  });
+});
+
+describe('feed media optional URLs', () => {
+  it.each([
+    'http://127.0.0.1/x',
+    'http://[2001:db8::1]/x',
+    'http://cdn:8080/x',
+    'http://media_host/x',
+  ])('keeps valid WHATWG HTTP URL %s', (url) => {
+    expect(
+      sourceDataSchema.parse({
+        kind: 'feed_media',
+        content: 'notes',
+        enclosureUrl: url,
+        imageUrl: url,
+      }),
+    ).toMatchObject({ enclosureUrl: url, imageUrl: url });
+  });
+  it.each([
+    'javascript:evil()',
+    'https://user:pass@example.com/x',
+    'broken',
+    'x'.repeat(65_537),
+    null,
+  ])('drops an invalid optional URL without losing notes', (url) => {
+    const parsed = parseFeedMediaSourceData({
+      kind: 'feed_media',
+      content: 'notes',
+      ...Object.fromEntries(
+        ['enclosureUrl', 'imageUrl', 'contentBaseUrl'].map((key) => [key, url]),
+      ),
+    });
+    expect(parsed).toMatchObject({ kind: 'feed_media', content: 'notes' });
+    expect(parsed).not.toHaveProperty('enclosureUrl', expect.anything());
+    expect(parsed).not.toHaveProperty('imageUrl', expect.anything());
   });
 });

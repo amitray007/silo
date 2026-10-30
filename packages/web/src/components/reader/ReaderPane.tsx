@@ -2,11 +2,13 @@ import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } fr
 import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
+import { isFeedPost } from '../../lib/isFeedPost';
 import { deriveTitleFromUrl } from '../../lib/url';
 import { useHideOnScroll } from '../../lib/useHideOnScroll';
 import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
 import { useHideWhileReading } from '../../lib/useHideWhileReading';
 import { useReaderWidth } from '../../lib/useReaderWidth';
+import { FeedSaveAction } from '../FeedSaveAction';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
@@ -55,26 +57,51 @@ function ReaderActions({
   actions,
   disabled,
   trashed,
+  feedPost,
+  archived,
+  compact,
+  link,
 }: {
   actions: Actions;
   disabled: boolean;
   trashed: boolean;
+  feedPost: boolean;
+  archived: boolean;
+  compact: boolean;
+  link: LinkJson | undefined;
 }) {
   return (
-    <div className="silo-reader-tools">
-      <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
-      <IconButton
-        name="external"
-        label="Open original"
-        onClick={actions.open}
-        disabled={disabled}
-      />
-      <IconButton
-        name={trashed ? 'restore' : 'trash'}
-        label={trashed ? 'Restore' : 'Move to trash'}
-        onClick={trashed ? actions.restore : actions.trash}
-        disabled={disabled || actions.busy}
-      />
+    <div className="silo-reader-tools" data-compact={compact}>
+      {!compact && (
+        <>
+          <IconButton name="copy" label="Copy link" onClick={actions.copy} disabled={disabled} />
+          <IconButton
+            name="external"
+            label="Open original"
+            onClick={actions.open}
+            disabled={disabled}
+          />
+        </>
+      )}
+      {feedPost && link && (
+        <FeedSaveAction link={link} save={actions.save} busy={disabled || actions.busy} />
+      )}
+      {feedPost && (
+        <IconButton
+          name={archived ? 'unarchive' : 'archive'}
+          label={archived ? 'Unarchive' : 'Archive'}
+          onClick={actions.archive}
+          disabled={disabled || actions.busy}
+        />
+      )}
+      {!feedPost && (
+        <IconButton
+          name={trashed ? 'restore' : 'trash'}
+          label={trashed ? 'Restore' : 'Move to trash'}
+          onClick={trashed ? actions.restore : actions.trash}
+          disabled={disabled || actions.busy}
+        />
+      )}
     </div>
   );
 }
@@ -112,7 +139,7 @@ function ReaderMore({
       <MenuPresence>
         {open && (
           <MenuSurface className="silo-reader-more-menu" link={link} onClose={() => setOpen(false)}>
-            {!trashed && (
+            {!trashed && !actions.feedPost && (
               <MenuAction
                 icon={<ReaderIcon name="edit" />}
                 shortcut="e"
@@ -136,7 +163,7 @@ function ReaderMore({
                 Reload page
               </MenuAction>
             )}
-            {(!trashed || (original && original.mode !== 'player')) && (
+            {((!trashed && !actions.feedPost) || (original && original.mode !== 'player')) && (
               <div className="silo-menu-separator" />
             )}
             {!trashed && link ? (
@@ -331,6 +358,24 @@ function panelSemantics(id: string, tab: string, selected: boolean) {
   return selected ? { role: 'tabpanel', 'aria-labelledby': `${id}-${tab}` } : {};
 }
 
+function showReaderActions(phone: boolean, link: LinkJson | undefined): boolean {
+  return !phone || isFeedPost(link);
+}
+
+function EmptyReader({ message, trashed }: { message: string | undefined; trashed: boolean }) {
+  return (
+    <div className="silo-empty-reader">
+      <div>
+        <ReaderIcon name="sidebar" />
+        <p>{message ?? 'Select a link to read'}</p>
+        {!message && (
+          <span>Use ↑ ↓ or j k to move through your {trashed ? 'trash' : 'library'}.</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ReaderPane({
   link,
   selectedId,
@@ -344,6 +389,7 @@ export function ReaderPane({
   trashed,
   purgeWindowDays,
   loading,
+  emptyMessage,
 }: {
   link: LinkJson | undefined;
   selectedId: string | null;
@@ -357,8 +403,10 @@ export function ReaderPane({
   trashed: boolean;
   purgeWindowDays: number;
   loading: boolean;
+  emptyMessage?: string | undefined;
 }) {
   const phone = useMediaQuery(layoutMedia.phone);
+  const showActions = showReaderActions(phone, link);
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const original = useOriginal(link, tab === 'original');
   const shownOriginal = tab === 'original' && link ? original : undefined;
@@ -396,15 +444,7 @@ export function ReaderPane({
     resetKey: `${selectedId}-${tab}`,
   });
 
-  let content: ReactNode = (
-    <div className="silo-empty-reader">
-      <div>
-        <ReaderIcon name="sidebar" />
-        <p>Select a link to read</p>
-        <span>Use ↑ ↓ or j k to move through your {trashed ? 'trash' : 'library'}.</span>
-      </div>
-    </div>
-  );
+  let content: ReactNode = <EmptyReader message={emptyMessage} trashed={trashed} />;
   if (loading)
     content = (
       <div className="silo-empty-reader" role="status">
@@ -490,9 +530,17 @@ export function ReaderPane({
                   setOpen={(open) => setOpenMenu(open ? 'settings' : null)}
                 />
               )}
-              {!phone && (
-                <div className="silo-reader-inline-actions">
-                  <ReaderActions actions={actions} disabled={!link} trashed={trashed} />
+              {showActions && (
+                <div className="silo-reader-inline-actions" data-feed={isFeedPost(link)}>
+                  <ReaderActions
+                    actions={actions}
+                    disabled={!link}
+                    trashed={trashed}
+                    feedPost={isFeedPost(link)}
+                    archived={Boolean(link?.archivedAt)}
+                    compact={phone}
+                    link={link}
+                  />
                 </div>
               )}
               <ReaderMore

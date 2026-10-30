@@ -300,3 +300,16 @@ describe('row semantics and keyboard', () => {
     expect(onLeave).toHaveBeenCalledTimes(1);
   });
 });
+
+it.each([
+  [{ source: 'feed', feedId: null }, true],
+  [{ source: 'web', feedId: 'feed-123' }, false],
+] as const)(
+  'keeps More actions and scopes the triage action by membership: %j',
+  (fields, editable) => {
+    render(<Row link={makeLink(fields)} />);
+    expect(screen.getByRole('button', { name: 'More actions' })).toBeDefined();
+    expect(screen.queryByRole('button', { name: 'Move to trash' }) !== null).toBe(editable);
+    expect(screen.queryByRole('button', { name: 'Archive' }) !== null).toBe(!editable);
+  },
+);

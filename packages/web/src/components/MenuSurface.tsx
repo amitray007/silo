@@ -23,7 +23,9 @@ export function LinkIdentity({ link }: { link: LinkJson }) {
 function moveMenuFocus(event: React.KeyboardEvent<HTMLElement>) {
   if (!['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) return;
   const rows = Array.from(
-    event.currentTarget.querySelectorAll<HTMLElement>('button:not(:disabled), a[href]'),
+    event.currentTarget.querySelectorAll<HTMLElement>(
+      'button:not(:disabled), a[href], [data-menu-readonly]',
+    ),
   );
   if (!rows.length) return;
   event.preventDefault();
@@ -58,6 +60,18 @@ function refreshShortcut(event: React.KeyboardEvent<HTMLElement>): void {
   refresh.click();
 }
 
+function trapMenuTab(event: React.KeyboardEvent<HTMLElement>) {
+  if (event.key !== 'Tab') return;
+  const controls = Array.from(
+    event.currentTarget.querySelectorAll<HTMLElement>('input, button:not(:disabled), a[href]'),
+  );
+  const next = event.shiftKey ? controls.at(-1) : controls[0];
+  if (document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
+    event.preventDefault();
+    next?.focus({ preventScroll: true });
+  }
+}
+
 export function MenuSurface({
   children,
   className = '',
@@ -82,10 +96,12 @@ export function MenuSurface({
   const closing = useMenuClosing();
   const ref = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
+  const triggerRef = useRef<Element | null>(null);
   close.current = onClose;
   const phone = sheet && matchMedia(layoutMedia.phone).matches;
   useEffect(() => {
     const trigger = document.activeElement;
+    triggerRef.current = trigger;
     const panel = ref.current;
     const boundary = panel?.parentElement?.classList.contains('silo-menu-presence')
       ? panel.parentElement.parentElement
@@ -147,18 +163,13 @@ export function MenuSurface({
           event.stopPropagation();
           onClose();
         }
-        if (phone && event.key === 'Tab') {
-          const controls = Array.from(
-            event.currentTarget.querySelectorAll<HTMLElement>(
-              'input, button:not(:disabled), a[href]',
-            ),
-          );
-          const next = event.shiftKey ? controls.at(-1) : controls[0];
-          if (document.activeElement === (event.shiftKey ? controls[0] : controls.at(-1))) {
-            event.preventDefault();
-            next?.focus({ preventScroll: true });
-          }
+        if (!phone && role === 'menu' && event.key === 'Tab') {
+          event.preventDefault();
+          onClose();
+          if (triggerRef.current instanceof HTMLElement)
+            triggerRef.current.focus({ preventScroll: true });
         }
+        if (phone) trapMenuTab(event);
       }}
     >
       <div className="silo-menu-grab" />

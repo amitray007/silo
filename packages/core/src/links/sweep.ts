@@ -1,7 +1,6 @@
 import { db, links } from '@silo/db';
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { ENRICH_ATTEMPT_CAP } from './enrichment.js';
-import { whereLive } from './live.js';
 
 /**
  * Options for `findStrandedEnriching`.
@@ -59,7 +58,7 @@ export type StrandedLink = {
  * capture_status, so a link trashed while enriching would otherwise match
  * forever; excluding trashed rows here (rather than relying on the caller to
  * filter) means the predicate can never leak a resurrect-by-retry path
- * (`requestRetry` is separately live-scoped via `whereLive`, but a query
+ * (`requestRetry` separately excludes deleted rows across library and feed posts, but a query
  * that returns trashed ids in the first place is a footgun this avoids at
  * the source).
  *
@@ -120,7 +119,8 @@ export async function restoreHeldFull(linkId: string): Promise<boolean> {
     .update(links)
     .set({ captureStatus: 'full', enrichFloorStatus: null })
     .where(
-      whereLive(
+      and(
+        sql`${links.deletedAt} is null`,
         eq(links.id, linkId),
         eq(links.captureStatus, 'enriching'),
         eq(links.enrichFloorStatus, 'full'),

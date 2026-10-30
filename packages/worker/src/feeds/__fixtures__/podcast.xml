@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:content="http://purl.org/rss/1.0/modules/content/" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd">
+  <channel>
+    <title>Example podcast</title>
+    <link>https://example.com/podcast</link>
+    <description>Weekly conversations</description>
+    <item>
+      <title>A conversation &amp; a question</title>
+      <guid isPermaLink="false">episode-123</guid>
+      <pubDate>Thu, 29 Oct 2026 10:00:00 GMT</pubDate>
+      <description><![CDATA[<p>Episode description with <b>details</b>.</p>]]></description>
+      <itunes:summary>  A short summary.  </itunes:summary>
+      <content:encoded><![CDATA[<p>These are the searchable show notes.</p><ul><li>First topic</li><li>Second topic</li></ul><a href="/transcript">Transcript</a><script>alert(1)</script><img src="https://example.com/photo.jpg" onerror="alert(1)">]]></content:encoded>
+      <enclosure url="https://audio.example.com/episode.mp3?download=1&amp;source=feed" length="123456" type="audio/mpeg"/>
+      <itunes:image href="https://example.com/episode.jpg"/>
+    </item>
+  </channel>
+</rss>

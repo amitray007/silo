@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { db, links, linkTags, tags } from '@silo/db';
 import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
+import type { FeedEntry } from '../feeds/types.js';
 import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
-import type { Executor, Link } from './executor.js';
-import { whereLive } from './live.js';
+import type { Executor, Link, Tx } from './executor.js';
+import { assertLibraryWrite } from './library-write.js';
+import { whereFeed, whereLibrary, whereLiveAnywhere, whereTrashedLibrary } from './live.js';
+import { mergeCaptureFields } from './merge-content.js';
 import {
   decodeListCursor,
   effectiveLimit,
@@ -18,7 +21,7 @@ import {
 import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
-import { sourceDataSchema } from './source-data.js';
+import { parseFeedMediaSourceData, sourceDataSchema } from './source-data.js';
 
 // `Db`/`Tx`/`Executor`/`Link` live in ./executor.ts so both ./enqueue.ts and
 // ./pagination.ts can reference them without a cycle through links.ts.
@@ -252,12 +255,10 @@ async function mergeIntoExisting(
       notes: mergedNotes,
       sourceKind: nextSourceKind,
       sourceData: nextSourceData,
-      title: input.title ?? existing.title,
-      titleSource: mergedTitleSource(existing.titleSource, input.title),
-      description: input.description ?? existing.description,
-      imageUrl: input.imageUrl ?? existing.imageUrl,
-      siteName: input.siteName ?? existing.siteName,
-      extractedText: input.extractedText ?? existing.extractedText,
+      ...mergeCaptureFields(existing, {
+        ...input,
+        titleSource: mergedTitleSource(existing.titleSource, input.title),
+      }),
       addedBy: mergedOrigin(existing.addedBy, input.origin),
       // `source` is DELIBERATELY absent from this SET clause (first-write-
       // sticky, capture-source slice): unlike `addedBy` above (agent-sticky —
@@ -293,7 +294,7 @@ async function findExistingForDedup(exec: Executor, url: string): Promise<Link |
   const [row] = await exec
     .select()
     .from(links)
-    .where(eq(links.canonicalUrl, canonical))
+    .where(and(eq(links.canonicalUrl, canonical), sql`${links.feedId} is null`))
     .orderBy(sql`${links.deletedAt} is null desc`)
     .limit(1);
   return row ?? null;
@@ -485,17 +486,17 @@ export async function findByCanonicalUrl(url: string): Promise<Link | null> {
   const [row] = await db
     .select()
     .from(links)
-    .where(whereLive(eq(links.canonicalUrl, canonical)))
+    .where(whereLibrary(eq(links.canonicalUrl, canonical)))
     .limit(1);
   return row ?? null;
 }
 
-/** Fetch a single live link row (no tag hydration), or `null` if it doesn't exist or is trashed. */
+/** Fetch a live library link or feed post without tags; missing or trashed rows return null. */
 async function getRawById(id: string): Promise<Link | null> {
   const [row] = await db
     .select()
     .from(links)
-    .where(whereLive(eq(links.id, id)))
+    .where(whereLiveAnywhere(eq(links.id, id)))
     .limit(1);
   return row ?? null;
 }
@@ -577,7 +578,7 @@ export async function getById(
   const [row] = await db
     .select(listColumns)
     .from(links)
-    .where(whereLive(eq(links.id, id)))
+    .where(whereLiveAnywhere(eq(links.id, id)))
     .limit(1);
   if (!row) return null;
   const [hydrated] = await hydrateTags(db, [row]);
@@ -685,7 +686,7 @@ const createdAtText = sql<string>`${links.createdAt}::text`;
 /**
  * Keyset predicate for `list`'s `(created_at, id)` DESC ordering: rows
  * strictly "after" the cursor row, i.e. `created_at < c.createdAt OR
- * (created_at = c.createdAt AND id < c.id)`. Composable with `whereLive` and
+ * (created_at = c.createdAt AND id < c.id)`. Composable with `whereLibrary` and
  * the tag/status filter branches via `and(...)`.
  *
  * `createdAtText` (a full-microsecond-precision string) is cast back to
@@ -745,7 +746,7 @@ function requiredTagKeys(filter: { tag?: string; tags?: string[] }): string[] {
  * (multi-tag AND, agent-navigation slice U1). Each `EXISTS` is independently
  * correlated on `links.id` (rather than a single join + `HAVING count(...)
  * = N`), which composes directly with `list`/`search`'s existing
- * `whereLive(...conditions)` flat-conditions-array style with no `GROUP BY`
+ * `whereLibrary(...conditions)` flat-conditions-array style with no `GROUP BY`
  * restructuring of a query that already selects whole-row columns.
  */
 function requiredTagConditions(tagKeys: ReadonlyArray<string>): ReturnType<typeof sql>[] {
@@ -793,7 +794,7 @@ export async function list(filter: ListFilter = {}, page: PageParams = {}): Prom
   const rows = await db
     .select({ link: listColumns, createdAtText })
     .from(links)
-    .where(whereLive(...conditions))
+    .where(whereLibrary(...conditions))
     .orderBy(desc(links.createdAt), desc(links.id))
     .limit(limit + 1);
 
@@ -1060,7 +1061,7 @@ export async function search(
   // description -> title) and the fixed headline options. `runUnionSearch`
   // now returns rows ALREADY shaped as `SearchResultRow` (extractedText
   // stripped, snippet + rank attached), so this returns its result directly.
-  return runUnionSearch(whereLive(), tagSearchVector, query, tagScopeCondition, page, {
+  return runUnionSearch(whereLibrary(), tagSearchVector, query, tagScopeCondition, page, {
     extraConditions,
     sort,
     snippetFor: (tsQuery) => buildSnippetHeadline(tsQuery),
@@ -1130,18 +1131,18 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
     db
       .select({ total: sql<string>`count(*)` })
       .from(links)
-      .where(whereLive(...sharedConditions)),
+      .where(whereLibrary(...sharedConditions)),
     db
       .select({ source: links.sourceKind, count: sql<string>`count(*)` })
       .from(links)
-      .where(whereLive(...sharedConditions))
+      .where(whereLibrary(...sharedConditions))
       .groupBy(links.sourceKind),
     db
       .select({ tag: tags.name, count: sql<string>`count(distinct ${links.id})` })
       .from(links)
       .innerJoin(linkTags, eq(linkTags.linkId, links.id))
       .innerJoin(tags, eq(tags.id, linkTags.tagId))
-      .where(whereLive(...sharedConditions))
+      .where(whereLibrary(...sharedConditions))
       .groupBy(tags.id, tags.name)
       .orderBy(desc(sql`count(distinct ${links.id})`), asc(tags.name))
       .limit(TOP_TAGS_LIMIT),
@@ -1174,6 +1175,7 @@ export type EditLinkInput = {
  * which branch runs.
  */
 export async function editLink(id: string, input: EditLinkInput): Promise<Link | null> {
+  await assertLibraryWrite(id);
   const patch: Partial<Pick<Link, 'title' | 'titleSource' | 'description' | 'notes'>> = {};
   if (input.title !== undefined) {
     patch.title = input.title;
@@ -1188,7 +1190,7 @@ export async function editLink(id: string, input: EditLinkInput): Promise<Link |
   const [updated] = await db
     .update(links)
     .set(patch)
-    .where(whereLive(eq(links.id, id)))
+    .where(whereLibrary(eq(links.id, id)))
     .returning();
   return updated ?? null;
 }
@@ -1200,7 +1202,12 @@ export async function editLink(id: string, input: EditLinkInput): Promise<Link |
  * `name` — a later `addTagWith(..., 'ai')` when `AI` already exists reuses
  * the existing row untouched, it does not overwrite `name`.
  */
-async function addTagWith(exec: Executor, linkId: string, tagName: string): Promise<void> {
+async function addTagWith(
+  exec: Executor,
+  linkId: string,
+  tagName: string,
+  retry = true,
+): Promise<void> {
   const name = tagName.trim();
   if (!name) return;
   const normalizedKey = normalizeTagKey(name);
@@ -1221,9 +1228,12 @@ async function addTagWith(exec: Executor, linkId: string, tagName: string): Prom
         .from(tags)
         .where(eq(tags.normalizedKey, normalizedKey))
         .limit(1)
+        .for('share')
     )[0]?.id;
   if (!tagId) {
-    throw new Error(`addTag: could not resolve tag "${name}"`);
+    if (!retry) throw new Error(`addTag: could not resolve tag "${name}"`);
+    await addTagWith(exec, linkId, name, false);
+    return;
   }
   await exec.insert(linkTags).values({ linkId, tagId }).onConflictDoNothing();
 }
@@ -1232,16 +1242,12 @@ async function addTagWith(exec: Executor, linkId: string, tagName: string): Prom
  * Attach `tagName` to `linkId`, creating the tag row if it doesn't exist yet
  * (keyed case-insensitively on `normalized_key`). Idempotent.
  *
- * Unlike `createLink`, this runs on the bare `db` executor, NOT in a
- * transaction: the tag insert and the `link_tags` insert are two separate
- * auto-committed statements. A crash between them can leave a newly-created
- * tag row with no `link_tags` referencing it — a harmless orphaned (unattached)
- * tag, not corruption. This is intentional and consistent with the existing
- * design where a tag row's lifetime is independent of any link (see
- * `removeTag`, which likewise never deletes the tag row).
+ * The transaction keeps the resolved tag locked until the association exists,
+ * so a concurrent rename/merge moves that association before deleting the tag.
  */
 export async function addTag(linkId: string, tagName: string): Promise<void> {
-  await addTagWith(db, linkId, tagName);
+  await assertLibraryWrite(linkId);
+  await db.transaction((tx) => addTagWith(tx, linkId, tagName));
 }
 
 /**
@@ -1250,6 +1256,7 @@ export async function addTag(linkId: string, tagName: string): Promise<void> {
  * itself is never deleted (may be used elsewhere).
  */
 export async function removeTag(linkId: string, tagName: string): Promise<void> {
+  await assertLibraryWrite(linkId);
   const name = tagName.trim();
   if (!name) return;
   const normalizedKey = normalizeTagKey(name);
@@ -1259,11 +1266,12 @@ export async function removeTag(linkId: string, tagName: string): Promise<void> 
 }
 
 /** Soft-delete: move a live link to trash by setting `deleted_at`. */
-export async function softDelete(id: string): Promise<Link | null> {
+export async function softDelete(id: string, feedId?: string | null): Promise<Link | null> {
+  if (!feedId) await assertLibraryWrite(id);
   const [updated] = await db
     .update(links)
     .set({ deletedAt: new Date() })
-    .where(whereLive(eq(links.id, id)))
+    .where(feedId ? whereFeed(feedId, eq(links.id, id)) : whereLibrary(eq(links.id, id)))
     .returning();
   return updated ?? null;
 }
@@ -1289,11 +1297,12 @@ export type RestoreResult =
  * retry so a concurrent softDelete of the colliding row doesn't leak a 23505.
  */
 export async function restore(id: string): Promise<RestoreResult> {
+  await assertLibraryWrite(id);
   for (let attempt = 0; attempt < 3; attempt++) {
     const [trashedRow] = await db
       .select()
       .from(links)
-      .where(and(eq(links.id, id), sql`${links.deletedAt} is not null`))
+      .where(whereTrashedLibrary(eq(links.id, id)))
       .limit(1);
     if (!trashedRow) return { status: 'not_found' };
 
@@ -1301,7 +1310,7 @@ export async function restore(id: string): Promise<RestoreResult> {
       const [restored] = await db
         .update(links)
         .set({ deletedAt: null })
-        .where(and(eq(links.id, id), sql`${links.deletedAt} is not null`))
+        .where(whereTrashedLibrary(eq(links.id, id)))
         .returning();
       if (!restored) {
         // Someone else restored/changed it between our read and update; retry.
@@ -1315,7 +1324,7 @@ export async function restore(id: string): Promise<RestoreResult> {
         const [liveCollision] = await tx
           .select()
           .from(links)
-          .where(whereLive(eq(links.canonicalUrl, trashedRow.canonicalUrl)))
+          .where(whereLibrary(eq(links.canonicalUrl, trashedRow.canonicalUrl)))
           .limit(1);
         // Collider was trashed by a concurrent op before we looked it up — the
         // slot is now free; fall out to retry the plain restore.
@@ -1376,4 +1385,41 @@ export async function restore(id: string): Promise<RestoreResult> {
   // Exhausted retries under sustained contention; report not_found rather than
   // throwing a raw driver error (extremely unlikely for a single-user store).
   return { status: 'not_found' };
+}
+
+/** Capture into one feed, using the same canonicalizer and enrichment transaction as Home. */
+export async function createFeedPost(
+  input: FeedEntry & { feedId: string },
+  executor?: Tx,
+): Promise<Link | null> {
+  const write = async (tx: Tx) => {
+    const { canonical, ok } = canonicalize(input.url);
+    if (!ok) return null;
+    const [inserted] = await tx
+      .insert(links)
+      .values({
+        feedId: input.feedId,
+        url: input.url,
+        canonicalUrl: canonical,
+        title: input.title,
+        titleSource: 'page',
+        publishedAt: input.publishedAt,
+        sourceKind: input.media ? 'feed_media' : detectSource(input.url).kind,
+        sourceData: input.media ? parseFeedMediaSourceData(input.media) : { kind: 'link' },
+        source: 'feed',
+        addedBy: 'user',
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (inserted) {
+      await enqueueEnrichment(tx, inserted.id, { trigger: 'capture', previousStatus: 'enriching' });
+      return inserted;
+    }
+    const [existing] = await tx
+      .select()
+      .from(links)
+      .where(whereFeed(input.feedId, eq(links.canonicalUrl, canonical)));
+    return existing ?? null;
+  };
+  return executor ? write(executor) : db.transaction(write);
 }

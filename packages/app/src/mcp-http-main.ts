@@ -1,4 +1,5 @@
 import { startEnqueuer } from '@silo/queue';
+import { registerFeedResolver } from '@silo/worker';
 import { startMcpHttpServer } from './mcp-http.js';
 
 /**
@@ -14,9 +15,8 @@ import { startMcpHttpServer } from './mcp-http.js';
  * `mcp` container ALSO ran `startWorker()` (as `main.ts` unconditionally
  * does), two worker instances would double-run the enrichment work loop AND
  * the scheduled cron jobs (purge-trash / sweep-enriching / dlq-alert) —
- * silent double-execution, not a crash, so it would go unnoticed until data
- * corruption or duplicate side effects surfaced. This process's only job is
- * the listener, so it never imports `@silo/worker` at all.
+ * duplicate work. This process registers feed discovery from the worker
+ * service, but does not start a worker or consume any jobs.
  *
  * It DOES register a producer-only enqueuer (`@silo/queue`'s `startEnqueuer`)
  * before it listens. Core's enqueue seam is process-local and a no-op until
@@ -164,6 +164,7 @@ async function main(): Promise<void> {
 
   // Before listening, so no tool call can race ahead of the seam going live.
   const boss = await startEnqueuer('[silo-mcp-http]');
+  const feedResolver = boss ? registerFeedResolver() : undefined;
 
   const httpServer = startMcpHttpServer({
     port,
@@ -215,6 +216,7 @@ async function main(): Promise<void> {
         exitCode = 1;
       }
       try {
+        feedResolver?.close();
         await boss?.stop({ graceful: true });
       } catch (error: unknown) {
         console.error('[silo-mcp-http] error stopping enqueuer boss:', error);

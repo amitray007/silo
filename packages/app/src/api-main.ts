@@ -1,8 +1,10 @@
 import { serve } from '@hono/node-server';
 import { createApp } from '@silo/api';
+import { setFeedPollEnqueuer } from '@silo/core';
 import {
   closeBrowserReader,
   registerAiConnectionTester,
+  registerFeedResolver,
   registerLinkTitles,
   registerLiveReader,
   registerPageViewer,
@@ -110,6 +112,7 @@ async function main(): Promise<void> {
   const viewer = registerPageViewer();
   const titles = registerLinkTitles();
   const aiTester = registerAiConnectionTester();
+  const feedResolver = registerFeedResolver();
   const liveReader = registerLiveReader();
   const siteIcons = registerSiteIcons();
   const worker = await startWorkerOrDegrade();
@@ -122,6 +125,7 @@ async function main(): Promise<void> {
   const shutdown = (signal: NodeJS.Signals) => {
     if (stopping) return;
     stopping = true;
+    setFeedPollEnqueuer(undefined);
     console.error(`[silo/app:api] received ${signal}, stopping gracefully...`);
     (async () => {
       // Close the SERVER first — stop accepting new connections and let
@@ -142,6 +146,7 @@ async function main(): Promise<void> {
         titles.close();
         aiTester.close();
         liveReader.close();
+        feedResolver.close();
         siteIcons.close();
         await viewer.close();
         await worker?.stop();

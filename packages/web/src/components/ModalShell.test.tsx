@@ -95,3 +95,23 @@ describe('ModalShell', () => {
     expect(innerClose).not.toHaveBeenCalled();
   });
 });
+
+it('dismisses only when the press and click both target the backdrop', () => {
+  const close = vi.fn();
+  render(
+    <ModalShell width={400} ariaLabel="Drag-safe modal" onClose={close}>
+      <input aria-label="Text" />
+    </ModalShell>,
+  );
+  const panel = screen.getByRole('dialog', { name: 'Drag-safe modal' });
+  const layer = scrimOf(panel);
+  fireEvent.pointerDown(screen.getByLabelText('Text'));
+  fireEvent.click(layer);
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.pointerDown(layer);
+  fireEvent.click(panel);
+  expect(close).not.toHaveBeenCalled();
+  fireEvent.pointerDown(layer);
+  fireEvent.click(layer);
+  expect(close).toHaveBeenCalledOnce();
+});

@@ -124,7 +124,9 @@ Body and nav use weight 400. Row titles, pane titles, section labels, menus, and
 
 Pass 2 in `docs/methods/shiori-match.md` overrides the earlier recipes. Inter Variable is self-hosted through `@fontsource-variable/inter` (OFL-1.1), at weights 400, 500, and 600. Reader body text is 16px with a 28px line height. Icons use a 20px box, a 24-unit viewBox, and a 1.5px rounded stroke.
 
-Row hover uses `--row-hover`; controls use `--icon-hover`. The reader segment chip uses `--segment-on` and the full control shadow. Dark inputs use neutral 800 and the low contrast shadow. Focus outlines use tertiary text at 2px with a 2px offset. Settings remains silo's modal with its own tabs and Compact links preference.
+Row hover uses `--row-hover`; controls use `--icon-hover`. The reader segment chip uses `--segment-on` and the full control shadow. Dark inputs use neutral 800 and the low contrast shadow. The Add feed URL field
+uses `--bg` for its dark well, with an 8px radius and 14px/20px text (owner
+decision, 2026-10-30). Focus outlines use tertiary text at 2px with a 2px offset. Settings remains silo's modal with its own tabs and Compact links preference.
 
 ## Home audit, 2026-10-29
 

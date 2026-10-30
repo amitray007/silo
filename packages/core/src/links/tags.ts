@@ -1,6 +1,7 @@
 import { db, links, linkTags, tags } from '@silo/db';
-import { and, asc, desc, eq, sql } from 'drizzle-orm';
+import { asc, desc, eq, sql } from 'drizzle-orm';
 import { normalizeTagKey } from './links.js';
+import { whereLibrary } from './live.js';
 
 /**
  * A tag's display name plus how many LIVE links carry it (plan 007, C3) —
@@ -57,7 +58,7 @@ export async function listTagsWithCounts(): Promise<TagCount[]> {
     })
     .from(tags)
     .leftJoin(linkTags, eq(linkTags.tagId, tags.id))
-    .leftJoin(links, and(eq(links.id, linkTags.linkId), sql`${links.deletedAt} is null`))
+    .leftJoin(links, whereLibrary(eq(links.id, linkTags.linkId)))
     .groupBy(tags.id, tags.name)
     .orderBy(desc(liveCount), asc(tags.name));
 

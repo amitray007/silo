@@ -1,5 +1,5 @@
 import { links, linkTags, tags } from '@silo/db';
-import { eq, getTableColumns, inArray } from 'drizzle-orm';
+import { eq, getTableColumns, inArray, sql } from 'drizzle-orm';
 import type { Executor, Link } from './executor.js';
 
 /** A `Link` with its tag names attached, sorted for stable output. */
@@ -19,7 +19,13 @@ const {
 } = getTableColumns(links);
 
 /** Every `links` column except the Reader payload: the select list for bulk row reads. */
-export const listColumns: { [K in keyof LinkSummary]: (typeof summaryColumns)[K] } = summaryColumns;
+export const listColumns = {
+  ...summaryColumns,
+  // Qualify the outer reference literally: Drizzle unqualifies columns in single-table selects.
+  savedLinkId: sql<
+    string | null
+  >`(select saved.id from links as saved where saved.id = links.saved_link_id and saved.feed_id is null and saved.deleted_at is null)`,
+};
 
 /** Shared page-request shape for `list`/`search`. */
 export type PageParams = {

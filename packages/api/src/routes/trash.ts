@@ -11,7 +11,7 @@ import {
   softDelete,
   trashMany,
 } from '@silo/core';
-import type { Hono } from 'hono';
+import type { Handler, Hono } from 'hono';
 import { z } from 'zod';
 import { runBulkGuarded } from '../bulk-result.js';
 import { toLinkJson, toTrashLinkJson, toTrashSnippetSearchResultJson } from '../link-json.js';
@@ -40,8 +40,8 @@ const trashSearchQuerySchema = pageQuerySchema.extend({
 export function registerTrashRoutes(app: Hono): void {
   /**
    * `GET /api/trash` — the whole Trash screen's data (plan 007, A2). Backed by
-   * `core.listTrash` (C2), the ONE read deliberately NOT scoped through
-   * `whereLive` — see `trash.ts`'s doc comment in `@silo/core`. A `list`/
+   * `core.listTrash` (C2), scoped to deleted library links through
+   * `whereTrashedLibrary` in `@silo/core`. A `list`/
    * `search` cursor handed here throws `InvalidCursorError` (mismatched `kind`
    * tag), mapped by the app's `onError` to `400 invalid_cursor` same as any
    * other malformed cursor.
@@ -130,7 +130,7 @@ export function registerTrashRoutes(app: Hono): void {
    * (the link is leaving the live set, so its tag list isn't hydrated),
    * exactly like `trash_link`'s `structuredContent` does.
    */
-  app.post('/links/:id/trash', async (c) => {
+  const trashLink: Handler = async (c) => {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
 
     const deleted = await softDelete(id);
@@ -149,7 +149,9 @@ export function registerTrashRoutes(app: Hono): void {
     // honest-omission shape `trash_link`'s MCP tool returns — rather than
     // giving `toLinkJson` a wider input type just for this one caller.
     return c.json({ link: toLinkJson({ ...deleted, tags: [] }) }, 200);
-  });
+  };
+  app.post('/links/:id/trash', trashLink);
+  app.delete('/links/:id', trashLink);
 
   /**
    * `POST /api/links/:id/restore` — restore from trash (plan 007, A4).

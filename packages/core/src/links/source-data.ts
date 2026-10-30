@@ -1,4 +1,21 @@
 import { z } from 'zod';
+import { httpUrl } from './http-url.js';
+
+const feedUrlSchema = z
+  .string()
+  .max(65_536)
+  .refine((value) => httpUrl(value) !== undefined);
+/** Publisher show notes are untrusted HTML. Only the worker's Reader sanitizer renders them. */
+const feedMediaSourceData = z
+  .object({
+    kind: z.literal('feed_media'),
+    content: z.string().max(1_048_576),
+    description: z.string().max(20_000).optional(),
+    imageUrl: feedUrlSchema.optional(),
+    enclosureUrl: feedUrlSchema.optional(),
+    contentBaseUrl: feedUrlSchema.optional(),
+  })
+  .strict();
 
 /**
  * Per-source `source_data` payload, typed and validated by a Zod
@@ -216,6 +233,7 @@ const youtubeSourceData = z
   .strict();
 
 export const sourceDataSchema = z.discriminatedUnion('kind', [
+  feedMediaSourceData,
   linkSourceData,
   hackerNewsSourceData,
   twitterSourceData,
@@ -224,3 +242,17 @@ export const sourceDataSchema = z.discriminatedUnion('kind', [
 ]);
 
 export type SourceData = z.infer<typeof sourceDataSchema>;
+
+/** Drop invalid optional publisher URLs before the strict storage boundary. */
+export function parseFeedMediaSourceData(
+  value: Extract<SourceData, { kind: 'feed_media' }>,
+): Extract<SourceData, { kind: 'feed_media' }> {
+  const { imageUrl: _image, enclosureUrl: _enclosure, contentBaseUrl: _base, ...required } = value;
+  const urls = Object.fromEntries(
+    (['imageUrl', 'enclosureUrl', 'contentBaseUrl'] as const).flatMap((key) => {
+      const parsed = feedUrlSchema.safeParse(value[key]);
+      return parsed.success ? [[key, parsed.data]] : [];
+    }),
+  );
+  return feedMediaSourceData.parse({ ...required, ...urls });
+}

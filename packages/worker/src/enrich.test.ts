@@ -8,7 +8,9 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EnrichLinkDeps } from './enrich.js';
 import type { ExtractResult } from './extract/extract.js';
+import * as readerWorker from './extract/reader-worker.js';
 import { ReaderExtractionError } from './extract/reader-worker.js';
+import { parseFeedBody } from './feeds/parse.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 
 /**
@@ -75,6 +77,269 @@ describeIfPg('enrichLink (integration)', () => {
         }),
     };
   }
+
+  it.each(['reader-failed', 'reader-timeout'])(
+    'leaves media Reader retryable after %s',
+    async (message) => {
+      const post = await core.createLink({
+        url: `https://example.com/${message}.mp3`,
+        sourceKind: 'feed_media',
+        sourceData: { kind: 'feed_media', content: '<p>Recovered show notes.</p>' },
+      });
+      const sanitizer = vi
+        .spyOn(readerWorker, 'sanitizeRenderedPage')
+        .mockRejectedValueOnce(new ReaderExtractionError(message));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await enrichMod.enrichLink(post.id);
+        const state = await pool.query(
+          'select enrich_attempts, reader_version, reader_captured_at, content_html, capture_status from links where id = $1',
+          [post.id],
+        );
+        expect(state.rows[0]).toEqual({
+          enrich_attempts: 1,
+          reader_version: null,
+          reader_captured_at: null,
+          content_html: null,
+          capture_status: 'full',
+        });
+        expect(warn).toHaveBeenCalled();
+      } finally {
+        sanitizer.mockRestore();
+        warn.mockRestore();
+      }
+      const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+      await core.runReaderBackfill(
+        createReaderRefresher(() => {}, {
+          fetch: async () => {
+            throw new Error('must rebuild saved media without fetching');
+          },
+        }),
+      );
+      expect((await core.getStoredReader(post.id))?.contentHtml).toContain('Recovered show notes.');
+    },
+  );
+
+  it('strips JSON Feed NULs before subscribing and polling on Postgres', async () => {
+    const parsed = parseFeedBody(
+      JSON.stringify({
+        version: 'https://jsonfeed.org/version/1.1',
+        title: 'Pod\u0000cast',
+        description: 'Feed\u0000 summary',
+        items: [
+          {
+            id: 'ep\u0000isode',
+            title: 'Episode\u0000 title',
+            content_html: '<p>Show\u0000 notes</p>',
+            summary: 'Short\u0000 summary',
+            attachments: [{ url: '/nul.mp3', mime_type: 'audio/mpeg' }],
+          },
+        ],
+      }),
+      'https://example.com/feed',
+    );
+    expect(parsed).toMatchObject({
+      title: 'Podcast',
+      description: 'Feed summary',
+      entries: [
+        {
+          id: 'episode',
+          title: 'Episode title',
+          media: { content: '<p>Show notes</p>', description: 'Short summary' },
+        },
+      ],
+    });
+    if (!parsed) throw new Error('feed did not parse');
+    const resolved = {
+      ...parsed,
+      feedUrl: 'https://example.com/nul-feed',
+      siteUrl: 'https://example.com',
+      intervalSeconds: 3600,
+    };
+    core.setFeedResolver(async () => resolved);
+    try {
+      const result = await core.subscribeFeed({ url: resolved.feedUrl, syncRecents: false });
+      if ('error' in result) throw new Error(result.error);
+      await pool.query("update feeds set next_poll_at = '2000-01-01' where id = $1", [
+        result.feed.id,
+      ]);
+      await core.pollFeed(result.feed.id, async () => ({
+        kind: 'modified',
+        feed: {
+          ...resolved,
+          entries: parsed.entries.map((entry) => ({
+            ...entry,
+            id: 'fresh',
+            url: 'https://example.com/fresh-nul.mp3',
+          })),
+        },
+      }));
+      expect(await core.getFeed(result.feed.id)).toMatchObject({
+        status: 'active',
+        postCount: 1,
+        title: 'Podcast',
+      });
+      expect((await core.listFeedPosts(result.feed.id)).links[0]).toMatchObject({
+        title: 'Episode title',
+        sourceData: { content: '<p>Show notes</p>', description: 'Short summary' },
+      });
+    } finally {
+      core.setFeedResolver(undefined);
+    }
+  });
+
+  it('captures feed media without page fetch, preserves show notes through refresh and Save to Home', async () => {
+    const feedResult = await pool.query<{ id: string }>(
+      "insert into feeds (feed_url, title, format, next_poll_at) values ('https://example.com/media-feed', 'Podcast', 'rss', now()) returning id",
+    );
+    const feed = feedResult.rows[0];
+    if (!feed) throw new Error('missing feed');
+    const source = {
+      kind: 'feed_media' as const,
+      content:
+        '<p>Searchable quasar show notes.</p><a href="../about">About</a><ul><li>A topic</li></ul><script>evil()</script><a href="javascript:evil()">Unsafe</a><img src="https://example.com/photo.jpg" onerror="evil()">',
+      description: '  <p>Short <b>episode</b> summary.</p>  ',
+      imageUrl: 'https://example.com/cover.jpg',
+      enclosureUrl: 'https://example.com/episode.mp3',
+      contentBaseUrl: 'https://publisher.example/episodes/',
+    };
+    const post = await core.createFeedPost({
+      feedId: feed.id,
+      url: source.enclosureUrl,
+      title: 'Episode title',
+      publishedAt: new Date('2026-10-29'),
+      media: source,
+    });
+    if (!post) throw new Error('missing post');
+    const deps = stubDeps({ ok: false, reason: 'not-found' });
+    const fetch = vi.spyOn(deps, 'safeFetch');
+    const extract = vi.spyOn(deps, 'extract');
+    const sourceFetch = vi.spyOn(deps, 'enrichSource');
+    await enrichMod.enrichLink(post.id, deps);
+    const stored = await core.getById(post.id);
+    expect(stored).toMatchObject({
+      title: 'Episode title',
+      description: 'Short episode summary.',
+      imageUrl: source.imageUrl,
+      captureStatus: 'full',
+      sourceKind: 'feed_media',
+      sourceData: source,
+      extractedText: expect.stringContaining('Searchable quasar show notes.'),
+    });
+    const reader = await core.getStoredReader(post.id);
+    expect(reader?.contentHtml).toContain('<ul><li>A topic</li></ul>');
+    expect(reader?.contentHtml).toContain('https://example.com/episode.mp3');
+    expect(reader?.contentHtml).toContain('https://publisher.example/about');
+    expect(reader?.contentImages).toEqual(['https://example.com/photo.jpg']);
+    expect(reader?.contentHtml).not.toMatch(/script|onerror|javascript:|evil\(/);
+    const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+    const refresher = createReaderRefresher(() => {}, {
+      fetch: async () => {
+        throw new Error('must not fetch media');
+      },
+    });
+    const refreshed = await refresher(post, AbortSignal.timeout(30_000));
+    expect(refreshed).toMatchObject({
+      status: 'reader',
+      reader: { contentHtml: reader?.contentHtml },
+    });
+    const { createLiveReader } = await import('./reader/live-reader.js');
+    const live = createLiveReader({
+      fetch: async () => {
+        throw new Error('must not fetch media');
+      },
+    });
+    expect(await live(post, AbortSignal.timeout(30_000))).toMatchObject({
+      contentHtml: reader?.contentHtml,
+    });
+    const enqueue = vi.fn(async () => {});
+    core.setEnrichmentEnqueuer(enqueue);
+    const saved = await core.saveFeedPost(feed.id, post.id);
+    if ('error' in saved) throw new Error(saved.error);
+    expect(enqueue).not.toHaveBeenCalled();
+    expect(await core.getStoredReader(saved.id)).toEqual(reader);
+    expect(await core.getById(saved.id)).toMatchObject({
+      feedId: null,
+      sourceKind: 'feed_media',
+      sourceData: source,
+      extractedText: stored?.extractedText,
+      captureStatus: 'full',
+    });
+    expect((await core.search('quasar')).results.map((l) => l.id)).toContain(saved.id);
+    // A retry or targeted Reader request must keep using the saved notes on the Home copy.
+    await core.requestEnrich(saved.id, { fields: ['reader'] });
+    await enrichMod.enrichLink(saved.id, deps, { trigger: 'manual', previousStatus: 'full' });
+    expect(await core.getStoredReader(saved.id)).toMatchObject({
+      contentHtml: reader?.contentHtml,
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(extract).not.toHaveBeenCalled();
+    expect(sourceFetch).not.toHaveBeenCalled();
+    core.resetEnrichmentEnqueuer();
+  }, 45_000);
+
+  it('fetches and extracts an article with an auto-enclosure and preserves YouTube classification', async () => {
+    const { parseFeedBody } = await import('./feeds/parse.js');
+    const result = await pool.query<{ id: string }>(
+      "insert into feeds (feed_url, title, format, next_poll_at) values ('https://example.com/articles-with-enclosures', 'Articles', 'rss', now()) returning id",
+    );
+    const feed = result.rows[0];
+    if (!feed) throw new Error('missing feed');
+    for (const [url, kind] of [
+      ['https://example.com/wordpress-post', 'link'],
+      ['https://www.youtube.com/watch?v=jNQXAC9IVRw', 'youtube'],
+    ]) {
+      const entry = parseFeedBody(
+        `<rss version="2.0"><channel><title>Feed</title><item><link>${url}</link><enclosure url="https://cdn.example/audio.mp3" type="audio/mpeg"/></item></channel></rss>`,
+        'https://example.com/feed',
+      )?.entries[0];
+      if (!entry) throw new Error('missing entry');
+      const post = await core.createFeedPost({ ...entry, feedId: feed.id });
+      if (!post) throw new Error('missing post');
+      expect(post.sourceKind).toBe(kind);
+      const deps = stubDeps(
+        {
+          ok: true,
+          html: '<p>Article</p>',
+          finalUrl: post.url,
+          contentType: 'text/html',
+          status: 200,
+        },
+        { status: 'full', title: 'Page title', text: 'Full page text' },
+      );
+      const fetch = vi.spyOn(deps, 'safeFetch');
+      await enrichMod.enrichLink(post.id, deps);
+      expect(fetch).toHaveBeenCalledWith(post.url);
+      expect(await core.getById(post.id)).toMatchObject({
+        captureStatus: kind === 'youtube' ? 'partial' : 'full',
+        extractedText: 'Full page text',
+        sourceKind: kind,
+      });
+    }
+  });
+
+  it('a missing feed post settles into its own trash without leaking into library trash', async () => {
+    const result = await pool.query<{ id: string }>(
+      "insert into feeds (feed_url, title, format, next_poll_at) values ('https://example.com/missing-post-feed', 'Publisher', 'rss', now()) returning id",
+    );
+    const feed = result.rows[0];
+    if (!feed) throw new Error('missing feed');
+    const post = await core.createFeedPost({
+      feedId: feed.id,
+      url: 'https://example.com/missing-feed-post',
+    });
+    if (!post) throw new Error('missing post');
+    await enrichMod.enrichLink(
+      post.id,
+      stubDeps({ ok: false, reason: 'not-found', detail: '404' }),
+    );
+    expect(await core.getById(post.id)).toBeNull();
+    expect(
+      (await pool.query('select deleted_at from links where id = $1', [post.id])).rows[0]
+        ?.deleted_at,
+    ).not.toBeNull();
+    expect((await core.listTrash()).links.map((row) => row.id)).not.toContain(post.id);
+  });
 
   async function newLink(url: string): Promise<string> {
     const link = await core.createLink({ url, sourceKind: 'link' });

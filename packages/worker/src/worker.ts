@@ -12,12 +12,14 @@
  * destructures `([job]) => ...` to make the v12 contract explicit.
  */
 
+import type { FeedPollEnqueuer } from '@silo/core';
 import {
   createBoss,
   ENRICH_LINK_QUEUE,
   ensureEnrichLinkQueue,
   logDlqDepth,
   registerEnqueuer,
+  registerFeedPollEnqueuer,
 } from '@silo/queue';
 import { prepareAiAtStartup } from './ai/startup.js';
 import { closeBrowserReader } from './browser/reader.js';
@@ -30,6 +32,7 @@ const LOCAL_CONCURRENCY = 5;
 
 /** A running worker instance, returned by `startWorker()`. */
 export interface WorkerHandle {
+  enqueueFeedPoll: FeedPollEnqueuer;
   /** Stops the worker gracefully, waiting for any in-flight job (bounded by pg-boss's own timeout). */
   stop: () => Promise<void>;
 }
@@ -71,6 +74,7 @@ export async function startWorker(): Promise<WorkerHandle> {
   // in THIS process (or any process that imported and registered) enqueue
   // transactionally. (The API process, when it exists, registers the same way.)
   registerEnqueuer(boss);
+  const enqueueFeedPoll = await registerFeedPollEnqueuer(boss);
 
   // Register the three scheduled maintenance jobs (scheduling-jobs slice):
   // purge-trash (daily), sweep-enriching (~5min), dlq-alert (~10min). Each
@@ -96,6 +100,7 @@ export async function startWorker(): Promise<WorkerHandle> {
   );
 
   return {
+    enqueueFeedPoll,
     stop: async () => {
       await boss.stop({ graceful: true });
       await closeBrowserReader();

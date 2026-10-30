@@ -33,6 +33,7 @@ export {
   type ExtractResult,
   extract,
 } from './extract/extract.js';
+export { registerFeedResolver } from './feeds/resolve.js';
 export { classifyIp, type IpClassification, isBlockedIp } from './fetch/ip-rules.js';
 export {
   DEFAULT_MAX_BODY_BYTES,

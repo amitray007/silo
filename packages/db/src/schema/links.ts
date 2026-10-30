@@ -1,7 +1,9 @@
 import type { SQL } from 'drizzle-orm';
 import { sql } from 'drizzle-orm';
 import {
+  type AnyPgColumn,
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -13,6 +15,7 @@ import {
 } from 'drizzle-orm/pg-core';
 import { tsvector } from '../types.js';
 import { captureSource, captureStatus, linkOrigin, titleSource } from './enums.js';
+import { feeds } from './feeds.js';
 
 /**
  * The `links` table — one row per saved item. Stable typed columns for
@@ -28,6 +31,12 @@ export const links = pgTable(
   'links',
   {
     id: uuid('id').primaryKey().defaultRandom(),
+    feedId: uuid('feed_id').references(() => feeds.id, { onDelete: 'cascade' }),
+    publishedAt: timestamp('published_at', { withTimezone: true }),
+    archivedAt: timestamp('archived_at', { withTimezone: true }),
+    savedLinkId: uuid('saved_link_id').references((): AnyPgColumn => links.id, {
+      onDelete: 'set null',
+    }),
 
     // Raw + canonical URL (see docs plan R5/R7): canonicalization is a `core`
     // (U3) concern. `canonicalUrl` falls back to the raw url when
@@ -210,9 +219,17 @@ export const links = pgTable(
     // Dedup (plan R6): unique only among live rows, so a trashed/purged URL
     // frees the slot for a fresh save. A plain unique would forbid ever
     // re-saving a URL sitting in trash.
-    uniqueIndex('links_canonical_url_live_unique_idx')
+    uniqueIndex('links_canonical_url_library_unique_idx')
       .on(table.canonicalUrl)
-      .where(sql`${table.deletedAt} is null`),
+      .where(sql`${table.deletedAt} is null and ${table.feedId} is null`),
+    uniqueIndex('links_feed_canonical_url_live_unique_idx')
+      .on(table.feedId, table.canonicalUrl)
+      .where(sql`${table.deletedAt} is null and ${table.feedId} is not null`),
+    index('links_feed_id_idx').on(table.feedId),
+    check(
+      'links_feed_fields_check',
+      sql`${table.feedId} is not null or (${table.archivedAt} is null and ${table.savedLinkId} is null)`,
+    ),
     // Full-text search index (plan R11/R12): partial, live rows only —
     // trashed rows never need to be searched.
     index('links_search_vector_live_idx')

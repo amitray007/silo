@@ -281,8 +281,8 @@ export type UnionSearchOptions = {
 
 /**
  * Run the union search (search-union rework) against `basePredicate` (the
- * live-vs-trash scope: `whereLive(...)` for live search, the trashed
- * condition for `searchTrash` — the ONE thing that differs between the two
+ * library scope: `whereLibrary(...)` for live search,
+ * `whereTrashedLibrary(...)` for `searchTrash` — the ONE thing that differs between the two
  * callers) ANDed with `tagVector` (each caller's `tagSearchVector`, passed
  * in rather than imported here to avoid a `links.ts` <-> `search-query.ts`
  * import cycle) and an optional `scopeCondition` (`search()`'s `filter.tag`

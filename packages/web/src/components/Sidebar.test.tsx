@@ -53,6 +53,7 @@ function stubFetchWithAuth(authResponse: unknown) {
   vi.stubGlobal(
     'fetch',
     vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      if (String(input) === '/api/feeds') return Promise.resolve(jsonResponse({ feeds: [] }));
       if (String(input).includes('/api/auth/check')) {
         return Promise.resolve(jsonResponse(authResponse));
       }
@@ -166,6 +167,22 @@ describe('Sidebar', () => {
     expect(screen.queryByRole('link', { name: /trash/i })).toBeNull();
   });
 
+  it('reveals an active tag beyond page one with spaces and an encoded slash', async () => {
+    const names = Array.from({ length: 120 }, (_, i) => `Tag ${i}`);
+    names[90] = 'A tag / with spaces';
+    vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
+      if (String(input) === '/api/tags')
+        return Promise.resolve(jsonResponse({ tags: tagCounts(names) }));
+      return Promise.resolve(jsonResponse({ live: 0, trash: 0 }));
+    });
+    const scroll = vi.spyOn(Element.prototype, 'scrollIntoView');
+    renderSidebar([`/tags/${encodeURIComponent('A tag / with spaces')}`]);
+    const active = await screen.findByRole('link', { name: /A tag \/ with spaces/ });
+    expect(active.getAttribute('aria-current')).toBe('page');
+    expect(tagRowCount()).toBe(100);
+    expect(scroll.mock.instances).toContain(active);
+    scroll.mockRestore();
+  });
   it('an active tag row gets the same themed neutral state as Library/Trash', async () => {
     vi.mocked(fetch).mockImplementation((input: RequestInfo | URL) => {
       const url = String(input);
@@ -263,7 +280,9 @@ describe('Sidebar', () => {
     it('renders the "⌘K" shortcut chip in the same right-aligned meta column as counts', async () => {
       // trash 2 anchors the load (Library no longer renders a count) and
       // formats compactly as "2".
-      vi.mocked(fetch).mockResolvedValue(jsonResponse({ live: 3, trash: 2, purgeWindowDays: 30 }));
+      vi.mocked(fetch).mockImplementation(() =>
+        Promise.resolve(jsonResponse({ live: 3, trash: 2, purgeWindowDays: 30 })),
+      );
       renderSidebar();
 
       await waitFor(() => expect(screen.getByText('3')).toBeDefined());
@@ -344,7 +363,7 @@ describe('Sidebar', () => {
       const { container } = renderSidebar();
       await waitFor(() => expect(screen.getByText('ai')).toBeDefined());
 
-      const scrollRegion = container.querySelector('.silo-tag-scroll');
+      const scrollRegion = container.querySelector('#silo-tag-list .silo-tag-scroll');
       expect(scrollRegion).not.toBeNull();
       expect(scrollRegion?.contains(screen.getByRole('link', { name: /ai/i }))).toBe(true);
     });

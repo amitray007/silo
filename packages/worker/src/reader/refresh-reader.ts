@@ -2,6 +2,7 @@ import type { ReaderRefresher } from '@silo/core';
 import { readerContentSchema } from '@silo/core/capture';
 import { type ExtractInput, type ExtractResult, extract } from '../extract/extract.js';
 import { extractYouTubeWatch } from '../extract/youtube-watch.js';
+import { readFeedMedia } from '../feeds/media.js';
 import { HTML_ACCEPT, type SafeFetchResult, safeFetch } from '../fetch/safe-fetch.js';
 import { selectReader } from './select-reader.js';
 
@@ -17,6 +18,7 @@ export function createReaderRefresher(
   const run = deps.extract ?? extract;
   return async (link, signal) => {
     if (signal.aborted) return { status: 'fetch_failed' };
+    if (link.sourceKind === 'feed_media') return readFeedMedia(link.id, link.url, signal);
     const page = await fetch(link.url, signal);
     if (!page.ok || signal.aborted) return { status: 'fetch_failed' };
     const youtube =

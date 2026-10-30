@@ -26,7 +26,15 @@ export type AddedBy = 'user' | 'agent';
  * CLI, Raycast, Chrome extension, generic ingest), orthogonal to `AddedBy`'s
  * who (human vs agent).
  */
-export type CaptureSource = 'web' | 'mcp' | 'cli' | 'raycast' | 'chrome' | 'ingest' | 'unknown';
+export type CaptureSource =
+  | 'web'
+  | 'mcp'
+  | 'cli'
+  | 'raycast'
+  | 'chrome'
+  | 'ingest'
+  | 'feed'
+  | 'unknown';
 
 /** One post of an X author's own thread, stored beside the saved post. */
 type TweetThreadPost = {
@@ -61,6 +69,14 @@ type TweetThreadPost = {
  * is present elsewhere on the link.
  */
 export type SourceData =
+  | {
+      kind: 'feed_media';
+      content?: string;
+      contentBaseUrl?: string;
+      description?: string;
+      imageUrl?: string;
+      enclosureUrl?: string;
+    }
   | { kind: 'link' }
   | { kind: 'hacker_news'; points: number; comments: number; author: string }
   | {
@@ -130,6 +146,10 @@ export type LinkJson = {
   captureStatus: CaptureStatus;
   addedBy: AddedBy;
   source: CaptureSource;
+  feedId: string | null;
+  publishedAt?: string | null;
+  archivedAt?: string | null;
+  savedLinkId?: string | null;
   notes: string | null;
   tags: string[];
   createdAt: string;
@@ -423,3 +443,27 @@ export type FrameHint = {
 export type SavedLinksResponse = { saved: string[] };
 /** Titles keyed by URL; a missing URL means no usable title was found. */
 export type LinkTitlesResponse = { titles: Record<string, string> };
+
+export type FeedJson = {
+  lastPolledAt?: string | null;
+  id: string;
+  title: string;
+  feedUrl: string;
+  siteUrl: string | null;
+  format: 'rss' | 'atom' | 'rdf' | 'json';
+  status: 'active' | 'failing' | 'gone';
+  lastError: string | null;
+  postCount: number;
+  inboxCount: number;
+  createdAt: string;
+};
+export type FeedsResponse = { feeds: FeedJson[] };
+export type FeedResponse = { feed: FeedJson };
+export type FeedPostsResponse = {
+  links: (LinkJson & { feedId: string; publishedAt: string | null })[];
+  nextCursor?: string;
+};
+export type SubscribeFeedRequest = { url: string; syncRecents: boolean };
+export type SubscribeFeedResponse = FeedResponse & { deduped: boolean };
+
+export type FeedTab = 'inbox' | 'archive';

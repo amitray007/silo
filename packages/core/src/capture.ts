@@ -2,6 +2,7 @@
 import { z } from 'zod';
 
 export { detectSource } from './links/detect-source.js';
+export { httpUrl } from './links/http-url.js';
 
 // 6: normalize in-page code editors before extraction in both Reader paths.
 export const READER_VERSION = 6;

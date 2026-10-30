@@ -1,8 +1,11 @@
 const paths = {
+  rss: 'M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16M4 20h.01',
+  warning: 'M12 3 2 21h20L12 3ZM12 9v5M12 17h.01',
   sliders:
     'M3 6h4m6 0h8M3 18h9m6 0h3M13 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0M18 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
   note: 'M5 3h14v13l-5 5H5zM14 16h5M14 16v5M8 8h8M8 12h6',
   page: 'M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8M14 3.5 18.5 8M14 3.5V8h4.5M9 12.5h6M9 16h4',
+  sync: 'M20 7a8 8 0 0 0-13-3L4 7m0-5v5h5M4 17a8 8 0 0 0 13 3l3-3m0 5v-5h-5',
   refresh: 'M20 9a8 8 0 1 0 0 6M20 3v6h-6',
   close: 'M6 6l12 12M18 6 6 18',
   up: 'm6 15 6-6 6 6',
@@ -15,6 +18,8 @@ const paths = {
   external: 'M14 3h7v7M21 3 10 14M10 5H3v16h16v-7',
   arrowUpRight: 'M7 17 17 7M8.5 7H17v8.5',
   trash: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6',
+  archive: 'M4 8h16v13H4zM3 3h18v5H3zM9 12h6',
+  unarchive: 'M4 8h16v13H4zM3 3h18v5H3zM12 18v-7m-3 3 3-3 3 3',
   restore: 'M4 12a8 8 0 1 0 2-5M4 3v5h5',
   plus: 'M12 5v14M5 12h14',
   minus: 'M5 12h14',
@@ -52,6 +57,7 @@ export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size
   return (
     <svg
       className="silo-reader-icon"
+      data-filled={name === 'bookmarkFilled'}
       width={size}
       height={size}
       viewBox="0 0 24 24"

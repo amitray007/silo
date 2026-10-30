@@ -95,6 +95,20 @@ function initialCollapsed() {
   }
 }
 
+function trapDrawerTab(event: KeyboardEvent, nav: HTMLElement | null) {
+  if (event.key !== 'Tab') return;
+  const elements = nav?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input');
+  const first = elements?.[0];
+  const last = elements?.[elements.length - 1];
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === nav)) {
+    event.preventDefault();
+    last?.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first?.focus();
+  }
+}
+
 export function AppFrame() {
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(initialCollapsed);
@@ -185,23 +199,14 @@ export function AppFrame() {
     drawerWasOpen.current = true;
     sidebarRef.current?.focus();
     const onKey = (event: KeyboardEvent) => {
+      if (document.querySelector('[role="dialog"], [role="alertdialog"], [data-reader-menu]'))
+        return;
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopImmediatePropagation();
         closeDrawer();
       }
-      if (event.key !== 'Tab') return;
-      const nav = sidebarRef.current;
-      const elements = nav?.querySelectorAll<HTMLElement>('a[href], button:not([disabled]), input');
-      const first = elements?.[0];
-      const last = elements?.[elements.length - 1];
-      if (event.shiftKey && (document.activeElement === first || document.activeElement === nav)) {
-        event.preventDefault();
-        last?.focus();
-      } else if (!event.shiftKey && document.activeElement === last) {
-        event.preventDefault();
-        first?.focus();
-      }
+      trapDrawerTab(event, sidebarRef.current);
     };
     document.addEventListener('keydown', onKey, true);
     return () => document.removeEventListener('keydown', onKey, true);

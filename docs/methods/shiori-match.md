@@ -29,8 +29,9 @@ weights, colors, spacing, radii, and shadows, not "similar".
 - Privacy: no third-party request per row from the browser. Real favicons
   through silo's `/api/favicon` proxy, styled as shiori's (20px, radius 4px).
   A site with no favicon shows a neutral globe icon in the same box.
-- Do not copy shiori's AI features (chat box, Summarize, auto-tagging), feeds,
-  favorites, archive, or Pro badges. Silo has no AI inside.
+- Do not copy shiori's AI features (chat box, Summarize, auto-tagging), favorites,
+  library archive, or Pro badges. Silo has no AI inside. Feeds are in scope
+  (2026-10-29); see `docs/methods/feeds.md`.
 
 ## Tokens (replace values in `src/styles/tokens.css`; keep token names)
 

@@ -16,6 +16,7 @@ export const CAPTURE_SOURCES = [
   'raycast',
   'chrome',
   'ingest',
+  'feed',
   'unknown',
 ] as const;
 

@@ -28,6 +28,7 @@ import type {
   CreatedAccessTokenJson,
   EditLinkRequest,
   EmptyTrashResponse,
+  FeedTab,
   FrameHint,
   LinkJson,
   LinkResponse,
@@ -57,6 +58,10 @@ import type {
  * (plan 008 W4 scope note) and will key off these same builders.
  */
 export const queryKeys = {
+  feeds: () => ['feeds'] as const,
+  feed: (id: string) => ['feed', id] as const,
+  feedPosts: (id: string, tab?: FeedTab) =>
+    tab ? (['feed-posts', id, tab] as const) : (['feed-posts', id] as const),
   counts: () => ['counts'] as const,
   tags: () => ['tags'] as const,
   /**
@@ -206,7 +211,7 @@ type LinksInfiniteData = InfiniteData<LinksResponse>;
  * it can be unit-tested with a plain object and reused verbatim inside the
  * `refetchInterval` callback below.
  */
-function hasEnrichingLink(data: LinksInfiniteData | undefined): boolean {
+export function hasEnrichingLink(data: LinksInfiniteData | undefined): boolean {
   return (data?.pages ?? []).some((page) =>
     page.links.some((l) => l.captureStatus === 'enriching'),
   );
@@ -342,6 +347,7 @@ function buildOptimisticLink(input: CaptureRequest): LinkJson {
     captureStatus: 'enriching',
     addedBy: 'user',
     source: 'web',
+    feedId: null,
     notes: input.note ?? null,
     tags: input.tags ?? [],
     createdAt: now,
@@ -482,13 +488,16 @@ export function useCaptureLink() {
  * no reason). Each call site's `affects` argument carries a one-line comment
  * on WHY that set, so it doesn't drift back to blanket invalidation.
  */
-function invalidateLinkQueries(
+export function invalidateLinkQueries(
   queryClient: ReturnType<typeof useQueryClient>,
   affects: { tags?: boolean; counts?: boolean } = {},
 ): void {
   queryClient.invalidateQueries({ queryKey: ['links'] });
   queryClient.invalidateQueries({ queryKey: ['link'] });
-  if (affects.counts) queryClient.invalidateQueries({ queryKey: ['saved-links'] });
+  if (affects.counts) {
+    queryClient.invalidateQueries({ queryKey: ['saved-links'] });
+    queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+  }
   if (affects.tags) queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
   if (affects.counts) queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
 }
@@ -716,6 +725,8 @@ function insertIntoTrashCache(
 
 /** The shared settle tail for every trash-lifecycle mutation below: the trash list itself, plus `counts` (live/trash tallies) — trash mutations never touch tag counts. */
 function invalidateTrashQueries(queryClient: ReturnType<typeof useQueryClient>): void {
+  queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+  queryClient.invalidateQueries({ queryKey: ['link'] });
   queryClient.invalidateQueries({ queryKey: ['saved-links'] });
   queryClient.invalidateQueries({ queryKey: queryKeys.trash() });
   queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
@@ -812,9 +823,11 @@ export function useRetryCapture(id: string, baselineTitle?: string) {
     onError: (_error, _input, context) => {
       if (context) restoreTitleReveal(id, context.pending, context.previous);
     },
-    // A retry only resets this link's own captureStatus — never tag
-    // membership or live/trash counts.
-    onSettled: () => invalidateLinkQueries(queryClient),
+    // Both collections need the pending status so their polling can follow the run.
+    onSettled: () => {
+      invalidateLinkQueries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+    },
   });
 }
 
@@ -1091,5 +1104,28 @@ export function useFrameHint(id: string, enabled: boolean) {
     enabled,
     retry: false,
     staleTime: 0,
+  });
+}
+
+export function useRenameTag() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: ({
+      name,
+      newName,
+      merge = false,
+    }: {
+      name: string;
+      newName: string;
+      merge?: boolean;
+    }) =>
+      apiPatch<{ name: string; merged: boolean }>(`/api/tags/${encodeURIComponent(name)}`, {
+        name: newName,
+        merge,
+      }),
+    onSuccess: () => {
+      invalidateLinkQueries(client, { tags: true, counts: true });
+      void client.invalidateQueries({ queryKey: ['links-tag-only'] });
+    },
   });
 }

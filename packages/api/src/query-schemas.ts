@@ -1,5 +1,5 @@
 import type { PageParams } from '@silo/core';
-import { CAPTURE_SOURCES, sourceDataSchema } from '@silo/core';
+import { CAPTURE_SOURCES, normalizeFeedUrl, sourceDataSchema } from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -115,7 +115,7 @@ export const captureBodySchema = z.object({
   tags: z.array(z.string()).optional(),
   note: z.string().optional(),
   sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
-  source: z.enum(CAPTURE_SOURCES).optional(),
+  source: z.enum(CAPTURE_SOURCES).exclude(['feed']).optional(),
 });
 
 /**
@@ -138,7 +138,7 @@ export const ingestBodySchema = z.object({
   // imported from `@silo/core`'s `CAPTURE_SOURCES`. Absent -> `ingest.ts`'s
   // route handler falls back to `'ingest'` (a generic ingest caller that
   // didn't self-declare); CLI/Raycast/Chrome self-declare and override it.
-  source: z.enum(CAPTURE_SOURCES).optional(),
+  source: z.enum(CAPTURE_SOURCES).exclude(['feed']).optional(),
 });
 
 /** The parsed `POST /api/ingest` body shape. */
@@ -192,8 +192,23 @@ export const batchTagBodySchema = batchIdsBodySchema.extend({
  * the same "empty batch is a caller bug" reason `batchIdsBodySchema` documents.
  */
 export const batchCaptureBodySchema = z.object({
+  source: z.enum(CAPTURE_SOURCES).exclude(['feed']).optional(),
   urls: z.array(z.string()).min(1),
   tags: z.array(z.string()).optional(),
   note: z.string().optional(),
   sourceKind: z.enum(['link', 'hacker_news', 'twitter']).optional(),
+});
+
+export const feedIdParamSchema = z.object({ id: z.uuid() });
+export const subscribeFeedSchema = z.object({
+  url: z
+    .string()
+    .transform(normalizeFeedUrl)
+    .pipe(z.url({ protocol: /^https?$/ }).max(8192)),
+  syncRecents: z.boolean(),
+});
+
+export const feedPostParamSchema = feedIdParamSchema.extend({ postId: z.uuid() });
+export const feedPostsQuerySchema = pageQuerySchema.extend({
+  tab: z.enum(['inbox', 'archive']).default('inbox'),
 });

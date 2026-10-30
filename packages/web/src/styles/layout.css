@@ -21,7 +21,8 @@
   padding: env(safe-area-inset-top, 0px) 0 0;
   border-right: 0.5px solid var(--line);
   background: transparent;
-  overflow: auto;
+  overflow: hidden;
+  min-height: 0;
   overscroll-behavior: contain;
 }
 .silo-sidebar-brandrow {
@@ -32,9 +33,12 @@
   flex: none;
   padding: 0 10px 0 12px;
 }
-.silo-sidebar-grow {
+.silo-sidebar-sections {
+  display: flex;
+  flex-direction: column;
   flex: 1;
-  min-height: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 .silo-nav-item {
   min-height: 32px;
@@ -45,9 +49,13 @@
   background: var(--sel);
   box-shadow: none;
 }
-/* Tags take the height the window can spare, keeping Settings in view. */
+/* Each list scrolls within its share of the sidebar. */
 .silo-tag-scroll {
-  max-height: max(160px, calc(100dvh - 300px));
+  flex: 1;
+  min-height: 0;
+  max-height: none;
+  scrollbar-gutter: stable;
+  overscroll-behavior: contain;
   overflow-y: auto;
   --fade-top: 0px;
   --fade-bottom: 0px;
@@ -92,7 +100,7 @@
   min-height: 0;
 }
 .silo-listpane {
-  width: 360px;
+  width: 384px;
   flex: none;
   min-width: 0;
   display: flex;
@@ -104,7 +112,7 @@
   display: none;
   position: absolute;
   inset-block: 0;
-  left: clamp(280px, var(--list-w, 360px), calc(100% - 420px));
+  left: clamp(280px, var(--list-w, 384px), calc(100% - 420px));
   width: 8px;
   margin-left: -4px;
   z-index: 24;
@@ -1275,7 +1283,7 @@
 }
 @media (min-width: 1024px) {
   .silo-listpane {
-    width: clamp(280px, var(--list-w, 360px), calc(100% - 420px));
+    width: clamp(280px, var(--list-w, 384px), calc(100% - 420px));
   }
   .silo-readerpane {
     min-width: 420px;
@@ -1674,9 +1682,36 @@ div.silo-reader-notecard {
   height: 20px;
 }
 .silo-tags {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 60px;
+  max-height: max-content;
   margin-top: 12px;
 }
+.silo-tags[data-expanded="false"] {
+  flex: none;
+  min-height: 0;
+}
+.silo-tags-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+.silo-tags-body > :not(.silo-tag-scroll),
+.silo-tag-scroll > * {
+  flex-shrink: 0;
+}
+/* Keep absolutely positioned accessible labels inside their scrolled row. */
+.silo-tag-scroll .silo-nav-item {
+  position: relative;
+}
+.silo-sidebar-sentinel {
+  height: 1px;
+}
 .silo-tags-header {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -1943,6 +1978,7 @@ div.silo-reader-notecard {
   box-shadow: 0 0 0 0.5px var(--line);
 }
 .silo-tags-header {
+  min-height: 24px;
   gap: 0;
   margin: 0;
   padding: 0;
@@ -2233,7 +2269,12 @@ div.silo-reader-notecard {
   container-type: inline-size;
 }
 @container (max-width: 420px) {
-  .silo-reader-inline-actions {
+  .silo-reader-inline-actions:not([data-feed="true"]) {
+    display: none;
+  }
+  .silo-reader-inline-actions[data-feed="true"]
+    .silo-reader-tools[data-compact="false"]
+    > button:nth-child(-n + 2) {
     display: none;
   }
 }
@@ -2356,4 +2397,29 @@ div.silo-reader-notecard {
     margin: 0 6px 0 2px;
     opacity: 1;
   }
+}
+
+.silo-row-saved {
+  display: inline-flex;
+  flex: 0 0 auto;
+  color: var(--fnt);
+}
+@media (hover: none) {
+  .silo-row-wrap .silo-row-actions[data-feed="true"] {
+    display: flex;
+    opacity: 1;
+    pointer-events: auto;
+    background: linear-gradient(to right, transparent, var(--bg) 40px);
+  }
+  .silo-row-actions[data-feed="true"] > :not(:first-child):not(.silo-rowmore) {
+    display: none;
+  }
+  .silo-row-actions[data-feed="true"] .silo-reader-iconbtn {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+.silo-reader-icon[data-filled="true"] {
+  fill: currentColor;
 }

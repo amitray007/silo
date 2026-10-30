@@ -10,7 +10,9 @@ import { LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
+import { SidebarFeeds } from './SidebarFeeds';
 import { SidebarTags } from './SidebarTags';
+import { TagMenu } from './TagMenu';
 
 const noop = () => {};
 
@@ -19,6 +21,7 @@ function NavItemLink({
   label,
   meta,
   end = false,
+  active: activeOverride,
   icon,
   variant,
   onNavigate,
@@ -29,6 +32,7 @@ function NavItemLink({
   label: ReactNode;
   meta?: React.ReactNode;
   end?: boolean;
+  active?: boolean;
   icon?: ReactNode;
   variant?: NavItemVariant | undefined;
   onNavigate: () => void;
@@ -37,7 +41,7 @@ function NavItemLink({
 }) {
   const navigate = useNavigate();
   const match = useMatch({ path: to, end });
-  const active = match !== null;
+  const active = activeOverride ?? match !== null;
 
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey) {
@@ -123,6 +127,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
     onNavigate();
   };
 
+  const activeTag = useMatch('/tags/:name')?.params.name;
   const tags = tagsErrored ? [] : (tagsData?.tags ?? []);
 
   return (
@@ -164,33 +169,37 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           onNavigate={onNavigate}
         />
       </div>
-      <SidebarTags
-        tags={tags}
-        loading={tagsLoading}
-        renderTagLink={(tag: TagCount) => (
-          <NavItemLink
-            key={tag.name}
-            to={`/tags/${encodeURIComponent(tag.name)}`}
-            // The `#` sits in NavItem's 18px icon slot (not inline in the
-            // label) so it aligns to the SAME left ledger column as the
-            // Library/Trash nav icons above and the `+ New tag` glyph below —
-            // one clean column, matching shiori's Tags spacing. Dim (--ghost)
-            // glyph, bright (--ink) label.
-            icon={
-              <>
-                <ReaderIcon name="hash" />
-                <span className="silo-sr-only">#</span>
-              </>
-            }
-            label={tag.name}
-            meta={tag.count > 0 ? formatCount(tag.count) : undefined}
-            variant="tag"
-            onNavigate={onNavigate}
-          />
-        )}
-      />
-
-      <div className="silo-sidebar-grow" />
+      <div className="silo-sidebar-sections">
+        <SidebarFeeds onNavigate={onNavigate} />
+        <SidebarTags
+          tags={tags}
+          activeTag={activeTag}
+          loading={tagsLoading}
+          renderTagLink={(tag: TagCount) => (
+            <TagMenu key={tag.name} tag={tag.name}>
+              <NavItemLink
+                to={`/tags/${encodeURIComponent(tag.name)}`}
+                active={tag.name.toLowerCase() === activeTag?.toLowerCase()}
+                // The `#` sits in NavItem's 18px icon slot (not inline in the
+                // label) so it aligns to the SAME left ledger column as the
+                // Library/Trash nav icons above and the `+ New tag` glyph below —
+                // one clean column, matching shiori's Tags spacing. Dim (--ghost)
+                // glyph, bright (--ink) label.
+                icon={
+                  <>
+                    <ReaderIcon name="hash" />
+                    <span className="silo-sr-only">#</span>
+                  </>
+                }
+                label={tag.name}
+                meta={tag.count > 0 ? formatCount(tag.count) : undefined}
+                variant="tag"
+                onNavigate={onNavigate}
+              />
+            </TagMenu>
+          )}
+        />
+      </div>
       <div className="silo-sidebar-bottom">
         <NavItemLink
           to="/settings"

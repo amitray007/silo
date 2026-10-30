@@ -4,6 +4,8 @@ export {
   accessTokens,
   aiProviders,
   captureStatus,
+  feedEntries,
+  feeds,
   links,
   linkTags,
   oauthClients,

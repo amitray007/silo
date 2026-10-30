@@ -331,6 +331,27 @@ describe('safeFetch — redirects', () => {
     }
   });
 
+  it.each([301, 302])(
+    'reports permanent redirects only for permanent status %s',
+    async (status) => {
+      handler = (req, res) => {
+        if (req.url === '/start') {
+          res.writeHead(status, { location: '/end' });
+          res.end();
+          return;
+        }
+        res.writeHead(200, { 'content-type': 'application/xml' });
+        res.end('<rss/>');
+      };
+      const result = await safeFetch(`http://example.test:${port}/start`, {
+        resolver: loopbackResolver(),
+        allowLoopbackForTests: true,
+      });
+      expect(result.ok).toBe(true);
+      if (result.ok) expect(result.permanentRedirect).toBe(status === 301 ? true : undefined);
+    },
+  );
+
   it('blocks a redirect to a private/internal host at the redirect hop (does not follow)', async () => {
     handler = (_req, res) => {
       res.writeHead(302, { location: 'http://internal-service.test/secret' });
@@ -732,6 +753,8 @@ describe('safeFetchBytes browser response contract', () => {
       ok: false,
       reason: 'not-found',
       detail: '404',
+      status: 404,
+      responseHeaders: {},
     });
   });
   it('rechecks a browser resource redirect and blocks a metadata destination', async () => {
@@ -829,4 +852,47 @@ it('returns only the application response headers explicitly selected by a calle
     responseHeaderNames: ['obs-status'],
   });
   expect(result.ok && result.responseHeaders).toEqual({ 'obs-status': 'success' });
+});
+
+describe('feed conditional GET', () => {
+  it('sends only allowlisted validators, returns 304 and selected cache headers', async () => {
+    handler = (req, res) => {
+      expect(req.headers['if-none-match']).toBe('"v1"');
+      expect(req.headers['if-modified-since']).toBe('Thu, 29 Oct 2026 10:00:00 GMT');
+      expect(req.headers.authorization).toBeUndefined();
+      expect(req.headers.cookie).toBeUndefined();
+      res.writeHead(304, { etag: '"v1"', 'cache-control': 'max-age=3600' });
+      res.end();
+    };
+    const result = await safeFetch(`http://feed.test:${port}/feed`, {
+      resolver: loopbackResolver(),
+      allowLoopbackForTests: true,
+      headers: {
+        'If-None-Match': '"v1"',
+        'if-modified-since': 'Thu, 29 Oct 2026 10:00:00 GMT',
+        authorization: 'secret',
+        cookie: 'secret',
+      },
+      responseHeaderNames: ['etag', 'cache-control'],
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      notModified: true,
+      status: 304,
+      html: '',
+      responseHeaders: { etag: '"v1"', 'cache-control': 'max-age=3600' },
+    });
+  });
+  it('blocks private redirect targets even when using validators', async () => {
+    handler = (_req, res) => {
+      res.writeHead(301, { location: 'http://192.168.1.1/feed' });
+      res.end();
+    };
+    const result = await safeFetch(`http://feed.test:${port}/feed`, {
+      resolver: async (host) => [{ address: host === 'feed.test' ? '127.0.0.1' : host, family: 4 }],
+      allowLoopbackForTests: true,
+      headers: { 'if-none-match': '"v1"' },
+    });
+    expect(result).toMatchObject({ ok: false, reason: 'blocked-ip' });
+  });
 });

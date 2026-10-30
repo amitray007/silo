@@ -5,6 +5,7 @@ import { registerCreateTag } from './tools/create-tag.js';
 import { registerDeleteTag } from './tools/delete-tag.js';
 import { registerEditLink } from './tools/edit-link.js';
 import { registerExportLinks } from './tools/export-links.js';
+import { registerFeedTools } from './tools/feeds.js';
 import { registerFindRelated } from './tools/find-related.js';
 import { registerGetLink } from './tools/get-link.js';
 import { registerHardDeleteLink } from './tools/hard-delete-link.js';
@@ -13,6 +14,7 @@ import { registerListTags } from './tools/list-tags.js';
 import { registerListTrash } from './tools/list-trash.js';
 import { registerRefreshReader } from './tools/refresh-reader.js';
 import { registerRemoveLinkTag } from './tools/remove-link-tag.js';
+import { registerRenameTools } from './tools/rename.js';
 import { registerRestoreLink } from './tools/restore-link.js';
 import { registerRetryCapture } from './tools/retry-capture.js';
 import { registerSearchLinks } from './tools/search-links.js';
@@ -38,6 +40,8 @@ export function createSiloMcpServer(): McpServer {
         'ones. All intelligence — search strategy, synthesis, ' +
         'recommendations, deciding what to capture/tag — is yours to ' +
         'perform over these primitives; silo only holds the data. ' +
+        'list_links/search_links exclude feed posts; feed tools list and triage them, and save_feed_post copies a post to the library. ' +
+        'get_link and refresh_reader also accept feed post ids. ' +
         'Use retry_capture fields for fast targeted re-enrichment; leave fields out for a full run.',
     },
   );
@@ -84,6 +88,8 @@ export function createSiloMcpServer(): McpServer {
   registerListTrash(server);
 
   registerRefreshReader(server);
+  registerFeedTools(server);
+  registerRenameTools(server);
 
   return server;
 }
