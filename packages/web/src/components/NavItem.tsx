@@ -1,4 +1,17 @@
-import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode } from 'react';
+import type { AnchorHTMLAttributes, ButtonHTMLAttributes, CSSProperties, ReactNode } from 'react';
+
+/** Shared with decorative sidebar rows so loading and loaded columns align. */
+export const navItemRowStyle = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: '8px',
+  width: '100%',
+  boxSizing: 'border-box',
+  textAlign: 'left',
+  padding: '6px 8px',
+  borderRadius: 6,
+  fontWeight: 400,
+} satisfies CSSProperties;
 
 export type NavItemVariant = 'default' | 'settings' | 'tag';
 
@@ -35,15 +48,7 @@ export function NavItem({
   ...props
 }: NavItemProps) {
   const sharedStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    width: '100%',
-    boxSizing: 'border-box' as const,
-    textAlign: 'left' as const,
-    padding: '6px 8px',
-    borderRadius: 6,
-    fontWeight: 400,
+    ...navItemRowStyle,
     cursor: 'pointer',
     textDecoration: 'none',
     color: active ? 'var(--ink)' : 'var(--nav-color, var(--mut))',

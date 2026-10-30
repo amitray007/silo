@@ -157,6 +157,7 @@ Feed posts stay outside the library. Save a post to create a library copy.
 | PATCH | `/api/feeds/:id` | Set or reset the display title |
 | DELETE | `/api/feeds/:id` | Unsubscribe and remove its feed posts |
 | POST | `/api/feeds/:id/refresh` | Queue a poll, including retrying a gone feed |
+| GET | `/api/feeds/:id/search` | Ranked search across Inbox and Archive (`q`, `limit`, `cursor`) |
 | GET | `/api/feeds/:id/posts` | Cursor-paged Inbox or Archive posts |
 | POST | `/api/feeds/:id/posts/:postId/archive` | Archive a post |
 | POST | `/api/feeds/:id/posts/:postId/unarchive` | Return a post to Inbox |

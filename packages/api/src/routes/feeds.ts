@@ -8,16 +8,18 @@ import {
   refreshFeed,
   renameFeed,
   saveFeedPost,
+  searchFeedPosts,
   setFeedPostArchived,
   subscribeFeed,
 } from '@silo/core';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
-import { toSummaryLinkJson } from '../link-json.js';
+import { toSnippetSearchResultJson, toSummaryLinkJson } from '../link-json.js';
 import {
   feedIdParamSchema,
   feedPostParamSchema,
   feedPostsQuerySchema,
+  pageQuerySchema,
   subscribeFeedSchema,
   toPageParams,
 } from '../query-schemas.js';
@@ -96,6 +98,13 @@ export function registerFeedRoutes(app: Hono): void {
     const result = await saveFeedPost(id, postId);
     if ('error' in result) return feedPostError(c, result.error);
     return c.json(result, result.outcome === 'created' ? 201 : 200);
+  });
+  app.get('/feeds/:id/search', async (c) => {
+    const { id } = feedIdParamSchema.parse(c.req.param());
+    const query = pageQuerySchema.extend({ q: z.string().min(1) }).parse(c.req.query());
+    if (!(await feedExists(id))) return feedNotFound(c);
+    const page = await searchFeedPosts(id, query.q, toPageParams(query));
+    return c.json({ ...page, results: page.results.map(toSnippetSearchResultJson) });
   });
   app.get('/feeds/:id/posts', async (c) => {
     const { id } = feedIdParamSchema.parse(c.req.param());

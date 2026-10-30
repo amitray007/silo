@@ -38,6 +38,61 @@ describeMcpTool('silo_mcp_feeds', 'MCP feed tools', (context) => {
     return (result.structuredContent as { feed: { id: string }; deduped: boolean }).feed.id;
   }
 
+  it('searches one feed across tabs with paging, errors and bounded content', async () => {
+    const { client, core } = context();
+    const feedId = await subscribe();
+    await subscribe();
+    const post = (await core.listFeedPosts(feedId)).links[0];
+    if (!post) throw new Error('missing post');
+    await core.setFeedPostArchived(feedId, post.id, true);
+    await seedLink(context, 'https://example.com/library-search', { title: 'Sharedsecret' });
+    const first = await client.callTool({
+      name: 'search_feed_posts',
+      arguments: { feedId, query: 'shared', limit: 1 },
+    });
+    expect(first.isError).toBeFalsy();
+    const page = first.structuredContent as {
+      results: { id: string; feedId: string; title: string; url: string }[];
+      nextCursor: string;
+    };
+    expect(page.results).toHaveLength(1);
+    expect(page.nextCursor).toEqual(expect.any(String));
+    const [text] = first.content as Array<{ type: 'text'; text: string }>;
+    for (const result of page.results) {
+      expect(text?.text).toContain(result.id);
+      expect(text?.text).toContain(result.title);
+      expect(text?.text).toContain(result.url);
+    }
+    expect(text?.text).toContain('Use get_link with an id');
+    const next = await client.callTool({
+      name: 'search_feed_posts',
+      arguments: { feedId, query: 'shared', cursor: page.nextCursor },
+    });
+    expect(next.isError).toBeFalsy();
+    const rest = next.structuredContent as { results: { id: string; feedId: string }[] };
+    expect([...page.results, ...rest.results]).toHaveLength(3);
+    expect([...page.results, ...rest.results].every((p) => p.feedId === feedId)).toBe(true);
+    expect([...page.results, ...rest.results]).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: post.id })]),
+    );
+    expect(JSON.stringify(first)).not.toMatch(/extractedText|canonicalUrl|searchVector/);
+    expect(
+      (
+        await client.callTool({
+          name: 'search_feed_posts',
+          arguments: { feedId, query: 'shared', cursor: 'bad' },
+        })
+      ).isError,
+    ).toBe(true);
+    expect(
+      (await client.callTool({ name: 'search_feed_posts', arguments: { feedId, query: '' } }))
+        .isError,
+    ).toBe(true);
+    const { tools } = await client.listTools();
+    expect(tools.find((tool) => tool.name === 'search_feed_posts')?.annotations?.readOnlyHint).toBe(
+      true,
+    );
+  });
   it('reports feed ids per item and continues trash and restore batches', async () => {
     const { client, core } = context();
     const feedId = await subscribe();

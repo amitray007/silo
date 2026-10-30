@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { Link, useMatch, useNavigate } from 'react-router';
 import { useFeeds } from '../api/feedHooks';
 import type { FeedJson } from '../api/types';
@@ -11,6 +11,8 @@ import { FeedMenu } from './FeedMenu';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
+import { SidebarFindButton, SidebarFindEmpty, SidebarFindInput } from './SidebarFind';
+import { SidebarRowSkeletonList } from './SidebarRowSkeleton';
 
 function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void }) {
   const to = `/feeds/${feed.id}`;
@@ -57,13 +59,21 @@ function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void
 export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
   const [expanded, setExpanded] = useState(true);
   const [adding, setAdding] = useState(false);
+  const [findOpen, setFindOpen] = useState(false);
+  const [autoFocusOnOpen, setAutoFocusOnOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const findButtonRef = useRef<HTMLButtonElement>(null);
   const feeds = useFeeds();
-  const rows = feeds.data?.feeds ?? [];
+  const trimmedQuery = query.trim().toLowerCase();
+  const rows = (feeds.data?.feeds ?? []).filter((feed) =>
+    feed.title.toLowerCase().includes(trimmedQuery),
+  );
   const activeId = useMatch('/feeds/:id')?.params.id;
   const page = useSidebarPagination(
     rows.length,
     rows.findIndex((feed) => feed.id === activeId),
     expanded,
+    trimmedQuery,
   );
   return (
     <div className="silo-tags" data-expanded={expanded}>
@@ -78,17 +88,43 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
             aria-label="Toggle feeds"
             aria-expanded={expanded}
             aria-controls="silo-feed-list"
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => {
+              setAutoFocusOnOpen(false);
+              setExpanded(!expanded);
+            }}
           >
             <SectionCaret expanded={expanded} />
           </button>
         </div>
+        <span style={{ flex: 1 }} />
+        <SidebarFindButton
+          ref={findButtonRef}
+          label="Find a feed"
+          open={findOpen}
+          onClick={() => {
+            setAutoFocusOnOpen(!findOpen && expanded);
+            setFindOpen(!findOpen);
+            if (findOpen) setQuery('');
+          }}
+        />
       </div>
       {expanded && (
         <div id="silo-feed-list" className="silo-tags-body">
+          {findOpen && (
+            <SidebarFindInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Find feed"
+              autoFocusOnOpen={autoFocusOnOpen}
+              onClose={() => {
+                setFindOpen(false);
+                findButtonRef.current?.focus();
+              }}
+            />
+          )}
           {feeds.isLoading && (
-            <span className="silo-feed-description" role="status">
-              Loading feeds…
+            <span className="silo-sr-only" role="status">
+              Loading feeds
             </span>
           )}
           {feeds.isError && (
@@ -96,7 +132,16 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
               Couldn't load feeds.
             </p>
           )}
-          <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Feed subscriptions">
+          <section
+            ref={page.scrollRef}
+            className="silo-tag-scroll"
+            aria-label="Feed subscriptions"
+            aria-busy={feeds.isLoading}
+          >
+            {feeds.isLoading && <SidebarRowSkeletonList kind="feeds" />}
+            {feeds.isSuccess && trimmedQuery && rows.length === 0 && (
+              <SidebarFindEmpty kind="feeds" query={query} />
+            )}
             {rows.slice(0, page.visibleCount).map((feed) => (
               <FeedLink key={feed.id} feed={feed} onNavigate={onNavigate} />
             ))}

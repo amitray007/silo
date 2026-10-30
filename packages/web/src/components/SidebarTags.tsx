@@ -2,11 +2,11 @@ import { type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { useCreateTag } from '../api/hooks';
 import type { TagCount } from '../api/types';
 import { useSidebarPagination } from '../lib/useSidebarPagination';
-import { SearchIcon } from './NavIcons';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
-import { Skeleton } from './Skeleton';
+import { SidebarFindButton, SidebarFindEmpty, SidebarFindInput } from './SidebarFind';
+import { SidebarRowSkeletonList } from './SidebarRowSkeleton';
 
 /**
  * A `NavItemLink`-shaped callback the caller (`Sidebar`) supplies so this
@@ -21,31 +21,6 @@ interface SidebarTagsProps {
   /** True while `useTags()` is still loading (`Sidebar`'s own `isLoading`) — renders skeleton tag rows in place of `tags` (which is `[]` until it resolves) instead of a flash of empty. Defaults to `false` so existing callers/tests are unaffected. */
   loading?: boolean;
   renderTagLink: (tag: TagCount) => React.ReactNode;
-}
-
-/** Per-row label-line widths for the skeleton tag list — varied so the placeholder rows don't read as a mechanical striped pattern before real tag names land. */
-const SKELETON_TAG_WIDTHS = ['50%', '65%', '40%', '60%', '55%'];
-
-/**
- * One placeholder tag row, shaped exactly like a real tag `NavItem` (`tag`
- * variant, `NavItem.tsx`'s `VARIANT_STYLE.tag`): `padding: 7px var(--s2-5)`
- * (7px 10px), `gap: var(--s1-5)`, a left label line + a right-aligned count
- * block — so swapping this for the real tag row produces no layout shift.
- */
-function SkeletonTagRow({ labelWidth }: { labelWidth: string }) {
-  const rowStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--s1-5)',
-    padding: '7px var(--s2-5)',
-  };
-  return (
-    <div style={rowStyle}>
-      <Skeleton height={12} width={labelWidth} radius={4} />
-      <span style={{ flex: 1 }} />
-      <Skeleton width={14} height={10} radius={4} />
-    </div>
-  );
 }
 
 /**
@@ -67,26 +42,21 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
     }
   });
   const [findOpen, setFindOpen] = useState(false);
+  const [autoFocusOnOpen, setAutoFocusOnOpen] = useState(false);
   const [query, setQuery] = useState('');
+  const findButtonRef = useRef<HTMLButtonElement>(null);
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
 
-  const findInputRef = useRef<HTMLInputElement>(null);
   const newTagInputRef = useRef<HTMLInputElement>(null);
   const createTag = useCreateTag();
-
-  // Focus the filter input the moment it opens (v3's `tagFindRef`/`onClick`
-  // focus behavior) — effect (not an inline autoFocus prop) so it re-focuses
-  // every time the button re-opens it, not just on first mount.
-  useEffect(() => {
-    if (findOpen) findInputRef.current?.focus();
-  }, [findOpen]);
 
   useEffect(() => {
     if (newTagOpen) newTagInputRef.current?.focus();
   }, [newTagOpen]);
 
   function toggleTagFind() {
+    setAutoFocusOnOpen(!findOpen && expanded);
     setFindOpen((open) => {
       const next = !open;
       if (!next) setQuery('');
@@ -150,6 +120,7 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
             aria-expanded={expanded}
             aria-controls="silo-tag-list"
             onClick={() => {
+              setAutoFocusOnOpen(false);
               setExpanded(!expanded);
               try {
                 localStorage.setItem('silo.tagsExpanded', String(!expanded));
@@ -163,74 +134,48 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
           </button>
         </div>
         <span style={{ flex: 1 }} />
-        {/* The search icon shares the SAME right inset as the tag counts below
-            it: the header container and the NavItem tag rows both use --s2-5
-            right padding, and here the icon button carries NO negative margin
-            (removed) + zero right padding, so the 16px glyph's right edge lands
-            exactly on the count column's right edge — one consistent right rail
-            for "Tags 🔍" and every "# tag  N" below it (user feedback: align the
-            count with the Tags heading). The extra hit area is added to the
-            LEFT/vertical only, never the right, so it can't push the glyph off
-            that rail. */}
-        <button
-          type="button"
+        <SidebarFindButton
+          ref={findButtonRef}
+          label="Find a tag"
+          open={findOpen}
           onClick={toggleTagFind}
-          title="Find a tag"
-          aria-label="Find a tag"
-          aria-expanded={findOpen}
-          className="silo-icon-btn-sm"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            border: 0,
-            background: 'none',
-            borderRadius: 6,
-            padding: 'var(--s1) 0 var(--s1) var(--s1)',
-            color: findOpen ? 'var(--ink)' : 'var(--mut)',
-            cursor: 'pointer',
-          }}
-        >
-          {/* The real magnifier SVG (matching the Omnibar's), not the thin
-              `⌕` Unicode glyph — that rendered undersized and inconsistent
-              across platforms (user feedback: "too small … use a better
-              search icon"). 16px, current stroke color. */}
-          <SearchIcon />
-        </button>
+        />
       </div>
 
       {expanded && (
         <div id="silo-tag-list" className="silo-tags-body">
           {findOpen && (
-            <input
-              ref={findInputRef}
+            <SidebarFindInput
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={setQuery}
               placeholder="Find tag"
-              className="silo-field"
-              style={{
-                margin: '0 4px 3px',
-                padding: '4px 8px',
-                border: '1px solid var(--line)',
-                borderRadius: 7,
-                background: 'var(--bg)',
-                color: 'var(--ink)',
-                font: 'inherit',
-                fontSize: 'var(--sidebar-input-size, var(--text-sm))',
-                width: 'calc(100% - 8px)',
-                boxSizing: 'border-box',
-                transition: 'border-color .15s ease',
+              autoFocusOnOpen={autoFocusOnOpen}
+              onClose={() => {
+                setFindOpen(false);
+                findButtonRef.current?.focus();
               }}
             />
           )}
 
-          <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Tags">
-            {loading && tags.length === 0
-              ? SKELETON_TAG_WIDTHS.map((width, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
-                  <SkeletonTagRow key={i} labelWidth={width} />
-                ))
-              : visibleTags.slice(0, page.visibleCount).map((tag) => renderTagLink(tag))}
+          {loading && (
+            <span className="silo-sr-only" role="status">
+              Loading tags
+            </span>
+          )}
+          <section
+            ref={page.scrollRef}
+            className="silo-tag-scroll"
+            aria-label="Tags"
+            aria-busy={loading}
+          >
+            {!loading && trimmedQuery && visibleTags.length === 0 && (
+              <SidebarFindEmpty kind="tags" query={query} />
+            )}
+            {loading && tags.length === 0 ? (
+              <SidebarRowSkeletonList kind="tags" />
+            ) : (
+              visibleTags.slice(0, page.visibleCount).map((tag) => renderTagLink(tag))
+            )}
             {page.hasMore && (
               <div ref={page.sentinelRef} className="silo-sidebar-sentinel" aria-hidden="true" />
             )}

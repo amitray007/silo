@@ -1,5 +1,7 @@
 import { Command } from 'cmdk';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router';
+import { useFeed, useFeedPosts, useFeeds, useSearchFeedPosts } from '../api/feedHooks';
 import {
   useInfiniteLinks,
   useLinksByTag,
@@ -10,6 +12,7 @@ import {
   useTrashList,
 } from '../api/hooks';
 import type {
+  FeedJson,
   LinkJson,
   SearchResultJson,
   SettingsMap,
@@ -25,6 +28,7 @@ import { type PaletteScope, usePaletteScope } from '../lib/usePaletteScope';
 import { Chip } from './Chip';
 import { useHoverPreview } from './HoverPreviewContext';
 import { trapDialogTab } from './ModalShell';
+import { SearchSpinner } from './SearchSpinner';
 
 /** Either a live link result or a trashed one — `PaletteLinkRow` only ever reads `.id`/`.url`/`.title`, and `TrashLinkJson`/its search variant are both structurally `LinkJson` plus extra fields, so one row renderer covers both scopes. */
 type PaletteLinkResult = LinkJson | SearchResultJson | TrashLinkJson;
@@ -72,11 +76,14 @@ function useStableResults(
 
 /** The stable `value` cmdk uses to identify each result row (also becomes the DOM id cmdk assigns internally) — kept distinct per kind so a link id can never collide with a tag name. */
 function resultValue(result: CommandPaletteResult): string {
-  return result.kind === 'link' ? `link:${result.link.id}` : `tag:${result.tag.name}`;
+  if (result.kind === 'link') return `link:${result.link.id}`;
+  if (result.kind === 'feed') return `feed:${result.feed.id}`;
+  return `tag:${result.tag.name}`;
 }
 
 /** The input placeholder, scoped to the current page — an honest hint about WHAT the palette is about to search (direct user decision: the palette replaces each page's own search box, so it should read like that page's search, not a generic global one). */
-function scopePlaceholder(scope: PaletteScope): string {
+function scopePlaceholder(scope: PaletteScope, feedTitle?: string): string {
+  if (scope.kind === 'feed') return `Search ${feedTitle ?? 'feed'}…`;
   if (scope.kind === 'trash') return 'Search trash…';
   if (scope.kind === 'tag') return `Search #${scope.tag}…`;
   return 'Search links…';
@@ -109,8 +116,17 @@ function palettePluginOn(
   return true; // generic link — always show hover
 }
 
+function PaletteFeedBadge({ feed }: { feed: FeedJson }) {
+  return (
+    <span className="silo-palette-feed-badge" title={feed.title}>
+      <Chip domain={deriveDomain(feed.siteUrl ?? feed.feedUrl)} size={14} />
+      <span>{feed.title}</span>
+    </span>
+  );
+}
+
 /** A single link result row (favicon + title + domain), scaled down from `LinkRow`'s look for the palette's tighter list. `Command.Item`'s own `onSelect` handles both click and Enter-while-active — no separate keydown handler needed. Renders trash-scope rows identically to library/tag ones (see `PaletteLinkResult`'s doc comment). Hover preview + inline source-line mirror the library row (`LinkRow`), gated per plugin by the palette `palette` flag; a generic link always gets its hover card. */
-function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
+function PaletteLinkRow({ link, feed }: { link: PaletteLinkResult; feed?: FeedJson | undefined }) {
   const domain = deriveDomain(link.url);
   const title = link.title ?? deriveTitleFromUrl(link.url);
   const rowRef = useRef<HTMLSpanElement>(null);
@@ -183,21 +199,25 @@ function PaletteLinkRow({ link }: { link: PaletteLinkResult }) {
           >
             {title}
           </span>
-          <span
-            className="silo-palette-domain"
-            style={{
-              flex: '0 1 auto',
-              maxWidth: '38%',
-              fontSize: 'var(--text-base)',
-              color: 'var(--fnt)',
-              fontWeight: 400,
-              whiteSpace: 'nowrap',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-            }}
-          >
-            {domain}
-          </span>
+          {feed ? (
+            <PaletteFeedBadge feed={feed} />
+          ) : (
+            <span
+              className="silo-palette-domain"
+              style={{
+                flex: '0 1 auto',
+                maxWidth: '38%',
+                fontSize: 'var(--text-base)',
+                color: 'var(--fnt)',
+                fontWeight: 400,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {domain}
+            </span>
+          )}
         </span>
       </span>
       {showInline && link.sourceData.kind === 'hacker_news' && (
@@ -260,7 +280,48 @@ function PaletteTagRow({ tag }: { tag: TagCount }) {
 
 type CommandPaletteResult =
   | { kind: 'link'; link: PaletteLinkResult }
-  | { kind: 'tag'; tag: TagCount };
+  | { kind: 'tag'; tag: TagCount }
+  | { kind: 'feed'; feed: FeedJson };
+
+function useMatchingFeeds(enabled: boolean, query: string): CommandPaletteResult[] {
+  const { data } = useFeeds();
+  if (!enabled) return [];
+  const needle = query.trim().toLowerCase();
+  return (data?.feeds ?? [])
+    .filter((feed) => feed.title.toLowerCase().includes(needle))
+    .map((feed) => ({ kind: 'feed', feed }));
+}
+
+function useFeedPaletteResults(scope: PaletteScope, query: string) {
+  const id = scope.kind === 'feed' ? scope.feedId : '';
+  const search = useSearchFeedPosts(id, query);
+  const recent = useFeedPosts(id, !query.trim());
+  const hasText = Boolean(query.trim());
+  const links = hasText
+    ? search.data?.results
+    : recent.data?.pages[0]?.links?.slice(0, RECENT_DEFAULT_COUNT);
+  const results = useStableResults(
+    (links ?? []).map((link) => ({ kind: 'link', link })),
+    hasText ? search.isPending : recent.isPending,
+  );
+  return {
+    results,
+    showTagSuggestions: false,
+    isFullyEmpty: !hasText,
+    isSearching: hasText && search.isPending && search.isFetching,
+  };
+}
+
+function usePaletteResults(
+  parsed: ReturnType<typeof useCommandPalette>['parsed'],
+  parsedDebounced: ReturnType<typeof useCommandPalette>['parsedDebounced'],
+  scope: PaletteScope,
+  rawQuery: string,
+) {
+  const library = useLibraryPaletteResults(parsed, parsedDebounced, scope);
+  const feed = useFeedPaletteResults(scope, rawQuery);
+  return scope.kind === 'feed' ? feed : library;
+}
 
 /**
  * The palette's data-selection logic, pulled out of `CommandPalette` itself
@@ -307,11 +368,17 @@ type CommandPaletteResult =
  * RESULTS returned here are additionally smoothed through `useStableResults`
  * (below) so a debounce/fetch cycle never blanks the list mid-type.
  */
-function usePaletteResults(
+function useLibraryPaletteResults(
   parsed: ReturnType<typeof useCommandPalette>['parsed'],
   parsedDebounced: ReturnType<typeof useCommandPalette>['parsedDebounced'],
   scope: PaletteScope,
-): { results: CommandPaletteResult[]; showTagSuggestions: boolean; isFullyEmpty: boolean } {
+): {
+  results: CommandPaletteResult[];
+  showTagSuggestions: boolean;
+  isFullyEmpty: boolean;
+  isSearching: boolean;
+} {
+  const hasLibraryScope = ['library', 'tag'].includes(scope.kind);
   const { data: tagsData } = useTags();
   const allTags = tagsData?.tags ?? [];
 
@@ -325,10 +392,10 @@ function usePaletteResults(
   );
 
   const hasText = searchText.trim().length > 0;
-  const hasSettledTag = !isTrashScope && settledTag !== undefined && settledTag.length > 0;
+  const hasSettledTag = hasLibraryScope && Boolean(settledTag);
 
   const searchQuery = useSearchLinks(
-    !isTrashScope && hasText ? searchText : '',
+    hasLibraryScope && hasText ? searchText : '',
     hasSettledTag ? settledTag : undefined,
   );
   const tagOnlyQuery = useLinksByTag(hasSettledTag && !hasText ? settledTag : undefined);
@@ -338,7 +405,7 @@ function usePaletteResults(
   // fetches `/api/links`. Only the current scope's recents are shown before you
   // type; the other scope's list loads if/when you switch to it.
   const recentQuery = useInfiniteLinks(isTrashScope ? undefined : routeTag, {
-    enabled: !isTrashScope,
+    enabled: hasLibraryScope,
   });
 
   const trashSearchQuery = useSearchTrash(trashHasText ? parsedDebounced.text : '');
@@ -357,10 +424,16 @@ function usePaletteResults(
   const rawResults: CommandPaletteResult[] = showTagSuggestions
     ? matchingTags.map((tag) => ({ kind: 'tag', tag }) as const)
     : linkResults.map((link) => ({ kind: 'link', link }) as const);
-
+  const matchingFeeds = useMatchingFeeds(
+    scope.kind === 'library' && hasText && !showTagSuggestions && !hasSettledTag,
+    searchText,
+  );
+  rawResults.unshift(...matchingFeeds);
   const results = useStableResults(rawResults, isSettling);
-
-  return { results, showTagSuggestions, isFullyEmpty };
+  const activeSearch = isTrashScope ? trashSearchQuery : searchQuery;
+  const isSearching =
+    hasText && !showTagSuggestions && activeSearch.isPending && activeSearch.isFetching;
+  return { results, showTagSuggestions, isFullyEmpty, isSearching };
 }
 
 /**
@@ -388,7 +461,8 @@ function derivePaletteMode(
 } {
   const isTrashScope = scope.kind === 'trash';
   const routeTag = scope.kind === 'tag' ? scope.tag : undefined;
-  const showTagSuggestions = !isTrashScope && parsedDebounced.partialTag !== undefined;
+  const showTagSuggestions =
+    !isTrashScope && scope.kind !== 'feed' && parsedDebounced.partialTag !== undefined;
 
   // The tag actually used to SCOPE the query: the user's own explicit
   // `#tag` wins when present; otherwise, on a `/tags/:name` page, the
@@ -685,6 +759,30 @@ function usePaletteKeyboardHover(
   return [activeValue, setActiveValue];
 }
 
+function PaletteResultRow({
+  result,
+  feed,
+}: {
+  result: CommandPaletteResult;
+  feed: FeedJson | undefined;
+}) {
+  if (result.kind === 'link')
+    return <PaletteLinkRow link={result.link} feed={result.link.feedId ? feed : undefined} />;
+  if (result.kind === 'tag') return <PaletteTagRow tag={result.tag} />;
+  return (
+    <span className="silo-palette-feed-result">
+      <PaletteFeedBadge feed={result.feed} />
+      <span className="silo-palette-feed-kind">Feed</span>
+    </span>
+  );
+}
+
+function paletteEmptyText(scope: PaletteScope, isFullyEmpty: boolean, showTagSuggestions: boolean) {
+  if (!isFullyEmpty) return showTagSuggestions ? 'No matching tags' : 'No results';
+  if (scope.kind === 'feed') return 'Type to search feed posts';
+  return scope.kind === 'trash' ? 'Type to search trash' : 'Type to search links and #tags';
+}
+
 /**
  * Everything that needs `open` to actually be true — split out of
  * `CommandPalette` (see that component's doc comment) purely so its data
@@ -699,10 +797,13 @@ function usePaletteKeyboardHover(
 function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useCommandPalette> }) {
   const { closePalette, q, setQ, parsed, parsedDebounced } = palette;
   const scope = usePaletteScope();
-  const { results, showTagSuggestions, isFullyEmpty } = usePaletteResults(
+  const navigate = useNavigate();
+  const feed = useFeed(scope.kind === 'feed' ? scope.feedId : '');
+  const { results, showTagSuggestions, isFullyEmpty, isSearching } = usePaletteResults(
     parsed,
     parsedDebounced,
     scope,
+    palette.debouncedQ,
   );
   const panelRef = useRef<HTMLDivElement>(null);
   const { data: settings } = useSettings();
@@ -736,6 +837,13 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
   };
 
   const openLinkResult = (link: PaletteLinkResult) => {
+    if (link.feedId) {
+      const params = new URLSearchParams({ link: link.id });
+      if (link.archivedAt) params.set('tab', 'archive');
+      navigate(`/feeds/${link.feedId}?${params}`);
+      closePalette();
+      return;
+    }
     // Mirrors `LinkRow`'s own anchor semantics (`target="_blank" rel="noopener"`).
     // Scheme guard (defense-in-depth, review fix): `link.url` is stored,
     // agent-writable data (the `capture_link` MCP tool can set an arbitrary
@@ -764,6 +872,9 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
   const onSelectResult = (result: CommandPaletteResult) => {
     if (result.kind === 'link') {
       openLinkResult(result.link);
+    } else if (result.kind === 'feed') {
+      navigate(`/feeds/${result.feed.id}`);
+      closePalette();
     } else {
       applyTagSuggestion(result.tag);
     }
@@ -818,11 +929,12 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               autoFocus
               value={q}
               onValueChange={setQ}
-              placeholder={scopePlaceholder(scope)}
+              placeholder={scopePlaceholder(scope, feed.data?.feed.title)}
               autoCapitalize="off"
               spellCheck={false}
               enterKeyHint="go"
             />
+            <SearchSpinner pending={isSearching} query={palette.debouncedQ} />
             <kbd className="silo-palette-esc">esc</kbd>
             <button
               type="button"
@@ -844,13 +956,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
                   color: 'var(--fnt)',
                 }}
               >
-                {isFullyEmpty
-                  ? scope.kind === 'trash'
-                    ? 'Type to search trash'
-                    : 'Type to search links and #tags'
-                  : showTagSuggestions
-                    ? 'No matching tags'
-                    : 'No results'}
+                {paletteEmptyText(scope, isFullyEmpty, showTagSuggestions)}
               </div>
             </Command.Empty>
 
@@ -866,11 +972,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
                 onSelect={() => onSelectResult(result)}
                 className="silo-palette-row"
               >
-                {result.kind === 'link' ? (
-                  <PaletteLinkRow link={result.link} />
-                ) : (
-                  <PaletteTagRow tag={result.tag} />
-                )}
+                <PaletteResultRow result={result} feed={feed.data?.feed} />
               </Command.Item>
             ))}
           </Command.List>
@@ -882,7 +984,7 @@ function CommandPaletteInner({ palette }: { palette: ReturnType<typeof useComman
               <PaletteHint glyph="esc" label="Close" />
             </div>
             {scope.kind === 'trash' && <span className="silo-palette-filter">Searching trash</span>}
-            {scope.kind !== 'trash' && (
+            {scope.kind !== 'trash' && scope.kind !== 'feed' && (
               <span className="silo-palette-filter">
                 Filter by
                 <button

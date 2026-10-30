@@ -16,6 +16,7 @@
     "@tanstack/react-query": "catalog:",
     "cmdk": "catalog:",
     "dompurify": "catalog:",
+    "loading-dev": "0.3.6",
     "mermaid": "catalog:",
     "react": "catalog:",
     "react-dom": "catalog:",

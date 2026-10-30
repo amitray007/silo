@@ -13,6 +13,7 @@ import type {
   FeedResponse,
   FeedsResponse,
   FeedTab,
+  SearchResponse,
   SubscribeFeedRequest,
   SubscribeFeedResponse,
 } from './types';
@@ -48,6 +49,17 @@ export function useFeedPosts(id: string, enabled = true, tab: FeedTab = 'inbox')
     getNextPageParam: (page: FeedPostsResponse) => page.nextCursor,
     enabled: enabled && Boolean(id),
     refetchInterval: (query) => (hasEnrichingLink(query.state.data) ? 1500 : 60000),
+  });
+}
+
+/** Search both Inbox and Archive; an empty query stays disabled. */
+export function useSearchFeedPosts(id: string, query: string) {
+  const q = query.trim();
+  return useQuery({
+    queryKey: [...queryKeys.feedPosts(id), 'search', q],
+    queryFn: ({ signal }) =>
+      apiGet<SearchResponse>(`/api/feeds/${id}/search?q=${encodeURIComponent(q)}`, signal),
+    enabled: Boolean(id) && Boolean(q),
   });
 }
 

@@ -20,6 +20,7 @@ import {
   toolError,
 } from './feed-result.js';
 import { snippetLinkShape, toSnippetLinkContent } from './link-shape.js';
+import { registerSearchFeedPosts } from './search-feed-posts.js';
 
 const pageShape = {
   limit: z
@@ -240,6 +241,7 @@ function registerFeedWrites(server: McpServer): void {
 
 export function registerFeedTools(server: McpServer): void {
   registerFeedReads(server);
+  registerSearchFeedPosts(server);
   registerFeedSubscription(server);
   registerFeedWrites(server);
 }
