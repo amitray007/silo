@@ -1021,6 +1021,9 @@ button.silo-note-text {
 .silo-dialog-content .silo-modal-footer {
   padding: 0;
 }
+.silo-dialog-content .silo-feed-footer {
+  justify-content: space-between;
+}
 .silo-dialog-content .silo-confirm-content {
   padding: 0;
 }

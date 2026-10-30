@@ -30,7 +30,7 @@
   background: var(--bg2);
   box-shadow: var(--elev-3);
   outline: none;
-  animation: siloIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  animation: siloModalIn 200ms cubic-bezier(0.16, 1, 0.3, 1);
   overscroll-behavior: contain;
 }
 .silo-modal-header {
@@ -2040,5 +2040,40 @@
 @media (prefers-reduced-motion: no-preference) {
   .silo-edit-save-btn:not(:disabled):not([aria-disabled="true"]):active {
     transform: scale(0.96);
+  }
+}
+
+@keyframes siloModalIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Callers retain the shell for the shorter exit before unmounting it. */
+.silo-modal-closing {
+  animation: siloFade 120ms ease-in reverse both;
+}
+.silo-modal-closing .silo-modal-panel {
+  animation: siloModalOut 120ms ease-in both;
+}
+@keyframes siloModalOut {
+  to {
+    opacity: 0;
+    transform: translateY(4px) scale(0.98);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-modal-layer,
+  .silo-modal-panel {
+    animation: siloFade 120ms ease both !important;
+  }
+  .silo-modal-closing,
+  .silo-modal-closing .silo-modal-panel {
+    animation: siloFade 120ms ease reverse both !important;
   }
 }

@@ -963,11 +963,8 @@ select {
   line-height: 20px;
   min-height: 40px;
 }
-.silo-feed-checkbox {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  min-height: 40px;
+.silo-feed-form > input {
+  box-shadow: none;
 }
 .silo-feed-error {
   margin: 0;
@@ -1018,14 +1015,118 @@ select {
 .silo-feed-form > input[aria-invalid="true"] {
   border-color: var(--warn);
 }
-.silo-feed-checkbox input {
-  width: 16px;
-  height: 16px;
-  margin: 0;
-  accent-color: var(--toggle-on);
+.silo-feed-footer {
+  justify-content: space-between;
+  margin-top: 4px;
 }
-.silo-feed-subscribe {
-  min-width: 120px;
+.silo-feed-footer > .silo-feed-subscribe {
+  flex: none;
+  width: 128px;
+  min-height: 40px;
+  font-size: 14px;
+}
+.silo-checkbox {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 40px;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  cursor: pointer;
+}
+.silo-checkbox > input {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  opacity: 0;
+}
+.silo-checkbox-box {
+  position: relative;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  box-sizing: border-box;
+  border: 1px solid var(--line-2);
+  border-radius: 5px;
+  background: var(--bg);
+  transition:
+    border-color 150ms ease,
+    transform 150ms var(--ease-out);
+}
+.silo-checkbox-fill {
+  position: absolute;
+  inset: -1px;
+  border-radius: inherit;
+  background: var(--toggle-on);
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity 150ms ease,
+    transform 150ms var(--ease-out);
+}
+.silo-checkbox-box svg {
+  position: absolute;
+  inset: -1px;
+  width: 18px;
+  height: 18px;
+  color: var(--solid-ink);
+}
+.silo-checkbox-box path {
+  stroke-dasharray: 1;
+  stroke-dashoffset: 1;
+  opacity: 0;
+  transition:
+    stroke-dashoffset 150ms var(--ease-out),
+    opacity 150ms ease;
+}
+.silo-checkbox > input:checked + .silo-checkbox-box {
+  border-color: var(--toggle-on);
+}
+.silo-checkbox > input:checked + .silo-checkbox-box .silo-checkbox-fill {
+  opacity: 1;
+  transform: scale(1);
+}
+.silo-checkbox > input:checked + .silo-checkbox-box path {
+  stroke-dashoffset: 0;
+  opacity: 1;
+}
+.silo-checkbox > input:focus-visible + .silo-checkbox-box {
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
+}
+.silo-checkbox:has(> input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-checkbox:hover > input:not(:disabled):not(:checked) + .silo-checkbox-box {
+    border-color: var(--fnt);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .silo-checkbox:active > input:not(:disabled) + .silo-checkbox-box {
+    transform: scale(0.95);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-checkbox-box,
+  .silo-checkbox-fill,
+  .silo-checkbox-box path {
+    transition: none !important;
+  }
+}
+@media (forced-colors: active) {
+  .silo-checkbox > input:checked + .silo-checkbox-box {
+    background: Highlight;
+    border-color: Highlight;
+  }
+  .silo-checkbox-box svg {
+    color: HighlightText;
+  }
 }
 
 .silo-feeds-section-title {

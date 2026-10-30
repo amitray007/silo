@@ -70,6 +70,7 @@ export function ModalShell({
   focusPanel = false,
   anchored = false,
   returnFocus,
+  closing = false,
 }: {
   /** Preferred width, capped to the available viewport. */
   width: number;
@@ -96,6 +97,8 @@ export function ModalShell({
   anchored?: boolean;
   /** Resolve a persistent trigger after a menu or renamed sidebar row unmounts. */
   returnFocus?: () => HTMLElement | null | Promise<HTMLElement | null>;
+  /** Keep mounted during a caller-owned exit, then let the caller unmount. */
+  closing?: boolean;
 }) {
   const panelRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<Element | null>(null);
@@ -146,7 +149,7 @@ export function ModalShell({
         if (backdropPress.current && event.target === event.currentTarget) onClose();
         backdropPress.current = false;
       }}
-      className={`silo-modal-layer${anchored ? ' silo-modal-layer-anchored' : ''} silo-modal-layer-${variant}${role === 'alertdialog' ? ' silo-confirm-layer' : ''}`}
+      className={`silo-modal-layer${anchored ? ' silo-modal-layer-anchored' : ''} silo-modal-layer-${variant}${role === 'alertdialog' ? ' silo-confirm-layer' : ''}${closing ? ' silo-modal-closing' : ''}`}
       style={{ zIndex }}
     >
       {/* biome-ignore lint/a11y/useAriaPropsSupportedByRole: role is restricted to dialog or alertdialog; both support aria-modal. */}

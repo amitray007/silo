@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
 import { useSubscribeFeed } from '../api/hooks';
 import { normalizeFeedUrl } from '../lib/url';
+import { Checkbox } from './Checkbox';
 import { ModalHeader, ModalShell } from './ModalShell';
 
 export function AddFeedDialog({
@@ -14,12 +15,19 @@ export function AddFeedDialog({
 }) {
   const [url, setUrl] = useState('');
   const [syncRecents, setSyncRecents] = useState(true);
+  const [closing, setClosing] = useState(false);
   const input = useRef<HTMLInputElement>(null);
   const subscribe = useSubscribeFeed();
   const navigate = useNavigate();
   useEffect(() => {
     input.current?.focus();
   }, []);
+  useEffect(() => {
+    if (!closing) return;
+    const timer = window.setTimeout(onClose, 120);
+    return () => window.clearTimeout(timer);
+  }, [closing, onClose]);
+  const close = () => setClosing(true);
   function submit(event: FormEvent) {
     event.preventDefault();
     if (subscribe.isPending) return;
@@ -36,9 +44,16 @@ export function AddFeedDialog({
     );
   }
   return createPortal(
-    <ModalShell anchored width={460} ariaLabel="Add feed" onClose={onClose}>
-      <ModalHeader title="Add feed" onClose={onClose} />
-      <p className="silo-feed-description">
+    <ModalShell
+      anchored
+      width={460}
+      ariaLabel="Add feed"
+      describedBy="feed-description"
+      onClose={close}
+      closing={closing}
+    >
+      <ModalHeader title="Add feed" onClose={close} />
+      <p id="feed-description" className="silo-feed-description">
         Automatically save links from your favorite websites and publishers.
       </p>
       <form onSubmit={submit} className="silo-feed-form">
@@ -68,16 +83,13 @@ export function AddFeedDialog({
             {subscribe.error.message}
           </p>
         )}
-        <label className="silo-feed-checkbox">
-          <input
+        <div className="silo-modal-footer silo-feed-footer">
+          <Checkbox
+            label="Sync recents"
             disabled={subscribe.isPending}
-            type="checkbox"
             checked={syncRecents}
             onChange={(event) => setSyncRecents(event.target.checked)}
           />
-          Sync recents
-        </label>
-        <div className="silo-modal-footer">
           <button
             className="silo-edit-save-btn silo-feed-subscribe"
             type="submit"

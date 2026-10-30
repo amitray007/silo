@@ -79,7 +79,7 @@ describe('feed subscription UI', () => {
     expect(JSON.parse(fetch.mock.calls[0]?.[1].body).syncRecents).toBe(false);
     expect(close).not.toHaveBeenCalled();
     fireEvent.keyDown(document, { key: 'Escape' });
-    expect(close).toHaveBeenCalledOnce();
+    await waitFor(() => expect(close).toHaveBeenCalledOnce());
   });
   it('shows feed title, local favicon, live count, collapse and Add feed', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(json({ feeds: [feed] })));
