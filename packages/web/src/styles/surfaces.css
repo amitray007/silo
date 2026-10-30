@@ -2067,6 +2067,17 @@
     transform: translateY(4px) scale(0.98);
   }
 }
+@media (max-width: 640px) {
+  /* The phone sheet leaves the way it came in: down, off the bottom edge. */
+  .silo-modal-closing .silo-modal-panel-sheet {
+    animation: siloSheetOut 160ms ease-in both;
+  }
+}
+@keyframes siloSheetOut {
+  to {
+    transform: translateY(100%);
+  }
+}
 @media (prefers-reduced-motion: reduce) {
   .silo-modal-layer,
   .silo-modal-panel {

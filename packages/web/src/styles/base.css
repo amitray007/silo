@@ -1127,6 +1127,10 @@ select {
   .silo-checkbox-box svg {
     color: HighlightText;
   }
+  /* The fill would be forced to Canvas and hide the Highlight box behind it. */
+  .silo-checkbox-fill {
+    display: none;
+  }
 }
 
 .silo-feeds-section-title {
