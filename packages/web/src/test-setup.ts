@@ -24,6 +24,9 @@ if (!window.matchMedia) {
 // observer never needs to actually fire a callback.
 if (!window.ResizeObserver) {
   window.ResizeObserver = class ResizeObserver {
+    // Same constructor shape as the browser's, so callers that pass a callback type-check
+    // and static analysis does not read the stub as taking no arguments.
+    constructor(_callback: ResizeObserverCallback) {}
     observe(): void {}
     unobserve(): void {}
     disconnect(): void {}
