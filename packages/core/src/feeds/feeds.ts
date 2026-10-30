@@ -89,7 +89,7 @@ export function entryIdentity(entry: FeedEntry): string | null {
   if (!entry.url) return null;
   const { canonical, ok } = canonicalize(entry.url);
   if (!ok) return null;
-  const key = entry.id?.trim() || canonical;
+  const key = (entry.id?.replaceAll('\0', '').trim() || canonical).replaceAll('\0', '');
   return key.length > 512 ? `sha256:${createHash('sha256').update(key).digest('hex')}` : key;
 }
 
@@ -99,6 +99,15 @@ function newest(entries: FeedEntry[]): FeedEntry[] {
   );
 }
 
+function entryCandidates(entries: FeedEntry[]): Map<string, FeedEntry> {
+  const candidates = new Map<string, FeedEntry>();
+  for (const entry of newest(entries)) {
+    const key = entryIdentity(entry);
+    if (key && !candidates.has(key)) candidates.set(key, entry);
+  }
+  return candidates;
+}
+
 async function captureEntries(
   tx: Tx,
   feedId: string,
@@ -106,26 +115,44 @@ async function captureEntries(
   limit: number,
   markAll: boolean,
 ): Promise<void> {
+  const candidates = entryCandidates(entries);
+  const keys = [...candidates.keys()];
+  const inserted = new Set<string>();
+  // Stay below Postgres's parameter limit even for very large publisher feeds.
+  for (let offset = 0; offset < keys.length; offset += 1000) {
+    const rows = await tx
+      .insert(feedEntries)
+      .values(keys.slice(offset, offset + 1000).map((entryKey) => ({ feedId, entryKey })))
+      .onConflictDoNothing()
+      .returning({ key: feedEntries.entryKey });
+    for (const row of rows) inserted.add(row.key);
+  }
   let captured = 0;
-  for (const entry of newest(entries)) {
-    if (!markAll && captured >= limit) break;
-    const key = entryIdentity(entry);
-    if (!key) continue;
+  const retry: string[] = [];
+  for (const [key, entry] of candidates) {
+    if (!inserted.has(key)) continue;
+    if (captured >= limit) {
+      if (!markAll) retry.push(key);
+      continue;
+    }
     try {
-      const inserted = await tx.transaction(async (savepoint) => {
-        const [seen] = await savepoint
-          .insert(feedEntries)
-          .values({ feedId, entryKey: key })
-          .onConflictDoNothing()
-          .returning({ key: feedEntries.entryKey });
-        if (!seen || captured >= limit) return false;
-        await createFeedPost({ ...entry, feedId }, savepoint);
-        return true;
-      });
-      if (inserted) captured++;
+      await tx.transaction((savepoint) => createFeedPost({ ...entry, feedId }, savepoint));
+      captured++;
     } catch (error) {
+      retry.push(key);
       console.warn('[silo/core] feed entry skipped:', feedId, key, error);
     }
+  }
+  // Failed captures and overflow from a normal poll remain eligible next time.
+  for (let offset = 0; offset < retry.length; offset += 1000) {
+    await tx
+      .delete(feedEntries)
+      .where(
+        and(
+          eq(feedEntries.feedId, feedId),
+          inArray(feedEntries.entryKey, retry.slice(offset, offset + 1000)),
+        ),
+      );
   }
 }
 
@@ -240,33 +267,47 @@ export async function pollFeed(
     console.error('[silo/core] poll-feed: fetch failed:', error);
     result = { kind: 'failure', message: 'Could not fetch this feed.' };
   }
-  await db.transaction(async (tx) => {
-    const [row] = await tx.select().from(feeds).where(eq(feeds.id, id)).for('update');
-    if (!row || !isDue(row, now) || !samePoll(row, snapshot)) return;
-    const captured = await capturePoll(tx, row, result);
-    if (captured.kind === 'failure') {
-      await recordFailure(tx, row, captured, now);
-      return;
-    }
-    const interval =
-      captured.kind === 'modified'
-        ? captured.feed.intervalSeconds
-        : (captured.intervalSeconds ?? row.pollIntervalSeconds);
-    const metadata = await pollMetadata(tx, row, captured);
-    await tx
-      .update(feeds)
-      .set({
-        ...metadata,
-        ...(captured.kind === 'modified' ? { mediaBackfillDone: true } : {}),
-        status: 'active',
-        consecutiveFailures: 0,
-        lastPolledAt: now,
-        lastSuccessAt: now,
-        pollIntervalSeconds: interval,
-        nextPollAt: new Date(now.getTime() + interval * 1000),
-      })
-      .where(eq(feeds.id, id));
-  });
+  try {
+    await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(feeds).where(eq(feeds.id, id)).for('update');
+      if (!row || !isDue(row, now) || !samePoll(row, snapshot)) return;
+      const captured = await capturePoll(tx, row, result);
+      if (captured.kind === 'failure') {
+        await recordFailure(tx, row, captured, now);
+        return;
+      }
+      const interval =
+        captured.kind === 'modified'
+          ? captured.feed.intervalSeconds
+          : (captured.intervalSeconds ?? row.pollIntervalSeconds);
+      const metadata = await pollMetadata(tx, row, captured);
+      await tx
+        .update(feeds)
+        .set({
+          ...metadata,
+          ...(captured.kind === 'modified' ? { mediaBackfillDone: true } : {}),
+          status: 'active',
+          consecutiveFailures: 0,
+          lastPolledAt: now,
+          lastSuccessAt: now,
+          pollIntervalSeconds: interval,
+          nextPollAt: new Date(now.getTime() + interval * 1000),
+        })
+        .where(eq(feeds.id, id));
+    });
+  } catch (error) {
+    console.error('[silo/core] poll-feed: commit failed:', error);
+    await db.transaction(async (tx) => {
+      const [row] = await tx.select().from(feeds).where(eq(feeds.id, id)).for('update');
+      if (!row || !isDue(row, now) || !samePoll(row, snapshot)) return;
+      await recordFailure(
+        tx,
+        row,
+        { kind: 'failure', message: 'Could not commit feed poll.' },
+        now,
+      );
+    });
+  }
 }
 
 function isDue(row: FeedRow, now: Date): boolean {

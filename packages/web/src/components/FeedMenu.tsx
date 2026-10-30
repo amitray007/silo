@@ -33,7 +33,7 @@ export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactN
   const close = () => setOpen(false);
   return (
     <>
-      {(refresh.isError || refresh.isPending) &&
+      {(refresh.isError || refresh.isRefreshing) &&
         createPortal(
           <div
             role={refresh.isError ? 'alert' : 'status'}
@@ -91,13 +91,13 @@ export function FeedMenu({ feed, children }: { feed: FeedJson; children?: ReactN
                 </MenuAction>
                 <MenuAction
                   icon={<ReaderIcon name="sync" />}
-                  disabled={refresh.isPending}
+                  disabled={refresh.isRefreshing}
                   onClick={() => {
                     close();
                     refresh.mutate(feed.id);
                   }}
                 >
-                  {refresh.isPending ? 'Refreshing…' : 'Refresh now'}
+                  {refresh.isRefreshing ? 'Refreshing…' : 'Refresh now'}
                 </MenuAction>
                 <MenuAction
                   icon={<ReaderIcon name="copy" />}

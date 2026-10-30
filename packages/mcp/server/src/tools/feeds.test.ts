@@ -11,6 +11,7 @@ describeMcpTool('silo_mcp_feeds', 'MCP feed tools', (context) => {
   afterEach(async () => {
     const { core, pool } = context();
     core.setFeedResolver(undefined);
+    core.setFeedPollEnqueuer(undefined);
     core.resetEnrichmentEnqueuer();
     await pool.query('truncate feeds, links, link_tags, tags cascade');
   });
@@ -37,6 +38,72 @@ describeMcpTool('silo_mcp_feeds', 'MCP feed tools', (context) => {
     return (result.structuredContent as { feed: { id: string }; deduped: boolean }).feed.id;
   }
 
+  it('reports feed ids per item and continues trash and restore batches', async () => {
+    const { client, core } = context();
+    const feedId = await subscribe();
+    const post = (await core.listFeedPosts(feedId)).links[0];
+    if (!post) throw new Error('missing post');
+    const a = await seedLink(context, 'https://example.com/batch-a');
+    const b = await seedLink(context, 'https://example.com/batch-b');
+    for (const name of ['trash_link', 'restore_link']) {
+      const result = await client.callTool({ name, arguments: { ids: [a, post.id, b] } });
+      expect(result.isError).toBeFalsy();
+      expect(result.structuredContent).toMatchObject({
+        results: [
+          { id: a, ok: true },
+          { id: post.id, ok: false, reason: 'feed_post_not_editable' },
+          { id: b, ok: true },
+        ],
+      });
+    }
+    expect(await core.getById(b)).toMatchObject({ id: b });
+  });
+
+  it('bounds media list output while get_link keeps full show notes', async () => {
+    const { client, core, pool } = context();
+    const feedId = await subscribe();
+    const post = (await core.listFeedPosts(feedId)).links[0];
+    if (!post) throw new Error('missing post');
+    const content = 'x'.repeat(1_048_576);
+    await pool.query('update links set source_kind = $1, source_data = $2 where id = $3', [
+      'feed_media',
+      JSON.stringify({ kind: 'feed_media', content }),
+      post.id,
+    ]);
+    const page = await client.callTool({ name: 'list_feed_posts', arguments: { feedId } });
+    expect(page.isError).toBeFalsy();
+    expect(JSON.stringify(page).length).toBeLessThan(10_000);
+    const full = await client.callTool({ name: 'get_link', arguments: { id: post.id } });
+    expect(full.isError).toBeFalsy();
+    expect(full.structuredContent).toMatchObject({ sourceData: { content } });
+  });
+
+  it('refreshes gone feeds, maps missing/unavailable, and declares tool hints', async () => {
+    const { client, core, pool } = context();
+    const call = (feedId: string) =>
+      client.callTool({ name: 'refresh_feed', arguments: { feedId } });
+    expect((await call(randomUUID())).structuredContent).toEqual({ found: false });
+    const feedId = await subscribe();
+    expect(await call(feedId)).toMatchObject({
+      isError: true,
+      content: [expect.objectContaining({ text: expect.stringContaining('feeds_unavailable') })],
+    });
+    await pool.query("update feeds set status = 'gone', consecutive_failures = 10 where id = $1", [
+      feedId,
+    ]);
+    const queued: string[] = [];
+    core.setFeedPollEnqueuer(async (_tx, id) => {
+      queued.push(id);
+    });
+    expect((await call(feedId)).structuredContent).toEqual({ found: true, id: feedId });
+    expect(queued).toEqual([feedId]);
+    expect((await core.getFeed(feedId))?.status).toBe('active');
+    const { tools } = await client.listTools();
+    for (const name of ['list_feeds', 'list_feed_posts'])
+      expect(tools.find((tool) => tool.name === name)?.annotations?.readOnlyHint).toBe(true);
+    for (const name of ['archive_feed_post', 'unarchive_feed_post', 'rename_feed'])
+      expect(tools.find((tool) => tool.name === name)?.annotations?.idempotentHint).toBe(true);
+  });
   it('returns clear unavailable, not-found and invalid-URL errors', async () => {
     const { core, client } = context();
     const args = { url: 'https://example.com/feed' };

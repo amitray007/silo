@@ -80,6 +80,18 @@ const { extractedText: _extractedText, ...snippetLinkBaseShape } = baseLinkShape
 void _extractedText;
 export const snippetLinkShape = {
   ...snippetLinkBaseShape,
+  sourceData: z.discriminatedUnion('kind', [
+    z
+      .object({
+        kind: z.literal('feed_media'),
+        description: z.string().max(20_000).optional(),
+        imageUrl: z.string().max(65_536).optional(),
+        enclosureUrl: z.string().max(65_536).optional(),
+        contentBaseUrl: z.string().max(65_536).optional(),
+      })
+      .strict(),
+    ...sourceDataSchema.options.filter((schema) => schema.shape.kind.value !== 'feed_media'),
+  ]),
   snippet: z.string().nullable(),
 };
 
@@ -165,6 +177,12 @@ export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent
     extractedText: null,
   });
   void _extractedText;
+  const sourceData = base.sourceData;
+  if (sourceData.kind === 'feed_media') {
+    const { content: _content, ...summary } = sourceData;
+    void _content;
+    return { ...base, sourceData: summary, snippet: link.snippet };
+  }
   return { ...base, snippet: link.snippet };
 }
 

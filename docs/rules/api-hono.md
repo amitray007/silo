@@ -145,6 +145,23 @@ input is a `400` (`validation_error` for Zod failures, `invalid_url` for the
 capture route's URL guard, `invalid_cursor` for a malformed/wrong-kind
 pagination cursor).
 
+### Feeds
+
+Feed posts stay outside the library. Save a post to create a library copy.
+
+| Method | Route | Result |
+| --- | --- | --- |
+| GET | `/api/feeds` | Subscriptions with Inbox counts and health |
+| POST | `/api/feeds` | Subscribe to a feed or site URL |
+| GET | `/api/feeds/:id` | Subscription details |
+| PATCH | `/api/feeds/:id` | Set or reset the display title |
+| DELETE | `/api/feeds/:id` | Unsubscribe and remove its feed posts |
+| POST | `/api/feeds/:id/refresh` | Queue a poll, including retrying a gone feed |
+| GET | `/api/feeds/:id/posts` | Cursor-paged Inbox or Archive posts |
+| POST | `/api/feeds/:id/posts/:postId/archive` | Archive a post |
+| POST | `/api/feeds/:id/posts/:postId/unarchive` | Return a post to Inbox |
+| POST | `/api/feeds/:id/posts/:postId/save` | Copy a post to the library |
+
 ### The restore `merged` outcome contract
 
 `POST /links/:id/restore` mirrors `restore_link`'s MCP handler exactly

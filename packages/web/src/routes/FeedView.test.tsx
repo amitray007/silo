@@ -469,3 +469,16 @@ it('offers refresh and enrichment in the feed row and Reader menus without libra
   fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
   expect(await screen.findByRole('menuitem', { name: 'Re-enrich' })).toBeDefined();
 });
+
+it('advances after archiving while a feed refresh is still being tracked', async () => {
+  mount();
+  fireEvent.click(await screen.findByText('Today post'));
+  await reader().findByRole('heading', { name: 'Today post' });
+  fireEvent.click(screen.getByRole('button', { name: 'Feed actions' }));
+  fireEvent.click(await screen.findByRole('menuitem', { name: 'Refresh now' }));
+  await screen.findByText('Refreshing…');
+  fireEvent.keyDown(document, { key: 'e' });
+  await waitFor(() => expect(list().queryByText('Today post')).toBeNull());
+  await reader().findByRole('heading', { name: 'Recent post' });
+  expect(screen.getByText('Refreshing…')).toBeDefined();
+});

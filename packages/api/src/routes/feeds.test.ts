@@ -6,9 +6,11 @@ const h = setupPgHarness('silo_api_feeds', async () => ({
   core: await import('@silo/core'),
   app: (await import('../app.js')).createApp(),
 }));
-afterEach(() => {
+afterEach(async () => {
   h.mod().core.setFeedResolver(undefined);
   h.mod().core.setFeedPollEnqueuer(undefined);
+  const { pool } = await import('@silo/db');
+  await pool.query('truncate feeds, links, tags, link_tags cascade');
 });
 const request = (url: string, syncRecents = true) => ({
   method: 'POST',
@@ -17,6 +19,45 @@ const request = (url: string, syncRecents = true) => ({
 });
 
 describe('feed API against Postgres', () => {
+  it('continues mixed library/feed trash and restore batches in input order', async () => {
+    const { app, core } = h.mod();
+    core.setFeedResolver(async (url) => ({
+      feedUrl: url,
+      title: 'Batch',
+      siteUrl: 'https://example.com',
+      format: 'rss',
+      intervalSeconds: 3600,
+      entries: [{ url: 'https://example.com/batch-post' }],
+    }));
+    const subscribed = await core.subscribeFeed({
+      url: 'https://example.com/batch.rss',
+      syncRecents: true,
+    });
+    if ('error' in subscribed) throw new Error(subscribed.error);
+    const post = (await core.listFeedPosts(subscribed.feed.id)).links[0];
+    if (!post) throw new Error('missing post');
+    const a = await core.createLink({ url: 'https://example.com/batch-a', sourceKind: 'link' });
+    const b = await core.createLink({ url: 'https://example.com/batch-b', sourceKind: 'link' });
+    for (const action of ['trash', 'restore']) {
+      const response = await app.request(`/api/links/batch/${action}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ids: [a.id, post.id, b.id] }),
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        results: [
+          { id: a.id, ok: true },
+          { id: post.id, ok: false, reason: 'feed_post_not_editable' },
+          { id: b.id, ok: true },
+        ],
+      });
+      expect(await core.getById(b.id)).toEqual(
+        action === 'trash' ? null : expect.objectContaining({ id: b.id }),
+      );
+      expect(await core.getById(post.id)).toMatchObject({ id: post.id });
+    }
+  });
   it('returns 503 with no resolver, 422 for no feed, and 400 for invalid input', async () => {
     const { app, core } = h.mod();
     expect((await app.request('/api/feeds', request('https://example.com'))).status).toBe(503);

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { AddFeedDialog } from './AddFeedDialog';
@@ -121,4 +121,31 @@ it('keeps the focused submit control during lookup and focuses the URL after fai
   reject?.(json({ error: 'feed_not_found', message: 'No feed found.' }, 422));
   await screen.findByRole('alert');
   await waitFor(() => expect(document.activeElement).toBe(input));
+});
+
+it('keeps the original exit deadline across parent rerenders and calls the latest onClose', () => {
+  vi.useFakeTimers();
+  const client = new QueryClient();
+  const oldClose = vi.fn();
+  const latestClose = vi.fn();
+  const ui = (onClose: () => void) => (
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <AddFeedDialog onClose={onClose} onSubscribed={vi.fn()} />
+      </MemoryRouter>
+    </QueryClientProvider>
+  );
+  const view = render(ui(oldClose));
+  try {
+    fireEvent.keyDown(document, { key: 'Escape' });
+    act(() => vi.advanceTimersByTime(80));
+    view.rerender(ui(latestClose));
+    act(() => vi.advanceTimersByTime(40));
+    expect(latestClose).toHaveBeenCalledOnce();
+    expect(oldClose).not.toHaveBeenCalled();
+  } finally {
+    cleanup();
+    client.clear();
+    vi.useRealTimers();
+  }
 });

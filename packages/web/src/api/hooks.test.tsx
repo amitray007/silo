@@ -1310,7 +1310,44 @@ describe('useRetryCapture', () => {
 });
 
 describe('feed refresh feedback', () => {
-  it('waits for the worker and refetches posts until lastPolledAt changes', async () => {
+  it('aborts an in-flight poll and schedules no more work after unmount', async () => {
+    vi.useFakeTimers();
+    let signal: AbortSignal | undefined;
+    const fetchMock = vi.fn((_input: unknown, init?: RequestInit) => {
+      if (init?.method === 'POST') return Promise.resolve(jsonResponse({ id: 'feed' }));
+      signal = init?.signal ?? undefined;
+      return new Promise<Response>((_resolve, reject) =>
+        signal?.addEventListener('abort', () => reject(new Error('aborted'))),
+      );
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { result, unmount } = renderHook(() => useRefreshFeed(), {
+      wrapper: ({ children }: { children: ReactNode }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+    try {
+      act(() => result.current.mutate('feed'));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1);
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+      expect(signal?.aborted).toBe(false);
+      unmount();
+      expect(signal?.aborted).toBe(true);
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(20_000);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    } finally {
+      client.clear();
+      vi.useRealTimers();
+    }
+  });
+  it('settles on acceptance and separately refetches until lastPolledAt changes', async () => {
     vi.useFakeTimers();
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     client.setQueryData(queryKeys.feed('feed'), { feed: { id: 'feed', lastPolledAt: null } });
@@ -1334,7 +1371,8 @@ describe('feed refresh feedback', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1);
       });
-      expect(result.current.isPending).toBe(true);
+      expect(result.current.isPending).toBe(false);
+      expect(result.current.isRefreshing).toBe(true);
       expect(reads).toBe(0);
       await act(async () => {
         await vi.advanceTimersByTimeAsync(4000);
@@ -1343,6 +1381,7 @@ describe('feed refresh feedback', () => {
         await vi.advanceTimersByTimeAsync(1);
       });
       expect(reads).toBe(2);
+      expect(result.current.isRefreshing).toBe(false);
       expect(result.current.isSuccess).toBe(true);
       expect(invalidate).toHaveBeenCalledWith({ queryKey: queryKeys.feedPosts('feed') });
     } finally {

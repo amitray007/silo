@@ -1,10 +1,12 @@
 import {
   type InfiniteData,
+  type QueryClient,
   useInfiniteQuery,
   useMutation,
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
 import {
   clearTitleReveal,
   getTitleReveal,
@@ -1153,34 +1155,61 @@ export function useSubscribeFeed() {
   });
 }
 
+async function refetchFeedPoll(client: QueryClient, id: string, signal: AbortSignal) {
+  const current = await client.fetchQuery({
+    queryKey: queryKeys.feed(id),
+    queryFn: () => apiGet<FeedResponse>(`/api/feeds/${id}`, signal),
+    staleTime: 0,
+  });
+  if (!signal.aborted)
+    await Promise.all([
+      client.invalidateQueries({ queryKey: queryKeys.feeds() }),
+      client.invalidateQueries({ queryKey: queryKeys.feedPosts(id) }),
+    ]);
+  return current.feed.lastPolledAt;
+}
+
 export function useRefreshFeed() {
   const client = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => {
-      const before = client.getQueryData<FeedResponse>(queryKeys.feed(id))?.feed.lastPolledAt;
-      const result = await apiPost<{ id: string }>(`/api/feeds/${id}/refresh`, {});
-      // The response accepts a job; it does not mean the worker has polled yet.
-      // A failed check only stops the wait: the refresh itself was accepted.
+  const [tracking, setTracking] = useState<{
+    id: string;
+    before: string | null | undefined;
+  } | null>(null);
+  const before = useRef<string | null | undefined>(undefined);
+  useEffect(() => {
+    if (!tracking) return;
+    const controller = new AbortController();
+    let timer: ReturnType<typeof setTimeout>;
+    let attempt = 0;
+    const poll = async () => {
       try {
-        for (let attempt = 0; attempt < 5; attempt++) {
-          await new Promise((resolve) => setTimeout(resolve, 2000));
-          const current = await client.fetchQuery({
-            queryKey: queryKeys.feed(id),
-            queryFn: () => apiGet<FeedResponse>(`/api/feeds/${id}`),
-            staleTime: 0,
-          });
-          await Promise.all([
-            client.invalidateQueries({ queryKey: queryKeys.feeds() }),
-            client.invalidateQueries({ queryKey: queryKeys.feedPosts(id) }),
-          ]);
-          if (current.feed.lastPolledAt !== before) break;
+        const lastPolledAt = await refetchFeedPoll(client, tracking.id, controller.signal);
+        if (controller.signal.aborted) return;
+        if (lastPolledAt !== tracking.before || ++attempt >= 5) {
+          setTracking(null);
+          return;
         }
+        timer = setTimeout(() => void poll(), 2000);
       } catch {
-        // Stop waiting; the next scheduled refetch shows the result.
+        if (!controller.signal.aborted) setTracking(null);
       }
-      return result;
+    };
+    timer = setTimeout(() => void poll(), 2000);
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [client, tracking]);
+  const mutation = useMutation({
+    mutationFn: (id: string) => {
+      before.current = client.getQueryData<FeedResponse>(queryKeys.feed(id))?.feed.lastPolledAt;
+      return apiPost<{ id: string }>(`/api/feeds/${id}/refresh`, {});
+    },
+    onSuccess: (_result, id) => {
+      setTracking({ id, before: before.current });
     },
   });
+  return { ...mutation, isRefreshing: mutation.isPending || tracking !== null };
 }
 
 export function useUnsubscribeFeed() {

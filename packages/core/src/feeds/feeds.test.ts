@@ -30,6 +30,117 @@ describe('feeds on real Postgres', () => {
   async function due(id: string) {
     await h.rawDb().execute(sql`update feeds set next_poll_at = '2000-01-01' where id = ${id}`);
   }
+  it('polls a large seen set, captures newest 50, retries overflow and isolates failed posts', async () => {
+    const old = Array.from({ length: 2200 }, (_, i) => ({
+      id: `old-${i}`,
+      url: `https://example.com/old-${i}`,
+    }));
+    const { feed, resolved } = await subscribe(old, false);
+    const fresh = Array.from({ length: 55 }, (_, i) => ({
+      id: `fresh-${i}`,
+      url: `https://example.com/fresh-${i}`,
+      publishedAt: new Date(2026, 9, 1, 0, i),
+    }));
+    const bad = {
+      id: 'bad',
+      url: 'https://example.com/bad',
+      publishedAt: new Date(2027, 0),
+      title: 'bad',
+    };
+    await h
+      .rawDb()
+      .execute(
+        sql`create function reject_bad_post() returns trigger language plpgsql as $$ begin if new.title = 'bad' then raise exception 'test post failure'; end if; return new; end $$`,
+      );
+    await h
+      .rawDb()
+      .execute(
+        sql`create trigger reject_bad_post before insert on links for each row execute function reject_bad_post()`,
+      );
+    try {
+      const result = {
+        kind: 'modified' as const,
+        feed: { ...resolved, entries: [...old, ...fresh, bad] },
+      };
+      await due(feed.id);
+      await h.mod().pollFeed(feed.id, async () => result);
+      const posts = (await h.mod().listFeedPosts(feed.id, { limit: 100 })).links;
+      expect(posts.map((post) => post.url)).toEqual(
+        [...fresh]
+          .reverse()
+          .slice(0, 50)
+          .map((entry) => entry.url),
+      );
+      const seen = await h
+        .rawDb()
+        .execute(sql`select count(*)::int as n from feed_entries where feed_id = ${feed.id}`);
+      expect(seen.rows[0]?.n).toBe(2250);
+      await due(feed.id);
+      await h.mod().pollFeed(feed.id, async () => result);
+      expect((await h.mod().getFeed(feed.id))?.postCount).toBe(55);
+    } finally {
+      await h.rawDb().execute(sql`drop trigger reject_bad_post on links`);
+      await h.rawDb().execute(sql`drop function reject_bad_post()`);
+    }
+  });
+
+  it('records backoff in a fresh transaction after an unexpected poll commit failure', async () => {
+    const { feed, resolved } = await subscribe([]);
+    await due(feed.id);
+    await h
+      .rawDb()
+      .execute(
+        sql`create function reject_poll_success() returns trigger language plpgsql as $$ begin if new.last_success_at is distinct from old.last_success_at then raise exception 'test commit failure'; end if; return new; end $$`,
+      );
+    await h
+      .rawDb()
+      .execute(
+        sql`create trigger reject_poll_success before update on feeds for each row execute function reject_poll_success()`,
+      );
+    const now = new Date(Date.now() + 1000);
+    try {
+      await h.mod().pollFeed(
+        feed.id,
+        async () => ({
+          kind: 'modified',
+          feed: { ...resolved, entries: [{ url: 'https://example.com/rolled-back' }] },
+        }),
+        now,
+      );
+      expect(await h.mod().getFeed(feed.id)).toMatchObject({
+        status: 'failing',
+        lastError: 'Could not commit feed poll.',
+        lastPolledAt: now,
+        postCount: 0,
+      });
+      const rows = await h
+        .rawDb()
+        .execute(sql`select consecutive_failures, next_poll_at from feeds where id = ${feed.id}`);
+      expect(rows.rows[0]?.consecutive_failures).toBe(1);
+      expect(new Date(String(rows.rows[0]?.next_poll_at)).getTime()).toBeGreaterThan(now.getTime());
+    } finally {
+      await h.rawDb().execute(sql`drop trigger reject_poll_success on feeds`);
+      await h.rawDb().execute(sql`drop function reject_poll_success()`);
+    }
+  });
+  it('purges only pond trash even when an old feed post is marked deleted', async () => {
+    const { feed } = await subscribe([{ url: 'https://example.com/purge-post' }]);
+    const post = (await h.mod().listFeedPosts(feed.id)).links[0];
+    if (!post) throw new Error('missing post');
+    const pond = await h
+      .mod()
+      .createLink({ url: 'https://example.com/purge-pond', sourceKind: 'link' });
+    await h
+      .rawDb()
+      .execute(
+        sql`update links set deleted_at = '2000-01-01' where id in (${post.id}, ${pond.id})`,
+      );
+    expect(await h.mod().purgeTrash()).toBe(1);
+    const rows = await h
+      .rawDb()
+      .execute(sql`select id from links where id in (${post.id}, ${pond.id})`);
+    expect(rows.rows).toEqual([{ id: post.id }]);
+  });
   it('moves posts between paginated tabs, counts only Inbox, and preserves Archive after polling', async () => {
     const { feed, resolved } = await subscribe(
       Array.from({ length: 4 }, (_, i) => ({
@@ -99,6 +210,7 @@ describe('feeds on real Postgres', () => {
     };
     const urlOnly = { url: `https://example.com/${'x'.repeat(600)}` };
     expect(h.mod().entryIdentity(short)).toBe(short.id);
+    expect(h.mod().entryIdentity({ ...short, id: 'nul\0key' })).toBe('nulkey');
     expect(h.mod().entryIdentity({ ...short, id: 'x'.repeat(513) })).toBe(
       'sha256:35ade0090e64e74d6ad04204009c23a4e34b82bdf0f4f317fbcc5f26f9b10241',
     );

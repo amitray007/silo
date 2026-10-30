@@ -7,6 +7,7 @@ export function registerRenameTools(server: McpServer): void {
   server.registerTool(
     'rename_feed',
     {
+      annotations: { idempotentHint: true },
       description:
         'Set an owner title for a feed. Polling preserves it. Pass title: null to restore the latest publisher title. Use list_feeds to find the subscription.',
       inputSchema: { feedId: z.uuid(), title: feedTitleSchema },

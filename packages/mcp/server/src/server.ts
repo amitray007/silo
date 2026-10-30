@@ -40,6 +40,8 @@ export function createSiloMcpServer(): McpServer {
         'ones. All intelligence — search strategy, synthesis, ' +
         'recommendations, deciding what to capture/tag — is yours to ' +
         'perform over these primitives; silo only holds the data. ' +
+        'list_links/search_links exclude feed posts; feed tools list and triage them, and save_feed_post copies a post to the library. ' +
+        'get_link and refresh_reader also accept feed post ids. ' +
         'Use retry_capture fields for fast targeted re-enrichment; leave fields out for a full run.',
     },
   );

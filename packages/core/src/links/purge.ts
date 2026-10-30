@@ -99,10 +99,12 @@ export async function purgeTrash(options: PurgeTrashOptions = {}): Promise<numbe
       delete from ${links}
       where id in (
         select id from ${links}
-        where ${links.deletedAt} is not null
+        where ${links.feedId} is null
+          and ${links.deletedAt} is not null
           and ${links.deletedAt} < ${cutoff}
         limit ${batchSize}
       )
+        and ${links.feedId} is null
         and ${links.deletedAt} is not null
         and ${links.deletedAt} < ${cutoff}
       returning id

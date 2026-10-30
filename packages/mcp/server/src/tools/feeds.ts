@@ -5,6 +5,7 @@ import {
   listFeedsPage,
   normalizeFeedUrl,
   type PageParams,
+  refreshFeed,
   saveFeedPost,
   setFeedPostArchived,
   subscribeFeed,
@@ -49,6 +50,7 @@ function registerFeedReads(server: McpServer): void {
   server.registerTool(
     'list_feeds',
     {
+      annotations: { readOnlyHint: true },
       description:
         'List feed subscriptions, their Inbox counts and health, with paging. Feed posts stay outside the library. Use list_feed_posts to read a subscription.',
       inputSchema: pageShape,
@@ -72,6 +74,7 @@ function registerFeedReads(server: McpServer): void {
   server.registerTool(
     'list_feed_posts',
     {
+      annotations: { readOnlyHint: true },
       description:
         'List posts in one feed, newest first. tab is inbox (default) or archive. Results include savedLinkId for the Home copy. Use get_link with a post id to read its full content, or save_feed_post to copy it into the library.',
       inputSchema: {
@@ -163,6 +166,38 @@ function registerFeedSubscription(server: McpServer): void {
 
 function registerFeedWrites(server: McpServer): void {
   server.registerTool(
+    'refresh_feed',
+    {
+      description:
+        'Queue a poll now, including retrying a gone feed. Use list_feeds to check health and list_feed_posts for new posts after the worker polls.',
+      inputSchema: { feedId: postInput.feedId },
+      outputSchema: { found: z.boolean(), id: z.uuid().optional() },
+    },
+    ({ feedId }) =>
+      runFeedTool(async () => {
+        const result = await refreshFeed(feedId);
+        if ('error' in result) {
+          if (result.error === 'not_found')
+            return feedResult('Subscription not found. Use list_feeds to find it.', {
+              found: false,
+            });
+          return {
+            isError: true,
+            content: [
+              {
+                type: 'text',
+                text: 'feeds_unavailable: Run the Silo app entry point with its feed queue, then retry refresh_feed.',
+              },
+            ],
+          };
+        }
+        return feedResult(
+          'Refresh queued. Use list_feeds to check health, then list_feed_posts for new posts.',
+          { found: true, id: result.id },
+        );
+      }),
+  );
+  server.registerTool(
     'save_feed_post',
     {
       description:
@@ -193,6 +228,7 @@ function registerFeedWrites(server: McpServer): void {
         description: archived
           ? 'Move a post from its feed Inbox to Archive. The Home copy is unchanged. Repeat safely; use unarchive_feed_post to undo.'
           : 'Move a post from its feed Archive to Inbox. The Home copy is unchanged. Repeat safely; use archive_feed_post to undo.',
+        annotations: { idempotentHint: true },
         inputSchema: postInput,
         outputSchema: {
           found: z.boolean(),

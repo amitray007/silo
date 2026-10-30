@@ -16,6 +16,8 @@ export function AddFeedDialog({
   const [url, setUrl] = useState('');
   const [syncRecents, setSyncRecents] = useState(true);
   const [closing, setClosing] = useState(false);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
   const input = useRef<HTMLInputElement>(null);
   const subscribe = useSubscribeFeed();
   const navigate = useNavigate();
@@ -24,9 +26,9 @@ export function AddFeedDialog({
   }, []);
   useEffect(() => {
     if (!closing) return;
-    const timer = window.setTimeout(onClose, 120);
+    const timer = window.setTimeout(() => onCloseRef.current(), 120);
     return () => window.clearTimeout(timer);
-  }, [closing, onClose]);
+  }, [closing]);
   const close = () => setClosing(true);
   function submit(event: FormEvent) {
     event.preventDefault();
