@@ -8,7 +8,9 @@ import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { EnrichLinkDeps } from './enrich.js';
 import type { ExtractResult } from './extract/extract.js';
+import * as readerWorker from './extract/reader-worker.js';
 import { ReaderExtractionError } from './extract/reader-worker.js';
+import { parseFeedBody } from './feeds/parse.js';
 import type { SafeFetchResult } from './fetch/safe-fetch.js';
 
 /**
@@ -75,6 +77,116 @@ describeIfPg('enrichLink (integration)', () => {
         }),
     };
   }
+
+  it.each(['reader-failed', 'reader-timeout'])(
+    'leaves media Reader retryable after %s',
+    async (message) => {
+      const post = await core.createLink({
+        url: `https://example.com/${message}.mp3`,
+        sourceKind: 'feed_media',
+        sourceData: { kind: 'feed_media', content: '<p>Recovered show notes.</p>' },
+      });
+      const sanitizer = vi
+        .spyOn(readerWorker, 'sanitizeRenderedPage')
+        .mockRejectedValueOnce(new ReaderExtractionError(message));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        await enrichMod.enrichLink(post.id);
+        const state = await pool.query(
+          'select enrich_attempts, reader_version, reader_captured_at, content_html, capture_status from links where id = $1',
+          [post.id],
+        );
+        expect(state.rows[0]).toEqual({
+          enrich_attempts: 1,
+          reader_version: null,
+          reader_captured_at: null,
+          content_html: null,
+          capture_status: 'full',
+        });
+        expect(warn).toHaveBeenCalled();
+      } finally {
+        sanitizer.mockRestore();
+        warn.mockRestore();
+      }
+      const { createReaderRefresher } = await import('./reader/refresh-reader.js');
+      await core.runReaderBackfill(
+        createReaderRefresher(() => {}, {
+          fetch: async () => {
+            throw new Error('must rebuild saved media without fetching');
+          },
+        }),
+      );
+      expect((await core.getStoredReader(post.id))?.contentHtml).toContain('Recovered show notes.');
+    },
+  );
+
+  it('strips JSON Feed NULs before subscribing and polling on Postgres', async () => {
+    const parsed = parseFeedBody(
+      JSON.stringify({
+        version: 'https://jsonfeed.org/version/1.1',
+        title: 'Pod\u0000cast',
+        description: 'Feed\u0000 summary',
+        items: [
+          {
+            id: 'ep\u0000isode',
+            title: 'Episode\u0000 title',
+            content_html: '<p>Show\u0000 notes</p>',
+            summary: 'Short\u0000 summary',
+            attachments: [{ url: '/nul.mp3', mime_type: 'audio/mpeg' }],
+          },
+        ],
+      }),
+      'https://example.com/feed',
+    );
+    expect(parsed).toMatchObject({
+      title: 'Podcast',
+      description: 'Feed summary',
+      entries: [
+        {
+          id: 'episode',
+          title: 'Episode title',
+          media: { content: '<p>Show notes</p>', description: 'Short summary' },
+        },
+      ],
+    });
+    if (!parsed) throw new Error('feed did not parse');
+    const resolved = {
+      ...parsed,
+      feedUrl: 'https://example.com/nul-feed',
+      siteUrl: 'https://example.com',
+      intervalSeconds: 3600,
+    };
+    core.setFeedResolver(async () => resolved);
+    try {
+      const result = await core.subscribeFeed({ url: resolved.feedUrl, syncRecents: false });
+      if ('error' in result) throw new Error(result.error);
+      await pool.query("update feeds set next_poll_at = '2000-01-01' where id = $1", [
+        result.feed.id,
+      ]);
+      await core.pollFeed(result.feed.id, async () => ({
+        kind: 'modified',
+        feed: {
+          ...resolved,
+          entries: parsed.entries.map((entry) => ({
+            ...entry,
+            id: 'fresh',
+            url: 'https://example.com/fresh-nul.mp3',
+          })),
+        },
+      }));
+      expect(await core.getFeed(result.feed.id)).toMatchObject({
+        status: 'active',
+        postCount: 1,
+        title: 'Podcast',
+      });
+      expect((await core.listFeedPosts(result.feed.id)).links[0]).toMatchObject({
+        title: 'Episode title',
+        sourceData: { content: '<p>Show notes</p>', description: 'Short summary' },
+      });
+    } finally {
+      core.setFeedResolver(undefined);
+    }
+  });
 
   it('captures feed media without page fetch, preserves show notes through refresh and Save to Home', async () => {
     const feedResult = await pool.query<{ id: string }>(
@@ -165,37 +277,6 @@ describeIfPg('enrichLink (integration)', () => {
     expect(sourceFetch).not.toHaveBeenCalled();
     core.resetEnrichmentEnqueuer();
   }, 45_000);
-
-  it.each(['reader-timeout', 'reader-failed'])(
-    'settles media and records an attempt after %s',
-    async (reason) => {
-      const readerWorker = await import('./extract/reader-worker.js');
-      const sanitizer = vi
-        .spyOn(readerWorker, 'sanitizeRenderedPage')
-        .mockRejectedValueOnce(new ReaderExtractionError(reason));
-      try {
-        const post = await core.createLink({
-          url: `https://example.com/${reason}.mp3`,
-          sourceKind: 'feed_media',
-          sourceData: { kind: 'feed_media', content: 'Show notes' },
-        });
-        await expect(enrichMod.enrichLink(post.id)).resolves.toBeUndefined();
-        expect(await core.getById(post.id)).toMatchObject({ captureStatus: 'full' });
-        const state = await pool.query(
-          'select enrich_attempts, reader_version, reader_captured_at, content_html from links where id = $1',
-          [post.id],
-        );
-        expect(state.rows[0]).toMatchObject({
-          enrich_attempts: 1,
-          reader_version: core.READER_VERSION,
-          reader_captured_at: expect.any(Date),
-          content_html: null,
-        });
-      } finally {
-        sanitizer.mockRestore();
-      }
-    },
-  );
 
   it('fetches and extracts an article with an auto-enclosure and preserves YouTube classification', async () => {
     const { parseFeedBody } = await import('./feeds/parse.js');

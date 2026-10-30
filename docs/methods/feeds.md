@@ -177,6 +177,7 @@ the latest fetched title. MCP exposes the same operation as `rename_feed`.
   same transaction. Failed polls and 304 responses keep the flag pending. This prevents
   old subscriptions from importing their newly visible back catalog. New subscriptions
   keep the normal Sync recents behavior.
+  This one-time baseline also marks link-less episodes published before that poll as seen.
 - Add a `createFeedPost` function in core beside `createLink`; it shares canonicalization
   and enqueue, and dedups within the feed only.
 

@@ -370,7 +370,7 @@ async function enrichFeedMedia(link: LinkSummaryWithTags): Promise<void> {
           '[reader] extraction unavailable',
           error instanceof Error ? error.message : 'reader-failed',
         );
-        return { status: 'no_reader' };
+        return { status: 'fetch_failed' };
       },
     );
     await recordReader(link.id, reader, capturedAt);

@@ -46,9 +46,17 @@ function mediaData(options: EntryMedia, base: string): NonNullable<FeedEntry['me
   return {
     kind: 'feed_media',
     contentBaseUrl: httpUrl(options.contentBaseUrl, base) ?? base,
-    content: (options.content ?? '').slice(0, 1_048_576).replace(/[\uD800-\uDBFF]$/, ''),
+    content: (options.content ?? '')
+      .replaceAll('\u0000', '')
+      .slice(0, 1_048_576)
+      .replace(/[\uD800-\uDBFF]$/, ''),
     ...(options.description
-      ? { description: options.description.slice(0, 20_000).replace(/[\uD800-\uDBFF]$/, '') }
+      ? {
+          description: options.description
+            .replaceAll('\u0000', '')
+            .slice(0, 20_000)
+            .replace(/[\uD800-\uDBFF]$/, ''),
+        }
       : {}),
     ...(imageUrl && imageUrl.length <= 65_536 ? { imageUrl } : {}),
     ...(enclosureUrl && enclosureUrl.length <= 65_536 ? { enclosureUrl } : {}),
@@ -57,7 +65,7 @@ function mediaData(options: EntryMedia, base: string): NonNullable<FeedEntry['me
 
 export function cleanTitle(value: string | { value: string } | undefined): string {
   if (!value) return '';
-  const text = typeof value === 'string' ? value : value.value;
+  const text = (typeof value === 'string' ? value : value.value).replaceAll('\u0000', '');
   const { document } = parseHTML(`<html><body>${text}</body></html>`);
   return (document.body.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
@@ -80,7 +88,7 @@ function entry(
     {
       url: resolved,
       ...(!httpUrl(url, base) ? { linkFallback: true } : {}),
-      ...(id ? { id } : {}),
+      ...(id ? { id: id.replaceAll('\u0000', '') } : {}),
       ...(title ? { title: cleanTitle(title) } : {}),
       publishedAt: parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate : null,
       ...(isMedia ? { media: mediaData(media, base) } : {}),

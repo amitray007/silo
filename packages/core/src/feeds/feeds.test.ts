@@ -91,6 +91,34 @@ describe('feeds on real Postgres', () => {
       error: 'not_found',
     });
   });
+  it('bounds long publisher and URL keys and deduplicates them across polls', async () => {
+    const short = { id: 'x'.repeat(512), url: 'https://example.com/short' };
+    const long = {
+      id: Array.from({ length: 200 }, () => randomUUID()).join(''),
+      url: 'https://example.com/long',
+    };
+    const urlOnly = { url: `https://example.com/${'x'.repeat(600)}` };
+    expect(h.mod().entryIdentity(short)).toBe(short.id);
+    expect(h.mod().entryIdentity({ ...short, id: 'x'.repeat(513) })).toBe(
+      'sha256:35ade0090e64e74d6ad04204009c23a4e34b82bdf0f4f317fbcc5f26f9b10241',
+    );
+    expect(h.mod().entryIdentity(long)).toMatch(/^sha256:[a-f0-9]{64}$/);
+    expect(h.mod().entryIdentity({ ...long, url: 'https://example.com/changed' })).toBe(
+      h.mod().entryIdentity(long),
+    );
+    expect(h.mod().entryIdentity(urlOnly)).toMatch(/^sha256:[a-f0-9]{64}$/);
+    const { feed, resolved } = await subscribe([short, long, urlOnly]);
+    expect(feed.postCount).toBe(3);
+    await due(feed.id);
+    await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: resolved }));
+    expect((await h.mod().getFeed(feed.id))?.postCount).toBe(3);
+    const seen = await h
+      .rawDb()
+      .execute(sql`select entry_key from feed_entries where feed_id = ${feed.id}`);
+    expect(seen.rows).toHaveLength(3);
+    expect(seen.rows.every((row) => String(row.entry_key).length <= 512)).toBe(true);
+  });
+
   it('stores feed media and keeps GUID identity when the enclosure URL changes', async () => {
     const media = {
       kind: 'feed_media' as const,
@@ -286,7 +314,7 @@ describe('feeds on real Postgres', () => {
       code: 'feed_post_not_editable',
     });
   });
-  it('enqueues atomically, and rolls the seen-set back when enqueue fails', async () => {
+  it('rolls an entry and its seen key back when enqueue throws, then retries next poll', async () => {
     const { feed, resolved } = await subscribe([], false);
     h.mod().setEnrichmentEnqueuer(async () => {
       throw new Error('queue down');
@@ -295,8 +323,8 @@ describe('feeds on real Postgres', () => {
     const updated = { ...resolved, entries: [{ id: 'new', url: 'https://example.com/new' }] };
     await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated }));
     expect(await h.mod().getFeed(feed.id)).toMatchObject({
-      status: 'failing',
-      lastError: 'Could not capture feed posts.',
+      status: 'active',
+      lastError: null,
     });
     expect((await h.mod().listFeedPosts(feed.id)).links).toEqual([]);
     const seen = await h
@@ -308,7 +336,7 @@ describe('feeds on real Postgres', () => {
     await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated }));
     expect((await h.mod().getFeed(feed.id))?.postCount).toBe(1);
   });
-  it('rolls back a database capture error to the savepoint and commits the failure', async () => {
+  it('skips and logs a database entry error while capturing entries before and after it', async () => {
     const { feed, resolved } = await subscribe([]);
     await due(feed.id);
     await h
@@ -316,6 +344,7 @@ describe('feeds on real Postgres', () => {
       .execute(
         sql`alter table links add constraint reject_qa_post check (url <> 'https://example.com/reject-qa-post')`,
       );
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     try {
       await h.mod().pollFeed(feed.id, async () => ({
         kind: 'modified',
@@ -328,18 +357,36 @@ describe('feeds on real Postgres', () => {
               url: 'https://example.com/reject-qa-post',
               publishedAt: new Date('2026-10-28'),
             },
+            { id: 'last', url: 'https://example.com/last', publishedAt: new Date('2026-10-27') },
           ],
         },
       }));
       expect(await h.mod().getFeed(feed.id)).toMatchObject({
-        status: 'failing',
-        postCount: 0,
-        lastError: 'Could not capture feed posts.',
+        status: 'active',
+        postCount: 2,
+        lastError: null,
       });
       expect(
-        (await h.rawDb().execute(sql`select * from feed_entries where feed_id = ${feed.id}`)).rows,
-      ).toEqual([]);
+        (
+          await h
+            .rawDb()
+            .execute(
+              sql`select entry_key from feed_entries where feed_id = ${feed.id} order by entry_key`,
+            )
+        ).rows,
+      ).toEqual([{ entry_key: 'first' }, { entry_key: 'last' }]);
+      expect((await h.mod().listFeedPosts(feed.id)).links.map((post) => post.url)).toEqual([
+        'https://example.com/first',
+        'https://example.com/last',
+      ]);
+      expect(warn).toHaveBeenCalledWith(
+        '[silo/core] feed entry skipped:',
+        feed.id,
+        'bad',
+        expect.any(Error),
+      );
     } finally {
+      warn.mockRestore();
       await h.rawDb().execute(sql`alter table links drop constraint reject_qa_post`);
     }
   });

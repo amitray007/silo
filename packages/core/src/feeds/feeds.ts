@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { db, feedEntries, feeds, links } from '@silo/db';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { canonicalize } from '../links/canonicalize.js';
@@ -88,7 +89,8 @@ export function entryIdentity(entry: FeedEntry): string | null {
   if (!entry.url) return null;
   const { canonical, ok } = canonicalize(entry.url);
   if (!ok) return null;
-  return entry.id?.trim() || canonical;
+  const key = entry.id?.trim() || canonical;
+  return key.length > 512 ? `sha256:${createHash('sha256').update(key).digest('hex')}` : key;
 }
 
 function newest(entries: FeedEntry[]): FeedEntry[] {
@@ -109,14 +111,21 @@ async function captureEntries(
     if (!markAll && captured >= limit) break;
     const key = entryIdentity(entry);
     if (!key) continue;
-    const [seen] = await tx
-      .insert(feedEntries)
-      .values({ feedId, entryKey: key })
-      .onConflictDoNothing()
-      .returning({ key: feedEntries.entryKey });
-    if (!seen || captured >= limit) continue;
-    await createFeedPost({ ...entry, feedId }, tx);
-    captured++;
+    try {
+      const inserted = await tx.transaction(async (savepoint) => {
+        const [seen] = await savepoint
+          .insert(feedEntries)
+          .values({ feedId, entryKey: key })
+          .onConflictDoNothing()
+          .returning({ key: feedEntries.entryKey });
+        if (!seen || captured >= limit) return false;
+        await createFeedPost({ ...entry, feedId }, savepoint);
+        return true;
+      });
+      if (inserted) captured++;
+    } catch (error) {
+      console.warn('[silo/core] feed entry skipped:', feedId, key, error);
+    }
   }
 }
 
