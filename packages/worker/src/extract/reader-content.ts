@@ -1,6 +1,7 @@
 import { isReaderImageUrl, READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core/capture';
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { type EditorCode, restoreCodeEditors } from './code-editors.js';
 import { readerText } from './reader-text.js';
 import { enrichRichBlocks } from './rich-blocks.js';
 
@@ -377,11 +378,13 @@ function splitEmbedParagraphs(fragment: DocumentFragment): void {
 export async function sanitizeRenderedContent(
   html: string,
   url: string,
+  codeEditors: [string, EditorCode][] = [],
 ): Promise<{ reader?: ReaderContent; text?: string }> {
   const dom = new JSDOM('', { url, virtualConsole: new VirtualConsole() });
   try {
     const rich = dom.window.document.createElement('div');
     rich.innerHTML = html;
+    restoreCodeEditors(rich, new Map(codeEditors));
     await enrichRichBlocks(rich);
     const reader = sanitizeReaderContent(rich.innerHTML, url, dom);
     if (!reader) return {};

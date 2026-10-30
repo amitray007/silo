@@ -1,4 +1,4 @@
-/** Collapse prose whitespace while retaining exact code indentation and line breaks. */
+/** Collapse prose whitespace while retaining code line breaks. */
 export function readerText(container: Element): string {
   const parts: string[] = [];
   let prose = '';
@@ -10,7 +10,7 @@ export function readerText(container: Element): string {
   function visit(node: Node): void {
     if (node.nodeType === 1 && (node as Element).localName === 'pre') {
       flush();
-      parts.push(node.textContent ?? '');
+      parts.push((node.textContent ?? '').replace(/[ \t]+/g, ' '));
       return;
     }
     if (node.nodeType === 3) prose += node.textContent ?? '';

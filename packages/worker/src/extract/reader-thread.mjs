@@ -5,11 +5,11 @@ register();
 const { extractPageContent } = await import('./reader-page.ts');
 const { sanitizeRenderedContent } = await import('./reader-content.ts');
 
-parentPort.on('message', async ({ html, url, description, operation }) => {
+parentPort.on('message', async ({ html, url, description, operation, codeEditors }) => {
   try {
     const result =
       operation === 'sanitize'
-        ? await sanitizeRenderedContent(html, url)
+        ? await sanitizeRenderedContent(html, url, codeEditors)
         : await extractPageContent(html, url, description);
     parentPort.postMessage({ result });
   } catch {

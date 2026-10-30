@@ -421,9 +421,79 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
         const { document } = parseHTML(result.reader?.contentHtml ?? '');
         expect(document.querySelectorAll('pre > code')).toHaveLength(1);
         expect(document.querySelector('code')?.textContent).toBe(text);
-        expect(result.text).toContain(text);
+        expect(result.text).toContain(text.replace(/[ \t]+/g, ' '));
         expect(result.text).not.toMatch(/silo-editor-|Copy sample|Duplicate/);
         expect(result.diagnostics.errors).toEqual([]);
+      } finally {
+        await browser.close();
+      }
+    },
+    25_000,
+  );
+
+  it.each([false, true])(
+    'restores editor text on the host without reparsing in the page (Trusted Types: %s)',
+    async (trustedTypes) => {
+      const browser = await chromium.connect(endpoint);
+      const newContext = browser.newContext.bind(browser);
+      const requests: string[] = [];
+      vi.spyOn(browser, 'newContext').mockImplementation(async (options) => {
+        const context = await newContext(options);
+        const newPage = context.newPage.bind(context);
+        vi.spyOn(context, 'newPage').mockImplementation(async () => {
+          const page = await newPage();
+          page.on('request', (request) => requests.push(request.url()));
+          const evaluate = page.evaluate.bind(page);
+          vi.spyOn(page, 'evaluate').mockImplementation(async (expression) => {
+            if (typeof expression === 'string' && expression.startsWith('(() =>')) {
+              await evaluate(`(() => {
+              const Original = window.Defuddle;
+              window.Defuddle = class extends Original {
+                parse() {
+                  const result = super.parse();
+                  result.content += '<img src="/restore-only.png">';
+                  if (${trustedTypes}) {
+                    const meta = document.createElement('meta');
+                    meta.httpEquiv = 'Content-Security-Policy';
+                    meta.content = "require-trusted-types-for 'script'; trusted-types 'none'";
+                    document.head.append(meta);
+                  } else {
+                    Object.defineProperty(Element.prototype, 'innerHTML', {
+                      set() { throw new Error('publisher-page-reparse'); },
+                    });
+                  }
+                  return result;
+                }
+              };
+            })()`);
+            }
+            return evaluate(expression);
+          });
+          return page;
+        });
+        return context;
+      });
+      try {
+        const html = `<article><p>${article}</p><div class="cm-editor"><div class="cm-content"><div class="cm-line">  &lt;img src="/literal.png"&gt;</div><div class="cm-line"><br></div><div class="cm-line">\tfinish();</div></div></div></article>`;
+        const result = await renderPage(
+          browser,
+          `${url}/restore`,
+          AbortSignal.timeout(20_000),
+          async () => ({
+            ok: true,
+            status: 200,
+            finalUrl: `${url}/restore`,
+            bytes: Buffer.from(html),
+            contentType: 'text/html',
+          }),
+        );
+        const { document } = parseHTML(result.reader?.contentHtml ?? '');
+        expect(document.querySelector('code')?.textContent).toBe(
+          '  <img src="/literal.png">\n\n\tfinish();',
+        );
+        expect(result.text).not.toContain('silo-editor-');
+        expect(document.querySelector('img')?.getAttribute('src')).toBe(`${url}/restore-only.png`);
+        expect(requests.filter((request) => request.includes('.png'))).toEqual([]);
       } finally {
         await browser.close();
       }
