@@ -2088,3 +2088,49 @@
     animation: siloFade 120ms ease reverse both !important;
   }
 }
+
+.silo-palette-searching {
+  display: inline-flex;
+  flex: 0 0 16px;
+  color: var(--mut);
+}
+
+.silo-palette-feed-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  min-width: 0;
+  max-width: 40%;
+  padding: 2px var(--s1-5);
+  border-radius: 5px;
+  background: var(--hov);
+  color: var(--mut);
+  font-size: var(--text-sm);
+  font-weight: 400;
+}
+
+.silo-palette-feed-badge > span:last-child {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.silo-palette-feed-result {
+  padding: 10px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  width: 100%;
+  min-width: 0;
+  color: var(--fnt);
+  font-size: var(--text-sm);
+}
+
+.silo-palette-feed-result .silo-palette-feed-badge {
+  max-width: 85%;
+}
+
+.silo-palette-row > .silo-palette-feed-result > .silo-palette-feed-kind {
+  display: inline;
+}

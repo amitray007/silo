@@ -91,3 +91,11 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
   hit a real API or a database (unlike the core/api/mcp integration suites).
 - Assert design rules alongside behavior: ink primary buttons, neutral active
   navigation, correct marks, and local favicons with the globe fallback.
+
+## Search feedback
+
+The command palette uses `Blocks` from [`loading-dev`](https://github.com/jakubkrehel/loading)
+0.3.6 (MIT, no runtime dependencies, React 19+) at 16px in muted currentColor.
+It starts after 150ms on a search without cached data and hides when the request settles.
+The package disables its animation under `prefers-reduced-motion: reduce`.
+Sidebar find inputs filter local data immediately and have no spinner.

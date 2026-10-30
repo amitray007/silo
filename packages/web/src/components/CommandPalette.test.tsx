@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { SettingsMap } from '../api/types';
 import {
@@ -50,8 +50,17 @@ function mockFetchByPath(routes: Record<string, unknown>) {
 async function renderPalette(route = '/') {
   const { useCommandPalette } = await import('../lib/useCommandPalette');
   function Harness() {
+    const location = useLocation();
     const palette = useCommandPalette();
-    return <CommandPalette palette={palette} />;
+    return (
+      <>
+        <output data-testid="location">
+          {location.pathname === '/' ? '' : location.pathname}
+          {location.search}
+        </output>
+        <CommandPalette palette={palette} />
+      </>
+    );
   }
   return render(<Harness />, { wrapper: (props) => wrapper({ ...props, route }) });
 }
@@ -121,6 +130,114 @@ describe('CommandPalette', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  const feed = {
+    id: 'feed-one',
+    title: 'Owner feed title',
+    siteUrl: 'https://publisher.example',
+    feedUrl: 'https://publisher.example/feed',
+    format: 'rss',
+    status: 'active',
+    inboxCount: 1,
+    postCount: 2,
+    lastError: null,
+    lastPolledAt: null,
+    createdAt: '2026-10-29T00:00:00Z',
+  };
+
+  it('uses the feed title and search endpoint, badges posts and opens Archive results in the feed Reader', async () => {
+    const post = makeLink({
+      id: 'post-one',
+      title: 'Archived story',
+      feedId: feed.id,
+      archivedAt: '2026-10-29T00:00:00Z',
+    });
+    mockFetchByPath({
+      [`/api/feeds/${feed.id}/search`]: { results: [post] },
+      [`/api/feeds/${feed.id}/posts`]: { links: [] },
+      [`/api/feeds/${feed.id}`]: { feed },
+      '/api/feeds': { feeds: [feed] },
+      '/api/tags': { tags: [] },
+    });
+    await renderPalette(`/feeds/${feed.id}`);
+    pressCmdK();
+    const input = await screen.findByPlaceholderText('Search Owner feed title…');
+    expect(screen.queryByRole('button', { name: '#tag' })).toBeNull();
+    fireEvent.change(input, { target: { value: 'story #literal' } });
+    const row = await screen.findByRole('option', { name: /Archived story/ });
+    expect(within(row).getByText(feed.title)).toBeDefined();
+    expect(row.querySelector('.silo-palette-feed-badge img')?.getAttribute('src')).toContain(
+      '/api/favicon?domain=publisher.example',
+    );
+    expect(
+      vi
+        .mocked(fetch)
+        .mock.calls.some(([url]) => String(url).includes('/search?q=story%20%23literal')),
+    ).toBe(true);
+    expect(vi.mocked(fetch).mock.calls.some(([url]) => String(url).startsWith('/api/links'))).toBe(
+      false,
+    );
+    await waitFor(() => expect(row.getAttribute('aria-selected')).toBe('true'));
+    fireEvent.keyDown(input, { key: 'Enter' });
+    expect(screen.getByTestId('location').textContent).toBe(
+      '/feeds/feed-one?link=post-one&tab=archive',
+    );
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('mixes matching feed jumps with library links and navigates to a feed', async () => {
+    mockFetchByPath({
+      '/api/links/search': { results: [makeLink({ title: 'Owner library link' })] },
+      '/api/links': { links: [] },
+      '/api/tags': { tags: [] },
+      '/api/feeds': { feeds: [feed, { ...feed, id: 'other', title: 'Unrelated' }] },
+    });
+    await renderPalette();
+    pressCmdK();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'owner' } });
+    await screen.findByText('Owner library link');
+    const row = await screen.findByRole('option', { name: /Owner feed title/ });
+    expect(row.querySelector('.silo-palette-feed-badge')).not.toBeNull();
+    expect(screen.queryByText('Unrelated')).toBeNull();
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' });
+    await waitFor(() => expect(row.getAttribute('aria-selected')).toBe('true'));
+    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
+    expect(screen.getByTestId('location').textContent).toBe('/feeds/feed-one');
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('shows delayed feedback only during an uncached search and hides when it resolves', async () => {
+    let finish: (response: Response) => void = () => {};
+    mockFetchByPath({
+      '/api/tags': { tags: [] },
+      '/api/links': { links: [] },
+      '/api/feeds': { feeds: [] },
+    });
+    const fallback = vi.mocked(fetch).getMockImplementation();
+    vi.mocked(fetch).mockImplementation((input, init) => {
+      if (String(input).includes('/api/links/search'))
+        return new Promise((resolve) => {
+          finish = resolve;
+        });
+      if (!fallback) throw new Error('missing mock');
+      return fallback(input, init);
+    });
+    await renderPalette();
+    pressCmdK();
+    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'slow' } });
+    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
+    await screen.findByRole('status', { name: 'Searching' });
+    await act(async () => finish(jsonResponse({ results: [makeLink({ title: 'Found' })] })));
+    await screen.findByText('Found');
+    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } });
+    await waitFor(() => expect(screen.queryByText('Found')).toBeNull());
+    fireEvent.change(screen.getByRole('combobox'), { target: { value: 'slow' } });
+    await screen.findByText('Found');
+    await act(async () => new Promise((resolve) => setTimeout(resolve, 200)));
+    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
   });
 
   it('renders nothing until opened', async () => {

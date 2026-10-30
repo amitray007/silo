@@ -20,6 +20,7 @@ import { useMatch } from 'react-router';
  *   `usePaletteResults` — an explicit parsed `tag`/`partialTag` always wins
  *   over the route's implicit one), so `#tag` autocomplete/switching keeps
  *   working exactly as before on top of the page scope.
+ * - `/feeds/:id` -> `{ kind: 'feed', feedId }` searches that feed's Inbox and Archive.
  * - Anything else (Settings, 404, …) -> `{ kind: 'library' }`, the same
  *   fallback as "no route matched" — there's no page-native search surface
  *   to scope to, so the palette falls back to its original whole-Library
@@ -30,12 +31,18 @@ import { useMatch } from 'react-router';
  * definitions — a route rename there is a compile-time-visible change here
  * too, not a silently-stale string prefix check.
  */
-export type PaletteScope = { kind: 'library' } | { kind: 'trash' } | { kind: 'tag'; tag: string };
+export type PaletteScope =
+  | { kind: 'library' }
+  | { kind: 'trash' }
+  | { kind: 'tag'; tag: string }
+  | { kind: 'feed'; feedId: string };
 
 export function usePaletteScope(): PaletteScope {
+  const feedMatch = useMatch('/feeds/:id');
   const trashMatch = useMatch('/trash');
   const tagMatch = useMatch('/tags/:name');
 
+  if (feedMatch?.params.id) return { kind: 'feed', feedId: feedMatch.params.id };
   if (trashMatch) return { kind: 'trash' };
   if (tagMatch?.params.name) return { kind: 'tag', tag: decodeURIComponent(tagMatch.params.name) };
   return { kind: 'library' };

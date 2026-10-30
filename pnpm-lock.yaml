@@ -549,6 +549,9 @@ importers:
       dompurify:
         specifier: 'catalog:'
         version: 3.4.17
+      loading-dev:
+        specifier: 0.3.6
+        version: 0.3.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       mermaid:
         specifier: 'catalog:'
         version: 12.2.0
@@ -3857,6 +3860,12 @@ packages:
     peerDependenciesMeta:
       canvas:
         optional: true
+
+  loading-dev@0.3.6:
+    resolution: {integrity: sha512-htn86CAKi28d4vCBFMImogiCzs8AxDi18J19FAAI7iJXibPwNvFuoGnomuSPkrDD+ft7X+8yK0BYPwsu1EKY9Q==}
+    peerDependencies:
+      react: '>=19.0.0'
+      react-dom: '>=19.0.0'
 
   lodash-es@4.18.1:
     resolution: {integrity: sha512-J8xewKD/Gk22OZbhpOVSwcs60zhd95ESDwezOFuA3/099925PdHJ7OFHNTGtajL3AlZkykD32HykiMo+BIBI8A==}
@@ -7606,6 +7615,11 @@ snapshots:
       html-escaper: 3.0.3
       htmlparser2: 10.1.0
       uhyphen: 0.2.0
+
+  loading-dev@0.3.6(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+    dependencies:
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
 
   lodash-es@4.18.1: {}
 
