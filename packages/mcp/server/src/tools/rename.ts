@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { feedTitleSchema, renameFeed, renameTag, tagTitleSchema } from '@silo/core';
 import { z } from 'zod';
-import { feedResult, feedShape, runFeedTool, toFeedContent } from './feed-result.js';
+import { feedResult, feedShape, runFeedTool, toFeedContent, toolError } from './feed-result.js';
 
 export function registerRenameTools(server: McpServer): void {
   server.registerTool(
@@ -48,15 +48,7 @@ export function registerRenameTools(server: McpServer): void {
         result = await renameTag(name, newName, merge);
       } catch (error) {
         console.error('[silo/mcp] tag rename failed:', error);
-        return {
-          isError: true,
-          content: [
-            {
-              type: 'text' as const,
-              text: 'Tag operation failed. Use list_tags to check the tag, then retry.',
-            },
-          ],
-        };
+        return toolError('Tag operation failed. Use list_tags to check the tag, then retry.');
       }
       if ('error' in result)
         return {

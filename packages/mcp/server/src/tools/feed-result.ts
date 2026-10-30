@@ -39,6 +39,10 @@ export function feedResult(
   return { content: [{ type: 'text', text }], structuredContent };
 }
 
+export function toolError(text: string): CallToolResult {
+  return { isError: true, content: [{ type: 'text', text }] };
+}
+
 /** Keep database and fetch diagnostics on stderr, outside protocol results. */
 export async function runFeedTool(
   operation: () => Promise<CallToolResult>,
@@ -51,7 +55,7 @@ export async function runFeedTool(
         ? 'Invalid cursor. Omit cursor to restart from the first page.'
         : 'Feed operation failed. Try list_feeds to check the subscription, then retry.';
     console.error('[silo/mcp] feed operation failed:', error);
-    return { isError: true, content: [{ type: 'text', text }] };
+    return toolError(text);
   }
 }
 

@@ -96,6 +96,7 @@ export type { Feed, FeedRow } from './feeds/feeds.js';
 export {
   deleteFeed,
   entryIdentity,
+  feedExists,
   getFeed,
   listDueFeeds,
   listFeedPosts,
@@ -278,13 +279,9 @@ export { createTag, deleteTag, listTagsWithCounts } from './links/tags.js';
 // Title provenance values come from the database enum.
 export { TITLE_SOURCES } from './links/title-source.js';
 export { type LinkTitleFetcher, linkTitles, setLinkTitleFetcher } from './links/titles.js';
-// Trash reads + counts (plan 007, C2): listTrash is the ONE read in this
-// package deliberately NOT scoped through `whereLive` — see trash.ts's doc
-// comment for why it's quarantined in its own module. getCounts/countLive/
-// countTrash back the mockup's sidebar live/trash counts. searchTrash is the
-// trash-scoped mirror of `search` (Trash search slice) — same ranking/
-// pagination, reusing the live search's `SearchPage` type since the shape is
-// identical.
+// Trash reads select deleted library links through `whereTrashedLibrary`.
+// countLive/countTrash/getCounts use the same library boundary for sidebar counts.
+// searchTrash mirrors library search with the same ranking and pagination shape.
 // hardDelete/emptyTrash (plan 007, C3): DESTRUCTIVE, trashed-only targeted
 // deletes (the mockup's "delete now"/"empty now") — see trash.ts's doc
 // comments for the atomic WHERE-clause guard that makes a live link

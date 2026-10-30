@@ -99,7 +99,7 @@ export function registerLinksWriteRoutes(app: Hono): void {
    * `PATCH /api/links/:id` — edit. Body: `{ title?, description?, note? }`,
    * all optional (an empty body is a valid no-op that returns the current
    * link — mirrors `core.editLink`'s own empty-patch branch). `core.editLink`
-   * IS live-scoped (`whereLive`), so an unknown OR trashed id returns `null`
+   * uses `whereLibrary` (live library links), so an unknown OR trashed id returns `null`
    * -> `404 not_found` directly, no separate guard needed.
    */
   app.patch('/links/:id', async (c) => {

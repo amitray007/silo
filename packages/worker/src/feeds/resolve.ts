@@ -29,6 +29,13 @@ const FEED_ACCEPT =
 const RESPONSE_HEADERS = ['etag', 'last-modified', 'cache-control', 'retry-after'];
 export type FeedFetcher = (url: string, options: SafeFetchOptions) => Promise<SafeFetchResult>;
 
+function validators(headers: Record<string, string>) {
+  return {
+    ...(headers.etag ? { etag: headers.etag } : {}),
+    ...(headers['last-modified'] ? { lastModified: headers['last-modified'] } : {}),
+  };
+}
+
 function prepare(
   parsed: ParsedFeed,
   response: Extract<SafeFetchResult, { ok: true }>,
@@ -42,8 +49,7 @@ function prepare(
     siteUrl,
     title: parsed.title || page?.title || new URL(siteUrl).hostname,
     intervalSeconds: pollInterval(headers, parsed.ttlMinutes),
-    ...(headers.etag ? { etag: headers.etag } : {}),
-    ...(headers['last-modified'] ? { lastModified: headers['last-modified'] } : {}),
+    ...validators(headers),
   };
 }
 
@@ -150,8 +156,7 @@ export async function fetchFeedPoll(
     return {
       kind: 'not-modified',
       intervalSeconds: pollInterval(headers, feed.pollIntervalSeconds / 60),
-      ...(headers.etag ? { etag: headers.etag } : {}),
-      ...(headers['last-modified'] ? { lastModified: headers['last-modified'] } : {}),
+      ...validators(headers),
     };
   const parsed = parseFeedBody(response.html, response.finalUrl);
   if (!parsed || response.status !== 200)

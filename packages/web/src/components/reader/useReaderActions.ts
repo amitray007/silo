@@ -1,11 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import {
-  useDeleteNow,
-  useRestoreLink,
-  useSaveFeedPost,
-  useTrashLink,
-  useTriageFeedPost,
-} from '../../api/hooks';
+import { useSaveFeedPost, useTriageFeedPost } from '../../api/feedHooks';
+import { useDeleteNow, useRestoreLink, useTrashLink } from '../../api/hooks';
 import type { LinkJson } from '../../api/types';
 import { isFeedPost } from '../../lib/isFeedPost';
 import { isTextEntryElement } from '../../lib/usePasteCapture';

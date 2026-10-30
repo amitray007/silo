@@ -932,23 +932,6 @@ select {
   transition: none !important;
 }
 
-.silo-feed-description {
-  margin: 0;
-  color: var(--mut);
-  font-size: var(--text-sm);
-  line-height: 1.5;
-}
-.silo-feed-form {
-  display: grid;
-  gap: var(--s3);
-  margin-top: var(--s4);
-}
-.silo-feed-form > label {
-  line-height: 20px;
-  font-weight: 500;
-  font-size: var(--text-sm);
-}
-.silo-feed-form > input,
 .silo-rename-form .silo-field {
   width: 100%;
   box-sizing: border-box;
@@ -962,68 +945,6 @@ select {
   font-size: 14px;
   line-height: 20px;
   min-height: 40px;
-}
-.silo-feed-form > input {
-  box-shadow: none;
-}
-.silo-feed-error {
-  margin: 0;
-  color: var(--warn);
-  font-size: var(--text-sm);
-}
-
-#silo-feed-list {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  padding: 4px 8px 8px;
-}
-#silo-feed-list > .silo-nav-item {
-  --nav-color: var(--fnt);
-}
-
-.silo-feed-tabs {
-  display: flex;
-  grid-column: 1 / -1;
-  /* Right edge matches the 24px left inset; the header itself pads 6px on the right. */
-  margin-right: 18px;
-}
-
-.silo-feed-warning {
-  display: inline-flex;
-  color: var(--warn);
-  vertical-align: middle;
-}
-.silo-feed-menu .silo-menu-item {
-  font-weight: 500;
-}
-.silo-feed-notice,
-.silo-feed-menu-error {
-  margin: 0;
-  padding: var(--s2) var(--s3);
-  color: var(--fnt);
-  font-size: var(--text-sm);
-  overflow-wrap: anywhere;
-}
-
-.silo-feed-description + .silo-feed-form {
-  margin-top: 16px;
-}
-.silo-modal-header + .silo-feed-description {
-  margin-top: 8px;
-}
-.silo-feed-form > input[aria-invalid="true"] {
-  border-color: var(--warn);
-}
-.silo-feed-footer {
-  justify-content: space-between;
-  margin-top: 4px;
-}
-.silo-feed-footer > .silo-feed-subscribe {
-  flex: none;
-  width: 128px;
-  min-height: 40px;
-  font-size: 14px;
 }
 .silo-checkbox {
   position: relative;
@@ -1133,73 +1054,6 @@ select {
   }
 }
 
-.silo-feeds-section-title {
-  align-items: center;
-  gap: 4px;
-}
-.silo-feeds-section-title > a {
-  padding-left: 8px;
-  text-decoration: none;
-}
-.silo-feeds-row {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px 24px;
-  color: var(--ink);
-  font-size: 14px;
-  line-height: 20px;
-  font-weight: 500;
-  text-decoration: none;
-}
-.silo-feeds-row-title {
-  flex: 1;
-  min-width: 0;
-  overflow-wrap: anywhere;
-}
-.silo-feeds-row-count {
-  color: var(--fnt);
-  font-size: 12px;
-}
-@media (hover: hover) and (pointer: fine) {
-  .silo-feeds-row:hover {
-    background: var(--row-hover);
-  }
-}
-.silo-panehead:has(.silo-feed-heading) {
-  /* Title row: title (shrinks first), count, spacer, menu. The tabs take a full row below. */
-  display: grid;
-  grid-template-columns: minmax(0, max-content) auto 1fr auto;
-  align-items: center;
-  height: auto;
-  padding-block: 0 12px;
-  row-gap: 0;
-}
-.silo-panehead:has(.silo-feed-heading) h1 {
-  min-width: 0;
-  min-height: 44px;
-  display: flex;
-  align-items: center;
-}
-.silo-feed-heading {
-  line-height: 20px;
-  display: flex;
-  align-items: baseline;
-  gap: 4px;
-  min-width: 0;
-}
-.silo-feed-breadcrumb {
-  flex: none;
-  color: var(--fnt);
-  text-decoration: none;
-}
-.silo-feed-title {
-  min-width: 0;
-  overflow: hidden;
-  white-space: nowrap;
-  text-overflow: ellipsis;
-}
-
 .silo-rename-form {
   display: grid;
   gap: 16px;
@@ -1212,21 +1066,9 @@ select {
 .silo-rename-form .silo-field[aria-invalid="true"] {
   border-color: var(--warn);
 }
-.silo-feed-menu-error:focus-visible {
-  outline: 2px solid var(--fnt);
-  outline-offset: -2px;
-}
 
 .silo-rename-form > label {
   font-size: 14px;
   line-height: 20px;
   font-weight: 500;
-}
-
-.silo-feed-tabs > .silo-reader-segment {
-  width: 100%;
-}
-.silo-feed-tabs .silo-reader-segment > button {
-  flex: 1;
-  min-width: 0;
 }

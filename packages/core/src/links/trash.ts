@@ -1,9 +1,9 @@
 import { db, links } from '@silo/db';
-import { and, desc, sql } from 'drizzle-orm';
+import { desc, sql } from 'drizzle-orm';
 import { assertLibraryWrite } from './library-write.js';
 import type { SearchPage } from './links.js';
 import { buildSnippetHeadline, tagSearchVector } from './links.js';
-import { whereLibrary } from './live.js';
+import { whereLibrary, whereTrashedLibrary } from './live.js';
 import {
   decodeTrashCursor,
   effectiveLimit,
@@ -19,15 +19,10 @@ import { runUnionSearch } from './search-query.js';
  * Reads of TRASHED links (`deleted_at IS NOT NULL`) — quarantined in this
  * module, separate from `links.ts`, on purpose.
  *
- * Every read in `links.ts` is deliberately scoped through `whereLive`
- * (`deleted_at IS NULL`) — see `live.ts`'s doc comment: that helper exists so
- * no query can forget to exclude trashed rows. `listTrash` below is the ONE
- * read in this codebase that intentionally does the opposite: it selects
- * ONLY trashed rows, for the mockup's Trash screen. It must NEVER be
- * confused with (or accidentally merged into) a live read, and it must never
- * weaken/touch `whereLive` itself — hence its own file. `countLive`/
- * `countTrash`/`getCounts` live here too since they read the same live/trash
- * split, but they don't return row data, only counts.
+ * Library collections use `whereLibrary`; by-id reads may also return live
+ * feed posts via `whereLiveAnywhere`. Trash reads use `whereTrashedLibrary`
+ * to select only deleted library links. Counts use the same library split
+ * without returning row data.
  */
 
 export type TrashPage = {
@@ -78,8 +73,7 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
   const cursor = page.cursor !== undefined ? decodeTrashCursor(page.cursor) : undefined;
   const cursorCondition = cursor ? afterTrashCursor(cursor.deletedAt, cursor.id) : undefined;
 
-  const trashedCondition = sql`${links.deletedAt} is not null and ${links.feedId} is null`;
-  const where = cursorCondition ? and(trashedCondition, cursorCondition) : trashedCondition;
+  const where = whereTrashedLibrary(cursorCondition);
 
   const rows = await db
     .select({ link: listColumns, deletedAtText })
@@ -106,8 +100,8 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
  * gated on the other's row count) over TRASHED links (`deleted_at IS NOT
  * NULL`) — the Trash-scoped mirror of `links.ts`'s `search`. Delegates to
  * the SAME `runUnionSearch` helper `search` uses (see `search-query.ts`),
- * swapping ONLY the live/trash predicate: `whereLive(...)` becomes the
- * trashed condition (`deleted_at IS NOT NULL`), and `search`'s optional
+ * swapping the library predicate: `whereLibrary(...)` becomes
+ * `whereTrashedLibrary(...)` (deleted library links), and `search`'s optional
  * `filter.tag` EXISTS scope is never passed (`searchTrash` has no
  * tag-filter parameter). Reuses `search`'s exported
  * `SearchPage`/`tagSearchVector` rather than a hand-duplicated copy — see
@@ -118,7 +112,7 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
  *
  * Deliberately quarantined in THIS file, not `links.ts` — same rationale as
  * `listTrash`: every trash-scoped read lives here, never mixed with the
- * `whereLive`-scoped reads in `links.ts`, so a query can never accidentally
+ * live reads in `links.ts`, so a query can never accidentally
  * cross the live/trash boundary. `limit` clamped to `[1, 100]` (default 20)
  * via `effectiveLimit`; pagination uses the SAME bounded plain offset cursor
  * as live `search` (`encodeSearchCursor`/`decodeSearchCursor` — `kind:
@@ -127,7 +121,7 @@ export async function listTrash(page: PageParams = {}): Promise<TrashPage> {
  * not tied to which predicate produced it).
  */
 export async function searchTrash(query: string, page: PageParams = {}): Promise<SearchPage> {
-  const trashedCondition = sql`${links.deletedAt} is not null and ${links.feedId} is null`;
+  const trashedCondition = whereTrashedLibrary();
   // `snippet` (agent-navigation slice U2): same query-focused `ts_headline`
   // excerpt live `search` returns — see `buildSnippetHeadline`'s doc comment.
   // No `filter`/`sort` params here (main's agent-navigation slice only added
@@ -149,7 +143,7 @@ export async function countTrash(): Promise<number> {
   const [row] = await db
     .select({ count: sql<string>`count(*)` })
     .from(links)
-    .where(sql`${links.deletedAt} is not null and ${links.feedId} is null`);
+    .where(whereTrashedLibrary());
   return Number(row?.count ?? 0);
 }
 

@@ -58,7 +58,7 @@ export type StrandedLink = {
  * capture_status, so a link trashed while enriching would otherwise match
  * forever; excluding trashed rows here (rather than relying on the caller to
  * filter) means the predicate can never leak a resurrect-by-retry path
- * (`requestRetry` is separately live-scoped via `whereLive`, but a query
+ * (`requestRetry` separately excludes deleted rows across library and feed posts, but a query
  * that returns trashed ids in the first place is a footgun this avoids at
  * the source).
  *

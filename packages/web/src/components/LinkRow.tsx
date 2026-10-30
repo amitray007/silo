@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
-import { useSaveFeedPost, useSettings, useTrashLink, useTriageFeedPost } from '../api/hooks';
+import { useSaveFeedPost, useTriageFeedPost } from '../api/feedHooks';
+import { useSettings, useTrashLink } from '../api/hooks';
 import type { LinkJson, SettingsMap } from '../api/types';
 import { isFeedPost } from '../lib/isFeedPost';
 import { isHoverCapable } from '../lib/pointer';

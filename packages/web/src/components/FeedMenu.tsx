@@ -1,7 +1,8 @@
 import { type ReactNode, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
-import { useRefreshFeed, useRenameFeed, useUnsubscribeFeed } from '../api/hooks';
+import { useRefreshFeed, useRenameFeed, useUnsubscribeFeed } from '../api/feedHooks';
+
 import type { FeedJson } from '../api/types';
 import { ConfirmDialog } from './ConfirmDialog';
 import { MenuPresence } from './MenuPresence';

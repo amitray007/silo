@@ -30,6 +30,14 @@ describe('feeds on real Postgres', () => {
   async function due(id: string) {
     await h.rawDb().execute(sql`update feeds set next_poll_at = '2000-01-01' where id = ${id}`);
   }
+  it('checks feed existence before and after unsubscribe', async () => {
+    expect(await h.mod().feedExists(randomUUID())).toBe(false);
+    const { feed } = await subscribe([]);
+    expect(await h.mod().feedExists(feed.id)).toBe(true);
+    expect(await h.mod().deleteFeed(feed.id)).toBe(true);
+    expect(await h.mod().feedExists(feed.id)).toBe(false);
+  });
+
   it('polls a large seen set, captures newest 50, retries overflow and isolates failed posts', async () => {
     const old = Array.from({ length: 2200 }, (_, i) => ({
       id: `old-${i}`,

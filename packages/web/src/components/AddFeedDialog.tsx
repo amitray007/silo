@@ -1,7 +1,8 @@
 import { type FormEvent, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router';
-import { useSubscribeFeed } from '../api/hooks';
+import { useSubscribeFeed } from '../api/feedHooks';
+
 import { normalizeFeedUrl } from '../lib/url';
 import { Checkbox } from './Checkbox';
 import { ModalHeader, ModalShell } from './ModalShell';

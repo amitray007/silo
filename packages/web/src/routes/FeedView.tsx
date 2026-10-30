@@ -1,7 +1,8 @@
 import { useId } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { ApiError } from '../api/client';
-import { useFeed } from '../api/hooks';
+import { useFeed } from '../api/feedHooks';
+
 import type { FeedJson } from '../api/types';
 import { FeedMenu } from '../components/FeedMenu';
 import { ReaderLayout } from '../components/reader/ReaderLayout';

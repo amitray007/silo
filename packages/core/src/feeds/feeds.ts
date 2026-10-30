@@ -52,6 +52,18 @@ export function listFeeds(): Promise<Feed[]> {
   return db.select(feedColumns).from(feeds).orderBy(asc(feeds.createdAt), asc(feeds.id));
 }
 
+/** Slice the lookahead row and retain full-precision cursor dates. */
+function pageOf<T>(rows: T[], limit: number, sortDate: (row: T) => string, id: (row: T) => string) {
+  const visible = rows.slice(0, limit);
+  const last = visible.at(-1);
+  return {
+    visible,
+    ...(rows.length > limit && last
+      ? { nextCursor: encodeListCursor(sortDate(last), id(last)) }
+      : {}),
+  };
+}
+
 /** Bounded feed discovery for agents, ordered by subscription time and id. */
 export async function listFeedsPage(page: PageParams = {}) {
   const limit = effectiveLimit(page.limit);
@@ -66,19 +78,24 @@ export async function listFeedsPage(page: PageParams = {}) {
     )
     .orderBy(asc(feeds.createdAt), asc(feeds.id))
     .limit(limit + 1);
-  const visible = rows.slice(0, limit);
-  const last = visible.at(-1);
-  return {
-    feeds: visible.map((row) => row.feed),
-    ...(rows.length > limit && last
-      ? { nextCursor: encodeListCursor(last.sortDate, last.feed.id) }
-      : {}),
-  };
+  const { visible, ...cursorPage } = pageOf(
+    rows,
+    limit,
+    (row) => row.sortDate,
+    (row) => row.feed.id,
+  );
+  return { feeds: visible.map((row) => row.feed), ...cursorPage };
 }
 export async function getFeed(id: string): Promise<Feed | null> {
   const [row] = await db.select(feedColumns).from(feeds).where(eq(feeds.id, id));
   return row ?? null;
 }
+/** Check subscription existence without loading counts. */
+export async function feedExists(id: string): Promise<boolean> {
+  const [row] = await db.select({ id: feeds.id }).from(feeds).where(eq(feeds.id, id));
+  return row !== undefined;
+}
+
 export async function deleteFeed(id: string): Promise<boolean> {
   const rows = await db.delete(feeds).where(eq(feeds.id, id)).returning({ id: feeds.id });
   return rows.length > 0;
@@ -230,18 +247,17 @@ export async function listFeedPosts(
     )
     .orderBy(desc(date), desc(links.id))
     .limit(limit + 1);
-  const visible = rows.slice(0, limit);
-  const last = visible.at(-1);
   const hydrated = await hydrateTags(
     db,
-    visible.map((row) => row.link),
+    rows.slice(0, limit).map((row) => row.link),
   );
-  return {
-    links: hydrated,
-    ...(rows.length > limit && last
-      ? { nextCursor: encodeListCursor(last.sortDate, last.link.id) }
-      : {}),
-  };
+  const { nextCursor } = pageOf(
+    rows,
+    limit,
+    (row) => row.sortDate,
+    (row) => row.link.id,
+  );
+  return { links: hydrated, ...(nextCursor ? { nextCursor } : {}) };
 }
 
 export async function listDueFeeds(now = new Date()): Promise<string[]> {

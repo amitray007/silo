@@ -40,8 +40,8 @@ const trashSearchQuerySchema = pageQuerySchema.extend({
 export function registerTrashRoutes(app: Hono): void {
   /**
    * `GET /api/trash` — the whole Trash screen's data (plan 007, A2). Backed by
-   * `core.listTrash` (C2), the ONE read deliberately NOT scoped through
-   * `whereLive` — see `trash.ts`'s doc comment in `@silo/core`. A `list`/
+   * `core.listTrash` (C2), scoped to deleted library links through
+   * `whereTrashedLibrary` in `@silo/core`. A `list`/
    * `search` cursor handed here throws `InvalidCursorError` (mismatched `kind`
    * tag), mapped by the app's `onError` to `400 invalid_cursor` same as any
    * other malformed cursor.

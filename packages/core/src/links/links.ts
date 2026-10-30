@@ -5,9 +5,9 @@ import type { FeedEntry } from '../feeds/types.js';
 import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
-import type { Executor, Link } from './executor.js';
+import type { Executor, Link, Tx } from './executor.js';
 import { assertLibraryWrite } from './library-write.js';
-import { whereFeed, whereLibrary } from './live.js';
+import { whereFeed, whereLibrary, whereLiveAnywhere, whereTrashedLibrary } from './live.js';
 import { mergeCaptureFields } from './merge-content.js';
 import {
   decodeListCursor,
@@ -491,12 +491,12 @@ export async function findByCanonicalUrl(url: string): Promise<Link | null> {
   return row ?? null;
 }
 
-/** Fetch a single live link row (no tag hydration), or `null` if it doesn't exist or is trashed. */
+/** Fetch a live library link or feed post without tags; missing or trashed rows return null. */
 async function getRawById(id: string): Promise<Link | null> {
   const [row] = await db
     .select()
     .from(links)
-    .where(and(eq(links.id, id), sql`${links.deletedAt} is null`))
+    .where(whereLiveAnywhere(eq(links.id, id)))
     .limit(1);
   return row ?? null;
 }
@@ -578,7 +578,7 @@ export async function getById(
   const [row] = await db
     .select(listColumns)
     .from(links)
-    .where(and(eq(links.id, id), sql`${links.deletedAt} is null`))
+    .where(whereLiveAnywhere(eq(links.id, id)))
     .limit(1);
   if (!row) return null;
   const [hydrated] = await hydrateTags(db, [row]);
@@ -1302,9 +1302,7 @@ export async function restore(id: string): Promise<RestoreResult> {
     const [trashedRow] = await db
       .select()
       .from(links)
-      .where(
-        and(eq(links.id, id), sql`${links.deletedAt} is not null`, sql`${links.feedId} is null`),
-      )
+      .where(whereTrashedLibrary(eq(links.id, id)))
       .limit(1);
     if (!trashedRow) return { status: 'not_found' };
 
@@ -1312,9 +1310,7 @@ export async function restore(id: string): Promise<RestoreResult> {
       const [restored] = await db
         .update(links)
         .set({ deletedAt: null })
-        .where(
-          and(eq(links.id, id), sql`${links.deletedAt} is not null`, sql`${links.feedId} is null`),
-        )
+        .where(whereTrashedLibrary(eq(links.id, id)))
         .returning();
       if (!restored) {
         // Someone else restored/changed it between our read and update; retry.
@@ -1394,9 +1390,9 @@ export async function restore(id: string): Promise<RestoreResult> {
 /** Capture into one feed, using the same canonicalizer and enrichment transaction as Home. */
 export async function createFeedPost(
   input: FeedEntry & { feedId: string },
-  executor?: import('./executor.js').Tx,
+  executor?: Tx,
 ): Promise<Link | null> {
-  const write = async (tx: import('./executor.js').Tx) => {
+  const write = async (tx: Tx) => {
     const { canonical, ok } = canonicalize(input.url);
     if (!ok) return null;
     const [inserted] = await tx
@@ -1422,13 +1418,7 @@ export async function createFeedPost(
     const [existing] = await tx
       .select()
       .from(links)
-      .where(
-        and(
-          eq(links.feedId, input.feedId),
-          eq(links.canonicalUrl, canonical),
-          sql`${links.deletedAt} is null`,
-        ),
-      );
+      .where(whereFeed(input.feedId, eq(links.canonicalUrl, canonical)));
     return existing ?? null;
   };
   return executor ? write(executor) : db.transaction(write);

@@ -5,6 +5,7 @@ import { useMatch, useNavigate } from 'react-router';
 import { ApiError } from '../api/client';
 import { queryKeys, useDeleteTag, useRenameTag } from '../api/hooks';
 import { ConfirmDialog } from './ConfirmDialog';
+import { DeleteTagDialog } from './DeleteTagDialog';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
 import { RenameDialog } from './RenameDialog';
@@ -156,11 +157,10 @@ export function TagMenu({ tag, children }: { tag: string; children?: ReactNode }
         )}
       {confirmDelete &&
         createPortal(
-          <ConfirmDialog
-            title="Delete tag?"
-            item={`#${tag}`}
-            action="Delete tag"
+          <DeleteTagDialog
+            tag={tag}
             pending={remove.isPending}
+            error={remove.isError ? remove.error.message : undefined}
             onClose={() => setConfirmDelete(false)}
             onConfirm={() =>
               remove.mutate(tag, {
@@ -170,10 +170,7 @@ export function TagMenu({ tag, children }: { tag: string; children?: ReactNode }
                 },
               })
             }
-          >
-            The tag #{tag} will be removed from all links. Your links will be kept.
-            {remove.isError && <span role="alert">{remove.error.message}</span>}
-          </ConfirmDialog>,
+          />,
           document.body,
         )}
     </>

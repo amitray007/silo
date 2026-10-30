@@ -17,6 +17,7 @@ import {
   feedShape,
   runFeedTool,
   toFeedContent,
+  toolError,
 } from './feed-result.js';
 import { snippetLinkShape, toSnippetLinkContent } from './link-shape.js';
 
@@ -123,18 +124,11 @@ function registerFeedSubscription(server: McpServer): void {
       runFeedTool(async () => {
         const result = await subscribeFeed(input);
         if ('error' in result)
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text',
-                text:
-                  result.error === 'feeds_unavailable'
-                    ? 'feeds_unavailable: Feed discovery is unavailable in this process. Run the Silo app entry point with its feed resolver and queue, then retry subscribe_feed.'
-                    : 'feed_not_found: No feed found at this URL. Try a direct RSS, Atom or JSON feed URL.',
-              },
-            ],
-          };
+          return toolError(
+            result.error === 'feeds_unavailable'
+              ? 'feeds_unavailable: Feed discovery is unavailable in this process. Run the Silo app entry point with its feed resolver and queue, then retry subscribe_feed.'
+              : 'feed_not_found: No feed found at this URL. Try a direct RSS, Atom or JSON feed URL.',
+          );
         return feedResult(
           `${result.deduped ? 'Already subscribed' : 'Subscribed'}: ${result.feed.title}. Use list_feed_posts with feedId ${result.feed.id}; enrichment runs asynchronously.`,
           { feed: toFeedContent(result.feed), deduped: result.deduped },
@@ -181,15 +175,9 @@ function registerFeedWrites(server: McpServer): void {
             return feedResult('Subscription not found. Use list_feeds to find it.', {
               found: false,
             });
-          return {
-            isError: true,
-            content: [
-              {
-                type: 'text',
-                text: 'feeds_unavailable: Run the Silo app entry point with its feed queue, then retry refresh_feed.',
-              },
-            ],
-          };
+          return toolError(
+            'feeds_unavailable: Run the Silo app entry point with its feed queue, then retry refresh_feed.',
+          );
         }
         return feedResult(
           'Refresh queued. Use list_feeds to check health, then list_feed_posts for new posts.',

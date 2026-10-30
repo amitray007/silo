@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import type { ApiError } from '../../api/client';
-import { useFeedPosts, useInfiniteLinks } from '../../api/hooks';
+import { useFeedPosts } from '../../api/feedHooks';
+import { useInfiniteLinks } from '../../api/hooks';
 import type { FeedTab, LinkJson } from '../../api/types';
 
 /**

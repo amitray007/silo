@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router';
-import { useFeeds } from '../api/hooks';
+import { useFeeds } from '../api/feedHooks';
+
 import { AddFeedDialog } from '../components/AddFeedDialog';
 import { Chip } from '../components/Chip';
 import { ReaderIcon } from '../components/reader/ReaderIcon';

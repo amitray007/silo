@@ -150,8 +150,8 @@ function clampToMax(value: string | undefined, max: number): string | undefined 
 /**
  * Record an enrichment result onto a LIVE link: updates title/description/
  * imageUrl/siteName/extractedText + captureStatus, going through the
- * live-query helper (`whereLive`) so the write can never touch — let alone
- * resurrect — a trashed link (plan R11/R12).
+ * any-live predicate (`deleted_at IS NULL`) across library and feed posts,
+ * so the write cannot touch or resurrect a trashed link (plan R11/R12).
  *
  * Don't-clobber: a field the result omits (`undefined`) keeps the link's
  * existing stored value, same policy as `mergeIntoExisting` in `links.ts` —
@@ -231,7 +231,7 @@ export async function recordEnrichment(
   // be clobbered by the stale read). COALESCE-in-one-statement removes that
   // window entirely and never rewrites an untouched column with a stale value
   // (each column coalesces to its own current value when the result omits it).
-  // `whereLive` on the single statement is what guarantees a trashed link is
+  // The any-live predicate on the single statement guarantees a trashed link is
   // never touched, let alone revived (no `deleted_at` is written).
   const [updated] = await db
     .update(links)
@@ -293,7 +293,7 @@ const RETRYABLE_STATUSES = ['partial', 'bare', 'enriching'] as const;
  * The worker/queue implementation remains behind the core enqueue port.
  *
  * Excludes `full` (terminal) so a good capture can't be downgraded by a
- * re-fetch. Live-scoped via `whereLive`: a trashed link is never resurrected.
+ * re-fetch. The any-live predicate spans library and feed posts and excludes trash.
  * Returns `null` if `linkId` doesn't exist, is trashed, or is already `full`.
  *
  * Also resets `enrich_attempts` to 0 (plan R3, U3): a re-kick is a fresh
@@ -419,7 +419,8 @@ function domainOf(url: string): string | undefined {
  * once, at end-of-life, so the small TOCTOU window (a concurrent edit
  * between the SELECT and UPDATE) is not the same lost-update hazard
  * `recordEnrichment` guards against on its hot, repeatable write path. The
- * final UPDATE is still `whereLive`, so a link trashed in that window is
+ * final UPDATE still excludes deleted rows across library and feed posts, so
+ * a link trashed in that window is
  * simply not touched (returns `null`), never resurrected.
  *
  * Returns the updated `Link`, or `null` if `linkId` doesn't exist or is

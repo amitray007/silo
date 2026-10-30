@@ -5,6 +5,7 @@ import { useSidebarPagination } from '../lib/useSidebarPagination';
 import { SearchIcon } from './NavIcons';
 import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
+import { SectionCaret } from './SectionCaret';
 import { Skeleton } from './Skeleton';
 
 /**
@@ -158,16 +159,7 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
             }}
           >
             <span className="silo-tags-label">Tags</span>
-            <svg
-              width="10"
-              height="10"
-              viewBox="0 0 10 10"
-              className="silo-section-caret"
-              data-expanded={expanded}
-              aria-hidden="true"
-            >
-              <path d="M1.5 3h7L5 7.5z" />
-            </svg>
+            <SectionCaret expanded={expanded} />
           </button>
         </div>
         <span style={{ flex: 1 }} />
