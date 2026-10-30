@@ -2,7 +2,8 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
-import type { FeedEntry, ResolvedFeed } from './types.js';
+import type { FeedRow, SubscribeFeedResult } from './feeds.js';
+import type { FeedEntry, FeedPollResult, ResolvedFeed } from './types.js';
 
 const snapshot = (entries: FeedEntry[] = []): ResolvedFeed => ({
   feedUrl: `https://example.com/${randomUUID()}.rss`,
@@ -516,18 +517,67 @@ describe('feeds on real Postgres', () => {
       ...resolved,
       title: 'New name',
       siteUrl: 'https://other.example.com',
+      etag: '"publisher-v1"',
+      lastModified: 'Thu, 29 Oct 2026 10:00:00 GMT',
       entries: Array.from({ length: 55 }, (_, i) => ({ url: `https://example.com/${i}` })),
     };
+    const fetchFeed = async (row: FeedRow): Promise<FeedPollResult> =>
+      row.etag || row.lastModified ? { kind: 'not-modified' } : { kind: 'modified', feed: updated };
     await due(feed.id);
-    await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated }));
+    await h.mod().pollFeed(feed.id, fetchFeed);
     expect(await h.mod().getFeed(feed.id)).toMatchObject({
       title: 'New name',
       siteUrl: updated.siteUrl,
       postCount: 50,
     });
+    const pending = await h
+      .rawDb()
+      .execute(sql`select etag, last_modified from feeds where id = ${feed.id}`);
+    expect(pending.rows[0]).toMatchObject({ etag: null, last_modified: null });
     await due(feed.id);
-    await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated }));
+    await h.mod().pollFeed(feed.id, fetchFeed);
     expect((await h.mod().getFeed(feed.id))?.postCount).toBe(55);
+    const drained = await h
+      .rawDb()
+      .execute(sql`select etag, last_modified from feeds where id = ${feed.id}`);
+    expect(drained.rows[0]).toMatchObject({
+      etag: updated.etag,
+      last_modified: updated.lastModified,
+    });
+  });
+  it('clears subscription validators after a failed recent capture and retries on the next poll', async () => {
+    const resolved = {
+      ...snapshot([{ id: 'retry', url: 'https://example.com/retry', title: 'retry' }]),
+      etag: '"publisher-v1"',
+      lastModified: 'Thu, 29 Oct 2026 10:00:00 GMT',
+    };
+    h.mod().setFeedResolver(async () => resolved);
+    await h
+      .rawDb()
+      .execute(sql`alter table links add constraint reject_qa_post check (title <> 'retry')`);
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    let result: SubscribeFeedResult;
+    try {
+      result = await h.mod().subscribeFeed({ url: resolved.feedUrl, syncRecents: true });
+    } finally {
+      warn.mockRestore();
+      await h.rawDb().execute(sql`alter table links drop constraint reject_qa_post`);
+    }
+    if ('error' in result) throw new Error(result.error);
+    expect(result.feed.postCount).toBe(0);
+    const pending = await h
+      .rawDb()
+      .execute(sql`select etag, last_modified from feeds where id = ${result.feed.id}`);
+    expect(pending.rows[0]).toMatchObject({ etag: null, last_modified: null });
+    await due(result.feed.id);
+    await h
+      .mod()
+      .pollFeed(result.feed.id, async (row) =>
+        row.etag || row.lastModified
+          ? { kind: 'not-modified' }
+          : { kind: 'modified', feed: resolved },
+      );
+    expect((await h.mod().getFeed(result.feed.id))?.postCount).toBe(1);
   });
   it('backs off, stops after 10 failures or 410, and resets on 304', async () => {
     const { feed } = await subscribe([]);

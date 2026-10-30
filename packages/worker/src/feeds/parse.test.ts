@@ -70,6 +70,14 @@ describe('podcast entry URLs and publisher content', () => {
     });
   });
 
+  it('uses an escaped iTunes summary as show notes when RSS content and description are absent', () => {
+    const body = `<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd"><channel><title>Podcast</title><item><guid isPermaLink="false">summary-only</guid><itunes:summary><![CDATA[A <b>literal</b> summary & notes]]></itunes:summary><enclosure url="/audio.mp3" type="audio/mpeg"/></item></channel></rss>`;
+    expect(parseFeedBody(body, base)?.entries[0]?.media).toMatchObject({
+      content: '<p>A &lt;b&gt;literal&lt;/b&gt; summary &amp; notes</p>',
+      description: 'A <b>literal</b> summary & notes',
+    });
+  });
+
   it('uses JSON Feed attachments and keeps an explicit page URL ahead of the audio', () => {
     const item = {
       id: 'json-episode',

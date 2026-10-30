@@ -179,7 +179,10 @@ function parseRss(feed: Extract<AnyFeed, { format: 'rss' }>['feed'], base: strin
             ? item.guid?.value
             : undefined,
         enclosures: [...(item.enclosures ?? []), ...mediaContents(item.media)],
-        content: item.content?.encoded ?? item.description,
+        content:
+          item.content?.encoded ??
+          item.description ??
+          (item.itunes?.summary ? `<p>${textHtml(item.itunes.summary)}</p>` : undefined),
         description: item.itunes?.summary ?? item.description,
         image: item.itunes?.image ?? mediaImage(item.media),
       }),

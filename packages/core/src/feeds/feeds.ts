@@ -131,7 +131,7 @@ async function captureEntries(
   entries: FeedEntry[],
   limit: number,
   markAll: boolean,
-): Promise<void> {
+): Promise<boolean> {
   const candidates = entryCandidates(entries);
   const keys = [...candidates.keys()];
   const inserted = new Set<string>();
@@ -171,6 +171,7 @@ async function captureEntries(
         ),
       );
   }
+  return retry.length > 0;
 }
 
 export type SubscribeFeedResult =
@@ -210,7 +211,19 @@ export async function subscribeFeed(input: {
       .onConflictDoNothing({ target: feeds.feedUrl })
       .returning();
     if (inserted) {
-      await captureEntries(tx, inserted.id, resolved.entries, input.syncRecents ? 20 : 0, true);
+      const pending = await captureEntries(
+        tx,
+        inserted.id,
+        resolved.entries,
+        input.syncRecents ? 20 : 0,
+        true,
+      );
+      if (pending) {
+        await tx
+          .update(feeds)
+          .set({ etag: null, lastModified: null })
+          .where(eq(feeds.id, inserted.id));
+      }
       return { id: inserted.id, deduped: false };
     }
     const [existing] = await tx
@@ -301,6 +314,7 @@ export async function pollFeed(
         .update(feeds)
         .set({
           ...metadata,
+          ...(captured.pending ? { etag: null, lastModified: null } : {}),
           ...(captured.kind === 'modified' ? { mediaBackfillDone: true } : {}),
           status: 'active',
           consecutiveFailures: 0,
@@ -335,10 +349,14 @@ function samePoll(row: FeedRow, snapshot: FeedRow): boolean {
     row.updatedAt.getTime() === snapshot.updatedAt.getTime()
   );
 }
-async function capturePoll(tx: Tx, row: FeedRow, result: FeedPollResult): Promise<FeedPollResult> {
+async function capturePoll(
+  tx: Tx,
+  row: FeedRow,
+  result: FeedPollResult,
+): Promise<FeedPollResult & { pending?: boolean }> {
   if (result.kind !== 'modified') return result;
   try {
-    await tx.transaction(async (savepoint) => {
+    const pending = await tx.transaction(async (savepoint) => {
       if (!row.mediaBackfillDone) {
         await captureEntries(
           savepoint,
@@ -348,9 +366,9 @@ async function capturePoll(tx: Tx, row: FeedRow, result: FeedPollResult): Promis
           true,
         );
       }
-      await captureEntries(savepoint, row.id, result.feed.entries, 50, false);
+      return captureEntries(savepoint, row.id, result.feed.entries, 50, false);
     });
-    return result;
+    return { ...result, pending };
   } catch (error) {
     console.error('[silo/core] poll-feed: capture failed:', error);
     return { kind: 'failure', message: 'Could not capture feed posts.' };
