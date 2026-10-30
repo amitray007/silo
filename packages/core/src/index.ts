@@ -108,6 +108,7 @@ export {
 export { type FeedPollEnqueuer, refreshFeed, setFeedPollEnqueuer } from './feeds/refresh.js';
 export { feedTitleSchema, renameFeed } from './feeds/rename.js';
 export { saveFeedPost } from './feeds/save.js';
+export { searchFeedPosts } from './feeds/search.js';
 export { setFeedPostArchived } from './feeds/triage.js';
 export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
 export { normalizeFeedUrl, setFeedResolver } from './feeds/types.js';

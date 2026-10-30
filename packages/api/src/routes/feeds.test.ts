@@ -19,6 +19,42 @@ const request = (url: string, syncRecents = true) => ({
 });
 
 describe('feed API against Postgres', () => {
+  it('searches one feed across tabs through a validated, whitelisted search route', async () => {
+    const { app, core } = h.mod();
+    core.setFeedResolver(async (url) => ({
+      feedUrl: url,
+      title: 'Search',
+      siteUrl: 'https://example.com',
+      format: 'rss',
+      intervalSeconds: 3600,
+      entries: [0, 1].map((i) => ({ url: `https://example.com/search-${i}`, title: 'Orchid' })),
+    }));
+    const sub = await core.subscribeFeed({
+      url: 'https://example.com/search.rss',
+      syncRecents: true,
+    });
+    if ('error' in sub) throw new Error(sub.error);
+    const post = (await core.listFeedPosts(sub.feed.id)).links[0];
+    if (!post) throw new Error('missing post');
+    await core.setFeedPostArchived(sub.feed.id, post.id, true);
+    await core.createLink({
+      url: 'https://example.com/library-search',
+      title: 'Orchid',
+      sourceKind: 'link',
+    });
+    const path = `/api/feeds/${sub.feed.id}/search`;
+    const response = await app.request(`${path}?q=orchid`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as { results: { feedId: string }[] };
+    expect(body.results).toHaveLength(2);
+    expect(body.results.every((p) => p.feedId === sub.feed.id)).toBe(true);
+    expect(JSON.stringify(body)).not.toMatch(/searchVector|canonicalUrl|extractedText/);
+    for (const query of ['', '?q=', '?q=orchid&limit=no', '?q=orchid&cursor=bad'])
+      expect((await app.request(path + query)).status).toBe(400);
+    expect((await app.request(`/api/feeds/${randomUUID()}/search?q=orchid`)).status).toBe(404);
+    expect((await app.request('/api/feeds/bad/search?q=orchid')).status).toBe(400);
+    expect(await (await app.request(`${path}?q=%00`)).json()).toEqual({ results: [] });
+  });
   it('continues mixed library/feed trash and restore batches in input order', async () => {
     const { app, core } = h.mod();
     core.setFeedResolver(async (url) => ({

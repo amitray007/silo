@@ -30,6 +30,7 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       'restore_link',
       'retry_capture',
       'save_feed_post',
+      'search_feed_posts',
       'search_links',
       'subscribe_feed',
       'trash_link',
