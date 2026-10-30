@@ -1,11 +1,56 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { FeedJson } from '../api/types';
 import { SidebarFeeds } from './SidebarFeeds';
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+it('delays decorative feed rows and announces loading until the request settles', async () => {
+  vi.useFakeTimers();
+  let resolve!: (response: Response) => void;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((done) => {
+          resolve = done;
+        }),
+    ),
+  );
+  const { container } = render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <MemoryRouter>
+        <SidebarFeeds onNavigate={() => {}} />
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  const region = screen.getByRole('region', { name: 'Feed subscriptions' });
+  expect(region.getAttribute('aria-busy')).toBe('true');
+  expect(screen.getByRole('status').textContent).toBe('Loading feeds');
+  expect(screen.getByRole('status').className).toBe('silo-sr-only');
+  const add = screen.getByRole('button', { name: 'Add feed' });
+  const list = container.querySelector('.silo-sidebar-skeleton-list');
+  expect(list?.getAttribute('data-visible')).toBe('false');
+  expect(list?.getAttribute('aria-hidden')).toBe('true');
+  act(() => vi.advanceTimersByTime(150));
+  expect(list?.getAttribute('data-visible')).toBe('true');
+  expect(region.querySelectorAll('.silo-sidebar-row-skeleton')).toHaveLength(3);
+  await act(async () => {
+    resolve(new Response(JSON.stringify({ feeds: [] })));
+    await vi.advanceTimersByTimeAsync(1);
+  });
+  expect(region.getAttribute('aria-busy')).toBe('false');
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(container.querySelector('.silo-sidebar-skeleton-list')).toBeNull();
+  expect(screen.getByRole('button', { name: 'Add feed' })).toBe(add);
+});
 it('filters the complete feed list before paging, focuses the input and clears on toggle', async () => {
   const feeds: FeedJson[] = Array.from({ length: 75 }, (_, i) => ({
     id: `feed-${i}`,

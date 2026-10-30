@@ -49,6 +49,21 @@
   background: var(--sel);
   box-shadow: none;
 }
+.silo-sidebar-skeleton-list {
+  display: contents;
+}
+.silo-sidebar-skeleton-list[data-visible="false"] {
+  visibility: hidden;
+}
+.silo-sidebar-row-skeleton {
+  pointer-events: none;
+  animation: siloPulse 1.6s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-sidebar-row-skeleton {
+    animation: none;
+  }
+}
 /* Each list scrolls within its share of the sidebar. */
 .silo-tag-scroll {
   flex: 1;

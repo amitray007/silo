@@ -6,7 +6,7 @@ import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
 import { SidebarFindButton, SidebarFindEmpty, SidebarFindInput } from './SidebarFind';
-import { Skeleton } from './Skeleton';
+import { SidebarRowSkeletonList } from './SidebarRowSkeleton';
 
 /**
  * A `NavItemLink`-shaped callback the caller (`Sidebar`) supplies so this
@@ -21,31 +21,6 @@ interface SidebarTagsProps {
   /** True while `useTags()` is still loading (`Sidebar`'s own `isLoading`) — renders skeleton tag rows in place of `tags` (which is `[]` until it resolves) instead of a flash of empty. Defaults to `false` so existing callers/tests are unaffected. */
   loading?: boolean;
   renderTagLink: (tag: TagCount) => React.ReactNode;
-}
-
-/** Per-row label-line widths for the skeleton tag list — varied so the placeholder rows don't read as a mechanical striped pattern before real tag names land. */
-const SKELETON_TAG_WIDTHS = ['50%', '65%', '40%', '60%', '55%'];
-
-/**
- * One placeholder tag row, shaped exactly like a real tag `NavItem` (`tag`
- * variant, `NavItem.tsx`'s `VARIANT_STYLE.tag`): `padding: 7px var(--s2-5)`
- * (7px 10px), `gap: var(--s1-5)`, a left label line + a right-aligned count
- * block — so swapping this for the real tag row produces no layout shift.
- */
-function SkeletonTagRow({ labelWidth }: { labelWidth: string }) {
-  const rowStyle = {
-    display: 'flex',
-    alignItems: 'center',
-    gap: 'var(--s1-5)',
-    padding: '7px var(--s2-5)',
-  };
-  return (
-    <div style={rowStyle}>
-      <Skeleton height={12} width={labelWidth} radius={4} />
-      <span style={{ flex: 1 }} />
-      <Skeleton width={14} height={10} radius={4} />
-    </div>
-  );
 }
 
 /**
@@ -182,16 +157,25 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
             />
           )}
 
-          <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Tags">
+          {loading && (
+            <span className="silo-sr-only" role="status">
+              Loading tags
+            </span>
+          )}
+          <section
+            ref={page.scrollRef}
+            className="silo-tag-scroll"
+            aria-label="Tags"
+            aria-busy={loading}
+          >
             {!loading && trimmedQuery && visibleTags.length === 0 && (
               <SidebarFindEmpty kind="tags" query={query} />
             )}
-            {loading && tags.length === 0
-              ? SKELETON_TAG_WIDTHS.map((width, i) => (
-                  // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list
-                  <SkeletonTagRow key={i} labelWidth={width} />
-                ))
-              : visibleTags.slice(0, page.visibleCount).map((tag) => renderTagLink(tag))}
+            {loading && tags.length === 0 ? (
+              <SidebarRowSkeletonList kind="tags" />
+            ) : (
+              visibleTags.slice(0, page.visibleCount).map((tag) => renderTagLink(tag))
+            )}
             {page.hasMore && (
               <div ref={page.sentinelRef} className="silo-sidebar-sentinel" aria-hidden="true" />
             )}

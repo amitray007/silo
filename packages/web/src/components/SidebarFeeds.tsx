@@ -12,6 +12,7 @@ import { NavItem } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SectionCaret } from './SectionCaret';
 import { SidebarFindButton, SidebarFindEmpty, SidebarFindInput } from './SidebarFind';
+import { SidebarRowSkeletonList } from './SidebarRowSkeleton';
 
 function FeedLink({ feed, onNavigate }: { feed: FeedJson; onNavigate: () => void }) {
   const to = `/feeds/${feed.id}`;
@@ -122,8 +123,8 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
             />
           )}
           {feeds.isLoading && (
-            <span className="silo-feed-description" role="status">
-              Loading feeds…
+            <span className="silo-sr-only" role="status">
+              Loading feeds
             </span>
           )}
           {feeds.isError && (
@@ -131,7 +132,13 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
               Couldn't load feeds.
             </p>
           )}
-          <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Feed subscriptions">
+          <section
+            ref={page.scrollRef}
+            className="silo-tag-scroll"
+            aria-label="Feed subscriptions"
+            aria-busy={feeds.isLoading}
+          >
+            {feeds.isLoading && <SidebarRowSkeletonList kind="feeds" />}
             {feeds.isSuccess && trimmedQuery && rows.length === 0 && (
               <SidebarFindEmpty kind="feeds" query={query} />
             )}

@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { TagCount } from '../api/types';
 import { SidebarTags } from './SidebarTags';
 
@@ -17,8 +17,14 @@ function renderTagLink(tag: TagCount) {
 /** `SidebarTags` calls `useCreateTag()` (the "+ new tag" flow) unconditionally, so every render needs a `QueryClientProvider` even for tests that never touch that flow — mirrors `Sidebar.test.tsx`'s own `renderSidebar` wrapper. */
 function renderSidebarTags(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
+  return render(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    ),
+  });
 }
+
+afterEach(() => vi.useRealTimers());
 
 it('focuses find only when opened by its button and explains an unmatched filter', () => {
   renderSidebarTags(
@@ -85,7 +91,8 @@ it('clears by button or Escape, then closes on empty Escape and restores toggle 
 
 describe('SidebarTags loading skeleton', () => {
   it('loading + no tags yet: renders skeleton rows, keeps the "Tags" header, and shows no real tag links', () => {
-    const { container } = renderSidebarTags(
+    vi.useFakeTimers();
+    const { container, rerender } = renderSidebarTags(
       <SidebarTags tags={[]} loading renderTagLink={renderTagLink} />,
     );
 
@@ -97,6 +104,21 @@ describe('SidebarTags loading skeleton', () => {
     expect(scrollRegion).not.toBeNull();
     const skeletonBlocks = scrollRegion?.querySelectorAll('[aria-hidden="true"]') ?? [];
     expect(skeletonBlocks.length).toBeGreaterThan(0);
+    expect(screen.getByRole('region', { name: 'Tags' }).getAttribute('aria-busy')).toBe('true');
+    expect(screen.getByRole('status').textContent).toBe('Loading tags');
+    expect(screen.getByRole('status').className).toBe('silo-sr-only');
+    const add = screen.getByRole('button', { name: 'New tag' });
+    const list = container.querySelector('.silo-sidebar-skeleton-list');
+    expect(list?.getAttribute('data-visible')).toBe('false');
+    act(() => vi.advanceTimersByTime(150));
+    expect(list?.getAttribute('data-visible')).toBe('true');
+    expect(container.querySelectorAll('.silo-sidebar-row-skeleton')).toHaveLength(5);
+    rerender(<SidebarTags tags={[{ name: 'ai', count: 3 }]} renderTagLink={renderTagLink} />);
+    expect(screen.getByRole('region', { name: 'Tags' }).getAttribute('aria-busy')).toBe('false');
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(container.querySelector('.silo-sidebar-skeleton-list')).toBeNull();
+    expect(screen.getByRole('link', { name: '#ai' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'New tag' })).toBe(add);
   });
 
   it('loading false + tags present: renders the real tag links, no skeleton blocks', () => {
