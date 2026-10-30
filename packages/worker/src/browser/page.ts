@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import type { BrowserContextOptions } from 'playwright-core';
 import { prepareBoxSpacing } from '../extract/box-spacing.js';
 import { isChallengePage } from '../extract/challenge-page.js';
+import { type EditorCode, prepareCodeEditors } from '../extract/code-editors.js';
 import type { PageContent } from '../extract/reader-page.js';
 import { sanitizeRenderedPage } from '../extract/reader-worker.js';
 import { prepareCodeLanguages, prepareGists } from '../extract/rich-blocks.js';
@@ -58,6 +59,7 @@ export const PAGE_PRELUDE = 'var __name = (target) => target;';
 // A string keeps this code independent of transpiler helpers in Node's TypeScript loader.
 const EXTRACT = String.raw`(() => {
   ${PAGE_PRELUDE}
+  const codeEditors = (${prepareCodeEditors.toString()})(document, true);
   (${prepareGists.toString()})(document);
   (${prepareCodeLanguages.toString()})(document);
   // Match Defuddle 0.19.6's small-image rule without broken-image layout sizes.
@@ -125,12 +127,12 @@ const EXTRACT = String.raw`(() => {
     else image.setAttribute('alt', alts[index]);
   });
   (${prepareBoxSpacing.toString()})(document, true);
-  const { content, wordCount } = new Defuddle(document, {
+  const { content } = new Defuddle(document, {
     useAsync: false, removeSmallImages: false,
   }).parse();
   if (typeof content !== 'string' || content.length > ${MAX_CONTENT_BYTES} ||
       new TextEncoder().encode(content).byteLength > ${MAX_CONTENT_BYTES}) return null;
-  return { content, wordCount: typeof wordCount === 'number' ? wordCount : 0 };
+  return { content, codeEditors: [...codeEditors] };
 })()`;
 
 function sanitizeResult(value: unknown, url: string, signal: AbortSignal): Promise<PageContent> {
@@ -139,7 +141,26 @@ function sanitizeResult(value: unknown, url: string, signal: AbortSignal): Promi
   const content = value.content;
   if (typeof content !== 'string' || Buffer.byteLength(content) > MAX_CONTENT_BYTES)
     throw new Error('browser-content-limit');
-  return sanitizeRenderedPage(content, url, signal);
+  const entries = 'codeEditors' in value ? value.codeEditors : [];
+  if (
+    !Array.isArray(entries) ||
+    !entries.every(isCodeEntry) ||
+    Buffer.byteLength(JSON.stringify(entries)) > MAX_CONTENT_BYTES
+  )
+    throw new Error('browser-content-limit');
+  return sanitizeRenderedPage(content, url, signal, entries);
+}
+
+function isCodeEntry(value: unknown): value is [string, EditorCode] {
+  if (!Array.isArray(value) || value.length !== 2 || typeof value[0] !== 'string') return false;
+  const code: unknown = value[1];
+  return (
+    !!code &&
+    typeof code === 'object' &&
+    'text' in code &&
+    typeof code.text === 'string' &&
+    (!('language' in code) || typeof code.language === 'string')
+  );
 }
 
 export interface RenderDiagnostics {

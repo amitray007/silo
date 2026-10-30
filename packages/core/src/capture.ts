@@ -4,8 +4,8 @@ import { z } from 'zod';
 export { detectSource } from './links/detect-source.js';
 export { httpUrl } from './links/http-url.js';
 
-// 3: the rendered path converts TeX to MathML (full Defuddle bundle).
-export const READER_VERSION = 5;
+// 6: normalize in-page code editors before extraction in both Reader paths.
+export const READER_VERSION = 6;
 
 export const READER_HTML_MAX_BYTES = 1024 * 1024;
 

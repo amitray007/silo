@@ -4,9 +4,11 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import { parseHTML } from 'linkedom';
 import { prepareBoxSpacing } from './box-spacing.js';
 import { isChallengePage } from './challenge-page.js';
+import { prepareCodeEditors, restoreCodeEditors } from './code-editors.js';
 import { recoverEmbeddedJson } from './embedded-json.js';
 import { FULL_TEXT_THRESHOLD } from './extract-constants.js';
 import { sanitizeReaderContent } from './reader-content.js';
+import { readerText } from './reader-text.js';
 import { enrichRichBlocks, prepareCodeLanguages, prepareGists } from './rich-blocks.js';
 import { extractYouTubeWatch } from './youtube-watch.js';
 
@@ -69,6 +71,8 @@ export async function extractPageContent(
 async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
   // jsdom repairs malformed HTML (notably the RFC's body/pre nesting). Defuddle's
   // selectors need linkedom; running directly on jsdom hits its selector limit.
+  // Static DOMs use explicit visibility hints; jsdom's CSS cascade is too expensive here.
+  const codeEditors = prepareCodeEditors(dom.window.document, true, false);
   prepareBoxSpacing(dom.window.document);
   prepareGists(dom.window.document);
   prepareCodeLanguages(dom.window.document);
@@ -90,13 +94,15 @@ async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
   });
   const rich = dom.window.document.createElement('div');
   rich.innerHTML = article.content;
+  restoreCodeEditors(rich, codeEditors);
+  restoreCodeEditors(dom.window.document, codeEditors);
   await enrichRichBlocks(rich);
   const reader = sanitizeReaderContent(rich.innerHTML, url, dom);
   const result: PageContent = {};
   // Search text follows Defuddle's content, before the stored-HTML byte cap.
   const textContainer = document.createElement('div');
   textContainer.innerHTML = rich.innerHTML;
-  const text = normalizeWhitespace(textContainer.textContent ?? '');
+  const text = readerText(textContainer);
   if (text) result.text = text;
   if (reader) result.reader = reader;
   const defuddleText = result.text;
@@ -130,6 +136,6 @@ function applyThinTextFallback(document: Document, result: PageContent): void {
   ))
     node.remove();
   const main = document.querySelector('main, article') ?? document.body;
-  const text = normalizeWhitespace(main?.textContent ?? '');
+  const text = main ? readerText(main) : '';
   if (text.length >= Math.max(FULL_TEXT_THRESHOLD, length * 5)) result.text = text;
 }

@@ -1,6 +1,6 @@
 import { type ChildProcess, spawn } from 'node:child_process';
 import { createSocket, type Socket as UdpSocket } from 'node:dgram';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { createServer as createTcpServer, type Server as TcpServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
@@ -382,6 +382,124 @@ describeWithChromium('rendered Reader through a hardened browser launcher', () =
       await browser.close();
     }
   }, 25_000);
+
+  it.each([
+    ['cm6', 'function greet() {\n  const text = "<hello>";\n\n\treturn text;  \n}\n'],
+    ['cm5', 'if (ready) {\n  run();\n}'],
+    ['monaco', 'const value: number = 1;\n  console.log(value);'],
+    ['github', 'if (ready) {\n  run();\n}'],
+    ['rouge', 'if ready\n  run\nend\n'],
+    ['pygments', 'if ready:\n    run()\n'],
+    [
+      'shopify',
+      "const authorizationDetails = JSON.stringify([\n  {\n    type: 'urn:shopify:shop_app:data-sharing:v1',\n    datatypes: [\n      {name: 'phone_number', required: true},\n      {name: 'birthdate', required: false},\n    ],\n  },\n]);",
+    ],
+  ])(
+    'normalizes a script-built %s editor through rendered extraction',
+    async (name, text) => {
+      const snippet = readFileSync(
+        new URL(`../extract/__fixtures__/code-editor-${name}.html`, import.meta.url),
+        'utf8',
+      );
+      const html = `<main><article><p>${article}</p></article></main><script>
+      document.querySelector('article').insertAdjacentHTML('beforeend', ${JSON.stringify(snippet)});
+      </script>`;
+      const browser = await chromium.connect(endpoint);
+      try {
+        const result = await renderPage(
+          browser,
+          `${url}/editor`,
+          AbortSignal.timeout(20_000),
+          async () => ({
+            ok: true,
+            status: 200,
+            finalUrl: `${url}/editor`,
+            bytes: Buffer.from(html),
+            contentType: 'text/html',
+          }),
+        );
+        const { document } = parseHTML(result.reader?.contentHtml ?? '');
+        expect(document.querySelectorAll('pre > code')).toHaveLength(1);
+        expect(document.querySelector('code')?.textContent).toBe(text);
+        expect(result.text).toContain(text.replace(/[ \t]+/g, ' '));
+        expect(result.text).not.toMatch(/silo-editor-|Copy sample|Duplicate/);
+        expect(result.diagnostics.errors).toEqual([]);
+      } finally {
+        await browser.close();
+      }
+    },
+    25_000,
+  );
+
+  it.each([false, true])(
+    'restores editor text on the host without reparsing in the page (Trusted Types: %s)',
+    async (trustedTypes) => {
+      const browser = await chromium.connect(endpoint);
+      const newContext = browser.newContext.bind(browser);
+      const requests: string[] = [];
+      vi.spyOn(browser, 'newContext').mockImplementation(async (options) => {
+        const context = await newContext(options);
+        const newPage = context.newPage.bind(context);
+        vi.spyOn(context, 'newPage').mockImplementation(async () => {
+          const page = await newPage();
+          page.on('request', (request) => requests.push(request.url()));
+          const evaluate = page.evaluate.bind(page);
+          vi.spyOn(page, 'evaluate').mockImplementation(async (expression) => {
+            if (typeof expression === 'string' && expression.startsWith('(() =>')) {
+              await evaluate(`(() => {
+              const Original = window.Defuddle;
+              window.Defuddle = class extends Original {
+                parse() {
+                  const result = super.parse();
+                  result.content += '<img src="/restore-only.png">';
+                  if (${trustedTypes}) {
+                    const meta = document.createElement('meta');
+                    meta.httpEquiv = 'Content-Security-Policy';
+                    meta.content = "require-trusted-types-for 'script'; trusted-types 'none'";
+                    document.head.append(meta);
+                  } else {
+                    Object.defineProperty(Element.prototype, 'innerHTML', {
+                      set() { throw new Error('publisher-page-reparse'); },
+                    });
+                  }
+                  return result;
+                }
+              };
+            })()`);
+            }
+            return evaluate(expression);
+          });
+          return page;
+        });
+        return context;
+      });
+      try {
+        const html = `<article><p>${article}</p><div class="cm-editor"><div class="cm-content"><div class="cm-line">  &lt;img src="/literal.png"&gt;</div><div class="cm-line"><br></div><div class="cm-line">\tfinish();</div></div></div></article>`;
+        const result = await renderPage(
+          browser,
+          `${url}/restore`,
+          AbortSignal.timeout(20_000),
+          async () => ({
+            ok: true,
+            status: 200,
+            finalUrl: `${url}/restore`,
+            bytes: Buffer.from(html),
+            contentType: 'text/html',
+          }),
+        );
+        const { document } = parseHTML(result.reader?.contentHtml ?? '');
+        expect(document.querySelector('code')?.textContent).toBe(
+          '  <img src="/literal.png">\n\n\tfinish();',
+        );
+        expect(result.text).not.toContain('silo-editor-');
+        expect(document.querySelector('img')?.getAttribute('src')).toBe(`${url}/restore-only.png`);
+        expect(requests.filter((request) => request.includes('.png'))).toEqual([]);
+      } finally {
+        await browser.close();
+      }
+    },
+    25_000,
+  );
 
   it('blocks loopback, metadata, WebSockets and POST before they reach their targets', async () => {
     const result = await reader.run(`${url}/security`);
