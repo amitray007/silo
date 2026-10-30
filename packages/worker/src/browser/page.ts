@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import type { BrowserContextOptions } from 'playwright-core';
 import { prepareBoxSpacing } from '../extract/box-spacing.js';
 import { isChallengePage } from '../extract/challenge-page.js';
+import { prepareCodeEditors, restoreCodeEditors } from '../extract/code-editors.js';
 import type { PageContent } from '../extract/reader-page.js';
 import { sanitizeRenderedPage } from '../extract/reader-worker.js';
 import { prepareCodeLanguages, prepareGists } from '../extract/rich-blocks.js';
@@ -58,6 +59,7 @@ export const PAGE_PRELUDE = 'var __name = (target) => target;';
 // A string keeps this code independent of transpiler helpers in Node's TypeScript loader.
 const EXTRACT = String.raw`(() => {
   ${PAGE_PRELUDE}
+  const codeEditors = (${prepareCodeEditors.toString()})(document, true);
   (${prepareGists.toString()})(document);
   (${prepareCodeLanguages.toString()})(document);
   // Match Defuddle 0.19.6's small-image rule without broken-image layout sizes.
@@ -130,7 +132,10 @@ const EXTRACT = String.raw`(() => {
   }).parse();
   if (typeof content !== 'string' || content.length > ${MAX_CONTENT_BYTES} ||
       new TextEncoder().encode(content).byteLength > ${MAX_CONTENT_BYTES}) return null;
-  return { content, wordCount: typeof wordCount === 'number' ? wordCount : 0 };
+  const restored = document.createElement('div');
+  restored.innerHTML = content;
+  (${restoreCodeEditors.toString()})(restored, codeEditors);
+  return { content: restored.innerHTML, wordCount: typeof wordCount === 'number' ? wordCount : 0 };
 })()`;
 
 function sanitizeResult(value: unknown, url: string, signal: AbortSignal): Promise<PageContent> {

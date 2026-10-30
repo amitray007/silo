@@ -1,6 +1,7 @@
 import { isReaderImageUrl, READER_HTML_MAX_BYTES, type ReaderContent } from '@silo/core/capture';
 import createDOMPurify from 'dompurify';
 import { JSDOM, VirtualConsole } from 'jsdom';
+import { readerText } from './reader-text.js';
 import { enrichRichBlocks } from './rich-blocks.js';
 
 const MATH_TAGS = [
@@ -386,7 +387,7 @@ export async function sanitizeRenderedContent(
     if (!reader) return {};
     const container = dom.window.document.createElement('div');
     container.innerHTML = reader.contentHtml;
-    return { reader, text: (container.textContent ?? '').replace(/\s+/g, ' ').trim() };
+    return { reader, text: readerText(container) };
   } finally {
     dom.window.close();
   }
