@@ -55,6 +55,21 @@ function menuAction(
   }
   return undefined;
 }
+function readerAction(path: string, method: string | undefined, posts: LinkJson[]) {
+  if (method !== 'POST') return undefined;
+  if (path.endsWith('/reader/refresh')) {
+    return json({
+      contentHtml: '<p>Refreshed feed Reader.</p>',
+      contentImages: [],
+      capturedAt: new Date().toISOString(),
+    });
+  }
+  if (!path.endsWith('/retry')) return undefined;
+  const post = posts.find((post) => path === `/api/links/${post.id}/retry`);
+  if (!post) return json({ error: 'not_found' }, 404);
+  post.captureStatus = 'enriching';
+  return json({ link: { ...post } });
+}
 function restoredFeedTitle(title: string | null) {
   return title ?? feed.title;
 }
@@ -74,6 +89,7 @@ function mount(options: MenuOptions = {}, route = '/feeds/feed') {
       archivedAt: today.toISOString(),
     }),
   ];
+  const status = options.status ?? 'active';
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://silo.test');
     const path = url.pathname;
@@ -83,9 +99,11 @@ function mount(options: MenuOptions = {}, route = '/feeds/feed') {
       feedTitle = restoredFeedTitle(body.title);
       return json({ feed: { ...feed, title: feedTitle } });
     }
-    const action = menuAction(path, method, options, () => {
-      subscribed = false;
-    });
+    const action =
+      readerAction(path, method, posts) ??
+      menuAction(path, method, options, () => {
+        subscribed = false;
+      });
     if (action) return action;
 
     if (method === 'POST' && path.startsWith('/api/feeds/feed/posts/')) {
@@ -94,7 +112,7 @@ function mount(options: MenuOptions = {}, route = '/feeds/feed') {
     const currentFeed = {
       ...feed,
       title: feedTitle,
-      status: options.status ?? 'active',
+      status,
       lastError: options.lastError ?? null,
       inboxCount: posts.filter((post) => !post.archivedAt).length,
     };
@@ -412,4 +430,42 @@ it('renames a feed from its sidebar keyboard menu and clears an owner title', as
     '/api/feeds/feed',
     expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: null }) }),
   );
+});
+
+it('offers refresh and enrichment in the feed row and Reader menus without library writes', async () => {
+  const { fetchMock } = mount();
+  await screen.findByText('Today post');
+  fireEvent.click(list().getAllByRole('button', { name: 'More actions' })[0] as HTMLElement);
+  const rowMenu = await screen.findByRole('menu', { name: 'Link actions' });
+  expect(within(rowMenu).getByRole('menuitem', { name: 'Refresh reader' })).toBeDefined();
+  for (const name of ['Edit', 'Tags', 'Move to trash']) {
+    expect(within(rowMenu).queryByRole('menuitem', { name })).toBeNull();
+  }
+  fireEvent.click(within(rowMenu).getByRole('menuitem', { name: 'Refresh reader' }));
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, init]) => String(url) === '/api/links/a/reader/refresh' && init?.method === 'POST',
+      ),
+    ).toBe(true),
+  );
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('menu', { name: 'Link actions' })).toBeNull());
+  fireEvent.click(list().getByText('Today post'));
+  await reader().findByRole('heading', { name: 'Today post' });
+  fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
+  const readerMenu = await screen.findByRole('menu', { name: 'Link actions' });
+  expect(within(readerMenu).getByRole('menuitem', { name: 'Refresh reader' })).toBeDefined();
+  for (const name of ['Edit', 'Tags', 'Move to trash']) {
+    expect(within(readerMenu).queryByRole('menuitem', { name })).toBeNull();
+  }
+  fireEvent.click(within(readerMenu).getByRole('menuitem', { name: 'Enrich' }));
+  await waitFor(() => expect(list().getByText('Capturing')).toBeDefined());
+  expect(
+    fetchMock.mock.calls.some(
+      ([url, init]) => String(url) === '/api/links/a/retry' && init?.method === 'POST',
+    ),
+  ).toBe(true);
+  fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
+  expect(await screen.findByRole('menuitem', { name: 'Re-enrich' })).toBeDefined();
 });

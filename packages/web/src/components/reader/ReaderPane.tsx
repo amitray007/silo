@@ -163,7 +163,7 @@ function ReaderMore({
                 Reload page
               </MenuAction>
             )}
-            {(!trashed || (original && original.mode !== 'player')) && (
+            {((!trashed && !actions.feedPost) || (original && original.mode !== 'player')) && (
               <div className="silo-menu-separator" />
             )}
             {!trashed && link ? (
@@ -543,18 +543,16 @@ export function ReaderPane({
                   />
                 </div>
               )}
-              {!isFeedPost(link) && (
-                <ReaderMore
-                  key={selectedId}
-                  actions={actions}
-                  disabled={!link}
-                  trashed={trashed}
-                  link={link}
-                  original={shownOriginal}
-                  open={openMenu === 'more'}
-                  setOpen={(open) => setOpenMenu(open ? 'more' : null)}
-                />
-              )}
+              <ReaderMore
+                key={selectedId}
+                actions={actions}
+                disabled={!link}
+                trashed={trashed}
+                link={link}
+                original={shownOriginal}
+                open={openMenu === 'more'}
+                setOpen={(open) => setOpenMenu(open ? 'more' : null)}
+              />
             </div>
           </>
         )}

@@ -258,25 +258,23 @@ function RowActions({
           <ReaderIcon name="trash" />
         </button>
       )}
-      {!feedPost && (
-        <button
-          type="button"
-          className="silo-rowmore silo-reader-iconbtn"
-          tabIndex={actionTabIndex}
-          title="More actions"
-          aria-label="More actions"
-          aria-haspopup="true"
-          aria-expanded={menuOpen}
-          onMouseDown={(event) => event.stopPropagation()}
-          onClick={(event) => {
-            event.stopPropagation();
-            onMenu?.();
-            toggleMenu();
-          }}
-        >
-          <ReaderIcon name="more" />
-        </button>
-      )}
+      <button
+        type="button"
+        className="silo-rowmore silo-reader-iconbtn"
+        tabIndex={actionTabIndex}
+        title="More actions"
+        aria-label="More actions"
+        aria-haspopup="true"
+        aria-expanded={menuOpen}
+        onMouseDown={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          onMenu?.();
+          toggleMenu();
+        }}
+      >
+        <ReaderIcon name="more" />
+      </button>
     </span>
   );
 }

@@ -51,9 +51,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
         else trash.mutate(link.id);
       }}
       menuOpen={menuOpen}
-      toggleMenu={() => {
-        if (!isFeedPost(link)) toggleMenu(link.id);
-      }}
+      toggleMenu={() => toggleMenu(link.id)}
       menu={(anchor) =>
         menuOpen && (
           <RowPopover anchor={anchor} onDismiss={closeMenu}>

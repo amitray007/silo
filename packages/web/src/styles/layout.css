@@ -2376,7 +2376,7 @@ div.silo-reader-notecard {
     pointer-events: auto;
     background: linear-gradient(to right, transparent, var(--bg) 40px);
   }
-  .silo-row-actions[data-feed="true"] > :not(:first-child) {
+  .silo-row-actions[data-feed="true"] > :not(:first-child):not(.silo-rowmore) {
     display: none;
   }
   .silo-row-actions[data-feed="true"] .silo-reader-iconbtn {

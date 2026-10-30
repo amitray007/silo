@@ -10,6 +10,8 @@ const h = setupPgHarness('silo_api_feed_writes', async () => ({
 afterEach(() => {
   vi.unstubAllEnvs();
   h.mod().core.setFeedResolver(undefined);
+  h.mod().core.setReaderRefresher(undefined);
+  h.mod().core.resetEnrichmentEnqueuer();
 });
 
 async function seedPost(trashed = false) {
@@ -116,6 +118,50 @@ describe('feed posts reject library API writes', () => {
         message: expect.any(String),
       });
       expect(await state(id)).toEqual(before);
+    },
+  );
+  it.each(['link', 'feed_media'])(
+    'allows Reader refresh and retry for a %s feed post',
+    async (kind) => {
+      const { app, core, pool } = h.mod();
+      const { id, feedId } = await seedPost();
+      if (kind === 'feed_media') {
+        await pool.query('update links set source_kind = $2, source_data = $3 where id = $1', [
+          id,
+          kind,
+          { kind, content: '<p>Publisher show notes.</p>' },
+        ]);
+      }
+      const reader = { contentHtml: '<p>Refreshed feed content.</p>', contentImages: [] };
+      const extract = vi.fn(async () => ({
+        status: 'reader' as const,
+        reader,
+        text: 'Refreshed feed content.',
+      }));
+      core.setReaderRefresher(extract);
+      const response = await app.request(`/api/links/${id}/reader/refresh`, { method: 'POST' });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ ...reader, capturedAt: expect.any(String) });
+      expect(await core.getStoredReader(id)).toMatchObject(reader);
+      expect(extract).toHaveBeenCalledWith(
+        expect.objectContaining({ id, sourceKind: kind }),
+        expect.any(AbortSignal),
+      );
+      const enqueue = vi.fn(async () => {});
+      core.setEnrichmentEnqueuer(enqueue);
+      const retry = await app.request(`/api/links/${id}/retry`, { method: 'POST' });
+      expect(retry.status).toBe(200);
+      expect(await retry.json()).toMatchObject({
+        link: { id, feedId, captureStatus: 'enriching' },
+      });
+      expect(enqueue).toHaveBeenCalledOnce();
+      expect(await core.getById(id)).toMatchObject({
+        feedId,
+        sourceKind: kind,
+        title: 'Original',
+        notes: 'Original note',
+        tags: [id],
+      });
     },
   );
   it('includes membership on detail and pond reads', async () => {

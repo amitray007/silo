@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useRefreshReader, useRetryCapture, useTrashLink } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import { layoutMedia } from '../lib/breakpoints';
+import { isFeedPost } from '../lib/isFeedPost';
 import { deriveTitleFromUrl } from '../lib/url';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
@@ -37,6 +38,7 @@ export function LinkMenuActions({
   trashed?: boolean;
 }) {
   const { openEdit } = useRowMenu();
+  const libraryPost = !isFeedPost(link);
   const [tagsOpen, setTagsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
   const trash = useTrashLink();
@@ -111,7 +113,7 @@ export function LinkMenuActions({
           </div>,
           document.body,
         )}
-      {showEdit && (
+      {showEdit && libraryPost && (
         <MenuAction
           icon={<ReaderIcon name="edit" />}
           shortcut="e"
@@ -123,46 +125,48 @@ export function LinkMenuActions({
           Edit
         </MenuAction>
       )}
-      {/* biome-ignore lint/a11y/noStaticElementInteractions: hover supplements the native Tags button. */}
-      <div
-        className="silo-tags-anchor"
-        onMouseEnter={() => {
-          if (!matchMedia(layoutMedia.phone).matches) keep();
-        }}
-        onMouseLeave={() => {
-          if (!matchMedia(layoutMedia.phone).matches) hide();
-        }}
-      >
-        <button
-          type="button"
-          className="silo-menu-item"
-          role="menuitem"
-          aria-haspopup="menu"
-          aria-expanded={tagsOpen}
-          onClick={keep}
+      {libraryPost && (
+        /* biome-ignore lint/a11y/noStaticElementInteractions: hover supplements the native Tags button. */
+        <div
+          className="silo-tags-anchor"
+          onMouseEnter={() => {
+            if (!matchMedia(layoutMedia.phone).matches) keep();
+          }}
+          onMouseLeave={() => {
+            if (!matchMedia(layoutMedia.phone).matches) hide();
+          }}
         >
-          <span className="silo-menu-icon">
-            <ReaderIcon name="hash" />
-          </span>
-          <span>Tags</span>
-          {tags.tags.length > 0 && <span className="silo-tag-count">{tags.tags.length}</span>}
-          <span className="silo-menu-chevron">
-            <ReaderIcon name="right" />
-          </span>
-        </button>
-        <MenuPresence>
-          {tagsOpen && (
-            <TagPicker
-              membership={tags}
-              link={link}
-              className="silo-tags-flyout"
-              onClose={() => setTagsOpen(false)}
-              onMouseEnter={keep}
-              onMouseLeave={hide}
-            />
-          )}
-        </MenuPresence>
-      </div>
+          <button
+            type="button"
+            className="silo-menu-item"
+            role="menuitem"
+            aria-haspopup="menu"
+            aria-expanded={tagsOpen}
+            onClick={keep}
+          >
+            <span className="silo-menu-icon">
+              <ReaderIcon name="hash" />
+            </span>
+            <span>Tags</span>
+            {tags.tags.length > 0 && <span className="silo-tag-count">{tags.tags.length}</span>}
+            <span className="silo-menu-chevron">
+              <ReaderIcon name="right" />
+            </span>
+          </button>
+          <MenuPresence>
+            {tagsOpen && (
+              <TagPicker
+                membership={tags}
+                link={link}
+                className="silo-tags-flyout"
+                onClose={() => setTagsOpen(false)}
+                onMouseEnter={keep}
+                onMouseLeave={hide}
+              />
+            )}
+          </MenuPresence>
+        </div>
+      )}
       <MenuAction
         icon={<ReaderIcon name="refresh" />}
         onClick={() => {
@@ -172,20 +176,24 @@ export function LinkMenuActions({
       >
         {link.captureStatus === 'enriching' ? 'Re-enrich' : 'Enrich'}
       </MenuAction>
-      <div className="silo-menu-separator" />
-      <MenuAction
-        icon={<ReaderIcon name="trash" />}
-        danger
-        shortcut="⌫"
-        disabled={busy}
-        onClick={() => {
-          closeMenu();
-          if (onTrash) onTrash();
-          else trash.mutate(link.id);
-        }}
-      >
-        Move to trash
-      </MenuAction>
+      {libraryPost && (
+        <>
+          <div className="silo-menu-separator" />
+          <MenuAction
+            icon={<ReaderIcon name="trash" />}
+            danger
+            shortcut="⌫"
+            disabled={busy}
+            onClick={() => {
+              closeMenu();
+              if (onTrash) onTrash();
+              else trash.mutate(link.id);
+            }}
+          >
+            Move to trash
+          </MenuAction>
+        </>
+      )}
     </>
   );
 }

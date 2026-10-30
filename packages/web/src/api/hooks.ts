@@ -828,9 +828,11 @@ export function useRetryCapture(id: string, baselineTitle?: string) {
     onError: (_error, _input, context) => {
       if (context) restoreTitleReveal(id, context.pending, context.previous);
     },
-    // A retry only resets this link's own captureStatus — never tag
-    // membership or live/trash counts.
-    onSettled: () => invalidateLinkQueries(queryClient),
+    // Both collections need the pending status so their polling can follow the run.
+    onSettled: () => {
+      invalidateLinkQueries(queryClient);
+      void queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
+    },
   });
 }
 
