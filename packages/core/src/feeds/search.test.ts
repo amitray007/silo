@@ -64,6 +64,18 @@ describe('feed search on real Postgres', () => {
       ]),
     );
     expect((await core.searchFeedPosts(b, 'rchid')).results).toHaveLength(3);
+    await h
+      .rawDb()
+      .execute(
+        sql`update links set extracted_text = 'A detailed chrysanthemum article in the feed body.' where id = ${archived.id}`,
+      );
+    const bodyMatch = await core.searchFeedPosts(a, 'chrysanthemum');
+    expect(bodyMatch.results).toHaveLength(1);
+    expect(bodyMatch.results[0]).toMatchObject({
+      id: archived.id,
+      snippet: expect.stringContaining('chrysanthemum'),
+    });
+    expect(bodyMatch.results[0]).not.toHaveProperty('extractedText');
     expect((await core.search('orchid')).results.map((p) => p.id)).toEqual([library.id]);
     expect((await core.searchFeedPosts(randomUUID(), 'orchid')).results).toEqual([]);
     expect((await core.searchFeedPosts(a, '\u0000')).results).toEqual([]);
