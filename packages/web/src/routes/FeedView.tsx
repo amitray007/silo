@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useId } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router';
 import type { ApiError } from '../api/client';
 import { useFeed } from '../api/hooks';
@@ -12,21 +12,14 @@ import { EmptyState, ErrorState } from './shared/ListStates';
 import { useListView } from './shared/useListView';
 
 function FeedHeading({ title }: { title: string }) {
-  const [expanded, setExpanded] = useState(false);
   return (
     <span className="silo-feed-heading">
       <Link to="/feeds" className="silo-feed-breadcrumb">
         Feeds /
       </Link>
-      <button
-        type="button"
-        className="silo-feed-title"
-        title={title}
-        aria-expanded={expanded}
-        onClick={() => setExpanded(!expanded)}
-      >
-        <span data-expanded={expanded}>{title}</span>
-      </button>
+      <span className="silo-feed-title" title={title}>
+        {title}
+      </span>
     </span>
   );
 }
@@ -61,6 +54,28 @@ export function FeedView() {
         headerSlot={feed.data ? <FeedMenu key={id} feed={feed.data.feed} /> : null}
         title={<FeedHeading key={id} title={feed.data?.feed.title ?? 'Feed'} />}
         count={feed.data ? <FeedCount feed={feed.data.feed} tab={tab} /> : undefined}
+        headerBelow={
+          <div className="silo-feed-tabs">
+            <SegmentTabs
+              id={tabsId}
+              tab={tab}
+              disabled={false}
+              label="Feed posts"
+              tabs={[
+                { value: 'inbox', label: 'Inbox' },
+                { value: 'archive', label: 'Archive' },
+              ]}
+              setTab={(next) => {
+                setParams((current) => {
+                  const params = new URLSearchParams(current);
+                  params.set('tab', next);
+                  params.delete('link');
+                  return params;
+                });
+              }}
+            />
+          </div>
+        }
         fadeKey={id}
       >
         {feed.data && feed.data.feed.status !== 'active' && (
@@ -71,26 +86,6 @@ export function FeedView() {
             {feed.data.feed.lastError && <> {feed.data.feed.lastError}</>}
           </p>
         )}
-        <div className="silo-feed-tabs">
-          <SegmentTabs
-            id={tabsId}
-            tab={tab}
-            disabled={false}
-            label="Feed posts"
-            tabs={[
-              { value: 'inbox', label: 'Inbox' },
-              { value: 'archive', label: 'Archive' },
-            ]}
-            setTab={(next) => {
-              setParams((current) => {
-                const params = new URLSearchParams(current);
-                params.set('tab', next);
-                params.delete('link');
-                return params;
-              });
-            }}
-          />
-        </div>
         <div role="tabpanel" id={`${tabsId}-panel`} aria-labelledby={`${tabsId}-${tab}`}>
           {feed.isError ? (
             <ErrorState error={feed.error as ApiError} />

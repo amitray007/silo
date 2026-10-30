@@ -383,12 +383,11 @@ it('shows the all-feeds empty state and keeps Add feed available', async () => {
     within(screen.getByRole('region', { name: 'Feeds' })).getByRole('button', { name: 'Add feed' }),
   ).toBeDefined();
 });
-it('exposes the complete feed title and allows the header title to expand', async () => {
+it('keeps the complete feed title on one ellipsized line', async () => {
   mount();
-  const title = await screen.findByRole('button', { name: 'Publisher' });
-  expect(title.getAttribute('aria-expanded')).toBe('false');
-  fireEvent.click(title);
-  expect(title.getAttribute('aria-expanded')).toBe('true');
+  const title = await screen.findByText('Publisher', { selector: '.silo-feed-title' });
+  expect(title.getAttribute('title')).toBe('Publisher');
+  expect(title.closest('header')?.querySelector('[role="tablist"]')).not.toBeNull();
 });
 
 it('renames a feed from its sidebar keyboard menu and clears an owner title', async () => {
@@ -399,7 +398,7 @@ it('renames a feed from its sidebar keyboard menu and clears an owner title', as
   const dialog = screen.getByRole('dialog', { name: 'Rename feed' });
   fireEvent.change(within(dialog).getByLabelText('Name'), { target: { value: 'Owner title' } });
   fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }));
-  await screen.findByRole('button', { name: 'Owner title' });
+  await screen.findByText('Owner title', { selector: '.silo-feed-title' });
   expect(fetchMock).toHaveBeenCalledWith(
     '/api/feeds/feed',
     expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: 'Owner title' }) }),
@@ -408,7 +407,7 @@ it('renames a feed from its sidebar keyboard menu and clears an owner title', as
   fireEvent.click(await screen.findByRole('menuitem', { name: 'Rename' }));
   fireEvent.change(screen.getByLabelText('Name'), { target: { value: '' } });
   fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-  await screen.findByRole('button', { name: 'Publisher' });
+  await screen.findByText('Publisher', { selector: '.silo-feed-title' });
   expect(fetchMock).toHaveBeenCalledWith(
     '/api/feeds/feed',
     expect.objectContaining({ method: 'PATCH', body: JSON.stringify({ title: null }) }),

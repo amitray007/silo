@@ -987,7 +987,9 @@ select {
 
 .silo-feed-tabs {
   display: flex;
-  padding: var(--s2) var(--s3);
+  grid-column: 1 / -1;
+  /* Right edge matches the 24px left inset; the header itself pads 6px on the right. */
+  margin-right: 18px;
 }
 
 .silo-feed-warning {
@@ -1060,15 +1062,19 @@ select {
   }
 }
 .silo-panehead:has(.silo-feed-heading) {
+  /* Title row: title (shrinks first), count, spacer, menu. The tabs take a full row below. */
+  display: grid;
+  grid-template-columns: minmax(0, max-content) auto 1fr auto;
+  align-items: center;
   height: auto;
-  min-height: 44px;
-  padding-block: 8px;
-  gap: 8px;
+  padding-block: 0 12px;
+  row-gap: 0;
 }
 .silo-panehead:has(.silo-feed-heading) h1 {
   min-width: 0;
-  white-space: normal;
-  overflow: visible;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
 }
 .silo-feed-heading {
   line-height: 20px;
@@ -1084,23 +1090,9 @@ select {
 }
 .silo-feed-title {
   min-width: 0;
-  border: 0;
-  padding: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.silo-feed-title > span {
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
   overflow: hidden;
-  overflow-wrap: anywhere;
-}
-.silo-feed-title > span[data-expanded="true"] {
-  -webkit-line-clamp: unset;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 .silo-rename-form {

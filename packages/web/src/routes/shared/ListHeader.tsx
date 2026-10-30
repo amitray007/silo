@@ -7,6 +7,7 @@ export function ContentFrame({
   count,
   captureError,
   headerSlot,
+  headerBelow,
   children,
   fadeKey,
 }: {
@@ -14,6 +15,8 @@ export function ContentFrame({
   count?: ReactNode;
   captureError?: string;
   headerSlot: ReactNode;
+  /** Full-width row inside the header, under the title. */
+  headerBelow?: ReactNode;
   children: ReactNode;
   /**
    * Keys the `.silo-route-fade` wrapper so its `@starting-style` entrance
@@ -32,6 +35,7 @@ export function ContentFrame({
         title={title}
         collection={title === 'Library'}
         count={count}
+        below={headerBelow}
         {...(captureError !== undefined ? { captureError } : {})}
       >
         {headerSlot}

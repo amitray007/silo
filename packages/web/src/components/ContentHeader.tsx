@@ -22,6 +22,8 @@ interface ContentHeaderProps {
   captureError?: string;
   /** Right-aligned slot — reserved for the omnibar (V3-2). Renders nothing when omitted (TrashView/SettingsView pass no children — a phantom placeholder box there would be decorative chrome that does nothing, violating "silence means complete"). */
   children?: ReactNode;
+  /** A full-width row under the title, above the header rule (the feed's Inbox / Archive tabs). */
+  below?: ReactNode;
 }
 
 /**
@@ -116,6 +118,7 @@ export function ContentHeader({
   count,
   captureError,
   children,
+  below,
   collection = false,
 }: ContentHeaderProps) {
   return (
@@ -133,6 +136,7 @@ export function ContentHeader({
         </span>
       )}
       {children}
+      {below}
     </header>
   );
 }
