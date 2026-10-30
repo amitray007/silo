@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { JSDOM } from 'jsdom';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { prepareCodeEditors } from './code-editors.js';
 import { extractPageContent } from './reader-page.js';
 
@@ -21,6 +21,63 @@ const examples = [
 ] as const;
 
 describe('code editor normalization', () => {
+  it.each([true, false])(
+    'skips visibility and diff checks for plain tables and empty editors (computed style: %s)',
+    (useComputedStyle) => {
+      const css = Array.from({ length: 2_000 }, (_, i) => `.rule-${i} { color: red; }`).join('\n');
+      const dom = new JSDOM(
+        `<style>${css}</style>${'<div>'.repeat(6)}${'<table><tr><td>Data</td></tr></table>'.repeat(500)}${'<div class="cm-editor"></div>'.repeat(50)}${'</div>'.repeat(6)}`,
+      );
+      const computed = vi.spyOn(dom.window, 'getComputedStyle');
+      const matches = vi.spyOn(dom.window.Element.prototype, 'matches');
+      const query = vi.spyOn(dom.window.Element.prototype, 'querySelector');
+      const queryAll = vi.spyOn(dom.window.Element.prototype, 'querySelectorAll');
+      try {
+        const before = dom.window.document.body.innerHTML;
+        prepareCodeEditors(dom.window.document, false, useComputedStyle);
+        expect(dom.window.document.body.innerHTML).toBe(before);
+        expect(computed).not.toHaveBeenCalled();
+        expect(matches).not.toHaveBeenCalledWith('[hidden], [aria-hidden="true"]');
+        expect(query).not.toHaveBeenCalledWith(
+          '.blob-code-addition, .blob-code-deletion, .blob-code-hunk, [data-code-marker]',
+        );
+        expect(queryAll).not.toHaveBeenCalledWith('tr');
+
+        // A real code table must still reach the visibility and diff checks.
+        dom.window.document.body.innerHTML =
+          '<table><tr><td class="blob-num">1</td><td class="blob-code">source</td></tr></table>';
+        prepareCodeEditors(dom.window.document, false, useComputedStyle);
+        expect(dom.window.document.querySelector('code')?.textContent).toBe('source');
+        expect(matches).toHaveBeenCalledWith('[hidden], [aria-hidden="true"]');
+        expect(queryAll).toHaveBeenCalledWith('tr');
+        expect(computed.mock.calls.length > 0).toBe(useComputedStyle);
+      } finally {
+        computed.mockRestore();
+        matches.mockRestore();
+        query.mockRestore();
+        queryAll.mockRestore();
+        dom.window.close();
+      }
+    },
+  );
+
+  it.each([true, false])('uses stylesheet visibility only when enabled: %s', (useComputedStyle) => {
+    const dom = new JSDOM(
+      '<style>.inactive { display: none; }</style><div class="inactive"><div class="cm-editor"><div class="cm-line">editor</div></div><table><tr><td class="blob-num">1</td><td class="blob-code">table</td></tr></table></div>',
+    );
+    const computed = vi.spyOn(dom.window, 'getComputedStyle');
+    try {
+      prepareCodeEditors(dom.window.document, false, useComputedStyle);
+      expect(dom.window.document.querySelectorAll('pre > code')).toHaveLength(
+        useComputedStyle ? 0 : 2,
+      );
+      expect(computed.mock.calls.length > 0).toBe(useComputedStyle);
+    } finally {
+      computed.mockRestore();
+      dom.window.close();
+    }
+  });
+
   it('keeps real Gist blank rows without adding extra lines', async () => {
     const html = readFileSync(
       new URL('./__fixtures__/code-editor-gist.html', import.meta.url),
@@ -160,7 +217,7 @@ describe('code editor normalization', () => {
     }
   });
 
-  it.each(['hidden', 'style="display:none"', 'aria-hidden="true"'])(
+  it.each(['hidden', 'style="display:none"', 'style="visibility:hidden"', 'aria-hidden="true"'])(
     'omits an editor hidden by %s, including inactive panels',
     async (attribute) => {
       const hidden = `<div class="cm-editor" ${attribute}><div class="cm-line">inactive sample</div></div>`;

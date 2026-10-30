@@ -4,7 +4,11 @@ export interface EditorCode {
 }
 
 /** Standalone: injected into rendered pages as well as used on the static DOM. */
-export function prepareCodeEditors(document: Document, protect = false): Map<string, EditorCode> {
+export function prepareCodeEditors(
+  document: Document,
+  protect = false,
+  useComputedStyle = true,
+): Map<string, EditorCode> {
   const originals = new Map<string, EditorCode>();
   const editors = '.cm-editor, .cm-content, .CodeMirror, .monaco-editor';
   const chrome =
@@ -71,22 +75,27 @@ export function prepareCodeEditors(document: Document, protect = false): Map<str
     for (let node: Element | null = element; node; node = node.parentElement) {
       if (node.matches('[hidden], [aria-hidden="true"]')) return true;
       const style = (node as HTMLElement).style;
-      if (style?.display === 'none' || style?.visibility === 'hidden') return true;
-      const computed = document.defaultView?.getComputedStyle?.(node);
-      if (computed?.display === 'none' || computed?.visibility === 'hidden') return true;
+      if (hiddenStyle(style)) return true;
+      const computed = useComputedStyle
+        ? document.defaultView?.getComputedStyle?.(node)
+        : undefined;
+      if (hiddenStyle(computed)) return true;
     }
     return false;
+  }
+  function hiddenStyle(style: CSSStyleDeclaration | undefined): boolean {
+    return style?.display === 'none' || style?.visibility === 'hidden';
   }
 
   function normalizeEditor(editor: Element): void {
     if (!editor.isConnected || editor.closest('pre') || editor.querySelector('pre > code')) return;
+    const content = editor.querySelector('.cm-content, .CodeMirror-code, .view-lines') ?? editor;
+    const lines = [...content.querySelectorAll('.cm-line, .CodeMirror-line, .view-line')];
+    if (!lines.length) return;
     if (isHidden(editor)) {
       editor.remove();
       return;
     }
-    const content = editor.querySelector('.cm-content, .CodeMirror-code, .view-lines') ?? editor;
-    const lines = [...content.querySelectorAll('.cm-line, .CodeMirror-line, .view-line')];
-    if (!lines.length) return;
     if (editor.matches('.monaco-editor'))
       lines.sort(
         (a, b) =>
@@ -98,12 +107,16 @@ export function prepareCodeEditors(document: Document, protect = false): Map<str
   }
 
   function normalizeTable(table: Element): void {
-    if (table.closest('pre') || isHidden(table) || isDiff(table)) return;
+    if (table.closest('pre')) return;
     const cells = ownCells(table, 'td.blob-code');
     if (cells.length && ownCells(table, 'td.blob-num').length) {
+      if (isDiff(table) || isHidden(table)) return;
       replace(table, cells.map((cell) => codeText(cell, true)).join('\n'), cells[0] ?? table);
       return;
     }
+    normalizeHighlightTable(table);
+  }
+  function normalizeHighlightTable(table: Element): void {
     if (
       !table.matches('.highlighttable, .rouge-table') &&
       !table.closest('.highlight, .highlighter-rouge, .codehilite')
@@ -112,6 +125,7 @@ export function prepareCodeEditors(document: Document, protect = false): Map<str
     const codeCells = ownCells(table, 'td.code, td.rouge-code');
     if (!codeCells.length || !ownCells(table, 'td.gutter, td.rouge-gutter, td.linenos').length)
       return;
+    if (isDiff(table) || isHidden(table)) return;
     replace(
       table,
       codeCells.map((cell) => codeText(cell.querySelector('pre') ?? cell)).join('\n'),

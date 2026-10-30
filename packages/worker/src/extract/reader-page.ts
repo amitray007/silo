@@ -71,7 +71,8 @@ export async function extractPageContent(
 async function extractDocument(dom: JSDOM, url: string): Promise<PageContent> {
   // jsdom repairs malformed HTML (notably the RFC's body/pre nesting). Defuddle's
   // selectors need linkedom; running directly on jsdom hits its selector limit.
-  const codeEditors = prepareCodeEditors(dom.window.document, true);
+  // Static DOMs use explicit visibility hints; jsdom's CSS cascade is too expensive here.
+  const codeEditors = prepareCodeEditors(dom.window.document, true, false);
   prepareBoxSpacing(dom.window.document);
   prepareGists(dom.window.document);
   prepareCodeLanguages(dom.window.document);
