@@ -1,4 +1,4 @@
-import { createServer, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { FeedRow } from '@silo/core';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { safeFetch } from '../fetch/safe-fetch.js';
@@ -18,8 +18,34 @@ const fetcher: FeedFetcher = (url, options) =>
     allowLoopbackForTests: true,
   });
 
+function specialResponse(req: IncomingMessage, res: ServerResponse): boolean {
+  if (req.url?.startsWith('/budget')) {
+    res.writeHead(200, {
+      'content-type': req.url === '/budget' ? 'text/html' : 'application/xml',
+    });
+    res.end(
+      req.url === '/budget'
+        ? `<html>${' '.repeat(4 * 1024 * 1024)}</html>`
+        : 'x'.repeat(19 * 1024 * 1024),
+    );
+    return true;
+  }
+  if (req.url === '/latin1') {
+    res.writeHead(200, { 'content-type': 'application/xml; charset=iso-8859-1' });
+    res.end(Buffer.from(`${feed}<!--${'é'.repeat(11 * 1024 * 1024)}-->`, 'latin1'));
+    return true;
+  }
+  if (req.url === '/utf16') {
+    res.writeHead(200, { 'content-type': 'application/xml; charset=utf-16le' });
+    res.end(Buffer.from(`${feed}<!--${' '.repeat(11 * 1024 * 1024)}-->`, 'utf16le'));
+    return true;
+  }
+  return false;
+}
+
 beforeAll(async () => {
   server = createServer((req, res) => {
+    if (specialResponse(req, res)) return;
     const html = req.url === '/page';
     res.writeHead(200, { 'content-type': html ? 'text/html' : 'application/xml' });
     // No Content-Length: the cap must count bytes read from the stream.
@@ -56,6 +82,35 @@ describe('feed-only streaming body cap', () => {
       kind: 'failure',
       message: 'The feed is too large.',
     });
+  });
+  it('shares a 25 MB wire-byte budget across discovery candidates', async () => {
+    let consumed = 0;
+    let calls = 0;
+    const budgets = new Set();
+    const budgetFetcher: FeedFetcher = async (url, options) => {
+      calls++;
+      const budget = options.bodyBudget;
+      if (!budget) throw new Error('missing shared budget');
+      if (!budgets.has(budget)) {
+        budgets.add(budget);
+        const settle = budget.settle.bind(budget);
+        budget.settle = (reserved, read) => {
+          consumed += read;
+          settle(reserved, read);
+        };
+      }
+      return fetcher(url, options);
+    };
+    expect(await resolveFeed(`${origin}/budget`, budgetFetcher)).toBeNull();
+    expect(budgets.size).toBe(1);
+    expect(calls).toBe(3);
+    expect(consumed).toBe(25 * 1024 * 1024);
+  });
+  it('caps bytes before charset decoding rather than UTF-8 re-encoding', async () => {
+    expect(await resolveFeed(`${origin}/latin1`, fetcher)).toMatchObject({
+      title: 'Large podcast',
+    });
+    expect(await resolveFeed(`${origin}/utf16`, fetcher)).toBeNull();
   });
   it('keeps HTML discovery at 5 MB and keeps the SSRF boundary', async () => {
     expect(await resolveFeed(`${origin}/page`, fetcher)).toBeNull();

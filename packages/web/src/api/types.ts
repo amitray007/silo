@@ -71,7 +71,8 @@ type TweetThreadPost = {
 export type SourceData =
   | {
       kind: 'feed_media';
-      content: string;
+      content?: string;
+      contentBaseUrl?: string;
       description?: string;
       imageUrl?: string;
       enclosureUrl?: string;

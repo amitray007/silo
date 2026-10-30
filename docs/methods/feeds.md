@@ -161,15 +161,22 @@ the latest fetched title. MCP exposes the same operation as `rename_feed`.
   `origin: 'user'`, `published_at`, and the entry title as the first title, then enqueue the
   normal enrichment job. Page posts get metadata, full text, Reader HTML, and the title
   rules (`title_source`, optional AI title when that feature is on) exactly like a pond link.
-- Podcast/media entries use `source_kind = feed_media` when the URL came from an enclosure
-  or an enclosure has an `audio/*` or `video/*` type. Store bounded publisher show notes in
+- Podcast/media entries use `source_kind = feed_media` only when no usable page link or
+  permalink GUID exists and the URL came from an enclosure, attachment, or Media RSS
+  fallback. Store bounded publisher show notes in
   `source_data`; the worker skips the page fetch and uses the existing Reader sanitizer
   thread to produce Reader HTML and searchable text. The item title stays the title;
   `itunes:summary` or the description supplies a plain-text description. Use `itunes:image`
   or a Media RSS thumbnail when present. Keep an Open media link to the enclosure in the
-  Reader, including when the entry URL is a page. A completed media capture has `full`
-  status even for short show notes. Retry, Reader refresh and Home copies use the stored
+  Reader. Resolve relative show-note URLs against the feed site URL, then the feed URL.
+  A completed media capture has `full` status even for short show notes. Retry, Reader refresh and Home copies use the stored
   show notes too. Save to Home copies the source payload, Reader and search text.
+- Migration `0026` sets `media_backfill_done = false` on existing feeds; new feeds default
+  to true. On the first successful modified poll, mark every fallback-only entry as seen
+  without capturing it, then capture ordinary linked entries as usual. Flip the flag in the
+  same transaction. Failed polls and 304 responses keep the flag pending. This prevents
+  old subscriptions from importing their newly visible back catalog. New subscriptions
+  keep the normal Sync recents behavior.
 - Add a `createFeedPost` function in core beside `createLink`; it shares canonicalization
   and enqueue, and dedups within the feed only.
 
@@ -235,9 +242,11 @@ HTTP(S) URL after these fallbacks.
 
 - Feed resolution and polling allow 20 MB, counted while streaming. HTML autodiscovery
   and site metadata probes retain the 5 MB cap. All requests retain the SSRF checks,
-  pinned DNS, redirect validation and timeout. Parsing rejects bodies over 20 MB and
-  DTDs before XML entity expansion. Keep every item identity for the seen-set; do not
-  truncate the feed to the capture batch size. Store at most 1,048,576 characters of raw
+  pinned DNS, redirect validation and timeout. One subscription shares a 25 MB streaming
+  budget across discovery candidates and metadata requests. The byte cap applies before
+  decoding, with no second decoded-string cap. Feedsmith disables XML entity expansion;
+  DTDs and DOCTYPE text in CDATA are accepted. Keep every item identity for the seen-set;
+  do not truncate the feed to the capture batch size. Store at most 1,048,576 characters of raw
   show notes per media item; sanitized Reader HTML keeps its existing 1 MB limit.
 
 - Add `headers?: Record<string, string>` limited to an allowlist (`if-none-match`,

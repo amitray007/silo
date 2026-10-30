@@ -118,6 +118,70 @@ describe('feeds on real Postgres', () => {
     expect((await h.mod().listFeedPosts(feed.id)).links.map((row) => row.id)).toEqual([post?.id]);
   });
 
+  it('baselines all newly identifiable entries once for existing feeds, across failures and 304s', async () => {
+    const { feed, resolved } = await subscribe([]);
+    await h
+      .rawDb()
+      .execute(sql`update feeds set media_backfill_done = false where id = ${feed.id}`);
+    for (const result of [
+      { kind: 'failure', message: 'offline' },
+      { kind: 'not-modified' },
+    ] as const) {
+      await due(feed.id);
+      await h.mod().pollFeed(feed.id, async () => result);
+      const state = await h
+        .rawDb()
+        .execute(sql`select media_backfill_done from feeds where id = ${feed.id}`);
+      expect(state.rows[0]?.media_backfill_done).toBe(false);
+    }
+    const backlog: FeedEntry[] = Array.from({ length: 120 }, (_, i) => ({
+      id: `old-${i}`,
+      url: `https://example.com/old-${i}.mp3`,
+      linkFallback: true,
+      media: { kind: 'feed_media', content: 'notes' },
+    }));
+    // A permalink-only GUID was also invisible to the old parser.
+    backlog.push({ id: 'old-guid', url: 'https://example.com/permalink', linkFallback: true });
+    const article = { id: 'article', url: 'https://example.com/article' };
+    const updated = { ...resolved, entries: [...backlog, article] };
+    await due(feed.id);
+    await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: updated }));
+    expect((await h.mod().listFeedPosts(feed.id)).links.map((post) => post.url)).toEqual([
+      article.url,
+    ]);
+    const seen = await h
+      .rawDb()
+      .execute(sql`select count(*)::int as n from feed_entries where feed_id = ${feed.id}`);
+    expect(seen.rows[0]?.n).toBe(122);
+    const fresh = { ...backlog[0], id: 'fresh', url: 'https://example.com/fresh.mp3' };
+    await due(feed.id);
+    await h.mod().pollFeed(feed.id, async () => ({
+      kind: 'modified',
+      feed: { ...updated, entries: [fresh, ...updated.entries] },
+    }));
+    expect((await h.mod().listFeedPosts(feed.id)).links.map((post) => post.url).sort()).toEqual(
+      [article.url, fresh.url].sort(),
+    );
+  });
+
+  it('new subscriptions still sync the newest fallback entries once', async () => {
+    const entries: FeedEntry[] = Array.from({ length: 30 }, (_, i) => ({
+      id: `${i}`,
+      url: `http://cdn:8080/${i}.mp3`,
+      linkFallback: true,
+      media: { kind: 'feed_media', content: 'notes', imageUrl: 'javascript:evil()' },
+    }));
+    const { feed, resolved } = await subscribe(entries);
+    expect(feed.postCount).toBe(20);
+    await due(feed.id);
+    await h.mod().pollFeed(feed.id, async () => ({ kind: 'modified', feed: resolved }));
+    expect((await h.mod().getFeed(feed.id))?.postCount).toBe(20);
+    expect((await h.mod().listFeedPosts(feed.id)).links[0]?.sourceData).toEqual({
+      kind: 'feed_media',
+      content: 'notes',
+    });
+  });
+
   it('reports unavailable and not found honestly', async () => {
     expect(await h.mod().subscribeFeed({ url: 'https://example.com', syncRecents: true })).toEqual({
       error: 'feeds_unavailable',

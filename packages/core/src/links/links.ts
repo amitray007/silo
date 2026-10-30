@@ -21,7 +21,7 @@ import {
 import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
-import { sourceDataSchema } from './source-data.js';
+import { parseFeedMediaSourceData, sourceDataSchema } from './source-data.js';
 
 // `Db`/`Tx`/`Executor`/`Link` live in ./executor.ts so both ./enqueue.ts and
 // ./pagination.ts can reference them without a cycle through links.ts.
@@ -1409,7 +1409,7 @@ export async function createFeedPost(
         titleSource: 'page',
         publishedAt: input.publishedAt,
         sourceKind: input.media ? 'feed_media' : detectSource(input.url).kind,
-        sourceData: input.media ? sourceDataSchema.parse(input.media) : { kind: 'link' },
+        sourceData: input.media ? parseFeedMediaSourceData(input.media) : { kind: 'link' },
         source: 'feed',
         addedBy: 'user',
       })

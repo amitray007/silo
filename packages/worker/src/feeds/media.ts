@@ -19,7 +19,11 @@ export async function extractFeedMedia(
     .replace(/"/g, '&quot;')
     .replace(/</g, '&lt;');
   const open = target ? `<p><a href="${target}">Open media</a></p>` : '';
-  const page = await sanitizeRenderedPage(`${media.content}${open}`, url, signal);
+  const page = await sanitizeRenderedPage(
+    `${media.content}${open}`,
+    media.contentBaseUrl ?? url,
+    signal,
+  );
   return page.reader
     ? { status: 'reader', reader: page.reader, ...(page.text ? { text: page.text } : {}) }
     : { status: 'no_reader' };

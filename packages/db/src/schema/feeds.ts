@@ -1,4 +1,13 @@
-import { index, integer, pgTable, primaryKey, text, timestamp, uuid } from 'drizzle-orm/pg-core';
+import {
+  boolean,
+  index,
+  integer,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uuid,
+} from 'drizzle-orm/pg-core';
 import { feedFormat, feedStatus } from './enums.js';
 
 export const feeds = pgTable(
@@ -11,6 +20,7 @@ export const feeds = pgTable(
     customTitle: text('custom_title'),
     description: text('description'),
     format: feedFormat('format').notNull(),
+    mediaBackfillDone: boolean('media_backfill_done').notNull().default(true),
     etag: text('etag'),
     lastModified: text('last_modified'),
     pollIntervalSeconds: integer('poll_interval_seconds').notNull().default(3600),

@@ -364,7 +364,15 @@ async function enrichFeedMedia(link: LinkSummaryWithTags): Promise<void> {
   const plan = planEnrich(link);
   const capturedAt = new Date();
   if (plan === null || plan.reader) {
-    const reader = await extractFeedMedia(media, link.url, AbortSignal.timeout(30_000));
+    const reader = await extractFeedMedia(media, link.url, AbortSignal.timeout(30_000)).catch(
+      (error): ReaderExtraction => {
+        console.warn(
+          '[reader] extraction unavailable',
+          error instanceof Error ? error.message : 'reader-failed',
+        );
+        return { status: 'no_reader' };
+      },
+    );
     await recordReader(link.id, reader, capturedAt);
   }
   const metadata = plan === null || plan.metadata;

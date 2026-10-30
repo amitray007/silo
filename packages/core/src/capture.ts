@@ -2,6 +2,7 @@
 import { z } from 'zod';
 
 export { detectSource } from './links/detect-source.js';
+export { httpUrl } from './links/http-url.js';
 
 // 3: the rendered path converts TeX to MathML (full Defuddle bundle).
 export const READER_VERSION = 5;

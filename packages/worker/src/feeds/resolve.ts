@@ -1,5 +1,6 @@
 import { type FeedPollResult, type FeedRow, type ResolvedFeed, setFeedResolver } from '@silo/core';
 import { parseHTML } from 'linkedom';
+import { BodyByteBudget } from '../fetch/body-budget.js';
 import {
   DEFAULT_MAX_BODY_BYTES,
   DEFAULT_TIMEOUT_MS,
@@ -79,15 +80,18 @@ export async function resolveFeed(
 
 function discoveryFetcher(fetcher: FeedFetcher) {
   let remaining = 8;
+  const bodyBudget = new BodyByteBudget(25 * 1024 * 1024);
   const deadline = Date.now() + 15_000;
   const visited = new Set<string>();
   return async (candidate: string, pageOnly = false) => {
     const timeoutMs = Math.min(DEFAULT_TIMEOUT_MS, deadline - Date.now());
-    if (!remaining || timeoutMs <= 0 || visited.has(candidate)) return null;
+    if (!remaining || bodyBudget.signal.aborted || timeoutMs <= 0 || visited.has(candidate))
+      return null;
     remaining--;
     visited.add(candidate);
     return fetcher(candidate, {
       accept: FEED_ACCEPT,
+      bodyBudget,
       responseHeaderNames: RESPONSE_HEADERS,
       timeoutMs,
       maxBodyBytes: pageOnly ? DEFAULT_MAX_BODY_BYTES : feedBodyCap,

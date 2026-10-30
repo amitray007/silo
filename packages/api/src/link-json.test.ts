@@ -30,6 +30,32 @@ describeIfPg('link-json (integration)', () => {
     return (await import('@silo/core')) as typeof CoreOps;
   });
 
+  it('omits raw show notes from list/search but keeps them on detail', async () => {
+    const core = harness.mod();
+    const { toLinkJson, toSnippetLinkJson, toSnippetSearchResultJson, toSummaryLinkJson } =
+      await import('./link-json.js');
+    const created = await core.createLink({
+      url: 'https://example.com/podcast-summary.mp3',
+      sourceKind: 'feed_media',
+      sourceData: {
+        kind: 'feed_media',
+        content: 'x'.repeat(1_000_000),
+        enclosureUrl: 'https://example.com/podcast-summary.mp3',
+      },
+    });
+    const link = await core.getById(created.id);
+    if (!link) throw new Error('missing link');
+    expect(toLinkJson(link).sourceData).toHaveProperty('content');
+    for (const summary of [
+      toSummaryLinkJson(link),
+      toSnippetLinkJson({ ...link, snippet: 'Episode' }),
+      toSnippetSearchResultJson({ ...link, snippet: 'Episode', rank: 1 }),
+    ]) {
+      expect(summary.sourceData).toEqual({ kind: 'feed_media', enclosureUrl: link.url });
+      expect(JSON.stringify(summary).length).toBeLessThan(2000);
+    }
+  });
+
   it('toLinkJson whitelists exactly the expected fields — no internal-field leak', async () => {
     const core = harness.mod();
     const { toLinkJson } = await import('./link-json.js');

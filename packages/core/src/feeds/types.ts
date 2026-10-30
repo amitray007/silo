@@ -5,6 +5,8 @@ export type FeedEntry = {
   url: string;
   title?: string;
   publishedAt?: Date | null;
+  /** No usable publisher link; this entry was invisible before fallback URL support. */
+  linkFallback?: boolean;
   media?: Extract<SourceData, { kind: 'feed_media' }>;
 };
 

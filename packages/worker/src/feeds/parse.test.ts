@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { FEED_MAX_BODY_BYTES, parseFeedBody } from './parse.js';
+import { parseFeedBody } from './parse.js';
 
 const podcast = readFileSync(new URL('./__fixtures__/podcast.xml', import.meta.url), 'utf8');
 const base = 'https://example.com/feed';
@@ -51,6 +51,7 @@ describe('podcast entry URLs and publisher content', () => {
       id: 'https://example.com/article',
       url: 'https://example.com/article',
       publishedAt: null,
+      linkFallback: true,
     });
     expect(
       parseFeedBody(
@@ -89,10 +90,9 @@ describe('podcast entry URLs and publisher content', () => {
       url: 'https://example.com/episode.mp3',
       media: { content: '&lt;literal&gt; &amp; notes', imageUrl: 'https://example.com/cover.jpg' },
     });
-    expect(parseFeedBody(feed({ url: '/page' }), base)?.entries[0]).toMatchObject({
-      url: 'https://example.com/page',
-      media: { enclosureUrl: 'https://example.com/episode.mp3' },
-    });
+    const page = parseFeedBody(feed({ url: '/page' }), base)?.entries[0];
+    expect(page?.url).toBe('https://example.com/page');
+    expect(page?.media).toBeUndefined();
   });
 
   it('falls back to Media RSS content and its thumbnail, including grouped content', () => {
@@ -112,15 +112,44 @@ describe('podcast entry URLs and publisher content', () => {
     ).toEqual([]);
   });
 
-  it('rejects DTDs before expansion and bodies over the feed cap', () => {
-    expect(
-      parseFeedBody(
-        '<!DOCTYPE rss [<!ENTITY a "expanded">]>' +
-          rss('<item><link>/x</link><title>&a;</title></item>'),
+  it('accepts DTDs without expanding nested entities', () => {
+    const body =
+      '<!DOCTYPE rss [<!ENTITY a "expanded"><!ENTITY b "&a;&a;"><!ENTITY c "&b;&b;">]>' +
+      rss('<item><link>/x</link><title>&c;</title></item>');
+    expect(parseFeedBody(body, base)?.entries[0]?.title).toBe('&c;');
+  });
+
+  it('accepts a DOCTYPE in CDATA and the Netscape RSS 0.91 DTD', () => {
+    const item =
+      '<item><link>/x</link><description><![CDATA[A <!DOCTYPE html> example]]></description></item>';
+    expect(parseFeedBody(rss(item), base)?.entries[0]?.url).toBe('https://example.com/x');
+    const body =
+      '<!DOCTYPE rss PUBLIC "-//Netscape Communications//DTD RSS 0.91//EN" "http://my.netscape.com/publish/formats/rss-0.91.dtd">' +
+      rss(item).replace('version="2.0"', 'version="0.91"');
+    expect(parseFeedBody(body, base)?.entries[0]?.url).toBe('https://example.com/x');
+  });
+
+  it.each(['https://example.com/article', 'https://www.youtube.com/watch?v=jNQXAC9IVRw'])(
+    'keeps %s on the page pipeline despite an audio enclosure',
+    (url) => {
+      const parsed = parseFeedBody(
+        rss(`<item><link>${url}</link><enclosure url="/audio.mp3" type="audio/mpeg"/></item>`),
         base,
-      ),
-    ).toBeNull();
-    expect(parseFeedBody(' '.repeat(FEED_MAX_BODY_BYTES + 1), base)).toBeNull();
+      )?.entries[0];
+      expect(parsed?.url).toBe(url);
+      expect(parsed?.media).toBeUndefined();
+      expect(parsed?.linkFallback).toBeUndefined();
+    },
+  );
+
+  it.each([
+    'http://127.0.0.1/x',
+    'http://[2001:db8::1]/x',
+    'http://cdn:8080/x',
+    'http://media_host/x',
+  ])('accepts publisher URL %s consistently', (url) => {
+    const parsed = parseFeedBody(rss(`<item><enclosure url="${url}"/></item>`), base)?.entries[0];
+    expect(parsed?.media?.enclosureUrl).toBe(url);
   });
 
   it('bounds publisher content without leaving half an emoji for Postgres JSONB', () => {

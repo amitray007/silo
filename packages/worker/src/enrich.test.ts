@@ -85,10 +85,11 @@ describeIfPg('enrichLink (integration)', () => {
     const source = {
       kind: 'feed_media' as const,
       content:
-        '<p>Searchable quasar show notes.</p><ul><li>A topic</li></ul><script>evil()</script><a href="javascript:evil()">Unsafe</a><img src="https://example.com/photo.jpg" onerror="evil()">',
+        '<p>Searchable quasar show notes.</p><a href="../about">About</a><ul><li>A topic</li></ul><script>evil()</script><a href="javascript:evil()">Unsafe</a><img src="https://example.com/photo.jpg" onerror="evil()">',
       description: '  <p>Short <b>episode</b> summary.</p>  ',
       imageUrl: 'https://example.com/cover.jpg',
       enclosureUrl: 'https://example.com/episode.mp3',
+      contentBaseUrl: 'https://publisher.example/episodes/',
     };
     const post = await core.createFeedPost({
       feedId: feed.id,
@@ -116,6 +117,7 @@ describeIfPg('enrichLink (integration)', () => {
     const reader = await core.getStoredReader(post.id);
     expect(reader?.contentHtml).toContain('<ul><li>A topic</li></ul>');
     expect(reader?.contentHtml).toContain('https://example.com/episode.mp3');
+    expect(reader?.contentHtml).toContain('https://publisher.example/about');
     expect(reader?.contentImages).toEqual(['https://example.com/photo.jpg']);
     expect(reader?.contentHtml).not.toMatch(/script|onerror|javascript:|evil\(/);
     const { createReaderRefresher } = await import('./reader/refresh-reader.js');
@@ -163,6 +165,77 @@ describeIfPg('enrichLink (integration)', () => {
     expect(sourceFetch).not.toHaveBeenCalled();
     core.resetEnrichmentEnqueuer();
   }, 45_000);
+
+  it.each(['reader-timeout', 'reader-failed'])(
+    'settles media and records an attempt after %s',
+    async (reason) => {
+      const readerWorker = await import('./extract/reader-worker.js');
+      const sanitizer = vi
+        .spyOn(readerWorker, 'sanitizeRenderedPage')
+        .mockRejectedValueOnce(new ReaderExtractionError(reason));
+      try {
+        const post = await core.createLink({
+          url: `https://example.com/${reason}.mp3`,
+          sourceKind: 'feed_media',
+          sourceData: { kind: 'feed_media', content: 'Show notes' },
+        });
+        await expect(enrichMod.enrichLink(post.id)).resolves.toBeUndefined();
+        expect(await core.getById(post.id)).toMatchObject({ captureStatus: 'full' });
+        const state = await pool.query(
+          'select enrich_attempts, reader_version, reader_captured_at, content_html from links where id = $1',
+          [post.id],
+        );
+        expect(state.rows[0]).toMatchObject({
+          enrich_attempts: 1,
+          reader_version: core.READER_VERSION,
+          reader_captured_at: expect.any(Date),
+          content_html: null,
+        });
+      } finally {
+        sanitizer.mockRestore();
+      }
+    },
+  );
+
+  it('fetches and extracts an article with an auto-enclosure and preserves YouTube classification', async () => {
+    const { parseFeedBody } = await import('./feeds/parse.js');
+    const result = await pool.query<{ id: string }>(
+      "insert into feeds (feed_url, title, format, next_poll_at) values ('https://example.com/articles-with-enclosures', 'Articles', 'rss', now()) returning id",
+    );
+    const feed = result.rows[0];
+    if (!feed) throw new Error('missing feed');
+    for (const [url, kind] of [
+      ['https://example.com/wordpress-post', 'link'],
+      ['https://www.youtube.com/watch?v=jNQXAC9IVRw', 'youtube'],
+    ]) {
+      const entry = parseFeedBody(
+        `<rss version="2.0"><channel><title>Feed</title><item><link>${url}</link><enclosure url="https://cdn.example/audio.mp3" type="audio/mpeg"/></item></channel></rss>`,
+        'https://example.com/feed',
+      )?.entries[0];
+      if (!entry) throw new Error('missing entry');
+      const post = await core.createFeedPost({ ...entry, feedId: feed.id });
+      if (!post) throw new Error('missing post');
+      expect(post.sourceKind).toBe(kind);
+      const deps = stubDeps(
+        {
+          ok: true,
+          html: '<p>Article</p>',
+          finalUrl: post.url,
+          contentType: 'text/html',
+          status: 200,
+        },
+        { status: 'full', title: 'Page title', text: 'Full page text' },
+      );
+      const fetch = vi.spyOn(deps, 'safeFetch');
+      await enrichMod.enrichLink(post.id, deps);
+      expect(fetch).toHaveBeenCalledWith(post.url);
+      expect(await core.getById(post.id)).toMatchObject({
+        captureStatus: kind === 'youtube' ? 'partial' : 'full',
+        extractedText: 'Full page text',
+        sourceKind: kind,
+      });
+    }
+  });
 
   it('a missing feed post settles into its own trash without leaking into library trash', async () => {
     const result = await pool.query<{ id: string }>(

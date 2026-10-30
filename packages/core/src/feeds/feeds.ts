@@ -234,7 +234,7 @@ export async function pollFeed(
   await db.transaction(async (tx) => {
     const [row] = await tx.select().from(feeds).where(eq(feeds.id, id)).for('update');
     if (!row || !isDue(row, now) || !samePoll(row, snapshot)) return;
-    const captured = await capturePoll(tx, row.id, result);
+    const captured = await capturePoll(tx, row, result);
     if (captured.kind === 'failure') {
       await recordFailure(tx, row, captured, now);
       return;
@@ -248,6 +248,7 @@ export async function pollFeed(
       .update(feeds)
       .set({
         ...metadata,
+        ...(captured.kind === 'modified' ? { mediaBackfillDone: true } : {}),
         status: 'active',
         consecutiveFailures: 0,
         lastPolledAt: now,
@@ -268,12 +269,21 @@ function samePoll(row: FeedRow, snapshot: FeedRow): boolean {
     row.updatedAt.getTime() === snapshot.updatedAt.getTime()
   );
 }
-async function capturePoll(tx: Tx, id: string, result: FeedPollResult): Promise<FeedPollResult> {
+async function capturePoll(tx: Tx, row: FeedRow, result: FeedPollResult): Promise<FeedPollResult> {
   if (result.kind !== 'modified') return result;
   try {
-    await tx.transaction((savepoint) =>
-      captureEntries(savepoint, id, result.feed.entries, 50, false),
-    );
+    await tx.transaction(async (savepoint) => {
+      if (!row.mediaBackfillDone) {
+        await captureEntries(
+          savepoint,
+          row.id,
+          result.feed.entries.filter((entry) => entry.linkFallback),
+          0,
+          true,
+        );
+      }
+      await captureEntries(savepoint, row.id, result.feed.entries, 50, false);
+    });
     return result;
   } catch (error) {
     console.error('[silo/core] poll-feed: capture failed:', error);

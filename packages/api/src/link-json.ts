@@ -98,11 +98,11 @@ function shapeSourceData(raw: unknown): SourceData {
   return parsed.data;
 }
 
-/** `LinkJson` plus `deletedAt` — the Trash screen's shape (`GET /api/trash`). */
-export type TrashLinkJson = LinkJson & { deletedAt: string };
+/** Summary JSON plus `deletedAt` — the Trash screen's shape (`GET /api/trash`). */
+export type TrashLinkJson = SummaryLinkJson & { deletedAt: string };
 
-/** A search result — `LinkJson` plus the match's `rank` (`GET /api/links/search`). */
-export type SearchResultJson = LinkJson & { rank: number };
+/** A search result — summary JSON plus the match's `rank` (`GET /api/links/search`). */
+export type SearchResultJson = SummaryLinkJson & { rank: number };
 
 /**
  * Builds the whitelisted, JSON-safe fields as an EXPLICIT field-by-field
@@ -160,7 +160,7 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
  */
 export function toTrashLinkJson(link: LinkSummaryWithTags): TrashLinkJson {
   return {
-    ...toLinkJson(link),
+    ...toSummaryLinkJson(link),
     deletedAt: link.deletedAt ? link.deletedAt.toISOString() : '',
   };
 }
@@ -171,12 +171,27 @@ export function toTrashLinkJson(link: LinkSummaryWithTags): TrashLinkJson {
  * `snippet` — mirrors `@silo/core`'s `ListResultRow`/`SearchResultRow`
  * (`Omit<LinkWithTags, 'extractedText'> & { snippet }`) and
  * `packages/mcp/server/src/tools/link-shape.ts`'s `SnippetLinkContent`. The
- * full-text `extractedText` field is dropped from list/search responses (a
+ * full-text `extractedText` and raw feed-media `sourceData.content` fields are dropped
+ * from list/search responses (a
  * page of 20 hits no longer drags every article's full body over HTTP) — a
  * client reads the full text via `GET /api/links/:id` for the one result it
  * actually wants.
  */
-export type SnippetLinkJson = Omit<LinkJson, 'extractedText'> & { snippet: string | null };
+type SummarySourceData =
+  | Exclude<SourceData, { kind: 'feed_media' }>
+  | Omit<Extract<SourceData, { kind: 'feed_media' }>, 'content'>;
+export type SummaryLinkJson = Omit<LinkJson, 'sourceData'> & { sourceData: SummarySourceData };
+export type SnippetLinkJson = Omit<SummaryLinkJson, 'extractedText'> & { snippet: string | null };
+
+/** Raw publisher notes belong only in single-link detail responses. */
+export function toSummaryLinkJson(link: LinkSummaryWithTags): SummaryLinkJson {
+  const base = toLinkJson(link);
+  if (base.sourceData.kind === 'feed_media') {
+    const { content: _content, ...sourceData } = base.sourceData;
+    return { ...base, sourceData };
+  }
+  return base;
+}
 
 /**
  * `SnippetLinkJson` plus a search `rank` (`GET /api/links/search`'s /
@@ -193,7 +208,10 @@ export type SnippetSearchResultJson = SnippetLinkJson & { rank: number };
  * the three can never drift on which fields a snippet row carries.
  */
 export function toSnippetLinkJson(link: ListResultRow | SearchResultRow): SnippetLinkJson {
-  const { extractedText: _extractedText, ...base } = toLinkJson({ ...link, extractedText: null });
+  const { extractedText: _extractedText, ...base } = toSummaryLinkJson({
+    ...link,
+    extractedText: null,
+  });
   return { ...base, snippet: link.snippet };
 }
 
@@ -204,7 +222,7 @@ export function toSnippetSearchResultJson(link: SearchResultRow): SnippetSearchR
 
 /** `toLinkJson` plus a search `rank` (`GET /api/links/search`'s per-result score). */
 export function toSearchResultJson(link: LinkSummaryWithTags, rank: number): SearchResultJson {
-  return { ...toLinkJson(link), rank };
+  return { ...toSummaryLinkJson(link), rank };
 }
 
 /**

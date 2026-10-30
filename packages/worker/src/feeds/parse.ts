@@ -1,12 +1,17 @@
 import type { FeedEntry, ResolvedFeed } from '@silo/core';
+import { httpUrl } from '@silo/core/capture';
+
 import { type AnyFeed, type MediaNs, parseFeed } from 'feedsmith';
 import { parseHTML } from 'linkedom';
+
+export { httpUrl } from '@silo/core/capture';
 
 export const FEED_MAX_BODY_BYTES = 20 * 1024 * 1024;
 
 type Enclosure = { url?: string | undefined; type?: string | undefined };
 type EntryMedia = {
   permalink?: string | undefined;
+  contentBaseUrl?: string | undefined;
   enclosures: Enclosure[];
   content: string | undefined;
   description: string | undefined;
@@ -40,6 +45,7 @@ function mediaData(options: EntryMedia, base: string): NonNullable<FeedEntry['me
   const enclosureUrl = options.enclosures.map((e) => httpUrl(e.url, base)).find(Boolean);
   return {
     kind: 'feed_media',
+    contentBaseUrl: httpUrl(options.contentBaseUrl, base) ?? base,
     content: (options.content ?? '').slice(0, 1_048_576).replace(/[\uD800-\uDBFF]$/, ''),
     ...(options.description
       ? { description: options.description.slice(0, 20_000).replace(/[\uD800-\uDBFF]$/, '') }
@@ -56,18 +62,6 @@ export function cleanTitle(value: string | { value: string } | undefined): strin
   return (document.body.textContent ?? '').replace(/\s+/g, ' ').trim();
 }
 
-export function httpUrl(value: string | undefined, base: string): string | undefined {
-  if (!value) return undefined;
-  try {
-    const url = new URL(value, base);
-    return ['http:', 'https:'].includes(url.protocol) && !url.username && !url.password
-      ? url.href
-      : undefined;
-  } catch {
-    return undefined;
-  }
-}
-
 function entry(
   url: string | undefined,
   id: string | undefined,
@@ -80,12 +74,12 @@ function entry(
   const enclosure = media?.enclosures.map((e) => httpUrl(e.url, base)).find(Boolean);
   const resolved = primary ?? enclosure;
   if (!resolved) return [];
-  const isMedia =
-    media && (!primary || media.enclosures.some((e) => /^(audio|video)\//i.test(e.type ?? '')));
+  const isMedia = media && !primary;
   const parsedDate = date ? new Date(date) : null;
   return [
     {
       url: resolved,
+      ...(!httpUrl(url, base) ? { linkFallback: true } : {}),
       ...(id ? { id } : {}),
       ...(title ? { title: cleanTitle(title) } : {}),
       publishedAt: parsedDate && Number.isFinite(parsedDate.getTime()) ? parsedDate : null,
@@ -126,6 +120,7 @@ function parseAtom(feed: Extract<AnyFeed, { format: 'atom' }>['feed'], base: str
         item.published ?? item.updated,
         base,
         {
+          contentBaseUrl: feed.links?.find(alternate)?.href,
           enclosures: [
             ...(item.links ?? [])
               .filter((link) => link.rel === 'enclosure')
@@ -154,6 +149,7 @@ function parseJson(feed: Extract<AnyFeed, { format: 'json' }>['feed'], base: str
         item.date_published ?? item.date_modified,
         base,
         {
+          contentBaseUrl: feed.home_page_url,
           enclosures: (item.attachments ?? []).map((a) => ({ ...a, type: a.mime_type })),
           content: item.content_html ?? textHtml(item.content_text),
           description: item.summary ?? item.content_text,
@@ -169,6 +165,7 @@ function parseRss(feed: Extract<AnyFeed, { format: 'rss' }>['feed'], base: strin
     ...(feed.ttl !== undefined ? { ttlMinutes: feed.ttl } : {}),
     entries: (feed.items ?? []).flatMap((item) =>
       entry(item.link, item.guid?.value, item.title, item.pubDate ?? item.dc?.dates?.[0], base, {
+        contentBaseUrl: feed.link,
         permalink:
           item.guid?.isPermaLink !== false && /^https?:\/\//i.test(item.guid?.value ?? '')
             ? item.guid?.value
@@ -186,6 +183,7 @@ function parseRdf(feed: Extract<AnyFeed, { format: 'rdf' }>['feed'], base: strin
     ...metadata('rdf', feed.title, feed.link, base, feed.description),
     entries: (feed.items ?? []).flatMap((item) =>
       entry(item.link, undefined, item.title, item.dc?.dates?.[0], base, {
+        contentBaseUrl: feed.link,
         enclosures: mediaContents(item.media),
         content: item.content?.encoded ?? item.description,
         description: item.description,
@@ -195,9 +193,7 @@ function parseRdf(feed: Extract<AnyFeed, { format: 'rdf' }>['feed'], base: strin
   };
 }
 export function parseFeedBody(body: string, base: string): ParsedFeed | null {
-  // Feedsmith does not expose XMLParser limits. Reject DTDs before entity expansion,
-  // and bound input even for callers that do not use safeFetch. Keep all item IDs.
-  if (Buffer.byteLength(body) > FEED_MAX_BODY_BYTES || /<!DOCTYPE\b/i.test(body)) return null;
+  // safeFetch bounds wire bytes before decoding. Feedsmith disables entity expansion.
   try {
     const result = parseFeed(body);
     switch (result.format) {
