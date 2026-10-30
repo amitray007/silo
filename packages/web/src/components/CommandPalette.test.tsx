@@ -186,9 +186,13 @@ describe('CommandPalette', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 
-  it('mixes matching feed jumps with library links and navigates to a feed', async () => {
+  it('puts matching feed jumps before a full page of library links and navigates with Enter', async () => {
     mockFetchByPath({
-      '/api/links/search': { results: [makeLink({ title: 'Owner library link' })] },
+      '/api/links/search': {
+        results: Array.from({ length: 20 }, (_, i) =>
+          makeLink({ id: `link-${i}`, title: `Owner library link ${i}` }),
+        ),
+      },
       '/api/links': { links: [] },
       '/api/tags': { tags: [] },
       '/api/feeds': { feeds: [feed, { ...feed, id: 'other', title: 'Unrelated' }] },
@@ -196,11 +200,15 @@ describe('CommandPalette', () => {
     await renderPalette();
     pressCmdK();
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'owner' } });
-    await screen.findByText('Owner library link');
+    await screen.findByText('Owner library link 0');
     const row = await screen.findByRole('option', { name: /Owner feed title/ });
+    const options = screen.getAllByRole('option');
+    expect(options).toHaveLength(21);
+    expect(options[0]).toBe(row);
+    expect(options[1]?.textContent).toContain('Owner library link 0');
+    expect(options[20]?.textContent).toContain('Owner library link 19');
     expect(row.querySelector('.silo-palette-feed-badge')).not.toBeNull();
     expect(screen.queryByText('Unrelated')).toBeNull();
-    fireEvent.keyDown(screen.getByRole('combobox'), { key: 'ArrowDown' });
     await waitFor(() => expect(row.getAttribute('aria-selected')).toBe('true'));
     fireEvent.keyDown(screen.getByRole('combobox'), { key: 'Enter' });
     expect(screen.getByTestId('location').textContent).toBe('/feeds/feed-one');
@@ -225,19 +233,20 @@ describe('CommandPalette', () => {
     });
     await renderPalette();
     pressCmdK();
-    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
+    const status = within(screen.getByRole('dialog')).getByRole('status');
+    expect(status.textContent).toBe('');
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'slow' } });
-    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
-    await screen.findByRole('status', { name: 'Searching' });
+    expect(status.textContent).toBe('');
+    await waitFor(() => expect(status.textContent).toBe('Searching'));
     await act(async () => finish(jsonResponse({ results: [makeLink({ title: 'Found' })] })));
     await screen.findByText('Found');
-    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
+    expect(status.textContent).toBe('');
     fireEvent.change(screen.getByRole('combobox'), { target: { value: '' } });
     await waitFor(() => expect(screen.queryByText('Found')).toBeNull());
     fireEvent.change(screen.getByRole('combobox'), { target: { value: 'slow' } });
     await screen.findByText('Found');
     await act(async () => new Promise((resolve) => setTimeout(resolve, 200)));
-    expect(screen.queryByRole('status', { name: 'Searching' })).toBeNull();
+    expect(status.textContent).toBe('');
   });
 
   it('renders nothing until opened', async () => {

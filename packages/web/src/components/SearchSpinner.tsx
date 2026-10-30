@@ -10,10 +10,17 @@ export function SearchSpinner({ pending, query }: { pending: boolean; query: str
     const timer = setTimeout(() => setVisibleQuery(query), 150);
     return () => clearTimeout(timer);
   }, [pending, query]);
-  if (!pending || visibleQuery !== query) return null;
+  const visible = pending && visibleQuery === query;
   return (
-    <span role="status" aria-label="Searching" className="silo-palette-searching">
-      <Blocks size={16} color="currentColor" />
-    </span>
+    <>
+      <span role="status" className="silo-sr-only">
+        {visible ? 'Searching' : ''}
+      </span>
+      {visible && (
+        <span aria-hidden="true" className="silo-palette-searching">
+          <Blocks size={16} color="currentColor" />
+        </span>
+      )}
+    </>
   );
 }

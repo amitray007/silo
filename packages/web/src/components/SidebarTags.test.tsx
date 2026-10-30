@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { describe, expect, it } from 'vitest';
 import type { TagCount } from '../api/types';
@@ -19,6 +19,32 @@ function renderSidebarTags(ui: ReactElement) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(<QueryClientProvider client={queryClient}>{ui}</QueryClientProvider>);
 }
+
+it('focuses find only when opened by its button and explains an unmatched filter', () => {
+  renderSidebarTags(
+    <SidebarTags tags={[{ name: 'design', count: 1 }]} renderTagLink={renderTagLink} />,
+  );
+  const find = screen.getByRole('button', { name: 'Find a tag' });
+  fireEvent.click(find);
+  const input = screen.getByRole('textbox', { name: 'Find tag' });
+  expect(document.activeElement).toBe(input);
+  fireEvent.change(input, { target: { value: 'missing' } });
+  expect(screen.getByText('No matching tags')).toBeDefined();
+  expect(screen.queryByRole('link', { name: '#design' })).toBeNull();
+  const toggle = screen.getByRole('button', { name: 'Tags' });
+  toggle.focus();
+  fireEvent.click(toggle);
+  expect(screen.queryByRole('textbox', { name: 'Find tag' })).toBeNull();
+  fireEvent.click(toggle);
+  expect(document.activeElement).toBe(toggle);
+  expect(screen.getByRole('textbox', { name: 'Find tag' })).toHaveProperty('value', 'missing');
+  fireEvent.click(find);
+  expect(screen.queryByText('No matching tags')).toBeNull();
+  expect(screen.getByRole('link', { name: '#design' })).toBeDefined();
+  fireEvent.click(find);
+  expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Find tag' }));
+  expect(screen.getByRole('textbox', { name: 'Find tag' })).toHaveProperty('value', '');
+});
 
 describe('SidebarTags loading skeleton', () => {
   it('loading + no tags yet: renders skeleton rows, keeps the "Tags" header, and shows no real tag links', () => {

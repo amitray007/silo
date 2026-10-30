@@ -428,7 +428,7 @@ function useLibraryPaletteResults(
     scope.kind === 'library' && hasText && !showTagSuggestions && !hasSettledTag,
     searchText,
   );
-  rawResults.push(...matchingFeeds);
+  rawResults.unshift(...matchingFeeds);
   const results = useStableResults(rawResults, isSettling);
   const activeSearch = isTrashScope ? trashSearchQuery : searchQuery;
   const isSearching =

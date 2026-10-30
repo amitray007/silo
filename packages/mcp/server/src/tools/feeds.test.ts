@@ -52,11 +52,18 @@ describeMcpTool('silo_mcp_feeds', 'MCP feed tools', (context) => {
     });
     expect(first.isError).toBeFalsy();
     const page = first.structuredContent as {
-      results: { id: string; feedId: string }[];
+      results: { id: string; feedId: string; title: string; url: string }[];
       nextCursor: string;
     };
     expect(page.results).toHaveLength(1);
     expect(page.nextCursor).toEqual(expect.any(String));
+    const [text] = first.content as Array<{ type: 'text'; text: string }>;
+    for (const result of page.results) {
+      expect(text?.text).toContain(result.id);
+      expect(text?.text).toContain(result.title);
+      expect(text?.text).toContain(result.url);
+    }
+    expect(text?.text).toContain('Use get_link with an id');
     const next = await client.callTool({
       name: 'search_feed_posts',
       arguments: { feedId, query: 'shared', cursor: page.nextCursor },

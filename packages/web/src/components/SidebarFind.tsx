@@ -39,15 +39,17 @@ export function SidebarFindInput({
   value,
   onChange,
   placeholder,
+  autoFocusOnOpen,
 }: {
   value: string;
   onChange: (value: string) => void;
   placeholder: string;
+  autoFocusOnOpen: boolean;
 }) {
   const ref = useRef<HTMLInputElement>(null);
   useEffect(() => {
-    ref.current?.focus();
-  }, []);
+    if (autoFocusOnOpen) ref.current?.focus();
+  }, [autoFocusOnOpen]);
   return (
     <input
       ref={ref}

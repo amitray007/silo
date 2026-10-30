@@ -2,7 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { searchFeedPosts } from '@silo/core';
 import { z } from 'zod';
 import { feedResult, runFeedTool } from './feed-result.js';
-import { snippetLinkShape, toSnippetLinkContent } from './link-shape.js';
+import { snippetLinkShape, toRankedResultLine, toSnippetLinkContent } from './link-shape.js';
 
 export function registerSearchFeedPosts(server: McpServer): void {
   server.registerTool(
@@ -47,7 +47,11 @@ export function registerSearchFeedPosts(server: McpServer): void {
         }));
         return feedResult(
           results.length
-            ? `Found ${results.length} posts. Use get_link with an id to read it. Pass nextCursor, when present, to continue.`
+            ? [
+                `Found ${results.length} posts.`,
+                ...results.map((result) => `${toRankedResultLine(result)} (id: ${result.id})`),
+                'Use get_link with an id to read it. Pass nextCursor, when present, to continue.',
+              ].join('\n')
             : 'No matching posts. Try another query, or list_feeds to choose a subscription.',
           { results, ...(page.nextCursor ? { nextCursor: page.nextCursor } : {}) },
         );

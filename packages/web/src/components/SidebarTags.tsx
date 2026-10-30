@@ -67,6 +67,7 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
     }
   });
   const [findOpen, setFindOpen] = useState(false);
+  const [autoFocusOnOpen, setAutoFocusOnOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [newTagOpen, setNewTagOpen] = useState(false);
   const [newTagValue, setNewTagValue] = useState('');
@@ -79,6 +80,7 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
   }, [newTagOpen]);
 
   function toggleTagFind() {
+    setAutoFocusOnOpen(!findOpen && expanded);
     setFindOpen((open) => {
       const next = !open;
       if (!next) setQuery('');
@@ -142,6 +144,7 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
             aria-expanded={expanded}
             aria-controls="silo-tag-list"
             onClick={() => {
+              setAutoFocusOnOpen(false);
               setExpanded(!expanded);
               try {
                 localStorage.setItem('silo.tagsExpanded', String(!expanded));
@@ -161,10 +164,18 @@ export function SidebarTags({ tags, activeTag, loading = false, renderTagLink }:
       {expanded && (
         <div id="silo-tag-list" className="silo-tags-body">
           {findOpen && (
-            <SidebarFindInput value={query} onChange={setQuery} placeholder="Find tag" />
+            <SidebarFindInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Find tag"
+              autoFocusOnOpen={autoFocusOnOpen}
+            />
           )}
 
           <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Tags">
+            {!loading && trimmedQuery && visibleTags.length === 0 && (
+              <p className="silo-feed-description">No matching tags</p>
+            )}
             {loading && tags.length === 0
               ? SKELETON_TAG_WIDTHS.map((width, i) => (
                   // biome-ignore lint/suspicious/noArrayIndexKey: a static, never-reordered placeholder list

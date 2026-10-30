@@ -59,6 +59,7 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
   const [expanded, setExpanded] = useState(true);
   const [adding, setAdding] = useState(false);
   const [findOpen, setFindOpen] = useState(false);
+  const [autoFocusOnOpen, setAutoFocusOnOpen] = useState(false);
   const [query, setQuery] = useState('');
   const feeds = useFeeds();
   const trimmedQuery = query.trim().toLowerCase();
@@ -85,7 +86,10 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
             aria-label="Toggle feeds"
             aria-expanded={expanded}
             aria-controls="silo-feed-list"
-            onClick={() => setExpanded(!expanded)}
+            onClick={() => {
+              setAutoFocusOnOpen(false);
+              setExpanded(!expanded);
+            }}
           >
             <SectionCaret expanded={expanded} />
           </button>
@@ -95,6 +99,7 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
           label="Find a feed"
           open={findOpen}
           onClick={() => {
+            setAutoFocusOnOpen(!findOpen && expanded);
             setFindOpen(!findOpen);
             if (findOpen) setQuery('');
           }}
@@ -103,7 +108,12 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
       {expanded && (
         <div id="silo-feed-list" className="silo-tags-body">
           {findOpen && (
-            <SidebarFindInput value={query} onChange={setQuery} placeholder="Find feed" />
+            <SidebarFindInput
+              value={query}
+              onChange={setQuery}
+              placeholder="Find feed"
+              autoFocusOnOpen={autoFocusOnOpen}
+            />
           )}
           {feeds.isLoading && (
             <span className="silo-feed-description" role="status">
@@ -116,6 +126,9 @@ export function SidebarFeeds({ onNavigate }: { onNavigate: () => void }) {
             </p>
           )}
           <section ref={page.scrollRef} className="silo-tag-scroll" aria-label="Feed subscriptions">
+            {feeds.isSuccess && trimmedQuery && rows.length === 0 && (
+              <p className="silo-feed-description">No matching feeds</p>
+            )}
             {rows.slice(0, page.visibleCount).map((feed) => (
               <FeedLink key={feed.id} feed={feed} onNavigate={onNavigate} />
             ))}
