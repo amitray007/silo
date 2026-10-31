@@ -154,3 +154,133 @@ docs page, a page with code and tables, and a Wikipedia page:
 The quality gate passes (`pnpm turbo run check-types test` and
 `pnpm quality`), the review protocol has run, QA passes, and the owner has
 approved at gate 2.
+
+## Working mode for slices 2 to 4 (owner decision, 2026-11-01)
+
+The owner tests all slices at the end. Each slice still gets this plan
+section, a Sonnet build, the review protocol, the quality gate, browser QA on
+real links, and a side-by-side check against the prototype. Each slice opens a
+pull request based on the previous slice's branch. Merging stays with the
+owner.
+
+## Slice 2: Outline + Pencil
+
+### Scope
+
+- **Outline dial**: a tick rail at the left edge of the reader pane.
+- **Reading pencil**: a line guide that sweeps the current line at a set pace.
+- **Resume point**: where the reader stopped, saved on the server, shown as a
+  play button, and readable and writable over the API and MCP.
+- The dock gains a **Pencil** split button: the main part toggles the pencil,
+  and a chevron opens the Pencil sheet.
+
+### Out of scope
+
+Highlights and their tints on the dial (slice 3), read aloud (slice 4), and AI
+section summaries for the outline cards. Parked: an AI summary in the outline
+card goes to `future-scope.md` under AI features.
+
+### Data: reading position
+
+- **New table `reading_positions`** (migration 0027, hand-named
+  `0027_reading_positions`): `link_id uuid primary key references links(id)
+  on delete cascade`, `position real not null` (0 to 1, a share of the
+  article's words), `updated_at timestamptz not null default now()`. A
+  separate table keeps frequent position writes from bumping
+  `links.updated_at`. The cascade purges it with the link. It survives trash
+  and restore because the link row survives.
+- **Core** (`packages/core/src/links/reading-position.ts`):
+  `getReadingPosition(linkId)`, `setReadingPosition(linkId, position)` (an upsert that
+  rejects values outside 0..1 and non-finite values with the existing
+  validation error type), and `clearReadingPosition(linkId)`. Writes
+  call `assertLibraryWrite` like `editLink`; a trashed or unknown link returns
+  null (not found).
+- **Restore merge** (`links.ts` restore path that folds notes and tags): keep
+  the newer of the two positions.
+- **Link JSON** (`api/src/link-json.ts`) and the MCP `baseLinkShape`: add
+  `readingPosition: { position: number, updatedAt: string } | null`,
+  explicitly, with the leak-guard tests both rules require. Fetch it with the
+  link in one query (a left join), not one query per row. List endpoints do
+  not need it; include it only where the single-link shape is built, and keep
+  list queries unchanged.
+- **API**: `PUT /api/links/:id/reading-position` with body
+  `{ position: number }` (Zod, 0..1, finite) returns `{ readingPosition }`;
+  `DELETE` clears it and returns 204. Not found returns the standard 404
+  envelope. Real-Postgres route tests.
+- **MCP** (parity rule): extend `edit_link` with an optional
+  `readingPosition: number | null` (null clears). `get_link` returns the field
+  through `baseLinkShape`. Update `parity.test.ts` and the tool description
+  so an agent knows what the number means.
+- **Export and import**: add an optional `readingPosition` to `ExportedLink`
+  and the import schema (no version bump; old files import unchanged). CSV
+  export leaves it out.
+
+### Web
+
+- **Pencil engine** (`components/reader/pencil/`): compute line boxes from the
+  prose text with `Range.getClientRects()`, skipping code blocks, figures,
+  captions and tables. Recompute on resize, type changes (slice 1 prefs) and
+  fonts loading. One `requestAnimationFrame` loop while playing; nothing runs
+  while paused.
+- **Styles**: Underline (a 2px pencil line under the current line) and
+  Highlighter (a soft translucent band behind the line), as in the prototype.
+  The style and the pace (100 to 600 wpm, step 20, default 240) are
+  browser-local prefs through `createPrefStore`.
+- **Controls**: the dock's Pencil split button (main: toggle; chevron: sheet).
+  The sheet holds play/pause, the wpm `Stepper`, a progress bar with percent,
+  and the Underline | Highlighter `Segmented`. No helper text; shortcuts in
+  `title` tooltips.
+- **Keys** (ignored in inputs, textareas, contenteditable and open dialogs):
+  `p` toggles the pencil, Space plays or pauses while it is on, ArrowUp and
+  ArrowDown move a line, `+` and `-` change speed, Escape turns it off after
+  any open sheet closes. While the pencil is on it takes over the Reader's
+  `j`/`k`/arrow link stepping, as in the prototype; when it is off, the
+  Reader's keys work as today.
+- **Click a line** to move the pencil there while it is on.
+- **Auto-scroll** keeps the current line in the middle third of the pane;
+  respect `prefers-reduced-motion` (jump instead of smooth scroll).
+- **Resume**: save the position (share of words) when the pencil pauses, stops,
+  every 10 seconds while playing, and on `pagehide` (fetch with
+  `keepalive`). On open, if a saved position exists, show a 24px accent play
+  button in the right gutter column, centred on that line (the same column the
+  slice 3 note markers will use). Clicking it turns the pencil on and plays
+  from there. Optimistic cache update for the link query; no full refetch per
+  save.
+- **Outline dial** (`components/reader/outline/OutlineRail.tsx`): ticks for
+  paragraph groups (at most 40, merged evenly), 4px gap, uniform at rest,
+  headings brighter, the current group in ink. Dock-style magnification on
+  hover with spring physics from `motion` (MIT; `motion/react`): crest 36px,
+  falloff over about five ticks, stiffness 300, damping 25, mass 0.5. A card
+  follows the crest with the group's title (heading or first sentence) and two
+  muted lines, clamped inside the pane. Click scrolls to the group. Hidden when
+  the pane is narrower than 700px. Reduced motion: no springs, static crest.
+  The rail is a `nav` with an accessible name; each tick is a button labelled
+  with its title.
+
+### Package choices
+
+- `motion`: the spring engine the owner approved during prototyping (the
+  ready-made "Chapter Scrubber" needs a 21st.dev key). Imported only by the
+  outline rail, so the main bundle grows only where the rail renders; lazy-load
+  the rail if the build shows a large chunk.
+- No package for line measurement: the platform `Range` API is enough.
+
+### Tests
+
+- Core and API: set, overwrite, clear, out-of-range, NaN, unknown id, trashed
+  id, cascade on purge, restore keeps the newer position, link JSON includes
+  the field, leak guard, MCP `edit_link` and `get_link` round trip, export and
+  import round trip and old-file import.
+- Web: line-box computation on a fixture, wpm timing (fake timers), keys and
+  their guards, the reader's own keys when the pencil is off, resume button
+  placement and click, save throttling and `pagehide`, prefs validation, rail
+  grouping cap and click-to-scroll, reduced-motion path.
+
+### QA and mockup parity
+
+Real links in `silo_reader_qa` at 1440, 1100 and 390 px, light, dark and
+sepia: pencil sweep in both styles, keys, click-to-jump, auto-scroll, resume
+after reload and after closing the tab, dial hover and click on a long article,
+and the MCP `get_link` output. Then compare side by side with prototype
+variant B (`prototype/reader-tools`, Vite on another port against the same
+API) and fix every unintended difference.
