@@ -168,6 +168,7 @@ export function PencilTransport({ pencil, bare = false }: { pencil: PencilApi; b
         type="button"
         className="proto-play"
         aria-label={pencil.playing ? 'Pause pencil' : 'Start pencil'}
+        title={pencil.playing ? 'Pause (Space)' : 'Play (Space)'}
         onClick={pencil.toggle}
       >
         <ProtoIcon name={pencil.playing ? 'pause' : 'play'} size={16} />
@@ -176,6 +177,7 @@ export function PencilTransport({ pencil, bare = false }: { pencil: PencilApi; b
         type="button"
         className="proto-step"
         aria-label="Slower"
+        title="Slower (-)"
         onClick={pencil.slower}
         disabled={pencil.wpm <= MIN_WPM}
       >
@@ -189,6 +191,7 @@ export function PencilTransport({ pencil, bare = false }: { pencil: PencilApi; b
         type="button"
         className="proto-step"
         aria-label="Faster"
+        title="Faster (+)"
         onClick={pencil.faster}
         disabled={pencil.wpm >= MAX_WPM}
       >
@@ -450,18 +453,31 @@ export function ListenControls({ ra, upcoming = 0 }: { ra: ReadAloudApi; upcomin
 export function ListenTransport({ ra, children }: { ra: ReadAloudApi; children?: ReactNode }) {
   return (
     <div className="proto-transport" data-bare="false">
-      <button type="button" className="proto-step" aria-label="Previous sentence" onClick={ra.prev}>
+      <button
+        type="button"
+        className="proto-step"
+        aria-label="Previous sentence"
+        title="Previous sentence (Left)"
+        onClick={ra.prev}
+      >
         <ProtoIcon name="prev" size={16} />
       </button>
       <button
         type="button"
         className="proto-play"
         aria-label={ra.playing ? 'Pause' : 'Play'}
+        title={ra.playing ? 'Pause (Space)' : 'Play (Space)'}
         onClick={ra.toggle}
       >
         <ProtoIcon name={ra.playing ? 'pause' : 'play'} size={16} />
       </button>
-      <button type="button" className="proto-step" aria-label="Next sentence" onClick={ra.next}>
+      <button
+        type="button"
+        className="proto-step"
+        aria-label="Next sentence"
+        title="Next sentence (Right)"
+        onClick={ra.next}
+      >
         <ProtoIcon name="next" size={16} />
       </button>
       <output className="proto-readout" aria-label="Sentence">

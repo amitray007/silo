@@ -51,7 +51,25 @@ export function usePencil(
   root: HTMLElement | null,
   scroll: HTMLElement | null,
   host: HTMLElement | null,
+  options: { linkId?: string | null; persist?: boolean } = {},
 ) {
+  const { linkId, persist = false } = options;
+  const storeKey = `silo.proto.pencil.${linkId}`;
+  const [style, setStyle] = useState<'underline' | 'highlighter'>('underline');
+  const styleRef = useRef(style);
+  styleRef.current = style;
+  const [saved, setSaved] = useState<number | null>(() => {
+    if (!persist || !linkId) return null;
+    try {
+      const value = Number.parseFloat(localStorage.getItem(storeKey) ?? '');
+      return Number.isFinite(value) ? value : null;
+    } catch {
+      return null;
+    }
+  });
+  const hasSaved = saved !== null;
+  const savedRef = useRef(saved);
+  savedRef.current = saved;
   const [enabled, setEnabled] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [wpm, setWpmState] = useState(240);
@@ -71,8 +89,12 @@ export function usePencil(
     const line = lines.current[index.current];
     const el = guide.current;
     if (!line || !el) return;
-    el.style.transform = `translate(${line.left}px, ${line.top + line.height + 1}px)`;
-    el.style.width = `${line.width}px`;
+    const marker = styleRef.current === 'highlighter';
+    el.style.transform = marker
+      ? `translate(${line.left - 4}px, ${line.top - 2}px)`
+      : `translate(${line.left}px, ${line.top + line.height + 1}px)`;
+    el.style.width = `${line.width + (marker ? 8 : 0)}px`;
+    el.style.height = marker ? `${line.height + 4}px` : '2px';
     if (fill.current) fill.current.style.transform = `scaleX(${sweep.current})`;
     const words = (prefix.current[index.current] ?? 0) + line.words * sweep.current;
     const total = prefix.current.at(-1) ?? 1;
@@ -103,9 +125,10 @@ export function usePencil(
 
   // Measure the lines whenever the prose or its size changes.
   useEffect(() => {
-    if (!enabled || !root || !scroll) return;
+    if (!(enabled || (persist && hasSaved)) || !root || !scroll) return;
     let frame = 0;
     const measure = () => {
+      const first = lines.current.length === 0;
       const previous = lines.current.length ? index.current / lines.current.length : 0;
       lines.current = measureLines(root, scroll);
       let sum = 0;
@@ -120,6 +143,13 @@ export function usePencil(
         Math.max(0, lines.current.length - 1),
         Math.round(previous * lines.current.length),
       );
+      const restore = savedRef.current;
+      if (first && restore !== null && lines.current.length) {
+        // Resume where the reader stopped, as a share of the words in the article.
+        const at = (prefix.current.at(-1) ?? 0) * restore;
+        const found = lines.current.findIndex((_, i) => (prefix.current[i + 1] ?? 0) > at);
+        index.current = found < 0 ? lines.current.length - 1 : found;
+      }
       setLineIndex(index.current);
       paint();
     };
@@ -128,6 +158,7 @@ export function usePencil(
       frame = requestAnimationFrame(measure);
     };
     measure();
+    if (enabled) reveal();
     const observer = new ResizeObserver(schedule);
     observer.observe(root);
     observer.observe(scroll);
@@ -137,7 +168,7 @@ export function usePencil(
       observer.disconnect();
       document.fonts?.removeEventListener('loadingdone', schedule);
     };
-  }, [enabled, root, scroll, paint]);
+  }, [enabled, root, scroll, paint, reveal, persist, hasSaved]);
 
   // Sweep the current line, then drop to the next.
   useEffect(() => {
@@ -195,6 +226,24 @@ export function usePencil(
     return () => root.removeEventListener('click', click);
   }, [enabled, root, scroll, goTo]);
 
+  // Remember the line the reader stopped on (a stand-in for server state).
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only a line change should write.
+  useEffect(() => {
+    if (!persist || !linkId || !enabled || !lineCount) return;
+    const fraction = (prefix.current[lineIndex] ?? 0) / (prefix.current.at(-1) || 1);
+    try {
+      localStorage.setItem(storeKey, String(fraction));
+    } catch {
+      /* Storage is unavailable; keep going. */
+    }
+    setSaved(fraction);
+  }, [lineIndex, enabled, lineCount]);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: repaint when the style changes.
+  useEffect(() => {
+    paint();
+  }, [style, paint]);
+
   const setWpm = useCallback((value: number) => {
     setWpmState(Math.min(MAX_WPM, Math.max(MIN_WPM, value)));
   }, []);
@@ -203,15 +252,36 @@ export function usePencil(
     setPlaying((value) => !value);
   }, []);
 
-  const overlay: ReactNode =
-    enabled && host
-      ? createPortal(
-          <div className="proto-pencil" ref={guide}>
+  const resumeLine = lines.current[lineIndex];
+  const overlay: ReactNode = host
+    ? createPortal(
+        enabled ? (
+          <div className="proto-pencil" data-style={style} ref={guide}>
             <div className="proto-pencil-fill" ref={fill} />
-          </div>,
-          host,
-        )
-      : null;
+          </div>
+        ) : persist && saved !== null && saved > 0.001 && resumeLine ? (
+          <button
+            type="button"
+            className="proto-resume"
+            title="Resume reading (P)"
+            aria-label="Resume reading"
+            style={{
+              top: resumeLine.top + resumeLine.height / 2 - 9,
+              left: resumeLine.left + resumeLine.width + 8,
+            }}
+            onClick={() => {
+              setEnabled(true);
+              setPlaying(true);
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+              <path d="M7 4.5v15l12-7.5z" />
+            </svg>
+          </button>
+        ) : null,
+        host,
+      )
+    : null;
 
   return {
     enabled,
@@ -226,6 +296,8 @@ export function usePencil(
     setWpm,
     faster: () => setWpm(wpmRef.current + WPM_STEP),
     slower: () => setWpm(wpmRef.current - WPM_STEP),
+    style,
+    setStyle,
     lineIndex,
     lineCount,
     progress,

@@ -489,6 +489,7 @@ export function useReadAloud(root: HTMLElement | null, scroll: HTMLElement | nul
     prev: () => jump(index - 1),
     jump,
     startHere,
+    startAt,
     slower: () => {
       const i = RATES.findIndex((value) => value >= rate);
       setRate(RATES[Math.max(0, i - 1)] ?? 1);

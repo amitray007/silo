@@ -3,6 +3,7 @@ import '@fontsource-variable/literata';
 import './prototype.css';
 import { type RefObject, useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useSearchParams } from 'react-router';
 import { SelectionPopover } from './controls';
 import { inTextEntry, onControl, plain } from './protoKeys';
 import { useHighlights } from './useHighlights';
@@ -66,7 +67,11 @@ function Mounted({
   const { variant, cycle } = useVariant();
   const prose = useProseRoot(scrollRef);
   const typo = useTypography(prose, panel);
-  const pencil = usePencil(prose, scroll, host);
+  const [params] = useSearchParams();
+  const pencil = usePencil(prose, scroll, host, {
+    linkId: params.get('link'),
+    persist: variant === 'B',
+  });
   const hl = useHighlights(prose, scroll);
   const ra = useReadAloud(prose, scroll);
 

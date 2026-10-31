@@ -16,7 +16,7 @@ const NAMES: Record<Variant, string> = {
 export function useVariant() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('variant')?.toUpperCase();
-  const variant: Variant = raw === 'B' || raw === 'C' ? raw : 'A';
+  const variant: Variant = raw === 'A' || raw === 'C' ? raw : 'B';
   const setVariant = useCallback(
     (next: Variant) =>
       setParams(

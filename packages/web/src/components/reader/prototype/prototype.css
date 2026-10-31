@@ -845,3 +845,234 @@
   background: var(--ink);
   transition: width 200ms var(--ease-out);
 }
+
+/* B iteration: note popover, notes rows, outline rail, pencil styles */
+.proto-colors {
+  padding: 4px;
+  margin: -4px;
+}
+.proto-color[aria-pressed="true"] {
+  outline: 0;
+  box-shadow:
+    0 0 0 2px var(--bg2),
+    0 0 0 3.5px var(--ink);
+}
+.proto-notepop {
+  position: fixed;
+  z-index: 910;
+  width: 280px;
+  padding: 10px 12px 8px;
+  border-radius: 8px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  animation: protoPopDown 120ms var(--ease-out);
+}
+.proto-notepop-field {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  overflow: auto;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+.proto-notepop-field::placeholder {
+  color: var(--fnt);
+}
+.proto-notepop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.proto-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  margin: -5px;
+}
+.proto-dot14 {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--hl);
+  box-shadow: inset 0 0 0 1px oklch(0% 0 0 / 12%);
+  cursor: pointer;
+}
+.proto-dot14[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--bg2),
+    0 0 0 3.5px var(--ink);
+}
+.proto-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.proto-rows button {
+  --hl: var(--line-2);
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.proto-rows button:hover {
+  background: var(--hov);
+}
+.proto-row-bar {
+  flex: none;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--hl);
+}
+.proto-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.proto-row-snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink);
+}
+.proto-row-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--fnt);
+}
+.proto-pencil[data-style="highlighter"] {
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--mark) 16%, transparent);
+}
+.proto-pencil[data-style="highlighter"]::before {
+  display: none;
+}
+.proto-pencil[data-style="highlighter"] .proto-pencil-fill {
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--mark) 22%, transparent);
+}
+.proto-resume {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  padding: 0 0 0 1px;
+  border: 0;
+  border-radius: 50%;
+  background: var(--mark);
+  color: oklch(99.11% 0 0);
+  pointer-events: auto;
+  cursor: pointer;
+  box-shadow: var(--elev-1);
+}
+.proto-outline {
+  position: absolute;
+  z-index: 22;
+  left: 0;
+  top: 56px;
+  width: 28px;
+  pointer-events: none;
+}
+.proto-tick {
+  position: absolute;
+  left: 0;
+  width: 28px;
+  height: 10px;
+  margin-top: -5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  display: flex;
+  align-items: center;
+  padding-left: 8px;
+  pointer-events: auto;
+  cursor: pointer;
+  --hl: var(--line-2);
+}
+.proto-tick i {
+  display: block;
+  width: 7px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-2);
+  transition: width 120ms var(--ease-out);
+}
+.proto-tick[data-heading="true"] i {
+  width: 14px;
+  background: var(--fnt);
+}
+.proto-tick[data-tinted="true"] i {
+  background: var(--hl);
+  height: 3px;
+}
+.proto-tick[data-current="true"] i {
+  width: 16px;
+  background: var(--ink);
+}
+.proto-tick:hover i,
+.proto-tick:focus-visible i {
+  width: 18px;
+}
+.proto-outline-card {
+  position: absolute;
+  left: 34px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  pointer-events: none;
+}
+.proto-outline-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.proto-outline-card span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--fnt);
+}
+@keyframes protoPopDown {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+.proto-notepop .proto-notepop-field:focus-visible {
+  outline: none;
+}
