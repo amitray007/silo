@@ -9,6 +9,7 @@ import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
 import { useRowMenu } from './RowMenuContext';
 import { useSearchSilo } from './SearchSiloContext';
+import { useSidebarControl } from './SidebarControlContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -53,6 +54,19 @@ function SearchSiloProbe() {
   );
 }
 
+/** What a Reader tool does when it needs the room: borrow the sidebar's width, then give it back. */
+function SidebarProbe() {
+  const sidebar = useSidebarControl();
+  return (
+    <>
+      <span>{sidebar.collapsed ? 'collapsed' : 'open'}</span>
+      <button type="button" onClick={() => sidebar.setCollapsed(!sidebar.collapsed)}>
+        borrow
+      </button>
+    </>
+  );
+}
+
 function renderAppFrame(initialEntries: string[] = ['/']) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -72,6 +86,7 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
                   }
                 />
                 <Route path="/search-silo" element={<SearchSiloProbe />} />
+                <Route path="/sidebar" element={<SidebarProbe />} />
                 <Route path="/trash" element={<div>trash content</div>} />
                 <Route path="/probe" element={<EscapeProbe />} />
                 <Route path="/settings/:tab" element={<SettingsView />} />
@@ -105,6 +120,26 @@ describe('AppFrame', () => {
     fireEvent.click(screen.getByRole('button', { name: 'search silo' }));
     const input = await screen.findByRole('combobox');
     expect((input as HTMLInputElement).value).toBe('quoted passage');
+  });
+
+  it('lets a tool collapse and restore the docked sidebar without saving the choice', () => {
+    const wide = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('min-width'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    vi.stubGlobal('matchMedia', wide);
+    localStorage.removeItem('silo.sidebarCollapsed');
+    const { container } = renderAppFrame(['/sidebar']);
+    const frame = container.querySelector('.silo-frame') as HTMLElement;
+    expect(frame.dataset.collapsed).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'borrow' }));
+    expect(frame.dataset.collapsed).toBe('true');
+    expect(screen.getByText('collapsed')).toBeDefined();
+    expect(localStorage.getItem('silo.sidebarCollapsed')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'borrow' }));
+    expect(frame.dataset.collapsed).toBe('false');
   });
 
   it('renders the sidebar and the routed outlet content (the theme toggle now lives in Settings, not the sidebar)', () => {

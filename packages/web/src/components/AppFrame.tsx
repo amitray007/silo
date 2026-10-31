@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Outlet, useLocation, useMatch } from 'react-router';
 import { layoutMedia } from '../lib/breakpoints';
 import { useCommandPalette } from '../lib/useCommandPalette';
@@ -14,6 +14,7 @@ import { SearchSiloContext } from './SearchSiloContext';
 import { SettingsProvider, useSettings } from './SettingsContext';
 import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
+import { type SidebarControl, SidebarControlContext } from './SidebarControlContext';
 
 const DRAWER_ID = 'silo-drawer';
 const COLLAPSED_KEY = 'silo.sidebarCollapsed';
@@ -145,6 +146,20 @@ export function AppFrame() {
       return next;
     });
   }, [closeDrawer]);
+  const collapseSidebar = useCallback((next: boolean) => {
+    if (matchMedia(layoutMedia.sidebar).matches) setCollapsed(next);
+  }, []);
+  const sidebarControl = useMemo<SidebarControl>(
+    () => ({
+      collapsed,
+      freedWidth: () =>
+        collapsed || !matchMedia(layoutMedia.sidebar).matches
+          ? 0
+          : (sidebarRef.current?.getBoundingClientRect().width ?? 0),
+      setCollapsed: collapseSidebar,
+    }),
+    [collapsed, collapseSidebar],
+  );
   const showSidebar = () => {
     if (drawerOpen) {
       closeDrawer();
@@ -225,51 +240,53 @@ export function AppFrame() {
     <SettingsProvider>
       <ThemeSettingsSync />
       <SearchSiloContext.Provider value={searchSilo}>
-        <HoverPreviewProvider>
-          <RowMenuProvider>
-            <div className="silo-frame" data-collapsed={collapsed}>
-              <div className="silo-band">
-                <button
-                  type="button"
-                  tabIndex={-1}
-                  className="silo-scrim"
-                  data-open={drawerOpen}
-                  aria-hidden="true"
-                  onClick={closeDrawer}
-                />
-                <Sidebar
-                  id={DRAWER_ID}
-                  ref={sidebarRef}
-                  open={drawerOpen}
-                  onNavigate={closeDrawer}
-                  onOpenSearch={() => {
-                    closeDrawer();
-                    commandPalette.openPalette();
-                  }}
-                  onToggleSidebar={toggleSidebar}
-                />
-                <main className="silo-content" inert={drawerOpen}>
+        <SidebarControlContext.Provider value={sidebarControl}>
+          <HoverPreviewProvider>
+            <RowMenuProvider>
+              <div className="silo-frame" data-collapsed={collapsed}>
+                <div className="silo-band">
                   <button
-                    ref={menuButtonRef}
                     type="button"
-                    className="silo-list-menu silo-reader-iconbtn"
-                    aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-                    aria-expanded={drawerOpen}
-                    aria-controls={DRAWER_ID}
-                    onClick={showSidebar}
-                  >
-                    <ReaderIcon name="sidebar" />
-                  </button>
-                  <Outlet context={{ showSidebar, sidebarHidden: collapsed }} />
-                  <MobileBar onSearch={commandPalette.openPalette} />
-                </main>
-                <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
+                    tabIndex={-1}
+                    className="silo-scrim"
+                    data-open={drawerOpen}
+                    aria-hidden="true"
+                    onClick={closeDrawer}
+                  />
+                  <Sidebar
+                    id={DRAWER_ID}
+                    ref={sidebarRef}
+                    open={drawerOpen}
+                    onNavigate={closeDrawer}
+                    onOpenSearch={() => {
+                      closeDrawer();
+                      commandPalette.openPalette();
+                    }}
+                    onToggleSidebar={toggleSidebar}
+                  />
+                  <main className="silo-content" inert={drawerOpen}>
+                    <button
+                      ref={menuButtonRef}
+                      type="button"
+                      className="silo-list-menu silo-reader-iconbtn"
+                      aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+                      aria-expanded={drawerOpen}
+                      aria-controls={DRAWER_ID}
+                      onClick={showSidebar}
+                    >
+                      <ReaderIcon name="sidebar" />
+                    </button>
+                    <Outlet context={{ showSidebar, sidebarHidden: collapsed }} />
+                    <MobileBar onSearch={commandPalette.openPalette} />
+                  </main>
+                  <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
+                </div>
+                <CommandPalette palette={commandPalette} />
+                <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
               </div>
-              <CommandPalette palette={commandPalette} />
-              <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
-            </div>
-          </RowMenuProvider>
-        </HoverPreviewProvider>
+            </RowMenuProvider>
+          </HoverPreviewProvider>
+        </SidebarControlContext.Provider>
       </SearchSiloContext.Provider>
     </SettingsProvider>
   );
