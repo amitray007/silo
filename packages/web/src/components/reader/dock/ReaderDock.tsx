@@ -2,12 +2,15 @@ import { type ComponentType, createContext, useContext, useEffect, useId, useSta
 import { createPortal } from 'react-dom';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
+import { ReaderIcon } from '../ReaderIcon';
 import { TypeSheet } from './TypeSheet';
 
 type DockTool = {
   id: string;
   label: string;
   title: string;
+  /** The sheet heading. */
+  heading: string;
   /** The glyph beside the label. */
   glyph: string;
   sheet: ComponentType;
@@ -15,7 +18,14 @@ type DockTool = {
 
 /** Later slices add their tools here; the dock lists only tools that have shipped. */
 const tools: readonly DockTool[] = [
-  { id: 'type', label: 'Type', title: 'Type settings', glyph: 'Aa', sheet: TypeSheet },
+  {
+    id: 'type',
+    label: 'Type',
+    title: 'Type settings',
+    heading: 'Typography',
+    glyph: 'Aa',
+    sheet: TypeSheet,
+  },
 ];
 
 /**
@@ -90,7 +100,19 @@ export function ReaderDock() {
             sheet={false}
             onClose={() => setOpenId(null)}
           >
-            <div id={sheetId}>
+            <header className="silo-sheet-head">
+              <h3>{openTool.heading}</h3>
+              <button
+                type="button"
+                className="silo-reader-iconbtn"
+                aria-label="Close sheet"
+                title="Close (Esc)"
+                onClick={() => setOpenId(null)}
+              >
+                <ReaderIcon name="close" size={18} />
+              </button>
+            </header>
+            <div id={sheetId} className="silo-sheet-body">
               <Sheet />
             </div>
           </MenuSurface>

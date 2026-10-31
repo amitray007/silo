@@ -137,3 +137,13 @@ it('closes the sheet when the open link changes', async () => {
     'false',
   );
 });
+
+it('titles the sheet and closes it from the header button', async () => {
+  renderContent(undefined, prose);
+  const trigger = await screen.findByRole('button', { name: 'Type' });
+  fireEvent.click(trigger);
+  expect(screen.getByRole('heading', { name: 'Typography' })).toBeDefined();
+  fireEvent.click(screen.getByRole('button', { name: 'Close sheet' }));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Type' })).toBeNull());
+  expect(trigger.getAttribute('aria-expanded')).toBe('false');
+});

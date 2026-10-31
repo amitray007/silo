@@ -1,4 +1,4 @@
-import { ReaderIcon } from '../ReaderIcon';
+import type { ReactNode } from 'react';
 
 /** A `- value +` control. The value is a spinbutton, so arrow keys and screen readers step it. */
 export function Stepper({
@@ -8,6 +8,9 @@ export function Stepper({
   max,
   step = 1,
   valueText,
+  display,
+  lessGlyph,
+  moreGlyph,
   onChange,
 }: {
   label: string;
@@ -17,6 +20,11 @@ export function Stepper({
   step?: number;
   /** Spoken form of the value, such as "16 pixels". */
   valueText?: string;
+  /** The text shown for the value; defaults to the number. */
+  display?: string;
+  /** Content of the decrease and increase buttons. */
+  lessGlyph: ReactNode;
+  moreGlyph: ReactNode;
   onChange: (value: number) => void;
 }) {
   const move = (delta: number) => onChange(Math.min(max, Math.max(min, value + delta)));
@@ -29,7 +37,7 @@ export function Stepper({
         disabled={value <= min}
         onClick={() => move(-step)}
       >
-        <ReaderIcon name="minus" size={16} />
+        {lessGlyph}
       </button>
       <span
         className="silo-stepper-value"
@@ -50,7 +58,7 @@ export function Stepper({
           event.stopPropagation();
         }}
       >
-        {value}
+        {display ?? value}
       </span>
       <button
         type="button"
@@ -59,7 +67,7 @@ export function Stepper({
         disabled={value >= max}
         onClick={() => move(step)}
       >
-        <ReaderIcon name="plus" size={16} />
+        {moreGlyph}
       </button>
     </div>
   );

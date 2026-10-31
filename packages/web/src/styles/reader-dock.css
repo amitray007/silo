@@ -20,7 +20,6 @@
   --input-bg: var(--hov);
   --menu-highlight: var(--hov);
   --menu-icon: var(--ink);
-  --segment-on: var(--bg2);
   background: var(--bg);
   color: var(--ink);
 }
@@ -46,7 +45,7 @@
 .silo-reader-dock {
   position: absolute;
   z-index: 25;
-  inset: auto 0 20px;
+  inset: auto 0 calc(20px + env(safe-area-inset-bottom, 0px));
   display: flex;
   justify-content: center;
   pointer-events: none;
@@ -65,9 +64,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: 6px;
   height: 38px;
-  padding: 0 16px;
+  padding: 0 8px;
+  min-width: 77px;
   border: 0;
   border-radius: 999px;
   background: none;
@@ -85,7 +85,7 @@
   transform: scale(0.97);
 }
 .silo-reader-dock-glyph {
-  font-size: 15px;
+  font-size: 14px;
   font-weight: 500;
   letter-spacing: -0.02em;
 }
@@ -102,37 +102,64 @@
 /* The sheet opens above the pill, centred in the pane. */
 .silo-type-sheet.silo-menu-surface {
   position: absolute;
-  bottom: calc(100% + 8px);
+  bottom: calc(100% + 10px);
   inset-inline: 0;
   margin-inline: auto;
-  width: 360px;
-  max-width: calc(100% - 24px);
-  max-height: min(560px, calc(100dvh - 160px));
-  overflow-y: auto;
-  padding: 16px;
+  width: min(430px, calc(100% - 24px));
+  min-width: 0;
+  max-height: min(62dvh, 540px);
+  overflow: auto;
+  padding: 0;
   border-radius: 16px;
   box-shadow: var(--elev-3);
   transform-origin: bottom center;
   pointer-events: auto;
+  animation: siloSheetRise 240ms var(--ease-drawer);
+}
+@keyframes siloSheetRise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
 }
 .silo-type-sheet .silo-menu-grab {
   display: none;
 }
+.silo-sheet-head {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 8px 6px 16px;
+  background: var(--bg2);
+}
+.silo-sheet-head h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.silo-sheet-body {
+  padding: 0 16px 16px;
+}
 .silo-type-sheet-body {
   display: flex;
   flex-direction: column;
-  gap: 14px;
+  gap: 12px;
 }
 .silo-type-sheet .silo-reader-settings-row {
   flex-wrap: wrap;
-  min-height: 32px;
-  font-weight: 500;
+  font-weight: 400;
 }
 .silo-type-sheet .silo-reader-settings-row > span {
   flex: none;
 }
 .silo-reader-segment [role="radio"] {
-  padding-inline: 8px;
+  padding-inline: 6px;
   white-space: nowrap;
 }
 .silo-reader-segment [role="radio"][aria-checked="true"] {
@@ -153,20 +180,31 @@
   gap: 4px;
 }
 .silo-stepper-btn {
-  display: inline-grid;
-  place-items: center;
-  width: 32px;
-  height: 32px;
-  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
   border: 0;
-  border-radius: 8px;
-  background: var(--hov);
+  border-radius: 6px;
+  background: none;
   color: var(--mut);
+  font: inherit;
+  font-weight: 500;
   cursor: pointer;
+  flex: none;
 }
 .silo-stepper-btn .silo-reader-icon {
-  width: 16px;
-  height: 16px;
+  width: 12px;
+  height: 12px;
+}
+.silo-stepper-a[data-size="small"] {
+  font-size: 12px;
+}
+.silo-stepper-a[data-size="large"] {
+  font-size: 16px;
 }
 .silo-stepper-btn:disabled {
   opacity: 0.35;
@@ -177,7 +215,6 @@
 }
 .silo-stepper-value {
   min-width: 40px;
-  border-radius: 6px;
   text-align: center;
   font-size: 13px;
   font-weight: 500;
@@ -187,15 +224,12 @@
 @media (hover: hover) and (pointer: fine) {
   .silo-stepper-btn:hover:not(:disabled) {
     color: var(--ink);
-    background: var(--sel);
+    background: var(--hov);
   }
 }
 
 /* Phones: clear the safe area, and leave room under the article for the dock. */
 @media (max-width: 640px) {
-  .silo-reader-dock {
-    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
-  }
   .silo-reader:has(.silo-reader-prose) {
     padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   }
@@ -207,6 +241,10 @@
     height: 40px;
   }
   .silo-stepper-btn {
+    min-width: 40px;
+    height: 40px;
+  }
+  .silo-sheet-head .silo-reader-iconbtn {
     width: 40px;
     height: 40px;
   }

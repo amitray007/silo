@@ -7,6 +7,7 @@ import {
   useReaderType,
 } from '../../../lib/readerPrefs';
 import { type ReaderWidth, useReaderWidth } from '../../../lib/useReaderWidth';
+import { ReaderIcon } from '../ReaderIcon';
 import { SegmentedRow } from './Segmented';
 import { Stepper } from './Stepper';
 
@@ -30,6 +31,18 @@ const themes: { value: ReaderTheme; label: string }[] = [
   { value: 'sepia', label: 'Sepia' },
 ];
 
+/** A small or large "A" beside a minus or plus: the stepper makes the text smaller or larger. */
+function StepGlyph({ size, name }: { size: 'small' | 'large'; name: 'minus' | 'plus' }) {
+  return (
+    <>
+      <span className="silo-stepper-a" data-size={size} aria-hidden="true">
+        A
+      </span>
+      <ReaderIcon name={name} size={12} />
+    </>
+  );
+}
+
 /** Controls only: each change applies to the article at once and persists on this device. */
 export function TypeSheet() {
   const { type, update } = useReaderType();
@@ -50,6 +63,9 @@ export function TypeSheet() {
           min={MIN_READER_SIZE}
           max={MAX_READER_SIZE}
           valueText={`${type.size} pixels`}
+          display={`${type.size}px`}
+          lessGlyph={<StepGlyph size="small" name="minus" />}
+          moreGlyph={<StepGlyph size="large" name="plus" />}
           onChange={(size) => update({ size })}
         />
       </div>
