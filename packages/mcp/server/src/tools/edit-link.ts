@@ -1,7 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
 import type { EditLinkInput } from '@silo/core';
-import { editLink, getById } from '@silo/core';
+import { clearReadingPosition, editLink, getById, setReadingPosition } from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, foundResult, notFoundResult } from './found-result.js';
 
@@ -24,6 +24,10 @@ export function registerEditLink(server: McpServer): void {
         'edit with no fields is a no-op that returns the link unchanged). ' +
         'A title you set here is kept permanently: later page or AI titles ' +
         'will not replace it. ' +
+        'Also sets or clears the reading position: `readingPosition` is a ' +
+        "number from 0 to 1, the share of the article's words already read " +
+        '(0 is the start, 1 is the end), and `null` clears it. Saving a ' +
+        "position does not change the link's updated time. " +
         "Cannot change the link's url, sourceKind, or tags — use " +
         '`add_link_tag`/`remove_link_tag` for tags. Returns a clean ' +
         'not-found result (not an error) if the id is unknown or the link ' +
@@ -33,10 +37,20 @@ export function registerEditLink(server: McpServer): void {
         title: z.string().optional().describe('New title. Omit to leave unchanged.'),
         description: z.string().optional().describe('New description. Omit to leave unchanged.'),
         note: z.string().optional().describe('New note. Omit to leave unchanged.'),
+        readingPosition: z
+          .number()
+          .min(0)
+          .max(1)
+          .nullable()
+          .optional()
+          .describe(
+            "Where the owner stopped reading, as a share (0 to 1) of the article's words. " +
+              '`null` clears the saved position. Omit to leave unchanged.',
+          ),
       },
       outputSchema: foundLinkOutputShape,
     },
-    async ({ id, title, description, note }): Promise<CallToolResult> => {
+    async ({ id, title, description, note, readingPosition }): Promise<CallToolResult> => {
       // Built conditionally (not object-literal spread) because
       // `exactOptionalPropertyTypes` makes `EditLinkInput`'s optional fields
       // reject an explicit `undefined` — the input schema's `.optional()`
@@ -54,6 +68,11 @@ export function registerEditLink(server: McpServer): void {
             'Use list_links or search_links to find it, or restore_link first if it is trashed.',
         );
       }
+
+      // Position writes go to their own table; `editLink` already proved the
+      // link is live.
+      if (readingPosition === null) await clearReadingPosition(id);
+      else if (readingPosition !== undefined) await setReadingPosition(id, readingPosition);
 
       // `editLink` returns a bare `Link` (no `tags`) — re-fetch via
       // `getById` to hydrate tags before shaping, same pattern

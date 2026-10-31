@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { describeMcpTool, seedLink } from './test-support/mcp-server-harness.js';
 
 describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
@@ -193,5 +193,93 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
     } finally {
       core.setReaderRefresher(undefined);
     }
+  });
+
+  describe('reading position', () => {
+    it('round-trips through edit_link and get_link, and null clears it', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position');
+
+      const before = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(before.structuredContent).toMatchObject({ found: true, readingPosition: null });
+
+      const edited = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, readingPosition: 0.37 },
+      });
+      expect(edited.isError).toBeFalsy();
+      expect(edited.structuredContent).toMatchObject({
+        found: true,
+        readingPosition: { position: expect.closeTo(0.37, 5), updatedAt: expect.any(String) },
+      });
+
+      const read = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(read.structuredContent).toMatchObject({
+        readingPosition: { position: expect.closeTo(0.37, 5) },
+      });
+      expect(JSON.stringify(read.content)).toContain('reading position: 37%');
+
+      const cleared = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, readingPosition: null },
+      });
+      expect(cleared.structuredContent).toMatchObject({ found: true, readingPosition: null });
+      const after = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(after.structuredContent).toMatchObject({ readingPosition: null });
+    });
+
+    it('leaves the position alone when edit_link omits it', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position-keep');
+      await client.callTool({ name: 'edit_link', arguments: { id, readingPosition: 0.5 } });
+      const edited = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, title: 'Renamed' },
+      });
+      expect(edited.structuredContent).toMatchObject({
+        title: 'Renamed',
+        readingPosition: { position: 0.5 },
+      });
+    });
+
+    it('rejects a value outside 0..1 without saving', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position-bad');
+      for (const readingPosition of [1.2, -0.1]) {
+        const result = await client.callTool({
+          name: 'edit_link',
+          arguments: { id, readingPosition },
+        });
+        expect(result.isError).toBe(true);
+      }
+      const read = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(read.structuredContent).toMatchObject({ readingPosition: null });
+    });
+
+    it('reports not found for an unknown or trashed link', async () => {
+      const { core, client } = getContext();
+      const unknown = await client.callTool({
+        name: 'edit_link',
+        arguments: { id: randomUUID(), readingPosition: 0.5 },
+      });
+      expect(unknown.structuredContent).toEqual({ found: false });
+      const id = await seedLink(getContext, 'https://example.com/reading-position-trashed');
+      await core.softDelete(id);
+      const trashed = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, readingPosition: 0.5 },
+      });
+      expect(trashed.structuredContent).toEqual({ found: false });
+    });
+
+    it('keeps the field out of list_links rows', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position-list');
+      await client.callTool({ name: 'edit_link', arguments: { id, readingPosition: 0.5 } });
+      const list = await client.callTool({ name: 'list_links', arguments: {} });
+      const rows = (list.structuredContent as { links: Array<Record<string, unknown>> }).links;
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) expect(row).not.toHaveProperty('readingPosition');
+    });
   });
 });

@@ -117,6 +117,31 @@ describeIfPg('link-json (integration)', () => {
     expect(toLinkJson(link).titleSource).toBe('user');
   });
 
+  it('toLinkDetailJson adds readingPosition and still leaks no internal field', async () => {
+    const core = harness.mod();
+    const { toLinkDetailJson, toLinkJson, toSummaryLinkJson } = await import('./link-json.js');
+    const created = await core.createLink({
+      url: 'https://example.com/link-json-position',
+      sourceKind: 'link',
+    });
+    const empty = await core.getById(created.id);
+    if (!empty) throw new Error('missing link');
+    expect(toLinkDetailJson(empty).readingPosition).toBeNull();
+
+    await core.setReadingPosition(created.id, 0.5);
+    const link = await core.getById(created.id);
+    if (!link) throw new Error('missing link');
+    const json = toLinkDetailJson(link);
+    expect(json.readingPosition?.position).toBe(0.5);
+    expect(typeof json.readingPosition?.updatedAt).toBe('string');
+    expect(Object.keys(json.readingPosition ?? {}).sort()).toEqual(['position', 'updatedAt']);
+    expectNoLeakedFields(json);
+    expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
+    // List-shaped and plain shapers never carry the field.
+    expect(Object.hasOwn(toLinkJson(link), 'readingPosition')).toBe(false);
+    expect(Object.hasOwn(toSummaryLinkJson(link), 'readingPosition')).toBe(false);
+  });
+
   it('toTrashLinkJson adds deletedAt as an ISO string for a trashed link', async () => {
     const core = harness.mod();
     const { toTrashLinkJson } = await import('./link-json.js');

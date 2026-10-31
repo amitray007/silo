@@ -151,6 +151,11 @@ export const editBodySchema = z.object({
   note: z.string().optional(),
 });
 
+/** `PUT /api/links/:id/reading-position` body: a finite share of the article's words, 0 to 1. */
+export const readingPositionBodySchema = z.object({
+  position: z.number().min(0).max(1),
+});
+
 /** `POST /api/links/:id/tags` (add tag) body schema. */
 export const addTagBodySchema = z.object({
   tag: z.string().min(1),

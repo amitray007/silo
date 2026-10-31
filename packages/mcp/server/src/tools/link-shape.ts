@@ -1,4 +1,4 @@
-import type { LinkSummaryWithTags } from '@silo/core';
+import type { LinkDetail, LinkSummaryWithTags } from '@silo/core';
 import { CAPTURE_SOURCES, sourceDataSchema, TITLE_SOURCES } from '@silo/core';
 import { z } from 'zod';
 
@@ -39,6 +39,24 @@ import { z } from 'zod';
  * re-declared) rather than re-listing the 7 values here — see the
  * capture-source method file's "value-set drift guard".
  */
+/**
+ * Where the reader stopped in a link's article. `position` is a share of the
+ * article's words (0 is the start, 1 is the end). Only single-link reads carry
+ * it (`get_link` and the write tools that return a link); list and search rows
+ * do not.
+ */
+export const readingPositionShape = z
+  .object({
+    position: z
+      .number()
+      .min(0)
+      .max(1)
+      .describe("Share of the article's words already read: 0 is the start, 1 is the end."),
+    updatedAt: z.iso.datetime().describe('When the position was last saved.'),
+  })
+  .nullable()
+  .describe('Where the owner stopped reading this article, or null when no position is saved.');
+
 export const baseLinkShape = {
   id: z.uuid(),
   url: z.string(),
@@ -61,6 +79,7 @@ export const baseLinkShape = {
   tags: z.array(z.string()),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
+  readingPosition: readingPositionShape,
 };
 
 export type BaseLinkContent = z.infer<z.ZodObject<typeof baseLinkShape>>;
@@ -76,8 +95,13 @@ export type BaseLinkContent = z.infer<z.ZodObject<typeof baseLinkShape>>;
  * browse newest-first) drop the full body from their result ROWS, so a page
  * of hits doesn't drag every article's full text into an agent's context.
  */
-const { extractedText: _extractedText, ...snippetLinkBaseShape } = baseLinkShape;
+const {
+  extractedText: _extractedText,
+  readingPosition: _readingPosition,
+  ...snippetLinkBaseShape
+} = baseLinkShape;
 void _extractedText;
+void _readingPosition;
 export const snippetLinkShape = {
   ...snippetLinkBaseShape,
   sourceData: z.discriminatedUnion('kind', [
@@ -130,7 +154,7 @@ function shapeSourceData(raw: unknown): BaseLinkContent['sourceData'] {
  * fields (e.g. `search_links`'s `rank`) spread this result and add their own
  * on top.
  */
-export function toBaseLinkContent(link: LinkSummaryWithTags): BaseLinkContent {
+export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
   return {
     id: link.id,
     url: link.url,
@@ -149,6 +173,12 @@ export function toBaseLinkContent(link: LinkSummaryWithTags): BaseLinkContent {
     tags: link.tags,
     createdAt: link.createdAt.toISOString(),
     updatedAt: link.updatedAt.toISOString(),
+    readingPosition: link.readingPosition
+      ? {
+          position: link.readingPosition.position,
+          updatedAt: link.readingPosition.updatedAt.toISOString(),
+        }
+      : null,
   };
 }
 
@@ -172,11 +202,13 @@ type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText'> & { snippet: 
  * `rank`) spread this result and add their own on top.
  */
 export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent {
-  const { extractedText: _extractedText, ...base } = toBaseLinkContent({
-    ...link,
-    extractedText: null,
-  });
+  const {
+    extractedText: _extractedText,
+    readingPosition: _readingPosition,
+    ...base
+  } = toBaseLinkContent({ ...link, extractedText: null, readingPosition: null });
   void _extractedText;
+  void _readingPosition;
   const sourceData = base.sourceData;
   if (sourceData.kind === 'feed_media') {
     const { content: _content, ...summary } = sourceData;

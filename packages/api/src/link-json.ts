@@ -1,5 +1,6 @@
 import type {
   CaptureSource,
+  LinkDetail,
   LinkSummaryWithTags,
   LinkWithTextWindow,
   ListResultRow,
@@ -98,6 +99,16 @@ function shapeSourceData(raw: unknown): SourceData {
   return parsed.data;
 }
 
+/** Where the reader stopped: a share (0 to 1) of the article's words, and when it was saved. */
+export type ReadingPositionJson = { position: number; updatedAt: string };
+
+/**
+ * `LinkJson` plus the saved reading position (`null` when none). Only the
+ * single-link reads and writes carry it; list, search and trash rows do not,
+ * so a list query never joins `reading_positions`.
+ */
+export type LinkDetailJson = LinkJson & { readingPosition: ReadingPositionJson | null };
+
 /** Summary JSON plus `deletedAt` — the Trash screen's shape (`GET /api/trash`). */
 export type TrashLinkJson = SummaryLinkJson & { deletedAt: string };
 
@@ -147,6 +158,19 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
     updatedAt: link.updatedAt.toISOString(),
   };
   /* jscpd:ignore-end */
+}
+
+/** `toLinkJson` plus the reading position, picked field by field. */
+export function toLinkDetailJson(link: LinkDetail): LinkDetailJson {
+  return {
+    ...toLinkJson(link),
+    readingPosition: link.readingPosition
+      ? {
+          position: link.readingPosition.position,
+          updatedAt: link.readingPosition.updatedAt.toISOString(),
+        }
+      : null,
+  };
 }
 
 /**
@@ -235,11 +259,11 @@ export function toSearchResultJson(link: LinkSummaryWithTags, rank: number): Sea
  * it received. Mirrors `packages/mcp/server/src/tools/get-link.ts`'s
  * `GetLinkStructuredContent`'s identical `extractedTextLength` field.
  */
-export type LinkWithTextWindowJson = LinkJson & { extractedTextLength: number };
+export type LinkWithTextWindowJson = LinkDetailJson & { extractedTextLength: number };
 
 /** Builds the windowed-detail shape — `toLinkJson` plus `extractedTextLength`. */
 export function toLinkWithTextWindowJson(link: LinkWithTextWindow): LinkWithTextWindowJson {
-  return { ...toLinkJson(link), extractedTextLength: link.extractedTextLength };
+  return { ...toLinkDetailJson(link), extractedTextLength: link.extractedTextLength };
 }
 
 /**

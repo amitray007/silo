@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { LinkSummaryWithTags, LinkWithTextWindow } from '@silo/core';
+import type { LinkDetail, LinkWithTextWindow } from '@silo/core';
 import { getById, getByIds } from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
@@ -82,9 +82,7 @@ type GetLinkOutputStructuredContent = GetLinkStructuredContent & { results?: Get
  * shape, `LinkWithTextWindow`), it's included in the result — see
  * `getLinkOutputShape`'s doc comment.
  */
-function toStructuredContent(
-  link: LinkSummaryWithTags | LinkWithTextWindow,
-): GetLinkStructuredContent {
+function toStructuredContent(link: LinkDetail | LinkWithTextWindow): GetLinkStructuredContent {
   const base = { found: true as const, ...toBaseLinkContent(link) };
   return 'extractedTextLength' in link
     ? { ...base, extractedTextLength: link.extractedTextLength }
@@ -99,7 +97,7 @@ function toStructuredContent(
  * ...toBaseLinkContent(link) }`) only to avoid TS's "specified more than
  * once" duplicate-key flag on the object literal.
  */
-function toBatchResult(id: string, link: LinkSummaryWithTags | null): GetLinkBatchResult {
+function toBatchResult(id: string, link: LinkDetail | null): GetLinkBatchResult {
   if (!link) return { id, found: false };
   return { ...toBaseLinkContent(link), found: true };
 }
@@ -113,7 +111,7 @@ function toBatchResult(id: string, link: LinkSummaryWithTags | null): GetLinkBat
  * can be arbitrarily large); only its presence/length is noted, with the
  * full text left to `structuredContent`.
  */
-function toTextSummary(link: LinkSummaryWithTags | LinkWithTextWindow): string {
+function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
   const windowNote =
     'extractedTextLength' in link
       ? `showing a ${link.extractedText?.length ?? 0}-char window of ${link.extractedTextLength} total chars`
@@ -126,6 +124,9 @@ function toTextSummary(link: LinkSummaryWithTags | LinkWithTextWindow): string {
     link.description ? `description: ${link.description}` : undefined,
     `tags: ${link.tags.length > 0 ? link.tags.join(', ') : '(none)'}`,
     link.notes ? `note: ${link.notes}` : undefined,
+    link.readingPosition
+      ? `reading position: ${Math.round(link.readingPosition.position * 100)}% of the article read (saved ${link.readingPosition.updatedAt.toISOString()})`
+      : undefined,
     link.extractedText
       ? `full text: ${link.extractedText.length} chars (see structuredContent.extractedText)${windowNote ? ` — ${windowNote}` : ''}`
       : undefined,
@@ -177,7 +178,9 @@ export function registerGetLink(server: McpServer): void {
       description:
         "Fetch one or more saved links' full detail by id: metadata (url, " +
         'title, description, image, site name), extracted full text, tags, ' +
-        'capture status, and notes. Pass `id` for ONE link, or `ids` for a ' +
+        'capture status, notes, and the reading position (`readingPosition`: ' +
+        "the share, 0 to 1, of the article's words the owner has read, or " +
+        'null). Pass `id` for ONE link, or `ids` for a ' +
         'BATCH read of several in one call (if both are given, `ids` wins). ' +
         'A single-`id` fetch may pass `textWindow: { offset, limit }` to ' +
         'read a character slice of a long article instead of the whole ' +
