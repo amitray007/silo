@@ -23,6 +23,7 @@ const reader = { capturedAt: null, contentHtml: html, contentImages: [] };
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
+let failPuts = 0;
 let puts: Array<{ url: string; body: { position: number }; keepalive: boolean }>;
 let scrollArea: HTMLDivElement;
 let restoreRects = () => {};
@@ -92,7 +93,9 @@ async function open(link: LinkJson = makeLink({ id: 'pencil' })) {
 const pencilButton = () => screen.getByRole('button', { name: 'Pencil' });
 const guide = () => document.querySelector<HTMLElement>('.silo-pencil');
 const guideY = () => Number(/, (-?[\d.]+)px/.exec(guide()?.style.transform ?? '')?.[1]);
-const press = (key: string, target: Element = document.body) => fireEvent.keyDown(target, { key });
+const press = (key: string, target: Element = document.body, init: KeyboardEventInit = {}) =>
+  fireEvent.keyDown(target, { key, ...init });
+const settle = () => act(async () => vi.advanceTimersByTimeAsync(0));
 const play = (seconds: number) => act(() => vi.advanceTimersByTime(seconds * 1000));
 const saved = (position: number, at: number) =>
   expect(Math.abs((puts[at]?.body.position ?? 9) - position)).toBeLessThan(0.006);
@@ -100,6 +103,7 @@ const saved = (position: number, at: number) =>
 beforeEach(() => {
   localStorage.clear();
   puts = [];
+  failPuts = 0;
   stubLayout();
   vi.stubGlobal(
     'fetch',
@@ -108,6 +112,10 @@ beforeEach(() => {
       if (init?.method === 'PUT') {
         const body = JSON.parse(String(init.body));
         puts.push({ url, body, keepalive: Boolean(init.keepalive) });
+        if (failPuts > 0) {
+          failPuts -= 1;
+          return json({ error: 'internal_error', message: 'boom' }, 500);
+        }
         return json({
           readingPosition: { position: body.position, updatedAt: '2026-11-01T00:00:00Z' },
         });
@@ -174,6 +182,7 @@ it('saves every 10 seconds while playing, and not in between', async () => {
   expect(puts).toHaveLength(0);
   play(2); // 11s
   expect(puts).toHaveLength(1);
+  await settle(); // one request at a time: the next waits for this one to land
   play(10); // 21s
   expect(puts).toHaveLength(2);
   saved(((20 / 60) * 100) / 80, 1); // at 100 wpm, 20 seconds read 33 of the 80 words
@@ -377,4 +386,107 @@ it('draws a Highlighter band when that style is chosen', async () => {
   press('p');
   expect(guide()?.getAttribute('data-style')).toBe('highlighter');
   expect(guide()?.style.height).toBe('24px'); // the line's 20px plus 2px above and below
+});
+
+it('retries a failed save on the next pause or stop', async () => {
+  await open();
+  failPuts = 1;
+  fireEvent.click(pencilButton());
+  play(1);
+  press(' '); // pause: the save fails
+  await settle();
+  expect(puts).toHaveLength(1);
+  fireEvent.click(pencilButton()); // stop at the same place: it is sent again
+  await settle();
+  expect(puts).toHaveLength(2);
+  expect(puts[1]?.body.position).toBeCloseTo(puts[0]?.body.position ?? -1, 5);
+});
+
+it('does not send the same position twice once the server confirmed it', async () => {
+  await open();
+  fireEvent.click(pencilButton());
+  play(1);
+  press(' ');
+  await settle();
+  expect(puts).toHaveLength(1);
+  fireEvent.click(pencilButton());
+  act(() => {
+    window.dispatchEvent(new Event('pagehide'));
+  });
+  await settle();
+  expect(puts).toHaveLength(1);
+});
+
+it('sends a keepalive save on pagehide when the server has not confirmed the position', async () => {
+  await open();
+  failPuts = 1;
+  fireEvent.click(pencilButton());
+  play(1);
+  press(' ');
+  await settle(); // the save failed, so the server still has nothing
+  act(() => {
+    window.dispatchEvent(new Event('pagehide'));
+  });
+  expect(puts).toHaveLength(2);
+  expect(puts[1]?.keepalive).toBe(true);
+});
+
+it('redraws the guide when the style changes while paused', async () => {
+  await open();
+  press('p');
+  press(' ');
+  expect(guide()?.getAttribute('data-style')).toBe('underline');
+  expect(guide()?.style.height).toBe('2px');
+  act(() => {
+    localStorage.setItem('silo.readerPencil', JSON.stringify({ v: 1, style: 'highlighter' }));
+    window.dispatchEvent(new StorageEvent('storage', { key: 'silo.readerPencil' }));
+  });
+  expect(guide()?.getAttribute('data-style')).toBe('highlighter');
+  expect(guide()?.style.height).toBe('24px');
+});
+
+it('toggles once for a held Space', async () => {
+  await open();
+  press('p');
+  const first = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+  const held = new KeyboardEvent('keydown', {
+    key: ' ',
+    bubbles: true,
+    cancelable: true,
+    repeat: true,
+  });
+  act(() => {
+    document.body.dispatchEvent(first);
+    document.body.dispatchEvent(held);
+    document.body.dispatchEvent(held);
+  });
+  const stopped = guideY();
+  play(3);
+  expect(guideY()).toBe(stopped); // paused once, not paused and played again
+  expect(held.defaultPrevented).toBe(true); // and the page did not scroll
+});
+
+it('starts a finished article from the first line in view, not the last line', async () => {
+  await open(
+    makeLink({ id: 'done', readingPosition: { position: 1, updatedAt: '2026-11-01T00:00:00Z' } }),
+  );
+  press('p');
+  expect(guideY()).toBe(GUIDE_Y(0));
+});
+
+it('sizes the resume button to the 20px phone padding', async () => {
+  vi.stubGlobal('matchMedia', (query: string) => ({
+    matches: query === '(max-width: 640px)',
+    media: query,
+    addEventListener: () => {},
+    removeEventListener: () => {},
+  }));
+  await open(
+    makeLink({
+      id: 'phone',
+      readingPosition: { position: 0.5, updatedAt: '2026-11-01T00:00:00Z' },
+    }),
+  );
+  const resume = screen.getByRole('button', { name: 'Resume reading' });
+  expect(resume.style.top).toBe(`${LINE_TOP(5) + 10 - 10}px`);
 });

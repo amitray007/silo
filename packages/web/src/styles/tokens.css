@@ -21,6 +21,10 @@
   --accent-b: #ff6a13;
   --mark: #f26b1d;
   --markt: #b8480a;
+  /* Ink on a --mark fill, such as the reader's resume button. Same in both themes. */
+  --mark-ink: oklch(99.11% 0 0);
+  /* A neutral wash behind a pressed control that sits on a --btn fill. */
+  --btn-pressed: oklch(50% 0 0 / 25%);
   --accent-soft: #fff1e6;
   /* Red 700: danger text clears 4.5:1 on --bg, --hov and --danger-soft. */
   --warn: oklch(50.5% 0.213 27.518);

@@ -61,7 +61,7 @@
   border: 0;
   border-radius: 50%;
   background: var(--mark);
-  color: oklch(99.11% 0 0);
+  color: var(--mark-ink);
   box-shadow: var(--elev-1);
   pointer-events: auto;
   cursor: pointer;
@@ -70,12 +70,31 @@
   width: 12px;
   height: 12px;
 }
-/* The target reaches 40px on touch without growing the mark. */
-@media (max-width: 640px), (pointer: coarse) {
+/* On touch the target reaches 40px without growing the mark or covering text: tall only, since
+   the button sits in the gutter and the text ends beside it. */
+@media (pointer: coarse) and (min-width: 641px) {
   .silo-resume::before {
     content: "";
     position: absolute;
     inset: -8px;
+  }
+}
+/* A phone's article padding is 20px: the button shrinks to fit it, and its target grows
+   upward and downward only, so a tap beside a line still moves the pencil there. */
+@media (max-width: 640px) {
+  .silo-resume {
+    width: 20px;
+    height: 20px;
+    padding: 0 0 0 1px;
+  }
+  .silo-resume .silo-reader-icon {
+    width: 10px;
+    height: 10px;
+  }
+  .silo-resume::before {
+    content: "";
+    position: absolute;
+    inset: -10px 0;
   }
 }
 
@@ -116,7 +135,7 @@
 }
 .silo-reader-dock-split[data-on="true"] .silo-reader-dockchev[aria-expanded="true"] {
   color: var(--btn-ink);
-  background: oklch(50% 0 0 / 25%);
+  background: var(--btn-pressed);
 }
 @media (hover: hover) and (pointer: fine) {
   .silo-reader-dockchev:hover {
@@ -125,7 +144,7 @@
   }
   .silo-reader-dock-split[data-on="true"] .silo-reader-dockchev:hover {
     color: var(--btn-ink);
-    background: oklch(50% 0 0 / 25%);
+    background: var(--btn-pressed);
   }
 }
 

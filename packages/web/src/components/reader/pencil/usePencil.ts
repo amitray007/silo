@@ -98,9 +98,14 @@ function pointAfterMeasure({
   start: (() => number) | null;
 }): Point {
   if (keep !== null) return pointAtShare(lines, prefix, keep);
-  if (saved !== null && saved > NOT_STARTED)
-    return { index: pointAtShare(lines, prefix, saved).index, sweep: 0 };
+  const resume = resumeShare(saved);
+  if (resume !== null) return { index: pointAtShare(lines, prefix, resume).index, sweep: 0 };
   return { index: start ? start() : 0, sweep: 0 };
+}
+
+/** A saved share the pencil resumes from: after the start and before the end of the article. */
+function resumeShare(saved: number | null): number | null {
+  return saved !== null && saved > NOT_STARTED && saved < FINISHED ? saved : null;
 }
 
 type PencilResume = { y: number };
@@ -125,7 +130,7 @@ export function usePencil({
   scroll: HTMLElement | null;
   saved: number | null;
   canSave: boolean;
-  onSave: (share: number, options?: SaveOptions) => void;
+  onSave: (share: number, options?: SaveOptions) => Promise<void>;
 }) {
   const { prefs, update } = usePencilPrefs();
   const { type } = useReaderType();
@@ -144,7 +149,12 @@ export function usePencil({
   const fill = useRef<HTMLDivElement | null>(null);
   const live = useRef({ enabled, saved, canSave, onSave, prefs, reduced });
   live.current = { enabled, saved, canSave, onSave, prefs, reduced };
+  // The share last sent (or confirmed), and the last one the server confirmed. They differ
+  // while a save is out, and a failed save puts the first back on the second so it retries.
   const lastSaved = useRef(saved ?? -1);
+  const confirmed = useRef(saved ?? -1);
+  // True until the pencil has a place from a saved position or a start of its own.
+  const viewportStart = useRef(true);
 
   const paint = useCallback(() => {
     const line = lines.current[point.current.index];
@@ -167,16 +177,26 @@ export function usePencil({
     const now = live.current;
     if (!now.enabled || !now.canSave || !lines.current.length) return;
     const share = shareAt(lines.current, prefix.current, point.current.index, point.current.sweep);
-    if (Math.abs(share - lastSaved.current) < SAVE_EPSILON) return;
+    // A page that is closing cannot wait for a request in flight, so it compares with what the
+    // server has confirmed.
+    const baseline = options?.keepalive ? confirmed.current : lastSaved.current;
+    if (Math.abs(share - baseline) < SAVE_EPSILON) return;
     lastSaved.current = share;
-    now.onSave(share, options);
+    now.onSave(share, options).then(
+      () => {
+        confirmed.current = share;
+      },
+      () => {
+        lastSaved.current = confirmed.current;
+      },
+    );
   }, []);
 
   /** Line the saved share falls on, for the resume button. */
   const placeResume = useCallback(() => {
-    const share = live.current.saved;
+    const share = resumeShare(live.current.saved);
     const line =
-      share !== null && share > NOT_STARTED && share < FINISHED
+      share !== null
         ? lines.current[pointAtShare(lines.current, prefix.current, share).index]
         : undefined;
     setResumeY(line ? line.top + line.height / 2 : null);
@@ -193,7 +213,7 @@ export function usePencil({
 
   // Measure the lines when the pencil is on or a resume point needs a place, and again when the
   // prose changes size: a resize, a type setting, a late font or image.
-  const resumable = saved !== null && saved > NOT_STARTED;
+  const resumable = resumeShare(saved) !== null;
   // biome-ignore lint/correctness/useExhaustiveDependencies: type and width re-run the measuring after the prose restyles.
   useEffect(() => {
     if (!(enabled || resumable) || !prose || !frame || !scroll) return;
@@ -212,6 +232,8 @@ export function usePencil({
         saved: live.current.saved,
         start: live.current.enabled ? () => firstLineInView(lines.current, frame, scroll) : null,
       });
+      if (first && (live.current.enabled || resumeShare(live.current.saved) !== null))
+        viewportStart.current = false;
       paint();
       placeResume();
       if (first && live.current.enabled) reveal();
@@ -234,12 +256,22 @@ export function usePencil({
 
   // A saved position that arrives or changes while the pencil is off moves the resume point.
   useEffect(() => {
-    lastSaved.current = saved ?? -1;
+    // Take the server's value only while no save of ours is out; an optimistic value is not one.
+    if (lastSaved.current === confirmed.current) {
+      lastSaved.current = saved ?? -1;
+      confirmed.current = saved ?? -1;
+    }
     if (live.current.enabled || !lines.current.length) return;
-    point.current = { ...pointAtShare(lines.current, prefix.current, saved ?? 0), sweep: 0 };
+    const share = resumeShare(saved);
+    viewportStart.current = share === null;
+    point.current = { ...pointAtShare(lines.current, prefix.current, share ?? 0), sweep: 0 };
     paint();
     placeResume();
   }, [saved, paint, placeResume]);
+
+  // The style changes how the guide is drawn, which matters most while the pencil is paused.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: `paint` reads the style from the ref.
+  useEffect(() => paint(), [prefs.style, paint]);
 
   // Sweep the current line, then drop to the next. One frame loop, only while playing.
   useEffect(() => {
@@ -313,11 +345,17 @@ export function usePencil({
     live.current = { ...live.current, enabled: false };
   }, [flush]);
   const start = useCallback(() => {
+    // With nothing to resume, start where the reader is: the first line in view.
+    if (!live.current.enabled && viewportStart.current && lines.current.length && frame && scroll) {
+      point.current = { index: firstLineInView(lines.current, frame, scroll), sweep: 0 };
+      viewportStart.current = false;
+      paint();
+    }
     live.current = { ...live.current, enabled: true };
     setEnabled(true);
     setPlaying(true);
     if (lines.current.length) reveal();
-  }, [reveal]);
+  }, [reveal, frame, scroll, paint]);
   const pause = useCallback(() => {
     setPlaying(false);
     flush();

@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import {
   clearTitleReveal,
   getTitleReveal,
@@ -203,40 +203,99 @@ export function useLink(id: string | undefined, options: { enabled?: boolean } =
 
 function withReadingPosition(
   data: LinkResponse | undefined,
-  readingPosition: ReadingPositionJson,
+  readingPosition: ReadingPositionJson | null,
 ): LinkResponse | undefined {
   return data && { ...data, link: { ...data.link, readingPosition } };
 }
 
+type SaveQueue = {
+  /** The request in flight, plus any queued behind it. */
+  flight: Promise<void> | null;
+  /** The newest position waiting for the one in flight to finish. */
+  pending: { position: number; generation: number } | null;
+  /** Counts saves, so a response for an older one never overwrites a newer position. */
+  generation: number;
+  /** The last position the server confirmed. */
+  confirmed: ReadingPositionJson | null | undefined;
+};
+
+/** Set the link's cached reading position, or clear it. */
+function putCachedPosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+  readingPosition: ReadingPositionJson | null,
+): void {
+  queryClient.setQueryData<LinkResponse>(queryKeys.link(id), (data) =>
+    withReadingPosition(data, readingPosition),
+  );
+}
+
+/** Send one position, then whatever newer one queued behind it. See `useSaveReadingPosition`. */
+async function drainSaves(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  position: number,
+  sent: number,
+): Promise<void> {
+  const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
+  try {
+    const saved = await apiPut<{ readingPosition: ReadingPositionJson }>(path, { position });
+    q.confirmed = saved.readingPosition;
+    if (sent === q.generation) putCachedPosition(queryClient, id, saved.readingPosition);
+  } catch (error) {
+    // A newer position is waiting: it goes next, and its result decides what the cache shows.
+    if (!q.pending) {
+      if (sent === q.generation && q.confirmed !== undefined)
+        putCachedPosition(queryClient, id, q.confirmed);
+      throw error;
+    }
+  }
+  const waiting = q.pending;
+  q.pending = null;
+  if (waiting) await drainSaves(queryClient, q, id, waiting.position, waiting.generation);
+}
+
 /**
  * Save where the reader stopped (`PUT /api/links/:id/reading-position`). The link query updates
- * at once, so the resume point is right without a refetch; the server's own timestamp replaces
- * the local one when the save lands. A failed save keeps the local value, and the next save
- * retries. `keepalive` sends the request so it survives the page closing.
+ * at once, so the resume point is right without a refetch, and an in-flight refetch is
+ * cancelled so it cannot overwrite the new value. Saves run one at a time: while a request is
+ * in flight the newest position waits behind it, so a slow request cannot land after a later
+ * one. The server's timestamp replaces the local one only when no newer save has started. The
+ * promise settles when the queue drains and rejects when the last request failed; the cache
+ * then returns to the last confirmed position. `keepalive` sends one request that survives the
+ * page closing, outside the queue.
  */
 export function useSaveReadingPosition(id: string) {
   const queryClient = useQueryClient();
+  const queue = useRef<SaveQueue>({
+    flight: null,
+    pending: null,
+    generation: 0,
+    confirmed: undefined,
+  });
   return useCallback(
-    (position: number, options: { keepalive?: boolean } = {}) => {
+    (position: number, options: { keepalive?: boolean } = {}): Promise<void> => {
       const key = queryKeys.link(id);
       const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
-      queryClient.setQueryData<LinkResponse>(key, (data) =>
-        withReadingPosition(data, { position, updatedAt: new Date().toISOString() }),
-      );
+      const q = queue.current;
+      const generation = ++q.generation;
+      if (q.confirmed === undefined)
+        q.confirmed = queryClient.getQueryData<LinkResponse>(key)?.link.readingPosition ?? null;
+      void queryClient.cancelQueries({ queryKey: key });
+      putCachedPosition(queryClient, id, { position, updatedAt: new Date().toISOString() });
       if (options.keepalive) {
         apiPutKeepalive(path, { position });
-        return;
+        return Promise.resolve();
       }
-      apiPut<{ readingPosition: ReadingPositionJson }>(path, { position }).then(
-        (saved) =>
-          // A newer local save may already have replaced this one; leave that alone.
-          queryClient.setQueryData<LinkResponse>(key, (data) =>
-            data?.link.readingPosition?.position === position
-              ? withReadingPosition(data, saved.readingPosition)
-              : data,
-          ),
-        () => {},
-      );
+      if (q.flight) {
+        q.pending = { position, generation };
+        return q.flight;
+      }
+      q.flight = drainSaves(queryClient, q, id, position, generation).finally(() => {
+        q.flight = null;
+      });
+      return q.flight;
     },
     [id, queryClient],
   );

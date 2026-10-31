@@ -233,8 +233,8 @@ card goes to `future-scope.md` under AI features.
 - **Keys** (ignored in inputs, textareas, contenteditable and open dialogs):
   `p` toggles the pencil, Space plays or pauses while it is on, ArrowUp and
   ArrowDown move a line, `+` and `-` change speed, Escape turns it off after
-  any open sheet closes. While the pencil is on it takes over the Reader's
-  `j`/`k`/arrow link stepping, as in the prototype; when it is off, the
+  any open sheet closes. While the pencil is on it takes over the arrow keys
+  only, as in the prototype: `j` and `k` still step links. When it is off, the
   Reader's keys work as today.
 - **Click a line** to move the pencil there while it is on.
 - **Auto-scroll** keeps the current line in the middle third of the pane;

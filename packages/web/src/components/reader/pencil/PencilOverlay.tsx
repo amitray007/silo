@@ -1,36 +1,39 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { layoutMedia, useMediaQuery } from '../../../lib/breakpoints';
 import { ReaderIcon } from '../ReaderIcon';
 import type { PencilApi } from './usePencil';
 
-/** The resume button is 24px wide; keep it 4px inside the pane's edge. */
-const RESUME_SIZE = 24;
-const GUTTER_GAP = 6;
-const EDGE_GAP = 4;
+/**
+ * The resume button is 24px wide, 6px past the prose and at least 4px inside the pane's edge. On
+ * a phone the article's right padding is 20px, so the button shrinks to 20px and fills it.
+ */
+type Gutter = { size: number; gap: number; edge: number };
+const DESKTOP_GUTTER: Gutter = { size: 24, gap: 6, edge: 4 };
+const PHONE_GUTTER: Gutter = { size: 20, gap: 0, edge: 0 };
 
 /**
  * Where the right gutter column starts, in the frame's own coordinates: just past the prose,
  * pulled in when the pane is too narrow to leave room. Slice 3's note markers share this column.
  */
-function useGutterLeft(frame: HTMLElement | null, scroll: HTMLElement | null): number {
+function useGutterLeft(
+  frame: HTMLElement | null,
+  scroll: HTMLElement | null,
+  { size, gap, edge }: Gutter,
+): number {
   const [left, setLeft] = useState(0);
   useEffect(() => {
     if (!frame || !scroll) return;
     const place = () => {
       const inset = frame.getBoundingClientRect().left - scroll.getBoundingClientRect().left;
-      setLeft(
-        Math.min(
-          frame.clientWidth + GUTTER_GAP,
-          scroll.clientWidth - inset - RESUME_SIZE - EDGE_GAP,
-        ),
-      );
+      setLeft(Math.min(frame.clientWidth + gap, scroll.clientWidth - inset - size - edge));
     };
     place();
     const observer = new ResizeObserver(place);
     observer.observe(frame);
     observer.observe(scroll);
     return () => observer.disconnect();
-  }, [frame, scroll]);
+  }, [frame, scroll, size, gap, edge]);
   return left;
 }
 
@@ -45,7 +48,8 @@ export function PencilOverlay({
   scroll: HTMLElement | null;
 }) {
   const frame = prose?.parentElement ?? null;
-  const gutterLeft = useGutterLeft(frame, scroll);
+  const gutter = useMediaQuery(layoutMedia.phone) ? PHONE_GUTTER : DESKTOP_GUTTER;
+  const gutterLeft = useGutterLeft(frame, scroll, gutter);
   if (!frame) return null;
   return createPortal(
     <>
@@ -60,7 +64,7 @@ export function PencilOverlay({
           className="silo-resume"
           title="Resume reading (P)"
           aria-label="Resume reading"
-          style={{ top: pencil.resume.y - RESUME_SIZE / 2, left: gutterLeft }}
+          style={{ top: pencil.resume.y - gutter.size / 2, left: gutterLeft }}
           onClick={pencil.start}
         >
           <ReaderIcon name="play" size={12} />

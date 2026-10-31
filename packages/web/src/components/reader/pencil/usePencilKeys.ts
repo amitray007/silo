@@ -35,7 +35,8 @@ function whileOn(event: KeyboardEvent, pencil: PencilApi): boolean {
   switch (event.key) {
     case ' ':
       if (target?.closest(CONTROL)) return false;
-      pencil.togglePlay();
+      // A held key repeats; the page must not scroll under it, but it toggles only once.
+      if (!event.repeat) pencil.togglePlay();
       return true;
     case 'ArrowDown':
     case 'ArrowUp':
