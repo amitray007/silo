@@ -433,33 +433,55 @@ downloads until the reader presses Listen.
 
 ### Engines
 
+Read aloud is **English-only for now** (owner decision, 2026-11-01). `kokoro-js@1.2.1`
+ships only `en-us` and `en-gb` voices and an English phonemizer, and Phonon 31m is
+English, so no engine here can read another language well. Multilingual read aloud is
+parked in `docs/product/future-scope.md`.
+
 - **Phonon 31m** (`phonon-tts`, code MIT or Apache-2.0, weights Apache-2.0,
-  English): the default for English. Its package runs its own worker and
-  streams audio as it generates. Extra voices come from the
-  `gradium/phonon-voices` catalog through `addVoice`; ship only voices whose
-  license allows redistribution (check the catalog's license and record it).
-- **Kokoro 82M** (`kokoro-js`, Apache-2.0): the default for other supported
-  languages and the second choice for English. Run it in a module Web Worker
-  owned by silo. WebGPU uses fp32 (the prototype measured fp16 as degraded);
-  without WebGPU use q8 on WASM, and show that it may be slower.
+  English): the default engine. Its package runs its own worker and streams audio as it
+  generates. Its voices are the 25 `en-us` and `en-gb` voices of the
+  `gradium/phonon-voices` catalog (Apache-2.0 on its card), registered through the
+  `ModelSpec` `voices` map. The 12 character voices and the fr, de, es and pt voices are
+  not shipped.
+- **Kokoro 82M** (`kokoro-js`, Apache-2.0): the second English engine, selectable in
+  the sheet. It runs in a module Web Worker owned by silo, with the 28 voices
+  `kokoro-js` lists. WebGPU uses fp32 (the prototype measured fp16 as degraded); without a
+  real WebGPU adapter it uses q8 on WASM, and the sheet says it may be slower. A WebGPU
+  start that fails is retried on a fresh worker, because ONNX Runtime keeps the failure.
 - **Phonon 40m is excluded**: its weights are CC BY-NC 4.0.
-- Engine choice is per language and browser-local (`createPrefStore`). The
-  article language comes from the stored reader's `lang` (fall back to the
-  link's, then English).
+- The engine, one voice per engine, and the speed are browser-local
+  (`createPrefStore`, key `silo.readerReadAloud`).
+- **Language gate.** The stored reader and the link carry no language field, so the
+  article language comes from its text (`listen/language.ts`: a non-Latin script, or
+  Latin text with almost none of the common English words, is not English; text too
+  short to judge counts as English). For a non-English article the dock's Listen button
+  is disabled with the title "Read aloud is English-only for now", and "Listen from
+  here" is left out of the selection toolbar.
 
 ### Model files served by silo
 
-- A manifest in code lists each engine's files: source URL pinned to a commit,
-  size, and sha256.
+- A manifest in code (`packages/core/src/tts/manifest.ts`) lists each engine's files:
+  source URL pinned to a commit, size, sha256, and the license. It ships 62 files:
+  Phonon (config, tokenizer, q8 weights, a default voice, 25 voices) and Kokoro
+  (config, tokenizers, the q8 and fp32 ONNX models, 28 voices).
 - `GET /api/tts/files/:engine/*path` serves only manifest entries. On the
   first request the server downloads the file from its pinned URL into the
-  data directory (`tts-cache/`), verifies the sha256, and then serves it with
-  immutable cache headers and range support. Concurrent first requests share
+  data directory (`$SILO_DATA_DIR/tts-cache/`, stored by sha256), verifies the sha256, and
+  then serves it with immutable cache headers and range support.
+  `SILO_DATA_DIR` defaults to `$XDG_STATE_HOME/silo` (or `~/.local/state/silo`); the
+  prod compose mounts a volume at `/data`. `GET /api/tts/manifest` lists the files
+  (without upstream URLs) for the web, which keeps the last good answer so a cached
+  voice loads while silo is unreachable. Concurrent first requests share
   one download. A failed or mismatched download returns 502 and leaves no
   partial file.
 - The web points `phonon-tts` (`ModelSpec`) and transformers.js
-  (`env.remoteHost` / path template) at these URLs, so the browser never calls
-  Hugging Face.
+  (`env.remoteHost` / `remotePathTemplate`) at these URLs, so the browser never calls
+  Hugging Face. Two things `env` does not cover are handled in the Kokoro worker:
+  `kokoro-js` fetches each voice from a hard-coded Hugging Face address (a `fetch`
+  wrapper sends it to silo and refuses any other Hugging Face request), and ONNX
+  Runtime fetches its WebAssembly files from a CDN (`wasmPaths` points at the copies
+  in the transformers.js package, which Vite serves).
 - Request `navigator.storage.persist()` when a model first loads.
 
 ### Speech plan
@@ -485,9 +507,12 @@ downloads until the reader presses Listen.
 
 ### UI
 
-- **Listen tool**: pressing it starts playback; the dock becomes the player
-  (previous, play/pause with a loading-dev spinner while waiting, next, the
-  current sentence text, speed, a list button for the sheet, and close).
+- **Listen tool**: pressing it turns the dock into the player and opens the Listen sheet,
+  ready to play (as the prototype did; the sheet warms the voice and the audio device opens
+  on that press, so Play starts in a few milliseconds). The player has previous, play/pause
+  with a loading-dev spinner while waiting, next, the current sentence text, speed, a list
+  button for the sheet, and close. "Listen from here" and a click on a sentence start
+  playing at once.
 - **Listen sheet**: engine and voice in silo's custom listbox (voices grouped
   by language, name at 500, muted trait, type-ahead, never truncated), the
   speed `Stepper`, and the download state ("Downloading voice · 42%" with MB
@@ -513,7 +538,8 @@ priority, and the sheet states on the web. Engines are mocked in unit tests.
 ### QA and mockup parity
 
 In a real browser on real links: cold and warm load for both engines, time to
-first audio, gaps, click-to-jump, speed changes, voice changes, a non-English
-article, offline after caching, and no request to a third-party host. Then
+first audio, gaps, click-to-jump, speed changes, voice changes, an article in
+another language (Listen disabled, no "Listen from here"), offline after caching, and no
+request to a third-party host. Then
 compare the dock player and Listen sheet side by side with prototype variant B
 and fix every unintended difference.

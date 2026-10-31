@@ -2,7 +2,7 @@
 
 silo's AI features are optional. The owner turns them on with their own provider key.
 The design is in [`docs/methods/ai-foundation.md`](../methods/ai-foundation.md). Rules
-marked **ENFORCED** fail the gate.
+marked **ENFORCED** fail the gate. Read aloud is outside this layer: its speech models run in the browser with no provider, key or server AI, and no article text leaves the device.
 
 ## Rules
 
