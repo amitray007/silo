@@ -1,4 +1,5 @@
 import { type CSSProperties, useCallback, useMemo, useSyncExternalStore } from 'react';
+import { type HighlightColor, isHighlightColor } from './highlights';
 
 /**
  * A browser-local preference backed by `localStorage`: one validated value per key, shared by
@@ -218,4 +219,41 @@ export function usePencilPrefs() {
     [],
   );
   return { prefs, update };
+}
+
+export type HighlightPrefs = { color: HighlightColor };
+
+export const highlightPrefsDefaults: HighlightPrefs = { color: 'yellow' };
+
+/** An unknown or damaged colour falls back to the default. */
+export function parseHighlightPrefs(raw: string): HighlightPrefs {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return highlightPrefsDefaults;
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data))
+    return highlightPrefsDefaults;
+  const { color } = data as Record<string, unknown>;
+  return isHighlightColor(color) ? { color } : highlightPrefsDefaults;
+}
+
+const highlightPrefsStore = createPrefStore<HighlightPrefs>({
+  key: 'silo.readerHighlight',
+  event: 'silo:reader-highlight',
+  initial: highlightPrefsDefaults,
+  parse: parseHighlightPrefs,
+  serialize: (value) => JSON.stringify({ v: 1, ...value }),
+});
+
+/** The colour new highlights start with, browser-local like the other reader settings. */
+export function useHighlightPrefs() {
+  const prefs = usePref(highlightPrefsStore);
+  const setColor = useCallback(
+    (color: HighlightColor) =>
+      highlightPrefsStore.set({ ...highlightPrefsStore.getSnapshot(), color }),
+    [],
+  );
+  return { color: prefs.color, setColor };
 }

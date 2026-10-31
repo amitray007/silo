@@ -9,6 +9,7 @@
  * one required divergence: dates are serialized over HTTP as ISO strings, so
  * every date field here is `string`, never `Date`.
  */
+import type { HighlightColor } from '../lib/highlights';
 
 /** Mirrors `LinkJson['captureStatus']` in `packages/api/src/link-json.ts`. */
 export type CaptureStatus = 'enriching' | 'full' | 'partial' | 'bare';
@@ -159,6 +160,23 @@ export type LinkJson = {
    * reads carry it: `null` means none saved, and a list row leaves it out.
    */
   readingPosition?: ReadingPositionJson | null;
+  /** Passage highlights. Only single-link reads carry them; a list row leaves them out. */
+  highlights?: HighlightJson[];
+};
+
+/** One passage highlight with its optional note; dates are ISO strings. */
+export type HighlightJson = {
+  id: string;
+  quote: string;
+  prefix: string;
+  suffix: string;
+  /** Hints into the prose's normalised text; `null` when the writer had none (an agent). */
+  startOffset: number | null;
+  endOffset: number | null;
+  color: HighlightColor;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /** `PUT /api/links/:id/reading-position` returns this; `updatedAt` is an ISO string. */

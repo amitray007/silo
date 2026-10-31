@@ -10,10 +10,10 @@ export type Line = {
 };
 
 /** Text the pencil never sweeps: code, figures and captions, tables, math, controls, notes. */
-const SKIP_SELECTOR =
+export const SKIP_SELECTOR =
   'pre, figure, figcaption, caption, table, math, svg, script, style, button, .silo-reader-card, [aria-hidden="true"], a[title="return to article"]';
 
-const BLOCK_SELECTOR = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, dd, dt, div';
+export const BLOCK_SELECTOR = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, dd, dt, div';
 
 /** Visible prose text nodes in document order, minus code, figures and tables. */
 export function proseTextNodes(root: HTMLElement): Text[] {

@@ -2,13 +2,16 @@ import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
+  highlightPrefsDefaults,
   MAX_PENCIL_WPM,
   MIN_PENCIL_WPM,
+  parseHighlightPrefs,
   parsePencilPrefs,
   parseReaderType,
   pencilPrefsDefaults,
   readerTypeDefaults,
   readerTypeStyle,
+  useHighlightPrefs,
   usePencilPrefs,
   useReaderType,
 } from './readerPrefs';
@@ -291,5 +294,43 @@ describe('pencil prefs', () => {
     expect(parsePencilPrefs(JSON.stringify({ wpm: 9000 })).wpm).toBe(MAX_PENCIL_WPM);
     expect(parsePencilPrefs(JSON.stringify({ wpm: 251 })).wpm).toBe(260);
     expect(parsePencilPrefs(JSON.stringify({ wpm: Number.NaN })).wpm).toBe(240);
+  });
+});
+
+describe('highlight prefs', () => {
+  const HIGHLIGHT_KEY = 'silo.readerHighlight';
+  afterEach(() => localStorage.clear());
+
+  it('starts on yellow', () => {
+    expect(highlightPrefsDefaults).toEqual({ color: 'yellow' });
+    expect(renderHook(useHighlightPrefs).result.current.color).toBe('yellow');
+  });
+
+  it('round-trips a colour through storage', () => {
+    const first = renderHook(useHighlightPrefs);
+    act(() => first.result.current.setColor('violet'));
+    expect(JSON.parse(localStorage.getItem(HIGHLIGHT_KEY) ?? '{}')).toEqual({
+      v: 1,
+      color: 'violet',
+    });
+    first.unmount();
+    expect(renderHook(useHighlightPrefs).result.current.color).toBe('violet');
+  });
+
+  it('falls back to yellow for damaged or unknown values', () => {
+    for (const raw of ['{nope', 'null', '[1]', '7', JSON.stringify({ color: 'orange' })]) {
+      expect(parseHighlightPrefs(raw)).toEqual(highlightPrefsDefaults);
+    }
+    expect(parseHighlightPrefs(JSON.stringify({ color: 'pink' }))).toEqual({ color: 'pink' });
+  });
+
+  it('keeps working when storage throws', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('full');
+    });
+    const { result } = renderHook(useHighlightPrefs);
+    act(() => result.current.setColor('green'));
+    expect(result.current.color).toBe('green');
+    vi.restoreAllMocks();
   });
 });

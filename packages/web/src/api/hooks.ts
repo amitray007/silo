@@ -6,6 +6,7 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useCallback, useRef } from 'react';
+import type { HighlightColor } from '../lib/highlights';
 import {
   clearTitleReveal,
   getTitleReveal,
@@ -31,6 +32,7 @@ import type {
   EmptyTrashResponse,
   FeedTab,
   FrameHint,
+  HighlightJson,
   LinkJson,
   LinkResponse,
   LinksResponse,
@@ -299,6 +301,191 @@ export function useSaveReadingPosition(id: string) {
     },
     [id, queryClient],
   );
+}
+
+/** What the reader sends to create a highlight. A temp row shows at once; the server row replaces it. */
+export type HighlightDraft = {
+  quote: string;
+  prefix: string;
+  suffix: string;
+  startOffset: number;
+  endOffset: number;
+  color: HighlightColor;
+  note?: string | null;
+};
+
+export type HighlightPatch = { color?: HighlightColor; note?: string | null };
+
+function mapHighlights(
+  data: LinkResponse | undefined,
+  change: (highlights: HighlightJson[]) => HighlightJson[],
+): LinkResponse | undefined {
+  return (
+    data && { ...data, link: { ...data.link, highlights: change(data.link.highlights ?? []) } }
+  );
+}
+
+let draftCounter = 0;
+
+/**
+ * Passage highlight writes (`POST /api/links/:id/highlights`, `PATCH` and `DELETE
+ * /api/highlights/:id`). Each one updates the link query at once and rolls back when the
+ * request fails; the returned promise rejects so the caller can say so. A new highlight shows
+ * under a temporary id. Edits and deletes made before the server answers wait for it, then use
+ * the real id. `resolveId` maps a temporary id to the real one for state that kept the old one.
+ */
+export function useHighlightWrites(linkId: string) {
+  const queryClient = useQueryClient();
+  const key = queryKeys.link(linkId);
+  // Temp id -> the request that creates it, and the real id once it is known.
+  const creating = useRef(new Map<string, Promise<string>>());
+  const aliases = useRef(new Map<string, string>());
+  // Temp ids whose create failed: the row is already gone, so a later rollback must not restore it.
+  const failed = useRef(new Set<string>());
+  const resolveId = useCallback((id: string) => aliases.current.get(id) ?? id, []);
+
+  const update = useCallback(
+    (change: (highlights: HighlightJson[]) => HighlightJson[]) => {
+      void queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<LinkResponse>(key, (data) => mapHighlights(data, change));
+    },
+    [queryClient, key],
+  );
+  const find = useCallback(
+    (id: string) =>
+      queryClient
+        .getQueryData<LinkResponse>(key)
+        ?.link.highlights?.find((item) => item.id === resolveIdIn(aliases.current, id)),
+    [queryClient, key],
+  );
+  const realId = useCallback(async (id: string): Promise<string> => {
+    const pending = creating.current.get(id);
+    return pending ? await pending : (aliases.current.get(id) ?? id);
+  }, []);
+
+  const add = useCallback(
+    (draft: HighlightDraft): { id: string; saved: Promise<string> } => {
+      const id = `pending-${++draftCounter}`;
+      const now = new Date().toISOString();
+      const temp: HighlightJson = {
+        id,
+        quote: draft.quote,
+        prefix: draft.prefix,
+        suffix: draft.suffix,
+        startOffset: draft.startOffset,
+        endOffset: draft.endOffset,
+        color: draft.color,
+        note: draft.note ?? null,
+        createdAt: now,
+        updatedAt: now,
+      };
+      update((list) => [...list, temp]);
+      const saved = apiPost<{ highlight: HighlightJson }>(
+        `/api/links/${encodeURIComponent(linkId)}/highlights`,
+        {
+          quote: draft.quote,
+          prefix: draft.prefix,
+          suffix: draft.suffix,
+          startOffset: draft.startOffset,
+          endOffset: draft.endOffset,
+          color: draft.color,
+          ...(draft.note ? { note: draft.note } : {}),
+        },
+      ).then(
+        ({ highlight }) => {
+          aliases.current.set(id, highlight.id);
+          // Keep what the reader changed while the request was in flight.
+          update((list) =>
+            list.map((item) =>
+              item.id === id ? { ...highlight, color: item.color, note: item.note } : item,
+            ),
+          );
+          creating.current.delete(id);
+          return highlight.id;
+        },
+        (error: unknown) => {
+          failed.current.add(id);
+          update((list) => list.filter((item) => item.id !== id));
+          creating.current.delete(id);
+          throw error;
+        },
+      );
+      creating.current.set(id, saved);
+      // The caller handles the failure; keep an unhandled rejection from the map copy quiet.
+      saved.catch(() => {});
+      return { id, saved };
+    },
+    [linkId, update],
+  );
+
+  const edit = useCallback(
+    async (id: string, patch: HighlightPatch): Promise<void> => {
+      const before = find(id);
+      if (!before) return;
+      const current = before.id;
+      update((list) => list.map((item) => (item.id === current ? { ...item, ...patch } : item)));
+      try {
+        const target = await realId(id);
+        const { highlight } = await apiPatch<{ highlight: HighlightJson }>(
+          `/api/highlights/${encodeURIComponent(target)}`,
+          patch,
+        );
+        update((list) =>
+          list.map((item) =>
+            item.id === target ? { ...item, updatedAt: highlight.updatedAt } : item,
+          ),
+        );
+      } catch (error) {
+        const target = aliases.current.get(id) ?? id;
+        update((list) =>
+          list.map((item) => (item.id === target ? undoPatch(item, patch, before) : item)),
+        );
+        throw error;
+      }
+    },
+    [find, update, realId],
+  );
+
+  const remove = useCallback(
+    async (id: string): Promise<void> => {
+      const before = queryClient.getQueryData<LinkResponse>(key)?.link.highlights ?? [];
+      const at = before.findIndex((item) => item.id === resolveIdIn(aliases.current, id));
+      const removed = before[at];
+      if (!removed) return;
+      update((list) => list.filter((item) => item.id !== removed.id));
+      try {
+        const target = await realId(id);
+        await apiDelete(`/api/highlights/${encodeURIComponent(target)}`);
+      } catch (error) {
+        if (failed.current.has(id)) throw error;
+        update((list) => {
+          const restored = [...list];
+          restored.splice(Math.min(at, restored.length), 0, removed);
+          return restored;
+        });
+        throw error;
+      }
+    },
+    [queryClient, key, update, realId],
+  );
+
+  return { add, edit, remove, resolveId };
+}
+
+/** Put back the fields a failed edit changed. */
+function undoPatch(
+  item: HighlightJson,
+  patch: HighlightPatch,
+  before: HighlightJson,
+): HighlightJson {
+  const undone = { ...item };
+  if (patch.color !== undefined) undone.color = before.color;
+  if (patch.note !== undefined) undone.note = before.note;
+  return undone;
+}
+
+function resolveIdIn(aliases: Map<string, string>, id: string): string {
+  return aliases.get(id) ?? id;
 }
 
 /** The paginated list cache, shared by query polling and optimistic writes. */
