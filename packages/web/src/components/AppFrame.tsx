@@ -146,8 +146,17 @@ export function AppFrame() {
       return next;
     });
   }, [closeDrawer]);
+  // A tool that borrowed the sidebar may hand it back while the window is too narrow to dock it
+  // (a resize to a phone). The restore is owed until the sidebar docks again.
+  const restoreOwed = useRef(false);
   const collapseSidebar = useCallback((next: boolean) => {
-    if (matchMedia(layoutMedia.sidebar).matches) setCollapsed(next);
+    const docked = matchMedia(layoutMedia.sidebar).matches;
+    if (next) {
+      if (docked) setCollapsed(true);
+      return;
+    }
+    restoreOwed.current = !docked;
+    if (docked) setCollapsed(false);
   }, []);
   const sidebarControl = useMemo<SidebarControl>(
     () => ({
@@ -181,7 +190,13 @@ export function AppFrame() {
   }, [location.pathname, commandPalette.closePalette]);
   useEffect(() => {
     const wide = matchMedia(layoutMedia.sidebar);
-    const onChange = () => setDrawerOpen(false);
+    const onChange = () => {
+      setDrawerOpen(false);
+      if (wide.matches && restoreOwed.current) {
+        restoreOwed.current = false;
+        setCollapsed(false);
+      }
+    };
     wide.addEventListener('change', onChange);
     return () => wide.removeEventListener('change', onChange);
   }, []);
