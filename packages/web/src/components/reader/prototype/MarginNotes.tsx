@@ -129,6 +129,7 @@ export function MarginNotes({
   onClose,
   onEdit,
   onRemove,
+  onSetNote,
   onDialHidden,
   resume,
   onResume,
@@ -148,6 +149,7 @@ export function MarginNotes({
   onClose: () => void;
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
+  onSetNote: (id: string, note: string) => void;
   onDialHidden: (hidden: boolean) => void;
   /** The pencil's resume line, drawn in the same gutter column as the note markers. */
   resume: { y: number } | null;
@@ -155,6 +157,7 @@ export function MarginNotes({
 }) {
   const reduced = useReducedMotion() ?? false;
   const [tick, setTick] = useState(0);
+  const [adding, setAdding] = useState<string | null>(null);
   const [tops, setTops] = useState<Record<string, number>>({});
   const lane = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
@@ -162,7 +165,8 @@ export function MarginNotes({
   const base = useRef<number | null>(null);
   const shifted = useRef(0);
   const anchor = useRef<{ el: Element; top: number } | null>(null);
-  const noted = useMemo(() => items.filter((entry) => entry.note), [items]);
+  // The lane lists every highlight: noted ones show their note, bare ones show their snippet.
+  const noted = items;
   const has = noted.length > 0;
   const article = prose?.closest<HTMLElement>('.silo-reader') ?? null;
 
@@ -312,19 +316,57 @@ export function MarginNotes({
 
   // Lane layout: each note at its passage's top, pushed down to avoid overlap.
   const stacked = open && plan && !plan.overlay && !plan.needsCollapse && !collapsing;
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-stack when notes or geometry change.
+  // Re-run the layout whenever a block's real height changes (a field growing, a bare block turning
+  // into a noted one), when the lane has finished opening, and when fonts finish loading.
+  const [blockTick, setBlockTick] = useState(0);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: observers follow the set of blocks.
+  useEffect(() => {
+    const host = lane.current;
+    if (!stacked || !host) return;
+    const bump = () => setBlockTick((value) => value + 1);
+    const resize = new ResizeObserver(bump);
+    const watch = () => {
+      for (const el of host.querySelectorAll('.proto-lnote')) resize.observe(el);
+    };
+    watch();
+    const mutation = new MutationObserver(watch);
+    mutation.observe(host, { childList: true });
+    const settled = window.setTimeout(bump, 450);
+    void document.fonts?.ready.then(bump);
+    return () => {
+      resize.disconnect();
+      mutation.disconnect();
+      window.clearTimeout(settled);
+    };
+  }, [stacked, items.length]);
+
+  // Each block goes at its passage's top, pushed below the one before it. Heights are measured.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-stack when anything that moves a block changes.
   useLayoutEffect(() => {
-    if (!stacked || !lane.current) return;
+    const host = lane.current;
+    if (!stacked || !host) return;
+    const box = scroll.getBoundingClientRect();
+    const rows = noted.map((item) => {
+      const rect = item.range.getClientRects()[0] ?? item.range.getBoundingClientRect();
+      return {
+        item,
+        y: rect.top - box.top + scroll.scrollTop - 2,
+        size: item.range.toString().length,
+      };
+    });
+    rows.sort(
+      (a, b) =>
+        a.y - b.y ||
+        a.item.range.compareBoundaryPoints(Range.START_TO_START, b.item.range) ||
+        a.size - b.size,
+    );
     const next: Record<string, number> = {};
     let floor = Number.NEGATIVE_INFINITY;
-    const box = scroll.getBoundingClientRect();
-    for (const item of noted) {
-      const rect = item.range.getClientRects()[0] ?? item.range.getBoundingClientRect();
-      const y = rect.top - box.top + scroll.scrollTop - 2;
-      const el = lane.current.querySelector<HTMLElement>(`[data-note="${item.id}"]`);
-      const top = Math.max(y, floor);
-      next[item.id] = top;
-      floor = top + (el?.offsetHeight ?? 48) + 12;
+    for (const row of rows) {
+      const el = host.querySelector<HTMLElement>(`[data-note="${row.item.id}"]`);
+      const top = Math.max(row.y, floor);
+      next[row.item.id] = top;
+      floor = top + (el?.offsetHeight ?? 0) + 8;
     }
     setTops((previous) => {
       const same =
@@ -332,7 +374,29 @@ export function MarginNotes({
         Object.entries(next).every(([k, v]) => previous[k] === v);
       return same ? previous : next;
     });
-  }, [stacked, noted, groups, plan, tick]);
+  }, [stacked, noted, groups, plan, tick, blockTick, adding, focusId]);
+
+  // Dev assertion: no two lane blocks may intersect once the layout has settled.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tops is the trigger, not a value used inside.
+  useEffect(() => {
+    const host = lane.current;
+    if (!stacked || !host) return;
+    const frame = requestAnimationFrame(() => {
+      const rects = Array.from(host.querySelectorAll<HTMLElement>('.proto-lnote')).map((el) => ({
+        id: el.dataset.note,
+        rect: el.getBoundingClientRect(),
+      }));
+      for (let i = 0; i < rects.length; i += 1)
+        for (let j = i + 1; j < rects.length; j += 1) {
+          const a = (rects[i] as (typeof rects)[number]).rect;
+          const b = (rects[j] as (typeof rects)[number]).rect;
+          // Blocks fade and rise 6px while they enter, so allow that much slack.
+          if (a.top < b.bottom - 6 && b.top < a.bottom - 6)
+            console.warn('[notes lane] blocks overlap', rects[i]?.id, rects[j]?.id);
+        }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [stacked, tops]);
 
   // Bring the emphasised note into view.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only react to a new focus.
@@ -389,7 +453,7 @@ export function MarginNotes({
             type="button"
             className="proto-marker2"
             data-active={open && focusId !== null && group.ids.includes(focusId)}
-            aria-label={`${group.ids.length} note${group.ids.length > 1 ? 's' : ''} on paragraph ${group.para}`}
+            aria-label={`${group.ids.length} highlight${group.ids.length > 1 ? 's' : ''} on paragraph ${group.para}`}
             style={{ top: markerY(group) - 12, left: x }}
             onMouseEnter={() => setHoveredIds(group.ids)}
             onMouseLeave={() => setHoveredIds([])}
@@ -425,22 +489,68 @@ export function MarginNotes({
       onMouseEnter={() => setHoveredIds([item.id])}
       onMouseLeave={() => setHoveredIds([])}
     >
-      <button type="button" className="proto-lnote-text" onClick={() => onFocus(item.id)}>
-        {item.note}
-      </button>
-      <span className="proto-lnote-actions">
-        <button
-          type="button"
-          aria-label="Edit note"
-          title="Edit note"
-          onClick={() => onEdit(item.id)}
-        >
-          <ProtoIcon name="pencil" size={13} />
+      {adding === item.id ? (
+        <textarea
+          className="proto-lnote-field"
+          aria-label="Add a note"
+          placeholder="Add a note"
+          rows={1}
+          ref={(el) => {
+            if (!el) return;
+            el.style.height = 'auto';
+            el.style.height = `${el.scrollHeight}px`;
+            if (document.activeElement !== el) el.focus({ preventScroll: true });
+          }}
+          onInput={(event) => {
+            event.currentTarget.style.height = 'auto';
+            event.currentTarget.style.height = `${event.currentTarget.scrollHeight}px`;
+          }}
+          onBlur={(event) => {
+            const text = event.currentTarget.value.trim();
+            if (text) onSetNote(item.id, text);
+            setAdding(null);
+          }}
+          onKeyDown={(event) => {
+            if (event.key === 'Escape') {
+              event.preventDefault();
+              event.stopPropagation();
+              event.currentTarget.value = '';
+              event.currentTarget.blur();
+            } else if (event.key === 'Enter' && !event.shiftKey) {
+              event.preventDefault();
+              event.currentTarget.blur();
+            }
+          }}
+        />
+      ) : item.note ? (
+        <button type="button" className="proto-lnote-text" onClick={() => onFocus(item.id)}>
+          {item.note}
         </button>
+      ) : (
+        <>
+          <button type="button" className="proto-lnote-snippet" onClick={() => onFocus(item.id)}>
+            {item.text}
+          </button>
+          <button type="button" className="proto-lnote-add" onClick={() => setAdding(item.id)}>
+            Add note
+          </button>
+        </>
+      )}
+      <span className="proto-lnote-actions">
+        {item.note && (
+          <button
+            type="button"
+            aria-label="Edit note"
+            title="Edit note"
+            onClick={() => onEdit(item.id)}
+          >
+            <ProtoIcon name="pencil" size={13} />
+          </button>
+        )}
         <button
           type="button"
-          aria-label="Delete note"
-          title="Delete note"
+          aria-label="Delete highlight"
+          title="Delete highlight"
           onClick={() => onRemove(item.id)}
         >
           <ProtoIcon name="trash" size={13} />

@@ -72,15 +72,19 @@ function coverAt(event: MouseEvent, items: PassageHighlight[]): PassageHighlight
     caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
   };
   const caret = doc.caretPositionFromPoint?.(event.clientX, event.clientY);
-  const covering = items.filter((item) => {
-    if (caret) return item.range.isPointInRange(caret.offsetNode, caret.offset);
-    return Array.from(item.range.getClientRects()).some(
+  const inside = (item: PassageHighlight) =>
+    Array.from(item.range.getClientRects()).some(
       (rect) =>
-        event.clientX >= rect.left &&
-        event.clientX <= rect.right &&
-        event.clientY >= rect.top &&
-        event.clientY <= rect.bottom,
+        event.clientX >= rect.left - 2 &&
+        event.clientX <= rect.right + 2 &&
+        event.clientY >= rect.top - 1 &&
+        event.clientY <= rect.bottom + 1,
     );
+  // The caret snaps to the nearest text, so it only nominates candidates: the pointer must also be
+  // inside one of the range's line boxes. Empty space beside a line is never a hit.
+  const covering = items.filter((item) => {
+    if (caret && !item.range.isPointInRange(caret.offsetNode, caret.offset)) return false;
+    return inside(item);
   });
   return covering.sort((a, b) => layerSize(a) - layerSize(b));
 }
@@ -133,7 +137,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
   const setFocusId = useCallback((id: string | null) => setFocusIds(id ? [id] : []), []);
   const [dialHidden, setDialHidden] = useState(false);
   const closeLane = useCallback(() => setLaneOpen(false), []);
-  const hasNotes = hl.items.some((item) => item.note);
+  const hasNotes = hl.items.length > 0;
   const toggleLane = () => {
     if (!hasNotes) return;
     setLaneOpen((open) => !open);
@@ -158,7 +162,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
 
   // The lane closes when the last note is deleted.
   useEffect(() => {
-    if (laneOpen && !hl.items.some((item) => item.note)) setLaneOpen(false);
+    if (laneOpen && hl.items.length === 0) setLaneOpen(false);
   }, [laneOpen, hl.items]);
 
   // Escape closes the notes lane once nothing above it is open.
@@ -327,6 +331,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
         onClose={closeLane}
         onEdit={setOpenNote}
         onRemove={hl.remove}
+        onSetNote={hl.setNote}
         onDialHidden={setDialHidden}
         resume={pencil.resume}
         onResume={pencil.start}
@@ -533,9 +538,9 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
             <DockButton
               icon="notes"
               label="Notes"
-              title={hasNotes ? 'Notes' : 'No notes yet'}
+              title={hasNotes ? 'Notes' : 'No highlights yet'}
               active={laneOpen}
-              badge={hl.items.filter((item) => item.note).length}
+              badge={hl.items.length}
               disabled={!hasNotes}
               onClick={toggleLane}
             />

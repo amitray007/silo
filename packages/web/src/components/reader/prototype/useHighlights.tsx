@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { PALETTE_ORDER } from './highlightPalette.prototype';
 import { scrollToRange } from './useProseRoot';
 
-export const COLORS = ['yellow', 'green', 'blue', 'pink'] as const;
+export const COLORS = PALETTE_ORDER;
 export type HighlightColor = (typeof COLORS)[number];
 
 export type PassageHighlight = {
@@ -29,6 +30,37 @@ function compare(a: Point, b: Point): number {
   return left.compareBoundaryPoints(Range.START_TO_START, probe);
 }
 
+function intersects(a: Range, b: Range): boolean {
+  return (
+    a.compareBoundaryPoints(Range.START_TO_END, b) > 0 &&
+    a.compareBoundaryPoints(Range.END_TO_START, b) < 0
+  );
+}
+
+/** Colours used by the highlights a range overlaps, optionally ignoring one highlight. */
+export function colorsUsedByOverlaps(
+  range: Range,
+  items: PassageHighlight[],
+  ignore?: string,
+): Set<HighlightColor> {
+  return new Set(
+    items
+      .filter((item) => item.id !== ignore && intersects(range, item.range))
+      .map((item) => item.color),
+  );
+}
+
+/** The wanted colour, or the next palette colour no overlapping highlight uses. */
+export function chooseColor(wanted: HighlightColor, used: Set<HighlightColor>): HighlightColor {
+  if (!used.has(wanted)) return wanted;
+  const start = COLORS.indexOf(wanted);
+  for (let step = 1; step < COLORS.length; step += 1) {
+    const next = COLORS[(start + step) % COLORS.length] as HighlightColor;
+    if (!used.has(next)) return next;
+  }
+  return wanted; // every colour is taken: reuse, and mark the inner one with an underline
+}
+
 /** How long a highlight is, for ordering layers from the innermost (shortest) outward. */
 export function layerSize(item: PassageHighlight): number {
   return item.range.toString().length;
@@ -38,7 +70,9 @@ export function layerSize(item: PassageHighlight): number {
  * Split the page's highlights at every range boundary. A piece covered by two or more ranges is an
  * overlap, tinted in the colour of the innermost (shortest) range that covers it.
  */
-function overlapSegments(items: PassageHighlight[]): { range: Range; color: HighlightColor }[] {
+function overlapSegments(
+  items: PassageHighlight[],
+): { range: Range; color: HighlightColor; dup: boolean }[] {
   if (items.length < 2) return [];
   const points: Point[] = [];
   for (const item of items) {
@@ -47,7 +81,7 @@ function overlapSegments(items: PassageHighlight[]): { range: Range; color: High
   }
   points.sort(compare);
   const sizes = new Map(items.map((item) => [item.id, layerSize(item)]));
-  const result: { range: Range; color: HighlightColor }[] = [];
+  const result: { range: Range; color: HighlightColor; dup: boolean }[] = [];
   for (let i = 0; i < points.length - 1; i += 1) {
     const from = points[i] as Point;
     const to = points[i + 1] as Point;
@@ -62,7 +96,12 @@ function overlapSegments(items: PassageHighlight[]): { range: Range; color: High
     const piece = document.createRange();
     piece.setStart(from.node, from.offset);
     piece.setEnd(to.node, to.offset);
-    result.push({ range: piece, color: (covering[0] as PassageHighlight).color });
+    const inner = covering[0] as PassageHighlight;
+    result.push({
+      range: piece,
+      color: inner.color,
+      dup: covering.slice(1).some((other) => other.color === inner.color),
+    });
   }
   return result;
 }
@@ -73,12 +112,25 @@ const supported =
 export function useHighlights(root: HTMLElement | null, scroll: HTMLElement | null) {
   const [items, setItems] = useState<PassageHighlight[]>([]);
   const [pending, setPending] = useState<Pending>(null);
+  const pulseTimer = useRef<number>(0);
+  const pulse = (range: Range) => {
+    if (!supported) return;
+    const mark = new Highlight(range);
+    mark.priority = 12;
+    CSS.highlights.set('proto-pulse', mark);
+    window.clearTimeout(pulseTimer.current);
+    pulseTimer.current = window.setTimeout(() => CSS.highlights.delete('proto-pulse'), 260);
+  };
   const [editing, setEditing] = useState<string | null>(null);
   const [autoColor, setAutoColor] = useState<HighlightColor | null>(null);
   const autoRef = useRef(autoColor);
   autoRef.current = autoColor;
 
-  const add = useCallback((range: Range, color: HighlightColor, note = '') => {
+  const itemsRef = useRef<PassageHighlight[]>([]);
+  itemsRef.current = items;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: pulse only touches a ref and the highlight registry.
+  const add = useCallback((range: Range, wanted: HighlightColor, note = '') => {
+    const color = chooseColor(wanted, colorsUsedByOverlaps(range, itemsRef.current));
     const item: PassageHighlight = {
       id: `h${++counter}`,
       color,
@@ -93,6 +145,7 @@ export function useHighlights(root: HTMLElement | null, scroll: HTMLElement | nu
     );
     window.getSelection()?.removeAllRanges();
     setPending(null);
+    pulse(item.range);
     return item;
   }, []);
 
@@ -115,6 +168,12 @@ export function useHighlights(root: HTMLElement | null, scroll: HTMLElement | nu
         mark.priority = 5;
         CSS.highlights.set(`proto-ov-${color}`, mark);
       } else CSS.highlights.delete(`proto-ov-${color}`);
+      const dups = overlaps.filter((segment) => segment.color === color && segment.dup);
+      if (dups.length) {
+        const mark = new Highlight(...dups.map((segment) => segment.range));
+        mark.priority = 6;
+        CSS.highlights.set(`proto-dup-${color}`, mark);
+      } else CSS.highlights.delete(`proto-dup-${color}`);
     }
   }, [items]);
   useEffect(
@@ -123,6 +182,7 @@ export function useHighlights(root: HTMLElement | null, scroll: HTMLElement | nu
       for (const color of COLORS) {
         CSS.highlights.delete(`proto-hl-${color}`);
         CSS.highlights.delete(`proto-ov-${color}`);
+        CSS.highlights.delete(`proto-dup-${color}`);
       }
       CSS.highlights.delete('proto-flash');
     },
@@ -197,10 +257,12 @@ export function useHighlights(root: HTMLElement | null, scroll: HTMLElement | nu
     items,
     pending,
     clearPending: () => setPending(null),
+    /** Creates a new layer; the colour may change if it would hide an overlapping one. */
     createPending: (color: HighlightColor, withNote = false) => {
-      if (!pending) return;
+      if (!pending) return undefined;
       const item = add(pending.range, color);
       if (withNote) setEditing(item.id);
+      return item;
     },
     setNote: (id: string, note: string) =>
       setItems((current) => current.map((item) => (item.id === id ? { ...item, note } : item))),

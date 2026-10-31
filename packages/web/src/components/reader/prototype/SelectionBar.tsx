@@ -100,8 +100,14 @@ export function SelectionBar({
       title,
       url: location.href.split('?')[0] ?? location.href,
       color,
-      highlight: (picked) => hl.createPending(picked),
-      note: () => hl.createPending(color, true),
+      highlight: (picked) => {
+        const made = hl.createPending(picked);
+        if (made) setColor(made.color);
+      },
+      note: () => {
+        const made = hl.createPending(color, true);
+        if (made) setColor(made.color);
+      },
       listen: () => {
         listen();
         hl.clearPending();
@@ -219,8 +225,8 @@ export function SelectionBar({
                       title={swatch}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => {
-                        setColor(swatch);
-                        hl.createPending(swatch);
+                        const made = hl.createPending(swatch);
+                        setColor(made?.color ?? swatch);
                       }}
                     />
                   ))}

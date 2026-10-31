@@ -6,7 +6,12 @@ import { ProtoIcon } from './ProtoIcon';
 import { type ProtoGroup, type ProtoOption, ProtoSelect } from './ProtoSelect';
 import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import type { EngineId } from './ttsEngine.prototype';
-import { COLORS, type HighlightsApi, type PassageHighlight } from './useHighlights';
+import {
+  COLORS,
+  colorsUsedByOverlaps,
+  type HighlightsApi,
+  type PassageHighlight,
+} from './useHighlights';
 import type { PencilApi } from './usePencil';
 import type { ReadAloudApi } from './useReadAloud';
 
@@ -71,6 +76,9 @@ export function NotePopover({
     };
   }, [scroll, onClose, hl.setNote]);
 
+  // Colours already used by overlapping layers are off, unless every colour is taken.
+  const used = colorsUsedByOverlaps(item.range, hl.items, item.id);
+  const blocked = used.size >= COLORS.length ? new Set<string>() : used;
   const rects = Array.from(item.range.getClientRects());
   const first = rects[0];
   const last = rects.at(-1);
@@ -105,18 +113,22 @@ export function NotePopover({
       />
       <div className="proto-notepop-foot">
         <div className="proto-dots" role="group" aria-label="Colour">
-          {COLORS.map((color) => (
-            <button
-              key={color}
-              type="button"
-              className="proto-dot14"
-              data-color={color}
-              aria-label={color}
-              title={color}
-              aria-pressed={item.color === color}
-              onClick={() => hl.setColor(item.id, color)}
-            />
-          ))}
+          {COLORS.map((color) => {
+            const taken = blocked.has(color) && item.color !== color;
+            return (
+              <button
+                key={color}
+                type="button"
+                className="proto-dot14"
+                data-color={color}
+                aria-label={color}
+                title={taken ? 'Used by an overlapping highlight' : color}
+                aria-pressed={item.color === color}
+                disabled={taken}
+                onClick={() => hl.setColor(item.id, color)}
+              />
+            );
+          })}
         </div>
         <button
           type="button"
