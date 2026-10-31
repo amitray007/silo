@@ -100,7 +100,11 @@ function Host({ children }: { children: ReactNode }) {
 
 function Reader() {
   const detail = useLink('hl');
-  return detail.data ? <ReaderContent link={detail.data.link} /> : null;
+  return detail.data ? (
+    <article className="silo-reader">
+      <ReaderContent link={detail.data.link} />
+    </article>
+  ) : null;
 }
 
 let queryClient: QueryClient;
@@ -145,6 +149,13 @@ async function toolbarButton(name: RegExp | string) {
   return within(toolbar).getByRole('button', { name });
 }
 
+/** The lane is an overlay panel in jsdom: no layout, so nothing fits beside the column. */
+async function openLane() {
+  fireEvent.click(await screen.findByRole('button', { name: /Notes/ }));
+  await screen.findByRole('complementary', { name: 'Notes' });
+}
+const laneEl = () => document.querySelector('[data-notes-lane]') as HTMLElement;
+
 function select(text: string) {
   const prose = document.querySelector('.silo-reader-prose') as HTMLElement;
   const walker = document.createTreeWalker(prose, NodeFilter.SHOW_TEXT);
@@ -181,9 +192,9 @@ it('paints every stored highlight and leaves an orphan unpainted but listed', as
   await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
   expect(registry.get('silo-hl-yellow')?.ranges[0]?.toString()).toBe('quick brown fox');
   expect(registry.has('silo-hl-green')).toBe(false);
-  fireEvent.click(await screen.findByRole('button', { name: /Notes/ }));
+  await openLane();
   expect(await screen.findByText('Passage not found')).toBeDefined();
-  expect(screen.getByText('quick brown fox')).toBeDefined();
+  expect(within(laneEl()).getByText('quick brown fox')).toBeDefined();
 });
 
 it('paints an overlap piece in the innermost colour above the single layers', async () => {
@@ -208,16 +219,18 @@ it('disables Notes with a "No highlights yet" title when there are none, and sho
   expect(notes.getAttribute('aria-disabled')).toBe('true');
   expect(notes.getAttribute('title')).toBe('No highlights yet');
   fireEvent.click(notes);
-  expect(screen.queryByRole('dialog', { name: 'Notes' })).toBeNull();
+  expect(notes.getAttribute('aria-pressed')).toBe('false');
+  expect(document.querySelector('[data-notes-lane]')).toBeNull();
 });
 
-it('lists highlights in the Notes sheet and counts them', async () => {
+it('lists highlights in the notes lane and counts them', async () => {
   serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
   mount();
   const notes = await screen.findByRole('button', { name: /Notes/ });
   expect(notes.querySelector('.silo-reader-dockbadge')?.textContent).toBe('1');
   fireEvent.click(notes);
   expect(await screen.findByText('my note')).toBeDefined();
+  expect(notes.getAttribute('aria-pressed')).toBe('true');
 });
 
 it('shows the selection toolbar for a selection and saves a highlight with offsets and context', async () => {
@@ -278,8 +291,8 @@ it('rolls a failed note save back and says so', async () => {
   mount();
   await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
   fetchFails();
-  fireEvent.click(await screen.findByRole('button', { name: /Notes/ }));
-  fireEvent.click(await screen.findByText('keep me'));
+  await openLane();
+  fireEvent.click(within(laneEl()).getByRole('button', { name: 'Edit note' }));
   const field = await screen.findByRole('textbox', { name: 'Note' });
   fireEvent.change(field, { target: { value: 'changed' } });
   fireEvent.blur(field);
@@ -454,4 +467,191 @@ it('does not report a failed note save when the highlight was deleted right afte
     await new Promise((resolve) => setTimeout(resolve, 80));
   });
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+const OVERLAPPING = () => [
+  highlight({ id: 'outer', quote: 'quick brown fox jumps', color: 'yellow', note: 'outer note' }),
+  highlight({ id: 'inner', quote: 'brown fox', color: 'blue' }),
+];
+const clickText = (init: MouseEventInit = {}) =>
+  fireEvent.click(document.querySelector('.silo-reader-prose') as Element, {
+    clientX: 50,
+    clientY: 20,
+    ...init,
+  });
+
+it('shows one marker per paragraph with a count when it holds several highlights', async () => {
+  serverLink = makeLink({
+    id: 'hl',
+    highlights: [...OVERLAPPING(), highlight({ id: 'first', quote: 'Alpha beta', color: 'pink' })],
+  });
+  mount();
+  const two = await screen.findByRole('button', { name: '2 highlights on paragraph 2' });
+  expect(two.querySelector('small')?.textContent).toBe('2');
+  const one = screen.getByRole('button', { name: '1 highlight on paragraph 1' });
+  expect(one.querySelector('small')).toBeNull();
+});
+
+it('puts a marker and the resume button on different lines when they would share one', async () => {
+  serverLink = makeLink({
+    id: 'hl',
+    highlights: [highlight({ id: 'one', quote: 'Alpha beta', color: 'pink' })],
+    readingPosition: { position: 0.4, updatedAt: '2026-01-01T00:00:00Z' },
+  });
+  mount();
+  const marker = await screen.findByRole('button', { name: '1 highlight on paragraph 1' });
+  const resume = await screen.findByRole('button', { name: 'Resume reading' });
+  expect(marker.style.left).toBe(resume.style.left);
+  expect(marker.style.top).not.toBe(resume.style.top);
+});
+
+it('opens the lane from a marker, emphasising its note, and closes it from the same marker', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
+  mount();
+  const marker = await screen.findByRole('button', { name: '1 highlight on paragraph 2' });
+  fireEvent.click(marker);
+  await screen.findByRole('complementary', { name: 'Notes' });
+  expect(document.querySelector('[data-note="h1"]')?.getAttribute('data-focus')).toBe('true');
+  expect(screen.getByRole('button', { name: /Notes/ }).getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(marker);
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+});
+
+it('closes the lane from its close button, from the dock and from Escape', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
+  mount();
+  await openLane();
+  fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+  await openLane();
+  fireEvent.click(screen.getByRole('button', { name: /Notes/ }));
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+  await openLane();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+});
+
+it('closes the lane when the last highlight is deleted', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
+  mount();
+  await openLane();
+  const original = globalThis.fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === 'DELETE' ? new Response(null, { status: 204 }) : original(input, init),
+    ),
+  );
+  fireEvent.click(within(laneEl()).getByRole('button', { name: 'Delete highlight' }));
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+});
+
+it('shows a bare highlight as a snippet and turns Add note into an inline field that saves', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight()] });
+  mount();
+  await openLane();
+  fireEvent.click(within(laneEl()).getByRole('button', { name: 'Add note' }));
+  const field = within(laneEl()).getByRole('textbox', { name: 'Add a note' });
+  fireEvent.change(field, { target: { value: 'from the lane' } });
+  fireEvent.blur(field);
+  await waitFor(() => expect(posts.some((body) => body.note === 'from the lane')).toBe(true));
+});
+
+it('removes the inline field without saving when it is left empty', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight()] });
+  mount();
+  await openLane();
+  fireEvent.click(within(laneEl()).getByRole('button', { name: 'Add note' }));
+  fireEvent.blur(within(laneEl()).getByRole('textbox', { name: 'Add a note' }));
+  expect(within(laneEl()).queryByRole('textbox')).toBeNull();
+  expect(posts).toHaveLength(0);
+});
+
+it('opens the layers popover, innermost first, for text covered by two highlights', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-blue')).toBeDefined());
+  clickText();
+  const popover = await screen.findByRole('dialog', { name: 'Layers' });
+  const rows = within(popover).getAllByRole('button');
+  expect(rows.map((row) => row.textContent)).toEqual([
+    'brown fox',
+    'quick brown fox jumpsouter note',
+  ]);
+  expect(within(popover).getByText('2 layers').getAttribute('title')).toBe(
+    'Option-click cycles through the layers',
+  );
+  expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
+});
+
+it('moves through the layers with the arrow keys and opens a note with a way back', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-blue')).toBeDefined());
+  clickText();
+  const popover = await screen.findByRole('dialog', { name: 'Layers' });
+  const [first, second] = within(popover).getAllByRole('button') as HTMLElement[];
+  expect(document.activeElement).toBe(first);
+  fireEvent.keyDown(popover, { key: 'ArrowDown' });
+  expect(document.activeElement).toBe(second);
+  fireEvent.click(second as HTMLElement);
+  expect(screen.queryByRole('dialog', { name: 'Layers' })).toBeNull();
+  const note = await screen.findByRole('dialog', { name: 'Note' });
+  expect((within(note).getByRole('textbox') as HTMLTextAreaElement).value).toBe('outer note');
+  fireEvent.click(within(note).getByRole('button', { name: 'Layers' }));
+  expect(await screen.findByRole('dialog', { name: 'Layers' })).toBeDefined();
+  expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
+});
+
+it('cycles the layers on Option-click, wrapping, and starts over after a different spot', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-blue')).toBeDefined());
+  const noteText = async () =>
+    (
+      within(await screen.findByRole('dialog', { name: 'Note' })).getByRole(
+        'textbox',
+      ) as HTMLTextAreaElement
+    ).value;
+  clickText({ altKey: true });
+  expect(await noteText()).toBe('');
+  clickText({ altKey: true });
+  await waitFor(async () => expect(await noteText()).toBe('outer note'));
+  clickText({ altKey: true });
+  await waitFor(async () => expect(await noteText()).toBe(''));
+  clickText({ altKey: true, clientX: 90 });
+  await waitFor(async () => expect(await noteText()).toBe(''));
+});
+
+it('emphasises every covering block when the lane is open and overlapping text is clicked', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
+  mount();
+  await openLane();
+  clickText();
+  await waitFor(() =>
+    expect(
+      Array.from(document.querySelectorAll('[data-note][data-focus="true"]')).map((el) =>
+        el.getAttribute('data-note'),
+      ),
+    ).toEqual(['outer', 'inner']),
+  );
+  expect(screen.queryByRole('dialog', { name: 'Layers' })).toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
+});
+
+it('closes one layer per Escape: the layers popover first, then the lane', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
+  mount();
+  await openLane();
+  // With the lane open a click emphasises; close the lane's emphasis path by opening layers first.
+  fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+  clickText();
+  await screen.findByRole('dialog', { name: 'Layers' });
+  await openLane();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+  expect(screen.queryByRole('dialog', { name: 'Layers' })).not.toBeNull();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Layers' })).toBeNull());
 });

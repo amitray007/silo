@@ -1,20 +1,20 @@
 import { useEffect, useRef } from 'react';
 import { highlightsAt } from './hitTest';
-import { paintHover } from './paint';
 import type { ResolvedHighlight } from './useHighlightLayer';
 
 /**
  * Click and hover on highlighted text. A hit counts only inside a highlight's line boxes, never
  * in the empty space beside a line. `onHits` gets every highlight under a click, innermost
- * first; hover brightens the innermost.
+ * first; `onHover` gets the innermost highlight under the pointer, or null.
  */
 export function useHighlightPointer(
   prose: HTMLElement | null,
   resolved: readonly ResolvedHighlight[],
   onHits: (hits: ResolvedHighlight[], event: MouseEvent) => void,
+  onHover: (id: string | null) => void,
 ): void {
-  const latest = useRef({ resolved, onHits });
-  latest.current = { resolved, onHits };
+  const latest = useRef({ resolved, onHits, onHover });
+  latest.current = { resolved, onHits, onHover };
 
   useEffect(() => {
     if (!prose) return;
@@ -35,13 +35,14 @@ export function useHighlightPointer(
         const id = hit?.id ?? null;
         if (id === hovered) return;
         hovered = id;
-        paintHover(hit ? [hit.range] : []);
+        latest.current.onHover(id);
       });
     };
     const onLeave = () => {
       cancelAnimationFrame(frame);
+      if (hovered === null) return;
       hovered = null;
-      paintHover([]);
+      latest.current.onHover(null);
     };
     prose.addEventListener('click', onClick);
     prose.addEventListener('mousemove', onMove);
@@ -51,7 +52,7 @@ export function useHighlightPointer(
       prose.removeEventListener('click', onClick);
       prose.removeEventListener('mousemove', onMove);
       prose.removeEventListener('mouseleave', onLeave);
-      paintHover([]);
+      if (hovered !== null) latest.current.onHover(null);
     };
   }, [prose]);
 }

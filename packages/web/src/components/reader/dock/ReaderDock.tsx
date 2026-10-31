@@ -18,8 +18,9 @@ import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
 import { HighlightSheet } from '../highlights/HighlightSheet';
 import { HighlightsLayer } from '../highlights/HighlightsLayer';
-import { NotesSheet } from '../highlights/NotesSheet';
 import { type HighlightsApi, useHighlights } from '../highlights/useHighlights';
+import { NotesLayer } from '../notes/NotesLayer';
+import { type NotesLaneApi, useNotesLane } from '../notes/useNotesLane';
 import { PencilOverlay } from '../pencil/PencilOverlay';
 import { PencilSheet } from '../pencil/PencilSheet';
 import { type PencilApi, usePencil } from '../pencil/usePencil';
@@ -33,7 +34,12 @@ const OutlineRail = lazy(() =>
 );
 
 /** What a dock tool's sheet can read. Later slices add their tools' state here. */
-type DockApi = { pencil: PencilApi; highlights: HighlightsApi; closeSheet: () => void };
+type DockApi = {
+  pencil: PencilApi;
+  highlights: HighlightsApi;
+  lane: NotesLaneApi;
+  closeSheet: () => void;
+};
 
 type DockTool = {
   id: string;
@@ -43,7 +49,10 @@ type DockTool = {
   heading: string;
   /** The glyph beside the label. */
   glyph: ReactNode;
-  sheet: ComponentType<{ api: DockApi }>;
+  /** The sheet the button opens. A tool with `press` and no sheet only toggles. */
+  sheet?: ComponentType<{ api: DockApi }>;
+  /** A tool that toggles something beside the article instead of opening a sheet. */
+  press?: { on: (api: DockApi) => boolean; toggle: (api: DockApi) => void };
   /** A tool with nothing to show yet: the button stays, greyed, with this title. */
   unavailable?: { when: (api: DockApi) => boolean; title: string };
   /** A count beside the label. */
@@ -101,20 +110,7 @@ const tools: readonly DockTool[] = [
     title: 'Notes',
     heading: 'Notes',
     glyph: <ReaderIcon name="note" size={19} />,
-    // Slice 3b swaps this list for the notes lane.
-    sheet: ({ api }) => (
-      <NotesSheet
-        resolved={api.highlights.resolved}
-        orphans={api.highlights.orphans}
-        canWrite={api.highlights.canWrite}
-        onOpen={(id) => {
-          api.closeSheet();
-          api.highlights.jump(id);
-          api.highlights.setOpenNote(id);
-        }}
-        onDelete={api.highlights.remove}
-      />
-    ),
+    press: { on: (api) => api.lane.open, toggle: (api) => api.lane.toggle() },
     unavailable: { when: (api) => api.highlights.items.length === 0, title: 'No highlights yet' },
     badge: (api) => api.highlights.items.length,
   },
@@ -153,13 +149,15 @@ function DockButton({
 }) {
   const unavailable = tool.unavailable?.when(api) ?? false;
   const count = tool.badge?.(api) ?? 0;
+  const pressed = tool.press?.on(api);
   return (
     <button
       type="button"
       className="silo-reader-dockbtn"
       title={unavailable ? tool.unavailable?.title : tool.title}
-      aria-haspopup="dialog"
-      aria-expanded={open}
+      aria-haspopup={tool.press ? undefined : 'dialog'}
+      aria-expanded={tool.press ? undefined : open}
+      aria-pressed={tool.press ? pressed : undefined}
       aria-controls={open ? sheetId : undefined}
       aria-disabled={unavailable || undefined}
       onClick={unavailable ? undefined : onToggle}
@@ -244,6 +242,7 @@ export function ReaderDock({
   const sheetId = useId();
   const save = useSaveReadingPosition(link.id);
   const { color: highlightColor } = useHighlightPrefs();
+  const [dialHidden, setDialHidden] = useState(false);
   const highlights = useHighlights({
     link,
     prose,
@@ -260,6 +259,7 @@ export function ReaderDock({
     onSave: save,
   });
   usePencilKeys(pencil);
+  const lane = useNotesLane(highlights);
   const hosted = host !== null;
   useEffect(() => {
     if (!hosted) return;
@@ -268,26 +268,39 @@ export function ReaderDock({
   }, [hosted, report]);
   if (!host) return null;
   const closeSheet = () => setOpenId(null);
-  const api: DockApi = { pencil, highlights, closeSheet };
+  const api: DockApi = { pencil, highlights, lane, closeSheet };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return createPortal(
     <>
       {prose && scroll && panel && (
         <Suspense fallback={null}>
-          <OutlineRail prose={prose} scroll={scroll} panel={panel} />
+          <OutlineRail prose={prose} scroll={scroll} panel={panel} hidden={dialHidden} />
         </Suspense>
       )}
       <PencilOverlay pencil={pencil} prose={prose} scroll={scroll} />
+      <NotesLayer
+        api={highlights}
+        lane={lane}
+        resumeY={pencil.resume?.y ?? null}
+        panel={panel}
+        onDialHidden={setDialHidden}
+      />
       <HighlightsLayer
         api={highlights}
+        lane={lane}
         title={link.title ?? deriveTitleFromUrl(link.url)}
         container={host}
       />
       <div className="silo-reader-dock">
         <div className="silo-reader-dock-pill" role="toolbar" aria-label="Reader tools">
           {tools.map((tool) => {
-            const toggle = () => setOpenId(openId === tool.id ? null : tool.id);
+            const toggle = () => {
+              if (tool.press) {
+                setOpenId(null);
+                tool.press.toggle(api);
+              } else setOpenId(openId === tool.id ? null : tool.id);
+            };
             return tool.split ? (
               <SplitDockButton
                 key={tool.id}

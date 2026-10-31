@@ -1,6 +1,8 @@
 import { useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchSilo } from '../../SearchSiloContext';
+import type { NotesLaneApi } from '../notes/useNotesLane';
+import { LayersPopover } from './LayersPopover';
 import { NotePopover } from './NotePopover';
 import { SelectionBar } from './SelectionBar';
 import type { HighlightsApi } from './useHighlights';
@@ -11,15 +13,20 @@ import type { HighlightsApi } from './useHighlights';
  */
 export function HighlightsLayer({
   api,
+  lane,
   title,
   container,
 }: {
   api: HighlightsApi;
+  lane: NotesLaneApi;
   title: string;
   container: HTMLElement;
 }) {
   const searchSilo = useSearchSilo();
-  const { create, color, openNoteItem, closeNote, scroll } = api;
+  const { create, color, openNoteItem, scroll } = api;
+  const layered = lane.layers
+    ? lane.layers.ids.flatMap((id) => api.resolved.filter((entry) => entry.id === id))
+    : [];
   const note = useCallback(() => create(color, { note: true }), [create, color]);
   return (
     <>
@@ -46,7 +53,18 @@ export function HighlightsLayer({
           onRecolor={api.recolor}
           onSetNote={api.setNote}
           onDelete={api.remove}
-          onClose={closeNote}
+          onClose={lane.closeNote}
+          onBack={lane.backTo ? lane.back : undefined}
+        />
+      )}
+      {lane.layers && layered.length > 1 && (
+        <LayersPopover
+          items={layered}
+          at={lane.layers}
+          container={container}
+          onOpen={lane.openFromLayers}
+          onClose={lane.closeLayers}
+          onHover={lane.setHoveredIds}
         />
       )}
       {api.error &&

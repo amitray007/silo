@@ -12,7 +12,6 @@ import { blockedColors, colorsUsedByOverlaps } from './overlap';
 import { pulseRange } from './paint';
 import { contextAfter, contextBefore } from './textMap';
 import { type ResolvedHighlight, useHighlightLayer } from './useHighlightLayer';
-import { useHighlightPointer } from './useHighlightPointer';
 import { useSelectionWatcher } from './useSelectionWatcher';
 
 const NONE: readonly HighlightJson[] = [];
@@ -34,8 +33,8 @@ function scrollToPassage(scroll: HTMLElement, range: Range): void {
 /**
  * Passage highlights for the open article: anchors them in the prose, paints them, watches the
  * text selection, and writes through optimistic mutations. The dock sheets, the selection
- * toolbar and the note popover all read this one object. The notes lane and layers popover of
- * the next slice read the same `resolved` and `orphans`.
+ * toolbar and the note popover all read this one object. The notes lane and the layers popover
+ * (`useNotesLane`) read the same `resolved` and `orphans` and decide what a click on text does.
  */
 export function useHighlights({
   link,
@@ -183,13 +182,6 @@ export function useHighlights({
     },
     [find, scroll],
   );
-
-  // A click on a highlight opens its note. The layers popover of the next slice replaces this
-  // for text covered twice.
-  useHighlightPointer(prose, resolved, (hits) => {
-    const inner = hits[0];
-    if (inner) setOpenNote(inner.id);
-  });
 
   const closeNote = useCallback(() => setOpenNote(null), []);
 
