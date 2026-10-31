@@ -788,9 +788,16 @@
 .silo-reader-prose {
   /* After shiori.sh prose: body in the secondary tone, emphasis in ink. */
   color: var(--mut);
-  font-size: 16px;
-  line-height: 28px;
+  /* The Type sheet sets these on the article; the fallbacks are the defaults (16px, 28px). */
+  font-family: var(--reader-font, "Inter Variable", Inter, sans-serif);
+  font-size: var(--reader-size, 16px);
+  line-height: var(--reader-leading, 1.75);
   overflow-wrap: anywhere;
+}
+/* The reset sets Inter on every element, so the chosen font must reach each one. Code keeps its
+   own rules below, which are more specific. */
+.silo-reader-prose :where(*) {
+  font-family: inherit;
 }
 .silo-reader-prose :is(h1, h2, h3, h4, h5, h6, strong, b, a, code, kbd, samp, th, mark) {
   color: var(--ink);
@@ -806,22 +813,22 @@
   text-wrap: pretty;
 }
 .silo-reader-prose h1 {
-  font-size: 26px;
+  font-size: calc(var(--reader-size, 16px) * 1.625);
 }
 .silo-reader-prose :where(h2) {
-  font-size: 20px;
+  font-size: calc(var(--reader-size, 16px) * 1.25);
 }
 .silo-reader-prose h3 {
-  font-size: 17px;
+  font-size: calc(var(--reader-size, 16px) * 1.0625);
 }
 .silo-reader-prose h4 {
-  font-size: 16px;
+  font-size: var(--reader-size, 16px);
 }
 .silo-reader-prose h5 {
-  font-size: 16px;
+  font-size: var(--reader-size, 16px);
 }
 .silo-reader-prose h6 {
-  font-size: 14px;
+  font-size: calc(var(--reader-size, 16px) * 0.875);
   letter-spacing: 0.02em;
 }
 .silo-reader-prose :is(p, ul, ol, dl, pre, figure, .silo-reader-table) {
@@ -882,8 +889,8 @@
   background: var(--hov);
   border: 0;
   font-family: var(--font-mono);
-  font-size: 13px;
-  line-height: 22px;
+  font-size: calc(var(--reader-size, 16px) * 0.8125);
+  line-height: calc(var(--reader-size, 16px) * 1.375);
   border-radius: 8px;
   overflow-x: auto;
   white-space: pre;
@@ -917,7 +924,7 @@
   border-collapse: collapse;
   width: max-content;
   min-width: 100%;
-  font-size: 14px;
+  font-size: calc(var(--reader-size, 16px) * 0.875);
 }
 .silo-reader-prose :is(th, td) {
   padding: 10px 12px 10px 0;
@@ -949,7 +956,7 @@
 }
 .silo-reader-prose :is(figcaption, caption) {
   color: var(--fnt);
-  font-size: 13px;
+  font-size: calc(var(--reader-size, 16px) * 0.8125);
   text-align: center;
 }
 .silo-reader-prose hr {
