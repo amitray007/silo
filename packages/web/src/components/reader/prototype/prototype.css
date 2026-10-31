@@ -1380,6 +1380,9 @@
 }
 ::highlight(proto-hover) {
   background-color: oklch(70% 0.1 85 / 0.32);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentcolor;
 }
 
 /* Selection toolbar */
@@ -1828,4 +1831,108 @@
 }
 .proto-lnote-meta {
   display: none;
+}
+
+/* Layers: an overlap is a stronger tint of the innermost colour with a 1px underline. */
+::highlight(proto-ov-yellow) {
+  background-color: oklch(86% 0.15 95 / 0.85);
+  text-decoration: underline;
+  text-decoration-color: oklch(55% 0.15 90);
+  text-decoration-thickness: 1px;
+}
+::highlight(proto-ov-green) {
+  background-color: oklch(80% 0.14 150 / 0.8);
+  text-decoration: underline;
+  text-decoration-color: oklch(50% 0.13 150);
+  text-decoration-thickness: 1px;
+}
+::highlight(proto-ov-blue) {
+  background-color: oklch(78% 0.11 245 / 0.8);
+  text-decoration: underline;
+  text-decoration-color: oklch(48% 0.13 245);
+  text-decoration-thickness: 1px;
+}
+::highlight(proto-ov-pink) {
+  background-color: oklch(80% 0.12 350 / 0.8);
+  text-decoration: underline;
+  text-decoration-color: oklch(52% 0.15 350);
+  text-decoration-thickness: 1px;
+}
+:root[data-theme="dark"] ::highlight(proto-ov-yellow) {
+  background-color: oklch(62% 0.14 95 / 0.6);
+  text-decoration-color: oklch(85% 0.14 95);
+}
+:root[data-theme="dark"] ::highlight(proto-ov-green) {
+  background-color: oklch(58% 0.13 150 / 0.6);
+  text-decoration-color: oklch(82% 0.13 150);
+}
+:root[data-theme="dark"] ::highlight(proto-ov-blue) {
+  background-color: oklch(55% 0.11 245 / 0.65);
+  text-decoration-color: oklch(80% 0.1 245);
+}
+:root[data-theme="dark"] ::highlight(proto-ov-pink) {
+  background-color: oklch(57% 0.12 350 / 0.65);
+  text-decoration-color: oklch(82% 0.11 350);
+}
+.proto-layers {
+  position: fixed;
+  z-index: 905;
+  width: 300px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  animation: protoPopDown 120ms var(--ease-out);
+}
+.proto-layers ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.proto-layers li button {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.proto-layers li button:hover,
+.proto-layers li button:focus-visible {
+  outline: none;
+  background: var(--hov);
+}
+.proto-layers .proto-row-text {
+  flex: 1;
+}
+.proto-layers footer {
+  padding: 4px 8px 3px;
+  font-size: 11px;
+  color: var(--fnt);
+}
+.proto-notepop-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: -2px 0 6px -4px;
+  padding: 2px 6px 2px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.proto-notepop-back:hover {
+  background: var(--hov);
+  color: var(--ink);
+}
+
+.proto-row-note-ink {
+  color: var(--ink);
 }

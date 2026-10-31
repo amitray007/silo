@@ -121,6 +121,7 @@ export function MarginNotes({
   panel,
   open,
   focusId,
+  alsoFocus = [],
   hoveredIds,
   setHoveredIds,
   onMarker,
@@ -139,6 +140,7 @@ export function MarginNotes({
   panel: HTMLElement;
   open: boolean;
   focusId: string | null;
+  alsoFocus?: string[];
   hoveredIds: string[];
   setHoveredIds: (ids: string[]) => void;
   onMarker: (ids: string[]) => void;
@@ -413,7 +415,7 @@ export function MarginNotes({
       className="proto-lnote"
       data-note={item.id}
       data-color={item.color}
-      data-focus={focusId === item.id}
+      data-focus={focusId === item.id || alsoFocus.includes(item.id)}
       data-hover={hoveredIds.includes(item.id)}
       style={style}
       initial={reduced ? false : { opacity: 0, y: 6 }}

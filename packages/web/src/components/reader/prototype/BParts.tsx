@@ -16,11 +16,14 @@ export function NotePopover({
   hl,
   scroll,
   onClose,
+  onBack,
 }: {
   item: PassageHighlight;
   hl: HighlightsApi;
   scroll: HTMLElement;
   onClose: () => void;
+  /** Set when the popover was opened from the layers list. */
+  onBack?: () => void;
 }) {
   const [, tick] = useState(0);
   const [draft, setDraft] = useState(item.note);
@@ -76,6 +79,12 @@ export function NotePopover({
   const top = last.bottom + 6;
   return createPortal(
     <div className="proto-notepop" ref={box} role="dialog" aria-label="Note" style={{ left, top }}>
+      {onBack && (
+        <button type="button" className="proto-notepop-back" onClick={onBack}>
+          <ProtoIcon name="chevronLeft" size={14} />
+          Layers
+        </button>
+      )}
       <textarea
         ref={field}
         className="proto-notepop-field"
@@ -336,5 +345,81 @@ export function ListenSheet({ ra }: { ra: ReadAloudApi }) {
         <SpeedStepper ra={ra} />
       </div>
     </div>
+  );
+}
+
+/** Every highlight under a click, innermost first. Row actions open that highlight's note. */
+export function LayersPopover({
+  items,
+  at,
+  onOpen,
+  onClose,
+  onHover,
+}: {
+  items: PassageHighlight[];
+  at: { x: number; y: number };
+  onOpen: (id: string) => void;
+  onClose: () => void;
+  onHover: (ids: string[]) => void;
+}) {
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    box.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
+    const outside = (event: MouseEvent) => {
+      if (event.target instanceof Node && box.current?.contains(event.target)) return;
+      onClose();
+    };
+    const keys = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        event.stopPropagation();
+        onClose();
+        return;
+      }
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+      event.preventDefault();
+      event.stopPropagation();
+      const rows = Array.from(box.current?.querySelectorAll<HTMLElement>('button') ?? []);
+      const at = rows.indexOf(document.activeElement as HTMLElement);
+      const next = (at + (event.key === 'ArrowDown' ? 1 : -1) + rows.length) % rows.length;
+      rows[next]?.focus();
+    };
+    document.addEventListener('mousedown', outside);
+    window.addEventListener('keydown', keys, true);
+    return () => {
+      document.removeEventListener('mousedown', outside);
+      window.removeEventListener('keydown', keys, true);
+      onHover([]);
+    };
+  }, [onClose, onHover]);
+  const left = Math.min(Math.max(8, at.x - 20), window.innerWidth - 316);
+  const top = Math.min(at.y + 14, window.innerHeight - 40 - items.length * 52);
+  return createPortal(
+    <div className="proto-layers" ref={box} role="dialog" aria-label="Layers" style={{ left, top }}>
+      <ul>
+        {items.map((item) => (
+          <li key={item.id}>
+            <button
+              type="button"
+              data-color={item.color}
+              onMouseEnter={() => onHover([item.id])}
+              onMouseLeave={() => onHover([])}
+              onFocus={() => onHover([item.id])}
+              onClick={() => onOpen(item.id)}
+            >
+              <span className="proto-row-bar" />
+              <span className="proto-row-text">
+                <span className="proto-row-snippet">{item.text}</span>
+                {item.note && (
+                  <span className="proto-row-note proto-row-note-ink">{item.note}</span>
+                )}
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+      <footer title="Option-click cycles through the layers">{items.length} layers</footer>
+    </div>,
+    document.body,
   );
 }

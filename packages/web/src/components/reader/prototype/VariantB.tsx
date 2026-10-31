@@ -1,6 +1,13 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: throwaway prototype
-import { useCallback, useEffect, useState } from 'react';
-import { HighlightSheet, ListenSheet, NotePopover, NotesList, PencilSheet } from './BParts';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  HighlightSheet,
+  LayersPopover,
+  ListenSheet,
+  NotePopover,
+  NotesList,
+  PencilSheet,
+} from './BParts';
 import { TypographyControls } from './controls';
 import { MarginNotes } from './MarginNotes';
 import { OutlineRail } from './OutlineRail';
@@ -9,7 +16,7 @@ import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import { inTextEntry, plain, useEscapeClose } from './protoKeys';
 import type { Tools } from './ReaderToolsPrototype';
 import { SelectionBar } from './SelectionBar';
-import type { HighlightColor } from './useHighlights';
+import { type HighlightColor, layerSize, type PassageHighlight } from './useHighlights';
 import { engineStatusLine, RATES } from './useReadAloud';
 
 type Sheet = 'aa' | 'pencil' | 'highlight' | 'listen' | 'notes';
@@ -59,6 +66,26 @@ function DockButton({
 }
 
 /** The sentence under a click, as an index into the read-aloud segments. */
+/** Every highlight under a pointer event, innermost (shortest) first. */
+function coverAt(event: MouseEvent, items: PassageHighlight[]): PassageHighlight[] {
+  const doc = document as Document & {
+    caretPositionFromPoint?: (x: number, y: number) => { offsetNode: Node; offset: number } | null;
+  };
+  const caret = doc.caretPositionFromPoint?.(event.clientX, event.clientY);
+  const covering = items.filter((item) => {
+    if (caret) return item.range.isPointInRange(caret.offsetNode, caret.offset);
+    return Array.from(item.range.getClientRects()).some(
+      (rect) =>
+        event.clientX >= rect.left &&
+        event.clientX <= rect.right &&
+        event.clientY >= rect.top &&
+        event.clientY <= rect.bottom,
+    );
+  });
+  return covering.sort((a, b) => layerSize(a) - layerSize(b));
+}
+
+/** The sentence under a click, as an index into the read-aloud segments. */
 function sentenceAt(event: MouseEvent, ra: Tools['ra']): number {
   const segments = ra.segments;
   const doc = document as Document & {
@@ -91,10 +118,19 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [color, setColor] = useState<HighlightColor>('yellow');
   const [openNote, setOpenNote] = useState<string | null>(null);
-  const closeNote = useCallback(() => setOpenNote(null), []);
+  const [layers, setLayers] = useState<{ ids: string[]; x: number; y: number } | null>(null);
+  const [backTo, setBackTo] = useState<{ ids: string[]; x: number; y: number } | null>(null);
+  const closeLayers = useCallback(() => setLayers(null), []);
+  const closeNote = useCallback(() => {
+    setOpenNote(null);
+    setBackTo(null);
+  }, []);
+  const cycle = useRef<{ x: number; y: number; at: number; index: number } | null>(null);
   const [hoveredIds, setHoveredIds] = useState<string[]>([]);
   const [laneOpen, setLaneOpen] = useState(false);
-  const [focusId, setFocusId] = useState<string | null>(null);
+  const [focusIds, setFocusIds] = useState<string[]>([]);
+  const focusId = focusIds[0] ?? null;
+  const setFocusId = useCallback((id: string | null) => setFocusIds(id ? [id] : []), []);
   const [dialHidden, setDialHidden] = useState(false);
   const closeLane = useCallback(() => setLaneOpen(false), []);
   const hasNotes = hl.items.some((item) => item.note);
@@ -103,12 +139,12 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
     setLaneOpen((open) => !open);
     setFocusId(null);
   };
-  useEscapeClose(sheet !== null && !openNote, () => setSheet(null));
+  useEscapeClose(sheet !== null && !openNote && !layers, () => setSheet(null));
 
   // Escape turns the pencil off once nothing above it (note, sheet, selection) is open.
   const pencilOff = pencil.setEnabled;
   useEffect(() => {
-    if (!pencil.enabled || laneOpen || sheet !== null || openNote || hl.pending) return;
+    if (!pencil.enabled || laneOpen || sheet !== null || openNote || layers || hl.pending) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || inTextEntry(event)) return;
       if (document.querySelector('[data-reader-menu], .proto-listbox')) return;
@@ -118,7 +154,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [pencil.enabled, laneOpen, sheet, openNote, hl.pending, pencilOff]);
+  }, [pencil.enabled, laneOpen, sheet, openNote, layers, hl.pending, pencilOff]);
 
   // The lane closes when the last note is deleted.
   useEffect(() => {
@@ -127,7 +163,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
 
   // Escape closes the notes lane once nothing above it is open.
   useEffect(() => {
-    if (!laneOpen || sheet !== null || openNote || hl.pending) return;
+    if (!laneOpen || sheet !== null || openNote || layers || hl.pending) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || inTextEntry(event)) return;
       if (document.querySelector('[data-reader-menu], .proto-listbox')) return;
@@ -137,7 +173,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [laneOpen, sheet, openNote, hl.pending]);
+  }, [laneOpen, sheet, openNote, layers, hl.pending]);
 
   // The hovered notes and their passages brighten together.
   useEffect(() => {
@@ -199,29 +235,33 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
         return;
       }
       if (sheet === 'pencil') return;
-      const hit = hl.items.find((item) =>
-        Array.from(item.range.getClientRects()).some(
-          (rect) =>
-            event.clientX >= rect.left &&
-            event.clientX <= rect.right &&
-            event.clientY >= rect.top &&
-            event.clientY <= rect.bottom,
-        ),
-      );
-      if (!hit) return;
-      if (laneOpen) setFocusId(hit.id);
-      else setOpenNote(hit.id);
+      const covering = coverAt(event, hl.items);
+      if (!covering.length) return;
+      const pick = (id: string) => (laneOpen ? setFocusId(id) : setOpenNote(id));
+      if (covering.length === 1) {
+        pick((covering[0] as PassageHighlight).id);
+        return;
+      }
+      // Option-click walks the layers, innermost to outermost, without the list.
+      if (event.altKey) {
+        const last = cycle.current;
+        const same =
+          last &&
+          Math.hypot(last.x - event.clientX, last.y - event.clientY) < 6 &&
+          Date.now() - last.at < 4000;
+        const index = same ? ((last?.index ?? 0) + 1) % covering.length : 0;
+        cycle.current = { x: event.clientX, y: event.clientY, at: Date.now(), index };
+        pick((covering[index] as PassageHighlight).id);
+        return;
+      }
+      if (laneOpen) {
+        setFocusIds(covering.map((item) => item.id));
+        return;
+      }
+      setLayers({ ids: covering.map((item) => item.id), x: event.clientX, y: event.clientY });
     };
     const onMove = (event: MouseEvent) => {
-      const hit = hl.items.find((item) =>
-        Array.from(item.range.getClientRects()).some(
-          (rect) =>
-            event.clientX >= rect.left &&
-            event.clientX <= rect.right &&
-            event.clientY >= rect.top &&
-            event.clientY <= rect.bottom,
-        ),
-      );
+      const hit = coverAt(event, hl.items)[0];
       setHoveredIds((previous) => {
         const next = hit ? [hit.id] : [];
         return previous.length === next.length && previous[0] === next[0] ? previous : next;
@@ -247,6 +287,11 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
   });
 
   const player = ra.active;
+  const layerItems = layers
+    ? (layers.ids
+        .map((id) => hl.items.find((item) => item.id === id))
+        .filter(Boolean) as PassageHighlight[])
+    : [];
   const spin = useDelayed(ra.status === 'loading' || (ra.playing && ra.buffering));
   const note = hl.items.find((item) => item.id === openNote);
   return (
@@ -266,6 +311,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
         panel={panel}
         open={laneOpen}
         focusId={focusId}
+        alsoFocus={focusIds.slice(1)}
         hoveredIds={hoveredIds}
         setHoveredIds={setHoveredIds}
         onMarker={(ids) => {
@@ -296,8 +342,36 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
           ra.startHere();
         }}
       />
+      {layers && layerItems.length > 1 && (
+        <LayersPopover
+          items={layerItems}
+          at={layers}
+          onClose={closeLayers}
+          onHover={setHoveredIds}
+          onOpen={(id) => {
+            setBackTo(layers);
+            setLayers(null);
+            setOpenNote(id);
+          }}
+        />
+      )}
       {note && (
-        <NotePopover key={note.id} item={note} hl={hl} scroll={scroll} onClose={closeNote} />
+        <NotePopover
+          key={note.id}
+          item={note}
+          hl={hl}
+          scroll={scroll}
+          onClose={closeNote}
+          {...(backTo
+            ? {
+                onBack: () => {
+                  setOpenNote(null);
+                  setLayers(backTo);
+                  setBackTo(null);
+                },
+              }
+            : {})}
+        />
       )}
       {sheet && (
         <section className="proto-sheet" aria-label={TITLES[sheet]} key={sheet}>
