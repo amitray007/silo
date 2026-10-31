@@ -284,3 +284,133 @@ after reload and after closing the tab, dial hover and click on a long article,
 and the MCP `get_link` output. Then compare side by side with prototype
 variant B (`prototype/reader-tools`, Vite on another port against the same
 API) and fix every unintended difference.
+
+## Slice 3: Highlights and passage notes
+
+Slice 3 ships as two stacked pull requests: **3a** (data, API, MCP, the
+selection toolbar, rendering, and the note popover) and **3b** (the notes lane,
+gutter markers, overlapping layers, and the lane's layout).
+
+### Decision record
+
+`docs/product/future-scope.md` recorded "separate highlight fields: decided
+against". The owner reversed this on 2026-10-31: passage highlights with notes
+ship as their own table. The link-level `notes` field stays unchanged. Update
+that entry in 3a to point here.
+
+### Data (3a)
+
+- **Table `highlights`** (migration `0028_highlights`): `id uuid pk default
+  random`, `link_id uuid not null references links(id) on delete cascade`
+  (indexed), `quote text not null` (1 to 5,000 chars), `prefix text not null
+  default ''` and `suffix text not null default ''` (up to 64 chars each),
+  `start_offset integer` and `end_offset integer` (nullable hints),
+  `color text not null` (check: yellow, green, blue, pink, violet),
+  `note text` (nullable, up to 10,000 chars), `created_at`, `updated_at`.
+- **Anchoring model** (W3C Web Annotation style): the quote with its prefix
+  and suffix is the truth, and the offsets are hints into the prose's
+  normalised text (whitespace collapsed, skipped blocks excluded, the same
+  normaliser as the pencil's text walk). Overlaps are allowed: rows are
+  independent ranges.
+- **Core** (`packages/core/src/links/highlights.ts`): `listHighlights(linkId)`,
+  `addHighlight(linkId, input)`, `editHighlight(id, { color?, note? })`,
+  `deleteHighlight(id)`. Writes call `assertLibraryWrite`; feed posts are not
+  editable (the existing error). For agent writes that pass only a quote,
+  `addHighlight` finds the quote in the link's `extracted_text` (the
+  `occurrence` input picks the nth match, default 1), fills prefix and suffix
+  from there, and leaves offsets null; a quote that is not found is a
+  validation error with a clear message.
+- **Restore merge**: move the merged-away row's highlights to the surviving
+  link.
+- **Link JSON and MCP shape**: single-link reads add
+  `highlights: Array<{ id, quote, prefix, suffix, startOffset, endOffset,
+  color, note, createdAt, updatedAt }>` ordered by start offset then created
+  time, loaded in one query per link read (no N+1), leak guards on both
+  shapes. List endpoints stay unchanged.
+- **API**: `POST /api/links/:id/highlights`, `PATCH /api/highlights/:id`,
+  `DELETE /api/highlights/:id`, all Zod-validated, standard error envelope.
+- **MCP** (parity): `add_highlight` (`id`, `quote`, optional `occurrence`,
+  `color`, `note`), `edit_highlight`, `delete_highlight`; `get_link` returns
+  highlights, and its text form lists each quote with its note. Tool
+  descriptions explain overlap and the quote-matching rule.
+- **Export and import**: an optional `highlights` array per link (no version
+  bump; old files import unchanged). CSV leaves it out.
+- **Search**: highlight notes are not searchable yet. Park "search passage
+  notes" in `future-scope.md`.
+
+### Web (3a)
+
+- **Anchoring** (`components/reader/highlights/anchor.ts`): build the prose's
+  normalised text and a text-node offset map once per render; resolve each
+  highlight by offsets when the quote matches there, else by exact
+  prefix+quote+suffix search, else by fuzzy match with `approx-string-match`
+  (MIT, Hypothesis' matcher, maintained), else mark it orphaned. Orphans are
+  kept and listed (3b shows them in the lane as "Passage not found").
+- **Rendering** with the CSS Custom Highlight API: one registered highlight per
+  colour plus overlap pieces (split at every range boundary; pieces covered by
+  two or more ranges take the innermost range's colour at higher chroma). No
+  DOM wrapping. Recompute on highlight change, type prefs change, and reader
+  refresh.
+- **Palette** (`styles/highlight-palette.css`): five semantic colours, per-theme
+  oklch tokens for light, dark, sepia and sepia-dark from the prototype's
+  `highlightPalette.prototype.ts` table (text on tint at least 4.5:1, minimum
+  pairwise OKLab distance about 0.08).
+- **Overlap colours**: a new highlight overlapping existing ones takes the next
+  palette colour not used by the ranges it overlaps; the colour picker disables
+  colours used by overlapping ranges unless all five are taken.
+- **Selection toolbar** (`components/reader/highlights/SelectionBar.tsx`): a
+  floating pill with a notch above the selection; Highlight (current colour
+  dot; click applies; hover, focus or ArrowUp opens a separate colour picker
+  with a hover bridge), Note, and a More menu (icon, 500 title, one muted
+  line) with Copy quote (`"text" - Title, ¶n`, no link), Copy text, and
+  Search silo (opens the command palette through its API with the phrase).
+  Actions come from a typed registry so slice 4's "Listen from here" and
+  future actions slot in. Keyboard reachable; Escape dismisses.
+- **Note popover**: click a highlight to open a 280px popover below it with a
+  borderless auto-growing note field, the colour dots, and delete. Saves on
+  blur or close (optimistic, rolled back on error).
+- **Hit testing**: a click or hover counts only inside a highlight's line boxes
+  (`getClientRects`, 2px and 1px tolerance), never in the empty space beside a
+  line.
+- **Dock**: a Highlight tool (sheet: default colour; while open, a selection
+  highlights at once) and a Notes tool (disabled with "No highlights yet" when
+  there are none; 3a opens a simple list sheet, 3b replaces it with the lane).
+
+### Web (3b)
+
+- **Layers**: a click on text covered by two or more highlights opens the
+  layers popover (innermost first; row: colour bar, snippet, note; hover
+  isolates that range; Enter opens its note popover with a back button);
+  Option-click cycles layers.
+- **Gutter markers**: silo's note glyph, 16px muted, a 10px count when a
+  paragraph has more than one highlight, hover circle on `--line` in dark;
+  one per paragraph in the shared right gutter column, the same x as the
+  slice 2 resume button (the resume button wins a shared line; the marker
+  moves down a line).
+- **Notes lane**: every highlight as a block (colour rule, note text, or a
+  muted two-line snippet with "Add note" for bare ones; edit and delete on
+  hover), grouped by paragraph, each group anchored at its paragraph and
+  capped at max(paragraph height, 112px) with internal scroll, fade masks, and
+  a "+N" chip; groups never overlap (measured heights, re-laid out on every
+  change). Hover links a block and its range with a hairline.
+- **Lane layout**: opening the lane shifts the column left on a spring just
+  enough for a 264px lane; if the pane is too narrow it collapses the app
+  sidebar through `AppFrame`'s own state (exposed via context, not synthetic
+  key events) and restores it on close only if it collapsed it; below that,
+  the lane is an overlay panel. Reduced motion swaps instantly.
+
+### Tests
+
+Core and API with real Postgres (CRUD, validation bounds, quote matching and
+`occurrence`, not found, feed post, trash, cascade, restore move, export and
+import, leak guards, MCP round trip and parity). Web: anchoring (exact, moved,
+fuzzy, orphan, overlapping), overlap colour assignment, toolbar actions and
+keyboard, hit testing, popover save and rollback, lane grouping and the
+no-overlap layout (3b), marker counts, sidebar collapse restore (3b).
+
+### QA and mockup parity
+
+Real links at 1440, 1100 and 390 in light, dark and sepia; create, overlap,
+recolour, note, delete; reader refresh keeps highlights; agent round trip
+through MCP; then side by side with prototype variant B and fix every
+unintended difference.
