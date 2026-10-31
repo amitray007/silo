@@ -282,6 +282,8 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
         onEdit={setOpenNote}
         onRemove={hl.remove}
         onDialHidden={setDialHidden}
+        resume={pencil.resume}
+        onResume={pencil.start}
       />
       <SelectionBar
         hl={hl}

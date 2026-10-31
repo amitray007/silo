@@ -78,7 +78,6 @@ export function usePencil(
   const [progress, setProgress] = useState(0);
   const lines = useRef<Line[]>([]);
   const prefix = useRef<number[]>([]);
-  const edge = useRef(0);
   const index = useRef(0);
   const sweep = useRef(0);
   const guide = useRef<HTMLDivElement>(null);
@@ -132,10 +131,6 @@ export function usePencil(
       const first = lines.current.length === 0;
       const previous = lines.current.length ? index.current / lines.current.length : 0;
       lines.current = measureLines(root, scroll);
-      edge.current =
-        root.getBoundingClientRect().right -
-        scroll.getBoundingClientRect().left +
-        scroll.scrollLeft;
       let sum = 0;
       prefix.current = lines.current.map((line) => {
         const before = sum;
@@ -258,38 +253,21 @@ export function usePencil(
   }, []);
 
   const resumeLine = lines.current[lineIndex];
-  // The marker sits at least 12px past the line end; a line that fills the column puts it in the gutter.
-  const lineEnd = resumeLine ? resumeLine.left + resumeLine.width : 0;
-  const resumeLeft = Math.min(
-    lineEnd + 12 > edge.current - 22 ? edge.current + 12 : lineEnd + 12,
-    (scroll?.clientWidth ?? 9999) - 24,
-  );
-  const overlay: ReactNode = host
-    ? createPortal(
-        enabled ? (
+  const overlay: ReactNode =
+    host && enabled
+      ? createPortal(
           <div className="proto-pencil" data-style={style} ref={guide}>
             <div className="proto-pencil-fill" ref={fill} />
-          </div>
-        ) : persist && saved !== null && saved > 0.001 && resumeLine ? (
-          <button
-            type="button"
-            className="proto-resume"
-            title="Resume reading (P)"
-            aria-label="Resume reading"
-            style={{ top: resumeLine.top + resumeLine.height / 2 - 11, left: resumeLeft }}
-            onClick={() => {
-              setEnabled(true);
-              setPlaying(true);
-            }}
-          >
-            <svg width="10" height="10" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-              <path d="M7 4.5v15l12-7.5z" />
-            </svg>
-          </button>
-        ) : null,
-        host,
-      )
-    : null;
+          </div>,
+          host,
+        )
+      : null;
+  // Where the resume button belongs: the centre of the line the reader stopped on. The margin
+  // gutter (MarginNotes) draws it so it shares the note markers' column.
+  const resume =
+    !enabled && persist && saved !== null && saved > 0.001 && resumeLine
+      ? { y: resumeLine.top + resumeLine.height / 2 }
+      : null;
 
   return {
     enabled,
@@ -299,6 +277,7 @@ export function usePencil(
     },
     playing,
     toggle,
+    resume,
     /** Turn the pencil on and start it from the resume point. */
     start: () => {
       setEnabled(true);

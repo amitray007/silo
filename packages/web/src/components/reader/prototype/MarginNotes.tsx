@@ -31,6 +31,7 @@ type Group = {
   items: PassageHighlight[];
   y: number; // centre of the first noted line
   colors: string[];
+  lineHeight: number;
 };
 
 type Geometry = { left: number; width: number; proseRight0: number; room: number };
@@ -76,10 +77,10 @@ function toggleSidebar() {
 }
 
 /** Work out how the column makes room for the lane. */
-function planColumn(g: Geometry, open: boolean, has: boolean): Plan {
+function planColumn(g: Geometry, open: boolean, has: boolean, gutter = false): Plan {
   const { left, width, proseRight0 } = g;
   const free = g.room - proseRight0;
-  const reserve = has ? Math.max(0, MARKER_GUTTER - free) : 0;
+  const reserve = has || gutter ? Math.max(0, MARKER_GUTTER - free) : 0;
   if (!(open && has))
     return {
       extra: reserve,
@@ -128,6 +129,8 @@ export function MarginNotes({
   onEdit,
   onRemove,
   onDialHidden,
+  resume,
+  onResume,
 }: {
   items: PassageHighlight[];
   prose: HTMLElement | null;
@@ -144,6 +147,9 @@ export function MarginNotes({
   onEdit: (id: string) => void;
   onRemove: (id: string) => void;
   onDialHidden: (hidden: boolean) => void;
+  /** The pencil's resume line, drawn in the same gutter column as the note markers. */
+  resume: { y: number } | null;
+  onResume: () => void;
 }) {
   const reduced = useReducedMotion() ?? false;
   const [tick, setTick] = useState(0);
@@ -192,14 +198,24 @@ export function MarginNotes({
     if (!article || !prose) return null;
     if (base.current === null)
       base.current = Number.parseFloat(getComputedStyle(article).paddingRight) || 32;
-    const now = planColumn(geometry(article, prose, scroll, applied.current, 0), open, has);
+    const now = planColumn(
+      geometry(article, prose, scroll, applied.current, 0),
+      open,
+      has,
+      Boolean(resume),
+    );
     if (!(open && has && now.overlay) || sidebarCollapsed()) return now;
     // The lane does not fit beside the list. Would it fit if the sidebar collapsed?
     const delta = document.querySelector('.silo-sidebar')?.getBoundingClientRect().width ?? 0;
     if (!delta) return now;
-    const wider = planColumn(geometry(article, prose, scroll, applied.current, delta), open, has);
+    const wider = planColumn(
+      geometry(article, prose, scroll, applied.current, delta),
+      open,
+      has,
+      Boolean(resume),
+    );
     return wider.overlay ? now : { ...now, needsCollapse: true };
-  }, [article, prose, scroll, open, has, tick]);
+  }, [article, prose, scroll, open, has, tick, Boolean(resume)]);
 
   // Collapse the sidebar through the app's own toggle while the lane needs the room, and put it
   // back afterwards, but only if the lane was what collapsed it.
@@ -278,7 +294,11 @@ export function MarginNotes({
       const rect = item.range.getClientRects()[0] ?? item.range.getBoundingClientRect();
       const para = paragraphNumber(prose, item.range.startContainer);
       const y = rect.top + rect.height / 2 - box.top + scroll.scrollTop;
-      const group = byPara.get(para) ?? { para, ids: [], items: [], y, colors: [] };
+      const lineHeight =
+        Number.parseFloat(
+          getComputedStyle(item.range.startContainer.parentElement ?? prose).lineHeight,
+        ) || 28;
+      const group = byPara.get(para) ?? { para, ids: [], items: [], y, colors: [], lineHeight };
       group.ids.push(item.id);
       group.items.push(item);
       group.y = Math.min(group.y, y);
@@ -326,7 +346,7 @@ export function MarginNotes({
       });
   }, [focusId, open]);
 
-  if (!plan || !groups.length) return null;
+  if (!plan || (!groups.length && !resume)) return null;
   const gutterX = plan.proseRight + 6;
   const laneLeft = plan.proseRight - plan.shift + LANE_GAP;
   const hovered = hoveredIds[0];
@@ -335,8 +355,29 @@ export function MarginNotes({
     ? { duration: 0 }
     : { duration: 0.2, ease: [0.23, 1, 0.32, 1] as const };
 
+  // A note marker that would touch the resume button moves down to a later line of its paragraph.
+  const markerY = (group: Group) => {
+    if (!resume || Math.abs(group.y - resume.y) >= 28) return group.y;
+    return group.y + Math.ceil(28 / group.lineHeight) * group.lineHeight;
+  };
+  const gutterLeft = Math.min(gutterX, scroll.clientWidth + shifted.current - 24 - 4);
+
   const markers = (
     <div className="proto-mwrap" ref={wrap}>
+      {resume && (
+        <button
+          type="button"
+          className="proto-resume"
+          title="Resume reading (P)"
+          aria-label="Resume reading"
+          style={{ top: resume.y - 12, left: gutterLeft }}
+          onClick={onResume}
+        >
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+            <path d="M7 4.5v15l12-7.5z" />
+          </svg>
+        </button>
+      )}
       {groups.map((group) => {
         const width = 24; // every marker shares one x
         const x = Math.min(gutterX, scroll.clientWidth + shifted.current - width - 4);
@@ -347,7 +388,7 @@ export function MarginNotes({
             className="proto-marker2"
             data-active={open && focusId !== null && group.ids.includes(focusId)}
             aria-label={`${group.ids.length} note${group.ids.length > 1 ? 's' : ''} on paragraph ${group.para}`}
-            style={{ top: group.y - 12, left: x }}
+            style={{ top: markerY(group) - 12, left: x }}
             onMouseEnter={() => setHoveredIds(group.ids)}
             onMouseLeave={() => setHoveredIds([])}
             onFocus={() => setHoveredIds(group.ids)}
