@@ -1,15 +1,16 @@
 import { createPortal } from 'react-dom';
 import type { Gutter } from '../gutter';
 import { ReaderIcon } from '../ReaderIcon';
+import { resolveMarkerYs } from './markerLayout';
 import type { NoteGroup } from './useGroups';
 import type { NotesLaneApi } from './useNotesLane';
 
-/** Markers within this many pixels of the resume button's centre share its line. */
+/** The least space between two items in the gutter column. */
 const CLEARANCE = 4;
 
 /**
  * One note marker per paragraph, in the gutter column the resume button uses (the same x). A
- * marker that would sit on the resume button's line moves down one line of its paragraph.
+ * marker that would touch the resume button or the marker above it moves down by whole lines.
  */
 export function GutterMarkers({
   frame,
@@ -33,14 +34,20 @@ export function GutterMarkers({
   hidden: boolean;
 }) {
   if (groups.length === 0) return null;
-  const clear = gutter.size + CLEARANCE;
+  const ys = resolveMarkerYs(
+    groups.map((group) => ({
+      key: group.para,
+      y: group.y - frameTop,
+      lineHeight: group.lineHeight,
+    })),
+    resumeY,
+    gutter.size + CLEARANCE,
+  );
   return createPortal(
     groups.map((group) => {
       const ids = group.items.map((item) => item.id);
       const count = ids.length;
-      let y = group.y - frameTop;
-      if (resumeY !== null && Math.abs(y - resumeY) < clear)
-        y += Math.ceil(clear / group.lineHeight) * group.lineHeight;
+      const y = ys.get(group.para) ?? group.y - frameTop;
       return (
         <button
           key={group.para}
