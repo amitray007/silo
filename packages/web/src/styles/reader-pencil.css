@@ -266,3 +266,25 @@
   line-height: 18px;
   color: var(--fnt);
 }
+
+/* `.silo-reader-icon` pins glyphs to 20px; these controls use the prototype's sizes. */
+.silo-reader-dock-split .silo-reader-dockbtn .silo-reader-icon {
+  width: 19px;
+  height: 19px;
+}
+.silo-reader-dockchev .silo-reader-icon {
+  width: 14px;
+  height: 14px;
+}
+.silo-pencil-play .silo-reader-icon {
+  width: 16px;
+  height: 16px;
+}
+.silo-pencil-transport .silo-stepper-btn .silo-reader-icon {
+  width: 14px;
+  height: 14px;
+}
+/* One 6px rhythm across the transport, the stepper's own gaps included. */
+.silo-pencil-transport .silo-stepper {
+  gap: 6px;
+}

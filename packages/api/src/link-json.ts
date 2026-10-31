@@ -100,7 +100,7 @@ function shapeSourceData(raw: unknown): SourceData {
 }
 
 /** Where the reader stopped: a share (0 to 1) of the article's words, and when it was saved. */
-export type ReadingPositionJson = { position: number; updatedAt: string };
+type ReadingPositionJson = { position: number; updatedAt: string };
 
 /**
  * `LinkJson` plus the saved reading position (`null` when none). Only the

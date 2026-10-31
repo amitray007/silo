@@ -45,7 +45,7 @@ import { z } from 'zod';
  * it (`get_link` and the write tools that return a link); list and search rows
  * do not.
  */
-export const readingPositionShape = z
+const readingPositionShape = z
   .object({
     position: z
       .number()

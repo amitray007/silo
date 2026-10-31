@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import type { PencilApi } from './usePencil';
 
 /** The dock's own sheet is a dialog too, and the pencil's keys keep working beside it. */
-export const DOCK_SHEET_CLASS = 'silo-type-sheet';
+const DOCK_SHEET_CLASS = 'silo-type-sheet';
 
 const OTHER_OVERLAY = `[role="alertdialog"], [role="dialog"]:not(.${DOCK_SHEET_CLASS}), [role="menu"]`;
 const OWN_ARROWS = '[role="radiogroup"], [role="spinbutton"], [role="listbox"], select';

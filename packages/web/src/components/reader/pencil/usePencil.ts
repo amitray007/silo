@@ -103,7 +103,7 @@ function pointAfterMeasure({
   return { index: start ? start() : 0, sweep: 0 };
 }
 
-export type PencilResume = { y: number };
+type PencilResume = { y: number };
 
 /**
  * The reading pencil: a guide that sweeps one line at a time at a set pace. Measuring, painting
