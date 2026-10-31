@@ -233,7 +233,10 @@ export function MarginNotes({
       collapsedByLane.current = true;
       setCollapsing(true);
       toggleSidebar();
-      window.setTimeout(() => setCollapsing(false), 380);
+      window.setTimeout(() => {
+        setCollapsing(false);
+        setTick((value) => value + 1);
+      }, 380);
       return;
     }
     if (!open && collapsedByLane.current) {
@@ -429,7 +432,16 @@ export function MarginNotes({
   const gutterLeft = Math.min(gutterX, scroll.clientWidth + shifted.current - 24 - 4);
 
   const markers = (
-    <div className="proto-mwrap" ref={wrap}>
+    <div
+      className="proto-mwrap"
+      ref={(el) => {
+        wrap.current = el;
+        // The layer can mount after the shift began; start it where the column already is.
+        if (el && shifted.current && !el.style.transform)
+          el.style.transform = `translateX(${-shifted.current}px)`;
+      }}
+      style={open && plan.overlay ? { visibility: 'hidden' } : {}}
+    >
       {resume && (
         <button
           type="button"
