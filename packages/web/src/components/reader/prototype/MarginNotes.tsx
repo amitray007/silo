@@ -4,7 +4,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ReaderIcon } from '../ReaderIcon';
 import { ProtoIcon } from './ProtoIcon';
-import { paragraphNumber } from './paragraphs.prototype';
+import { paragraphNumber, paragraphSections } from './paragraphs.prototype';
 import type { PassageHighlight } from './useHighlights';
 
 const LANE = 264;
@@ -158,7 +158,11 @@ export function MarginNotes({
   const reduced = useReducedMotion() ?? false;
   const [tick, setTick] = useState(0);
   const [adding, setAdding] = useState<string | null>(null);
-  const [tops, setTops] = useState<Record<string, number>>({});
+  // Lane groups: one per paragraph, anchored at the paragraph's top, scrolling inside themselves.
+  type Slot = { top: number; max: number };
+  type Edges = { up: boolean; down: boolean; hidden: number };
+  const [slots, setSlots] = useState<Record<number, Slot>>({});
+  const [edges, setEdges] = useState<Record<number, Edges>>({});
   const lane = useRef<HTMLDivElement>(null);
   const wrap = useRef<HTMLDivElement>(null);
   const applied = useRef(0);
@@ -343,69 +347,115 @@ export function MarginNotes({
     };
   }, [stacked, items.length]);
 
-  // Each block goes at its passage's top, pushed below the one before it. Heights are measured.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: re-stack when anything that moves a block changes.
+  // Each paragraph's group goes at the paragraph's top, no taller than the paragraph (at least
+  // 112px), and below the group before it. Heights are measured, never estimated.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: re-stack when anything that moves a group changes.
+  useLayoutEffect(() => {
+    const host = lane.current;
+    if (!stacked || !host || !prose) return;
+    const box = scroll.getBoundingClientRect();
+    const sections = paragraphSections(prose);
+    const rows = groups.map((group) => {
+      const section = sections[group.para - 1];
+      const rect = section?.getBoundingClientRect();
+      const first = group.items[0];
+      const fallback = first ? first.range.getBoundingClientRect() : null;
+      const top = (rect ?? fallback)?.top ?? 0;
+      return {
+        para: group.para,
+        y: top - box.top + scroll.scrollTop - 2,
+        max: Math.max(rect?.height ?? 0, 112),
+      };
+    });
+    rows.sort((a, b) => a.y - b.y);
+    const next: Record<number, Slot> = {};
+    let floor = Number.NEGATIVE_INFINITY;
+    for (const row of rows) {
+      const el = host.querySelector<HTMLElement>(`[data-group="${row.para}"]`);
+      const top = Math.max(row.y, floor);
+      next[row.para] = { top, max: row.max };
+      floor = top + (el?.offsetHeight ?? 0) + 12;
+    }
+    setSlots((previous) => {
+      const same =
+        Object.keys(next).length === Object.keys(previous).length &&
+        Object.entries(next).every(([k, v]) => {
+          const old = previous[Number(k)];
+          return old && old.top === v.top && old.max === v.max;
+        });
+      return same ? previous : next;
+    });
+  }, [stacked, groups, plan, tick, blockTick, adding, focusId]);
+
+  // Which groups can still scroll up or down, and how many blocks are hidden below.
+  const measureEdges = (scroller: HTMLElement): Edges => {
+    let hidden = 0;
+    for (const child of Array.from(scroller.children) as HTMLElement[])
+      if (child.offsetTop + child.offsetHeight > scroller.scrollTop + scroller.clientHeight + 1)
+        hidden += 1;
+    return {
+      up: scroller.scrollTop > 1,
+      down: scroller.scrollTop + scroller.clientHeight < scroller.scrollHeight - 1,
+      hidden,
+    };
+  };
+  const refreshEdges = (scroller: HTMLElement) => {
+    const para = Number(scroller.dataset.scroller);
+    const next = measureEdges(scroller);
+    setEdges((previous) => {
+      const old = previous[para];
+      return old && old.up === next.up && old.down === next.down && old.hidden === next.hidden
+        ? previous
+        : { ...previous, [para]: next };
+    });
+  };
+  // biome-ignore lint/correctness/useExhaustiveDependencies: measure after every layout change.
   useLayoutEffect(() => {
     const host = lane.current;
     if (!stacked || !host) return;
-    const box = scroll.getBoundingClientRect();
-    const rows = noted.map((item) => {
-      const rect = item.range.getClientRects()[0] ?? item.range.getBoundingClientRect();
-      return {
-        item,
-        y: rect.top - box.top + scroll.scrollTop - 2,
-        size: item.range.toString().length,
-      };
-    });
-    rows.sort(
-      (a, b) =>
-        a.y - b.y ||
-        a.item.range.compareBoundaryPoints(Range.START_TO_START, b.item.range) ||
-        a.size - b.size,
-    );
-    const next: Record<string, number> = {};
-    let floor = Number.NEGATIVE_INFINITY;
-    for (const row of rows) {
-      const el = host.querySelector<HTMLElement>(`[data-note="${row.item.id}"]`);
-      const top = Math.max(row.y, floor);
-      next[row.item.id] = top;
-      floor = top + (el?.offsetHeight ?? 0) + 8;
-    }
-    setTops((previous) => {
-      const same =
-        Object.keys(next).length === Object.keys(previous).length &&
-        Object.entries(next).every(([k, v]) => previous[k] === v);
-      return same ? previous : next;
-    });
-  }, [stacked, noted, groups, plan, tick, blockTick, adding, focusId]);
+    for (const el of host.querySelectorAll<HTMLElement>('.proto-lgroup-scroll')) refreshEdges(el);
+  }, [stacked, slots, blockTick, noted, adding]);
 
-  // Dev assertion: no two lane blocks may intersect once the layout has settled.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: tops is the trigger, not a value used inside.
+  // Dev assertion: no two lane groups may intersect once the layout has settled.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: slots is the trigger, not a value used inside.
   useEffect(() => {
     const host = lane.current;
     if (!stacked || !host) return;
-    const frame = requestAnimationFrame(() => {
-      const rects = Array.from(host.querySelectorAll<HTMLElement>('.proto-lnote')).map((el) => ({
-        id: el.dataset.note,
+    const frame = window.setTimeout(() => {
+      const rects = Array.from(host.querySelectorAll<HTMLElement>('.proto-lgroup')).map((el) => ({
+        id: el.dataset.group,
         rect: el.getBoundingClientRect(),
       }));
       for (let i = 0; i < rects.length; i += 1)
         for (let j = i + 1; j < rects.length; j += 1) {
           const a = (rects[i] as (typeof rects)[number]).rect;
           const b = (rects[j] as (typeof rects)[number]).rect;
-          // Blocks fade and rise 6px while they enter, so allow that much slack.
-          if (a.top < b.bottom - 6 && b.top < a.bottom - 6)
-            console.warn('[notes lane] blocks overlap', rects[i]?.id, rects[j]?.id);
+          if (a.top < b.bottom - 1 && b.top < a.bottom - 1)
+            console.warn('[notes lane] groups overlap', rects[i]?.id, rects[j]?.id);
         }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [stacked, tops]);
+    }, 600);
+    return () => window.clearTimeout(frame);
+  }, [stacked, slots]);
 
-  // Bring the emphasised note into view.
+  // Bring the emphasised note into view: scroll its group, then the reader.
   // biome-ignore lint/correctness/useExhaustiveDependencies: only react to a new focus.
   useEffect(() => {
     if (!open || !focusId) return;
-    const top = tops[focusId];
+    const host = lane.current;
+    const block = host?.querySelector<HTMLElement>(`[data-note="${focusId}"]`);
+    const scroller = block?.closest<HTMLElement>('.proto-lgroup-scroll');
+    if (block && scroller) {
+      const above = block.offsetTop < scroller.scrollTop;
+      const below =
+        block.offsetTop + block.offsetHeight > scroller.scrollTop + scroller.clientHeight;
+      if (above || below)
+        scroller.scrollTo({
+          top: Math.max(0, block.offsetTop - 4),
+          behavior: reduced ? 'auto' : 'smooth',
+        });
+    }
+    const para = groups.find((group) => group.ids.includes(focusId))?.para;
+    const top = para === undefined ? undefined : slots[para]?.top;
     if (top === undefined) return;
     const view = top - scroll.scrollTop;
     if (view < 80 || view > scroll.clientHeight - 140)
@@ -571,18 +621,22 @@ export function MarginNotes({
     </motion.div>
   );
 
-  // The hairline from the gutter to the hovered note.
-  const link =
-    stacked && hoveredGroup && hovered && tops[hovered] !== undefined
-      ? (() => {
-          const x1 = gutterX - plan.shift + 30;
-          const y1 = hoveredGroup.y;
-          const x2 = laneLeft - 6;
-          const y2 = (tops[hovered] as number) + 12;
-          const mid = (x1 + x2) / 2;
-          return `M${x1} ${y1}C${mid} ${y1} ${mid} ${y2} ${x2} ${y2}`;
-        })()
-      : null;
+  // The hairline from the gutter to the hovered block (hidden when it is scrolled out of its group).
+  const link = (() => {
+    if (!stacked || !hoveredGroup || !hovered) return null;
+    const block = lane.current?.querySelector<HTMLElement>(`[data-note="${hovered}"]`);
+    const scroller = block?.closest<HTMLElement>('.proto-lgroup-scroll');
+    if (!block || !scroller) return null;
+    const rect = block.getBoundingClientRect();
+    const view = scroller.getBoundingClientRect();
+    if (rect.bottom < view.top + 4 || rect.top > view.bottom - 4) return null;
+    const y2 = rect.top - scroll.getBoundingClientRect().top + scroll.scrollTop + 12;
+    const x1 = gutterX - plan.shift + 30;
+    const y1 = hoveredGroup.y;
+    const x2 = laneLeft - 6;
+    const mid = (x1 + x2) / 2;
+    return `M${x1} ${y1}C${mid} ${y1} ${mid} ${y2} ${x2} ${y2}`;
+  })();
 
   return (
     <>
@@ -597,7 +651,47 @@ export function MarginNotes({
           <AnimatePresence>
             {stacked && (
               <div className="proto-lane2" ref={lane} style={{ left: laneLeft, width: LANE }}>
-                {noted.map((item, index) => noteBlock(item, index, { top: tops[item.id] ?? 0 }))}
+                {groups.map((group) => {
+                  const edge = edges[group.para];
+                  return (
+                    <div
+                      key={group.para}
+                      className="proto-lgroup"
+                      data-group={group.para}
+                      style={{ top: slots[group.para]?.top ?? 0 }}
+                    >
+                      <div
+                        className="proto-lgroup-scroll"
+                        data-scroller={group.para}
+                        data-up={edge?.up ?? false}
+                        data-down={edge?.down ?? false}
+                        style={{ maxHeight: slots[group.para]?.max ?? 'none' }}
+                        onScroll={(event) => refreshEdges(event.currentTarget)}
+                      >
+                        {group.items.map((item, index) =>
+                          noteBlock(item, index, { position: 'relative' }),
+                        )}
+                      </div>
+                      {(edge?.hidden ?? 0) > 0 && (
+                        <button
+                          type="button"
+                          className="proto-lgroup-more"
+                          aria-label={`${edge?.hidden} more highlights, scroll down`}
+                          onClick={(event) => {
+                            const scroller = event.currentTarget.previousElementSibling;
+                            if (scroller instanceof HTMLElement)
+                              scroller.scrollBy({
+                                top: scroller.clientHeight * 0.9,
+                                behavior: reduced ? 'auto' : 'smooth',
+                              });
+                          }}
+                        >
+                          +{edge?.hidden}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </AnimatePresence>

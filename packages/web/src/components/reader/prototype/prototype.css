@@ -2012,3 +2012,68 @@
   height: 18px;
   margin-top: 2px;
 }
+
+/* Round 14: one scrolling group per paragraph in the notes lane */
+.proto-lgroup {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: none;
+  transition: top 160ms var(--ease-out);
+}
+.proto-lgroup-scroll {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  overflow-x: hidden;
+  pointer-events: auto;
+  overscroll-behavior: auto;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.proto-lgroup-scroll:hover,
+.proto-lgroup-scroll:focus-within {
+  scrollbar-color: var(--line-2) transparent;
+}
+.proto-lgroup-scroll[data-down="true"] {
+  mask-image: linear-gradient(to bottom, black calc(100% - 28px), transparent);
+}
+.proto-lgroup-scroll[data-up="true"] {
+  mask-image: linear-gradient(to bottom, transparent, black 28px);
+}
+.proto-lgroup-scroll[data-up="true"][data-down="true"] {
+  mask-image: linear-gradient(
+    to bottom,
+    transparent,
+    black 28px,
+    black calc(100% - 28px),
+    transparent
+  );
+}
+.proto-lgroup .proto-lnote {
+  position: relative;
+  left: auto;
+  right: auto;
+  flex: none;
+}
+.proto-lgroup-more {
+  position: absolute;
+  right: 4px;
+  bottom: 2px;
+  height: 18px;
+  padding: 0 7px;
+  border: 0;
+  border-radius: 9px;
+  background: var(--hov);
+  color: var(--fnt);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.proto-lgroup-more:hover {
+  color: var(--ink);
+}
