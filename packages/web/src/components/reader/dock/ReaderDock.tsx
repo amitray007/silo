@@ -19,6 +19,12 @@ import { MenuSurface } from '../../MenuSurface';
 import { HighlightSheet } from '../highlights/HighlightSheet';
 import { HighlightsLayer } from '../highlights/HighlightsLayer';
 import { type HighlightsApi, useHighlights } from '../highlights/useHighlights';
+import { ListenPlayer } from '../listen/ListenPlayer';
+import { ListenSheet } from '../listen/ListenSheet';
+import { ENGLISH_ONLY_TITLE } from '../listen/language';
+import { useListenClicks } from '../listen/useListenClicks';
+import { useListenKeys } from '../listen/useListenKeys';
+import { type ReadAloudApi, useReadAloud } from '../listen/useReadAloud';
 import { NotesLayer } from '../notes/NotesLayer';
 import { type NotesLaneApi, useNotesLane } from '../notes/useNotesLane';
 import { PencilOverlay } from '../pencil/PencilOverlay';
@@ -38,6 +44,7 @@ type DockApi = {
   pencil: PencilApi;
   highlights: HighlightsApi;
   lane: NotesLaneApi;
+  listen: ReadAloudApi;
   closeSheet: () => void;
 };
 
@@ -103,6 +110,16 @@ const tools: readonly DockTool[] = [
     sheet: ({ api }) => (
       <HighlightSheet color={api.highlights.color} setColor={api.highlights.setColor} />
     ),
+  },
+  {
+    id: 'listen',
+    label: 'Listen',
+    title: 'Read aloud',
+    heading: 'Read aloud',
+    glyph: <ReaderIcon name="headphones" size={19} />,
+    sheet: ({ api }) => <ListenSheet listen={api.listen} />,
+    press: { on: (api) => api.listen.active, toggle: (api) => api.listen.begin() },
+    unavailable: { when: (api) => !api.listen.english, title: ENGLISH_ONLY_TITLE },
   },
   {
     id: 'notes',
@@ -260,6 +277,24 @@ export function ReaderDock({
   });
   usePencilKeys(pencil);
   const lane = useNotesLane(highlights);
+  const listen = useReadAloud({ prose, scroll });
+  useListenKeys(listen);
+  useListenClicks(prose, listen);
+  // Two guides at once would fight over Space; reading aloud wins.
+  const { stop: stopPencil, enabled: pencilOn } = pencil;
+  const listening = listen.active;
+  useEffect(() => {
+    if (listening && pencilOn) stopPencil();
+  }, [listening, pencilOn, stopPencil]);
+  // The Listen sheet warms the voice model, so Play is instant once it is chosen.
+  const { warm: warmListen } = listen;
+  useEffect(() => {
+    if (openId === 'listen') warmListen();
+  }, [openId, warmListen]);
+  // Stopping Listen closes its sheet with it.
+  useEffect(() => {
+    if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
+  }, [listening]);
   const hosted = host !== null;
   useEffect(() => {
     if (!hosted) return;
@@ -268,7 +303,7 @@ export function ReaderDock({
   }, [hosted, report]);
   if (!host) return null;
   const closeSheet = () => setOpenId(null);
-  const api: DockApi = { pencil, highlights, lane, closeSheet };
+  const api: DockApi = { pencil, highlights, lane, listen, closeSheet };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return createPortal(
@@ -291,37 +326,57 @@ export function ReaderDock({
         lane={lane}
         title={link.title ?? deriveTitleFromUrl(link.url)}
         container={host}
+        listen={listen}
       />
       <div className="silo-reader-dock">
-        <div className="silo-reader-dock-pill" role="toolbar" aria-label="Reader tools">
-          {tools.map((tool) => {
-            const toggle = () => {
-              if (tool.press) {
-                setOpenId(null);
-                tool.press.toggle(api);
-              } else setOpenId(openId === tool.id ? null : tool.id);
-            };
-            return tool.split ? (
-              <SplitDockButton
-                key={tool.id}
-                tool={tool}
-                split={tool.split}
-                api={api}
-                open={openId === tool.id}
-                sheetId={sheetId}
-                onToggle={toggle}
-              />
-            ) : (
-              <DockButton
-                key={tool.id}
-                tool={tool}
-                api={api}
-                open={openId === tool.id}
-                sheetId={sheetId}
-                onToggle={toggle}
-              />
-            );
-          })}
+        <div
+          className="silo-reader-dock-pill"
+          data-mode={listen.active ? 'player' : 'tools'}
+          role="toolbar"
+          aria-label="Reader tools"
+        >
+          {listen.active ? (
+            <ListenPlayer
+              listen={listen}
+              sheetOpen={openId === 'listen'}
+              onSheet={() => setOpenId(openId === 'listen' ? null : 'listen')}
+              onClose={() => {
+                listen.stop();
+                closeSheet();
+              }}
+            />
+          ) : (
+            <>
+              {tools.map((tool) => {
+                const toggle = () => {
+                  if (tool.press) {
+                    setOpenId(null);
+                    tool.press.toggle(api);
+                  } else setOpenId(openId === tool.id ? null : tool.id);
+                };
+                return tool.split ? (
+                  <SplitDockButton
+                    key={tool.id}
+                    tool={tool}
+                    split={tool.split}
+                    api={api}
+                    open={openId === tool.id}
+                    sheetId={sheetId}
+                    onToggle={toggle}
+                  />
+                ) : (
+                  <DockButton
+                    key={tool.id}
+                    tool={tool}
+                    api={api}
+                    open={openId === tool.id}
+                    sheetId={sheetId}
+                    onToggle={toggle}
+                  />
+                );
+              })}
+            </>
+          )}
         </div>
         <MenuPresence>
           {openTool && Sheet && (

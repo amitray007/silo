@@ -11,6 +11,8 @@ export type SelectionContext = {
   color: HighlightColor;
   highlight: (color: HighlightColor) => void;
   note: () => void;
+  /** Read aloud from the sentence the selection starts in. */
+  listen: () => void;
   /** Copy text, then say `done` in a short toast. */
   copy: (text: string, done: string) => void;
   /** Open silo's search with a phrase. */
@@ -34,8 +36,8 @@ export type SelectionAction = {
 const SEARCH_PHRASE_MAX = 120;
 
 /**
- * The selection toolbar is built from this list. A later action (Listen from here in the read
- * aloud slice, or Explain and Ask) is one more entry, with no layout change.
+ * The selection toolbar is built from this list. A later action (Explain or Ask) is one more
+ * entry, with no layout change.
  */
 export const selectionActions: readonly SelectionAction[] = [
   {
@@ -54,6 +56,14 @@ export const selectionActions: readonly SelectionAction[] = [
     hint: 'Highlight and write a note',
     group: 'primary',
     run: (context) => context.note(),
+  },
+  {
+    id: 'listen',
+    icon: 'headphones',
+    label: 'Listen from here',
+    hint: 'Read aloud from this sentence',
+    group: 'primary',
+    run: (context) => context.listen(),
   },
   {
     id: 'copy-quote',

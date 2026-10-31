@@ -47,6 +47,10 @@ const paths = {
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   right: 'm9 5 7 7-7 7',
   play: 'M7 4.5v15l12-7.5z',
+  prev: 'M6 5v14M19 5l-9 7 9 7z',
+  next: 'M18 5v14M5 5l9 7-9 7z',
+  headphones: 'M4 15v-3a8 8 0 0 1 16 0v3M4 15h3v5H5a1 1 0 0 1-1-1zM20 15h-3v5h2a1 1 0 0 0 1-1z',
+  list: 'M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01',
   pause: 'M8.5 5v14M15.5 5v14',
   globe:
     'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21M12 3C9.5 5.5 8.25 8.5 8.25 12S9.5 18.5 12 21',
@@ -58,7 +62,7 @@ export function readerIconPath(name: keyof typeof paths): string {
   return paths[name];
 }
 
-const filled = new Set<keyof typeof paths>(['bookmarkFilled', 'play']);
+const filled = new Set<keyof typeof paths>(['bookmarkFilled', 'play', 'prev', 'next']);
 
 /** Original silo glyphs drawn on the shared 24-unit grid. */
 export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size?: number }) {

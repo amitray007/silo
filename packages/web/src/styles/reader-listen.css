@@ -1,0 +1,226 @@
+/* Reader tools, slice 4: the read-aloud player in the dock, the Listen sheet and the sentence
+   being read. Tokens only; Sepia recolours them with the pane. */
+
+/* The sentence being read. Passage highlights paint over it. */
+::highlight(silo-speak) {
+  background-color: color-mix(in oklch, var(--ink) 11%, transparent);
+}
+
+/* The dock turns into the player: the pill grows and holds the transport. */
+.silo-reader-dock-pill {
+  transition: width 260ms var(--ease-drawer);
+}
+.silo-reader-dock-pill[data-mode="player"] {
+  width: 600px;
+  max-width: calc(100% - 24px);
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+}
+.silo-listen-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  flex: none;
+}
+.silo-listen-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.silo-listen-step[aria-pressed="true"] {
+  background: var(--hov);
+  color: var(--ink);
+}
+.silo-listen-play {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  cursor: pointer;
+  flex: none;
+}
+.silo-listen-play:active,
+.silo-listen-step:active {
+  transform: scale(0.96);
+}
+.silo-listen-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-listen-text:hover,
+  .silo-listen-step:hover:not(:disabled) {
+    background: var(--hov);
+    color: var(--ink);
+  }
+}
+.silo-listen-now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--mut);
+}
+.silo-listen-now[data-empty="true"] {
+  color: var(--fnt);
+}
+.silo-listen-now[data-state="error"] {
+  color: var(--warn);
+}
+.silo-listen-spinner {
+  display: inline-grid;
+  place-items: center;
+  color: inherit;
+}
+
+/* The Listen sheet. */
+.silo-listen-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.silo-listen-download {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.silo-listen-download-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.silo-listen-download-line small {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fnt);
+  font-variant-numeric: tabular-nums;
+}
+.silo-listen-progress {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+.silo-listen-progress > div {
+  height: 100%;
+  background: var(--ink);
+}
+.silo-listen-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--danger-soft);
+  color: var(--warn);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+.silo-listen-status button {
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+/* The engine and voice listboxes: a muted word beside the name, and skeleton rows. */
+.silo-settings-select-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.silo-settings-select-option small {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+.silo-settings-select-value small {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+.silo-settings-select-menu[data-floating] {
+  position: fixed;
+  right: auto;
+  z-index: 920;
+  background: var(--bg2);
+  transform-origin: top right;
+  animation: siloListenMorph 150ms var(--ease-out);
+}
+.silo-settings-select-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+}
+@keyframes siloListenMorph {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-settings-select-menu[data-floating] {
+    animation: none;
+  }
+  .silo-reader-dock-pill {
+    transition: none;
+  }
+}
+
+/* Touch: controls reach 40px (docs/rules/web-react.md). */
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-listen-step {
+    min-width: 40px;
+    height: 40px;
+  }
+  .silo-listen-play {
+    width: 40px;
+    height: 40px;
+  }
+  .silo-listen-text {
+    min-height: 40px;
+  }
+  .silo-settings-select-trigger {
+    min-height: 40px;
+  }
+}

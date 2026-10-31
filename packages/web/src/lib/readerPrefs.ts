@@ -257,3 +257,77 @@ export function useHighlightPrefs() {
   );
   return { color: prefs.color, setColor };
 }
+
+const readAloudEngines = ['phonon', 'kokoro'] as const;
+/** The speeds the Listen sheet steps through. */
+export const READ_ALOUD_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
+
+export type ReadAloudEngine = (typeof readAloudEngines)[number];
+export type ReadAloudPrefs = {
+  engine: ReadAloudEngine;
+  /** The chosen voice per engine; an empty id is the engine's default voice. */
+  voices: Record<ReadAloudEngine, string>;
+  rate: number;
+};
+
+export const readAloudPrefsDefaults: ReadAloudPrefs = {
+  engine: 'phonon',
+  voices: { phonon: '', kokoro: '' },
+  rate: 1,
+};
+
+function validVoice(value: unknown): string {
+  return typeof value === 'string' && value.length <= 64 ? value : '';
+}
+
+function validRate(value: unknown): number {
+  return READ_ALOUD_SPEEDS.find((speed) => speed === value) ?? readAloudPrefsDefaults.rate;
+}
+
+/** Each field falls back to its default alone, so one bad field keeps the rest. */
+export function parseReadAloudPrefs(raw: string): ReadAloudPrefs {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return readAloudPrefsDefaults;
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data))
+    return readAloudPrefsDefaults;
+  const stored = data as Record<string, unknown>;
+  const voices =
+    typeof stored.voices === 'object' && stored.voices !== null
+      ? (stored.voices as Record<string, unknown>)
+      : {};
+  return {
+    engine: oneOf(readAloudEngines, stored.engine, readAloudPrefsDefaults.engine),
+    voices: { phonon: validVoice(voices.phonon), kokoro: validVoice(voices.kokoro) },
+    rate: validRate(stored.rate),
+  };
+}
+
+const readAloudPrefsStore = createPrefStore<ReadAloudPrefs>({
+  key: 'silo.readerReadAloud',
+  event: 'silo:reader-read-aloud',
+  initial: readAloudPrefsDefaults,
+  parse: parseReadAloudPrefs,
+  serialize: (value) => JSON.stringify({ v: 1, ...value }),
+});
+
+/** The read-aloud engine, voices and speed, browser-local like the other reader settings. */
+export function useReadAloudPrefs() {
+  const prefs = usePref(readAloudPrefsStore);
+  const update = useCallback(
+    (patch: Partial<Omit<ReadAloudPrefs, 'voices'>> & { voice?: [ReadAloudEngine, string] }) => {
+      const current = readAloudPrefsStore.getSnapshot();
+      const { voice, ...rest } = patch;
+      readAloudPrefsStore.set({
+        ...current,
+        ...rest,
+        voices: voice ? { ...current.voices, [voice[0]]: voice[1] } : current.voices,
+      });
+    },
+    [],
+  );
+  return { prefs, update };
+}

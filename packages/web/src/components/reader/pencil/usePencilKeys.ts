@@ -1,33 +1,6 @@
 import { useEffect, useRef } from 'react';
+import { blocked, CONTROL, OWN_ARROWS } from '../dock/keyGuards';
 import type { PencilApi } from './usePencil';
-
-/** The dock's own sheet is a dialog too, and the pencil's keys keep working beside it. */
-const DOCK_SHEET_CLASS = 'silo-type-sheet';
-
-const OTHER_OVERLAY = `[role="alertdialog"], [role="dialog"]:not(.${DOCK_SHEET_CLASS}), [role="menu"]`;
-const OWN_ARROWS = '[role="radiogroup"], [role="spinbutton"], [role="listbox"], select';
-const CONTROL = 'button, a[href], [role="radio"], [role="switch"], summary';
-
-function inTextEntry(target: EventTarget | null): boolean {
-  return (
-    target instanceof HTMLElement &&
-    (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
-  );
-}
-
-function plain(event: KeyboardEvent): boolean {
-  return !(event.metaKey || event.ctrlKey || event.altKey);
-}
-
-/** A key that is allowed to run a pencil command right now. */
-function blocked(event: KeyboardEvent): boolean {
-  return (
-    !plain(event) ||
-    inTextEntry(event.target) ||
-    inTextEntry(document.activeElement) ||
-    document.querySelector(OTHER_OVERLAY) !== null
-  );
-}
 
 /** Run a command for a key press while the pencil is on. Returns true when the key was used. */
 function whileOn(event: KeyboardEvent, pencil: PencilApi): boolean {

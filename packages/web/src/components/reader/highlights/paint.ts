@@ -14,9 +14,10 @@ const overlap = (color: HighlightColor) => `silo-hl-ov-${color}`;
 const repeated = (color: HighlightColor) => `silo-hl-dup-${color}`;
 const HOVER = 'silo-hl-hover';
 const PULSE = 'silo-hl-pulse';
+const SPEAK = 'silo-speak';
 
 /** Higher wins where registered highlights meet: single layers, overlap pieces, hover, pulse. */
-const PRIORITY = { base: 1, overlap: 5, repeated: 6, hover: 10, pulse: 12 } as const;
+const PRIORITY = { speak: 0, base: 1, overlap: 5, repeated: 6, hover: 10, pulse: 12 } as const;
 
 function register(name: string, ranges: readonly Range[], priority: number): void {
   if (ranges.length === 0) {
@@ -68,6 +69,7 @@ export function clearHighlights(): void {
   }
   CSS.highlights.delete(HOVER);
   CSS.highlights.delete(PULSE);
+  CSS.highlights.delete(SPEAK);
 }
 
 /** Brighten the hovered highlight's passage. */
@@ -81,4 +83,10 @@ export function pulseRange(range: Range, ms = 260): void {
   register(PULSE, [range], PRIORITY.pulse);
   window.clearTimeout(pulseTimer);
   pulseTimer = window.setTimeout(() => CSS.highlights.delete(PULSE), ms);
+}
+
+/** The sentence being read aloud; passage highlights paint over it. `null` clears it. */
+export function paintSpeaking(range: Range | null): void {
+  if (!canPaintHighlights()) return;
+  register(SPEAK, range ? [range] : [], PRIORITY.speak);
 }
