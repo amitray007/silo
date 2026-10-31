@@ -1457,15 +1457,67 @@
   background: var(--hl);
   box-shadow: 0 0 0 1.5px var(--bg2);
 }
-.proto-sb-colors {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  padding: 0 8px 0 4px;
-}
-.proto-sb-item[data-colors="true"]:hover .proto-sb-colors,
-.proto-sb-item[data-colors="true"]:focus-within .proto-sb-colors {
+.proto-sb-picker {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
   display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  animation: protoPickerIn 120ms var(--ease-out);
+}
+/* Bridges the gap to the button so the pointer can travel up without closing it. */
+.proto-sb-picker::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 14px;
+}
+.proto-sb-picker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 2px;
+  background: var(--bg2);
+  transform: rotate(45deg);
+  box-shadow: 2px 2px 3px -1px oklch(0% 0 0 / 12%);
+}
+.proto-sb[data-flip="true"] .proto-sb-picker {
+  bottom: auto;
+  top: calc(100% + 12px);
+  transform-origin: 50% 0;
+}
+.proto-sb[data-flip="true"] .proto-sb-picker::before {
+  top: auto;
+  bottom: 100%;
+}
+.proto-sb[data-flip="true"] .proto-sb-picker::after {
+  bottom: auto;
+  top: -5px;
+  box-shadow: -2px -2px 3px -1px oklch(0% 0 0 / 12%);
+}
+@keyframes protoPickerIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.94);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proto-sb-picker {
+    animation: none;
+  }
 }
 .proto-sb-menu {
   position: absolute;

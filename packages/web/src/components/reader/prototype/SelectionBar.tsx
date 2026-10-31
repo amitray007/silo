@@ -29,6 +29,18 @@ export function SelectionBar({
 }) {
   const { pending } = hl;
   const [menu, setMenu] = useState(false);
+  const [picker, setPicker] = useState(false);
+  const timers = useRef<{ open?: number; close?: number }>({});
+  const openPicker = (delay: number) => {
+    window.clearTimeout(timers.current.close);
+    window.clearTimeout(timers.current.open);
+    timers.current.open = window.setTimeout(() => setPicker(true), delay);
+  };
+  const closePicker = (delay: number) => {
+    window.clearTimeout(timers.current.open);
+    window.clearTimeout(timers.current.close);
+    timers.current.close = window.setTimeout(() => setPicker(false), delay);
+  };
   const [toast, setToast] = useState('');
   const bar = useRef<HTMLDivElement>(null);
 
@@ -39,7 +51,8 @@ export function SelectionBar({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
-        if (menu) setMenu(false);
+        if (picker) setPicker(false);
+        else if (menu) setMenu(false);
         else {
           hl.clearPending();
           window.getSelection()?.removeAllRanges();
@@ -57,10 +70,13 @@ export function SelectionBar({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [pending, menu, hl.clearPending]);
+  }, [pending, menu, picker, hl.clearPending]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection closes the menu.
-  useEffect(() => setMenu(false), [pending?.range]);
+  useEffect(() => {
+    setMenu(false);
+    setPicker(false);
+  }, [pending?.range]);
 
   useEffect(() => {
     if (!toast) return;
@@ -130,13 +146,43 @@ export function SelectionBar({
           style={{ left, top }}
         >
           {primary.map((action) => (
-            <div key={action.id} className="proto-sb-item" data-colors={Boolean(action.colors)}>
+            <div
+              key={action.id}
+              className="proto-sb-item"
+              data-colors={Boolean(action.colors)}
+              {...(action.colors
+                ? {
+                    onMouseEnter: () => openPicker(120),
+                    onMouseLeave: () => closePicker(150),
+                    onBlur: (event: React.FocusEvent<HTMLDivElement>) => {
+                      if (!event.currentTarget.contains(event.relatedTarget)) closePicker(0);
+                    },
+                  }
+                : {})}
+            >
               <button
                 type="button"
                 className="proto-sb-btn"
                 title={action.label}
+                aria-haspopup={action.colors ? 'true' : undefined}
+                aria-expanded={action.colors ? picker : undefined}
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => run(action)}
+                {...(action.colors
+                  ? {
+                      onFocus: () => openPicker(0),
+                      onKeyDown: (event: React.KeyboardEvent) => {
+                        if (event.key !== 'ArrowUp') return;
+                        event.preventDefault();
+                        setPicker(true);
+                        requestAnimationFrame(() =>
+                          bar.current
+                            ?.querySelector<HTMLElement>('.proto-sb-picker [aria-pressed="true"]')
+                            ?.focus(),
+                        );
+                      },
+                    }
+                  : {})}
               >
                 <span className="proto-sb-icon" data-color={action.colors ? color : undefined}>
                   <ProtoIcon name={action.icon} size={17} />
@@ -144,8 +190,24 @@ export function SelectionBar({
                 </span>
                 <span>{action.label}</span>
               </button>
-              {action.colors && (
-                <div className="proto-sb-colors" role="group" aria-label="Highlight colour">
+              {action.colors && picker && (
+                <div
+                  className="proto-sb-picker"
+                  role="group"
+                  aria-label="Highlight colour"
+                  onKeyDown={(event) => {
+                    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+                    event.preventDefault();
+                    const swatches = Array.from(
+                      event.currentTarget.querySelectorAll<HTMLElement>('button'),
+                    );
+                    const at = swatches.indexOf(document.activeElement as HTMLElement);
+                    const next =
+                      (at + (event.key === 'ArrowRight' ? 1 : -1) + swatches.length) %
+                      swatches.length;
+                    swatches[next]?.focus();
+                  }}
+                >
                   {COLORS.map((swatch) => (
                     <button
                       key={swatch}
