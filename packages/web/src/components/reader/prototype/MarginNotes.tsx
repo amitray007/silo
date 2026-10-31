@@ -2,6 +2,7 @@
 import { AnimatePresence, animate, motion, useReducedMotion } from 'motion/react';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { ReaderIcon } from '../ReaderIcon';
 import { ProtoIcon } from './ProtoIcon';
 import { paragraphNumber } from './paragraphs.prototype';
 import type { PassageHighlight } from './useHighlights';
@@ -272,8 +273,7 @@ export function MarginNotes({
   const markers = (
     <div className="proto-mwrap" ref={wrap}>
       {groups.map((group) => {
-        const dots = group.colors.slice(0, 3);
-        const width = 40; // the widest marker, so every marker shares one x
+        const width = 24; // every marker shares one x
         const x = Math.min(gutterX, scroll.clientWidth + shifted.current - width - 4);
         return (
           <button
@@ -282,18 +282,14 @@ export function MarginNotes({
             className="proto-marker2"
             data-active={open && focusId !== null && group.ids.includes(focusId)}
             aria-label={`${group.ids.length} note${group.ids.length > 1 ? 's' : ''} on paragraph ${group.para}`}
-            style={{ top: group.y - 10, left: x }}
+            style={{ top: group.y - 12, left: x }}
             onMouseEnter={() => setHoveredIds(group.ids)}
             onMouseLeave={() => setHoveredIds([])}
             onFocus={() => setHoveredIds(group.ids)}
             onBlur={() => setHoveredIds([])}
             onClick={() => onMarker(group.ids)}
           >
-            <span className="proto-mdots">
-              {dots.map((color) => (
-                <i key={color} data-color={color} />
-              ))}
-            </span>
+            <ReaderIcon name="note" size={16} />
             {group.ids.length > 1 && <small>{group.ids.length}</small>}
           </button>
         );

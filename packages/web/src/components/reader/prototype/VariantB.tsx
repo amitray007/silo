@@ -30,6 +30,7 @@ function DockButton({
   badge,
   onClick,
   text,
+  disabled = false,
 }: {
   icon?: ProtoIconName;
   text?: string;
@@ -38,6 +39,7 @@ function DockButton({
   active: boolean;
   badge?: number;
   onClick: () => void;
+  disabled?: boolean;
 }) {
   return (
     <button
@@ -45,8 +47,9 @@ function DockButton({
       className="proto-dockbtn"
       aria-pressed={active}
       aria-label={label}
+      aria-disabled={disabled || undefined}
       title={title}
-      onClick={onClick}
+      onClick={disabled ? undefined : onClick}
     >
       {icon ? <ProtoIcon name={icon} size={19} /> : <span className="proto-aa">{text}</span>}
       <span className="proto-dock-label">{label}</span>
@@ -94,7 +97,9 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
   const [focusId, setFocusId] = useState<string | null>(null);
   const [dialHidden, setDialHidden] = useState(false);
   const closeLane = useCallback(() => setLaneOpen(false), []);
+  const hasNotes = hl.items.some((item) => item.note);
   const toggleLane = () => {
+    if (!hasNotes) return;
     setLaneOpen((open) => !open);
     setFocusId(null);
   };
@@ -114,6 +119,11 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
   }, [pencil.enabled, laneOpen, sheet, openNote, hl.pending, pencilOff]);
+
+  // The lane closes when the last note is deleted.
+  useEffect(() => {
+    if (laneOpen && !hl.items.some((item) => item.note)) setLaneOpen(false);
+  }, [laneOpen, hl.items]);
 
   // Escape closes the notes lane once nothing above it is open.
   useEffect(() => {
@@ -447,9 +457,10 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
             <DockButton
               icon="notes"
               label="Notes"
-              title="Notes"
+              title={hasNotes ? 'Notes' : 'No notes yet'}
               active={laneOpen}
-              badge={hl.items.length}
+              badge={hl.items.filter((item) => item.note).length}
+              disabled={!hasNotes}
               onClick={toggleLane}
             />
           </>
