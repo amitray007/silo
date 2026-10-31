@@ -162,7 +162,7 @@
   padding: 2px 0 2px 12px;
   border-left: 2px solid var(--hl, var(--line-2));
   pointer-events: auto;
-  animation: siloLnoteIn 200ms var(--ease-out) backwards;
+  animation: siloLnoteIn 160ms var(--ease-out) backwards;
   transition: border-width 120ms var(--ease-out);
 }
 .silo-lnote[data-focus="true"] {
@@ -444,6 +444,8 @@ span.silo-lnote-snippet {
 
 .silo-layers {
   position: fixed;
+  display: flex;
+  flex-direction: column;
   z-index: 905;
   width: 300px;
   padding: 4px;
@@ -453,9 +455,12 @@ span.silo-lnote-snippet {
   animation: siloNotePop 120ms var(--ease-out);
 }
 .silo-layers ul {
-  list-style: none;
+  min-height: 0;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  overscroll-behavior: contain;
 }
 .silo-layers li button {
   display: flex;

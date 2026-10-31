@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import type { LinkJson } from '../api/types';
 import { layoutMedia } from '../lib/breakpoints';
 import { deriveDomain, deriveTitleFromUrl } from '../lib/url';
+import { useEscapeLayer } from '../lib/useEscapeLayer';
 import { Chip } from './Chip';
 import { useMenuClosing } from './MenuPresence';
 
@@ -98,6 +99,9 @@ export function MenuSurface({
   const close = useRef(onClose);
   const triggerRef = useRef<Element | null>(null);
   close.current = onClose;
+  // Escape closes the newest layer first, in the order the shared stack keeps (notes lane,
+  // popovers, dialogs and menus alike).
+  useEscapeLayer(!closing, () => close.current());
   const phone = sheet && matchMedia(layoutMedia.phone).matches;
   useEffect(() => {
     const trigger = document.activeElement;
@@ -118,18 +122,9 @@ export function MenuSurface({
       )
         close.current();
     };
-    const keyboard = (event: KeyboardEvent) => {
-      const menus = document.querySelectorAll('[data-reader-menu]');
-      if (event.key !== 'Escape' || menus[menus.length - 1] !== panel) return;
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      close.current();
-    };
-    document.addEventListener('keydown', keyboard, true);
     document.addEventListener('mousedown', pointer);
     return () => {
       document.removeEventListener('mousedown', pointer);
-      document.removeEventListener('keydown', keyboard, true);
       if (
         trigger instanceof HTMLElement &&
         trigger.isConnected &&

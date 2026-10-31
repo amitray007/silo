@@ -473,12 +473,14 @@ const OVERLAPPING = () => [
   highlight({ id: 'outer', quote: 'quick brown fox jumps', color: 'yellow', note: 'outer note' }),
   highlight({ id: 'inner', quote: 'brown fox', color: 'blue' }),
 ];
-const clickText = (init: MouseEventInit = {}) =>
-  fireEvent.click(document.querySelector('.silo-reader-prose') as Element, {
-    clientX: 50,
-    clientY: 20,
-    ...init,
-  });
+/** A real click: press, release, then the click event. */
+const clickText = (init: MouseEventInit = {}) => {
+  const target = document.querySelector('.silo-reader-prose') as Element;
+  const point = { clientX: 50, clientY: 20, ...init };
+  fireEvent.mouseDown(target, point);
+  fireEvent.mouseUp(target, point);
+  fireEvent.click(target, point);
+};
 
 it('shows one marker per paragraph with a count when it holds several highlights', async () => {
   serverLink = makeLink({
@@ -639,13 +641,10 @@ it('emphasises every covering block when the lane is open and overlapping text i
   expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
 });
 
-it('closes one layer per Escape: the layers popover first, then the lane', async () => {
+it('closes the newest layer first: the lane, opened after the layers popover, then the popover', async () => {
   serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
   mount();
-  await openLane();
-  // With the lane open a click emphasises; close the lane's emphasis path by opening layers first.
-  fireEvent.click(screen.getByRole('button', { name: 'Close notes' }));
-  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+  await waitFor(() => expect(registry.get('silo-hl-blue')).toBeDefined());
   clickText();
   await screen.findByRole('dialog', { name: 'Layers' });
   await openLane();
@@ -654,4 +653,51 @@ it('closes one layer per Escape: the layers popover first, then the lane', async
   expect(screen.queryByRole('dialog', { name: 'Layers' })).not.toBeNull();
   fireEvent.keyDown(document.body, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Layers' })).toBeNull());
+});
+
+it('closes the Type sheet before the lane when both are open', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
+  mount();
+  await openLane();
+  const dock = screen.getByRole('toolbar', { name: 'Reader tools' });
+  fireEvent.click(dock.querySelector('button[title="Type settings"]') as Element);
+  await screen.findByRole('dialog', { name: 'Type' });
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Type' })).toBeNull());
+  expect(document.querySelector('[data-notes-lane]')).not.toBeNull();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+});
+
+it('closes an open note popover, and forgets its way back, when the layers popover opens', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-blue')).toBeDefined());
+  clickText();
+  const popover = await screen.findByRole('dialog', { name: 'Layers' });
+  fireEvent.click(within(popover).getAllByRole('button')[0] as HTMLElement);
+  await screen.findByRole('dialog', { name: 'Note' });
+  expect(screen.getByRole('button', { name: 'Layers' })).toBeDefined();
+  // Clicking the passage again opens the list, not a second popover.
+  clickText();
+  await screen.findByRole('dialog', { name: 'Layers' });
+  expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
+  // A plain note opened from there has its own way back, and only one.
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Layers' })).toBeNull());
+  expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
+});
+
+it('returns focus to the element that had it when the layers popover closes', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: OVERLAPPING() });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-blue')).toBeDefined());
+  const marker = await screen.findByRole('button', { name: /highlights on paragraph 2/ });
+  marker.focus();
+  clickText();
+  await screen.findByRole('dialog', { name: 'Layers' });
+  expect(document.activeElement).not.toBe(marker);
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Layers' })).toBeNull());
+  expect(document.activeElement).toBe(marker);
 });

@@ -7,6 +7,7 @@ import type { ResolvedHighlight } from './useHighlightLayer';
 const WIDTH = 300;
 const EDGE = 8;
 const ROW = 52;
+const FOOTER = 28;
 
 /**
  * Every highlight under a click, innermost first. Hovering or focusing a row isolates that
@@ -33,6 +34,8 @@ export function LayersPopover({
   useEscapeLayer(true, () => latest.current.onClose());
 
   useEffect(() => {
+    // Focus goes back to where it was, like a menu, unless something else took it meanwhile.
+    const trigger = document.activeElement;
     box.current?.querySelector<HTMLElement>('button')?.focus({ preventScroll: true });
     const outside = (event: MouseEvent) => {
       if (event.target instanceof Node && box.current?.contains(event.target)) return;
@@ -42,11 +45,22 @@ export function LayersPopover({
     return () => {
       document.removeEventListener('mousedown', outside);
       latest.current.onHover([]);
+      const held = document.activeElement;
+      if (
+        trigger instanceof HTMLElement &&
+        trigger !== document.body &&
+        trigger.isConnected &&
+        (!held || held === document.body || box.current?.contains(held))
+      )
+        trigger.focus({ preventScroll: true });
     };
   }, []);
 
   const left = Math.min(Math.max(EDGE, at.x - 20), window.innerWidth - WIDTH - EDGE);
-  const top = Math.min(at.y + 14, window.innerHeight - 40 - items.length * ROW);
+  // Never taller than the window; a long list scrolls inside itself.
+  const maxHeight = window.innerHeight - 2 * EDGE;
+  const height = Math.min(items.length * ROW + FOOTER, maxHeight);
+  const top = Math.max(EDGE, Math.min(at.y + 14, window.innerHeight - EDGE - height));
   return createPortal(
     <div
       className="silo-layers"
@@ -54,7 +68,7 @@ export function LayersPopover({
       role="dialog"
       aria-label="Layers"
       data-reader-menu
-      style={{ left, top }}
+      style={{ left, top, maxHeight }}
       onKeyDown={(event) => {
         if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
         event.preventDefault();

@@ -39,6 +39,12 @@ export function useNotesLane(api: HighlightsApi) {
     setFocusIds(NONE);
   }, [hasItems]);
   const focus = useCallback((ids: string[]) => setFocusIds(ids), []);
+  /** Drop the lane after its code failed to load or run, so the next open starts clean. */
+  const release = useCallback(() => {
+    setOpen(false);
+    setUsed(false);
+    setFocusIds(NONE);
+  }, []);
   const setHoveredIds = useCallback(
     (ids: string[]) =>
       setHovered((previous) =>
@@ -102,8 +108,14 @@ export function useNotesLane(api: HighlightsApi) {
         pick((hits[step.index] ?? inner).id);
         return;
       }
-      if (open) setFocusIds(hits.map((hit) => hit.id));
-      else setLayers({ ids: hits.map((hit) => hit.id), x: event.clientX, y: event.clientY });
+      if (open) {
+        setFocusIds(hits.map((hit) => hit.id));
+        return;
+      }
+      // One layer at a time: a note popover that is open gives way to the list.
+      closeNotePopover();
+      setBackTo(null);
+      setLayers({ ids: hits.map((hit) => hit.id), x: event.clientX, y: event.clientY });
     },
     (id) => setHoveredIds(id ? [id] : NONE),
   );
@@ -145,6 +157,7 @@ export function useNotesLane(api: HighlightsApi) {
     () => ({
       open,
       used,
+      release,
       toggle,
       close,
       focusIds,
@@ -163,6 +176,7 @@ export function useNotesLane(api: HighlightsApi) {
     [
       open,
       used,
+      release,
       toggle,
       close,
       focusIds,
