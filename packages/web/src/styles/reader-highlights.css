@@ -364,11 +364,13 @@
   line-height: 16px;
   color: var(--fnt);
 }
-.silo-sb-toast {
-  position: fixed;
+.silo-sb-toast,
+.silo-highlight-error {
+  /* In the pane, centred over the dock, so it never covers the list. */
+  position: absolute;
   z-index: 950;
   left: 50%;
-  bottom: 84px;
+  bottom: calc(84px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   padding: 8px 14px;
   border-radius: 999px;
@@ -377,6 +379,12 @@
   font-size: 13px;
   font-weight: 500;
   box-shadow: var(--elev-2);
+}
+.silo-highlight-error {
+  min-height: 0;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
 }
 @keyframes siloSbPop {
   from {
@@ -514,6 +522,14 @@
   .silo-reader-dockbtn[aria-disabled="true"]:hover {
     background: none;
     color: var(--mut);
+  }
+}
+
+/* Phones: four tools share the pill, so each button gives up its minimum width. */
+@media (max-width: 640px) {
+  .silo-reader-dockbtn {
+    min-width: 0;
+    padding-inline: 6px;
   }
 }
 

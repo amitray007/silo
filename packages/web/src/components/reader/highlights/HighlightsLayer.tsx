@@ -49,7 +49,7 @@ export function HighlightsLayer({
       )}
       {api.error &&
         createPortal(
-          <div className="silo-toast silo-highlight-error" role="alert">
+          <div className="silo-sb-toast silo-highlight-error" role="alert">
             {api.error}
           </div>,
           container,
