@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { type HighlightColor, restoreHighlights } from './highlights.js';
 import { type CreateLinkInput, createLink, willDedupCapture } from './links.js';
 import { restoreReadingPosition } from './reading-position.js';
 import type { SourceData } from './source-data.js';
@@ -56,11 +57,26 @@ const linkSchema = z.object({
   // Parsed apart from the link (see `readingPositionSchema`): a bad position
   // drops the position, never the link.
   readingPosition: z.unknown().optional(),
+  // Parsed apart too: each bad highlight is skipped, never the link.
+  highlights: z.unknown().optional(),
 });
 
 /** An exported reading position. Invalid values are ignored, the link still imports. */
 const readingPositionSchema = z.object({
   position: z.number().min(0).max(1),
+  updatedAt: z.iso.datetime({ offset: true }),
+});
+
+/** One exported highlight. Invalid entries are ignored, the link still imports. */
+const highlightSchema = z.object({
+  quote: z.string(),
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
+  startOffset: z.number().int().nullable().optional(),
+  endOffset: z.number().int().nullable().optional(),
+  color: z.string(),
+  note: z.string().nullable().optional(),
+  createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
 });
 
@@ -204,6 +220,28 @@ async function importOneLink(element: unknown, index: number): Promise<ImportOne
         position: savedPosition.data.position,
         updatedAt: new Date(savedPosition.data.updatedAt),
       });
+    }
+    if (Array.isArray(link.highlights)) {
+      const parsed = link.highlights.flatMap((item: unknown) => {
+        const result = highlightSchema.safeParse(item);
+        if (!result.success) return [];
+        const h = result.data;
+        return [
+          {
+            quote: h.quote,
+            prefix: h.prefix ?? '',
+            suffix: h.suffix ?? '',
+            startOffset: h.startOffset ?? null,
+            endOffset: h.endOffset ?? null,
+            // Checked against the palette inside `restoreHighlights`.
+            color: h.color as HighlightColor,
+            note: h.note ?? null,
+            createdAt: new Date(h.createdAt),
+            updatedAt: new Date(h.updatedAt),
+          },
+        ];
+      });
+      await restoreHighlights(imported.id, parsed);
     }
     return { outcome: existed ? 'merged' : 'created' };
   } catch (error) {

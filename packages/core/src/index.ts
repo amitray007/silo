@@ -183,6 +183,22 @@ export type { Db, Executor, Tx } from './links/executor.js';
 // export.ts's doc comments for the format-by-format contract.
 export type { ExportFormat, ExportResult } from './links/export.js';
 export { EXPORT_VERSION, exportLinks, InvalidExportFormatError } from './links/export.js';
+export type {
+  AddHighlightInput,
+  EditHighlightInput,
+  Highlight,
+  HighlightColor,
+} from './links/highlights.js';
+export {
+  addHighlight,
+  deleteHighlight,
+  editHighlight,
+  HIGHLIGHT_COLORS,
+  HIGHLIGHT_NOTE_MAX,
+  HIGHLIGHT_QUOTE_MAX,
+  InvalidHighlightError,
+  listHighlights,
+} from './links/highlights.js';
 // Import (import slice, U1): importLinks is the write half of the export/
 // import round-trip — restores a silo `version: 1` JSON export back into the
 // store, reusing `createLink`'s existing canonical-URL dedup-merge (no new

@@ -6,6 +6,7 @@ import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Executor, Link, Tx } from './executor.js';
+import { type Highlight, listHighlights, moveHighlights } from './highlights.js';
 import { assertLibraryWrite } from './library-write.js';
 import { whereFeed, whereLibrary, whereLiveAnywhere, whereTrashedLibrary } from './live.js';
 import { mergeCaptureFields } from './merge-content.js';
@@ -541,9 +542,13 @@ export type LinkWithTextWindow = LinkDetail & { extractedTextLength: number };
 
 /**
  * A single link as `getById` returns it: the summary with tags, plus the saved
- * reading position (`null` when none). List and search rows do not carry it.
+ * reading position (`null` when none) and the passage highlights (one extra
+ * query per link read). List and search rows do not carry either.
  */
-export type LinkDetail = LinkSummaryWithTags & { readingPosition: ReadingPosition | null };
+export type LinkDetail = LinkSummaryWithTags & {
+  readingPosition: ReadingPosition | null;
+  highlights: Highlight[];
+};
 
 /**
  * Character-slice `text` to `[offset, offset + limit)`. An out-of-range
@@ -594,6 +599,7 @@ export async function getById(
   if (!withTags) return null;
   const hydrated: LinkDetail = {
     ...withTags,
+    highlights: await listHighlights(id),
     readingPosition:
       found.position !== null && found.positionUpdatedAt !== null
         ? { position: found.position, updatedAt: found.positionUpdatedAt }
@@ -1391,6 +1397,7 @@ export async function restore(id: string): Promise<RestoreResult> {
           );
         }
         await mergeReadingPosition(tx, trashedRow.id, mergedRow.id);
+        await moveHighlights(tx, trashedRow.id, mergedRow.id);
         const [finalMerged] = await tx.select().from(links).where(eq(links.id, mergedRow.id));
         return finalMerged ?? mergedRow;
       });
