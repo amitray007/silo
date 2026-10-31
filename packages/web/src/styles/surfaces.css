@@ -558,11 +558,19 @@
   font-weight: 600;
 }
 /* An empty list state sits in the middle of the pane, a little above center. */
-.silo-content-body:has(> .silo-content-col > .silo-empty-state) {
+.silo-content-body:has(.silo-empty-state) {
   display: flex;
   flex-direction: column;
 }
-.silo-content-body:has(> .silo-content-col > .silo-empty-state) > .silo-content-col {
+.silo-content-body:has(.silo-empty-state) > .silo-content-col {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+}
+/* Wrappers between the column and the empty state (the feed tab panel) fill
+   the rest of the column, so a notice above them stays at the top. */
+.silo-content-col :has(.silo-empty-state) {
   display: flex;
   flex: 1;
   flex-direction: column;
