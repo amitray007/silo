@@ -7,8 +7,14 @@
 }
 
 /* The dock turns into the player: the pill grows and holds the transport. */
+/* Both modes have a set width, so the pill animates between them. 456px is the width the five
+   tools fill; a narrow pane clamps it. */
 .silo-reader-dock-pill {
   transition: width 260ms var(--ease-drawer);
+}
+.silo-reader-dock-pill[data-mode="tools"] {
+  width: 456px;
+  max-width: calc(100% - 24px);
 }
 .silo-reader-dock-pill[data-mode="player"] {
   width: 600px;
@@ -32,6 +38,11 @@
   font-weight: 500;
   cursor: pointer;
   flex: none;
+}
+.silo-listen-step .silo-reader-icon,
+.silo-listen-play .silo-reader-icon {
+  width: 16px;
+  height: 16px;
 }
 .silo-listen-step:disabled {
   opacity: 0.35;
@@ -178,13 +189,32 @@
   font-weight: 400;
   color: var(--fnt);
 }
+.silo-type-sheet .silo-settings-select-trigger {
+  gap: 8px;
+  padding: 0 10px 0 12px;
+  font-size: 13px;
+  line-height: 24px;
+}
 .silo-settings-select-menu[data-floating] {
   position: fixed;
+  top: auto;
   right: auto;
+  bottom: auto;
   z-index: 920;
+  min-width: 0;
+  border: 0;
   background: var(--bg2);
   transform-origin: top right;
   animation: siloListenMorph 150ms var(--ease-out);
+}
+.silo-settings-select-menu[data-floating] .silo-settings-select-option {
+  gap: 16px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.silo-settings-select-menu[data-floating] .silo-settings-select-group-label {
+  font-size: 11.5px;
+  line-height: normal;
 }
 .silo-settings-select-skeleton {
   display: flex;
@@ -222,5 +252,14 @@
   }
   .silo-settings-select-trigger {
     min-height: 40px;
+  }
+}
+
+/* Phones: five tools share a 366px pill, so each button gives up its minimum width. */
+@media (max-width: 640px) {
+  .silo-reader-dock-pill[data-mode="tools"] .silo-reader-dockbtn {
+    min-width: 0;
+    padding: 0 6px;
+    gap: 4px;
   }
 }

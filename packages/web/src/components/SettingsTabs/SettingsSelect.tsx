@@ -16,6 +16,8 @@ export type SettingsSelectOption<V extends string | number> = {
   label: string;
   /** A muted word beside the label in the list, such as a voice's trait. */
   hint?: string;
+  /** The label the trigger shows while this option is selected, when it differs from the list. */
+  triggerLabel?: string;
   /** A muted word beside the label on the trigger while this option is selected. */
   triggerHint?: string;
 };
@@ -88,7 +90,7 @@ function TriggerLabel<V extends string | number>({
 }) {
   return (
     <span className={option?.triggerHint ? 'silo-settings-select-value' : undefined}>
-      {option?.label ?? placeholder ?? ''}
+      {option?.triggerLabel ?? option?.label ?? placeholder ?? ''}
       {option?.triggerHint && (
         <>
           {' '}

@@ -35,7 +35,7 @@ function voiceGroups(voices: ReadAloudApi['voices']): SettingsSelectGroup<string
     byLocale.set(name, options);
   }
   return [
-    { options: [{ value: '', label: 'Default voice' }] },
+    { options: [{ value: '', label: 'Default voice', triggerLabel: 'Default' }] },
     ...[...byLocale].map(([label, options]) => ({ label, options })),
   ];
 }
@@ -101,7 +101,7 @@ export function ListenSheet({ listen }: { listen: ReadAloudApi }) {
                 options: listen.engines.map((engine) => ({
                   value: engine.id,
                   label: engine.label,
-                  ...(engine.id === 'kokoro' && slow ? { triggerHint: 'slower here' } : {}),
+                  ...(engine.id === 'kokoro' && slow ? { triggerHint: 'may be slower' } : {}),
                 })),
               },
             ]}
