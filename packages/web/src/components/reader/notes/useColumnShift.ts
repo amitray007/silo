@@ -22,6 +22,32 @@ function samePlan(a: Plan | null, b: Plan | null): boolean {
   );
 }
 
+/** The element to hold still across a reflow, with where it sits now. */
+function pinAnchor(prose: HTMLElement, scroll: HTMLElement, preferred: Element | null) {
+  const box = scroll.getBoundingClientRect();
+  const target =
+    preferred ??
+    Array.from(prose.children).find(
+      (child) => child.getBoundingClientRect().bottom > box.top + 80,
+    ) ??
+    null;
+  return target ? { el: target, top: target.getBoundingClientRect().top } : null;
+}
+
+/** Move the column to `-shift` px: on the spring, or at once under reduced motion. */
+function moveColumn(article: HTMLElement, x: number, reduced: boolean) {
+  if (reduced) {
+    article.style.transform = x ? `translateX(${x}px)` : '';
+    return null;
+  }
+  if (x === 0 && !article.style.transform) return null;
+  const running = animate(article, { x }, SPRING);
+  running.then(() => {
+    if (x === 0) article.style.transform = '';
+  });
+  return running;
+}
+
 export type ColumnShift = {
   plan: Plan | null;
   /** The lane sits beside the column. */
@@ -59,7 +85,6 @@ export function useColumnShift({
   const [collapsing, setCollapsing] = useState(false);
   const applied = useRef(0);
   const base = useRef<number | null>(null);
-  const held = useRef<{ el: Element; top: number } | null>(null);
   const collapsedByLane = useRef(false);
   const [declined, setDeclined] = useState(false);
   const latest = useRef({ anchor, onDialHidden });
@@ -70,25 +95,14 @@ export function useColumnShift({
     const observer = new ResizeObserver(bump);
     observer.observe(prose);
     observer.observe(scroll);
+    // Content above the prose (a wrapping title, a note card) moves it without resizing it.
+    if (article) observer.observe(article);
     document.fonts?.addEventListener('loadingdone', bump);
     return () => {
       observer.disconnect();
       document.fonts?.removeEventListener('loadingdone', bump);
     };
-  }, [prose, scroll]);
-
-  // Remember the paragraph the reader is looking at, so the reflow does not move it.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: capture when the lane toggles.
-  useLayoutEffect(() => {
-    const box = scroll.getBoundingClientRect();
-    const target =
-      latest.current.anchor() ??
-      Array.from(prose.children).find(
-        (child) => child.getBoundingClientRect().bottom > box.top + 80,
-      ) ??
-      null;
-    held.current = target ? { el: target, top: target.getBoundingClientRect().top } : null;
-  }, [open]);
+  }, [prose, scroll, article]);
 
   // Where the column would sit, and whether the sidebar collapsing would make the lane fit.
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick, collapsed and declined re-read the layout after it changes.
@@ -166,36 +180,27 @@ export function useColumnShift({
   const controls = useRef<{ stop: () => void } | null>(null);
   useEffect(() => {
     if (!article || base.current === null || !ready) return;
+    const pinned = pinAnchor(prose, scroll, latest.current.anchor());
     applied.current = extra;
     article.style.paddingRight = extra ? `${base.current + extra}px` : '';
     controls.current?.stop();
-    controls.current = null;
-    const x = -shift;
-    if (reduced) article.style.transform = x ? `translateX(${x}px)` : '';
-    else if (x !== 0 || article.style.transform) {
-      const running = animate(article, { x }, SPRING);
-      controls.current = running;
-      running.then(() => {
-        if (x === 0) article.style.transform = '';
-      });
-    }
+    controls.current = moveColumn(article, -shift, reduced);
     latest.current.onDialHidden(hideDial);
-    // Keep the paragraph where it was after the reflow.
-    const pinned = held.current;
+    // Keep the paragraph where it was after the reflow. The anchor is measured now, before this
+    // plan's padding lands, so a scroll since the lane opened is never undone.
     let inner = 0;
     const outer = requestAnimationFrame(() => {
       inner = requestAnimationFrame(() => {
         if (!pinned) return;
         const delta = pinned.el.getBoundingClientRect().top - pinned.top;
         if (Math.abs(delta) > 1) scroll.scrollTop += delta;
-        held.current = { el: pinned.el, top: pinned.el.getBoundingClientRect().top };
       });
     });
     return () => {
       cancelAnimationFrame(outer);
       cancelAnimationFrame(inner);
     };
-  }, [article, ready, extra, shift, hideDial, reduced, scroll]);
+  }, [article, prose, ready, extra, shift, hideDial, reduced, scroll]);
   useEffect(
     () => () => {
       controls.current?.stop();

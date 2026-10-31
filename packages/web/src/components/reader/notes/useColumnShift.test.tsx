@@ -25,6 +25,7 @@ let calls: boolean[];
 /** Starts the sidebar collapsed or open, as the reader's saved choice. */
 let startCollapsed = false;
 let expand: (() => void) | null;
+let contract: (() => void) | null;
 
 function Sidebar({ children }: { children: ReactNode }) {
   const [collapsed, set] = useState(startCollapsed);
@@ -33,6 +34,7 @@ function Sidebar({ children }: { children: ReactNode }) {
     set(next);
   }, []);
   expand = () => set(false);
+  contract = () => set(true);
   const value = useMemo(
     () => ({ collapsed, setCollapsed, freedWidth: () => (collapsed ? 0 : 240) }),
     [collapsed, setCollapsed],
@@ -42,6 +44,8 @@ function Sidebar({ children }: { children: ReactNode }) {
   return <SidebarControlContext.Provider value={value}>{children}</SidebarControlContext.Provider>;
 }
 
+let anchor: () => Element | null = () => null;
+
 function setup(open: boolean) {
   return renderHook(
     ({ open: isOpen }) =>
@@ -49,7 +53,7 @@ function setup(open: boolean) {
         prose,
         scroll,
         open: isOpen,
-        anchor: () => null,
+        anchor: () => anchor(),
         reduced: true,
         onDialHidden: () => {},
       }),
@@ -61,7 +65,9 @@ beforeEach(() => {
   calls = [];
   startCollapsed = false;
   expand = null;
+  contract = null;
   fixed = null;
+  anchor = () => null;
   document.body.innerHTML =
     '<div class="scroll"><article class="silo-reader"><div><div class="prose"></div></div></article></div>';
   scroll = document.querySelector('.scroll') as HTMLElement;
@@ -122,4 +128,29 @@ it('does not collapse the sidebar again after the reader opens it during the lan
   expect(view.result.current.overlay).toBe(true);
   view.rerender({ open: false });
   expect(calls).toEqual([true]);
+});
+
+it('keeps a scroll made while the lane is open when the layout changes later', async () => {
+  const paragraph = document.createElement('p');
+  prose.append(paragraph);
+  // The paragraph sits 300px down at scrollTop 100 and moves up as the reader scrolls.
+  paragraph.getBoundingClientRect = () => {
+    const top = 400 - scroll.scrollTop;
+    return { top, bottom: top + 20, left: 0, right: 0, width: 0, height: 20 } as DOMRect;
+  };
+  anchor = () => paragraph;
+  fixed = { ...WIDE, room: 1000, proseRight: 836, left: 200 };
+  scroll.scrollTop = 100;
+  setup(true);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+  // The reader scrolls on, then something resizes the pane.
+  scroll.scrollTop = 500;
+  fixed = { ...WIDE, room: 1100, proseRight: 836, left: 200 };
+  act(() => contract?.());
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+  expect(scroll.scrollTop).toBe(500);
 });
