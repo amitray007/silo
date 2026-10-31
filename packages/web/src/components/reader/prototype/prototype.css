@@ -1,0 +1,847 @@
+/* THROWAWAY prototype styles for the Reader tools. Loaded only in dev. */
+
+.silo-reader-scroll {
+  position: relative;
+}
+.proto-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+}
+.proto-warning {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 12px;
+  color: var(--warn);
+}
+
+/* Typography */
+.silo-reader-prose[data-proto-type] {
+  font-family: var(--proto-font);
+  font-size: var(--proto-size);
+  line-height: var(--proto-lh);
+}
+.silo-reader-prose[data-proto-type] :not(:is(pre, code, kbd, samp, math, pre *, code *, math *)) {
+  font-family: inherit;
+}
+.silo-reader-prose[data-proto-type] h1 {
+  font-size: calc(var(--proto-size) * 1.625);
+}
+.silo-reader-prose[data-proto-type] :where(h2) {
+  font-size: calc(var(--proto-size) * 1.25);
+}
+.silo-reader-prose[data-proto-type] h3 {
+  font-size: calc(var(--proto-size) * 1.0625);
+}
+.silo-reader-prose[data-proto-type] :is(h4, h5) {
+  font-size: var(--proto-size);
+}
+.silo-reader-prose[data-proto-type] h6 {
+  font-size: calc(var(--proto-size) * 0.875);
+}
+.silo-reader-prose[data-proto-type] :is(code, kbd, samp, pre) {
+  font-size: 0.875em;
+}
+
+/* Reader theme: sepia recolours the whole pane, head included. */
+.silo-readerpane[data-proto-theme="sepia"] {
+  --bg: oklch(95.5% 0.025 85);
+  --bg2: oklch(97.2% 0.02 85);
+  --ink: oklch(24% 0.03 60);
+  --mut: oklch(38% 0.035 60);
+  --fnt: oklch(50% 0.035 65);
+  --line: oklch(89% 0.03 80);
+  --line-2: oklch(84% 0.035 80);
+  --hov: oklch(93% 0.028 85);
+  --sel: oklch(90.5% 0.03 85);
+  --btn: oklch(30% 0.03 60);
+  --btn-ink: oklch(96% 0.02 85);
+  background: var(--bg);
+  color: var(--ink);
+}
+:root[data-theme="dark"] .silo-readerpane[data-proto-theme="sepia"] {
+  --bg: oklch(22% 0.015 70);
+  --bg2: oklch(26% 0.018 70);
+  --ink: oklch(90% 0.03 80);
+  --mut: oklch(78% 0.03 80);
+  --fnt: oklch(66% 0.03 75);
+  --line: oklch(31% 0.02 70);
+  --line-2: oklch(38% 0.02 70);
+  --hov: oklch(26% 0.018 70);
+  --sel: oklch(30% 0.02 70);
+  --btn: oklch(88% 0.03 80);
+  --btn-ink: oklch(22% 0.015 70);
+}
+
+/* Highlight colours */
+[data-color="yellow"] {
+  --hl: oklch(88% 0.14 95);
+}
+[data-color="green"] {
+  --hl: oklch(84% 0.13 150);
+}
+[data-color="blue"] {
+  --hl: oklch(82% 0.1 245);
+}
+[data-color="pink"] {
+  --hl: oklch(84% 0.11 350);
+}
+::highlight(proto-hl-yellow) {
+  background-color: oklch(90% 0.13 95 / 0.6);
+}
+::highlight(proto-hl-green) {
+  background-color: oklch(86% 0.12 150 / 0.55);
+}
+::highlight(proto-hl-blue) {
+  background-color: oklch(85% 0.09 245 / 0.55);
+}
+::highlight(proto-hl-pink) {
+  background-color: oklch(86% 0.1 350 / 0.55);
+}
+:root[data-theme="dark"] ::highlight(proto-hl-yellow) {
+  background-color: oklch(70% 0.13 95 / 0.38);
+}
+:root[data-theme="dark"] ::highlight(proto-hl-green) {
+  background-color: oklch(65% 0.12 150 / 0.38);
+}
+:root[data-theme="dark"] ::highlight(proto-hl-blue) {
+  background-color: oklch(62% 0.1 245 / 0.42);
+}
+:root[data-theme="dark"] ::highlight(proto-hl-pink) {
+  background-color: oklch(64% 0.11 350 / 0.4);
+}
+::highlight(proto-speak) {
+  background-color: oklch(86% 0.1 60 / 0.6);
+}
+:root[data-theme="dark"] ::highlight(proto-speak) {
+  background-color: oklch(62% 0.12 55 / 0.5);
+}
+::highlight(proto-flash) {
+  background-color: oklch(70% 0 0 / 0.4);
+}
+
+/* Reading pencil */
+.proto-pencil {
+  position: absolute;
+  left: 0;
+  top: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-2);
+  pointer-events: none;
+  will-change: transform;
+}
+.proto-pencil::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 2px;
+  height: 20px;
+  background: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--mark) 12%, transparent),
+    transparent
+  );
+}
+.proto-pencil-fill {
+  position: relative;
+  height: 100%;
+  background: var(--mark);
+  transform-origin: left;
+  transform: scaleX(0);
+  border-radius: 1px;
+}
+
+/* Shared controls */
+.proto-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.proto-aa {
+  font-size: 14px;
+  font-weight: 500;
+  letter-spacing: -0.02em;
+}
+.proto-badge {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.proto-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.proto-stepper output {
+  min-width: 40px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.proto-step {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 28px;
+  height: 28px;
+  padding: 0 6px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+  flex: none;
+}
+.proto-step:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.proto-step[aria-pressed="true"] {
+  background: var(--hov);
+  color: var(--ink);
+}
+.proto-play {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  cursor: pointer;
+  flex: none;
+}
+.proto-play:active,
+.proto-step:active {
+  transform: scale(0.96);
+}
+.proto-readout {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.proto-readout small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+.proto-transport {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.proto-progress {
+  flex: 1;
+  min-width: 48px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+.proto-progress > div {
+  height: 100%;
+  background: var(--ink);
+}
+.proto-select {
+  max-width: 150px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--hov);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+}
+.proto-wide-btn {
+  min-height: 32px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.proto-text-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+@media (hover: hover) and (pointer: fine) {
+  .proto-text-btn:hover,
+  .proto-step:hover:not(:disabled),
+  .proto-railbtn:hover,
+  .proto-dockbtn:hover,
+  .proto-headbtn:hover {
+    background: var(--hov);
+    color: var(--ink);
+  }
+}
+.proto-now {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--mut);
+}
+.proto-now[data-empty="true"] {
+  color: var(--fnt);
+}
+.proto-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--line-2);
+}
+.proto-empty {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--fnt);
+}
+.proto-upcoming {
+  list-style: none;
+  margin: 4px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.proto-upcoming button {
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 13px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+.proto-upcoming li[data-now="true"] button {
+  background: var(--sel);
+  color: var(--ink);
+}
+.proto-upcoming li[data-kind="heading"] button {
+  font-weight: 600;
+}
+
+/* Highlight colours and cards */
+.proto-colors {
+  display: flex;
+  gap: 8px;
+}
+.proto-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--hl);
+  box-shadow: inset 0 0 0 1px oklch(0% 0 0 / 12%);
+  cursor: pointer;
+}
+.proto-color[aria-pressed="true"] {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+.proto-selection {
+  position: fixed;
+  z-index: 900;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  animation: protoPop 120ms var(--ease-out);
+}
+.proto-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.proto-card {
+  --hl: var(--line-2);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-1);
+  border-left: 3px solid var(--hl);
+}
+.proto-card[data-aligned="true"] {
+  position: absolute;
+  left: 0;
+  right: 0;
+  pointer-events: auto;
+  transition: top 160ms var(--ease-out);
+}
+.proto-quote {
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 12.5px;
+  line-height: 18px;
+  text-align: left;
+  cursor: pointer;
+}
+.proto-note,
+.proto-add-note {
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 13px;
+  line-height: 19px;
+  text-align: left;
+  cursor: text;
+}
+.proto-note {
+  color: var(--ink);
+  white-space: pre-wrap;
+}
+.proto-add-note {
+  color: var(--fnt);
+}
+.proto-note-input {
+  width: 100%;
+  resize: vertical;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 6px;
+  background: var(--hov);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  line-height: 19px;
+}
+.proto-card-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.proto-dot {
+  position: absolute;
+  width: 11px;
+  height: 11px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--hl);
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 3px var(--line-2);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.proto-dot::after {
+  content: attr(data-note);
+  position: absolute;
+  top: -6px;
+  left: 18px;
+  width: max-content;
+  max-width: 220px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 18px;
+  text-align: left;
+  white-space: pre-wrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 120ms var(--ease-out);
+  z-index: 5;
+}
+.proto-dot:hover::after,
+.proto-dot:focus-visible::after {
+  opacity: 1;
+  visibility: visible;
+}
+
+/* A: head icons, drawer, bottom bars */
+.proto-head-slot {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.proto-headbtn {
+  position: relative;
+}
+.proto-headbtn[aria-pressed="true"],
+.proto-headbtn[aria-expanded="true"] {
+  background: var(--hov);
+  color: var(--ink);
+}
+.proto-head-sep {
+  width: 1px;
+  height: 16px;
+  margin: 0 4px;
+  background: var(--line-2);
+}
+.silo-reader-settings.silo-menu-surface.proto-pop {
+  width: 320px;
+}
+.silo-reader-settings.proto-pop h3 {
+  margin-bottom: 12px;
+}
+.proto-a-drawer {
+  position: absolute;
+  z-index: 30;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 340px;
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg2);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--elev-2);
+  transform: translateX(100%);
+  visibility: hidden;
+  transition:
+    transform 220ms var(--ease-drawer),
+    visibility 0s 220ms;
+}
+.proto-a-drawer[data-open="true"] {
+  transform: none;
+  visibility: visible;
+  transition-delay: 0s;
+}
+.proto-a-drawer header,
+.proto-c-panel header,
+.proto-sheet header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 6px 8px 6px 16px;
+}
+.proto-a-drawer h3,
+.proto-c-panel h3,
+.proto-sheet h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.proto-a-drawer header span {
+  font-size: 12px;
+  color: var(--fnt);
+}
+.proto-drawer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 16px 120px;
+}
+.proto-a-bottom {
+  position: absolute;
+  z-index: 31;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  pointer-events: none;
+}
+.proto-bar {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 8px 16px;
+  background: var(--bg2);
+  border-top: 1px solid var(--line);
+  color: var(--mut);
+}
+.proto-bar .proto-transport {
+  flex: 1;
+  min-width: 0;
+  flex-wrap: nowrap;
+}
+.proto-voice {
+  max-width: 120px;
+}
+
+/* B: dock and sheets */
+.proto-dock {
+  position: absolute;
+  z-index: 25;
+  left: 50%;
+  bottom: 20px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  width: 420px;
+  max-width: calc(100% - 24px);
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  transition: width 260ms var(--ease-drawer);
+}
+.proto-dock[data-mode="player"] {
+  width: 600px;
+  gap: 6px;
+  padding: 5px 10px 5px 8px;
+}
+.proto-dockbtn {
+  position: relative;
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 38px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.proto-dockbtn[aria-pressed="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.proto-dockbtn .proto-badge {
+  top: 2px;
+  right: 4px;
+}
+.proto-sheet {
+  position: absolute;
+  z-index: 26;
+  left: 50%;
+  bottom: 78px;
+  transform: translateX(-50%);
+  width: min(430px, calc(100% - 24px));
+  max-height: min(62%, 540px);
+  overflow: auto;
+  border-radius: 16px;
+  background: var(--bg2);
+  box-shadow: var(--elev-3);
+  animation: protoRise 240ms var(--ease-drawer);
+}
+.proto-sheet header {
+  position: sticky;
+  top: 0;
+  background: var(--bg2);
+  z-index: 1;
+}
+.proto-sheet-body {
+  padding: 0 16px 16px;
+}
+
+/* C: rail, docked panel, margin notes */
+[data-proto-variant="C"] .silo-reader-scroll {
+  margin-right: 44px;
+  padding-right: calc(var(--proto-c-pad, 44px) - 44px);
+  transition: padding-right 220ms var(--ease-drawer);
+}
+.proto-rail {
+  position: absolute;
+  z-index: 24;
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  width: 44px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding-top: 12px;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+}
+.proto-railbtn {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fnt);
+  cursor: pointer;
+}
+.proto-railbtn[aria-pressed="true"] {
+  background: var(--hov);
+  color: var(--ink);
+}
+.proto-c-panel {
+  position: absolute;
+  z-index: 23;
+  top: 44px;
+  right: 44px;
+  bottom: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  animation: protoSlide 220ms var(--ease-drawer);
+}
+.proto-c-body {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 16px 16px;
+}
+.proto-lane {
+  position: absolute;
+  top: 0;
+}
+
+/* Variant switcher */
+.proto-switcher {
+  position: fixed;
+  z-index: 1000;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border-radius: 999px;
+  background: oklch(14.5% 0 0);
+  color: oklch(99.11% 0 0);
+  box-shadow: var(--elev-3);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+.proto-switcher span {
+  padding: 0 6px;
+}
+.proto-switcher button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.proto-switcher button:hover {
+  background: oklch(26.9% 0 0);
+}
+
+@keyframes protoRise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 14px);
+  }
+}
+@keyframes protoSlide {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+}
+@keyframes protoPop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.96);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proto-sheet,
+  .proto-c-panel,
+  .proto-selection {
+    animation: none;
+  }
+  .proto-dock,
+  .proto-a-drawer {
+    transition: none;
+  }
+}
+
+/* Voice model status */
+.proto-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--hov);
+  color: var(--ink);
+  font-size: 12.5px;
+  line-height: 18px;
+}
+.proto-status[data-state="error"] {
+  color: var(--warn);
+  background: var(--danger-soft);
+}
+.proto-status .proto-progress {
+  flex-basis: 100%;
+  min-width: 0;
+}
+.proto-status .proto-progress > span {
+  display: block;
+  height: 100%;
+  background: var(--ink);
+  transition: width 200ms var(--ease-out);
+}

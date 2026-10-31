@@ -1,4 +1,13 @@
-import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
+import {
+  lazy,
+  type ReactNode,
+  type RefObject,
+  Suspense,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from 'react';
 import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
@@ -24,6 +33,11 @@ import { ReaderSettings } from './ReaderSettings';
 import { type OriginalState, useOriginal } from './useOriginal';
 import type { useReaderActions } from './useReaderActions';
 import { seekChapter, YouTubeStats } from './YouTubeDetails';
+
+// PROTOTYPE (dev only): Reader tools layouts. Remove with the prototype folder.
+const ReaderToolsPrototype = import.meta.env.DEV
+  ? lazy(() => import('./prototype/ReaderToolsPrototype'))
+  : null;
 
 type Actions = ReturnType<typeof useReaderActions>;
 type Tab = 'reader' | 'original';
@@ -522,7 +536,7 @@ export function ReaderPane({
               <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
             </div>
             <div className="silo-reader-right">
-              {link && (
+              {link && !(import.meta.env.DEV && tab === 'reader') && (
                 <ReaderSettings
                   key={`settings-${selectedId}-${tab}`}
                   original={shownOriginal}
@@ -577,6 +591,11 @@ export function ReaderPane({
       >
         {content}
       </div>
+      {ReaderToolsPrototype && link && selectedId && tab === 'reader' && (
+        <Suspense fallback={null}>
+          <ReaderToolsPrototype key={link.id} scrollRef={scrollRef} panelRef={panelRef} />
+        </Suspense>
+      )}
     </section>
   );
 }
