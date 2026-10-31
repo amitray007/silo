@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useState } from 'react';
+import { Component, lazy, type ReactNode, Suspense, useEffect, useState } from 'react';
 import { useGutter } from '../gutter';
 import type { HighlightsApi } from '../highlights/useHighlights';
 import { GutterMarkers } from './GutterMarkers';
@@ -9,6 +9,20 @@ import type { NotesLaneApi } from './useNotesLane';
 const NotesLane = lazy(() =>
   import('./NotesLane').then((module) => ({ default: module.NotesLane })),
 );
+
+/** Catches a lane that fails to load or draw; the page stays up and the lane closes. */
+class LaneBoundary extends Component<{ onFail: () => void; children: ReactNode }> {
+  override state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  override componentDidCatch() {
+    this.props.onFail();
+  }
+  override render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
 
 /** A layer in the scroll area, beside the article, that the lane and its connector draw in. */
 function useScrollLayer(scroll: HTMLElement | null, wanted: boolean): HTMLElement | null {
@@ -46,7 +60,8 @@ export function NotesLayer({
   onDialHidden: (hidden: boolean) => void;
 }) {
   const { prose, scroll, resolved } = api;
-  const groups = useGroups(prose, scroll, resolved);
+  // Orphans need the lane's layout too, so an open lane measures even with nothing resolved.
+  const groups = useGroups(prose, scroll, resolved, resolved.length > 0 || lane.open);
   const frame = prose?.parentElement ?? null;
   const { gutter, left } = useGutter(frame, scroll);
   const [overlay, setOverlay] = useState(false);
@@ -65,20 +80,27 @@ export function NotesLayer({
         hidden={overlay}
       />
       {lane.used && layer && panel && (
-        <Suspense fallback={null}>
-          <NotesLane
-            api={api}
-            lane={lane}
-            groups={groups}
-            prose={prose}
-            scroll={scroll}
-            host={layer}
-            panel={panel}
-            gutterOffset={gutter.gap + gutter.size + 6}
-            onDialHidden={onDialHidden}
-            onOverlay={setOverlay}
-          />
-        </Suspense>
+        <LaneBoundary
+          onFail={() => {
+            lane.release();
+            api.report("Couldn't open the notes lane");
+          }}
+        >
+          <Suspense fallback={null}>
+            <NotesLane
+              api={api}
+              lane={lane}
+              groups={groups}
+              prose={prose}
+              scroll={scroll}
+              host={layer}
+              panel={panel}
+              gutterOffset={gutter.gap + gutter.size + 6}
+              onDialHidden={onDialHidden}
+              onOverlay={setOverlay}
+            />
+          </Suspense>
+        </LaneBoundary>
       )}
     </>
   );

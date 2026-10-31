@@ -64,7 +64,8 @@ function command(event: KeyboardEvent, pencil: PencilApi): boolean {
   if (!pencil.enabled) return false;
   if (event.key === 'Escape') {
     // An open sheet, menu or the notes lane takes the key first; the pencil turns off on the next press.
-    if (document.querySelector('[data-reader-menu], [data-notes-lane]')) return false;
+    if (document.querySelector('[data-reader-menu], [data-notes-lane], [data-notes-open]'))
+      return false;
     pencil.stop();
     return true;
   }

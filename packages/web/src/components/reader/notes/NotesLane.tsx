@@ -1,5 +1,5 @@
 import { useReducedMotion } from 'motion/react';
-import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { HighlightsApi } from '../highlights/useHighlights';
 import { ReaderIcon } from '../ReaderIcon';
@@ -86,6 +86,9 @@ export function NotesLane({
   const focusId = focusIds[0] ?? null;
   const [adding, setAdding] = useState<string | null>(null);
   const [blockTick, setBlockTick] = useState(0);
+  // A group scrolling inside itself moves its blocks, so the connector re-reads their place.
+  const [, setScrolled] = useState(0);
+  const onScrolled = useCallback(() => setScrolled((value) => value + 1), []);
   const [slots, setSlots] = useState<Map<string, Slot>>(new Map());
   const [laneEl, setLaneEl] = useState<HTMLElement | null>(null);
 
@@ -166,17 +169,24 @@ export function NotesLane({
     return () => window.clearTimeout(timer);
   }, [stacked, slots]);
 
-  // Bring the emphasised block into view: scroll its group, then the reader.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only react to a new focus.
+  // Bring the emphasised block into view: scroll its group, then the reader. It runs once for
+  // each new emphasis, as soon as the group has a place (on the first docked open that is a pass
+  // after the lane mounts).
+  const revealed = useRef<readonly string[] | null>(null);
   useEffect(() => {
-    if (!open || !focusId || !stacked) return;
-    const behavior = reduced ? 'auto' : 'smooth';
-    const target = laneEl?.querySelector<HTMLElement>(`[data-note="${CSS.escape(focusId)}"]`);
-    if (target) revealInGroup(target, behavior);
+    if (!open || !focusId || !stacked || !laneEl) {
+      revealed.current = null;
+      return;
+    }
     const para = groups.groups.find((g) => g.items.some((item) => item.id === focusId))?.para;
     const top = para === undefined ? undefined : slots.get(`p${para}`)?.top;
-    if (top !== undefined) revealGroup(scroll, top, behavior);
-  }, [focusId, open, stacked]);
+    if (top === undefined || revealed.current === focusIds) return;
+    revealed.current = focusIds;
+    const behavior = reduced ? 'auto' : 'smooth';
+    const target = laneEl.querySelector<HTMLElement>(`[data-note="${CSS.escape(focusId)}"]`);
+    if (target) revealInGroup(target, behavior);
+    revealGroup(scroll, top, behavior);
+  }, [focusId, focusIds, open, stacked, laneEl, slots, groups.groups, reduced, scroll]);
 
   const block = (entry: NoteEntry, index: number) => (
     <LaneBlock
@@ -240,6 +250,7 @@ export function NotesLane({
                   slot={slots.get(ORPHANS)}
                   version={blockTick}
                   smooth={!reduced}
+                  onScrolled={onScrolled}
                 >
                   {lostEntries.map(block)}
                 </LaneGroup>
@@ -251,6 +262,7 @@ export function NotesLane({
                   slot={slots.get(key)}
                   version={blockTick}
                   smooth={!reduced}
+                  onScrolled={onScrolled}
                 >
                   {entries.map(block)}
                 </LaneGroup>
@@ -265,6 +277,7 @@ export function NotesLane({
           <button
             type="button"
             className="silo-lane-close"
+            data-notes-open
             aria-label="Close notes"
             title="Close notes (Esc)"
             onClick={lane.close}

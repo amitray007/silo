@@ -65,30 +65,35 @@ function collectGroups(
 
 /**
  * The paragraph groups, re-measured when the highlights change, when the prose or the pane
- * resizes, and when web fonts finish loading.
+ * resizes, and when web fonts finish loading. With nothing to place (`active` false) it does no
+ * measuring at all.
  */
 export function useGroups(
   prose: HTMLElement | null,
   scroll: HTMLElement | null,
   resolved: readonly ResolvedHighlight[],
+  active: boolean,
 ): Groups {
   const [tick, setTick] = useState(0);
   const [measured, setMeasured] = useState<Groups>(NONE);
   useLayoutEffect(() => {
-    if (!prose || !scroll) return;
+    if (!prose || !scroll || !active) return;
     const bump = () => setTick((value) => value + 1);
     const observer = new ResizeObserver(bump);
     observer.observe(prose);
     observer.observe(scroll);
+    // Content above the prose (a wrapping title, a note card) moves it without resizing it.
+    const article = prose.closest('.silo-reader');
+    if (article) observer.observe(article);
     document.fonts?.addEventListener('loadingdone', bump);
     return () => {
       observer.disconnect();
       document.fonts?.removeEventListener('loadingdone', bump);
     };
-  }, [prose, scroll]);
+  }, [prose, scroll, active]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: tick re-reads the layout after it changes.
   useLayoutEffect(() => {
-    setMeasured(prose && scroll ? collectGroups(prose, scroll, resolved) : NONE);
-  }, [prose, scroll, resolved, tick]);
+    setMeasured(prose && scroll && active ? collectGroups(prose, scroll, resolved) : NONE);
+  }, [prose, scroll, resolved, active, tick]);
   return measured;
 }

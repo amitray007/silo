@@ -77,6 +77,9 @@ export function useHighlights({
     return () => window.clearTimeout(timer);
   }, [error]);
 
+  /** Show a short failure message in the pane (it clears itself). */
+  const report = useCallback((message: string) => setError(message), []);
+
   const fail = useCallback((message: string) => () => setError(message), []);
 
   /**
@@ -205,6 +208,7 @@ export function useHighlights({
     setNote,
     remove,
     jump,
+    report,
     error,
     prose,
     scroll,

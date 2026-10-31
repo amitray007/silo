@@ -26,6 +26,7 @@ export function LaneGroup({
   slot,
   version,
   smooth,
+  onScrolled,
   children,
 }: {
   groupKey: string;
@@ -34,6 +35,8 @@ export function LaneGroup({
   /** Changes whenever a block's height does, to re-measure the edges. */
   version: number;
   smooth: boolean;
+  /** The group scrolled inside itself, so anything drawn to a block must follow. */
+  onScrolled: () => void;
   children: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -72,7 +75,10 @@ export function LaneGroup({
         data-up={edges.up}
         data-down={edges.down}
         style={{ maxHeight: slot?.max ?? 'none' }}
-        onScroll={measure}
+        onScroll={() => {
+          measure();
+          onScrolled();
+        }}
       >
         {children}
       </div>

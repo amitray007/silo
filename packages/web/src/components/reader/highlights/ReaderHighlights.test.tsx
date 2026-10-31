@@ -701,3 +701,18 @@ it('returns focus to the element that had it when the layers popover closes', as
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Layers' })).toBeNull());
   expect(document.activeElement).toBe(marker);
 });
+
+it('closes the lane before the pencil turns off when Escape is pressed', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
+  mount();
+  await screen.findByText(/Alpha beta/);
+  const pencil = screen.getByRole('button', { name: 'Pencil' });
+  fireEvent.click(pencil);
+  await waitFor(() => expect(pencil.getAttribute('aria-pressed')).toBe('true'));
+  await openLane();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(document.querySelector('[data-notes-lane]')).toBeNull());
+  expect(pencil.getAttribute('aria-pressed')).toBe('true');
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(pencil.getAttribute('aria-pressed')).toBe('false'));
+});
