@@ -107,23 +107,35 @@ afterEach(() => vi.unstubAllGlobals());
 
 const toolbar = () => screen.getByRole('toolbar', { name: 'Reader tools' });
 
-it('turns the dock into the player when Listen is pressed, and starts reading', async () => {
+/** Press Listen (the player and its sheet open, ready), then Play. Resolves when it is playing. */
+async function listen() {
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  fireEvent.click(await within(toolbar()).findByRole('button', { name: 'Play' }));
+  return within(toolbar()).findByRole('button', { name: 'Pause' });
+}
+
+it('turns the dock into the player and opens the sheet, ready to play', async () => {
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
   expect(toolbar().getAttribute('data-mode')).toBe('player');
   expect(within(toolbar()).queryByRole('button', { name: 'Type' })).toBeNull();
+  expect(within(toolbar()).getByRole('button', { name: 'Play' })).toBeDefined();
+  expect(await screen.findByRole('dialog', { name: 'Listen' })).toBeDefined();
+  // Opening the sheet warms the voice: the first units are synthesized before Play.
   await waitFor(() => expect(engineState.streamed.length).toBeGreaterThan(0));
+  fireEvent.click(within(toolbar()).getByRole('button', { name: 'Play' }));
+  expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
   // The sentence being read shows beside the controls.
   await waitFor(() => expect(toolbar().textContent).toMatch(/The title|The first sentence/));
 });
 
 it('closes the player and brings the tools back', async () => {
   renderArticle(ENGLISH);
-  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Stop reading aloud' }));
+  await listen();
+  fireEvent.click(screen.getByRole('button', { name: 'Stop reading aloud' }));
   expect(await screen.findByRole('button', { name: 'Type' })).toBeDefined();
   expect(toolbar().getAttribute('data-mode')).toBe('tools');
+  expect(screen.queryByRole('dialog', { name: 'Listen' })).toBeNull();
 });
 
 it('disables Listen for an article that is not English, with the reason as its title', async () => {
@@ -136,14 +148,9 @@ it('disables Listen for an article that is not English, with the reason as its t
   expect(engineState.streamed).toEqual([]);
 });
 
-it('plays and pauses on Space, steps on the arrows, and changes speed on + and -', async () => {
+it('plays and pauses on Space, and changes speed on + and -', async () => {
   renderArticle(ENGLISH);
-  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  await within(toolbar()).findByRole('button', { name: 'Pause' });
-  fireEvent.click(screen.getByRole('button', { name: 'Stop reading aloud' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  await within(toolbar()).findByRole('button', { name: 'Pause' });
-
+  await listen();
   fireEvent.keyDown(document.body, { key: ' ' });
   expect(await within(toolbar()).findByRole('button', { name: 'Play' })).toBeDefined();
   fireEvent.keyDown(document.body, { key: ' ' });
@@ -161,10 +168,20 @@ it('plays and pauses on Space, steps on the arrows, and changes speed on + and -
   expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').rate).toBe(0.75);
 });
 
+it('steps a sentence on the arrow keys', async () => {
+  renderArticle(ENGLISH);
+  await listen();
+  fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+  await waitFor(() =>
+    expect(toolbar().textContent).toContain('The first sentence of the article is here.'),
+  );
+  fireEvent.keyDown(document.body, { key: 'ArrowLeft' });
+  await waitFor(() => expect(toolbar().textContent).toContain('The title.'));
+});
+
 it('leaves Space to a focused button', async () => {
   renderArticle(ENGLISH);
-  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  const pause = await within(toolbar()).findByRole('button', { name: 'Pause' });
+  const pause = await listen();
   const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
   act(() => {
     pause.dispatchEvent(space);
@@ -186,8 +203,7 @@ it('starts at the clicked sentence before anything else sees the click', async (
   fireEvent.click(prose.querySelectorAll('p')[1] as HTMLElement);
   expect(bubble).toHaveBeenCalledTimes(1);
 
-  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  await within(toolbar()).findByRole('button', { name: 'Pause' });
+  await listen();
   bubble.mockClear();
   fireEvent.click(prose.querySelectorAll('p')[1] as HTMLElement);
   expect(bubble).not.toHaveBeenCalled();
@@ -199,8 +215,7 @@ it('leaves links alone while Listen is open', async () => {
   const { container } = renderArticle(
     '<p>Some words before <a href="#x">a link</a> and some words after the link, to be long enough.</p>',
   );
-  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  await within(toolbar()).findByRole('button', { name: 'Pause' });
+  await listen();
   engineState.streamed = [];
   const anchor = container.querySelector('a') as HTMLElement;
   const clicked = vi.fn();
@@ -210,33 +225,44 @@ it('leaves links alone while Listen is open', async () => {
   expect(engineState.streamed).toEqual([]);
 });
 
-it('opens the Listen sheet from the player and shows the engine, voice and speed controls', async () => {
+it('shows the engine, voice and speed controls, and closes the sheet on Escape', async () => {
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Read aloud settings' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   expect(within(sheet).getByRole('button', { name: 'Voice engine' }).textContent).toContain(
-    'Phonon 31M',
+    'Phonon (31M)',
   );
-  expect(within(sheet).getByRole('button', { name: 'Voice' }).textContent).toContain(
-    'Default voice',
-  );
+  expect(within(sheet).getByRole('button', { name: 'Voice' }).textContent).toContain('Default');
   expect(within(sheet).getByRole('spinbutton', { name: 'Speed' }).textContent).toBe('1x');
-  // The sheet closes with Escape and leaves the player.
   fireEvent.keyDown(sheet, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Listen' })).toBeNull());
+  // The player stays; its list button brings the sheet back.
   expect(toolbar().getAttribute('data-mode')).toBe('player');
+  fireEvent.click(within(toolbar()).getByRole('button', { name: 'Read aloud settings' }));
+  expect(await screen.findByRole('dialog', { name: 'Listen' })).toBeDefined();
+});
+
+it('closes an open voice list on Escape before the sheet', async () => {
+  renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  const sheet = await screen.findByRole('dialog', { name: 'Listen' });
+  await waitFor(() => expect(within(sheet).getByRole('button', { name: 'Voice' })).toBeDefined());
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Voice' }));
+  const list = await screen.findByRole('listbox', { name: 'Voice' });
+  fireEvent.keyDown(list, { key: 'Escape' });
+  expect(screen.queryByRole('listbox', { name: 'Voice' })).toBeNull();
+  expect(screen.getByRole('dialog', { name: 'Listen' })).toBeDefined();
 });
 
 it('groups voices by locale, lets the reader pick one, and remembers it', async () => {
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Read aloud settings' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
-  await waitFor(() => expect(within(sheet).getByRole('button', { name: 'Voice' })).toBeDefined());
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice' }));
   const list = await screen.findByRole('listbox', { name: 'Voice' });
-  expect(within(list).getByRole('group', { name: 'English (US)' })).toBeDefined();
+  await waitFor(() =>
+    expect(within(list).getByRole('group', { name: 'English (US)' })).toBeDefined(),
+  );
   expect(within(list).getByRole('group', { name: 'English (UK)' })).toBeDefined();
   fireEvent.click(within(list).getByRole('option', { name: /Maeve/ }));
   await waitFor(() =>
@@ -255,10 +281,9 @@ it('shows the download state with its percentage and size while the voice loads'
     });
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Read aloud settings' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   const status = await within(sheet).findByRole('status');
-  expect(status.textContent).toContain('Downloading voice · 42%');
+  expect(status.textContent).toContain('Downloading voice \u00b7 42%');
   expect(status.textContent).toContain('4.2 / 10.0 MB');
   // Skeleton rows stand in for voices that have not loaded.
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice' }));
@@ -281,21 +306,30 @@ it('shows a failed load with Retry, and Retry loads again', async () => {
   const alert = await within(toolbar()).findByRole('alert');
   expect(alert.textContent).toContain('Voice failed: the model host answered 502');
   expect(within(toolbar()).queryByRole('button', { name: 'Pause' })).toBeNull();
-  // Reading is never blocked: the player can still be closed.
   fireEvent.click(within(toolbar()).getByRole('button', { name: 'Retry' }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
   expect(attempts).toBe(2);
 });
 
-it('switches the engine from the sheet and keeps reading with it', async () => {
+it('switches the engine from the sheet and keeps it for the next play', async () => {
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
-  fireEvent.click(await screen.findByRole('button', { name: 'Read aloud settings' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice engine' }));
-  fireEvent.click(await screen.findByRole('option', { name: /Kokoro 82M/ }));
+  fireEvent.click(await screen.findByRole('option', { name: /Kokoro \(82M\)/ }));
   await waitFor(() =>
     expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro'),
   );
+  fireEvent.click(within(toolbar()).getByRole('button', { name: 'Play' }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
+});
+
+it('switches the engine while playing and carries on with the new one', async () => {
+  renderArticle(ENGLISH);
+  await listen();
+  // Pressing Listen opened the sheet, and it is still open.
+  fireEvent.click(await screen.findByRole('button', { name: 'Voice engine' }));
+  fireEvent.click(await screen.findByRole('option', { name: /Kokoro \(82M\)/ }));
+  expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
+  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro');
 });

@@ -10,8 +10,8 @@ export function createEngine(id: EngineId): TtsEngine {
 
 /** Phonon first: it is the default English voice. */
 export const ENGINES: readonly { id: EngineId; label: string }[] = [
-  { id: 'phonon', label: 'Phonon 31M' },
-  { id: 'kokoro', label: 'Kokoro 82M' },
+  { id: 'phonon', label: 'Phonon (31M)' },
+  { id: 'kokoro', label: 'Kokoro (82M)' },
 ];
 
 export function defaultEngine(): EngineId {

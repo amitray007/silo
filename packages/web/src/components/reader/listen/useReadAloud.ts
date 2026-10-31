@@ -245,6 +245,8 @@ export function useReadAloud({
     }
   }, [loadEngine, ensure, player, firstVisible]);
 
+  const warmUp = useCallback(() => void warm(), [warm]);
+
   const restartIfPlaying = useCallback(() => {
     if (live.current.playing) void startAt(live.current.index);
   }, [startAt]);
@@ -349,11 +351,14 @@ export function useReadAloud({
     [setRate],
   );
 
-  /** The Listen button: open the player and start reading. */
+  /** The Listen button: open the player, ready to play. The dock opens the sheet, which warms the voice. */
   const begin = useCallback(() => {
     ensure();
-    play();
-  }, [ensure, play]);
+    setActive(true);
+    // Opening the audio device takes a moment (about 250 ms measured); do it on this press, so
+    // Play does not wait for it.
+    context.current ??= new AudioContext();
+  }, [ensure]);
 
   // A voice the loaded engine does not have falls back to its default.
   useEffect(() => {
@@ -411,7 +416,7 @@ export function useReadAloud({
     jump,
     startAt: (at: number) => void startAt(at),
     startHere,
-    warm: () => void warm(),
+    warm: warmUp,
     retry: () => {
       setStatus('idle');
       setError('');

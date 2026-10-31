@@ -17,7 +17,7 @@ export function createPhononEngine(): TtsEngine {
   let voiceList: Voice[] = [];
   const engine: TtsEngine = {
     id: 'phonon',
-    label: 'Phonon 31M',
+    label: 'Phonon (31M)',
     supportsSpeed: false,
     sampleRate: 24000,
     device: 'not loaded',

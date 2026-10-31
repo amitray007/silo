@@ -41,30 +41,33 @@ function route(filesBase: string) {
   self.fetch = siloFetch(filesBase, self.fetch.bind(self));
 }
 
+/** True when the browser hands out a real GPU adapter (the API alone can exist without one). */
+async function hasGpu(): Promise<boolean> {
+  const gpu = scope.navigator.gpu as { requestAdapter(): Promise<unknown> } | undefined;
+  try {
+    return Boolean(await gpu?.requestAdapter());
+  } catch {
+    return false;
+  }
+}
+
 async function load(message: LoadMessage) {
   route(message.filesBase);
   const progress_callback = (info: unknown) => scope.postMessage({ type: 'progress', info });
-  let device = 'wasm';
-  let dtype = 'q8';
-  if (scope.navigator.gpu && message.webgpuDtype) {
-    try {
-      tts = await KokoroTTS.from_pretrained(MODEL, {
-        dtype: message.webgpuDtype,
-        device: 'webgpu',
-        progress_callback,
-      });
-      device = 'webgpu';
-      dtype = message.webgpuDtype;
-    } catch {
-      tts = undefined;
-    }
-  }
-  tts ??= await KokoroTTS.from_pretrained(MODEL, {
-    dtype: 'q8',
-    device: 'wasm',
+  const gpu = message.webgpuDtype !== null && (await hasGpu());
+  // A GPU start that fails is reported as an error: ONNX Runtime keeps the failure, so the main
+  // thread retries on a fresh worker without WebGPU.
+  tts = await KokoroTTS.from_pretrained(MODEL, {
+    dtype: gpu ? (message.webgpuDtype as 'fp32') : 'q8',
+    device: gpu ? 'webgpu' : 'wasm',
     progress_callback,
   });
-  scope.postMessage({ type: 'ready', device, dtype, voices: tts.voices });
+  scope.postMessage({
+    type: 'ready',
+    device: gpu ? 'webgpu' : 'wasm',
+    dtype: gpu ? message.webgpuDtype : 'q8',
+    voices: tts.voices,
+  });
 }
 
 async function generate(message: GenerateMessage) {

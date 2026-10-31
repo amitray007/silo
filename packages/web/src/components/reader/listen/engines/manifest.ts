@@ -16,8 +16,35 @@ export type TtsEngineInfo = {
 
 export type TtsManifestJson = { engines: Record<EngineId, TtsEngineInfo> };
 
-export function fetchTtsManifest(): Promise<TtsManifestJson> {
-  return apiGet<TtsManifestJson>('/api/tts/manifest');
+const CACHE_KEY = 'silo.ttsManifest';
+
+function readCached(): TtsManifestJson | null {
+  try {
+    const raw = localStorage.getItem(CACHE_KEY);
+    return raw ? (JSON.parse(raw) as TtsManifestJson) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * The list of model files silo serves. The last good answer is kept in this browser, so a voice
+ * whose files are already cached still loads while silo cannot be reached.
+ */
+export async function fetchTtsManifest(): Promise<TtsManifestJson> {
+  try {
+    const manifest = await apiGet<TtsManifestJson>('/api/tts/manifest');
+    try {
+      localStorage.setItem(CACHE_KEY, JSON.stringify(manifest));
+    } catch {
+      // Storage is full or off; the manifest is just not remembered.
+    }
+    return manifest;
+  } catch (error) {
+    const cached = readCached();
+    if (cached) return cached;
+    throw error;
+  }
 }
 
 /** The absolute URL of silo's route for an engine's files (no trailing slash). */

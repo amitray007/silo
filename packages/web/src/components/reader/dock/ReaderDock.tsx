@@ -46,6 +46,7 @@ type DockApi = {
   lane: NotesLaneApi;
   listen: ReadAloudApi;
   closeSheet: () => void;
+  openSheet: (id: string) => void;
 };
 
 type DockTool = {
@@ -118,7 +119,14 @@ const tools: readonly DockTool[] = [
     heading: 'Read aloud',
     glyph: <ReaderIcon name="headphones" size={19} />,
     sheet: ({ api }) => <ListenSheet listen={api.listen} />,
-    press: { on: (api) => api.listen.active, toggle: (api) => api.listen.begin() },
+    press: {
+      on: (api) => api.listen.active,
+      // Open the player and its sheet; the sheet warms the voice, and Play then starts at once.
+      toggle: (api) => {
+        api.listen.begin();
+        api.openSheet('listen');
+      },
+    },
     unavailable: { when: (api) => !api.listen.english, title: ENGLISH_ONLY_TITLE },
   },
   {
@@ -303,7 +311,7 @@ export function ReaderDock({
   }, [hosted, report]);
   if (!host) return null;
   const closeSheet = () => setOpenId(null);
-  const api: DockApi = { pencil, highlights, lane, listen, closeSheet };
+  const api: DockApi = { pencil, highlights, lane, listen, closeSheet, openSheet: setOpenId };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return createPortal(
