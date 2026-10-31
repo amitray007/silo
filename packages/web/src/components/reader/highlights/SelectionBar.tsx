@@ -1,6 +1,7 @@
 import { type FocusEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HIGHLIGHT_COLORS, type HighlightColor } from '../../../lib/highlights';
+import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { ReaderIcon } from '../ReaderIcon';
 import { paragraphNumber } from './paragraphs';
 import { type SelectionAction, type SelectionContext, selectionActions } from './selectionActions';
@@ -27,9 +28,12 @@ function placement(rect: DOMRect) {
 /** The colour choices that open beside the Highlight button. */
 function ColorPicker({
   color,
+  blocked,
   onPick,
 }: {
   color: HighlightColor;
+  /** Colours used by highlights this selection overlaps: off, so picking never recolours quietly. */
+  blocked: ReadonlySet<HighlightColor>;
   onPick: (color: HighlightColor) => void;
 }) {
   const move = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -43,19 +47,23 @@ function ColorPicker({
   return (
     // biome-ignore lint/a11y/useSemanticElements: a group of colour buttons, not a fieldset.
     <div className="silo-sb-picker" role="group" aria-label="Highlight colour" onKeyDown={move}>
-      {HIGHLIGHT_COLORS.map((swatch) => (
-        <button
-          key={swatch}
-          type="button"
-          className="silo-dot14"
-          data-color={swatch}
-          aria-label={swatch}
-          aria-pressed={color === swatch}
-          title={swatch}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => onPick(swatch)}
-        />
-      ))}
+      {HIGHLIGHT_COLORS.map((swatch) => {
+        const taken = blocked.has(swatch);
+        return (
+          <button
+            key={swatch}
+            type="button"
+            className="silo-dot14"
+            data-color={swatch}
+            aria-label={swatch}
+            aria-pressed={color === swatch}
+            title={taken ? 'Used by an overlapping highlight' : swatch}
+            disabled={taken}
+            onMouseDown={(event) => event.preventDefault()}
+            onClick={() => onPick(swatch)}
+          />
+        );
+      })}
     </div>
   );
 }
@@ -64,15 +72,21 @@ function ColorPicker({
 function PrimaryAction({
   action,
   color,
+  blocked,
+  picker,
+  setPicker,
   onRun,
   onPick,
 }: {
   action: SelectionAction;
   color: HighlightColor;
+  blocked: ReadonlySet<HighlightColor>;
+  /** The colour picker is open. The bar owns it, so Escape can close it before the bar. */
+  picker: boolean;
+  setPicker: (open: boolean) => void;
   onRun: () => void;
   onPick: (color: HighlightColor) => void;
 }) {
-  const [picker, setPicker] = useState(false);
   const timers = useRef<{ open?: number; close?: number }>({});
   const schedule = (open: boolean, delay: number) => {
     window.clearTimeout(timers.current.close);
@@ -94,12 +108,6 @@ function PrimaryAction({
         onMouseLeave: () => schedule(false, 150),
         onBlur: (event: FocusEvent<HTMLDivElement>) => {
           if (!event.currentTarget.contains(event.relatedTarget)) schedule(false, 0);
-        },
-        onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
-          if (event.key === 'Escape' && picker) {
-            event.stopPropagation();
-            setPicker(false);
-          }
         },
       }
     : {};
@@ -135,7 +143,7 @@ function PrimaryAction({
         </span>
         <span>{action.label}</span>
       </button>
-      {hasColors && picker && <ColorPicker color={color} onPick={onPick} />}
+      {hasColors && picker && <ColorPicker color={color} blocked={blocked} onPick={onPick} />}
     </div>
   );
 }
@@ -179,7 +187,9 @@ export function SelectionBar({
   container,
   title,
   color,
+  blocked,
   onHighlight,
+  onPick,
   onNote,
   onDismiss,
   onSearch,
@@ -189,17 +199,25 @@ export function SelectionBar({
   container: HTMLElement;
   title: string;
   color: HighlightColor;
+  blocked: ReadonlySet<HighlightColor>;
+  /** Highlight with the current colour; an overlap may move it to the next free one. */
   onHighlight: (color: HighlightColor) => void;
+  /** A colour picked on purpose: applied as is. */
+  onPick: (color: HighlightColor) => void;
   onNote: () => void;
   onDismiss: () => void;
   onSearch: (phrase: string) => void;
 }) {
   const [menu, setMenu] = useState(false);
+  const [picker, setPicker] = useState(false);
   const [toast, setToast] = useState('');
   const bar = useRef<HTMLDivElement>(null);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection closes the menu.
-  useEffect(() => setMenu(false), [pending?.range]);
+  useEffect(() => {
+    setMenu(false);
+    setPicker(false);
+  }, [pending?.range]);
 
   useEffect(() => {
     if (!toast) return;
@@ -207,19 +225,20 @@ export function SelectionBar({
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  // Escape closes the colour picker, then the menu, then the bar, and only the top layer hears it.
+  useEscapeLayer(pending !== null, () => {
+    if (picker) setPicker(false);
+    else if (menu) setMenu(false);
+    else {
+      onDismiss();
+      window.getSelection()?.removeAllRanges();
+    }
+  });
+
+  // Tab from the selection moves into the toolbar.
   useEffect(() => {
     if (!pending) return;
     const onKey = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        event.stopPropagation();
-        if (menu) setMenu(false);
-        else {
-          onDismiss();
-          window.getSelection()?.removeAllRanges();
-        }
-        return;
-      }
       if (event.key !== 'Tab' || event.shiftKey || bar.current?.contains(document.activeElement))
         return;
       const first = bar.current?.querySelector<HTMLElement>('button');
@@ -229,7 +248,7 @@ export function SelectionBar({
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [pending, menu, onDismiss]);
+  }, [pending]);
 
   if (!pending && !toast) return null;
   const where = pending ? placement(pending.rect) : null;
@@ -267,6 +286,7 @@ export function SelectionBar({
           ref={bar}
           className="silo-sb"
           data-selection-bar
+          data-reader-menu
           data-flip={where.flip}
           role="toolbar"
           aria-label="Selection"
@@ -279,8 +299,11 @@ export function SelectionBar({
                 key={action.id}
                 action={action}
                 color={color}
+                blocked={blocked}
+                picker={picker}
+                setPicker={setPicker}
                 onRun={() => run(action)}
-                onPick={onHighlight}
+                onPick={onPick}
               />
             ))}
           <span className="silo-sb-divider" />

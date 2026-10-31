@@ -6,6 +6,8 @@ function canPaintHighlights(): boolean {
   return typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight !== 'undefined';
 }
 
+let pulseTimer = 0;
+
 /** Registry names. The stylesheet (`highlight-palette.css`, `reader-highlights.css`) paints them. */
 const base = (color: HighlightColor) => `silo-hl-${color}`;
 const overlap = (color: HighlightColor) => `silo-hl-ov-${color}`;
@@ -55,8 +57,10 @@ export function paintHighlights(
   }
 }
 
+/** Remove everything this module registered (the reader leaves, or another article opens). */
 export function clearHighlights(): void {
   if (!canPaintHighlights()) return;
+  window.clearTimeout(pulseTimer);
   for (const color of HIGHLIGHT_COLORS) {
     CSS.highlights.delete(base(color));
     CSS.highlights.delete(overlap(color));
@@ -70,8 +74,6 @@ export function clearHighlights(): void {
 export function paintHover(ranges: readonly Range[]): void {
   if (canPaintHighlights()) register(HOVER, ranges, PRIORITY.hover);
 }
-
-let pulseTimer = 0;
 
 /** A short flash on a passage, such as a new highlight. */
 export function pulseRange(range: Range, ms = 260): void {

@@ -5,7 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { useCallback, useRef } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HighlightColor } from '../lib/highlights';
 import {
   clearTitleReveal,
@@ -316,6 +316,21 @@ export type HighlightDraft = {
 
 export type HighlightPatch = { color?: HighlightColor; note?: string | null };
 
+type Fields = { color: HighlightColor; note: string | null };
+
+/** Edits to one highlight, sent one at a time: the newest patch waits behind the one in flight. */
+type EditQueue = {
+  flight: Promise<void> | null;
+  pending: HighlightPatch | null;
+  /** The colour and note the server last confirmed; a failed save returns to it. */
+  confirmed: Fields | null;
+};
+
+/** A highlight still saving. `real` is set once the server answered but the cache has not shown it yet. */
+type PendingRow = HighlightJson & { real?: string };
+
+let draftCounter = 0;
+
 function mapHighlights(
   data: LinkResponse | undefined,
   change: (highlights: HighlightJson[]) => HighlightJson[],
@@ -325,61 +340,166 @@ function mapHighlights(
   );
 }
 
-let draftCounter = 0;
+/** Add rows still being saved to a link's highlights (a refetch must not hide them). */
+export function withPendingHighlights(
+  saved: readonly HighlightJson[],
+  pending: readonly (HighlightJson & { real?: string })[],
+): readonly HighlightJson[] {
+  if (pending.length === 0) return saved;
+  const shown = (row: HighlightJson & { real?: string }) =>
+    !saved.some((item) => item.id === row.id || item.id === row.real);
+  return [...saved, ...pending.filter(shown).map(({ real: _real, ...row }) => row)];
+}
+
+function applyPatch(item: HighlightJson, patch: HighlightPatch): HighlightJson {
+  const next = { ...item };
+  if (patch.color !== undefined) next.color = patch.color;
+  if (patch.note !== undefined) next.note = patch.note;
+  return next;
+}
+
+type WriterState = {
+  removed: Set<string>;
+};
+
+/** What the edit queue needs from the writer: its state, the id lookup and the row patcher. */
+type EditContext = {
+  st: WriterState;
+  realId: (id: string) => Promise<string>;
+  patchRow: (id: string, change: (row: HighlightJson) => HighlightJson) => void;
+};
+
+/** Send one patch to the real id and note what the server confirmed. */
+async function sendPatch(ctx: EditContext, root: string, queue: EditQueue, sent: HighlightPatch) {
+  const target = await ctx.realId(root);
+  const { highlight } = await apiPatch<{ highlight: HighlightJson }>(
+    `/api/highlights/${encodeURIComponent(target)}`,
+    sent,
+  );
+  queue.confirmed = queue.confirmed && applyPatch({ ...highlight, ...queue.confirmed }, sent);
+  ctx.patchRow(target, (row) => ({ ...row, updatedAt: highlight.updatedAt }));
+}
+
+/** Send an edit and whatever newer edits queue behind it. */
+async function runEdit(
+  ctx: EditContext,
+  root: string,
+  queue: EditQueue,
+  first: HighlightPatch,
+): Promise<void> {
+  let patch: HighlightPatch | null = first;
+  while (patch) {
+    try {
+      await sendPatch(ctx, root, queue, patch);
+    } catch (error) {
+      // A newer edit is waiting: it goes next, and its result decides what stays.
+      if (!queue.pending) {
+        // Deleted meanwhile: the failure means nothing now.
+        if (ctx.st.removed.has(root)) return;
+        const back = queue.confirmed;
+        if (back) ctx.patchRow(root, (row) => ({ ...row, color: back.color, note: back.note }));
+        throw error;
+      }
+    }
+    patch = queue.pending;
+    queue.pending = null;
+  }
+}
 
 /**
  * Passage highlight writes (`POST /api/links/:id/highlights`, `PATCH` and `DELETE
- * /api/highlights/:id`). Each one updates the link query at once and rolls back when the
- * request fails; the returned promise rejects so the caller can say so. A new highlight shows
- * under a temporary id. Edits and deletes made before the server answers wait for it, then use
- * the real id. `resolveId` maps a temporary id to the real one for state that kept the old one.
+ * /api/highlights/:id`). Each updates the screen at once and rolls back when the request
+ * fails; the returned promise rejects so the caller can say so.
+ *
+ * - A new highlight lives in `pending` (state, not the query cache) under a temporary id until
+ *   the server answers, so a refetch in between cannot hide it. Edits and deletes made before
+ *   the answer wait for it, then use the real id (`resolveId` maps old to new).
+ * - Edits to one highlight run one at a time, newest wins, so a slow response never lands
+ *   after a later one. A failed save returns to the last confirmed colour and note.
+ * - `shown` is the link's highlights as the screen has them; a pending copy goes away only once
+ *   `shown` holds the saved one, so the row never blinks out in between.
+ * - Every callback is stable, so a parent re-render never re-runs an effect that depends on it.
  */
-export function useHighlightWrites(linkId: string) {
+export function useHighlightWrites(linkId: string, shown?: readonly HighlightJson[]) {
   const queryClient = useQueryClient();
-  const key = queryKeys.link(linkId);
-  // Temp id -> the request that creates it, and the real id once it is known.
-  const creating = useRef(new Map<string, Promise<string>>());
-  const aliases = useRef(new Map<string, string>());
-  // Temp ids whose create failed: the row is already gone, so a later rollback must not restore it.
-  const failed = useRef(new Set<string>());
-  const resolveId = useCallback((id: string) => aliases.current.get(id) ?? id, []);
+  const key = useMemo(() => queryKeys.link(linkId), [linkId]);
+  const [pending, setPendingState] = useState<PendingRow[]>([]);
+  const state = useRef({
+    rows: [] as PendingRow[],
+    creating: new Map<string, Promise<string>>(),
+    created: new Map<string, HighlightJson>(),
+    aliases: new Map<string, string>(),
+    /** Real id -> the temporary id it replaced, so both name one queue. */
+    origin: new Map<string, string>(),
+    failed: new Set<string>(),
+    removed: new Set<string>(),
+    queues: new Map<string, EditQueue>(),
+  });
 
-  const update = useCallback(
-    (change: (highlights: HighlightJson[]) => HighlightJson[]) => {
+  // Once the cache shows a saved highlight, its pending copy has done its job.
+  useEffect(() => {
+    const st = state.current;
+    if (!shown) return;
+    const rest = st.rows.filter((row) => !(row.real && shown.some((item) => item.id === row.real)));
+    if (rest.length !== st.rows.length) {
+      st.rows = rest;
+      setPendingState(rest);
+    }
+  }, [shown]);
+  const api = useMemo(() => {
+    const st = state.current;
+    const setRows = (rows: PendingRow[]) => {
+      st.rows = rows;
+      setPendingState(rows);
+    };
+    const rootOf = (id: string) => st.origin.get(id) ?? id;
+    const resolveId = (id: string) => st.aliases.get(id) ?? id;
+    const find = (id: string): HighlightJson | undefined => {
+      const real = resolveId(id);
+      const saving = st.rows.find((row) => row.id === id && !row.real);
+      return (
+        saving ??
+        queryClient.getQueryData<LinkResponse>(key)?.link.highlights?.find((row) => row.id === real)
+      );
+    };
+    const updateCache = (change: (highlights: HighlightJson[]) => HighlightJson[]) => {
       void queryClient.cancelQueries({ queryKey: key });
       queryClient.setQueryData<LinkResponse>(key, (data) => mapHighlights(data, change));
-    },
-    [queryClient, key],
-  );
-  const find = useCallback(
-    (id: string) =>
-      queryClient
-        .getQueryData<LinkResponse>(key)
-        ?.link.highlights?.find((item) => item.id === resolveIdIn(aliases.current, id)),
-    [queryClient, key],
-  );
-  const realId = useCallback(async (id: string): Promise<string> => {
-    const pending = creating.current.get(id);
-    return pending ? await pending : (aliases.current.get(id) ?? id);
-  }, []);
+    };
+    /** Change one row wherever it lives: still saving, or in the cache. */
+    const patchRow = (id: string, change: (row: HighlightJson) => HighlightJson) => {
+      if (st.rows.some((row) => row.id === id && !row.real)) {
+        setRows(st.rows.map((row) => (row.id === id ? change(row) : row)));
+      } else {
+        const real = resolveId(id);
+        updateCache((list) => list.map((row) => (row.id === real ? change(row) : row)));
+      }
+    };
+    const realId = async (id: string): Promise<string> => {
+      const waiting = st.creating.get(rootOf(id)) ?? st.creating.get(id);
+      return waiting ? await waiting : resolveId(id);
+    };
 
-  const add = useCallback(
-    (draft: HighlightDraft): { id: string; saved: Promise<string> } => {
+    const ctx: EditContext = { st, realId, patchRow };
+
+    const add = (draft: HighlightDraft): { id: string; saved: Promise<string> } => {
       const id = `pending-${++draftCounter}`;
       const now = new Date().toISOString();
-      const temp: HighlightJson = {
-        id,
-        quote: draft.quote,
-        prefix: draft.prefix,
-        suffix: draft.suffix,
-        startOffset: draft.startOffset,
-        endOffset: draft.endOffset,
-        color: draft.color,
-        note: draft.note ?? null,
-        createdAt: now,
-        updatedAt: now,
-      };
-      update((list) => [...list, temp]);
+      setRows([
+        ...st.rows,
+        {
+          id,
+          quote: draft.quote,
+          prefix: draft.prefix,
+          suffix: draft.suffix,
+          startOffset: draft.startOffset,
+          endOffset: draft.endOffset,
+          color: draft.color,
+          note: draft.note ?? null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
       const saved = apiPost<{ highlight: HighlightJson }>(
         `/api/links/${encodeURIComponent(linkId)}/highlights`,
         {
@@ -393,99 +513,90 @@ export function useHighlightWrites(linkId: string) {
         },
       ).then(
         ({ highlight }) => {
-          aliases.current.set(id, highlight.id);
-          // Keep what the reader changed while the request was in flight.
-          update((list) =>
-            list.map((item) =>
-              item.id === id ? { ...highlight, color: item.color, note: item.note } : item,
-            ),
+          st.aliases.set(id, highlight.id);
+          st.origin.set(highlight.id, id);
+          st.created.set(id, highlight);
+          st.creating.delete(id);
+          const temp = st.rows.find((row) => row.id === id);
+          if (!st.removed.has(id)) {
+            // Keep what the reader changed while the request was in flight.
+            const row = temp ? { ...highlight, color: temp.color, note: temp.note } : highlight;
+            updateCache((list) =>
+              list.some((item) => item.id === row.id)
+                ? list.map((item) => (item.id === row.id ? row : item))
+                : [...list, row],
+            );
+          }
+          // The row stays visible (as `real`) until the cache shows the saved one: no gap.
+          setRows(
+            st.removed.has(id)
+              ? st.rows.filter((row) => row.id !== id)
+              : st.rows.map((row) => (row.id === id ? { ...row, real: highlight.id } : row)),
           );
-          creating.current.delete(id);
           return highlight.id;
         },
         (error: unknown) => {
-          failed.current.add(id);
-          update((list) => list.filter((item) => item.id !== id));
-          creating.current.delete(id);
+          st.failed.add(id);
+          st.creating.delete(id);
+          setRows(st.rows.filter((row) => row.id !== id));
           throw error;
         },
       );
-      creating.current.set(id, saved);
-      // The caller handles the failure; keep an unhandled rejection from the map copy quiet.
+      st.creating.set(id, saved);
+      // The caller handles the failure; keep the stored copy from reporting it unhandled.
       saved.catch(() => {});
       return { id, saved };
-    },
-    [linkId, update],
-  );
+    };
 
-  const edit = useCallback(
-    async (id: string, patch: HighlightPatch): Promise<void> => {
+    const edit = (id: string, patch: HighlightPatch): Promise<void> => {
       const before = find(id);
-      if (!before) return;
-      const current = before.id;
-      update((list) => list.map((item) => (item.id === current ? { ...item, ...patch } : item)));
-      try {
-        const target = await realId(id);
-        const { highlight } = await apiPatch<{ highlight: HighlightJson }>(
-          `/api/highlights/${encodeURIComponent(target)}`,
-          patch,
-        );
-        update((list) =>
-          list.map((item) =>
-            item.id === target ? { ...item, updatedAt: highlight.updatedAt } : item,
-          ),
-        );
-      } catch (error) {
-        const target = aliases.current.get(id) ?? id;
-        update((list) =>
-          list.map((item) => (item.id === target ? undoPatch(item, patch, before) : item)),
-        );
-        throw error;
+      if (!before) return Promise.resolve();
+      const root = rootOf(id);
+      const queue = st.queues.get(root) ?? { flight: null, pending: null, confirmed: null };
+      st.queues.set(root, queue);
+      if (!queue.confirmed) queue.confirmed = { color: before.color, note: before.note };
+      patchRow(before.id, (row) => applyPatch(row, patch));
+      if (queue.flight) {
+        queue.pending = { ...queue.pending, ...patch };
+        return queue.flight;
       }
-    },
-    [find, update, realId],
-  );
+      queue.flight = runEdit(ctx, root, queue, patch).finally(() => {
+        queue.flight = null;
+        if (!queue.pending) queue.confirmed = null;
+      });
+      return queue.flight;
+    };
 
-  const remove = useCallback(
-    async (id: string): Promise<void> => {
-      const before = queryClient.getQueryData<LinkResponse>(key)?.link.highlights ?? [];
-      const at = before.findIndex((item) => item.id === resolveIdIn(aliases.current, id));
-      const removed = before[at];
-      if (!removed) return;
-      update((list) => list.filter((item) => item.id !== removed.id));
+    const remove = async (id: string): Promise<void> => {
+      const root = rootOf(id);
+      const row = find(id);
+      if (!row) return;
+      st.removed.add(root);
+      const saving = st.rows.some((item) => item.id === row.id && !item.real);
+      const list = queryClient.getQueryData<LinkResponse>(key)?.link.highlights ?? [];
+      const at = list.findIndex((item) => item.id === row.id);
+      if (saving) setRows(st.rows.filter((item) => item.id !== row.id));
+      else updateCache((all) => all.filter((item) => item.id !== row.id));
       try {
         const target = await realId(id);
         await apiDelete(`/api/highlights/${encodeURIComponent(target)}`);
       } catch (error) {
-        if (failed.current.has(id)) throw error;
-        update((list) => {
-          const restored = [...list];
-          restored.splice(Math.min(at, restored.length), 0, removed);
+        // The create itself failed: the row is already gone and must not come back.
+        if (st.failed.has(root)) throw error;
+        st.removed.delete(root);
+        const back = st.created.get(root) ?? row;
+        updateCache((all) => {
+          const restored = all.filter((item) => item.id !== back.id);
+          restored.splice(at < 0 ? restored.length : Math.min(at, restored.length), 0, back);
           return restored;
         });
         throw error;
       }
-    },
-    [queryClient, key, update, realId],
-  );
+    };
 
-  return { add, edit, remove, resolveId };
-}
-
-/** Put back the fields a failed edit changed. */
-function undoPatch(
-  item: HighlightJson,
-  patch: HighlightPatch,
-  before: HighlightJson,
-): HighlightJson {
-  const undone = { ...item };
-  if (patch.color !== undefined) undone.color = before.color;
-  if (patch.note !== undefined) undone.note = before.note;
-  return undone;
-}
-
-function resolveIdIn(aliases: Map<string, string>, id: string): string {
-  return aliases.get(id) ?? id;
+    return { add, edit, remove, resolveId };
+  }, [queryClient, key, linkId]);
+  return { ...api, pending };
 }
 
 /** The paginated list cache, shared by query polling and optimistic writes. */

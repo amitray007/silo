@@ -20,7 +20,7 @@ export function HighlightsLayer({
 }) {
   const searchSilo = useSearchSilo();
   const { create, color, openNoteItem, closeNote, scroll } = api;
-  const note = useCallback(() => create(color, true), [create, color]);
+  const note = useCallback(() => create(color, { note: true }), [create, color]);
   return (
     <>
       <SelectionBar
@@ -29,7 +29,9 @@ export function HighlightsLayer({
         container={container}
         title={title}
         color={color}
+        blocked={api.blocked}
         onHighlight={create}
+        onPick={api.pick}
         onNote={note}
         onDismiss={api.clearPending}
         onSearch={searchSilo}

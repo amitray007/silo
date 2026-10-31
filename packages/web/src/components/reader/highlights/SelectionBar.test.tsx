@@ -31,7 +31,9 @@ function setup(overrides: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
     container: document.getElementById('pane') as HTMLElement,
     title: 'An Article',
     color: 'blue' as const,
+    blocked: new Set<'yellow' | 'green' | 'blue' | 'pink' | 'violet'>(),
     onHighlight: vi.fn(),
+    onPick: vi.fn(),
     onNote: vi.fn(),
     onDismiss: vi.fn(),
     onSearch: vi.fn(),
@@ -67,7 +69,8 @@ it('opens the colour picker on ArrowUp and a swatch applies its colour', () => {
   fireEvent.keyDown(button, { key: 'ArrowUp' });
   const group = screen.getByRole('group', { name: 'Highlight colour' });
   fireEvent.click(group.querySelector('[aria-label="pink"]') as Element);
-  expect(props.onHighlight).toHaveBeenCalledWith('pink');
+  expect(props.onPick).toHaveBeenCalledWith('pink');
+  expect(props.onHighlight).not.toHaveBeenCalled();
 });
 
 it('moves between swatches with the arrow keys', () => {
@@ -130,13 +133,36 @@ it('Search silo hands the phrase to the palette, trimmed to 120 characters', () 
   expect((onSearch.mock.calls[0]?.[0] as string).length).toBe(120);
 });
 
+it('turns off colours used by overlapping highlights in the picker', () => {
+  const props = setup({ blocked: new Set(['green', 'pink']) });
+  fireEvent.keyDown(screen.getByRole('button', { name: /Highlight/ }), { key: 'ArrowUp' });
+  const group = screen.getByRole('group', { name: 'Highlight colour' });
+  const dot = (name: string) => group.querySelector(`[aria-label="${name}"]`) as HTMLButtonElement;
+  expect(dot('green').disabled).toBe(true);
+  expect(dot('green').title).toBe('Used by an overlapping highlight');
+  expect(dot('blue').disabled).toBe(false);
+  fireEvent.click(dot('green'));
+  expect(props.onPick).not.toHaveBeenCalled();
+});
+
+it('Escape closes the colour picker first, then the menu, then the bar', () => {
+  const props = setup();
+  fireEvent.keyDown(screen.getByRole('button', { name: /Highlight/ }), { key: 'ArrowUp' });
+  expect(screen.getByRole('group', { name: 'Highlight colour' })).toBeTruthy();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('group', { name: 'Highlight colour' })).toBeNull();
+  expect(props.onDismiss).not.toHaveBeenCalled();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(props.onDismiss).toHaveBeenCalledTimes(1);
+});
+
 it('Escape closes the menu first, then dismisses the toolbar', () => {
   const props = setup();
   fireEvent.click(screen.getByRole('button', { name: 'More' }));
-  fireEvent.keyDown(window, { key: 'Escape' });
+  fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.queryByRole('menu')).toBeNull();
   expect(props.onDismiss).not.toHaveBeenCalled();
-  fireEvent.keyDown(window, { key: 'Escape' });
+  fireEvent.keyDown(document, { key: 'Escape' });
   expect(props.onDismiss).toHaveBeenCalled();
 });
 

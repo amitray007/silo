@@ -95,7 +95,7 @@ it('Enter closes, Shift+Enter keeps writing, Escape closes', () => {
   expect(props.onClose).not.toHaveBeenCalled();
   fireEvent.keyDown(field, { key: 'Enter' });
   expect(props.onClose).toHaveBeenCalledTimes(1);
-  fireEvent.keyDown(window, { key: 'Escape' });
+  fireEvent.keyDown(document, { key: 'Escape' });
   expect(props.onClose).toHaveBeenCalledTimes(2);
 });
 
@@ -143,4 +143,42 @@ it('deletes without saving the draft note', () => {
   expect(props.onClose).toHaveBeenCalled();
   props.view.unmount();
   expect(props.onSetNote).not.toHaveBeenCalled();
+});
+
+it('keeps the caret and does not save when the parent re-renders while typing', () => {
+  const item = resolved('a', 4, 9, 'yellow');
+  const onSetNote = vi.fn();
+  const props = {
+    all: [item],
+    scroll,
+    container,
+    onRecolor: vi.fn(),
+    onDelete: vi.fn(),
+    onClose: vi.fn(),
+  };
+  const view = render(<NotePopover item={item} onSetNote={onSetNote} {...props} />);
+  const field = screen.getByRole('textbox', { name: 'Note' }) as HTMLTextAreaElement;
+  fireEvent.change(field, { target: { value: 'half a thou' } });
+  field.setSelectionRange(4, 4);
+  // A new handler identity on every render, as a parent that re-renders would pass.
+  view.rerender(
+    <NotePopover
+      item={item}
+      onSetNote={(...a) => onSetNote(...a)}
+      {...props}
+      onClose={() => props.onClose()}
+    />,
+  );
+  view.rerender(
+    <NotePopover
+      item={{ ...item }}
+      onSetNote={(...a) => onSetNote(...a)}
+      {...props}
+      onClose={() => props.onClose()}
+    />,
+  );
+  expect(onSetNote).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(field);
+  expect(field.selectionStart).toBe(4);
+  expect(field.value).toBe('half a thou');
 });

@@ -1,6 +1,15 @@
 import { db, HIGHLIGHT_COLORS, type HighlightColor, highlights, links } from '@silo/db';
 import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from './executor.js';
+import {
+  collapseWhitespace,
+  contextAfter,
+  contextBefore,
+  HIGHLIGHT_CONTEXT_MAX,
+} from './highlight-text.js';
+
+export { HIGHLIGHT_CONTEXT_MAX };
+
 import { assertLibraryWrite } from './library-write.js';
 import { whereLibrary, whereLiveAnywhere } from './live.js';
 
@@ -9,7 +18,6 @@ export { HIGHLIGHT_COLORS, type HighlightColor };
 /** Largest quote, note and context sizes. The table checks the same bounds. */
 export const HIGHLIGHT_QUOTE_MAX = 5000;
 export const HIGHLIGHT_NOTE_MAX = 10000;
-export const HIGHLIGHT_CONTEXT_MAX = 64;
 /** The largest value of a Postgres `integer` column; offsets stay within it. */
 export const HIGHLIGHT_OFFSET_MAX = 2_147_483_647;
 /** The most highlights one imported link keeps. */
@@ -91,11 +99,6 @@ const byPosition = [
   asc(highlights.createdAt),
   asc(highlights.id),
 ];
-
-/** Collapse whitespace runs to one space, like the reader's text walk. */
-export function collapseWhitespace(text: string): string {
-  return text.replace(/\s+/g, ' ').trim();
-}
 
 /**
  * Find the nth (1-based) non-overlapping match of `quote` in `text`, after both
@@ -181,23 +184,6 @@ export async function listHighlights(linkId: string): Promise<Highlight[]> {
     .where(eq(highlights.linkId, linkId))
     .orderBy(...byPosition);
   return rows.map(toHighlight);
-}
-
-const isHigh = (code: number) => code >= 0xd800 && code <= 0xdbff;
-const isLow = (code: number) => code >= 0xdc00 && code <= 0xdfff;
-
-/** Up to 64 characters before `at`, never starting inside a surrogate pair. */
-export function contextBefore(text: string, at: number): string {
-  let from = Math.max(0, at - HIGHLIGHT_CONTEXT_MAX);
-  if (from > 0 && isLow(text.charCodeAt(from)) && isHigh(text.charCodeAt(from - 1))) from += 1;
-  return text.slice(from, at);
-}
-
-/** Up to 64 characters from `at`, never ending inside a surrogate pair. */
-export function contextAfter(text: string, at: number): string {
-  let to = Math.min(text.length, at + HIGHLIGHT_CONTEXT_MAX);
-  if (to < text.length && isLow(text.charCodeAt(to)) && isHigh(text.charCodeAt(to - 1))) to -= 1;
-  return text.slice(at, to);
 }
 
 /** The highlights of several links in one query, grouped by link id (batch reads). */

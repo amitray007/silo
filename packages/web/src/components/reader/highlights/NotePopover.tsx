@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { HIGHLIGHT_COLORS, HIGHLIGHT_NOTE_MAX, type HighlightColor } from '../../../lib/highlights';
+import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { ReaderIcon } from '../ReaderIcon';
 import { pointInLineBoxes } from './hitTest';
 import { blockedColors, colorsUsedByOverlaps } from './overlap';
@@ -38,8 +39,10 @@ export function NotePopover({
   const [draft, setDraft] = useState(saved);
   const field = useRef<HTMLTextAreaElement>(null);
   const box = useRef<HTMLDivElement>(null);
-  const latest = useRef({ draft, id: item.id, saved, range: item.range });
-  latest.current = { draft, id: item.id, saved, range: item.range };
+  const latest = useRef({ draft, id: item.id, saved, range: item.range, onClose, onSetNote });
+  latest.current = { draft, id: item.id, saved, range: item.range, onClose, onSetNote };
+  // The newest handlers are read at call time, so a parent re-render never re-runs the effect below.
+  useEscapeLayer(true, () => latest.current.onClose());
 
   // Size the field to its text.
   // biome-ignore lint/correctness/useExhaustiveDependencies: the draft changes the height.
@@ -59,28 +62,20 @@ export function NotePopover({
       if (event.target instanceof Node && box.current?.contains(event.target)) return;
       // A press on the passage itself keeps the popover; the click that follows is a no-op.
       if (pointInLineBoxes(latest.current.range, event.clientX, event.clientY)) return;
-      onClose();
-    };
-    const onEscape = (event: KeyboardEvent) => {
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      onClose();
+      latest.current.onClose();
     };
     scroll.addEventListener('scroll', follow, { passive: true });
     window.addEventListener('resize', follow);
     document.addEventListener('mousedown', outside);
-    window.addEventListener('keydown', onEscape, true);
     return () => {
       scroll.removeEventListener('scroll', follow);
       window.removeEventListener('resize', follow);
       document.removeEventListener('mousedown', outside);
-      window.removeEventListener('keydown', onEscape, true);
       // Save on close.
-      const { draft: text, id, saved: before } = latest.current;
-      if (text !== before) onSetNote(id, text);
+      const { draft: text, id, saved: before, onSetNote: save } = latest.current;
+      if (text !== before) save(id, text);
     };
-  }, [scroll, onClose, onSetNote]);
+  }, [scroll]);
 
   // Colours of the highlights this one overlaps are off, unless every colour is taken.
   const blocked = blockedColors(colorsUsedByOverlaps(item.start, item.end, all, item.id));
@@ -91,7 +86,14 @@ export function NotePopover({
   const left = Math.min(Math.max(EDGE, first.left), window.innerWidth - WIDTH - EDGE);
   const top = last.bottom + 6;
   return createPortal(
-    <div className="silo-notepop" ref={box} role="dialog" aria-label="Note" style={{ left, top }}>
+    <div
+      className="silo-notepop"
+      ref={box}
+      role="dialog"
+      aria-label="Note"
+      style={{ left, top }}
+      data-reader-menu
+    >
       <textarea
         ref={field}
         className="silo-notepop-field"

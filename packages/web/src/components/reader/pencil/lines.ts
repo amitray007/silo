@@ -10,7 +10,7 @@ export type Line = {
 };
 
 /** Text the pencil never sweeps: code, figures and captions, tables, math, controls, notes. */
-export const SKIP_SELECTOR =
+const SKIP_SELECTOR =
   'pre, figure, figcaption, caption, table, math, svg, script, style, button, .silo-reader-card, [aria-hidden="true"], a[title="return to article"]';
 
 export const BLOCK_SELECTOR = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, dd, dt, div';

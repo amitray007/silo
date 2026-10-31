@@ -103,7 +103,12 @@ function Reader() {
   return detail.data ? <ReaderContent link={detail.data.link} /> : null;
 }
 
-function mount(opts: { trashed?: boolean } = {}) {
+let queryClient: QueryClient;
+/** When set, the POST waits for this before answering. */
+let holdPost: Promise<void> | null = null;
+
+function mount() {
+  holdPost = null;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -112,6 +117,7 @@ function mount(opts: { trashed?: boolean } = {}) {
       if (url.endsWith('/highlights') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
         posts.push(body);
+        if (holdPost) await holdPost;
         return json({ highlight: { ...highlight(), ...body, id: 'server-1' } }, 201);
       }
       if (url.startsWith('/api/highlights/') && init?.method === 'PATCH') {
@@ -123,10 +129,9 @@ function mount(opts: { trashed?: boolean } = {}) {
       return json({ error: 'not_found', message: 'none' }, 404);
     }),
   );
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  void opts;
+  queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
+    <QueryClientProvider client={queryClient}>
       <Host>
         <Reader />
       </Host>
@@ -314,4 +319,139 @@ it('opens the note popover for the highlight under a click, not for empty space'
   expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
   fireEvent.click(proseEl, { clientX: 50, clientY: 20 });
   expect(await screen.findByRole('dialog', { name: 'Note' })).toBeDefined();
+});
+
+it('does not highlight a selection that was already there when the Highlight sheet opened', async () => {
+  mount();
+  await screen.findByText(/Alpha beta/);
+  select('brown fox');
+  await toolbarButton(/Highlight/);
+  const dock = screen.getByRole('toolbar', { name: 'Reader tools' });
+  fireEvent.click(dock.querySelector('button[title="Highlight"]') as Element);
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 60));
+  });
+  expect(posts).toHaveLength(0);
+  select('lazy dog');
+  await waitFor(() => expect(posts).toHaveLength(1));
+  expect(posts[0]).toMatchObject({ quote: 'lazy dog' });
+});
+
+it('keeps a new highlight on screen when the link refetches before the server answers', async () => {
+  mount();
+  await screen.findByText(/Alpha beta/);
+  let release!: () => void;
+  holdPost = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  select('brown fox');
+  fireEvent.click(await toolbarButton(/Highlight/));
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  // A refetch lands with a list that does not have the new row yet.
+  await act(async () => {
+    await queryClient.invalidateQueries({ queryKey: ['link', 'hl'] });
+  });
+  expect(registry.get('silo-hl-yellow')?.ranges[0]?.toString()).toBe('brown fox');
+  await act(async () => {
+    release();
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(registry.get('silo-hl-yellow')?.ranges).toHaveLength(1);
+});
+
+it('closes one layer per Escape: toolbar, then note popover, then the sheet', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight()] });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  const dock = screen.getByRole('toolbar', { name: 'Reader tools' });
+  fireEvent.click(dock.querySelector('button[title="Type settings"]') as Element);
+  await screen.findByRole('dialog', { name: 'Type' });
+  fireEvent.click(document.querySelector('.silo-reader-prose') as Element, {
+    clientX: 50,
+    clientY: 20,
+  });
+  await screen.findByRole('dialog', { name: 'Note' });
+  select('Alpha beta');
+  await screen.findByRole('toolbar', { name: 'Selection' });
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull());
+  expect(screen.queryByRole('dialog', { name: 'Note' })).not.toBeNull();
+  expect(screen.queryByRole('dialog', { name: 'Type' })).not.toBeNull();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull());
+  expect(screen.queryByRole('dialog', { name: 'Type' })).not.toBeNull();
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Type' })).toBeNull());
+});
+
+it('moves the toolbar with the selection when the window resizes', async () => {
+  mount();
+  await screen.findByText(/Alpha beta/);
+  select('brown fox');
+  const bar = await screen.findByRole('toolbar', { name: 'Selection' });
+  const before = bar.style.left;
+  stubGlobal(Range.prototype, 'getBoundingClientRect', () => ({
+    left: 300,
+    top: 400,
+    right: 400,
+    bottom: 420,
+    width: 100,
+    height: 20,
+  }));
+  fireEvent(window, new Event('resize'));
+  await waitFor(() => expect(bar.style.left).not.toBe(before));
+  expect(bar.style.top).toBe('350px');
+});
+
+it('turns off, in the toolbar picker, colours used by highlights the selection overlaps', async () => {
+  serverLink = makeLink({
+    id: 'hl',
+    highlights: [highlight({ quote: 'quick brown fox', color: 'green' })],
+  });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-green')).toBeDefined());
+  select('brown fox jumps');
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  fireEvent.keyDown(within(toolbar).getByRole('button', { name: /Highlight/ }), { key: 'ArrowUp' });
+  const picker = within(toolbar).getByRole('group', { name: 'Highlight colour' });
+  const green = within(picker).getByRole('button', { name: 'green' }) as HTMLButtonElement;
+  expect(green.disabled).toBe(true);
+  expect(green.title).toBe('Used by an overlapping highlight');
+  expect((within(picker).getByRole('button', { name: 'blue' }) as HTMLButtonElement).disabled).toBe(
+    false,
+  );
+  // A colour picked on purpose is applied as is.
+  fireEvent.click(within(picker).getByRole('button', { name: 'blue' }));
+  await waitFor(() => expect(posts).toHaveLength(1));
+  expect(posts[0]?.color).toBe('blue');
+});
+
+it('does not report a failed note save when the highlight was deleted right after', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight()] });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  const original = globalThis.fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (init?.method === 'PATCH') {
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        return json({ error: 'not_found', message: 'gone' }, 404);
+      }
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      return original(input, init);
+    }),
+  );
+  fireEvent.click(document.querySelector('.silo-reader-prose') as Element, {
+    clientX: 50,
+    clientY: 20,
+  });
+  const field = await screen.findByRole('textbox', { name: 'Note' });
+  fireEvent.change(field, { target: { value: 'typed then deleted' } });
+  fireEvent.blur(field);
+  fireEvent.click(screen.getByRole('button', { name: 'Delete highlight' }));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 80));
+  });
+  expect(screen.queryByRole('alert')).toBeNull();
 });

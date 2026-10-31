@@ -39,11 +39,17 @@ export function useSelectionWatcher({
   scroll: HTMLElement | null;
   map: TextMap | null;
   enabled: boolean;
-}): { pending: PendingSelection | null; clear: () => void } {
+}): {
+  pending: PendingSelection | null;
+  clear: () => void;
+  /** The selection as it is right now, whether or not the toolbar has shown it. */
+  current: () => PendingSelection | null;
+} {
   const [pending, setPending] = useState<PendingSelection | null>(null);
   const mapRef = useRef(map);
   mapRef.current = map;
   const clear = useCallback(() => setPending(null), []);
+  const current = useCallback(() => (prose ? readSelection(prose, mapRef.current) : null), [prose]);
 
   useEffect(() => {
     if (!prose || !enabled) {
@@ -94,17 +100,19 @@ export function useSelectionWatcher({
     };
   }, [prose, enabled]);
 
-  // Keep the toolbar next to a selection that scrolls.
+  // Keep the toolbar next to a selection that scrolls or moves when the window resizes.
   const active = pending !== null;
   useEffect(() => {
-    if (!scroll || !active) return;
+    if (!active) return;
     const follow = () =>
-      setPending((current) =>
-        current ? { ...current, rect: current.range.getBoundingClientRect() } : current,
-      );
-    scroll.addEventListener('scroll', follow, { passive: true });
-    return () => scroll.removeEventListener('scroll', follow);
+      setPending((held) => (held ? { ...held, rect: held.range.getBoundingClientRect() } : held));
+    scroll?.addEventListener('scroll', follow, { passive: true });
+    window.addEventListener('resize', follow);
+    return () => {
+      scroll?.removeEventListener('scroll', follow);
+      window.removeEventListener('resize', follow);
+    };
   }, [scroll, active]);
 
-  return { pending, clear };
+  return { pending, clear, current };
 }

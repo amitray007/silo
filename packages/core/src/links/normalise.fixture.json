@@ -1,0 +1,18 @@
+[
+  { "name": "plain", "text": "one two", "expected": "one two" },
+  { "name": "runs of spaces and tabs", "text": "one   two\t\tthree", "expected": "one two three" },
+  { "name": "newlines", "text": "one\n\n  two\n", "expected": "one two" },
+  {
+    "name": "no-break space collapses like any whitespace",
+    "text": "one  two",
+    "expected": "one two"
+  },
+  {
+    "name": "curly quotes and dashes stay",
+    "text": "it’s “quoted” – done",
+    "expected": "it’s “quoted” – done"
+  },
+  { "name": "case is kept", "text": "Hello   WORLD", "expected": "Hello WORLD" },
+  { "name": "emoji", "text": "ok 😀   fine", "expected": "ok 😀 fine" },
+  { "name": "leading and trailing space trimmed", "text": "   edge   ", "expected": "edge" }
+]

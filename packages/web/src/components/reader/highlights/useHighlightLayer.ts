@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import type { HighlightJson } from '../../../api/types';
 import { anchorHighlight } from './anchor';
 import { overlapPieces, type Span } from './overlap';
@@ -67,9 +67,12 @@ export function useHighlightLayer(prose: HTMLElement | null, highlights: readonl
       const range = map && rangeFromOffsets(map, piece.start, piece.end);
       if (range) pieces.push({ ...piece, range });
     }
+    // Repainting replaces the colour sets; the pulse and hover highlights are left alone.
     paintHighlights(layer.resolved, pieces);
-    return clearHighlights;
   }, [layer, map]);
+
+  // Everything goes when the reader leaves or another article opens.
+  useEffect(() => clearHighlights, []);
 
   return { map, resolved: layer.resolved, orphans: layer.orphans };
 }

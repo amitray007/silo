@@ -1,5 +1,13 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { beforeEach, describe, expect, it } from 'vitest';
-import { buildTextMap, offsetsFromRange, rangeFromOffsets } from './textMap';
+import {
+  buildTextMap,
+  contextAfter,
+  contextBefore,
+  offsetsFromRange,
+  rangeFromOffsets,
+} from './textMap';
 
 let root: HTMLElement;
 
@@ -30,14 +38,20 @@ describe('buildTextMap', () => {
     expect(map.text).toBe('a b');
   });
 
-  it('leaves out code, figures, tables, controls and hidden text, like the pencil', () => {
+  it('keeps code, tables and captions, and leaves out hidden and non-text content', () => {
     const map = buildTextMap(
       prose(
-        '<p>Kept</p><pre>code</pre><figure><figcaption>cap</figcaption></figure>' +
-          '<table><tr><td>cell</td></tr></table><p>also <button>Copy</button><span aria-hidden="true">x</span>kept</p>',
+        '<p>Kept</p><pre><code>let  x = 1;\nlet y</code></pre><figure><figcaption>cap</figcaption></figure>' +
+          '<table><tr><td>cell</td><td>two</td></tr></table>' +
+          '<p>also <button>Copy</button><span aria-hidden="true">x</span><svg><text>drawn</text></svg>kept</p>',
       ),
     );
-    expect(map.text).toBe('Kept also kept');
+    expect(map.text).toBe('Kept let x = 1; let y cap cell two also kept');
+  });
+
+  it('counts a skipped inline element as a word boundary', () => {
+    expect(buildTextMap(prose('<p>left<svg></svg>right</p>')).text).toBe('left right');
+    expect(buildTextMap(prose('<p>left<math><mi>x</mi></math>right</p>')).text).toBe('left right');
   });
 
   it('starts without a leading space and ends without a doubled one', () => {
@@ -90,20 +104,61 @@ describe('offsets and ranges', () => {
   });
 
   it('returns null for a range outside the prose or without prose text', () => {
-    const map = buildTextMap(prose('<p>text</p><pre>code</pre>'));
+    const map = buildTextMap(prose('<p>text</p><button>go</button>'));
     const outside = document.createElement('p');
     outside.textContent = 'elsewhere';
     document.body.append(outside);
     const range = document.createRange();
     range.selectNodeContents(outside);
     expect(offsetsFromRange(map, range)).toBeNull();
-    const code = document.createRange();
-    code.selectNodeContents(root.querySelector('pre') as Element);
-    expect(offsetsFromRange(map, code)).toBeNull();
+    const hidden = document.createRange();
+    hidden.selectNodeContents(root.querySelector('button') as Element);
+    expect(offsetsFromRange(map, hidden)).toBeNull();
   });
 
   it('gives no range for an empty span', () => {
     const map = buildTextMap(prose('<p>text</p>'));
     expect(rangeFromOffsets(map, 2, 2)).toBeNull();
+  });
+});
+
+describe('whitespace-only nodes at an element boundary', () => {
+  it('maps a triple click, which ends at the next block, without a negative offset', () => {
+    const map = buildTextMap(prose('<div>\n  <p>First para</p>\n  <p>Second para</p>\n</div>'));
+    const start = document.createRange();
+    start.setStart(root.firstChild as Node, 0);
+    start.setEnd(root.querySelectorAll('p')[1] as Element, 0);
+    expect(offsetsFromRange(map, start)).toEqual({ start: 0, end: 'First para'.length });
+    const all = document.createRange();
+    all.selectNodeContents(root);
+    expect(offsetsFromRange(map, all)).toEqual({ start: 0, end: map.text.trimEnd().length });
+  });
+});
+
+describe('context cuts', () => {
+  it('does not split a surrogate pair', () => {
+    const text = `a\u{1F600}${'b'.repeat(63)}needle${'c'.repeat(63)}\u{1F600}`;
+    const at = text.indexOf('needle');
+    const lone = /(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+    expect(contextBefore(text, at, 64)).not.toMatch(lone);
+    expect(contextAfter(text, at + 6, 64)).not.toMatch(lone);
+    expect(contextBefore('short', 3, 64)).toBe('sho');
+    expect(contextAfter('short', 2, 64)).toBe('ort');
+  });
+});
+
+describe('shared normaliser fixture', () => {
+  const cases = JSON.parse(
+    readFileSync(
+      resolve(process.cwd(), 'src/components/reader/highlights/normalise.fixture.json'),
+      'utf8',
+    ),
+  ) as Array<{ name: string; text: string; expected: string }>;
+
+  it.each(cases)('$name matches the server collapse', ({ text, expected }) => {
+    const p = document.createElement('p');
+    p.textContent = text;
+    document.body.append(p);
+    expect(buildTextMap(p).text.trim()).toBe(expected);
   });
 });

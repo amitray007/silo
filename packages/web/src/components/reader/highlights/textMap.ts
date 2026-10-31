@@ -1,4 +1,4 @@
-import { BLOCK_SELECTOR, SKIP_SELECTOR } from '../pencil/lines';
+import { BLOCK_SELECTOR } from '../pencil/lines';
 
 /** One prose text node and where its characters sit in the normalised text. */
 type Segment = {
@@ -9,16 +9,18 @@ type Segment = {
 
 /**
  * The prose as one normalised string, plus the maps that turn a text offset into a DOM point
- * and back. Whitespace runs collapse to one space, code, figures, tables and other skipped
- * blocks are left out, and a block or line break between two words counts as one space. It is
- * the same text the pencil sweeps (`SKIP_SELECTOR`), so a quote taken from a selection is found
- * again by plain string search.
+ * and back. Whitespace runs collapse to one space, and a block, a table cell, a line break or a
+ * skipped element between two words counts as one space. Code blocks, tables and captions are
+ * part of the text (they are worth highlighting); only hidden and non-text content is left out.
+ * This is not the pencil's walk, which skips code and tables. It follows the same collapse rule
+ * as the server's `collapseWhitespace`, so a quote found in the saved text is found here too
+ * (the shared fixture test checks both).
  */
 export type TextMap = {
   root: HTMLElement;
   text: string;
   segments: readonly Segment[];
-  /** The segment that owns each text index, or -1 for a space made by a block boundary. */
+  /** The segment that owns each text index, or -1 for a space made by a boundary. */
   ownerOf: Int32Array;
   /** The character index inside the owner's node for each text index. */
   charOf: Int32Array;
@@ -26,25 +28,21 @@ export type TextMap = {
 
 const WHITESPACE = /\s/;
 
-/** Elements the walker hands over: block boundaries and line breaks. Everything else is skipped. */
-function accept(node: Node): number {
-  if (node.nodeType === Node.TEXT_NODE) return NodeFilter.FILTER_ACCEPT;
-  const element = node as Element;
-  if (element.matches(SKIP_SELECTOR)) return NodeFilter.FILTER_REJECT;
-  if (element.matches(`${BLOCK_SELECTOR}, br, tr, td, th, ul, ol, dl`))
-    return NodeFilter.FILTER_ACCEPT;
-  return NodeFilter.FILTER_SKIP;
-}
+/** Content with no readable text of its own: drawings, math, scripts, controls, hidden bits. */
+const NOT_TEXT =
+  'svg, math, script, style, button, .silo-reader-card, [aria-hidden="true"], a[title="return to article"]';
 
-/** Collects the normalised text and its maps while the walker visits each text node. */
+const BOUNDARY = `${BLOCK_SELECTOR}, br, tr, td, th, ul, ol, dl, pre, table, figure, figcaption, caption`;
+
+/** Collects the normalised text and its maps while the walk visits each text node. */
 class MapBuilder {
   readonly parts: string[] = [];
   readonly owners: number[] = [];
   readonly chars: number[] = [];
   readonly segments: Segment[] = [];
   private lastIsSpace = true;
-  /** A block or line break came since the last character: a word after it needs a space. */
-  boundary = false;
+  /** A boundary came since the last character: a word after it needs a space. */
+  private boundary = false;
 
   private emit(char: string, owner: number, at: number): void {
     this.parts.push(char);
@@ -72,17 +70,30 @@ class MapBuilder {
     }
     this.segments.push({ node: text, keep });
   }
+
+  visit(parent: Node): void {
+    for (const child of Array.from(parent.childNodes)) {
+      if (child.nodeType === Node.TEXT_NODE) {
+        this.addText(child as Text);
+      } else if (child.nodeType === Node.ELEMENT_NODE) {
+        const element = child as Element;
+        if (element.matches(NOT_TEXT)) {
+          // Left out, but "left<svg/>right" still reads as two words.
+          this.boundary = true;
+          continue;
+        }
+        const block = element.matches(BOUNDARY);
+        if (block) this.boundary = true;
+        this.visit(element);
+        if (block) this.boundary = true;
+      }
+    }
+  }
 }
 
 export function buildTextMap(root: HTMLElement): TextMap {
   const builder = new MapBuilder();
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT, {
-    acceptNode: accept,
-  });
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    if (node.nodeType === Node.TEXT_NODE) builder.addText(node as Text);
-    else builder.boundary = true;
-  }
+  builder.visit(root);
   return {
     root,
     text: builder.parts.join(''),
@@ -184,12 +195,18 @@ function pointToOffset(map: TextMap, container: Node, offset: number, side: 'sta
   probe.setStart(container, offset);
   probe.collapse(true);
   if (side === 'start') {
-    const next = map.segments.find((segment) => probe.comparePoint(segment.node, 0) >= 0);
+    const next = map.segments.find(
+      (segment) => firstKept(segment) >= 0 && probe.comparePoint(segment.node, 0) >= 0,
+    );
     return next ? firstKept(next) : map.text.length;
   }
   for (let i = map.segments.length - 1; i >= 0; i -= 1) {
     const segment = map.segments[i];
-    if (segment && probe.comparePoint(segment.node, segment.node.length) <= 0)
+    if (
+      segment &&
+      lastKept(segment) >= 0 &&
+      probe.comparePoint(segment.node, segment.node.length) <= 0
+    )
       return lastKept(segment) + 1;
   }
   return 0;
@@ -209,4 +226,21 @@ export function offsetsFromRange(
   while (start < end && map.text.charAt(start) === ' ') start += 1;
   while (end > start && map.text.charAt(end - 1) === ' ') end -= 1;
   return end > start ? { start, end } : null;
+}
+
+const isHigh = (code: number) => code >= 0xd800 && code <= 0xdbff;
+const isLow = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+
+/** Up to `max` characters before `at`, never starting inside a surrogate pair. */
+export function contextBefore(text: string, at: number, max: number): string {
+  let from = Math.max(0, at - max);
+  if (from > 0 && isLow(text.charCodeAt(from)) && isHigh(text.charCodeAt(from - 1))) from += 1;
+  return text.slice(from, at);
+}
+
+/** Up to `max` characters from `at`, never ending inside a surrogate pair. */
+export function contextAfter(text: string, at: number, max: number): string {
+  let to = Math.min(text.length, at + max);
+  if (to < text.length && isLow(text.charCodeAt(to)) && isHigh(text.charCodeAt(to - 1))) to -= 1;
+  return text.slice(at, to);
 }
