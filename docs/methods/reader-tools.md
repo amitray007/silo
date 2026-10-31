@@ -414,3 +414,106 @@ Real links at 1440, 1100 and 390 in light, dark and sepia; create, overlap,
 recolour, note, delete; reader refresh keeps highlights; agent round trip
 through MCP; then side by side with prototype variant B and fix every
 unintended difference.
+
+## Slice 4: Read aloud
+
+### Scope
+
+The dock's **Listen** tool reads the article aloud with an on-device voice
+model. It covers smart segmentation, a gapless lookahead queue, sentence
+highlighting, click-to-jump, a "Listen from here" toolbar action, engine and
+voice choice, speed, and model files served by silo.
+
+### Position in the product
+
+Read aloud runs a speech model in the browser. It uses no provider, no key and
+no server AI, and no article text leaves the device, so it sits outside the
+AI layer in `docs/rules/ai.md` (add one line there saying so). Nothing
+downloads until the reader presses Listen.
+
+### Engines
+
+- **Phonon 31m** (`phonon-tts`, code MIT or Apache-2.0, weights Apache-2.0,
+  English): the default for English. Its package runs its own worker and
+  streams audio as it generates. Extra voices come from the
+  `gradium/phonon-voices` catalog through `addVoice`; ship only voices whose
+  license allows redistribution (check the catalog's license and record it).
+- **Kokoro 82M** (`kokoro-js`, Apache-2.0): the default for other supported
+  languages and the second choice for English. Run it in a module Web Worker
+  owned by silo. WebGPU uses fp32 (the prototype measured fp16 as degraded);
+  without WebGPU use q8 on WASM, and show that it may be slower.
+- **Phonon 40m is excluded**: its weights are CC BY-NC 4.0.
+- Engine choice is per language and browser-local (`createPrefStore`). The
+  article language comes from the stored reader's `lang` (fall back to the
+  link's, then English).
+
+### Model files served by silo
+
+- A manifest in code lists each engine's files: source URL pinned to a commit,
+  size, and sha256.
+- `GET /api/tts/files/:engine/*path` serves only manifest entries. On the
+  first request the server downloads the file from its pinned URL into the
+  data directory (`tts-cache/`), verifies the sha256, and then serves it with
+  immutable cache headers and range support. Concurrent first requests share
+  one download. A failed or mismatched download returns 502 and leaves no
+  partial file.
+- The web points `phonon-tts` (`ModelSpec`) and transformers.js
+  (`env.remoteHost` / path template) at these URLs, so the browser never calls
+  Hugging Face.
+- Request `navigator.storage.persist()` when a model first loads.
+
+### Speech plan
+
+- Build segments from the prose DOM: sentences via `Intl.Segmenter`, headings
+  followed by a 250 ms pause, paragraph ends by 150 ms, list items spoken as
+  sentences with no bullet words, and code blocks, figures and captions
+  skipped.
+- Merge adjacent short sentences (under 60 characters, same paragraph) up to
+  200 characters; split sentences over 300 characters at clause boundaries.
+  Keep a sentence map so highlighting stays per sentence.
+- Keep about 20 seconds (at least 3 units) synthesized ahead; the clicked unit
+  goes first; cancel stale work on jump, voice, engine or speed change.
+- Schedule buffers on the `AudioContext` timeline (`start(when)`) for gapless
+  playback. Phonon streams its chunks as they arrive.
+- Speed 0.75 to 3x. Kokoro uses its native speed. Phonon at 1x streams; at
+  other speeds use a pitch-preserving time stretch (WSOLA, as the prototype
+  did) on the whole unit.
+- An in-memory replay cache keyed by engine, voice, speed and text, capped at
+  about 64 MB (least recently used goes first).
+- Warm up when the Listen sheet opens: load the model and synthesize the first
+  units.
+
+### UI
+
+- **Listen tool**: pressing it starts playback; the dock becomes the player
+  (previous, play/pause with a loading-dev spinner while waiting, next, the
+  current sentence text, speed, a list button for the sheet, and close).
+- **Listen sheet**: engine and voice in silo's custom listbox (voices grouped
+  by language, name at 500, muted trait, type-ahead, never truncated), the
+  speed `Stepper`, and the download state ("Downloading voice · 42%" with MB
+  and a slim bar); skeleton rows while voices load. No helper text.
+- **Sentence highlight**: a dedicated Custom Highlight with its own token, under
+  passage highlights in priority.
+- **Click to jump**: while Listen is open, a click on any sentence starts there.
+  This takes priority over the note popover. Keys: Space play or pause,
+  ArrowLeft and ArrowRight previous or next sentence, `+` and `-` speed.
+- **Selection toolbar**: add "Listen from here" to the action registry.
+- **Errors**: a model that fails to load shows Retry and an engine switch;
+  playback never blocks reading.
+
+### Tests
+
+Manifest allowlist, path traversal, sha256 mismatch, shared first download,
+range requests, and cache headers on the server; segmentation (headings,
+lists, code, abbreviations, long sentences, merge rules), the queue
+(lookahead, cancel on jump, priority, cap), scheduling maths, WSOLA length,
+replay cache eviction, the language-to-engine default, keys and click
+priority, and the sheet states on the web. Engines are mocked in unit tests.
+
+### QA and mockup parity
+
+In a real browser on real links: cold and warm load for both engines, time to
+first audio, gaps, click-to-jump, speed changes, voice changes, a non-English
+article, offline after caching, and no request to a third-party host. Then
+compare the dock player and Listen sheet side by side with prototype variant B
+and fix every unintended difference.
