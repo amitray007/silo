@@ -110,6 +110,12 @@ describeIfPg('highlight routes (integration)', () => {
     ['long prefix', { quote: 'a', prefix: 'p'.repeat(65) }],
     ['long note', { quote: 'a', prefix: '', suffix: '', note: 'n'.repeat(10001) }],
     ['missing quote', {}],
+    [
+      'offset above int4',
+      { quote: 'a', prefix: '', suffix: '', startOffset: 5, endOffset: 4_000_000_000 },
+    ],
+    ['NUL in quote', { quote: 'a\u0000b', prefix: '', suffix: '' }],
+    ['NUL in note', { quote: 'a', prefix: '', suffix: '', note: 'x\u0000' }],
   ])('POST rejects %s with 400', async (name, body) => {
     const id = await newLinkId(`https://example.com/h-bad-${name.replace(/\W/g, '')}`);
     const res = await send('POST', `/api/links/${id}/highlights`, body);

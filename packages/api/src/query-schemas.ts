@@ -3,6 +3,7 @@ import {
   CAPTURE_SOURCES,
   HIGHLIGHT_COLORS,
   HIGHLIGHT_NOTE_MAX,
+  HIGHLIGHT_OFFSET_MAX,
   HIGHLIGHT_QUOTE_MAX,
   normalizeFeedUrl,
   sourceDataSchema,
@@ -165,22 +166,26 @@ export const readingPositionBodySchema = z.object({
 
 const highlightColorSchema = z.enum(HIGHLIGHT_COLORS);
 
+/** Postgres text cannot hold a NUL byte. */
+const noNul = (value: string) => !value.includes('\u0000');
+const noNulMessage = { message: 'must not contain a NUL character' };
+
 /** `POST /api/links/:id/highlights` body. Context and offsets are optional; without them the quote is matched in the saved text. */
 export const addHighlightBodySchema = z.object({
-  quote: z.string().min(1).max(HIGHLIGHT_QUOTE_MAX),
-  prefix: z.string().max(64).optional(),
-  suffix: z.string().max(64).optional(),
-  startOffset: z.number().int().min(0).nullable().optional(),
-  endOffset: z.number().int().min(1).nullable().optional(),
+  quote: z.string().min(1).max(HIGHLIGHT_QUOTE_MAX).refine(noNul, noNulMessage),
+  prefix: z.string().max(64).refine(noNul, noNulMessage).optional(),
+  suffix: z.string().max(64).refine(noNul, noNulMessage).optional(),
+  startOffset: z.number().int().min(0).max(HIGHLIGHT_OFFSET_MAX).nullable().optional(),
+  endOffset: z.number().int().min(1).max(HIGHLIGHT_OFFSET_MAX).nullable().optional(),
   occurrence: z.number().int().min(1).optional(),
   color: highlightColorSchema.optional(),
-  note: z.string().max(HIGHLIGHT_NOTE_MAX).nullable().optional(),
+  note: z.string().max(HIGHLIGHT_NOTE_MAX).refine(noNul, noNulMessage).nullable().optional(),
 });
 
 /** `PATCH /api/highlights/:id` body. `note: null` clears the note. */
 export const editHighlightBodySchema = z.object({
   color: highlightColorSchema.optional(),
-  note: z.string().max(HIGHLIGHT_NOTE_MAX).nullable().optional(),
+  note: z.string().max(HIGHLIGHT_NOTE_MAX).refine(noNul, noNulMessage).nullable().optional(),
 });
 
 /** `POST /api/links/:id/tags` (add tag) body schema. */

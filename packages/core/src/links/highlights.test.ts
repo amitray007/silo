@@ -205,6 +205,55 @@ describeIfPg('highlights (integration)', () => {
     });
   });
 
+  describe('hostile values', () => {
+    it('rejects offsets above the integer column and a NUL byte, as validation errors', async () => {
+      const link = await newLink();
+      const bad: HighlightOps.AddHighlightInput[] = [
+        webInput('q', { startOffset: 5, endOffset: 2_147_483_648 }),
+        webInput('q', { startOffset: 2_147_483_648, endOffset: 2_147_483_649 }),
+        webInput('q', { startOffset: 7, endOffset: 3 }),
+        webInput('q\u0000'),
+        webInput('q', { prefix: 'a\u0000' }),
+        webInput('q', { suffix: '\u0000' }),
+        webInput('q', { note: 'n\u0000n' }),
+      ];
+      for (const input of bad) {
+        await expect(ops.addHighlight(link.id, input)).rejects.toBeInstanceOf(
+          ops.InvalidHighlightError,
+        );
+      }
+      expect(
+        await ops.addHighlight(
+          link.id,
+          webInput('q', { startOffset: 0, endOffset: 2_147_483_647 }),
+        ),
+      ).not.toBeNull();
+    });
+
+    it('rejects a NUL byte in an edited note', async () => {
+      const link = await newLink();
+      const added = await ops.addHighlight(link.id, webInput('q'));
+      await expect(ops.editHighlight(added?.id ?? '', { note: 'a\u0000' })).rejects.toBeInstanceOf(
+        ops.InvalidHighlightError,
+      );
+    });
+
+    it('writes from the web without loading the saved text', async () => {
+      const link = await newLink('https://example.com/no-text', null);
+      expect(await ops.addHighlight(link.id, webInput('anything'))).not.toBeNull();
+    });
+
+    it('does not cut the quote context inside a surrogate pair', async () => {
+      const text = `a${'\u{1F600}'}${'b'.repeat(63)}needle${'c'.repeat(63)}${'\u{1F600}'}`;
+      const link = await newLink('https://example.com/emoji', text);
+      const added = await ops.addHighlight(link.id, { quote: 'needle' });
+      const lone = /(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]|[\uD800-\uDBFF](?![\uDC00-\uDFFF])/;
+      expect(added?.prefix).not.toMatch(lone);
+      expect(added?.suffix).not.toMatch(lone);
+      expect(added?.prefix.length).toBeLessThanOrEqual(64);
+    });
+  });
+
   describe('edit and delete', () => {
     it('recolours, sets and clears a note, and bumps updatedAt', async () => {
       const link = await newLink();
@@ -306,6 +355,17 @@ describeIfPg('highlights (integration)', () => {
     expect(await ops.listHighlights(original.id)).toHaveLength(0);
   });
 
+  it('getByIds returns each link its own highlights', async () => {
+    const one = await newLink('https://example.com/b1');
+    const two = await newLink('https://example.com/b2');
+    await ops.addHighlight(one.id, webInput('one'));
+    await ops.addHighlight(two.id, webInput('two'));
+    await ops.addHighlight(two.id, webInput('two b'));
+    const { getByIds } = await import('./bulk.js');
+    const got = await getByIds([two.id, one.id, '11111111-1111-4111-8111-111111111111']);
+    expect(got.map((r) => r.link?.highlights.length ?? null)).toEqual([2, 1, null]);
+  });
+
   it('getById loads highlights without touching list queries', async () => {
     const link = await newLink();
     await ops.addHighlight(link.id, webInput('q'));
@@ -389,6 +449,90 @@ describeIfPg('highlights (integration)', () => {
       const imported = await linksOps.findByCanonicalUrl('https://example.com/mixed');
       const list = imported ? await ops.listHighlights(imported.id) : [];
       expect(list.map((h) => h.quote)).toEqual(['good']);
+    });
+
+    it('keeps a link whose highlights are bad, and reports them', async () => {
+      const file = (highlights: unknown[]) => ({
+        version: 1,
+        links: [{ url: 'https://example.com/issues', sourceKind: 'link', highlights }],
+      });
+      const good = {
+        quote: 'good',
+        color: 'green',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      };
+      const result = await importOps.importLinks(
+        file([
+          good,
+          { ...good, quote: 'nul\u0000' },
+          { ...good, quote: 'far', startOffset: 5, endOffset: 4_000_000_000 },
+          { nonsense: true },
+        ]),
+      );
+      expect(result.created).toBe(1);
+      expect(result.skipped).toEqual([]);
+      expect(result.highlightIssues).toEqual([
+        { index: 0, url: 'https://example.com/issues', skipped: 3, reason: expect.any(String) },
+      ]);
+      const imported = await linksOps.findByCanonicalUrl('https://example.com/issues');
+      expect((imported ? await ops.listHighlights(imported.id) : []).map((h) => h.quote)).toEqual([
+        'good',
+      ]);
+    });
+
+    it('imports at most 1000 highlights per link and reports the rest', async () => {
+      const many = Array.from({ length: 1005 }, (_, i) => ({
+        quote: `quote ${i}`,
+        color: 'blue',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z',
+      }));
+      const result = await importOps.importLinks({
+        version: 1,
+        links: [{ url: 'https://example.com/many', sourceKind: 'link', highlights: many }],
+      });
+      expect(result.created).toBe(1);
+      expect(result.highlightIssues?.[0]).toMatchObject({ skipped: 5 });
+      const imported = await linksOps.findByCanonicalUrl('https://example.com/many');
+      expect(imported ? await ops.listHighlights(imported.id) : []).toHaveLength(1000);
+    });
+
+    it('still counts the link as imported when the highlight insert fails in the database', async () => {
+      await rawDb.execute(sql`
+        create function silo_test_fail() returns trigger as $$ begin raise exception 'boom'; end; $$ language plpgsql`);
+      await rawDb.execute(
+        sql`create trigger silo_test_fail before insert on highlights for each row execute function silo_test_fail()`,
+      );
+      try {
+        const result = await importOps.importLinks({
+          version: 1,
+          links: [
+            {
+              url: 'https://example.com/db-fail',
+              sourceKind: 'link',
+              highlights: [
+                {
+                  quote: 'q',
+                  color: 'blue',
+                  createdAt: '2026-01-01T00:00:00Z',
+                  updatedAt: '2026-01-01T00:00:00Z',
+                },
+              ],
+            },
+          ],
+        });
+        expect(result.created).toBe(1);
+        expect(result.skipped).toEqual([]);
+        expect(result.highlightIssues?.[0]).toMatchObject({
+          skipped: 1,
+          reason: expect.stringContaining('boom'),
+        });
+        expect(await linksOps.findByCanonicalUrl('https://example.com/db-fail')).not.toBeNull();
+      } finally {
+        await rawDb.execute(sql`drop trigger silo_test_fail on highlights`);
+        await rawDb.execute(sql`drop function silo_test_fail()`);
+      }
     });
   });
 });

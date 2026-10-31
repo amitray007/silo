@@ -520,6 +520,8 @@ export type TextWindowOptions = {
 
 /** Optional read modifiers for `getById`. */
 export type GetByIdOptions = {
+  /** For a batch reader that already loaded the highlights in one query (`getByIds`). */
+  preloadedHighlights?: Highlight[];
   /**
    * Request a character-sliced window of `extractedText` instead of the full
    * text — lets an agent read a relevant slice of a long article without
@@ -599,7 +601,7 @@ export async function getById(
   if (!withTags) return null;
   const hydrated: LinkDetail = {
     ...withTags,
-    highlights: await listHighlights(id),
+    highlights: opts?.preloadedHighlights ?? (await listHighlights(id)),
     readingPosition:
       found.position !== null && found.positionUpdatedAt !== null
         ? { position: found.position, updatedAt: found.positionUpdatedAt }

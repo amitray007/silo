@@ -195,9 +195,11 @@ export {
   editHighlight,
   HIGHLIGHT_COLORS,
   HIGHLIGHT_NOTE_MAX,
+  HIGHLIGHT_OFFSET_MAX,
   HIGHLIGHT_QUOTE_MAX,
   InvalidHighlightError,
   listHighlights,
+  listHighlightsForLinks,
 } from './links/highlights.js';
 // Import (import slice, U1): importLinks is the write half of the export/
 // import round-trip — restores a silo `version: 1` JSON export back into the

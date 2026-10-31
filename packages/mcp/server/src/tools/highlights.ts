@@ -14,6 +14,10 @@ import {
 import { z } from 'zod';
 import { highlightShape, toHighlightContent } from './link-shape.js';
 
+/** Postgres text cannot hold a NUL byte. */
+const noNul = (value: string) => !value.includes('\u0000');
+const noNulMessage = { message: 'must not contain a NUL character' };
+
 const colorField = z
   .enum(HIGHLIGHT_COLORS)
   .describe(
@@ -94,6 +98,7 @@ export function registerHighlightTools(server: McpServer): void {
         note: z
           .string()
           .max(HIGHLIGHT_NOTE_MAX)
+          .refine(noNul, noNulMessage)
           .optional()
           .describe('A note about the passage. Omit for a bare highlight.'),
       },
@@ -138,6 +143,7 @@ export function registerHighlightTools(server: McpServer): void {
         note: z
           .string()
           .max(HIGHLIGHT_NOTE_MAX)
+          .refine(noNul, noNulMessage)
           .nullable()
           .optional()
           .describe('New note. `null` clears it. Omit to leave unchanged.'),
@@ -155,7 +161,10 @@ export function registerHighlightTools(server: McpServer): void {
             `No highlight with id ${id} (unknown, or its link is trashed). Use get_link to list a link's highlights.`,
           );
         }
-        return savedResult(updated, `Updated highlight ${id}.`);
+        return savedResult(
+          updated,
+          `Updated highlight ${id}. Call get_link with the link id to see all its highlights.`,
+        );
       } catch (error) {
         return ruleError(error);
       }
@@ -182,7 +191,7 @@ export function registerHighlightTools(server: McpServer): void {
             {
               type: 'text',
               text: deleted
-                ? `Deleted highlight ${id}.`
+                ? `Deleted highlight ${id}. Call get_link with the link id to see the remaining highlights.`
                 : `No highlight with id ${id} (unknown, or its link is trashed). Use get_link to list a link's highlights.`,
             },
           ],

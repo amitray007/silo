@@ -116,7 +116,7 @@ export const baseLinkShape = {
   highlights: z
     .array(z.object(highlightShape))
     .describe(
-      'Passage highlights with their notes, ordered by position in the article. May overlap.',
+      'Passage highlights with their notes, ordered by start offset then creation time; highlights an agent added by quote have no offsets and come last. May overlap.',
     ),
 };
 

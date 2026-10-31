@@ -1,5 +1,5 @@
 import { db, HIGHLIGHT_COLORS, type HighlightColor, highlights, links } from '@silo/db';
-import { asc, eq, sql } from 'drizzle-orm';
+import { asc, eq, inArray, sql } from 'drizzle-orm';
 import type { Tx } from './executor.js';
 import { assertLibraryWrite } from './library-write.js';
 import { whereLibrary, whereLiveAnywhere } from './live.js';
@@ -10,6 +10,10 @@ export { HIGHLIGHT_COLORS, type HighlightColor };
 export const HIGHLIGHT_QUOTE_MAX = 5000;
 export const HIGHLIGHT_NOTE_MAX = 10000;
 export const HIGHLIGHT_CONTEXT_MAX = 64;
+/** The largest value of a Postgres `integer` column; offsets stay within it. */
+export const HIGHLIGHT_OFFSET_MAX = 2_147_483_647;
+/** The most highlights one imported link keeps. */
+export const HIGHLIGHT_IMPORT_MAX = 1000;
 
 /** One highlighted passage of a link's article. */
 export type Highlight = {
@@ -132,6 +136,16 @@ function assertBounds(input: {
   if (input.note !== null && input.note.length > HIGHLIGHT_NOTE_MAX) {
     throw new InvalidHighlightError(`note must be at most ${HIGHLIGHT_NOTE_MAX} characters.`);
   }
+  assertNoNul({ quote: input.quote, prefix: input.prefix, suffix: input.suffix, note: input.note });
+}
+
+/** Postgres text cannot hold a NUL byte; reject it up front instead of failing at insert. */
+function assertNoNul(fields: Record<string, string | null | undefined>) {
+  for (const [name, value] of Object.entries(fields)) {
+    if (value?.includes('\u0000')) {
+      throw new InvalidHighlightError(`${name} must not contain a NUL character.`);
+    }
+  }
 }
 
 function assertColor(color: string): asserts color is HighlightColor {
@@ -145,8 +159,16 @@ function assertOffsets(start: number | null, end: number | null) {
     throw new InvalidHighlightError('startOffset and endOffset go together.');
   }
   if (start !== null && end !== null) {
-    if (!Number.isInteger(start) || !Number.isInteger(end) || start < 0 || end <= start) {
-      throw new InvalidHighlightError('offsets must be integers with 0 <= start < end.');
+    if (
+      !Number.isInteger(start) ||
+      !Number.isInteger(end) ||
+      start < 0 ||
+      end <= start ||
+      end > HIGHLIGHT_OFFSET_MAX
+    ) {
+      throw new InvalidHighlightError(
+        `offsets must be integers with 0 <= start < end <= ${HIGHLIGHT_OFFSET_MAX}.`,
+      );
     }
   }
 }
@@ -159,6 +181,43 @@ export async function listHighlights(linkId: string): Promise<Highlight[]> {
     .where(eq(highlights.linkId, linkId))
     .orderBy(...byPosition);
   return rows.map(toHighlight);
+}
+
+const isHigh = (code: number) => code >= 0xd800 && code <= 0xdbff;
+const isLow = (code: number) => code >= 0xdc00 && code <= 0xdfff;
+
+/** Up to 64 characters before `at`, never starting inside a surrogate pair. */
+export function contextBefore(text: string, at: number): string {
+  let from = Math.max(0, at - HIGHLIGHT_CONTEXT_MAX);
+  if (from > 0 && isLow(text.charCodeAt(from)) && isHigh(text.charCodeAt(from - 1))) from += 1;
+  return text.slice(from, at);
+}
+
+/** Up to 64 characters from `at`, never ending inside a surrogate pair. */
+export function contextAfter(text: string, at: number): string {
+  let to = Math.min(text.length, at + HIGHLIGHT_CONTEXT_MAX);
+  if (to < text.length && isLow(text.charCodeAt(to)) && isHigh(text.charCodeAt(to - 1))) to -= 1;
+  return text.slice(at, to);
+}
+
+/** The highlights of several links in one query, grouped by link id (batch reads). */
+export async function listHighlightsForLinks(
+  linkIds: ReadonlyArray<string>,
+): Promise<Map<string, Highlight[]>> {
+  const grouped = new Map<string, Highlight[]>();
+  const unique = [...new Set(linkIds)];
+  if (unique.length === 0) return grouped;
+  const rows = await db
+    .select(columns)
+    .from(highlights)
+    .where(inArray(highlights.linkId, unique))
+    .orderBy(...byPosition);
+  for (const row of rows) {
+    const list = grouped.get(row.linkId) ?? [];
+    list.push(toHighlight(row));
+    grouped.set(row.linkId, list);
+  }
+  return grouped;
 }
 
 /**
@@ -196,8 +255,8 @@ function matchQuote(
   const end = match.start + quote.length;
   return {
     quote,
-    prefix: collapsed.slice(Math.max(0, match.start - HIGHLIGHT_CONTEXT_MAX), match.start),
-    suffix: collapsed.slice(end, end + HIGHLIGHT_CONTEXT_MAX),
+    prefix: contextBefore(collapsed, match.start),
+    suffix: contextAfter(collapsed, end),
   };
 }
 
@@ -220,16 +279,17 @@ export async function addHighlight(
   assertOffsets(startOffset, endOffset);
 
   await assertLibraryWrite(linkId);
+  // Only a quote-only (agent) write needs the saved text; a web write sends its own context.
+  const quoteOnly = input.prefix === undefined && input.suffix === undefined;
   const [live] = await db
-    .select({ id: links.id, text: links.extractedText })
+    .select(quoteOnly ? { id: links.id, text: links.extractedText } : { id: links.id })
     .from(links)
     .where(whereLibrary(eq(links.id, linkId)));
   if (!live) return null;
 
-  const context =
-    input.prefix === undefined && input.suffix === undefined
-      ? matchQuote(live.text, input)
-      : { quote: input.quote, prefix: input.prefix ?? '', suffix: input.suffix ?? '' };
+  const context = quoteOnly
+    ? matchQuote('text' in live ? live.text : null, input)
+    : { quote: input.quote, prefix: input.prefix ?? '', suffix: input.suffix ?? '' };
   const { quote, prefix, suffix } = context;
   assertBounds({ quote, prefix, suffix, note });
 
@@ -265,6 +325,7 @@ export async function editHighlight(
   if (note != null && note.length > HIGHLIGHT_NOTE_MAX) {
     throw new InvalidHighlightError(`note must be at most ${HIGHLIGHT_NOTE_MAX} characters.`);
   }
+  assertNoNul({ note });
   const linkId = await liveLinkOf(id);
   if (!linkId) return null;
   await assertLibraryWrite(linkId);
@@ -315,51 +376,70 @@ export async function listLibraryHighlightsByLink(): Promise<Map<string, Highlig
   return grouped;
 }
 
+/** What an import did with one link's highlights. */
+export type RestoreHighlightsResult = { restored: number; skipped: number; reason?: string };
+
 /**
  * Import helper: write exported highlights onto a live library link with their
- * original timestamps. Skips a link that is not a live library link, and a
- * highlight that breaks a bound (the link still imports).
+ * original timestamps. Never throws for a bad highlight: each one that breaks a
+ * bound is counted in `skipped` with the first reason, and only the first
+ * `HIGHLIGHT_IMPORT_MAX` are kept. A database failure still throws; the caller
+ * reports it without failing the link.
  */
 export async function restoreHighlights(
   linkId: string,
   saved: ReadonlyArray<Omit<Highlight, 'id' | 'linkId'> & { id?: string }>,
-): Promise<void> {
+): Promise<RestoreHighlightsResult> {
   const [live] = await db
     .select({ id: links.id })
     .from(links)
     .where(whereLibrary(eq(links.id, linkId)));
-  if (!live) return;
-  const rows = saved.flatMap((item) => {
+  if (!live)
+    return { restored: 0, skipped: saved.length, reason: 'the link is not a live library link' };
+  let skipped = 0;
+  let reason: string | undefined;
+  const skip = (why: string) => {
+    skipped += 1;
+    reason ??= why;
+  };
+  const rows = [];
+  for (const item of saved) {
+    if (rows.length >= HIGHLIGHT_IMPORT_MAX) {
+      skip(`only ${HIGHLIGHT_IMPORT_MAX} highlights are imported per link`);
+      continue;
+    }
     try {
       assertColor(item.color);
       assertBounds({ ...item, note: item.note });
       assertOffsets(item.startOffset, item.endOffset);
-    } catch {
-      return [];
+    } catch (error) {
+      skip(error instanceof Error ? error.message : String(error));
+      continue;
     }
-    return [
-      {
-        linkId,
-        quote: item.quote,
-        prefix: item.prefix,
-        suffix: item.suffix,
-        startOffset: item.startOffset,
-        endOffset: item.endOffset,
-        color: item.color,
-        note: item.note,
-        createdAt: item.createdAt,
-        updatedAt: item.updatedAt,
-      },
-    ];
-  });
+    rows.push({
+      linkId,
+      quote: item.quote,
+      prefix: item.prefix,
+      suffix: item.suffix,
+      startOffset: item.startOffset,
+      endOffset: item.endOffset,
+      color: item.color,
+      note: item.note,
+      createdAt: item.createdAt,
+      updatedAt: item.updatedAt,
+    });
+  }
   // Importing the same file twice must not double the highlights.
   const existing = await db
     .select({ quote: highlights.quote, prefix: highlights.prefix, suffix: highlights.suffix })
     .from(highlights)
     .where(eq(highlights.linkId, linkId));
-  const seen = new Set(existing.map((row) => `${row.prefix}\u0000${row.quote}\u0000${row.suffix}`));
-  const fresh = rows.filter(
-    (row) => !seen.has(`${row.prefix}\u0000${row.quote}\u0000${row.suffix}`),
-  );
+  const key = (row: { prefix: string; quote: string; suffix: string }) =>
+    `${row.prefix}\u0000${row.quote}\u0000${row.suffix}`;
+  const seen = new Set(existing.map(key));
+  const fresh = rows.filter((row) => !seen.has(key(row)));
   if (fresh.length > 0) await db.insert(highlights).values(fresh);
+  return reason === undefined
+    ? { restored: fresh.length, skipped }
+    : { restored: fresh.length, skipped, reason };
 }

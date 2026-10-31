@@ -365,6 +365,18 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       expect(read.structuredContent).toMatchObject({ highlights: [] });
     });
 
+    it('rejects a NUL byte in a quote or note', async () => {
+      const { client } = getContext();
+      const id = await seedWithText('https://example.com/highlight-nul');
+      for (const args of [
+        { id, quote: 'Alpha\u0000' },
+        { id, quote: 'Alpha', note: 'a\u0000' },
+      ]) {
+        const result = await client.callTool({ name: 'add_highlight', arguments: args });
+        expect(result.isError).toBe(true);
+      }
+    });
+
     it('rejects an out-of-range occurrence and a bad colour', async () => {
       const { client } = getContext();
       const id = await seedWithText('https://example.com/highlight-bad');
