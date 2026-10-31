@@ -41,6 +41,7 @@ import { registerSettingsRoutes } from './routes/settings.js';
 import { registerSourceMediaRoutes } from './routes/source-media.js';
 import { registerTagsRoutes } from './routes/tags.js';
 import { registerTrashRoutes } from './routes/trash.js';
+import { registerTtsRoutes } from './routes/tts.js';
 
 /**
  * The API's error envelope — every non-2xx JSON body this API returns has
@@ -255,6 +256,7 @@ export function createApp(): Hono {
   registerImportRoutes(api);
   registerAccessTokenRoutes(api);
   registerAiRoutes(api);
+  registerTtsRoutes(api);
   app.route('/api', api);
 
   // Web SPA static serve + client-route fallback (Unit 1, deployable-silo
