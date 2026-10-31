@@ -121,11 +121,11 @@ it('reveals on toolbar focus and stays shown until focus leaves', async () => {
   expect(head.dataset.hidden).toBe('true');
 });
 
-it.each(['More actions', 'View settings'])('pins the bar while %s is open', async (label) => {
+it('pins the bar while More actions is open', async () => {
   const { container } = show();
   const { head, scroll } = scrollPane(container);
   await scroll(200);
-  fireEvent.click(screen.getByRole('button', { name: label }));
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
   // Move focus out to prove the open menu itself pins the header.
   act(() => (document.activeElement as HTMLElement).blur());
   await scroll(240);
@@ -191,18 +191,12 @@ afterEach(() => {
   document.documentElement.dataset.theme = 'light';
 });
 
-it('keeps only five controls inline and orders Edit and Reload before existing menu items', async () => {
+it('keeps only four controls inline and orders Edit and Reload before existing menu items', async () => {
   const { container } = show();
   const tools = within(container.querySelector('.silo-reader-right') as HTMLElement);
   const labels = () =>
     tools.getAllByRole('button').map((button) => button.getAttribute('aria-label'));
-  expect(labels()).toEqual([
-    'View settings',
-    'Copy link',
-    'Open original',
-    'Move to trash',
-    'More actions',
-  ]);
+  expect(labels()).toEqual(['Copy link', 'Open original', 'Move to trash', 'More actions']);
   fireEvent.click(tools.getByRole('button', { name: 'More actions' }));
   expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
     'Edite',

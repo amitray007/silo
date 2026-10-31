@@ -3,6 +3,7 @@ import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { isFeedPost } from '../../lib/isFeedPost';
+import { useReaderType } from '../../lib/readerPrefs';
 import { deriveTitleFromUrl } from '../../lib/url';
 import { useHideOnScroll } from '../../lib/useHideOnScroll';
 import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
@@ -12,6 +13,7 @@ import { FeedSaveAction } from '../FeedSaveAction';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
+import { DockHostContext } from './dock/ReaderDock';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
 import { ReaderContent } from './ReaderContent';
@@ -248,6 +250,7 @@ function ReaderArticle({
   showLive: () => void;
 }) {
   const [width] = useReaderWidth();
+  const { style } = useReaderType();
   const embed = embedFor(link.url, link.sourceData);
   const video = embed?.video ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
@@ -256,6 +259,7 @@ function ReaderArticle({
     <article
       className="silo-reader"
       data-width={width}
+      style={style}
       onClick={(event) => seekChapter(event, video)}
     >
       {trashed && (
@@ -409,6 +413,8 @@ export function ReaderPane({
   const showActions = showReaderActions(phone, link);
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const original = useOriginal(link, tab === 'original');
+  const { type } = useReaderType();
+  const [dockHost, setDockHost] = useState<HTMLElement | null>(null);
   const shownOriginal = tab === 'original' && link ? original : undefined;
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
@@ -468,6 +474,7 @@ export function ReaderPane({
   return (
     <section
       className="silo-readerpane"
+      data-reader-theme={tab === 'reader' ? type.theme : undefined}
       aria-label="Link reader"
       ref={panelRef}
       tabIndex={-1}
@@ -522,7 +529,7 @@ export function ReaderPane({
               <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
             </div>
             <div className="silo-reader-right">
-              {link && (
+              {shownOriginal && (
                 <ReaderSettings
                   key={`settings-${selectedId}-${tab}`}
                   original={shownOriginal}
@@ -575,8 +582,9 @@ export function ReaderPane({
         id={`${id}-panel`}
         {...panelSemantics(id, tab, Boolean(selectedId))}
       >
-        {content}
+        <DockHostContext.Provider value={dockHost}>{content}</DockHostContext.Provider>
       </div>
+      <div className="silo-reader-dock-host" ref={setDockHost} />
     </section>
   );
 }

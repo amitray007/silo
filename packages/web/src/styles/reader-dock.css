@@ -1,0 +1,202 @@
+/* Reader tools: the bottom dock, its sheets, and the Sepia reader theme. */
+
+/* Sepia recolours the whole reader pane, head and dock included. Tokens only change here, so
+   every component that already reads them follows. Body text (--mut on --bg) is 8.9:1 in the
+   light variant and 8.7:1 in the dark one. */
+.silo-readerpane[data-reader-theme="sepia"] {
+  --bg: oklch(95.5% 0.025 85);
+  --bg2: oklch(97.2% 0.02 85);
+  --ink: oklch(24% 0.03 60);
+  --mut: oklch(38% 0.035 60);
+  --fnt: oklch(50% 0.035 65);
+  --line: oklch(89% 0.03 80);
+  --line-2: oklch(84% 0.035 80);
+  --hov: oklch(93% 0.028 85);
+  --sel: oklch(90.5% 0.03 85);
+  --btn: oklch(30% 0.03 60);
+  --btn-ink: oklch(96% 0.02 85);
+  --row-hover: var(--hov);
+  --icon-hover: var(--sel);
+  --input-bg: var(--hov);
+  --menu-highlight: var(--hov);
+  --menu-icon: var(--ink);
+  --segment-on: var(--bg2);
+  background: var(--bg);
+  color: var(--ink);
+}
+:root[data-theme="dark"] .silo-readerpane[data-reader-theme="sepia"] {
+  --bg: oklch(22% 0.015 70);
+  --bg2: oklch(26% 0.018 70);
+  --ink: oklch(90% 0.03 80);
+  --mut: oklch(78% 0.03 80);
+  --fnt: oklch(68% 0.03 75);
+  --line: oklch(31% 0.02 70);
+  --line-2: oklch(38% 0.02 70);
+  --hov: oklch(26% 0.018 70);
+  --sel: oklch(30% 0.02 70);
+  --btn: oklch(88% 0.03 80);
+  --btn-ink: oklch(22% 0.015 70);
+  --segment-on: var(--sel);
+}
+
+/* The dock floats over the pane's scroll area. */
+.silo-reader-dock-host {
+  display: contents;
+}
+.silo-reader-dock {
+  position: absolute;
+  z-index: 25;
+  inset: auto 0 20px;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.silo-reader-dock-pill {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 5px;
+  border-radius: 999px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  pointer-events: auto;
+}
+.silo-reader-dockbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 38px;
+  padding: 0 16px;
+  border: 0;
+  border-radius: 999px;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.silo-reader-dockbtn[aria-expanded="true"] {
+  background: var(--sel);
+  color: var(--ink);
+}
+.silo-reader-dockbtn:active {
+  transform: scale(0.97);
+}
+.silo-reader-dock-glyph {
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-dockbtn:hover {
+    background: var(--hov);
+    color: var(--ink);
+  }
+  .silo-reader-dockbtn[aria-expanded="true"]:hover {
+    background: var(--sel);
+  }
+}
+
+/* The sheet opens above the pill, centred in the pane. */
+.silo-type-sheet.silo-menu-surface {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  inset-inline: 0;
+  margin-inline: auto;
+  width: 360px;
+  max-width: calc(100% - 24px);
+  max-height: min(560px, calc(100dvh - 160px));
+  overflow-y: auto;
+  padding: 16px;
+  border-radius: 16px;
+  box-shadow: var(--elev-3);
+  transform-origin: bottom center;
+  pointer-events: auto;
+}
+.silo-type-sheet .silo-menu-grab {
+  display: none;
+}
+.silo-type-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.silo-type-sheet .silo-reader-settings-row {
+  flex-wrap: wrap;
+  min-height: 32px;
+  font-weight: 500;
+}
+.silo-type-sheet .silo-reader-settings-row > span {
+  flex: none;
+}
+.silo-reader-segment [role="radio"] {
+  padding-inline: 8px;
+  white-space: nowrap;
+}
+.silo-reader-segment [role="radio"][aria-checked="true"] {
+  background: var(--segment-on);
+  box-shadow: var(--segment-shadow);
+  color: var(--ink);
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-segment [role="radio"][aria-checked="true"]:hover {
+    background: var(--segment-on);
+    color: var(--ink);
+  }
+}
+
+.silo-stepper {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.silo-stepper-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hov);
+  color: var(--mut);
+  cursor: pointer;
+}
+.silo-stepper-btn .silo-reader-icon {
+  width: 16px;
+  height: 16px;
+}
+.silo-stepper-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.silo-stepper-btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.silo-stepper-value {
+  min-width: 40px;
+  border-radius: 6px;
+  text-align: center;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-stepper-btn:hover:not(:disabled) {
+    color: var(--ink);
+    background: var(--sel);
+  }
+}
+
+/* Phones: clear the safe area, and leave room under the article for the dock. */
+@media (max-width: 640px) {
+  .silo-reader-dock {
+    bottom: calc(16px + env(safe-area-inset-bottom, 0px));
+  }
+  .silo-reader:has(.silo-reader-prose) {
+    padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}

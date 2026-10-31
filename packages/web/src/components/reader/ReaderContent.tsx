@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import { queryKeys, useLiveReader, useRetryCapture } from '../../api/hooks';
 import type { LinkJson, LiveReaderJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
+import { ReaderDock } from './dock/ReaderDock';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
@@ -183,12 +184,15 @@ export function ReaderContent({
         (live.isLoading ? (
           <ReaderSkeleton />
         ) : prose ? (
-          <ReaderProse
-            key={prose.capturedAt}
-            linkId={link.id}
-            reader={prose}
-            topPlayerSrc={topPlayerSrc}
-          />
+          <>
+            <ReaderProse
+              key={prose.capturedAt}
+              linkId={link.id}
+              reader={prose}
+              topPlayerSrc={topPlayerSrc}
+            />
+            <ReaderDock key={link.id} />
+          </>
         ) : (
           <Paragraphs link={link} />
         ))}
