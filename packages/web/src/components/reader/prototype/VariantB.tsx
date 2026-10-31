@@ -4,6 +4,7 @@ import { HighlightSheet, ListenSheet, NotePopover, NotesList, PencilSheet } from
 import { TypographyControls } from './controls';
 import { OutlineRail } from './OutlineRail';
 import { ProtoIcon, type ProtoIconName } from './ProtoIcon';
+import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import { inTextEntry, plain, useEscapeClose } from './protoKeys';
 import type { Tools } from './ReaderToolsPrototype';
 import type { HighlightColor } from './useHighlights';
@@ -153,6 +154,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel }: Tools) 
   });
 
   const player = ra.active;
+  const spin = useDelayed(ra.status === 'loading' || (ra.playing && ra.buffering));
   const note = hl.items.find((item) => item.id === openNote);
   return (
     <>
@@ -217,7 +219,11 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel }: Tools) 
               title={ra.playing ? 'Pause (Space)' : 'Play (Space)'}
               onClick={ra.toggle}
             >
-              <ProtoIcon name={ra.playing ? 'pause' : 'play'} size={16} />
+              {spin ? (
+                <ProtoSpinner size={16} />
+              ) : (
+                <ProtoIcon name={ra.playing ? 'pause' : 'play'} size={16} />
+              )}
             </button>
             <button
               type="button"

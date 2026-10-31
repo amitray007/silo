@@ -993,53 +993,73 @@
   position: absolute;
   z-index: 22;
   left: 0;
-  top: 56px;
-  width: 28px;
+  top: 44px;
+  bottom: 0;
+  width: 34px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
   pointer-events: none;
 }
+.proto-cluster {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  pointer-events: auto;
+}
 .proto-tick {
-  position: absolute;
-  left: 0;
-  width: 28px;
-  height: 10px;
-  margin-top: -5px;
-  padding: 0;
-  border: 0;
-  background: none;
   display: flex;
   align-items: center;
-  padding-left: 8px;
-  pointer-events: auto;
+  height: 6px;
+  width: 34px;
+  padding: 0 0 0 8px;
+  border: 0;
+  background: none;
   cursor: pointer;
   --hl: var(--line-2);
 }
 .proto-tick i {
   display: block;
-  width: 7px;
+  width: 12px;
   height: 2px;
   border-radius: 1px;
-  background: var(--line-2);
-  transition: width 120ms var(--ease-out);
+  background: color-mix(in oklch, var(--mut) 50%, transparent);
+  transition: width 100ms var(--ease-out);
 }
 .proto-tick[data-heading="true"] i {
-  width: 14px;
-  background: var(--fnt);
+  width: 18px;
+  background: var(--mut);
 }
 .proto-tick[data-tinted="true"] i {
   background: var(--hl);
-  height: 3px;
 }
 .proto-tick[data-current="true"] i {
-  width: 16px;
+  width: 20px;
   background: var(--ink);
 }
-.proto-tick:hover i,
-.proto-tick:focus-visible i {
-  width: 18px;
+.proto-tick[data-near="0"] i {
+  width: calc(var(--w, 12px) + 6px);
+}
+.proto-tick[data-near="1"] i {
+  width: calc(var(--w, 12px) + 3px);
+}
+.proto-tick[data-near="2"] i {
+  width: calc(var(--w, 12px) + 1px);
+}
+.proto-tick[data-heading="true"] {
+  --w: 18px;
+}
+.proto-tick[data-current="true"] {
+  --w: 20px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .proto-tick i {
+    transition: none;
+  }
 }
 .proto-outline-card {
   position: absolute;
-  left: 34px;
+  left: 38px;
   width: 260px;
   display: flex;
   flex-direction: column;
@@ -1075,4 +1095,139 @@
 }
 .proto-notepop .proto-notepop-field:focus-visible {
   outline: none;
+}
+
+/* Round 3: select, download state, popover focus */
+.proto-spinner {
+  display: inline-grid;
+  place-items: center;
+  color: inherit;
+}
+.proto-select-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 10px 0 12px;
+  border: 0;
+  border-radius: 8px;
+  background: var(--hov);
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.proto-select-trigger:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.proto-select-trigger svg {
+  color: var(--fnt);
+  flex: none;
+}
+.proto-select-name {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.proto-select-name small,
+.proto-listbox-option small {
+  font-size: 11.5px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+.proto-listbox {
+  position: fixed;
+  z-index: 920;
+  overflow-y: auto;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  transform-origin: top right;
+  animation: protoMorph 150ms var(--ease-out);
+}
+.proto-listbox[data-up="true"] {
+  transform-origin: bottom right;
+}
+.proto-listbox-group {
+  padding: 8px 10px 4px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: var(--fnt);
+}
+.proto-listbox-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.proto-listbox-option:focus-visible,
+.proto-listbox-option:hover {
+  outline: none;
+  background: var(--hov);
+}
+.proto-listbox-option[aria-selected="true"] {
+  background: var(--sel);
+}
+.proto-listbox-skeleton {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px;
+}
+.proto-download {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.proto-download-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.proto-download-line small {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fnt);
+  font-variant-numeric: tabular-nums;
+}
+.proto-notepop:focus-within {
+  box-shadow:
+    var(--elev-2),
+    0 0 0 2px color-mix(in oklch, var(--ink) 18%, transparent);
+}
+@keyframes protoMorph {
+  from {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .proto-listbox {
+    animation: none;
+  }
+}
+.proto-download .proto-progress {
+  flex: none;
+  width: 100%;
+  height: 4px;
 }

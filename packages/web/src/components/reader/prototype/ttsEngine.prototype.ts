@@ -2,8 +2,8 @@
 /** In-browser AI text-to-speech engines for the read-aloud prototype. */
 
 export type EngineId = 'kokoro' | 'phonon';
-export type Voice = { id: string; label: string };
-export type LoadProgress = (percent: number | null) => void;
+export type Voice = { id: string; label: string; language?: string; trait?: string };
+export type LoadProgress = (percent: number | null, loaded: number, total: number) => void;
 
 export type TtsEngine = {
   id: EngineId;
@@ -38,7 +38,7 @@ function progressTracker(
       loaded += l;
       total += t;
     }
-    onProgress(total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null);
+    onProgress(total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null, loaded, total);
   };
 }
 
@@ -82,7 +82,9 @@ export function createKokoroEngine(): TtsEngine {
       if (!tts) return [];
       return Object.entries(tts.voices as Record<string, any>).map(([id, info]) => ({
         id,
-        label: `${info.name} (${info.language}, ${info.gender})`,
+        label: info.name as string,
+        language: info.language as string,
+        trait: info.gender as string,
       }));
     },
     async *stream(text, { voice, speed }) {
@@ -119,7 +121,7 @@ export function createPhononEngine(): TtsEngine {
       engine.device = tts.device === 'webgpu' ? 'webgpu' : `cpu x${tts.threads}`;
     },
     voices() {
-      return tts ? (tts.voices as string[]).map((id) => ({ id, label: id })) : [];
+      return tts ? (tts.voices as string[]).map((id) => ({ id, label: id, language: 'en' })) : [];
     },
     async *stream(text, { voice, signal }) {
       const speech = tts.stream(text, {

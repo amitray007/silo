@@ -26,7 +26,7 @@ export function useEscapeClose(open: boolean, close: () => void) {
     if (!open) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || inTextEntry(event)) return;
-      if (document.querySelector('[data-reader-menu]')) return;
+      if (document.querySelector('[data-reader-menu], .proto-listbox')) return;
       event.preventDefault();
       event.stopPropagation();
       close();

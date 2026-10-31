@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { type ReaderWidth, useReaderWidth } from '../../../lib/useReaderWidth';
 import { ToggleSwitch } from '../../SettingsTabs/ToggleSwitch';
 import { ProtoIcon } from './ProtoIcon';
+import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import type { EngineId } from './ttsEngine.prototype';
 import {
   COLORS,
@@ -450,7 +451,16 @@ export function ListenControls({ ra, upcoming = 0 }: { ra: ReadAloudApi; upcomin
   );
 }
 
-export function ListenTransport({ ra, children }: { ra: ReadAloudApi; children?: ReactNode }) {
+export function ListenTransport({
+  ra,
+  busy = false,
+  children,
+}: {
+  ra: ReadAloudApi;
+  busy?: boolean;
+  children?: ReactNode;
+}) {
+  const spin = useDelayed(busy);
   return (
     <div className="proto-transport" data-bare="false">
       <button
@@ -469,7 +479,11 @@ export function ListenTransport({ ra, children }: { ra: ReadAloudApi; children?:
         title={ra.playing ? 'Pause (Space)' : 'Play (Space)'}
         onClick={ra.toggle}
       >
-        <ProtoIcon name={ra.playing ? 'pause' : 'play'} size={16} />
+        {spin ? (
+          <ProtoSpinner size={16} />
+        ) : (
+          <ProtoIcon name={ra.playing ? 'pause' : 'play'} size={16} />
+        )}
       </button>
       <button
         type="button"

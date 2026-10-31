@@ -133,6 +133,7 @@ export function useReadAloud(root: HTMLElement | null, scroll: HTMLElement | nul
   const [voiceId, setVoiceIdState] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [progress, setProgress] = useState<number | null>(null);
+  const [bytes, setBytes] = useState({ loaded: 0, total: 0 });
   const [error, setError] = useState('');
   const [stats, setStats] = useState<SpeechStats>({});
   const [buffering, setBuffering] = useState(false);
@@ -221,7 +222,10 @@ export function useReadAloud(root: HTMLElement | null, scroll: HTMLElement | nul
     setProgress(null);
     setError('');
     const promise = engine
-      .load((percent) => setProgress(percent))
+      .load((percent, loaded, total) => {
+        setProgress(percent);
+        setBytes({ loaded, total });
+      })
       .then(() => {
         engines.current.set(id, engine);
         setStatus('ready');
@@ -469,6 +473,7 @@ export function useReadAloud(root: HTMLElement | null, scroll: HTMLElement | nul
     setVoiceId: chooseVoice,
     status,
     progress,
+    bytes,
     error,
     stats,
     buffering,
@@ -506,10 +511,7 @@ export type ReadAloudApi = ReturnType<typeof useReadAloud>;
 /** The one-line state shown next to the player controls. */
 export function engineStatusLine(ra: ReadAloudApi): string | null {
   if (ra.status === 'loading')
-    return ra.progress === null
-      ? 'Downloading voice model...'
-      : `Downloading voice model ${ra.progress}%`;
+    return ra.progress === null ? 'Downloading voice...' : `Downloading voice · ${ra.progress}%`;
   if (ra.status === 'error') return `Voice failed: ${ra.error}`;
-  if (ra.buffering && ra.playing) return 'Preparing speech...';
   return null;
 }

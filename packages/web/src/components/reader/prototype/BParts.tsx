@@ -3,10 +3,12 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { ColorDots, ListenTransport, PencilTransport, Segmented } from './controls';
 import { ProtoIcon } from './ProtoIcon';
+import { type ProtoGroup, type ProtoOption, ProtoSelect } from './ProtoSelect';
+import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import type { EngineId } from './ttsEngine.prototype';
 import { COLORS, type HighlightsApi, type PassageHighlight } from './useHighlights';
 import type { PencilApi } from './usePencil';
-import { engineStatusLine, RATES, type ReadAloudApi } from './useReadAloud';
+import type { ReadAloudApi } from './useReadAloud';
 
 /** A small popover under a highlighted passage: the note, then colours and delete. */
 export function NotePopover({
@@ -178,78 +180,160 @@ export function HighlightSheet({
   );
 }
 
+const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3];
+
+const LANGUAGES: Record<string, string> = {
+  'en-us': 'English (US)',
+  'en-gb': 'English (UK)',
+  en: 'English',
+};
+
+function languageName(code: string): string {
+  const known = LANGUAGES[code.toLowerCase()];
+  if (known) return known;
+  try {
+    return new Intl.DisplayNames(['en'], { type: 'language' }).of(code) ?? code;
+  } catch {
+    return code;
+  }
+}
+
+function megabytes(bytes: number): string {
+  return (bytes / 1_048_576).toFixed(bytes > 10 * 1_048_576 ? 0 : 1);
+}
+
+export function SpeedStepper({ ra }: { ra: ReadAloudApi }) {
+  const at = SPEEDS.reduce(
+    (best, value, i) =>
+      Math.abs(value - ra.rate) < Math.abs((SPEEDS[best] ?? 1) - ra.rate) ? i : best,
+    0,
+  );
+  const set = (i: number) => ra.setRate(SPEEDS[Math.min(SPEEDS.length - 1, Math.max(0, i))] ?? 1);
+  return (
+    <div className="proto-stepper">
+      <button
+        type="button"
+        className="proto-step"
+        aria-label="Slower"
+        title="Slower (-)"
+        disabled={at <= 0}
+        onClick={() => set(at - 1)}
+      >
+        <ProtoIcon name="minus" size={14} />
+      </button>
+      <output className="proto-readout" aria-label="Speed">
+        {ra.rate}x
+      </output>
+      <button
+        type="button"
+        className="proto-step"
+        aria-label="Faster"
+        title="Faster (+)"
+        disabled={at >= SPEEDS.length - 1}
+        onClick={() => set(at + 1)}
+      >
+        <ProtoIcon name="plus" size={14} />
+      </button>
+    </div>
+  );
+}
+
+function DownloadState({ ra }: { ra: ReadAloudApi }) {
+  const show = useDelayed(ra.status === 'loading');
+  if (ra.status === 'error')
+    return (
+      <p className="proto-status" data-state="error" role="status">
+        Voice failed: {ra.error}
+        <button type="button" className="proto-text-btn" onClick={ra.retry}>
+          Retry
+        </button>
+      </p>
+    );
+  if (ra.status !== 'loading' || !show) return null;
+  const { loaded, total } = ra.bytes;
+  return (
+    <div className="proto-download" role="status">
+      <div className="proto-download-line">
+        <ProtoSpinner size={14} />
+        <span>Downloading voice{ra.progress === null ? '' : ` · ${ra.progress}%`}</span>
+        {total > 0 && (
+          <small>
+            {megabytes(loaded)} / {megabytes(total)} MB
+          </small>
+        )}
+      </div>
+      <div className="proto-progress">
+        <div style={{ width: `${ra.progress ?? 0}%` }} />
+      </div>
+    </div>
+  );
+}
+
 export function ListenSheet({ ra }: { ra: ReadAloudApi }) {
-  const line = engineStatusLine(ra);
   const detail = ra.stats.device
     ? `On ${ra.stats.device}, loaded in ${ra.stats.loadMs} ms${
         ra.stats.firstAudioMs ? `, first audio ${ra.stats.firstAudioMs} ms` : ''
       }`
     : 'Loads when you press play';
+  const voice = ra.voices.find((entry) => entry.id === ra.voiceId);
+  // Voices group by language, in the order the engine lists them.
+  const byLanguage = new Map<string, ProtoOption<string>[]>();
+  for (const entry of ra.voices) {
+    const key = languageName(entry.language ?? 'en');
+    const list = byLanguage.get(key) ?? [];
+    list.push({
+      value: entry.id,
+      label: entry.label,
+      ...(entry.trait ? { trait: entry.trait } : {}),
+    });
+    byLanguage.set(key, list);
+  }
+  const voiceGroups: ProtoGroup<string>[] = [
+    { options: [{ value: '', label: 'Default voice' }] },
+    ...[...byLanguage].map(([label, options]) => ({ label, options })),
+  ];
+  const busy = ra.status === 'loading' || (ra.playing && ra.buffering);
   return (
     <div className="proto-stack">
-      <ListenTransport ra={ra} />
-      {line && (
-        <p className="proto-status" data-state={ra.status} role="status">
-          {line}
-          {ra.status === 'loading' && ra.progress !== null && (
-            <span className="proto-progress">
-              <span style={{ width: `${ra.progress}%` }} />
-            </span>
-          )}
-          {ra.status === 'error' && (
-            <button type="button" className="proto-text-btn" onClick={ra.retry}>
-              Retry
-            </button>
-          )}
-        </p>
-      )}
+      <ListenTransport ra={ra} busy={busy} />
+      <DownloadState ra={ra} />
       <div className="silo-reader-settings-row">
         <span>Engine</span>
-        <select
-          className="proto-select"
-          aria-label="Voice engine"
-          title={detail}
-          value={ra.engineId}
-          onChange={(event) => ra.setEngine(event.target.value as EngineId)}
-        >
-          {ra.engines.map((engine) => (
-            <option key={engine.id} value={engine.id}>
-              {engine.label}
-            </option>
-          ))}
-        </select>
+        <span title={detail}>
+          <ProtoSelect
+            ariaLabel="Voice engine"
+            value={ra.engineId}
+            groups={[
+              { options: ra.engines.map((engine) => ({ value: engine.id, label: engine.label })) },
+            ]}
+            onChange={(value) => ra.setEngine(value as EngineId)}
+            trigger={
+              <span className="proto-select-name">
+                {ra.engines.find((e) => e.id === ra.engineId)?.label}
+              </span>
+            }
+          />
+        </span>
       </div>
       <div className="silo-reader-settings-row">
         <span>Voice</span>
-        <select
-          className="proto-select"
-          aria-label="Voice"
+        <ProtoSelect
+          ariaLabel="Voice"
           value={ra.voiceId}
-          onChange={(event) => ra.setVoiceId(event.target.value)}
-        >
-          <option value="">Default voice</option>
-          {ra.voices.map((voice) => (
-            <option key={voice.id} value={voice.id}>
-              {voice.label}
-            </option>
-          ))}
-        </select>
+          groups={voiceGroups}
+          onChange={ra.setVoiceId}
+          loading={ra.voices.length === 0 && ra.status !== 'error'}
+          trigger={
+            <span className="proto-select-name">
+              {voice?.label ?? 'Default'}
+              {voice?.language && <small>{voice.language.toUpperCase()}</small>}
+            </span>
+          }
+        />
       </div>
       <div className="silo-reader-settings-row">
         <span>Speed</span>
-        <select
-          className="proto-select"
-          aria-label="Speed"
-          title="Faster (+), slower (-)"
-          value={ra.rate}
-          onChange={(event) => ra.setRate(Number(event.target.value))}
-        >
-          {RATES.map((rate) => (
-            <option key={rate} value={rate}>
-              {rate}x
-            </option>
-          ))}
-        </select>
+        <SpeedStepper ra={ra} />
       </div>
     </div>
   );

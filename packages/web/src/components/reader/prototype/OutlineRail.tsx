@@ -1,17 +1,18 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: throwaway prototype
+// biome-ignore-all lint/a11y/noStaticElementInteractions: hover cluster, prototype
 import { useEffect, useMemo, useState } from 'react';
 import type { PassageHighlight } from './useHighlights';
 
-type Section = { id: string; el: Element; heading: boolean; top: number; y: number; next: string };
+type Section = { el: Element; heading: boolean; next: string };
 type Group = {
-  id: string;
-  first: Section;
+  id: number;
+  sections: Section[];
   heading: Section | undefined;
-  y: number;
   color: string | null;
 };
 
-const MIN_GAP = 6;
+const MAX_TICKS = 40;
+const STEP = 6; // 2px tick plus a 4px gap
 
 /**
  * Seam for an optional AI section summary. Returns null for now, so the rail shows the
@@ -26,7 +27,41 @@ function firstSentence(text: string): string {
   return (match?.[0] ?? text).slice(0, 90);
 }
 
-/** A vertical tick rail at the left edge: one tick per paragraph, a longer one per heading. */
+function collect(prose: HTMLElement): Section[] {
+  const sections: Section[] = [];
+  for (const el of prose.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, blockquote')) {
+    if (el.parentElement?.closest('li, blockquote, p, pre, figure, table')) continue;
+    if (!el.textContent?.trim()) continue;
+    sections.push({ el, heading: /^H[1-6]$/.test(el.tagName), next: '' });
+  }
+  sections.forEach((section, i) => {
+    section.next = sections[i + 1]?.el.textContent ?? '';
+  });
+  return sections;
+}
+
+/** Group neighbours so the rail never holds more than MAX_TICKS; a heading starts a new group. */
+function group(sections: Section[]): Group[] {
+  for (let size = 1; ; size += 1) {
+    const result: Group[] = [];
+    for (const section of sections) {
+      const last = result.at(-1);
+      if (last && !section.heading && last.sections.length < size) {
+        last.sections.push(section);
+        continue;
+      }
+      result.push({
+        id: result.length,
+        sections: [section],
+        heading: section.heading ? section : undefined,
+        color: null,
+      });
+    }
+    if (result.length <= MAX_TICKS || size > sections.length) return result;
+  }
+}
+
+/** A compact, centred cluster of ticks: one per paragraph group, a wider one per heading. */
 export function OutlineRail({
   prose,
   scroll,
@@ -42,10 +77,12 @@ export function OutlineRail({
   const [tick, setTick] = useState(0);
   const [current, setCurrent] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
+  const [height, setHeight] = useState(0);
 
   useEffect(() => {
     const observer = new ResizeObserver(() => {
       setWide(panel.clientWidth >= 700);
+      setHeight(panel.clientHeight - 44);
       setTick((value) => value + 1);
     });
     observer.observe(panel);
@@ -53,66 +90,32 @@ export function OutlineRail({
     return () => observer.disconnect();
   }, [panel, prose]);
 
-  const height = Math.max(0, scroll.clientHeight - 68);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: tick re-measures after layout changes.
-  const groups = useMemo<Group[]>(() => {
-    if (!prose || !wide || !height) return [];
-    const box = scroll.getBoundingClientRect();
-    const proseTop = prose.getBoundingClientRect().top - box.top + scroll.scrollTop;
-    const total = Math.max(1, prose.scrollHeight);
-    const sections: Section[] = [];
-    for (const el of prose.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, blockquote')) {
-      if (el.parentElement?.closest('li, blockquote, p, pre, figure, table')) continue;
-      if (!el.textContent?.trim()) continue;
-      const top = el.getBoundingClientRect().top - box.top + scroll.scrollTop;
-      sections.push({
-        id: `s${sections.length}`,
-        el,
-        heading: /^H[1-6]$/.test(el.tagName),
-        top,
-        y: ((top - proseTop) / total) * height,
-        next: '',
-      });
-    }
-    sections.forEach((section, i) => {
-      section.next = sections[i + 1]?.el.textContent ?? '';
-    });
-    const result: Group[] = [];
-    for (const section of sections) {
-      const last = result.at(-1);
-      if (last && section.y - last.y < MIN_GAP) {
-        if (section.heading && !last.heading) last.heading = section;
-        continue;
-      }
-      result.push({
-        id: section.id,
-        first: section,
-        heading: section.heading ? section : undefined,
-        y: section.y,
-        color: null,
-      });
-    }
-    // Tint the group that holds a highlight, using the highlight's colour.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: tick re-reads the DOM after layout changes.
+  const groups = useMemo(() => {
+    if (!prose || !wide) return [];
+    const result = group(collect(prose));
     for (const item of items) {
       const node = item.range.startContainer;
-      const at = sections.find((section) => section.el.contains(node));
-      if (!at) continue;
-      const group = [...result].reverse().find((entry) => entry.first.y <= at.y);
-      if (group) group.color = item.color;
+      const hit = result.find((entry) =>
+        entry.sections.some((section) => section.el.contains(node)),
+      );
+      if (hit) hit.color = item.color;
     }
     return result;
-  }, [prose, scroll, wide, height, items, tick]);
+  }, [prose, wide, items, tick]);
 
   useEffect(() => {
     let frame = 0;
     const update = () => {
       frame = 0;
-      const box = scroll.getBoundingClientRect();
-      const line = scroll.scrollTop + scroll.clientHeight * 0.38;
+      const line = scroll.getBoundingClientRect().top + scroll.clientHeight * 0.38;
       let at = 0;
-      groups.forEach((group, i) => {
-        const top = group.first.el.getBoundingClientRect().top - box.top + scroll.scrollTop;
-        if (top <= line) at = i;
+      groups.forEach((entry, i) => {
+        if (
+          entry.sections[0]?.el.getBoundingClientRect().top !== undefined &&
+          (entry.sections[0]?.el.getBoundingClientRect().top ?? 0) <= line
+        )
+          at = i;
       });
       setCurrent(at);
     };
@@ -128,51 +131,63 @@ export function OutlineRail({
   }, [scroll, groups]);
 
   if (!wide || !groups.length) return null;
+  const clusterHeight = groups.length * STEP;
   const hovered = hover === null ? undefined : groups[hover];
-  const lead = hovered?.heading ?? hovered?.first;
+  const lead = hovered?.heading ?? hovered?.sections[0];
   const text = lead?.el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
-  const summary = lead ? summaryFor(lead.id) : null;
+  const summary = lead ? summaryFor(String(hovered?.id)) : null;
   const title = lead?.heading ? text.slice(0, 90) : firstSentence(text);
-  const body = summary ?? (lead?.heading ? lead.next : text.slice(title.length));
+  const body = (summary ?? (lead?.heading ? lead.next : text.slice(title.length)))
+    .replace(/\s+/g, ' ')
+    .trim();
+  // Keep the card inside the pane: below the head, above the dock.
+  const centre = (height - clusterHeight) / 2;
+  const cardTop =
+    hover === null
+      ? 0
+      : Math.min(Math.max(centre + hover * STEP - 18, 12), Math.max(12, height - 170));
 
   return (
-    <nav className="proto-outline" aria-label="Article outline" style={{ height }}>
-      {groups.map((group, index) => (
-        <button
-          key={group.id}
-          type="button"
-          className="proto-tick"
-          data-heading={Boolean(group.heading)}
-          data-current={index === current}
-          data-color={group.color ?? undefined}
-          data-tinted={group.color !== null}
-          style={{ top: group.y }}
-          aria-label={group.heading ? (group.heading.el.textContent ?? 'Section') : 'Paragraph'}
-          onMouseEnter={() => setHover(index)}
-          onMouseLeave={() => setHover(null)}
-          onFocus={() => setHover(index)}
-          onBlur={() => setHover(null)}
-          onClick={() =>
-            scroll.scrollTo({
-              top:
-                scroll.scrollTop +
-                group.first.el.getBoundingClientRect().top -
-                scroll.getBoundingClientRect().top -
-                90,
-              behavior: 'smooth',
-            })
-          }
-        >
-          <i />
-        </button>
-      ))}
+    <nav className="proto-outline" aria-label="Article outline">
+      <div className="proto-cluster" onMouseLeave={() => setHover(null)}>
+        {groups.map((entry, index) => {
+          const near = hover === null ? 99 : Math.abs(index - hover);
+          return (
+            <button
+              key={entry.id}
+              type="button"
+              className="proto-tick"
+              data-heading={Boolean(entry.heading)}
+              data-current={index === current}
+              data-color={entry.color ?? undefined}
+              data-tinted={entry.color !== null}
+              data-near={near < 3 ? near : undefined}
+              aria-label={entry.heading ? (entry.heading.el.textContent ?? 'Section') : 'Paragraph'}
+              onMouseEnter={() => setHover(index)}
+              onFocus={() => setHover(index)}
+              onBlur={() => setHover(null)}
+              onClick={() => {
+                const el = entry.sections[0]?.el;
+                if (!el) return;
+                scroll.scrollTo({
+                  top:
+                    scroll.scrollTop +
+                    el.getBoundingClientRect().top -
+                    scroll.getBoundingClientRect().top -
+                    90,
+                  behavior: 'smooth',
+                });
+              }}
+            >
+              <i />
+            </button>
+          );
+        })}
+      </div>
       {hovered && lead && (
-        <div
-          className="proto-outline-card"
-          style={{ top: Math.min(Math.max(hovered.y - 12, 0), Math.max(0, height - 96)) }}
-        >
+        <div className="proto-outline-card" style={{ top: cardTop }}>
           <strong>{title}</strong>
-          {body.trim() && <span>{body.replace(/\s+/g, ' ').trim()}</span>}
+          {body && <span>{body}</span>}
         </div>
       )}
     </nav>
