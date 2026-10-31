@@ -791,7 +791,8 @@
   /* The Type sheet sets these on the article; the fallbacks are the defaults (16px, 28px). */
   font-family: var(--reader-font, "Inter Variable", Inter, sans-serif);
   font-size: var(--reader-size, 16px);
-  line-height: var(--reader-leading, 1.75);
+  /* A length, not a ratio, so children with their own font-size keep inheriting 28px. */
+  line-height: calc(var(--reader-size, 16px) * var(--reader-leading, 1.75));
   overflow-wrap: anywhere;
 }
 /* The reset sets Inter on every element, so the chosen font must reach each one. Code keeps its

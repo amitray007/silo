@@ -122,3 +122,14 @@ it('lets every label and option wrap instead of truncating', () => {
     expect(option.textContent?.trim().length).toBeGreaterThan(0);
   }
 });
+
+it('wraps from the first option to the last with ArrowUp', () => {
+  open();
+  const inter = screen.getByRole('radio', { name: 'Inter' });
+  inter.focus();
+  fireEvent.keyDown(inter, { key: 'ArrowUp' });
+  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Mono' }));
+  expect(state().type.font).toBe('mono');
+  fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' });
+  expect(state().type.font).toBe('serif');
+});

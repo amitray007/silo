@@ -4,26 +4,19 @@ export type SegmentedOption<T extends string> = { value: T; label: string };
 
 /** A radio group of text buttons: arrow keys move and select, and only the selected one tabs. */
 function Segmented<T extends string>({
-  label,
   labelId,
   value,
   options,
   onChange,
 }: {
-  /** Names the group; ignored when `labelId` points at a visible label. */
-  label?: string;
-  labelId?: string;
+  /** The id of the visible label that names the group. */
+  labelId: string;
   value: T;
   options: readonly SegmentedOption<T>[];
   onChange: (value: T) => void;
 }) {
   return (
-    <div
-      className="silo-reader-segment"
-      role="radiogroup"
-      aria-label={labelId ? undefined : label}
-      aria-labelledby={labelId}
-    >
+    <div className="silo-reader-segment" role="radiogroup" aria-labelledby={labelId}>
       {options.map((option, index) => (
         // biome-ignore lint/a11y/useSemanticElements: segmented buttons implement the radio keyboard pattern.
         <button

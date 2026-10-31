@@ -29,11 +29,11 @@
   --bg2: oklch(26% 0.018 70);
   --ink: oklch(90% 0.03 80);
   --mut: oklch(78% 0.03 80);
-  --fnt: oklch(68% 0.03 75);
+  --fnt: oklch(72% 0.03 75);
   --line: oklch(31% 0.02 70);
   --line-2: oklch(38% 0.02 70);
-  --hov: oklch(26% 0.018 70);
-  --sel: oklch(30% 0.02 70);
+  --hov: oklch(29% 0.019 70);
+  --sel: oklch(33% 0.02 70);
   --btn: oklch(88% 0.03 80);
   --btn-ink: oklch(22% 0.015 70);
   --segment-on: var(--sel);
@@ -86,7 +86,7 @@
 }
 .silo-reader-dock-glyph {
   font-size: 15px;
-  font-weight: 600;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 @media (hover: hover) and (pointer: fine) {
@@ -198,5 +198,24 @@
   }
   .silo-reader:has(.silo-reader-prose) {
     padding-bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  }
+}
+
+/* Touch: controls reach 40px (docs/rules/web-react.md). */
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-reader-dockbtn {
+    height: 40px;
+  }
+  .silo-stepper-btn {
+    width: 40px;
+    height: 40px;
+  }
+  .silo-stepper-value {
+    min-width: 48px;
+    line-height: 40px;
+  }
+  .silo-type-sheet .silo-reader-segment [role="radio"] {
+    min-height: 40px;
+    min-width: 40px;
   }
 }

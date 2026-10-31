@@ -1,8 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { makeLink, twitterSourceData, youtubeSourceData } from '../../../test/fixtures';
+import { makeLink, twitterSourceData } from '../../../test/fixtures';
 import { ReaderContent } from '../ReaderContent';
 import { DockHostContext, ReaderDock } from './ReaderDock';
 
@@ -12,7 +12,7 @@ const json = (body: unknown, status = 200) =>
 function Host({ children }: { children: ReactNode }) {
   const [host, setHost] = useState<HTMLElement | null>(null);
   return (
-    <DockHostContext.Provider value={host}>
+    <DockHostContext.Provider value={{ element: host, report: () => {} }}>
       {children}
       <div ref={setHost} data-testid="host" />
     </DockHostContext.Provider>
@@ -58,7 +58,7 @@ it('does not render when the page has no Reader prose', async () => {
   expect(screen.queryByRole('toolbar', { name: 'Reader tools' })).toBeNull();
 });
 
-it('does not render for an X post', () => {
+it('does not render for an X post and never asks for Reader prose', async () => {
   renderContent(
     makeLink({
       id: 'post',
@@ -67,19 +67,13 @@ it('does not render for an X post', () => {
     }),
     prose,
   );
+  // Let any query that was going to start do so, so a missing guard shows up as a fetch.
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
   expect(screen.queryByRole('toolbar', { name: 'Reader tools' })).toBeNull();
-});
-
-it('does not render for a video page without Reader prose', async () => {
-  renderContent(
-    makeLink({
-      id: 'video',
-      url: 'https://youtube.com/watch?v=jNQXAC9IVRw',
-      sourceData: youtubeSourceData,
-    }),
-  );
-  await waitFor(() => expect(screen.queryByRole('status')).toBeNull());
-  expect(screen.queryByRole('toolbar', { name: 'Reader tools' })).toBeNull();
+  const fetched = vi.mocked(fetch).mock.calls.map(([input]) => String(input));
+  expect(fetched.some((url) => url.endsWith('/reader'))).toBe(false);
 });
 
 it('renders nothing when no pane hosts it', () => {
@@ -119,4 +113,27 @@ it('closes the sheet on an outside press and keeps the dock', async () => {
   fireEvent.mouseDown(document.body);
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Type' })).toBeNull());
   expect(screen.getByRole('toolbar', { name: 'Reader tools' })).toBeDefined();
+});
+
+it('closes the sheet when the open link changes', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => json(prose)),
+  );
+  const tree = (id: string) => (
+    <QueryClientProvider client={client}>
+      <Host>
+        <ReaderContent link={makeLink({ id })} />
+      </Host>
+    </QueryClientProvider>
+  );
+  const view = render(tree('first'));
+  fireEvent.click(await screen.findByRole('button', { name: 'Type' }));
+  expect(screen.getByRole('dialog', { name: 'Type' })).toBeDefined();
+  view.rerender(tree('second'));
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Type' })).toBeNull());
+  expect((await screen.findByRole('button', { name: 'Type' })).getAttribute('aria-expanded')).toBe(
+    'false',
+  );
 });

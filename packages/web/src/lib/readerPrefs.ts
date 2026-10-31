@@ -28,13 +28,17 @@ export function createPrefStore<T>({
 }): PrefStore<T> {
   let memory = initial;
   let memoryOnly = false;
+  // What storage held when the last write failed; a different value means storage moved on.
+  let memoryRaw: string | null = null;
   // Object values need a stable identity between reads of the same stored text.
   let cache: { raw: string | null; value: T } = { raw: null, value: initial };
 
   const getSnapshot = (): T => {
-    if (memoryOnly) return memory;
     try {
       const raw = localStorage.getItem(key);
+      // A write failed earlier, so memory is newer than storage until storage changes under us.
+      if (memoryOnly && raw === memoryRaw) return memory;
+      memoryOnly = false;
       if (raw === null) return initial;
       if (cache.raw !== raw) cache = { raw, value: parse(raw) };
       return cache.value;
@@ -61,6 +65,11 @@ export function createPrefStore<T>({
     } catch {
       // Keep this session usable.
       memoryOnly = true;
+      try {
+        memoryRaw = localStorage.getItem(key);
+      } catch {
+        memoryRaw = null;
+      }
     }
     window.dispatchEvent(new Event(event));
   };

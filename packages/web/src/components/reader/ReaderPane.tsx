@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
@@ -414,7 +414,9 @@ export function ReaderPane({
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const original = useOriginal(link, tab === 'original');
   const { type } = useReaderType();
-  const [dockHost, setDockHost] = useState<HTMLElement | null>(null);
+  const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
+  const [dockMounted, setDockMounted] = useState(false);
+  const dockHost = useMemo(() => ({ element: dockElement, report: setDockMounted }), [dockElement]);
   const shownOriginal = tab === 'original' && link ? original : undefined;
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
@@ -474,7 +476,7 @@ export function ReaderPane({
   return (
     <section
       className="silo-readerpane"
-      data-reader-theme={tab === 'reader' ? type.theme : undefined}
+      data-reader-theme={tab === 'reader' && dockMounted ? type.theme : undefined}
       aria-label="Link reader"
       ref={panelRef}
       tabIndex={-1}
@@ -584,7 +586,7 @@ export function ReaderPane({
       >
         <DockHostContext.Provider value={dockHost}>{content}</DockHostContext.Provider>
       </div>
-      <div className="silo-reader-dock-host" ref={setDockHost} />
+      <div className="silo-reader-dock-host" ref={setDockElement} />
     </section>
   );
 }

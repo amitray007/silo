@@ -1,4 +1,4 @@
-import { type ComponentType, createContext, useContext, useId, useState } from 'react';
+import { type ComponentType, createContext, useContext, useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
@@ -18,8 +18,12 @@ const tools: readonly DockTool[] = [
   { id: 'type', label: 'Type', title: 'Type settings', glyph: 'Aa', sheet: TypeSheet },
 ];
 
-/** The element that holds the dock: the reader pane, so the dock floats over its scroll area. */
-export const DockHostContext = createContext<HTMLElement | null>(null);
+/**
+ * The reader pane's side of the dock: the element that holds it, so it floats over the scroll
+ * area, and a report of whether a dock is mounted. The pane themes itself only while one is.
+ */
+export type DockHost = { element: HTMLElement | null; report: (mounted: boolean) => void };
+export const DockHostContext = createContext<DockHost>({ element: null, report: () => {} });
 
 function DockButton({
   tool,
@@ -52,9 +56,15 @@ function DockButton({
 
 /** A floating pill at the bottom of the reader pane. Each tool opens a sheet above it. */
 export function ReaderDock() {
-  const host = useContext(DockHostContext);
+  const { element: host, report } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
+  const hosted = host !== null;
+  useEffect(() => {
+    if (!hosted) return;
+    report(true);
+    return () => report(false);
+  }, [hosted, report]);
   if (!host) return null;
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;

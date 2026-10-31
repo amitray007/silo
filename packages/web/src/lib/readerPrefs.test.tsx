@@ -58,10 +58,10 @@ it('round-trips an update through storage and across remounts', () => {
 it('keeps a stable object between reads of the same stored value', () => {
   localStorage.setItem(KEY, JSON.stringify({ font: 'serif' }));
   const { result, rerender } = renderHook(useReaderType);
-  const before = result.current.type;
+  const { type, style } = result.current;
   rerender();
-  expect(result.current.type).toBe(before);
-  expect(result.current.style).toBe(result.current.style);
+  expect(result.current.type).toBe(type);
+  expect(result.current.style).toBe(style);
 });
 
 it('falls back to defaults for invalid JSON and non-object values', () => {
@@ -169,7 +169,19 @@ it('reproduces the shipped Reader sizes at the default settings', () => {
   const leading = Number(style['--reader-leading' as never]);
   expect(size * leading).toBe(28);
   expect(declared('.silo-reader-prose', 'font-size')).toBe('var(--reader-size, 16px)');
-  expect(declared('.silo-reader-prose', 'line-height')).toBe('var(--reader-leading, 1.75)');
+  // A length, so children with their own font-size inherit 28px as they did before.
+  const lineHeight = declared('.silo-reader-prose', 'line-height');
+  expect(lineHeight).toBe('calc(var(--reader-size, 16px) * var(--reader-leading, 1.75))');
+  expect(size * leading).toBe(28);
+  for (const selector of [
+    '.silo-reader-prose table',
+    '.silo-reader-prose :is(th, td)',
+    '.silo-reader-prose :is(figcaption, caption)',
+    '.silo-reader-callout-title',
+    '.silo-reader-prose :is(code, kbd, samp)',
+  ]) {
+    expect(() => declared(selector, 'line-height'), `${selector} inherits`).toThrow();
+  }
   const expected = [
     ['.silo-reader-prose h1', 26],
     ['.silo-reader-prose :where(h2)', 20],
@@ -191,4 +203,36 @@ it('scales headings, code, and tables in proportion at a larger size', () => {
   expect(px(declared('.silo-reader-prose h1', 'font-size'), 20)).toBe(32.5);
   expect(px(declared('.silo-reader-prose pre', 'font-size'), 24)).toBe(19.5);
   expect(px(declared('.silo-reader-prose table', 'font-size'), 18)).toBe(15.75);
+});
+
+it('follows storage again after a failed write once storage changes', () => {
+  localStorage.setItem(KEY, JSON.stringify({ v: 1, font: 'mono' }));
+  const view = render(<Probe />);
+  expect(screen.getByText('mono-16')).toBeDefined();
+  const write = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('quota');
+  });
+  fireEvent.click(screen.getByRole('button'));
+  expect(screen.getByText('serif-20')).toBeDefined();
+  write.mockRestore();
+  // Storage still holds the old value, so the session's change stays.
+  view.rerender(<Probe />);
+  expect(screen.getByText('serif-20')).toBeDefined();
+  // Another tab writes: storage wins again and later writes persist.
+  act(() => {
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, font: 'inter', size: 22 }));
+    window.dispatchEvent(new StorageEvent('storage', { key: KEY }));
+  });
+  expect(screen.getByText('inter-22')).toBeDefined();
+  fireEvent.click(screen.getByRole('button'));
+  expect(JSON.parse(localStorage.getItem(KEY) ?? '{}')).toMatchObject({ font: 'serif', size: 20 });
+});
+
+it('re-reads on a storage event that names no key', () => {
+  render(<Probe />);
+  act(() => {
+    localStorage.setItem(KEY, JSON.stringify({ v: 1, font: 'mono', size: 19 }));
+    window.dispatchEvent(new StorageEvent('storage', { key: null }));
+  });
+  expect(screen.getByText('mono-19')).toBeDefined();
 });
