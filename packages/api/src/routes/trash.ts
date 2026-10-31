@@ -14,7 +14,12 @@ import {
 import type { Handler, Hono } from 'hono';
 import { z } from 'zod';
 import { runBulkGuarded } from '../bulk-result.js';
-import { toLinkJson, toTrashLinkJson, toTrashSnippetSearchResultJson } from '../link-json.js';
+import {
+  toLinkDetailJson,
+  toLinkJson,
+  toTrashLinkJson,
+  toTrashSnippetSearchResultJson,
+} from '../link-json.js';
 import { batchIdsBodySchema, pageQuerySchema, toPageParams } from '../query-schemas.js';
 import { respondWithLink } from './mutate-link.js';
 
@@ -203,7 +208,7 @@ export function registerTrashRoutes(app: Hono): void {
       return c.json(
         {
           outcome: 'merged',
-          link: toLinkJson(link),
+          link: toLinkDetailJson(link),
           message:
             `The link you restored was merged into an existing live link (id ${result.link.id}) ` +
             `that already had the same URL — its notes and tags were folded in. The original id ` +
@@ -213,7 +218,7 @@ export function registerTrashRoutes(app: Hono): void {
       );
     }
 
-    return c.json({ outcome: 'restored', link: toLinkJson(link) }, 200);
+    return c.json({ outcome: 'restored', link: toLinkDetailJson(link) }, 200);
   });
 
   /**

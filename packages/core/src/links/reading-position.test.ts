@@ -242,6 +242,25 @@ describeIfPg('reading position (integration)', () => {
       expect(result.skipped).toEqual([]);
     });
 
+    it('keeps the position the link already has when the file one is older, and takes a newer one', async () => {
+      const link = await newLink('https://example.com/keep-newer');
+      await ops.setReadingPosition(link.id, 0.2);
+      const file = (position: number, updatedAt: string) => ({
+        version: 1,
+        links: [
+          {
+            url: 'https://example.com/keep-newer',
+            sourceKind: 'link',
+            readingPosition: { position, updatedAt },
+          },
+        ],
+      });
+      await importOps.importLinks(file(0.9, '2020-01-01T00:00:00Z'));
+      expect((await ops.getReadingPosition(link.id))?.position).toBeCloseTo(0.2);
+      await importOps.importLinks(file(0.9, '2099-01-01T00:00:00Z'));
+      expect((await ops.getReadingPosition(link.id))?.position).toBeCloseTo(0.9);
+    });
+
     it('drops an invalid position but still imports the link', async () => {
       const result = await importOps.importLinks({
         version: 1,

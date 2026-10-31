@@ -124,6 +124,8 @@ whitelist — no route ever returns a raw `LinkWithTags`.
 | `/counts`                          | GET    | 200 `{live, trash, purgeWindowDays}` | —     | `purgeWindowDays` is the read-only `PURGE_WINDOW_DAYS` constant (C4) |
 | `/links` (capture)                 | POST   | 201 `{link, deduped}` | 400 `invalid_url`     | web/API captures are `origin: 'user'` (the `◆` mark is agent-only)   |
 | `/links/:id`                       | PATCH  | 200 `{link}`     | 404 `not_found`            | live-scoped edit; empty body is a valid no-op                        |
+| `/links/:id/reading-position`      | PUT    | 200 `{readingPosition}` | 400 `validation_error`; 404 `not_found`; 409 `feed_post_not_editable` | body `{position}` is a finite share 0..1 of the article's words; upsert in its own table (no `links.updated_at` bump); live library links only |
+| `/links/:id/reading-position`      | DELETE | 204              | 404 `not_found`; 409 `feed_post_not_editable` | clears the saved position; clearing an empty one is still 204        |
 | `/links/:id/tags`                  | POST   | 200 `{link}`     | 404 `not_found`            | guarded via `getById` first (`addTag` isn't live-scoped)             |
 | `/links/:id/tags/:tag`             | DELETE | 200 `{link}`     | 404 `not_found`            | guarded via `getById` first; removing an absent tag is a 200 no-op   |
 | `/tags` (standalone create)        | POST   | 201 `{name}`    | 400 `validation_error`     | blank/whitespace name; case-insensitive idempotent (canonical name)  |

@@ -17,7 +17,8 @@ describeIfPg('reading position routes (integration)', () => {
   const harness = setupPgHarness('silo_api_reading_position_test', async () => {
     const core = (await import('@silo/core')) as typeof CoreOps;
     const { createApp } = await import('../app.js');
-    return { core, app: createApp() };
+    const { pool } = await import('@silo/db');
+    return { core, app: createApp(), pool };
   });
 
   async function newLinkId(url: string): Promise<string> {
@@ -116,6 +117,22 @@ describeIfPg('reading position routes (integration)', () => {
     expect((await readLink(id)).readingPosition).toBeNull();
     const second = await app.request(`/api/links/${id}/reading-position`, { method: 'DELETE' });
     expect(second.status).toBe(204);
+  });
+
+  it('DELETE on a feed post -> 409, and PUT too', async () => {
+    const { pool, app } = harness.mod();
+    const feed = await pool.query<{ id: string }>(
+      "insert into feeds (feed_url, title, format, next_poll_at) values ('https://f.test/x', 'F', 'rss', now()) returning id",
+    );
+    const post = await pool.query<{ id: string }>(
+      "insert into links (url, canonical_url, source_kind, feed_id) values ('https://f.test/p', 'https://f.test/p', 'link', $1) returning id",
+      [feed.rows[0]?.id],
+    );
+    const id = post.rows[0]?.id ?? '';
+    const del = await app.request(`/api/links/${id}/reading-position`, { method: 'DELETE' });
+    expect(del.status).toBe(409);
+    expect(((await del.json()) as ErrorEnvelope).error).toBe('feed_post_not_editable');
+    expect((await put(`/api/links/${id}/reading-position`, { position: 0.5 })).status).toBe(409);
   });
 
   it('list responses do not carry readingPosition', async () => {

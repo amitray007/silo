@@ -42,6 +42,11 @@ export async function getReadingPosition(linkId: string): Promise<ReadingPositio
  * `InvalidReadingPositionError` for a value outside 0..1 or not finite, and
  * `FeedPostNotEditableError` for a feed post. The write goes to its own table,
  * so it never bumps `links.updated_at`.
+ *
+ * Last write wins on purpose. The web client sends one request at a time per link and queues
+ * the newest position behind it, so a slow earlier request cannot land after a later one from
+ * the same tab. The request carries no timestamp, so there is nothing to guard the upsert with;
+ * two tabs reading the same article race, and the later request wins.
  */
 export async function setReadingPosition(
   linkId: string,

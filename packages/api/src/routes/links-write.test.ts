@@ -548,6 +548,20 @@ describeIfPg('A3 write routes (integration)', () => {
       expect(bAfter?.tags).toContain('u5-batch-tag');
     });
 
+    it("carries each link's reading position", async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/u5-batch-get-position',
+        sourceKind: 'link',
+      });
+      await core.setReadingPosition(created.id, 0.25);
+      const res = await postJson(app, '/api/links/batch-get', { ids: [created.id] });
+      const body = (await res.json()) as {
+        results: Array<{ link: { readingPosition: { position: number } | null } | null }>;
+      };
+      expect(body.results[0]?.link?.readingPosition?.position).toBe(0.25);
+    });
+
     it('empty ids array -> 400 validation_error', async () => {
       const { app } = harness.mod();
       const res = await postJson(app, '/api/links/batch/tags', { ids: [], tag: 'whatever' });
@@ -638,6 +652,7 @@ describeIfPg('A3 write routes (integration)', () => {
       };
       const found = body.results.find((r) => r.id === created.id);
       expect(found?.link?.extractedText).toBe('full body text');
+      expect(found?.link?.readingPosition).toBeNull();
       const missing = body.results.find((r) => r.id === bogusId);
       expect(missing?.link).toBeNull();
     });
