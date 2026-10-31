@@ -28,7 +28,8 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - Trend/pattern surfacing over time — needs the activity trail above.
 
 ### Deferred capture richness
-- **Separate reaction/highlight/why fields** — decided against; a single free-form `notes` field per item covers this. Revisit only if one note field proves too coarse.
+- **Separate reaction/highlight/why fields** - reversed on 2026-10-31. Passage highlights with passage notes now ship as their own `highlights` table, with API routes and MCP tools (`add_highlight`, `edit_highlight`, `delete_highlight`); see [`docs/methods/reader-tools.md`](../methods/reader-tools.md), slice 3. The link-level `notes` field stays as it was. Reaction and why fields are still not planned.
+- **Search passage notes** - highlight notes are not searchable yet. Add them to the search index and the command palette when passage notes prove worth finding by text.
 - **Mechanical semantic/embedding index** — silo stores + matches vectors so "find by meaning" is fast (NOT AI inside silo; the agent still judges relevance). Later increment on the same base.
 
 ### Deliberate agent-native boundary
