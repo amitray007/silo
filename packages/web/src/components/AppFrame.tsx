@@ -10,6 +10,7 @@ import { HoverPreviewProvider } from './HoverPreviewContext';
 import { MobileBar } from './MobileBar';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
+import { SearchSiloContext } from './SearchSiloContext';
 import { SettingsProvider, useSettings } from './SettingsContext';
 import { SettingsModal } from './SettingsModal';
 import { Sidebar } from './Sidebar';
@@ -120,6 +121,14 @@ export function AppFrame() {
   const currentTag = useMatch('/tags/:name')?.params.name;
   usePasteCapture(currentTag);
   const commandPalette = useCommandPalette();
+  const { setQ, openPalette } = commandPalette;
+  const searchSilo = useCallback(
+    (phrase: string) => {
+      setQ(phrase);
+      openPalette();
+    },
+    [setQ, openPalette],
+  );
   const closeDrawer = useCallback(() => setDrawerOpen(false), []);
   const toggleSidebar = useCallback(() => {
     if (!matchMedia(layoutMedia.sidebar).matches) {
@@ -215,51 +224,53 @@ export function AppFrame() {
   return (
     <SettingsProvider>
       <ThemeSettingsSync />
-      <HoverPreviewProvider>
-        <RowMenuProvider>
-          <div className="silo-frame" data-collapsed={collapsed}>
-            <div className="silo-band">
-              <button
-                type="button"
-                tabIndex={-1}
-                className="silo-scrim"
-                data-open={drawerOpen}
-                aria-hidden="true"
-                onClick={closeDrawer}
-              />
-              <Sidebar
-                id={DRAWER_ID}
-                ref={sidebarRef}
-                open={drawerOpen}
-                onNavigate={closeDrawer}
-                onOpenSearch={() => {
-                  closeDrawer();
-                  commandPalette.openPalette();
-                }}
-                onToggleSidebar={toggleSidebar}
-              />
-              <main className="silo-content" inert={drawerOpen}>
+      <SearchSiloContext.Provider value={searchSilo}>
+        <HoverPreviewProvider>
+          <RowMenuProvider>
+            <div className="silo-frame" data-collapsed={collapsed}>
+              <div className="silo-band">
                 <button
-                  ref={menuButtonRef}
                   type="button"
-                  className="silo-list-menu silo-reader-iconbtn"
-                  aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
-                  aria-expanded={drawerOpen}
-                  aria-controls={DRAWER_ID}
-                  onClick={showSidebar}
-                >
-                  <ReaderIcon name="sidebar" />
-                </button>
-                <Outlet context={{ showSidebar, sidebarHidden: collapsed }} />
-                <MobileBar onSearch={commandPalette.openPalette} />
-              </main>
-              <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
+                  tabIndex={-1}
+                  className="silo-scrim"
+                  data-open={drawerOpen}
+                  aria-hidden="true"
+                  onClick={closeDrawer}
+                />
+                <Sidebar
+                  id={DRAWER_ID}
+                  ref={sidebarRef}
+                  open={drawerOpen}
+                  onNavigate={closeDrawer}
+                  onOpenSearch={() => {
+                    closeDrawer();
+                    commandPalette.openPalette();
+                  }}
+                  onToggleSidebar={toggleSidebar}
+                />
+                <main className="silo-content" inert={drawerOpen}>
+                  <button
+                    ref={menuButtonRef}
+                    type="button"
+                    className="silo-list-menu silo-reader-iconbtn"
+                    aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
+                    aria-expanded={drawerOpen}
+                    aria-controls={DRAWER_ID}
+                    onClick={showSidebar}
+                  >
+                    <ReaderIcon name="sidebar" />
+                  </button>
+                  <Outlet context={{ showSidebar, sidebarHidden: collapsed }} />
+                  <MobileBar onSearch={commandPalette.openPalette} />
+                </main>
+                <RowMenuLayer palette={commandPalette} drawerOpen={drawerOpen} />
+              </div>
+              <CommandPalette palette={commandPalette} />
+              <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
             </div>
-            <CommandPalette palette={commandPalette} />
-            <SettingsLayer palette={commandPalette} closeDrawer={closeDrawer} />
-          </div>
-        </RowMenuProvider>
-      </HoverPreviewProvider>
+          </RowMenuProvider>
+        </HoverPreviewProvider>
+      </SearchSiloContext.Provider>
     </SettingsProvider>
   );
 }

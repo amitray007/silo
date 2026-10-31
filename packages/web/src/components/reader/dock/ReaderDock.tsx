@@ -12,8 +12,14 @@ import {
 import { createPortal } from 'react-dom';
 import { useSaveReadingPosition } from '../../../api/hooks';
 import type { LinkJson } from '../../../api/types';
+import { useHighlightPrefs } from '../../../lib/readerPrefs';
+import { deriveTitleFromUrl } from '../../../lib/url';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
+import { HighlightSheet } from '../highlights/HighlightSheet';
+import { HighlightsLayer } from '../highlights/HighlightsLayer';
+import { NotesSheet } from '../highlights/NotesSheet';
+import { type HighlightsApi, useHighlights } from '../highlights/useHighlights';
 import { PencilOverlay } from '../pencil/PencilOverlay';
 import { PencilSheet } from '../pencil/PencilSheet';
 import { type PencilApi, usePencil } from '../pencil/usePencil';
@@ -27,7 +33,7 @@ const OutlineRail = lazy(() =>
 );
 
 /** What a dock tool's sheet can read. Later slices add their tools' state here. */
-type DockApi = { pencil: PencilApi };
+type DockApi = { pencil: PencilApi; highlights: HighlightsApi; closeSheet: () => void };
 
 type DockTool = {
   id: string;
@@ -38,6 +44,10 @@ type DockTool = {
   /** The glyph beside the label. */
   glyph: ReactNode;
   sheet: ComponentType<{ api: DockApi }>;
+  /** A tool with nothing to show yet: the button stays, greyed, with this title. */
+  unavailable?: { when: (api: DockApi) => boolean; title: string };
+  /** A count beside the label. */
+  badge?: (api: DockApi) => number;
   /** A tool with a main action beside its sheet chevron. */
   split?: {
     mainTitle: string;
@@ -75,6 +85,39 @@ const tools: readonly DockTool[] = [
       toggle: (api) => api.pencil.toggleEnabled(),
     },
   },
+  {
+    id: 'highlight',
+    label: 'Highlight',
+    title: 'Highlight',
+    heading: 'Highlight',
+    glyph: <ReaderIcon name="highlighter" size={19} />,
+    sheet: ({ api }) => (
+      <HighlightSheet color={api.highlights.color} setColor={api.highlights.setColor} />
+    ),
+  },
+  {
+    id: 'notes',
+    label: 'Notes',
+    title: 'Notes',
+    heading: 'Notes',
+    glyph: <ReaderIcon name="note" size={19} />,
+    // Slice 3b swaps this list for the notes lane.
+    sheet: ({ api }) => (
+      <NotesSheet
+        resolved={api.highlights.resolved}
+        orphans={api.highlights.orphans}
+        canWrite={api.highlights.canWrite}
+        onOpen={(id) => {
+          api.closeSheet();
+          api.highlights.jump(id);
+          api.highlights.setOpenNote(id);
+        }}
+        onDelete={api.highlights.remove}
+      />
+    ),
+    unavailable: { when: (api) => api.highlights.items.length === 0, title: 'No highlights yet' },
+    badge: (api) => api.highlights.items.length,
+  },
 ];
 
 /**
@@ -97,27 +140,33 @@ export const DockHostContext = createContext<DockHost>({
 
 function DockButton({
   tool,
+  api,
   open,
   sheetId,
   onToggle,
 }: {
   tool: DockTool;
+  api: DockApi;
   open: boolean;
   sheetId: string;
   onToggle: () => void;
 }) {
+  const unavailable = tool.unavailable?.when(api) ?? false;
+  const count = tool.badge?.(api) ?? 0;
   return (
     <button
       type="button"
       className="silo-reader-dockbtn"
-      title={tool.title}
+      title={unavailable ? tool.unavailable?.title : tool.title}
       aria-haspopup="dialog"
       aria-expanded={open}
       aria-controls={open ? sheetId : undefined}
-      onClick={onToggle}
+      aria-disabled={unavailable || undefined}
+      onClick={unavailable ? undefined : onToggle}
     >
       {tool.glyph}
       {tool.label}
+      {count > 0 && <span className="silo-reader-dockbadge">{count}</span>}
     </button>
   );
 }
@@ -172,7 +221,7 @@ function SplitDockButton({
   );
 }
 
-/** A reading position is saved only for a live library link; trash and feed posts refuse it. */
+/** Reading positions and highlights are saved only for a live library link; trash and feed posts refuse them. */
 function canSavePosition(link: LinkJson, trashed: boolean): boolean {
   return !trashed && link.feedId === null;
 }
@@ -194,6 +243,15 @@ export function ReaderDock({
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
   const save = useSaveReadingPosition(link.id);
+  const { color: highlightColor } = useHighlightPrefs();
+  const highlights = useHighlights({
+    link,
+    prose,
+    scroll,
+    writable: canSavePosition(link, trashed),
+    // While the Highlight sheet is open, a selection is highlighted at once.
+    autoColor: openId === 'highlight' ? highlightColor : null,
+  });
   const pencil = usePencil({
     prose,
     scroll,
@@ -209,7 +267,8 @@ export function ReaderDock({
     return () => report(false);
   }, [hosted, report]);
   if (!host) return null;
-  const api: DockApi = { pencil };
+  const closeSheet = () => setOpenId(null);
+  const api: DockApi = { pencil, highlights, closeSheet };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return createPortal(
@@ -220,6 +279,11 @@ export function ReaderDock({
         </Suspense>
       )}
       <PencilOverlay pencil={pencil} prose={prose} scroll={scroll} />
+      <HighlightsLayer
+        api={highlights}
+        title={link.title ?? deriveTitleFromUrl(link.url)}
+        container={host}
+      />
       <div className="silo-reader-dock">
         <div className="silo-reader-dock-pill" role="toolbar" aria-label="Reader tools">
           {tools.map((tool) => {
@@ -238,6 +302,7 @@ export function ReaderDock({
               <DockButton
                 key={tool.id}
                 tool={tool}
+                api={api}
                 open={openId === tool.id}
                 sheetId={sheetId}
                 onToggle={toggle}

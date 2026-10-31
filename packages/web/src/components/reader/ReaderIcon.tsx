@@ -4,6 +4,8 @@ const paths = {
   sliders:
     'M3 6h4m6 0h8M3 18h9m6 0h3M13 6a3 3 0 1 1-6 0 3 3 0 0 1 6 0M18 18a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
   note: 'M5 3h14v13l-5 5H5zM14 16h5M14 16v5M8 8h8M8 12h6',
+  highlighter: 'm13.5 4.5 6 6-8.5 8.5H5.5v-6zM4 21h7',
+  quote: 'M5 17c0-4 1-7 4-9M13 17c0-4 1-7 4-9M5 17h4v-4H5zM13 17h4v-4h-4z',
   page: 'M14 3.5H7.5a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2h9a2 2 0 0 0 2-2V8M14 3.5 18.5 8M14 3.5V8h4.5M9 12.5h6M9 16h4',
   sync: 'M20 7a8 8 0 0 0-13-3L4 7m0-5v5h5M4 17a8 8 0 0 0 13 3l3-3m0 5v-5h-5',
   refresh: 'M20 9a8 8 0 1 0 0 6M20 3v6h-6',
@@ -49,6 +51,8 @@ const paths = {
   globe:
     'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21M12 3C9.5 5.5 8.25 8.5 8.25 12S9.5 18.5 12 21',
 } as const;
+
+export type ReaderIconName = keyof typeof paths;
 
 export function readerIconPath(name: keyof typeof paths): string {
   return paths[name];

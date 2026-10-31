@@ -1,0 +1,560 @@
+/* Reader highlights: painted passages, the selection toolbar, the note popover and the
+   Highlight and Notes sheets. Colours come from highlight-palette.css. */
+
+/* Palette tokens for dots, bars and rules. */
+[data-color="yellow"] {
+  --hl: var(--hl-yellow-edge);
+}
+[data-color="green"] {
+  --hl: var(--hl-green-edge);
+}
+[data-color="blue"] {
+  --hl: var(--hl-blue-edge);
+}
+[data-color="pink"] {
+  --hl: var(--hl-pink-edge);
+}
+[data-color="violet"] {
+  --hl: var(--hl-violet-edge);
+}
+
+/* Passages, painted with the CSS Custom Highlight API (no DOM is wrapped). */
+::highlight(silo-hl-yellow) {
+  background-color: var(--hl-yellow);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-green) {
+  background-color: var(--hl-green);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-blue) {
+  background-color: var(--hl-blue);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-pink) {
+  background-color: var(--hl-pink);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-violet) {
+  background-color: var(--hl-violet);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-ov-yellow) {
+  background-color: var(--hl-yellow-ov);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-ov-green) {
+  background-color: var(--hl-green-ov);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-ov-blue) {
+  background-color: var(--hl-blue-ov);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-ov-pink) {
+  background-color: var(--hl-pink-ov);
+  color: var(--hl-text);
+}
+::highlight(silo-hl-ov-violet) {
+  background-color: var(--hl-violet-ov);
+  color: var(--hl-text);
+}
+/* Five layers deep a colour repeats; the inner one gets a solid 1.5px underline in its own colour. */
+::highlight(silo-hl-dup-yellow) {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--hl-yellow-edge);
+}
+::highlight(silo-hl-dup-green) {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--hl-green-edge);
+}
+::highlight(silo-hl-dup-blue) {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--hl-blue-edge);
+}
+::highlight(silo-hl-dup-pink) {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--hl-pink-edge);
+}
+::highlight(silo-hl-dup-violet) {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-decoration-color: var(--hl-violet-edge);
+}
+::highlight(silo-hl-hover) {
+  background-color: oklch(70% 0.1 85 / 0.32);
+  text-decoration: underline;
+  text-decoration-thickness: 2px;
+  text-decoration-color: currentcolor;
+}
+::highlight(silo-hl-pulse) {
+  background-color: color-mix(in oklch, var(--ink) 20%, transparent);
+}
+
+/* Dock: the Notes count. */
+.silo-reader-dockbtn {
+  position: relative;
+}
+.silo-reader-dockbtn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+.silo-reader-dockbadge {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  min-width: 15px;
+  height: 15px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 15px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Colour dots */
+.silo-colors {
+  display: flex;
+  gap: 8px;
+  padding: 4px;
+  margin: -4px;
+}
+.silo-color {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--hl);
+  box-shadow: inset 0 0 0 1px oklch(0% 0 0 / 12%);
+  cursor: pointer;
+}
+.silo-color[aria-pressed="true"] {
+  outline: 0;
+  box-shadow:
+    0 0 0 2px var(--bg2),
+    0 0 0 3.5px var(--ink);
+}
+.silo-dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px;
+  margin: -5px;
+}
+.silo-dot14 {
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--hl);
+  box-shadow: inset 0 0 0 1px oklch(0% 0 0 / 12%);
+  cursor: pointer;
+}
+.silo-dot14[aria-pressed="true"] {
+  box-shadow:
+    0 0 0 2px var(--bg2),
+    0 0 0 3.5px var(--ink);
+}
+.silo-dot14:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* Selection toolbar */
+.silo-sb,
+.silo-notepop {
+  line-height: 1.5;
+}
+.silo-sb-icon .silo-reader-icon,
+.silo-sb-more .silo-reader-icon,
+.silo-sb-menu .silo-reader-icon {
+  width: 17px;
+  height: 17px;
+}
+.silo-notepop .silo-stepper-btn .silo-reader-icon {
+  width: 15px;
+  height: 15px;
+}
+.silo-sb {
+  position: fixed;
+  z-index: 900;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  animation: siloSbPop 120ms var(--ease-out);
+}
+.silo-sb::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 2px;
+  background: var(--bg2);
+  transform: rotate(45deg);
+  box-shadow: 2px 2px 3px -1px oklch(0% 0 0 / 12%);
+}
+.silo-sb[data-flip="true"]::after {
+  bottom: auto;
+  top: -5px;
+  box-shadow: -2px -2px 3px -1px oklch(0% 0 0 / 12%);
+}
+.silo-sb-item {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+.silo-sb-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.silo-sb-btn:hover,
+.silo-sb-btn:focus-visible,
+.silo-sb-btn[aria-expanded="true"] {
+  background: var(--hov);
+}
+.silo-sb-more {
+  padding: 0 7px;
+}
+.silo-sb-divider {
+  width: 1px;
+  height: 16px;
+  background: var(--line-2);
+}
+.silo-sb-icon {
+  position: relative;
+  display: inline-grid;
+}
+.silo-sb-icon i {
+  position: absolute;
+  right: -3px;
+  bottom: -2px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--hl);
+  box-shadow: 0 0 0 1.5px var(--bg2);
+}
+.silo-sb-picker {
+  position: absolute;
+  bottom: calc(100% + 12px);
+  left: 50%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 12px;
+  border-radius: 12px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  transform: translateX(-50%);
+  transform-origin: 50% 100%;
+  animation: siloSbPicker 120ms var(--ease-out);
+}
+/* Bridges the gap to the button so the pointer can travel up without closing it. */
+.silo-sb-picker::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 100%;
+  height: 14px;
+}
+.silo-sb-picker::after {
+  content: "";
+  position: absolute;
+  left: 50%;
+  bottom: -5px;
+  width: 10px;
+  height: 10px;
+  margin-left: -5px;
+  border-radius: 2px;
+  background: var(--bg2);
+  transform: rotate(45deg);
+  box-shadow: 2px 2px 3px -1px oklch(0% 0 0 / 12%);
+}
+.silo-sb[data-flip="true"] .silo-sb-picker {
+  bottom: auto;
+  top: calc(100% + 12px);
+  transform-origin: 50% 0;
+}
+.silo-sb[data-flip="true"] .silo-sb-picker::before {
+  top: auto;
+  bottom: 100%;
+}
+.silo-sb[data-flip="true"] .silo-sb-picker::after {
+  bottom: auto;
+  top: -5px;
+  box-shadow: -2px -2px 3px -1px oklch(0% 0 0 / 12%);
+}
+.silo-sb-menu {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 10px);
+  width: 270px;
+  padding: 4px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+}
+.silo-sb[data-flip="true"] .silo-sb-menu {
+  bottom: auto;
+  top: calc(100% + 10px);
+}
+.silo-sb-menu button {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  width: 100%;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 7px;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.silo-sb-menu button:hover,
+.silo-sb-menu button:focus-visible {
+  background: var(--hov);
+}
+.silo-sb-menu svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--mut);
+}
+.silo-sb-menu strong {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+}
+.silo-sb-menu small {
+  display: block;
+  margin-top: 1px;
+  font-size: 12px;
+  line-height: 16px;
+  color: var(--fnt);
+}
+.silo-sb-toast {
+  position: fixed;
+  z-index: 950;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--elev-2);
+}
+@keyframes siloSbPop {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.96);
+  }
+}
+@keyframes siloSbPicker {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) scale(0.94);
+  }
+}
+
+/* Note popover */
+.silo-notepop {
+  position: fixed;
+  z-index: 910;
+  width: 280px;
+  padding: 10px 12px 8px;
+  border-radius: 8px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  animation: siloNotePop 120ms var(--ease-out);
+}
+.silo-notepop:focus-within {
+  box-shadow:
+    var(--elev-2),
+    0 0 0 2px color-mix(in oklch, var(--ink) 18%, transparent);
+}
+.silo-notepop-field {
+  display: block;
+  width: 100%;
+  max-height: 180px;
+  padding: 0;
+  border: 0;
+  outline: 0;
+  resize: none;
+  overflow: auto;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+}
+.silo-notepop-field::placeholder {
+  color: var(--fnt);
+}
+.silo-notepop .silo-notepop-field:focus-visible {
+  outline: none;
+}
+.silo-notepop-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+@keyframes siloNotePop {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
+
+/* The notes list sheet */
+.silo-empty-note {
+  margin: 0;
+  font-size: 13px;
+  line-height: 20px;
+  color: var(--fnt);
+}
+.silo-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+}
+.silo-rows button:not(.silo-stepper-btn) {
+  display: flex;
+  gap: 10px;
+  width: 100%;
+  padding: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.silo-rows button:not(.silo-stepper-btn):hover {
+  background: var(--hov);
+}
+.silo-row-orphan {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.silo-row-line {
+  display: flex;
+  flex: 1;
+  gap: 10px;
+  min-width: 0;
+  padding: 8px;
+}
+.silo-row-bar {
+  flex: none;
+  width: 3px;
+  border-radius: 2px;
+  background: var(--hl, var(--line-2));
+}
+.silo-row-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.silo-row-snippet {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  color: var(--ink);
+}
+.silo-row-note {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+  color: var(--fnt);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-dockbtn[aria-disabled="true"]:hover {
+    background: none;
+    color: var(--mut);
+  }
+}
+
+/* Touch: the toolbar, popover and sheet controls reach 40px (docs/rules/web-react.md). */
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-sb-btn {
+    height: 40px;
+  }
+  .silo-sb-menu button {
+    min-height: 40px;
+  }
+  /* Dot size plus gap is 40px, so each dot's touch cell is 40px wide. */
+  .silo-colors {
+    gap: 12px;
+  }
+  .silo-color {
+    width: 28px;
+    height: 28px;
+  }
+  .silo-dot14 {
+    width: 22px;
+    height: 22px;
+  }
+  .silo-dots,
+  .silo-sb-picker {
+    gap: 18px;
+  }
+  .silo-notepop .silo-stepper-btn,
+  .silo-rows .silo-stepper-btn {
+    min-width: 40px;
+    height: 40px;
+  }
+  .silo-rows button:not(.silo-stepper-btn) {
+    min-height: 40px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .silo-sb,
+  .silo-sb-picker,
+  .silo-notepop {
+    animation: none;
+  }
+}

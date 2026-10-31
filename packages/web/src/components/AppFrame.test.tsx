@@ -8,6 +8,7 @@ import { makeLink } from '../test/fixtures';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
 import { useRowMenu } from './RowMenuContext';
+import { useSearchSilo } from './SearchSiloContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -42,6 +43,16 @@ function PathProbe() {
   return <span data-testid="current-path">{location.pathname}</span>;
 }
 
+/** What the Reader's selection toolbar does: ask the frame to open search with a phrase. */
+function SearchSiloProbe() {
+  const searchSilo = useSearchSilo();
+  return (
+    <button type="button" onClick={() => searchSilo('quoted passage')}>
+      search silo
+    </button>
+  );
+}
+
 function renderAppFrame(initialEntries: string[] = ['/']) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -60,6 +71,7 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
                     </>
                   }
                 />
+                <Route path="/search-silo" element={<SearchSiloProbe />} />
                 <Route path="/trash" element={<div>trash content</div>} />
                 <Route path="/probe" element={<EscapeProbe />} />
                 <Route path="/settings/:tab" element={<SettingsView />} />
@@ -86,6 +98,13 @@ describe('AppFrame', () => {
 
   afterEach(() => {
     vi.unstubAllGlobals();
+  });
+
+  it('opens the command palette with a phrase already typed, through the context', async () => {
+    renderAppFrame(['/search-silo']);
+    fireEvent.click(screen.getByRole('button', { name: 'search silo' }));
+    const input = await screen.findByRole('combobox');
+    expect((input as HTMLInputElement).value).toBe('quoted passage');
   });
 
   it('renders the sidebar and the routed outlet content (the theme toggle now lives in Settings, not the sidebar)', () => {

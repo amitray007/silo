@@ -1,0 +1,317 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { type ReactNode, useState } from 'react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { useLink } from '../../../api/hooks';
+import type { HighlightJson, LinkJson } from '../../../api/types';
+import { makeLink } from '../../../test/fixtures';
+import { DockHostContext } from '../dock/ReaderDock';
+import { ReaderContent } from '../ReaderContent';
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+
+const HTML = '<p>Alpha beta gamma delta.</p><p>The quick brown fox jumps over the lazy dog.</p>';
+const prose = { capturedAt: '2026-01-01T00:00:00Z', contentHtml: HTML, contentImages: [] };
+const TEXT = 'Alpha beta gamma delta. The quick brown fox jumps over the lazy dog.';
+
+function highlight(overrides: Partial<HighlightJson> = {}): HighlightJson {
+  const quote = overrides.quote ?? 'quick brown fox';
+  const start = TEXT.indexOf(quote);
+  return {
+    id: 'h1',
+    quote,
+    prefix: TEXT.slice(Math.max(0, start - 10), start),
+    suffix: TEXT.slice(start + quote.length, start + quote.length + 10),
+    startOffset: start,
+    endOffset: start + quote.length,
+    color: 'yellow',
+    note: null,
+    createdAt: '2026-01-01T00:00:00Z',
+    updatedAt: '2026-01-01T00:00:00Z',
+    ...overrides,
+  };
+}
+
+let registry: Map<string, { ranges: Range[]; priority: number }>;
+let posts: Array<Record<string, unknown>>;
+let serverLink: LinkJson;
+let restore: Array<() => void> = [];
+
+function stubGlobal(target: object, key: string, value: unknown) {
+  const original = Object.getOwnPropertyDescriptor(target, key);
+  Object.defineProperty(target, key, { configurable: true, writable: true, value });
+  restore.push(() => {
+    if (original) Object.defineProperty(target, key, original);
+    else Reflect.deleteProperty(target, key);
+  });
+}
+
+beforeEach(() => {
+  localStorage.clear();
+  registry = new Map();
+  posts = [];
+  restore = [];
+  class FakeHighlight {
+    ranges: Range[];
+    priority = 0;
+    constructor(...ranges: Range[]) {
+      this.ranges = ranges;
+    }
+  }
+  stubGlobal(globalThis, 'Highlight', FakeHighlight);
+  stubGlobal(globalThis, 'CSS', {
+    escape: (value: string) => value,
+    highlights: {
+      set: (name: string, mark: { ranges: Range[]; priority: number }) => registry.set(name, mark),
+      delete: (name: string) => registry.delete(name),
+    },
+  });
+  stubGlobal(HTMLElement.prototype, 'scrollTo', vi.fn());
+  stubGlobal(Range.prototype, 'getClientRects', () => [
+    { left: 10, top: 10, right: 110, bottom: 30, width: 100, height: 20 },
+  ]);
+  stubGlobal(Range.prototype, 'getBoundingClientRect', () => ({
+    left: 10,
+    top: 200,
+    right: 110,
+    bottom: 220,
+    width: 100,
+    height: 20,
+  }));
+  serverLink = makeLink({ id: 'hl', highlights: [] });
+});
+afterEach(() => {
+  for (const undo of restore.reverse()) undo();
+  vi.unstubAllGlobals();
+});
+
+function Host({ children }: { children: ReactNode }) {
+  const [host, setHost] = useState<HTMLElement | null>(null);
+  return (
+    <DockHostContext.Provider
+      value={{ element: host, scroll: host, panel: host, report: () => {} }}
+    >
+      {children}
+      <div ref={setHost} data-testid="host" />
+    </DockHostContext.Provider>
+  );
+}
+
+function Reader() {
+  const detail = useLink('hl');
+  return detail.data ? <ReaderContent link={detail.data.link} /> : null;
+}
+
+function mount(opts: { trashed?: boolean } = {}) {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/reader')) return json(prose);
+      if (url.endsWith('/highlights') && init?.method === 'POST') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posts.push(body);
+        return json({ highlight: { ...highlight(), ...body, id: 'server-1' } }, 201);
+      }
+      if (url.startsWith('/api/highlights/') && init?.method === 'PATCH') {
+        const body = JSON.parse(String(init.body)) as Record<string, unknown>;
+        posts.push(body);
+        return json({ highlight: { ...highlight(), ...body } });
+      }
+      if (url.startsWith('/api/links/hl')) return json({ link: serverLink });
+      return json({ error: 'not_found', message: 'none' }, 404);
+    }),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  void opts;
+  return render(
+    <QueryClientProvider client={client}>
+      <Host>
+        <Reader />
+      </Host>
+    </QueryClientProvider>,
+  );
+}
+
+/** A button in the floating selection toolbar, not the dock's own Highlight and Notes. */
+async function toolbarButton(name: RegExp | string) {
+  const toolbar = await screen.findByRole('toolbar', { name: 'Selection' });
+  return within(toolbar).getByRole('button', { name });
+}
+
+function select(text: string) {
+  const prose = document.querySelector('.silo-reader-prose') as HTMLElement;
+  const walker = document.createTreeWalker(prose, NodeFilter.SHOW_TEXT);
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const at = (node as Text).data.indexOf(text);
+    if (at < 0) continue;
+    const range = document.createRange();
+    range.setStart(node, at);
+    range.setEnd(node, at + text.length);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+    fireEvent.mouseUp(prose);
+    return;
+  }
+  throw new Error(`no text ${text}`);
+}
+
+it('paints every stored highlight and leaves an orphan unpainted but listed', async () => {
+  serverLink = makeLink({
+    id: 'hl',
+    highlights: [
+      highlight(),
+      highlight({
+        id: 'h2',
+        quote: 'text that is gone now',
+        color: 'green',
+        startOffset: null,
+        endOffset: null,
+      }),
+    ],
+  });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  expect(registry.get('silo-hl-yellow')?.ranges[0]?.toString()).toBe('quick brown fox');
+  expect(registry.has('silo-hl-green')).toBe(false);
+  fireEvent.click(await screen.findByRole('button', { name: /Notes/ }));
+  expect(await screen.findByText('Passage not found')).toBeDefined();
+  expect(screen.getByText('quick brown fox')).toBeDefined();
+});
+
+it('paints an overlap piece in the innermost colour above the single layers', async () => {
+  serverLink = makeLink({
+    id: 'hl',
+    highlights: [
+      highlight({ id: 'a', quote: 'quick brown fox jumps', color: 'yellow' }),
+      highlight({ id: 'b', quote: 'brown fox', color: 'blue' }),
+    ],
+  });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-ov-blue')).toBeDefined());
+  expect(registry.get('silo-hl-ov-blue')?.ranges[0]?.toString()).toBe('brown fox');
+  expect(registry.get('silo-hl-ov-blue')?.priority).toBeGreaterThan(
+    registry.get('silo-hl-blue')?.priority ?? 99,
+  );
+});
+
+it('disables Notes with a "No highlights yet" title when there are none, and shows a count otherwise', async () => {
+  mount();
+  const notes = await screen.findByRole('button', { name: /Notes/ });
+  expect(notes.getAttribute('aria-disabled')).toBe('true');
+  expect(notes.getAttribute('title')).toBe('No highlights yet');
+  fireEvent.click(notes);
+  expect(screen.queryByRole('dialog', { name: 'Notes' })).toBeNull();
+});
+
+it('lists highlights in the Notes sheet and counts them', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'my note' })] });
+  mount();
+  const notes = await screen.findByRole('button', { name: /Notes/ });
+  expect(notes.querySelector('.silo-reader-dockbadge')?.textContent).toBe('1');
+  fireEvent.click(notes);
+  expect(await screen.findByText('my note')).toBeDefined();
+});
+
+it('shows the selection toolbar for a selection and saves a highlight with offsets and context', async () => {
+  mount();
+  await screen.findByText(/Alpha beta/);
+  select('brown fox');
+  fireEvent.click(await toolbarButton(/Highlight/));
+  await waitFor(() => expect(posts).toHaveLength(1));
+  const start = TEXT.indexOf('brown fox');
+  expect(posts[0]).toMatchObject({
+    quote: 'brown fox',
+    prefix: 'Alpha beta gamma delta. The quick ',
+    suffix: ' jumps over the lazy dog.',
+    startOffset: start,
+    endOffset: start + 9,
+    color: 'yellow',
+  });
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+});
+
+it('gives an overlapping new highlight the next free colour', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ quote: 'quick brown fox' })] });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  select('brown fox jumps');
+  fireEvent.click(await toolbarButton(/Highlight/));
+  await waitFor(() => expect(posts).toHaveLength(1));
+  expect(posts[0]?.color).toBe('green');
+  expect(JSON.parse(localStorage.getItem('silo.readerHighlight') ?? '{}').color).toBe('green');
+});
+
+it('highlights a selection at once while the Highlight sheet is open', async () => {
+  mount();
+  await screen.findByText(/Alpha beta/);
+  const dock = screen.getByRole('toolbar', { name: 'Reader tools' });
+  fireEvent.click(dock.querySelector('button[title="Highlight"]') as Element);
+  fireEvent.click(screen.getByRole('button', { name: 'pink' }));
+  select('lazy dog');
+  await waitFor(() => expect(posts).toHaveLength(1));
+  expect(posts[0]).toMatchObject({ quote: 'lazy dog', color: 'pink' });
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+});
+
+it('Note highlights and opens the note popover on the new highlight', async () => {
+  mount();
+  await screen.findByText(/Alpha beta/);
+  select('Alpha beta');
+  fireEvent.click(await toolbarButton(/Note/));
+  const field = await screen.findByRole('textbox', { name: 'Note' });
+  fireEvent.change(field, { target: { value: 'first thoughts' } });
+  fireEvent.blur(field);
+  await waitFor(() => expect(posts.some((body) => body.note === 'first thoughts')).toBe(true));
+});
+
+it('rolls a failed note save back and says so', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight({ note: 'keep me' })] });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  fetchFails();
+  fireEvent.click(await screen.findByRole('button', { name: /Notes/ }));
+  fireEvent.click(await screen.findByText('keep me'));
+  const field = await screen.findByRole('textbox', { name: 'Note' });
+  fireEvent.change(field, { target: { value: 'changed' } });
+  fireEvent.blur(field);
+  expect(await screen.findByRole('alert')).toBeDefined();
+  expect(screen.getByRole('alert').textContent).toMatch(/save the note/);
+});
+
+function fetchFails() {
+  const original = globalThis.fetch;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) =>
+      init?.method === 'PATCH' ? json({ error: 'x', message: 'no' }, 500) : original(input, init),
+    ),
+  );
+}
+
+it('does not offer a toolbar when the link has no highlight data yet (a list row)', async () => {
+  const row = makeLink({ id: 'hl' });
+  serverLink = row;
+  Reflect.deleteProperty(serverLink, 'highlights');
+  mount();
+  await screen.findByText(/Alpha beta/);
+  select('Alpha beta');
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+});
+
+it('opens the note popover for the highlight under a click, not for empty space', async () => {
+  serverLink = makeLink({ id: 'hl', highlights: [highlight()] });
+  mount();
+  await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
+  const proseEl = document.querySelector('.silo-reader-prose') as HTMLElement;
+  fireEvent.click(proseEl, { clientX: 500, clientY: 500 });
+  expect(screen.queryByRole('dialog', { name: 'Note' })).toBeNull();
+  fireEvent.click(proseEl, { clientX: 50, clientY: 20 });
+  expect(await screen.findByRole('dialog', { name: 'Note' })).toBeDefined();
+});
