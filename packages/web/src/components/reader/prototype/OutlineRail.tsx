@@ -258,10 +258,7 @@ export function OutlineRail({
       </div>
       {hovered && lead && (
         <motion.div className="proto-outline-card" style={{ top: reduced ? cardTop : cardY }}>
-          <strong>
-            {title}
-            <em>¶{lead.number}</em>
-          </strong>
+          <strong>{title}</strong>
           {body && <span>{body}</span>}
         </motion.div>
       )}

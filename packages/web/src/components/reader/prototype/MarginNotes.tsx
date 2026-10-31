@@ -426,27 +426,24 @@ export function MarginNotes({
       <button type="button" className="proto-lnote-text" onClick={() => onFocus(item.id)}>
         {item.note}
       </button>
-      <div className="proto-lnote-meta">
-        <span>¶{paragraphNumber(prose as HTMLElement, item.range.startContainer)}</span>
-        <span className="proto-lnote-actions">
-          <button
-            type="button"
-            aria-label="Edit note"
-            title="Edit note"
-            onClick={() => onEdit(item.id)}
-          >
-            <ProtoIcon name="pencil" size={13} />
-          </button>
-          <button
-            type="button"
-            aria-label="Delete note"
-            title="Delete note"
-            onClick={() => onRemove(item.id)}
-          >
-            <ProtoIcon name="trash" size={13} />
-          </button>
-        </span>
-      </div>
+      <span className="proto-lnote-actions">
+        <button
+          type="button"
+          aria-label="Edit note"
+          title="Edit note"
+          onClick={() => onEdit(item.id)}
+        >
+          <ProtoIcon name="pencil" size={13} />
+        </button>
+        <button
+          type="button"
+          aria-label="Delete note"
+          title="Delete note"
+          onClick={() => onRemove(item.id)}
+        >
+          <ProtoIcon name="trash" size={13} />
+        </button>
+      </span>
     </motion.div>
   );
 

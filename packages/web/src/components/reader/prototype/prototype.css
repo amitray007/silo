@@ -1817,3 +1817,15 @@
   pointer-events: auto;
   cursor: pointer;
 }
+
+/* Round 11: no meta line; the edit and delete buttons float at the right of the first line. */
+.proto-lnote-actions {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  padding-left: 14px;
+  background: linear-gradient(to right, transparent, var(--bg) 14px);
+}
+.proto-lnote-meta {
+  display: none;
+}
