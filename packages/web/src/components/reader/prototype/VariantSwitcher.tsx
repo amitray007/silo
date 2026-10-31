@@ -38,6 +38,7 @@ export function useVariant() {
   );
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
+      if ((event as KeyboardEvent & { __protoPass?: boolean }).__protoPass) return;
       if (inTextEntry(event) || !plain(event)) return;
       if (event.key !== '[' && event.key !== ']') return;
       // The app binds "[" to the sidebar; the prototype wins while it is mounted.

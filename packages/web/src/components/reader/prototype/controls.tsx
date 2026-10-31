@@ -78,7 +78,7 @@ const lineHeights: { value: LineHeight; label: string }[] = [
   { value: 'relaxed', label: 'Relaxed' },
 ];
 const themes: { value: ReaderTheme; label: string }[] = [
-  { value: 'app', label: 'Match app' },
+  { value: 'app', label: 'Default' },
   { value: 'sepia', label: 'Sepia' },
 ];
 const widths: { value: ReaderWidth; label: string }[] = [

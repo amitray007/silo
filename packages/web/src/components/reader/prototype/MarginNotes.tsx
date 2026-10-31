@@ -21,6 +21,7 @@ type Plan = {
   shift: number; // how far the column moves left
   hideDial: boolean;
   overlay: boolean;
+  needsCollapse?: boolean;
   proseRight: number; // natural prose right edge, minus `extra`
 };
 
@@ -32,22 +33,52 @@ type Group = {
   colors: string[];
 };
 
-/** Work out how the column makes room for the lane, from natural (untransformed) geometry. */
-function planColumn(
+type Geometry = { left: number; width: number; proseRight0: number; room: number };
+
+/** The column's natural (untransformed) geometry, or what it would be in a pane `delta` wider. */
+function geometry(
   article: HTMLElement,
   prose: HTMLElement,
   scroll: HTMLElement,
   applied: number,
-  base: number,
-  open: boolean,
-  has: boolean,
-): Plan {
+  delta: number,
+): Geometry {
   const a = article.getBoundingClientRect();
   const p = prose.getBoundingClientRect();
-  const left = article.offsetLeft + (p.left - a.left);
+  const inset = p.left - a.left;
   const width = p.width + applied;
-  const proseRight0 = article.offsetLeft + (p.right - a.left) + applied;
-  const free = scroll.clientWidth - proseRight0;
+  if (!delta) {
+    return {
+      left: article.offsetLeft + inset,
+      width,
+      proseRight0: article.offsetLeft + (p.right - a.left) + applied,
+      room: scroll.clientWidth,
+    };
+  }
+  // A wider pane re-centres the article, up to its max width.
+  const room = scroll.clientWidth + delta;
+  const max = Number.parseFloat(getComputedStyle(article).maxWidth) || article.offsetWidth;
+  const rightInset = a.right - p.right - applied;
+  const articleWidth = Math.min(max, room);
+  const left = (room - articleWidth) / 2 + inset;
+  const proseWidth = articleWidth - inset - rightInset;
+  return { left, width: proseWidth, proseRight0: left + proseWidth, room };
+}
+
+const sidebarCollapsed = () =>
+  document.querySelector<HTMLElement>('.silo-frame')?.dataset.collapsed === 'true';
+
+/** The app's own sidebar toggle is the "[" key; the prototype's variant switcher lets this one through. */
+function toggleSidebar() {
+  const event = new KeyboardEvent('keydown', { key: '[', bubbles: true, cancelable: true });
+  Object.defineProperty(event, '__protoPass', { value: true });
+  document.dispatchEvent(event);
+}
+
+/** Work out how the column makes room for the lane. */
+function planColumn(g: Geometry, open: boolean, has: boolean): Plan {
+  const { left, width, proseRight0 } = g;
+  const free = g.room - proseRight0;
   const reserve = has ? Math.max(0, MARKER_GUTTER - free) : 0;
   if (!(open && has))
     return {
@@ -57,7 +88,6 @@ function planColumn(
       overlay: false,
       proseRight: proseRight0 - reserve,
     };
-  void base;
   const need = Math.max(0, NEED - free);
   const withDial = left - RAIL - 4;
   const noDial = left - 16;
@@ -162,8 +192,43 @@ export function MarginNotes({
     if (!article || !prose) return null;
     if (base.current === null)
       base.current = Number.parseFloat(getComputedStyle(article).paddingRight) || 32;
-    return planColumn(article, prose, scroll, applied.current, base.current, open, has);
+    const now = planColumn(geometry(article, prose, scroll, applied.current, 0), open, has);
+    if (!(open && has && now.overlay) || sidebarCollapsed()) return now;
+    // The lane does not fit beside the list. Would it fit if the sidebar collapsed?
+    const delta = document.querySelector('.silo-sidebar')?.getBoundingClientRect().width ?? 0;
+    if (!delta) return now;
+    const wider = planColumn(geometry(article, prose, scroll, applied.current, delta), open, has);
+    return wider.overlay ? now : { ...now, needsCollapse: true };
   }, [article, prose, scroll, open, has, tick]);
+
+  // Collapse the sidebar through the app's own toggle while the lane needs the room, and put it
+  // back afterwards, but only if the lane was what collapsed it.
+  const collapsedByLane = useRef(false);
+  const [collapsing, setCollapsing] = useState(false);
+  const needsCollapse = Boolean(plan?.needsCollapse);
+  useEffect(() => {
+    if (open && needsCollapse && !collapsedByLane.current) {
+      collapsedByLane.current = true;
+      setCollapsing(true);
+      toggleSidebar();
+      window.setTimeout(() => setCollapsing(false), 380);
+      return;
+    }
+    if (!open && collapsedByLane.current) {
+      collapsedByLane.current = false;
+      setCollapsing(false);
+      toggleSidebar();
+    }
+  }, [open, needsCollapse]);
+  useEffect(
+    () => () => {
+      if (collapsedByLane.current) {
+        collapsedByLane.current = false;
+        toggleSidebar();
+      }
+    },
+    [],
+  );
 
   // Apply the plan: padding (narrowing / gutter) now, the shift on a spring.
   // biome-ignore lint/correctness/useExhaustiveDependencies: onDialHidden is stable enough for a prototype.
@@ -224,7 +289,7 @@ export function MarginNotes({
   }, [noted, prose, scroll, tick, plan]);
 
   // Lane layout: each note at its passage's top, pushed down to avoid overlap.
-  const stacked = open && plan && !plan.overlay;
+  const stacked = open && plan && !plan.overlay && !plan.needsCollapse && !collapsing;
   // biome-ignore lint/correctness/useExhaustiveDependencies: re-stack when notes or geometry change.
   useLayoutEffect(() => {
     if (!stacked || !lane.current) return;
@@ -392,6 +457,8 @@ export function MarginNotes({
         )}
       {open &&
         plan.overlay &&
+        !plan.needsCollapse &&
+        !collapsing &&
         createPortal(
           <motion.aside
             className="proto-lane-overlay"

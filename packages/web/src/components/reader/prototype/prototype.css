@@ -1793,3 +1793,10 @@
   opacity: 0.35;
   cursor: default;
 }
+
+/* Dark mode: the marker's hover circle needs a stronger neutral to read. */
+:root[data-theme="dark"] .proto-marker2:hover,
+:root[data-theme="dark"] .proto-marker2:focus-visible,
+:root[data-theme="dark"] .proto-marker2[data-active="true"] {
+  background: var(--line);
+}
