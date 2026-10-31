@@ -19,6 +19,7 @@
     "dompurify": "catalog:",
     "loading-dev": "0.3.6",
     "mermaid": "catalog:",
+    "motion": "^14.9.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "react-router": "catalog:",
