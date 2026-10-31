@@ -1530,3 +1530,208 @@
   font-weight: 500;
   box-shadow: var(--elev-2);
 }
+
+/* Round 6: gutter markers and the notes lane */
+.proto-mwrap {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  will-change: transform;
+}
+.proto-marker2 {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg2);
+  color: var(--fnt);
+  font: inherit;
+  cursor: pointer;
+  pointer-events: auto;
+  transition: background 120ms var(--ease-out);
+}
+.proto-marker2:hover,
+.proto-marker2[data-active="true"] {
+  background: var(--hov);
+}
+.proto-marker2:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.proto-marker2 small {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--fnt);
+  font-variant-numeric: tabular-nums;
+}
+.proto-mdots {
+  display: inline-flex;
+  align-items: center;
+}
+.proto-mdots i {
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  border-radius: 50%;
+  background: var(--hl, var(--line-2));
+  box-shadow: 0 0 0 1.5px var(--bg2);
+}
+.proto-mdots i:first-child {
+  margin-left: 0;
+}
+.proto-marker2:hover .proto-mdots i,
+.proto-marker2[data-active="true"] .proto-mdots i {
+  box-shadow: 0 0 0 1.5px var(--hov);
+}
+.proto-lane2 {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+}
+.proto-lnote {
+  position: absolute;
+  left: 0;
+  right: 0;
+  padding: 2px 0 2px 12px;
+  border-left: 2px solid var(--hl, var(--line-2));
+  pointer-events: auto;
+  transition:
+    top 160ms var(--ease-out),
+    border-width 120ms var(--ease-out);
+}
+.proto-lnote[data-focus="true"] {
+  border-left-width: 3px;
+  padding-left: 11px;
+}
+.proto-lnote-text {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: color-mix(in oklch, var(--ink) 86%, var(--bg));
+  font: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 20px;
+  text-align: left;
+  white-space: pre-wrap;
+  cursor: pointer;
+}
+.proto-lnote[data-focus="true"] .proto-lnote-text,
+.proto-lnote[data-hover="true"] .proto-lnote-text {
+  color: var(--ink);
+}
+.proto-lnote-meta {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  min-height: 20px;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--fnt);
+}
+.proto-lnote-actions {
+  display: inline-flex;
+  gap: 2px;
+  opacity: 0;
+  transition: opacity 120ms var(--ease-out);
+}
+.proto-lnote:hover .proto-lnote-actions,
+.proto-lnote:focus-within .proto-lnote-actions {
+  opacity: 1;
+}
+.proto-lnote-actions button {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fnt);
+  cursor: pointer;
+}
+.proto-lnote-actions button:hover,
+.proto-lnote-actions button:focus-visible {
+  background: var(--hov);
+  color: var(--ink);
+}
+.proto-hairline {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  overflow: visible;
+  pointer-events: none;
+}
+.proto-hairline path {
+  fill: none;
+  stroke: var(--line-2);
+  stroke-width: 1;
+  opacity: 0;
+  transition: opacity 160ms var(--ease-out);
+}
+.proto-hairline path[data-on="true"] {
+  opacity: 1;
+}
+.proto-lane-close {
+  position: absolute;
+  z-index: 26;
+  top: 52px;
+  right: 14px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--fnt);
+  cursor: pointer;
+}
+.proto-lane-close:hover,
+.proto-lane-close:focus-visible {
+  background: var(--hov);
+  color: var(--ink);
+}
+.proto-lane-overlay {
+  position: absolute;
+  z-index: 24;
+  top: 44px;
+  right: 0;
+  bottom: 0;
+  width: min(300px, 86%);
+  display: flex;
+  flex-direction: column;
+  padding-top: 40px;
+  background: var(--bg);
+  border-left: 1px solid var(--line);
+  box-shadow: var(--elev-2);
+}
+.proto-lane-overlay-body {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 8px 20px 120px 18px;
+  overflow: auto;
+}
+.proto-lane-overlay .proto-lnote {
+  position: relative;
+}
+@media (prefers-reduced-motion: reduce) {
+  .proto-lnote,
+  .proto-marker2,
+  .proto-hairline path {
+    transition: none;
+  }
+}

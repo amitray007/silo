@@ -127,11 +127,13 @@ export function OutlineRail({
   scroll,
   panel,
   items,
+  hidden = false,
 }: {
   prose: HTMLElement | null;
   scroll: HTMLElement;
   panel: HTMLElement;
   items: PassageHighlight[];
+  hidden?: boolean;
 }) {
   const [wide, setWide] = useState(true);
   const [tick, setTick] = useState(0);
@@ -204,7 +206,7 @@ export function OutlineRail({
   useEffect(() => {
     if (hover !== null) cardY.set(cardTop);
   }, [hover, cardTop]);
-  if (!wide || !groups.length) return null;
+  if (hidden || !wide || !groups.length) return null;
   const hovered = hover === null ? undefined : groups[hover];
   const lead = hovered?.heading ?? hovered?.sections[0];
   const text = lead?.el.textContent?.replace(/\s+/g, ' ').trim() ?? '';

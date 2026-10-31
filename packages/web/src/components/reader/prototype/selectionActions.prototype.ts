@@ -67,7 +67,7 @@ export const selectionActions: SelectionAction[] = [
     group: 'more',
     run: (context) =>
       context.copy(
-        `“${context.text}” — ${context.title}${context.paragraph ? `, ¶${context.paragraph}` : ''}\n${context.url}`,
+        `“${context.text}” — ${context.title}${context.paragraph ? `, ¶${context.paragraph}` : ''}`,
         'Quote copied',
       ),
   },

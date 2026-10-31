@@ -89,13 +89,21 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
   const [color, setColor] = useState<HighlightColor>('yellow');
   const [openNote, setOpenNote] = useState<string | null>(null);
   const closeNote = useCallback(() => setOpenNote(null), []);
-  const [hovered, setHovered] = useState<string | null>(null);
+  const [hoveredIds, setHoveredIds] = useState<string[]>([]);
+  const [laneOpen, setLaneOpen] = useState(false);
+  const [focusId, setFocusId] = useState<string | null>(null);
+  const [dialHidden, setDialHidden] = useState(false);
+  const closeLane = useCallback(() => setLaneOpen(false), []);
+  const toggleLane = () => {
+    setLaneOpen((open) => !open);
+    setFocusId(null);
+  };
   useEscapeClose(sheet !== null && !openNote, () => setSheet(null));
 
   // Escape turns the pencil off once nothing above it (note, sheet, selection) is open.
   const pencilOff = pencil.setEnabled;
   useEffect(() => {
-    if (!pencil.enabled || sheet !== null || openNote || hl.pending) return;
+    if (!pencil.enabled || laneOpen || sheet !== null || openNote || hl.pending) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.key !== 'Escape' || inTextEntry(event)) return;
       if (document.querySelector('[data-reader-menu], .proto-listbox')) return;
@@ -105,23 +113,39 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [pencil.enabled, sheet, openNote, hl.pending, pencilOff]);
+  }, [pencil.enabled, laneOpen, sheet, openNote, hl.pending, pencilOff]);
 
-  // The hovered note and its passage brighten together.
+  // Escape closes the notes lane once nothing above it is open.
+  useEffect(() => {
+    if (!laneOpen || sheet !== null || openNote || hl.pending) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || inTextEntry(event)) return;
+      if (document.querySelector('[data-reader-menu], .proto-listbox')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setLaneOpen(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [laneOpen, sheet, openNote, hl.pending]);
+
+  // The hovered notes and their passages brighten together.
   useEffect(() => {
     if (typeof CSS === 'undefined' || !('highlights' in CSS)) return;
-    const item = hl.items.find((entry) => entry.id === hovered);
-    if (!item) {
+    const ranges = hl.items
+      .filter((entry) => hoveredIds.includes(entry.id))
+      .map((entry) => entry.range);
+    if (!ranges.length) {
       CSS.highlights.delete('proto-hover');
       return;
     }
-    const mark = new Highlight(item.range);
+    const mark = new Highlight(...ranges);
     mark.priority = 10;
     CSS.highlights.set('proto-hover', mark);
     return () => {
       CSS.highlights.delete('proto-hover');
     };
-  }, [hovered, hl.items]);
+  }, [hoveredIds, hl.items]);
 
   // While the Highlight sheet is open, selecting text highlights it straight away.
   const { setAutoColor } = hl;
@@ -174,7 +198,9 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
             event.clientY <= rect.bottom,
         ),
       );
-      if (hit) setOpenNote(hit.id);
+      if (!hit) return;
+      if (laneOpen) setFocusId(hit.id);
+      else setOpenNote(hit.id);
     };
     const onMove = (event: MouseEvent) => {
       const hit = hl.items.find((item) =>
@@ -186,7 +212,10 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
             event.clientY <= rect.bottom,
         ),
       );
-      setHovered((previous) => (previous === (hit?.id ?? null) ? previous : (hit?.id ?? null)));
+      setHoveredIds((previous) => {
+        const next = hit ? [hit.id] : [];
+        return previous.length === next.length && previous[0] === next[0] ? previous : next;
+      });
     };
     prose.addEventListener('click', onClick);
     prose.addEventListener('mousemove', onMove);
@@ -212,15 +241,37 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
   const note = hl.items.find((item) => item.id === openNote);
   return (
     <>
-      <OutlineRail prose={prose} scroll={scroll} panel={panel} items={hl.items} />
+      <OutlineRail
+        prose={prose}
+        scroll={scroll}
+        panel={panel}
+        items={hl.items}
+        hidden={dialHidden}
+      />
       <MarginNotes
         items={hl.items}
         prose={prose}
         scroll={scroll}
         host={host}
-        hovered={hovered}
-        setHovered={setHovered}
-        onOpen={setOpenNote}
+        panel={panel}
+        open={laneOpen}
+        focusId={focusId}
+        hoveredIds={hoveredIds}
+        setHoveredIds={setHoveredIds}
+        onMarker={(ids) => {
+          if (laneOpen && focusId && ids.includes(focusId)) {
+            setLaneOpen(false);
+            setFocusId(null);
+          } else {
+            setLaneOpen(true);
+            setFocusId(ids[0] ?? null);
+          }
+        }}
+        onFocus={setFocusId}
+        onClose={closeLane}
+        onEdit={setOpenNote}
+        onRemove={hl.remove}
+        onDialHidden={setDialHidden}
       />
       <SelectionBar
         hl={hl}
@@ -397,9 +448,9 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
               icon="notes"
               label="Notes"
               title="Notes"
-              active={sheet === 'notes'}
+              active={laneOpen}
               badge={hl.items.length}
-              onClick={() => toggle('notes')}
+              onClick={toggleLane}
             />
           </>
         )}
