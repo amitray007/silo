@@ -2,13 +2,13 @@ import { apiGet, apiUrl } from '../../../../api/client';
 import type { EngineId } from './types';
 
 /** What `GET /api/tts/manifest` says about one model file. */
-export type TtsFileInfo = {
+type TtsFileInfo = {
   size: number;
   sha256: string;
   voice?: { name: string; locale: string; gender: string };
 };
 
-export type TtsEngineInfo = {
+type TtsEngineInfo = {
   label: string;
   license: string;
   files: Record<string, TtsFileInfo>;

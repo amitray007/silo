@@ -7,7 +7,7 @@ type CaretDocument = Document & {
 };
 
 /** The sentence under a click, as an index into the read-aloud segments, or -1. */
-export function sentenceAt(event: MouseEvent, segments: ReadAloudApi['segments']): number {
+function sentenceAt(event: MouseEvent, segments: ReadAloudApi['segments']): number {
   const doc = document as CaretDocument;
   const position = doc.caretPositionFromPoint?.(event.clientX, event.clientY);
   const range = position ? null : doc.caretRangeFromPoint?.(event.clientX, event.clientY);

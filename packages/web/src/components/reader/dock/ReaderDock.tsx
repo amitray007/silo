@@ -354,36 +354,34 @@ export function ReaderDock({
               }}
             />
           ) : (
-            <>
-              {tools.map((tool) => {
-                const toggle = () => {
-                  if (tool.press) {
-                    setOpenId(null);
-                    tool.press.toggle(api);
-                  } else setOpenId(openId === tool.id ? null : tool.id);
-                };
-                return tool.split ? (
-                  <SplitDockButton
-                    key={tool.id}
-                    tool={tool}
-                    split={tool.split}
-                    api={api}
-                    open={openId === tool.id}
-                    sheetId={sheetId}
-                    onToggle={toggle}
-                  />
-                ) : (
-                  <DockButton
-                    key={tool.id}
-                    tool={tool}
-                    api={api}
-                    open={openId === tool.id}
-                    sheetId={sheetId}
-                    onToggle={toggle}
-                  />
-                );
-              })}
-            </>
+            tools.map((tool) => {
+              const toggle = () => {
+                if (tool.press) {
+                  setOpenId(null);
+                  tool.press.toggle(api);
+                } else setOpenId(openId === tool.id ? null : tool.id);
+              };
+              return tool.split ? (
+                <SplitDockButton
+                  key={tool.id}
+                  tool={tool}
+                  split={tool.split}
+                  api={api}
+                  open={openId === tool.id}
+                  sheetId={sheetId}
+                  onToggle={toggle}
+                />
+              ) : (
+                <DockButton
+                  key={tool.id}
+                  tool={tool}
+                  api={api}
+                  open={openId === tool.id}
+                  sheetId={sheetId}
+                  onToggle={toggle}
+                />
+              );
+            })
           )}
         </div>
         <MenuPresence>

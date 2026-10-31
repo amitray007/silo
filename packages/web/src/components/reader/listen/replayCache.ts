@@ -2,7 +2,7 @@
 export type CachedAudio = { chunks: Float32Array[]; sampleRate: number };
 
 /** About 64 MB of samples (4 bytes each). */
-export const REPLAY_CACHE_BYTES = 64 * 1024 * 1024;
+const REPLAY_CACHE_BYTES = 64 * 1024 * 1024;
 
 function bytesOf(audio: CachedAudio): number {
   let samples = 0;

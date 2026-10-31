@@ -13,7 +13,3 @@ export const ENGINES: readonly { id: EngineId; label: string }[] = [
   { id: 'phonon', label: 'Phonon (31M)' },
   { id: 'kokoro', label: 'Kokoro (82M)' },
 ];
-
-export function defaultEngine(): EngineId {
-  return 'phonon';
-}

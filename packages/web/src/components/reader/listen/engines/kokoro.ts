@@ -5,7 +5,7 @@ import { progressTracker, type TtsEngine, type Voice } from './types';
  * WebGPU runs Kokoro at fp32: the prototype measured fp16 as degraded. Without WebGPU the
  * worker runs q8 on WebAssembly.
  */
-export const KOKORO_WEBGPU_DTYPE = 'fp32';
+const KOKORO_WEBGPU_DTYPE = 'fp32';
 
 type VoiceInfo = { name: string; language: string; gender: string };
 type Progress = { status?: string; file?: string; loaded?: number; total?: number };

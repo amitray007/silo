@@ -11,8 +11,8 @@ export type Unit = {
 
 type Planned = Pick<Segment, 'text' | 'block' | 'kind'>;
 
-export const HEADING_PAUSE_MS = 250;
-export const BLOCK_PAUSE_MS = 150;
+const HEADING_PAUSE_MS = 250;
+const BLOCK_PAUSE_MS = 150;
 /** Adjacent sentences merge while either is shorter than this. */
 const SHORT = 60;
 const MERGE_MAX = 200;

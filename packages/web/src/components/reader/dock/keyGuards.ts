@@ -12,14 +12,14 @@ export const OWN_ARROWS = '[role="radiogroup"], [role="spinbutton"], [role="list
 /** Controls that Space presses. */
 export const CONTROL = 'button, a[href], [role="radio"], [role="switch"], summary';
 
-export function inTextEntry(target: EventTarget | null): boolean {
+function inTextEntry(target: EventTarget | null): boolean {
   return (
     target instanceof HTMLElement &&
     (target.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(target.tagName))
   );
 }
 
-export function plain(event: KeyboardEvent): boolean {
+function plain(event: KeyboardEvent): boolean {
   return !(event.metaKey || event.ctrlKey || event.altKey);
 }
 

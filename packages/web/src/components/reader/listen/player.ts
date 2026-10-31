@@ -20,7 +20,7 @@ const NOW = -1;
 const WARM = 100;
 const WARM_UNITS = 2;
 
-export type PlayerSettings = { rate: number; voice: string };
+type PlayerSettings = { rate: number; voice: string };
 
 export type PlayerEvents = {
   /** The sentence being spoken changed. */

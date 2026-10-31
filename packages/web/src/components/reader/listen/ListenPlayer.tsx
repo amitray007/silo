@@ -4,7 +4,7 @@ import { Spinner, useDelayed } from './Spinner';
 import type { ReadAloudApi } from './useReadAloud';
 
 /** The one-line state shown beside the player controls instead of the sentence. */
-export function statusLine(listen: ReadAloudApi): string | null {
+function statusLine(listen: ReadAloudApi): string | null {
   if (listen.status === 'loading') {
     return listen.progress === null
       ? 'Downloading voice...'

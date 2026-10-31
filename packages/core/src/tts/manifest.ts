@@ -23,7 +23,7 @@
  * Hugging Face does not store in LFS (config.json, tokenizer.json) were hashed the same way.
  */
 
-export type TtsVoiceInfo = { name: string; locale: 'en-us' | 'en-gb'; gender: 'female' | 'male' };
+type TtsVoiceInfo = { name: string; locale: 'en-us' | 'en-gb'; gender: 'female' | 'male' };
 
 export type TtsFileEntry = {
   /** The pinned upstream address. */
@@ -34,7 +34,7 @@ export type TtsFileEntry = {
   voice?: TtsVoiceInfo;
 };
 
-export type TtsEngineManifest = {
+type TtsEngineManifest = {
   label: string;
   license: string;
   /** Request path (under `/api/tts/files/<engine>/`) to its entry. */
