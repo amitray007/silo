@@ -35,40 +35,38 @@ export function GutterMarkers({
   if (groups.length === 0) return null;
   const clear = gutter.size + CLEARANCE;
   return createPortal(
-    <>
-      {groups.map((group) => {
-        const ids = group.items.map((item) => item.id);
-        const count = ids.length;
-        let y = group.y - frameTop;
-        if (resumeY !== null && Math.abs(y - resumeY) < clear)
-          y += Math.ceil(clear / group.lineHeight) * group.lineHeight;
-        return (
-          <button
-            key={group.para}
-            type="button"
-            className="silo-marker"
-            data-active={lane.open && lane.focusIds.some((id) => ids.includes(id))}
-            data-count={count > 1 ? count : undefined}
-            aria-label={`${count} highlight${count > 1 ? 's' : ''} on paragraph ${group.para}`}
-            style={{
-              top: y - gutter.size / 2,
-              left,
-              width: gutter.size,
-              height: gutter.size,
-              visibility: hidden ? 'hidden' : undefined,
-            }}
-            onMouseEnter={() => lane.setHoveredIds(ids)}
-            onMouseLeave={() => lane.setHoveredIds([])}
-            onFocus={() => lane.setHoveredIds(ids)}
-            onBlur={() => lane.setHoveredIds([])}
-            onClick={() => lane.onMarker(ids)}
-          >
-            <ReaderIcon name="note" size={20} />
-            {count > 1 && <small>{count}</small>}
-          </button>
-        );
-      })}
-    </>,
+    groups.map((group) => {
+      const ids = group.items.map((item) => item.id);
+      const count = ids.length;
+      let y = group.y - frameTop;
+      if (resumeY !== null && Math.abs(y - resumeY) < clear)
+        y += Math.ceil(clear / group.lineHeight) * group.lineHeight;
+      return (
+        <button
+          key={group.para}
+          type="button"
+          className="silo-marker"
+          data-active={lane.open && lane.focusIds.some((id) => ids.includes(id))}
+          data-count={count > 1 ? count : undefined}
+          aria-label={`${count} highlight${count > 1 ? 's' : ''} on paragraph ${group.para}`}
+          style={{
+            top: y - gutter.size / 2,
+            left,
+            width: gutter.size,
+            height: gutter.size,
+            visibility: hidden ? 'hidden' : undefined,
+          }}
+          onMouseEnter={() => lane.setHoveredIds(ids)}
+          onMouseLeave={() => lane.setHoveredIds([])}
+          onFocus={() => lane.setHoveredIds(ids)}
+          onBlur={() => lane.setHoveredIds([])}
+          onClick={() => lane.onMarker(ids)}
+        >
+          <ReaderIcon name="note" size={20} />
+          {count > 1 && <small>{count}</small>}
+        </button>
+      );
+    }),
     frame,
   );
 }

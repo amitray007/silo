@@ -36,6 +36,9 @@
   width: 20px;
   height: 20px;
 }
+.silo-marker:focus-visible {
+  outline-offset: 1px;
+}
 .silo-marker:hover,
 .silo-marker:focus-visible,
 .silo-marker[data-active="true"] {
@@ -46,9 +49,6 @@
 :root[data-theme="dark"] .silo-marker:focus-visible,
 :root[data-theme="dark"] .silo-marker[data-active="true"] {
   background: var(--line);
-}
-.silo-marker:focus-visible {
-  outline-offset: 1px;
 }
 .silo-marker small {
   grid-area: 1 / 1;

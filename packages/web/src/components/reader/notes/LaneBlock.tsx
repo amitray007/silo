@@ -39,7 +39,7 @@ function AddNoteField({ onSave, onDone }: { onSave: (note: string) => void; onDo
     dropped.current = true;
     onDone();
   });
-  const fit = (el: HTMLTextAreaElement) => {
+  const growField = (el: HTMLTextAreaElement) => {
     el.style.height = 'auto';
     el.style.height = `${el.scrollHeight}px`;
   };
@@ -51,10 +51,10 @@ function AddNoteField({ onSave, onDone }: { onSave: (note: string) => void; onDo
       rows={1}
       ref={(el) => {
         if (!el) return;
-        fit(el);
+        growField(el);
         if (document.activeElement !== el) el.focus({ preventScroll: true });
       }}
-      onInput={(event) => fit(event.currentTarget)}
+      onInput={(event) => growField(event.currentTarget)}
       onBlur={(event) => {
         const text = event.currentTarget.value.trim();
         if (text && !dropped.current) onSave(text);

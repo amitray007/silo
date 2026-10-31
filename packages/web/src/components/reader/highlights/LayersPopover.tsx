@@ -48,7 +48,6 @@ export function LayersPopover({
   const left = Math.min(Math.max(EDGE, at.x - 20), window.innerWidth - WIDTH - EDGE);
   const top = Math.min(at.y + 14, window.innerHeight - 40 - items.length * ROW);
   return createPortal(
-    // biome-ignore lint/a11y/noNoninteractiveElementInteractions: arrow keys move between the rows inside.
     <div
       className="silo-layers"
       ref={box}
