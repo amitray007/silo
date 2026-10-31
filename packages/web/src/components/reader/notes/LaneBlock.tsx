@@ -32,7 +32,15 @@ export const lostEntry = (orphan: HighlightJson): NoteEntry => ({
 });
 
 /** A growing note field. Enter or leaving saves a non-empty note; Escape drops it. */
-function AddNoteField({ onSave, onDone }: { onSave: (note: string) => void; onDone: () => void }) {
+function AddNoteField({
+  initial = '',
+  onSave,
+  onDone,
+}: {
+  initial?: string;
+  onSave: (note: string) => void;
+  onDone: () => void;
+}) {
   const dropped = useRef(false);
   // Escape cancels this field only, never the lane behind it.
   useEscapeLayer(true, () => {
@@ -49,6 +57,7 @@ function AddNoteField({ onSave, onDone }: { onSave: (note: string) => void; onDo
       aria-label="Add a note"
       placeholder="Add a note"
       rows={1}
+      defaultValue={initial}
       ref={(el) => {
         if (!el) return;
         growField(el);
@@ -117,8 +126,17 @@ export function LaneBlock({
     >
       {lost ? (
         <>
-          <span className="silo-lnote-snippet">{quote}</span>
           <span className="silo-lnote-lost">Passage not found</span>
+          <span className="silo-lnote-snippet">{quote}</span>
+          {adding ? (
+            <AddNoteField
+              initial={note ?? ''}
+              onSave={(text) => onSetNote(id, text)}
+              onDone={() => onAdd(null)}
+            />
+          ) : (
+            note && <span className="silo-lnote-text silo-lnote-plain">{note}</span>
+          )}
         </>
       ) : adding ? (
         <AddNoteField onSave={(text) => onSetNote(id, text)} onDone={() => onAdd(null)} />
@@ -140,12 +158,12 @@ export function LaneBlock({
       )}
       {canWrite && (
         <span className="silo-lnote-actions">
-          {note && !lost && (
+          {note && (
             <button
               type="button"
               aria-label="Edit note"
               title="Edit note"
-              onClick={() => onEdit(id)}
+              onClick={() => (lost ? onAdd(id) : onEdit(id))}
             >
               <ReaderIcon name="edit" size={13} />
             </button>

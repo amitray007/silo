@@ -716,3 +716,32 @@ it('closes the lane before the pencil turns off when Escape is pressed', async (
   fireEvent.keyDown(document.body, { key: 'Escape' });
   await waitFor(() => expect(pencil.getAttribute('aria-pressed')).toBe('false'));
 });
+
+it('shows an orphan with its label, quote and note, and lets the note be edited inline', async () => {
+  serverLink = makeLink({
+    id: 'hl',
+    highlights: [
+      highlight({
+        id: 'gone',
+        quote: 'text that is gone now',
+        startOffset: null,
+        endOffset: null,
+        note: 'what I thought here',
+      }),
+    ],
+  });
+  mount();
+  await openLane();
+  const block = within(laneEl())
+    .getByText('what I thought here')
+    .closest('.silo-lnote') as HTMLElement;
+  expect(within(block).getByText('Passage not found')).toBeDefined();
+  expect(within(block).getByText('text that is gone now')).toBeDefined();
+  fireEvent.click(within(block).getByRole('button', { name: 'Edit note' }));
+  const field = within(block).getByRole('textbox', { name: 'Add a note' }) as HTMLTextAreaElement;
+  expect(field.value).toBe('what I thought here');
+  fireEvent.change(field, { target: { value: 'rewritten' } });
+  fireEvent.blur(field);
+  await waitFor(() => expect(posts.some((body) => body.note === 'rewritten')).toBe(true));
+  expect(within(block).getByRole('button', { name: 'Delete highlight' })).toBeDefined();
+});

@@ -207,9 +207,14 @@
 span.silo-lnote-snippet {
   cursor: default;
 }
+.silo-lnote-plain {
+  margin-top: 4px;
+  color: var(--ink);
+  cursor: default;
+}
 .silo-lnote-lost {
   display: block;
-  margin-top: 2px;
+  margin-bottom: 2px;
   color: var(--fnt);
   font-size: 12px;
   line-height: 18px;
