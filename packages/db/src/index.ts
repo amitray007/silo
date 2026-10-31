@@ -10,6 +10,7 @@ export {
   linkTags,
   oauthClients,
   oauthCodes,
+  readingPositions,
   settings,
   tags,
 } from './schema/index.js';

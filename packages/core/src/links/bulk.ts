@@ -6,7 +6,7 @@ import {
   createLink,
   getById,
   type Link,
-  type LinkSummaryWithTags,
+  type LinkDetail,
   removeTag,
   restore,
   softDelete,
@@ -248,7 +248,7 @@ export async function retryCaptureMany(
  * with the rest of the file rather than special-casing a read op to be the
  * only concurrent one.
  */
-export type BulkGetResult = { id: string; link: LinkSummaryWithTags | null };
+export type BulkGetResult = { id: string; link: LinkDetail | null };
 
 export async function getByIds(ids: ReadonlyArray<string>): Promise<BulkGetResult[]> {
   assertWithinBulkCap(ids.length);

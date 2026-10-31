@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { db, links, linkTags, tags } from '@silo/db';
+import { db, links, linkTags, readingPositions, tags } from '@silo/db';
 import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
 import type { FeedEntry } from '../feeds/types.js';
 import { canonicalize } from './canonicalize.js';
@@ -18,6 +18,7 @@ import {
   listColumns,
   type PageParams,
 } from './pagination.js';
+import { mergeReadingPosition, type ReadingPosition } from './reading-position.js';
 import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
@@ -536,7 +537,13 @@ export type GetByIdOptions = {
  * (an agent) can tell there's more text beyond the window it received and
  * decide whether to request a later offset.
  */
-export type LinkWithTextWindow = LinkSummaryWithTags & { extractedTextLength: number };
+export type LinkWithTextWindow = LinkDetail & { extractedTextLength: number };
+
+/**
+ * A single link as `getById` returns it: the summary with tags, plus the saved
+ * reading position (`null` when none). List and search rows do not carry it.
+ */
+export type LinkDetail = LinkSummaryWithTags & { readingPosition: ReadingPosition | null };
 
 /**
  * Character-slice `text` to `[offset, offset + limit)`. An out-of-range
@@ -567,22 +574,31 @@ export async function getById(
   id: string,
   opts: GetByIdOptions & { textWindow: TextWindowOptions },
 ): Promise<LinkWithTextWindow | null>;
+export async function getById(id: string, opts?: GetByIdOptions): Promise<LinkDetail | null>;
 export async function getById(
   id: string,
   opts?: GetByIdOptions,
-): Promise<LinkSummaryWithTags | null>;
-export async function getById(
-  id: string,
-  opts?: GetByIdOptions,
-): Promise<LinkSummaryWithTags | LinkWithTextWindow | null> {
-  const [row] = await db
-    .select(listColumns)
+): Promise<LinkDetail | LinkWithTextWindow | null> {
+  const [found] = await db
+    .select({
+      link: listColumns,
+      position: readingPositions.position,
+      positionUpdatedAt: readingPositions.updatedAt,
+    })
     .from(links)
+    .leftJoin(readingPositions, eq(readingPositions.linkId, links.id))
     .where(whereLiveAnywhere(eq(links.id, id)))
     .limit(1);
-  if (!row) return null;
-  const [hydrated] = await hydrateTags(db, [row]);
-  if (!hydrated) return null;
+  if (!found) return null;
+  const [withTags] = await hydrateTags(db, [found.link]);
+  if (!withTags) return null;
+  const hydrated: LinkDetail = {
+    ...withTags,
+    readingPosition:
+      found.position !== null && found.positionUpdatedAt !== null
+        ? { position: found.position, updatedAt: found.positionUpdatedAt }
+        : null,
+  };
 
   const window = opts?.textWindow;
   if (!window) return hydrated;
@@ -1374,6 +1390,7 @@ export async function restore(id: string): Promise<RestoreResult> {
             trashedTagRows.map((row) => row.name),
           );
         }
+        await mergeReadingPosition(tx, trashedRow.id, mergedRow.id);
         const [finalMerged] = await tx.select().from(links).where(eq(links.id, mergedRow.id));
         return finalMerged ?? mergedRow;
       });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { type CreateLinkInput, createLink, willDedupCapture } from './links.js';
+import { restoreReadingPosition } from './reading-position.js';
 import type { SourceData } from './source-data.js';
 
 /** One link from the envelope that failed to import, with why. */
@@ -52,6 +53,15 @@ const linkSchema = z.object({
   sourceData: z.record(z.string(), z.unknown()).nullable().optional(),
   tags: z.array(z.string()).optional(),
   addedBy: z.enum(['user', 'agent']).optional(),
+  // Parsed apart from the link (see `readingPositionSchema`): a bad position
+  // drops the position, never the link.
+  readingPosition: z.unknown().optional(),
+});
+
+/** An exported reading position. Invalid values are ignored, the link still imports. */
+const readingPositionSchema = z.object({
+  position: z.number().min(0).max(1),
+  updatedAt: z.iso.datetime({ offset: true }),
 });
 
 type ImportLink = z.infer<typeof linkSchema>;
@@ -187,7 +197,14 @@ async function importOneLink(element: unknown, index: number): Promise<ImportOne
   try {
     const input = toCreateLinkInput(link);
     const existed = await willDedupCapture(link.url);
-    await createLink(input);
+    const imported = await createLink(input);
+    const savedPosition = readingPositionSchema.safeParse(link.readingPosition);
+    if (savedPosition.success) {
+      await restoreReadingPosition(imported.id, {
+        position: savedPosition.data.position,
+        updatedAt: new Date(savedPosition.data.updatedAt),
+      });
+    }
     return { outcome: existed ? 'merged' : 'created' };
   } catch (error) {
     return {

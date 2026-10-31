@@ -1,9 +1,10 @@
-import { db, links } from '@silo/db';
-import { desc } from 'drizzle-orm';
+import { db, links, readingPositions } from '@silo/db';
+import { desc, eq } from 'drizzle-orm';
 import { stringify as stringifyYaml } from 'yaml';
 import type { Link } from './executor.js';
 import { whereLibrary } from './live.js';
 import { hydrateTags, type LinkSummaryWithTags, listColumns } from './pagination.js';
+import type { ReadingPosition } from './reading-position.js';
 
 /** The three export output formats (design spec: full-library snapshot). */
 export type ExportFormat = 'json' | 'yaml' | 'csv';
@@ -52,6 +53,8 @@ type ExportedLink = {
   createdAt: string;
   updatedAt: string;
   tags: string[];
+  /** Present only when a position is saved. CSV leaves it out. */
+  readingPosition?: { position: number; updatedAt: string };
 };
 
 /**
@@ -62,8 +65,11 @@ type ExportedLink = {
  * lifecycle columns (`deletedAt`, `searchVector`, `enrichAttempts`) — not
  * user data worth round-tripping. Timestamps render as ISO strings.
  */
-function toExportedLink(link: LinkSummaryWithTags): ExportedLink {
-  return {
+function toExportedLink(
+  link: LinkSummaryWithTags,
+  readingPosition: ReadingPosition | null,
+): ExportedLink {
+  const exported: ExportedLink = {
     id: link.id,
     url: link.url,
     canonicalUrl: link.canonicalUrl,
@@ -82,6 +88,13 @@ function toExportedLink(link: LinkSummaryWithTags): ExportedLink {
     updatedAt: link.updatedAt.toISOString(),
     tags: link.tags,
   };
+  if (readingPosition) {
+    exported.readingPosition = {
+      position: readingPosition.position,
+      updatedAt: readingPosition.updatedAt.toISOString(),
+    };
+  }
+  return exported;
 }
 
 /** The JSON/YAML envelope both lossless formats share. */
@@ -209,12 +222,27 @@ export async function exportLinks(opts?: { format?: ExportFormat }): Promise<Exp
   }
 
   const rows = await db
-    .select(listColumns)
+    .select({
+      link: listColumns,
+      position: readingPositions.position,
+      positionUpdatedAt: readingPositions.updatedAt,
+    })
     .from(links)
+    .leftJoin(readingPositions, eq(readingPositions.linkId, links.id))
     .where(whereLibrary())
     .orderBy(desc(links.createdAt), desc(links.id));
-  const hydrated = await hydrateTags(db, rows);
-  const exportedLinks = hydrated.map(toExportedLink);
+  const hydrated = await hydrateTags(
+    db,
+    rows.map((row) => row.link),
+  );
+  const exportedLinks = hydrated.map((link, index) => {
+    const row = rows[index];
+    const saved =
+      row?.position != null && row.positionUpdatedAt != null
+        ? { position: row.position, updatedAt: row.positionUpdatedAt }
+        : null;
+    return toExportedLink(link, saved);
+  });
 
   if (format === 'csv') {
     return {

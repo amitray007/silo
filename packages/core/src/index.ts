@@ -204,6 +204,7 @@ export type {
   GetByIdOptions,
   Link,
   LinkCounts,
+  LinkDetail,
   LinkSummaryWithTags,
   LinkWithTags,
   LinkWithTextWindow,
@@ -240,6 +241,13 @@ export { type LiveReader, readLive, setLiveReader } from './links/live-reader.js
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
+export type { ReadingPosition } from './links/reading-position.js';
+export {
+  clearReadingPosition,
+  getReadingPosition,
+  InvalidReadingPositionError,
+  setReadingPosition,
+} from './links/reading-position.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`
 // over a link's own tags + title terms — see related.ts's doc comment.
 export { findRelated } from './links/related.js';
