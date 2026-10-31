@@ -78,6 +78,7 @@ export function usePencil(
   const [progress, setProgress] = useState(0);
   const lines = useRef<Line[]>([]);
   const prefix = useRef<number[]>([]);
+  const edge = useRef(0);
   const index = useRef(0);
   const sweep = useRef(0);
   const guide = useRef<HTMLDivElement>(null);
@@ -131,6 +132,10 @@ export function usePencil(
       const first = lines.current.length === 0;
       const previous = lines.current.length ? index.current / lines.current.length : 0;
       lines.current = measureLines(root, scroll);
+      edge.current =
+        root.getBoundingClientRect().right -
+        scroll.getBoundingClientRect().left +
+        scroll.scrollLeft;
       let sum = 0;
       prefix.current = lines.current.map((line) => {
         const before = sum;
@@ -253,6 +258,12 @@ export function usePencil(
   }, []);
 
   const resumeLine = lines.current[lineIndex];
+  // The marker sits at least 12px past the line end; a line that fills the column puts it in the gutter.
+  const lineEnd = resumeLine ? resumeLine.left + resumeLine.width : 0;
+  const resumeLeft = Math.min(
+    lineEnd + 12 > edge.current - 22 ? edge.current + 12 : lineEnd + 12,
+    (scroll?.clientWidth ?? 9999) - 24,
+  );
   const overlay: ReactNode = host
     ? createPortal(
         enabled ? (
@@ -265,10 +276,7 @@ export function usePencil(
             className="proto-resume"
             title="Resume reading (P)"
             aria-label="Resume reading"
-            style={{
-              top: resumeLine.top + resumeLine.height / 2 - 9,
-              left: resumeLine.left + resumeLine.width + 8,
-            }}
+            style={{ top: resumeLine.top + resumeLine.height / 2 - 11, left: resumeLeft }}
             onClick={() => {
               setEnabled(true);
               setPlaying(true);
@@ -291,6 +299,11 @@ export function usePencil(
     },
     playing,
     toggle,
+    /** Turn the pencil on and start it from the resume point. */
+    start: () => {
+      setEnabled(true);
+      setPlaying(true);
+    },
     pause: () => setPlaying(false),
     wpm,
     setWpm,

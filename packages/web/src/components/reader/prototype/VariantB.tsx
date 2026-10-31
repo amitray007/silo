@@ -2,11 +2,13 @@
 import { useCallback, useEffect, useState } from 'react';
 import { HighlightSheet, ListenSheet, NotePopover, NotesList, PencilSheet } from './BParts';
 import { TypographyControls } from './controls';
+import { MarginNotes } from './MarginNotes';
 import { OutlineRail } from './OutlineRail';
 import { ProtoIcon, type ProtoIconName } from './ProtoIcon';
 import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import { inTextEntry, plain, useEscapeClose } from './protoKeys';
 import type { Tools } from './ReaderToolsPrototype';
+import { SelectionBar } from './SelectionBar';
 import type { HighlightColor } from './useHighlights';
 import { engineStatusLine, RATES } from './useReadAloud';
 
@@ -82,12 +84,44 @@ function sentenceAt(event: MouseEvent, ra: Tools['ra']): number {
 }
 
 /** B: the head stays as it is; a floating dock opens sheets and turns into the player. */
-export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel }: Tools) {
+export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: Tools) {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [color, setColor] = useState<HighlightColor>('yellow');
   const [openNote, setOpenNote] = useState<string | null>(null);
   const closeNote = useCallback(() => setOpenNote(null), []);
+  const [hovered, setHovered] = useState<string | null>(null);
   useEscapeClose(sheet !== null && !openNote, () => setSheet(null));
+
+  // Escape turns the pencil off once nothing above it (note, sheet, selection) is open.
+  const pencilOff = pencil.setEnabled;
+  useEffect(() => {
+    if (!pencil.enabled || sheet !== null || openNote || hl.pending) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || inTextEntry(event)) return;
+      if (document.querySelector('[data-reader-menu], .proto-listbox')) return;
+      event.preventDefault();
+      event.stopPropagation();
+      pencilOff(false);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [pencil.enabled, sheet, openNote, hl.pending, pencilOff]);
+
+  // The hovered note and its passage brighten together.
+  useEffect(() => {
+    if (typeof CSS === 'undefined' || !('highlights' in CSS)) return;
+    const item = hl.items.find((entry) => entry.id === hovered);
+    if (!item) {
+      CSS.highlights.delete('proto-hover');
+      return;
+    }
+    const mark = new Highlight(item.range);
+    mark.priority = 10;
+    CSS.highlights.set('proto-hover', mark);
+    return () => {
+      CSS.highlights.delete('proto-hover');
+    };
+  }, [hovered, hl.items]);
 
   // While the Highlight sheet is open, selecting text highlights it straight away.
   const { setAutoColor } = hl;
@@ -105,13 +139,17 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel }: Tools) 
     setEditing(null);
   }, [editing, setEditing]);
 
+  const togglePencil = () => {
+    if (pencil.enabled) pencil.setEnabled(false);
+    else pencil.start();
+  };
+
   const toggle = (next: Sheet) => {
     if (sheet === next) {
       setSheet(null);
       return;
     }
     setSheet(next);
-    if (next === 'pencil') pencil.setEnabled(true);
     if (next === 'listen') ra.open();
   };
 
@@ -138,14 +176,30 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel }: Tools) 
       );
       if (hit) setOpenNote(hit.id);
     };
+    const onMove = (event: MouseEvent) => {
+      const hit = hl.items.find((item) =>
+        Array.from(item.range.getClientRects()).some(
+          (rect) =>
+            event.clientX >= rect.left &&
+            event.clientX <= rect.right &&
+            event.clientY >= rect.top &&
+            event.clientY <= rect.bottom,
+        ),
+      );
+      setHovered((previous) => (previous === (hit?.id ?? null) ? previous : (hit?.id ?? null)));
+    };
     prose.addEventListener('click', onClick);
-    return () => prose.removeEventListener('click', onClick);
+    prose.addEventListener('mousemove', onMove);
+    return () => {
+      prose.removeEventListener('click', onClick);
+      prose.removeEventListener('mousemove', onMove);
+    };
   });
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
       if (inTextEntry(event) || !plain(event) || event.repeat) return;
-      if (event.key === 'p') toggle('pencil');
+      if (event.key === 'p') togglePencil();
       else if (event.key === 'l') toggle('listen');
       else if (event.key === 'h') toggle('highlight');
     };
@@ -159,6 +213,26 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel }: Tools) 
   return (
     <>
       <OutlineRail prose={prose} scroll={scroll} panel={panel} items={hl.items} />
+      <MarginNotes
+        items={hl.items}
+        prose={prose}
+        scroll={scroll}
+        host={host}
+        hovered={hovered}
+        setHovered={setHovered}
+        onOpen={setOpenNote}
+      />
+      <SelectionBar
+        hl={hl}
+        prose={prose}
+        color={color}
+        setColor={setColor}
+        title={scroll.querySelector('h2')?.textContent ?? document.title}
+        listen={() => {
+          ra.open();
+          ra.startHere();
+        }}
+      />
       {note && (
         <NotePopover key={note.id} item={note} hl={hl} scroll={scroll} onClose={closeNote} />
       )}
@@ -282,13 +356,29 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel }: Tools) 
               active={sheet === 'aa'}
               onClick={() => toggle('aa')}
             />
-            <DockButton
-              icon="pencil"
-              label="Pencil"
-              title="Reading pencil (P)"
-              active={sheet === 'pencil' || pencil.enabled}
-              onClick={() => toggle('pencil')}
-            />
+            <div className="proto-split" data-on={pencil.enabled}>
+              <button
+                type="button"
+                className="proto-dockbtn"
+                aria-pressed={pencil.enabled}
+                aria-label="Pencil"
+                title="Reading pencil (P)"
+                onClick={togglePencil}
+              >
+                <ProtoIcon name="pencil" size={19} />
+                <span className="proto-dock-label">Pencil</span>
+              </button>
+              <button
+                type="button"
+                className="proto-dockchev"
+                aria-label="Pencil settings"
+                title="Pencil settings"
+                aria-expanded={sheet === 'pencil'}
+                onClick={() => toggle('pencil')}
+              >
+                <ProtoIcon name="chevronDown" size={14} />
+              </button>
+            </div>
             <DockButton
               icon="highlighter"
               label="Highlight"

@@ -42,8 +42,41 @@ function progressTracker(
   };
 }
 
-export function createKokoroEngine(): TtsEngine {
-  let tts: any;
+/** WebGPU dtype for Kokoro. Chosen by the measurements in the round-4 report. */
+export const KOKORO_WEBGPU_DTYPE = 'fp32';
+
+export function createKokoroEngine(options: { webgpuDtype?: string | null } = {}): TtsEngine {
+  const worker = new Worker(new URL('./kokoroWorker.prototype.ts', import.meta.url), {
+    type: 'module',
+  });
+  let voiceInfo: Record<string, any> = {};
+  let sequence = 0;
+  const pending = new Map<
+    number,
+    {
+      resolve: (value: { samples: Float32Array; sampleRate: number }) => void;
+      reject: (error: Error) => void;
+    }
+  >();
+  let onReady: ((info: any) => void) | undefined;
+  let onFail: ((error: Error) => void) | undefined;
+  let track: ((event: any) => void) | undefined;
+  worker.onmessage = (event) => {
+    const message = event.data;
+    if (message.type === 'progress') track?.(message.info);
+    else if (message.type === 'ready') onReady?.(message);
+    else if (message.type === 'audio') {
+      pending.get(message.id)?.resolve(message);
+      pending.delete(message.id);
+    } else if (message.type === 'error') {
+      const error = new Error(message.message);
+      if (message.id === undefined) onFail?.(error);
+      else {
+        pending.get(message.id)?.reject(error);
+        pending.delete(message.id);
+      }
+    }
+  };
   const engine: TtsEngine = {
     id: 'kokoro',
     label: 'Kokoro (82M)',
@@ -51,49 +84,46 @@ export function createKokoroEngine(): TtsEngine {
     sampleRate: 24000,
     device: 'not loaded',
     async load(onProgress) {
-      const { KokoroTTS } = await import('kokoro-js');
-      const gpu = Boolean((navigator as any).gpu);
-      const track = progressTracker(onProgress, (event) =>
+      track = progressTracker(onProgress, (event) =>
         event.status === 'progress' && event.file
           ? [event.file as string, event.loaded as number, event.total as number]
           : null,
       );
-      const options = gpu
-        ? ({ dtype: 'fp32', device: 'webgpu' } as const)
-        : ({ dtype: 'q8', device: 'wasm' } as const);
-      try {
-        tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
-          ...options,
-          progress_callback: track,
-        });
-        engine.device = options.device;
-      } catch (error) {
-        if (!gpu) throw error;
-        // WebGPU adapter exists but the model failed on it: retry on wasm.
-        tts = await KokoroTTS.from_pretrained('onnx-community/Kokoro-82M-v1.0-ONNX', {
-          dtype: 'q8',
-          device: 'wasm',
-          progress_callback: track,
-        });
-        engine.device = 'wasm (webgpu failed)';
-      }
+      const ready = new Promise<any>((resolve, reject) => {
+        onReady = resolve;
+        onFail = reject;
+      });
+      worker.postMessage({
+        type: 'load',
+        webgpuDtype: options.webgpuDtype === undefined ? KOKORO_WEBGPU_DTYPE : options.webgpuDtype,
+      });
+      const info = await ready;
+      voiceInfo = info.voices;
+      engine.device = `${info.device} ${info.dtype}`;
     },
     voices() {
-      if (!tts) return [];
-      return Object.entries(tts.voices as Record<string, any>).map(([id, info]) => ({
+      return Object.entries(voiceInfo).map(([id, info]) => ({
         id,
         label: info.name as string,
         language: info.language as string,
         trait: info.gender as string,
       }));
     },
-    async *stream(text, { voice, speed }) {
-      const audio = await tts.generate(text, { voice: voice || 'af_heart', speed });
-      engine.sampleRate = audio.sampling_rate;
-      yield audio.audio as Float32Array;
+    async *stream(text, { voice, speed, signal }) {
+      const id = ++sequence;
+      const result = new Promise<{ samples: Float32Array; sampleRate: number }>(
+        (resolve, reject) => {
+          pending.set(id, { resolve, reject });
+        },
+      );
+      worker.postMessage({ type: 'generate', id, text, voice, speed });
+      const audio = await result;
+      if (signal?.aborted) return;
+      engine.sampleRate = audio.sampleRate;
+      yield audio.samples;
     },
     dispose() {
-      tts = undefined;
+      worker.terminate();
     },
   };
   return engine;

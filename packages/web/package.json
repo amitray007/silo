@@ -20,6 +20,7 @@
     "kokoro-js": "^1.2.1",
     "loading-dev": "0.3.6",
     "mermaid": "catalog:",
+    "motion": "^14.9.0",
     "phonon-tts": "^0.6.0",
     "react": "catalog:",
     "react-dom": "catalog:",

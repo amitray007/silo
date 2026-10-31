@@ -15,6 +15,11 @@ const paths = {
   chevronRight: 'm9 5 7 7-7 7',
   trash: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6',
   stop: 'M7 7h10v10H7z',
+  quote: 'M5 17c0-4 1-7 4-9M13 17c0-4 1-7 4-9M5 17h4v-4H5zM13 17h4v-4h-4z',
+  copy: 'M9 7V3h12v12h-4M3 9h12v12H3z',
+  search: 'M16 16l5 5M18 10a8 8 0 1 1-16 0 8 8 0 0 1 16 0',
+  more: 'M5 12h.01M12 12h.01M19 12h.01',
+  chevronDown: 'm6 9 6 6 6-6',
 } as const;
 
 export type ProtoIconName = keyof typeof paths;

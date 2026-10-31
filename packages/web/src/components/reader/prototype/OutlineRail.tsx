@@ -1,9 +1,18 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: throwaway prototype
 // biome-ignore-all lint/a11y/noStaticElementInteractions: hover cluster, prototype
+import {
+  type MotionValue,
+  motion,
+  useMotionValue,
+  useReducedMotion,
+  useSpring,
+  useTransform,
+} from 'motion/react';
 import { useEffect, useMemo, useState } from 'react';
+import { paragraphSections } from './paragraphs.prototype';
 import type { PassageHighlight } from './useHighlights';
 
-type Section = { el: Element; heading: boolean; next: string };
+type Section = { el: Element; heading: boolean; next: string; number: number };
 type Group = {
   id: number;
   sections: Section[];
@@ -13,6 +22,57 @@ type Group = {
 
 const MAX_TICKS = 40;
 const STEP = 6; // 2px tick plus a 4px gap
+const PAD = 6; // cluster padding above the first tick
+const BASE = 12;
+const CREST = 36;
+const REACH = STEP * 5; // the wave falls off over about five ticks
+const FAR = 1e5;
+const SPRING = { stiffness: 300, damping: 25, mass: 0.5 };
+
+/** One tick: its pointer distance drives a spring that lifts its width and brightness. */
+function Tick({
+  index,
+  pointerY,
+  reduced,
+  crest,
+  entry,
+  current,
+  onEnter,
+  onClick,
+}: {
+  index: number;
+  pointerY: MotionValue<number>;
+  reduced: boolean;
+  crest: boolean;
+  entry: Group;
+  current: boolean;
+  onEnter: () => void;
+  onClick: () => void;
+}) {
+  const centre = PAD + index * STEP + STEP / 2;
+  const rest = current ? 20 : BASE;
+  const lift = useTransform(pointerY, (y) => Math.max(0, 1 - Math.abs(y - centre) / REACH));
+  const spring = useSpring(lift, SPRING);
+  const width = useTransform(spring, (m) => rest + m * (CREST - rest));
+  const opacity = useTransform(spring, (m) => 0.55 + 0.45 * m);
+  return (
+    <button
+      type="button"
+      className="proto-tick"
+      data-heading={Boolean(entry.heading)}
+      data-current={current}
+      data-crest={reduced && crest}
+      data-color={entry.color ?? undefined}
+      data-tinted={entry.color !== null}
+      aria-label={entry.heading ? (entry.heading.el.textContent ?? 'Section') : 'Paragraph'}
+      onMouseEnter={onEnter}
+      onFocus={onEnter}
+      onClick={onClick}
+    >
+      <motion.i style={reduced ? {} : { width, opacity }} />
+    </button>
+  );
+}
 
 /**
  * Seam for an optional AI section summary. Returns null for now, so the rail shows the
@@ -28,12 +88,12 @@ function firstSentence(text: string): string {
 }
 
 function collect(prose: HTMLElement): Section[] {
-  const sections: Section[] = [];
-  for (const el of prose.querySelectorAll('h1, h2, h3, h4, h5, h6, p, li, blockquote')) {
-    if (el.parentElement?.closest('li, blockquote, p, pre, figure, table')) continue;
-    if (!el.textContent?.trim()) continue;
-    sections.push({ el, heading: /^H[1-6]$/.test(el.tagName), next: '' });
-  }
+  const sections = paragraphSections(prose).map((el, i) => ({
+    el,
+    heading: /^H[1-6]$/.test(el.tagName),
+    next: '',
+    number: i + 1,
+  }));
   sections.forEach((section, i) => {
     section.next = sections[i + 1]?.el.textContent ?? '';
   });
@@ -77,6 +137,9 @@ export function OutlineRail({
   const [tick, setTick] = useState(0);
   const [current, setCurrent] = useState(0);
   const [hover, setHover] = useState<number | null>(null);
+  const reduced = useReducedMotion() ?? false;
+  const pointerY = useMotionValue(FAR);
+  const cardY = useSpring(0, SPRING);
   const [height, setHeight] = useState(0);
 
   useEffect(() => {
@@ -130,8 +193,18 @@ export function OutlineRail({
     };
   }, [scroll, groups]);
 
-  if (!wide || !groups.length) return null;
   const clusterHeight = groups.length * STEP;
+  const centre = (height - clusterHeight) / 2;
+  const cardTop =
+    hover === null
+      ? 0
+      : Math.min(Math.max(centre + PAD + hover * STEP - 18, 12), Math.max(12, height - 170));
+  // The card rides a spring toward the crest tick.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: cardY is a stable motion value.
+  useEffect(() => {
+    if (hover !== null) cardY.set(cardTop);
+  }, [hover, cardTop]);
+  if (!wide || !groups.length) return null;
   const hovered = hover === null ? undefined : groups[hover];
   const lead = hovered?.heading ?? hovered?.sections[0];
   const text = lead?.el.textContent?.replace(/\s+/g, ' ').trim() ?? '';
@@ -140,55 +213,55 @@ export function OutlineRail({
   const body = (summary ?? (lead?.heading ? lead.next : text.slice(title.length)))
     .replace(/\s+/g, ' ')
     .trim();
-  // Keep the card inside the pane: below the head, above the dock.
-  const centre = (height - clusterHeight) / 2;
-  const cardTop =
-    hover === null
-      ? 0
-      : Math.min(Math.max(centre + hover * STEP - 18, 12), Math.max(12, height - 170));
-
   return (
     <nav className="proto-outline" aria-label="Article outline">
-      <div className="proto-cluster" onMouseLeave={() => setHover(null)}>
-        {groups.map((entry, index) => {
-          const near = hover === null ? 99 : Math.abs(index - hover);
-          return (
-            <button
-              key={entry.id}
-              type="button"
-              className="proto-tick"
-              data-heading={Boolean(entry.heading)}
-              data-current={index === current}
-              data-color={entry.color ?? undefined}
-              data-tinted={entry.color !== null}
-              data-near={near < 3 ? near : undefined}
-              aria-label={entry.heading ? (entry.heading.el.textContent ?? 'Section') : 'Paragraph'}
-              onMouseEnter={() => setHover(index)}
-              onFocus={() => setHover(index)}
-              onBlur={() => setHover(null)}
-              onClick={() => {
-                const el = entry.sections[0]?.el;
-                if (!el) return;
-                scroll.scrollTo({
-                  top:
-                    scroll.scrollTop +
-                    el.getBoundingClientRect().top -
-                    scroll.getBoundingClientRect().top -
-                    90,
-                  behavior: 'smooth',
-                });
-              }}
-            >
-              <i />
-            </button>
-          );
-        })}
+      <div
+        className="proto-cluster"
+        onPointerMove={(event) => {
+          const y = event.clientY - event.currentTarget.getBoundingClientRect().top;
+          pointerY.set(y);
+          const at = Math.round((y - PAD - STEP / 2) / STEP);
+          const next = Math.min(groups.length - 1, Math.max(0, at));
+          setHover((previous) => (previous === next ? previous : next));
+        }}
+        onPointerLeave={() => {
+          pointerY.set(FAR);
+          setHover(null);
+        }}
+      >
+        {groups.map((entry, index) => (
+          <Tick
+            key={entry.id}
+            index={index}
+            pointerY={pointerY}
+            reduced={reduced}
+            crest={hover === index}
+            entry={entry}
+            current={index === current}
+            onEnter={() => setHover(index)}
+            onClick={() => {
+              const el = entry.sections[0]?.el;
+              if (!el) return;
+              scroll.scrollTo({
+                top:
+                  scroll.scrollTop +
+                  el.getBoundingClientRect().top -
+                  scroll.getBoundingClientRect().top -
+                  90,
+                behavior: 'smooth',
+              });
+            }}
+          />
+        ))}
       </div>
       {hovered && lead && (
-        <div className="proto-outline-card" style={{ top: cardTop }}>
-          <strong>{title}</strong>
+        <motion.div className="proto-outline-card" style={{ top: reduced ? cardTop : cardY }}>
+          <strong>
+            {title}
+            <em>¶{lead.number}</em>
+          </strong>
           {body && <span>{body}</span>}
-        </div>
+        </motion.div>
       )}
     </nav>
   );

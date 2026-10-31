@@ -140,7 +140,7 @@ function Mounted({
       {hl.supported
         ? null
         : createPortal(<p className="proto-warning">Custom Highlight API missing.</p>, host)}
-      <SelectionPopover hl={hl} />
+      {variant !== 'B' && <SelectionPopover hl={hl} />}
       <VariantSwitcher variant={variant} cycle={cycle} />
       {variant === 'A' && <VariantA {...tools} />}
       {variant === 'B' && <VariantB {...tools} />}

@@ -90,7 +90,8 @@ export function useHighlights(root: HTMLElement | null, scroll: HTMLElement | nu
       }, 0);
     };
     const down = (event: MouseEvent) => {
-      if (event.target instanceof Element && event.target.closest('.proto-selection')) return;
+      if (event.target instanceof Element && event.target.closest('.proto-selection, .proto-sb'))
+        return;
       setPending(null);
     };
     root.addEventListener('mouseup', up);
