@@ -168,3 +168,54 @@ export function useReaderType() {
   const style = useMemo(() => readerTypeStyle(type), [type]);
   return { type, update, style };
 }
+
+const pencilStyles = ['underline', 'highlighter'] as const;
+export const MIN_PENCIL_WPM = 100;
+export const MAX_PENCIL_WPM = 600;
+export const PENCIL_WPM_STEP = 20;
+
+export type PencilStyle = (typeof pencilStyles)[number];
+export type PencilPrefs = { style: PencilStyle; wpm: number };
+
+export const pencilPrefsDefaults: PencilPrefs = { style: 'underline', wpm: 240 };
+
+function validWpm(value: unknown): number {
+  if (typeof value !== 'number' || !Number.isFinite(value)) return pencilPrefsDefaults.wpm;
+  const snapped = Math.round(value / PENCIL_WPM_STEP) * PENCIL_WPM_STEP;
+  return Math.min(MAX_PENCIL_WPM, Math.max(MIN_PENCIL_WPM, snapped));
+}
+
+/** Each field falls back to its default alone, so one bad field keeps the other. */
+export function parsePencilPrefs(raw: string): PencilPrefs {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    return pencilPrefsDefaults;
+  }
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return pencilPrefsDefaults;
+  const stored = data as Record<string, unknown>;
+  return {
+    style: oneOf(pencilStyles, stored.style, pencilPrefsDefaults.style),
+    wpm: validWpm(stored.wpm),
+  };
+}
+
+const pencilPrefsStore = createPrefStore<PencilPrefs>({
+  key: 'silo.readerPencil',
+  event: 'silo:reader-pencil',
+  initial: pencilPrefsDefaults,
+  parse: parsePencilPrefs,
+  serialize: (value) => JSON.stringify({ v: 1, ...value }),
+});
+
+/** The pencil's style and pace, browser-local like the type settings. */
+export function usePencilPrefs() {
+  const prefs = usePref(pencilPrefsStore);
+  const update = useCallback(
+    (patch: Partial<PencilPrefs>) =>
+      pencilPrefsStore.set({ ...pencilPrefsStore.getSnapshot(), ...patch }),
+    [],
+  );
+  return { prefs, update };
+}

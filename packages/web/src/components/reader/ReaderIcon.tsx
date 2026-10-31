@@ -44,6 +44,8 @@ const paths = {
   hash: 'M10 5.5 8.5 18.5M15.5 5.5 14 18.5M6 9.75h12.5M5.5 14.25H18',
   more: 'M5 12h.01M12 12h.01M19 12h.01',
   right: 'm9 5 7 7-7 7',
+  play: 'M7 4.5v15l12-7.5z',
+  pause: 'M8.5 5v14M15.5 5v14',
   globe:
     'M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0M3 12h18M12 3c2.5 2.5 3.75 5.5 3.75 9S14.5 18.5 12 21M12 3C9.5 5.5 8.25 8.5 8.25 12S9.5 18.5 12 21',
 } as const;
@@ -52,16 +54,18 @@ export function readerIconPath(name: keyof typeof paths): string {
   return paths[name];
 }
 
+const filled = new Set<keyof typeof paths>(['bookmarkFilled', 'play']);
+
 /** Original silo glyphs drawn on the shared 24-unit grid. */
 export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size?: number }) {
   return (
     <svg
       className="silo-reader-icon"
-      data-filled={name === 'bookmarkFilled'}
+      data-filled={filled.has(name)}
       width={size}
       height={size}
       viewBox="0 0 24 24"
-      fill={name === 'bookmarkFilled' ? 'currentColor' : 'none'}
+      fill={filled.has(name) ? 'currentColor' : 'none'}
       stroke="currentColor"
       strokeWidth="1.5"
       strokeLinecap="round"

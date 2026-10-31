@@ -5,6 +5,7 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { useCallback } from 'react';
 import {
   clearTitleReveal,
   getTitleReveal,
@@ -15,7 +16,7 @@ import {
   transferTitleReveal,
 } from '../lib/titleReveals';
 import { deriveTitleFromUrl } from '../lib/url';
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiPutKeepalive } from './client';
 import type {
   AccessTokensResponse,
   AiProviderKind,
@@ -36,6 +37,7 @@ import type {
   LinkTitlesResponse,
   LiveReaderJson,
   OAuthClientsResponse,
+  ReadingPositionJson,
   RestoreResponse,
   SaveAiKeyResponse,
   SavedLinksResponse,
@@ -197,6 +199,47 @@ export function useLink(id: string | undefined, options: { enabled?: boolean } =
     refetchInterval: (query) =>
       query.state.data?.link.captureStatus === 'enriching' ? 1500 : false,
   });
+}
+
+function withReadingPosition(
+  data: LinkResponse | undefined,
+  readingPosition: ReadingPositionJson,
+): LinkResponse | undefined {
+  return data && { ...data, link: { ...data.link, readingPosition } };
+}
+
+/**
+ * Save where the reader stopped (`PUT /api/links/:id/reading-position`). The link query updates
+ * at once, so the resume point is right without a refetch; the server's own timestamp replaces
+ * the local one when the save lands. A failed save keeps the local value, and the next save
+ * retries. `keepalive` sends the request so it survives the page closing.
+ */
+export function useSaveReadingPosition(id: string) {
+  const queryClient = useQueryClient();
+  return useCallback(
+    (position: number, options: { keepalive?: boolean } = {}) => {
+      const key = queryKeys.link(id);
+      const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
+      queryClient.setQueryData<LinkResponse>(key, (data) =>
+        withReadingPosition(data, { position, updatedAt: new Date().toISOString() }),
+      );
+      if (options.keepalive) {
+        apiPutKeepalive(path, { position });
+        return;
+      }
+      apiPut<{ readingPosition: ReadingPositionJson }>(path, { position }).then(
+        (saved) =>
+          // A newer local save may already have replaced this one; leave that alone.
+          queryClient.setQueryData<LinkResponse>(key, (data) =>
+            data?.link.readingPosition?.position === position
+              ? withReadingPosition(data, saved.readingPosition)
+              : data,
+          ),
+        () => {},
+      );
+    },
+    [id, queryClient],
+  );
 }
 
 /** The paginated list cache, shared by query polling and optimistic writes. */

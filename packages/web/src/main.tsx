@@ -12,6 +12,7 @@ import './styles/feeds.css';
 import './styles/surfaces.css';
 import './styles/link-details.css';
 import './styles/reader-dock.css';
+import './styles/reader-pencil.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
 const queryClient = new QueryClient({

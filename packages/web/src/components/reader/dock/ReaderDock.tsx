@@ -1,9 +1,33 @@
-import { type ComponentType, createContext, useContext, useEffect, useId, useState } from 'react';
+import {
+  type ComponentType,
+  createContext,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useContext,
+  useEffect,
+  useId,
+  useState,
+} from 'react';
 import { createPortal } from 'react-dom';
+import { useSaveReadingPosition } from '../../../api/hooks';
+import type { LinkJson } from '../../../api/types';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
+import { PencilOverlay } from '../pencil/PencilOverlay';
+import { PencilSheet } from '../pencil/PencilSheet';
+import { type PencilApi, usePencil } from '../pencil/usePencil';
+import { usePencilKeys } from '../pencil/usePencilKeys';
 import { ReaderIcon } from '../ReaderIcon';
 import { TypeSheet } from './TypeSheet';
+
+// The outline rail brings the spring engine with it, so it loads only where a rail can show.
+const OutlineRail = lazy(() =>
+  import('../outline/OutlineRail').then((module) => ({ default: module.OutlineRail })),
+);
+
+/** What a dock tool's sheet can read. Later slices add their tools' state here. */
+type DockApi = { pencil: PencilApi };
 
 type DockTool = {
   id: string;
@@ -12,8 +36,15 @@ type DockTool = {
   /** The sheet heading. */
   heading: string;
   /** The glyph beside the label. */
-  glyph: string;
-  sheet: ComponentType;
+  glyph: ReactNode;
+  sheet: ComponentType<{ api: DockApi }>;
+  /** A tool with a main action beside its sheet chevron. */
+  split?: {
+    mainTitle: string;
+    chevronTitle: string;
+    on: (api: DockApi) => boolean;
+    toggle: (api: DockApi) => void;
+  };
 };
 
 /** Later slices add their tools here; the dock lists only tools that have shipped. */
@@ -23,17 +54,46 @@ const tools: readonly DockTool[] = [
     label: 'Type',
     title: 'Type settings',
     heading: 'Typography',
-    glyph: 'Aa',
-    sheet: TypeSheet,
+    glyph: (
+      <span className="silo-reader-dock-glyph" aria-hidden="true">
+        Aa
+      </span>
+    ),
+    sheet: () => <TypeSheet />,
+  },
+  {
+    id: 'pencil',
+    label: 'Pencil',
+    title: 'Reading pencil',
+    heading: 'Reading pencil',
+    glyph: <ReaderIcon name="edit" size={19} />,
+    sheet: ({ api }) => <PencilSheet pencil={api.pencil} />,
+    split: {
+      mainTitle: 'Reading pencil (P)',
+      chevronTitle: 'Pencil settings',
+      on: (api) => api.pencil.enabled,
+      toggle: (api) => api.pencil.toggleEnabled(),
+    },
   },
 ];
 
 /**
- * The reader pane's side of the dock: the element that holds it, so it floats over the scroll
- * area, and a report of whether a dock is mounted. The pane themes itself only while one is.
+ * The reader pane's side of the dock: the element that holds it, the scroll area and the pane
+ * itself, so tools can draw beside the prose, and a report of whether a dock is mounted. The
+ * pane themes itself only while one is.
  */
-export type DockHost = { element: HTMLElement | null; report: (mounted: boolean) => void };
-export const DockHostContext = createContext<DockHost>({ element: null, report: () => {} });
+export type DockHost = {
+  element: HTMLElement | null;
+  scroll: HTMLElement | null;
+  panel: HTMLElement | null;
+  report: (mounted: boolean) => void;
+};
+export const DockHostContext = createContext<DockHost>({
+  element: null,
+  scroll: null,
+  panel: null,
+  report: () => {},
+});
 
 function DockButton({
   tool,
@@ -56,19 +116,92 @@ function DockButton({
       aria-controls={open ? sheetId : undefined}
       onClick={onToggle}
     >
-      <span className="silo-reader-dock-glyph" aria-hidden="true">
-        {tool.glyph}
-      </span>
+      {tool.glyph}
       {tool.label}
     </button>
   );
 }
 
-/** A floating pill at the bottom of the reader pane. Each tool opens a sheet above it. */
-export function ReaderDock() {
-  const { element: host, report } = useContext(DockHostContext);
+/** The main part toggles the tool; the chevron opens its sheet. */
+function SplitDockButton({
+  tool,
+  split,
+  api,
+  open,
+  sheetId,
+  onToggle,
+}: {
+  tool: DockTool;
+  split: NonNullable<DockTool['split']>;
+  api: DockApi;
+  open: boolean;
+  sheetId: string;
+  onToggle: () => void;
+}) {
+  const on = split.on(api);
+  return (
+    <div className="silo-reader-dock-split" data-on={on}>
+      <button
+        type="button"
+        className="silo-reader-dockbtn"
+        title={split.mainTitle}
+        aria-pressed={on}
+        onClick={(event) => {
+          split.toggle(api);
+          // A click leaves focus here, where Space would press the button again instead of
+          // pausing the tool. Keyboard presses keep their focus.
+          if (event.detail > 0) event.currentTarget.blur();
+        }}
+      >
+        {tool.glyph}
+        {tool.label}
+      </button>
+      <button
+        type="button"
+        className="silo-reader-dockchev"
+        title={split.chevronTitle}
+        aria-label={split.chevronTitle}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        aria-controls={open ? sheetId : undefined}
+        onClick={onToggle}
+      >
+        <ReaderIcon name="down" size={14} />
+      </button>
+    </div>
+  );
+}
+
+/** A reading position is saved only for a live library link; trash and feed posts refuse it. */
+function canSavePosition(link: LinkJson, trashed: boolean): boolean {
+  return !trashed && link.feedId === null;
+}
+
+/**
+ * A floating pill at the bottom of the reader pane. Each tool opens a sheet above it. It also
+ * runs the pencil, the outline rail and the resume point, which draw in the prose and the pane.
+ */
+export function ReaderDock({
+  link,
+  prose,
+  trashed = false,
+}: {
+  link: LinkJson;
+  prose: HTMLElement | null;
+  trashed?: boolean;
+}) {
+  const { element: host, scroll, panel, report } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
+  const save = useSaveReadingPosition(link.id);
+  const pencil = usePencil({
+    prose,
+    scroll,
+    saved: link.readingPosition?.position ?? null,
+    canSave: canSavePosition(link, trashed),
+    onSave: save,
+  });
+  usePencilKeys(pencil);
   const hosted = host !== null;
   useEffect(() => {
     if (!hosted) return;
@@ -76,49 +209,71 @@ export function ReaderDock() {
     return () => report(false);
   }, [hosted, report]);
   if (!host) return null;
+  const api: DockApi = { pencil };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return createPortal(
-    <div className="silo-reader-dock">
-      <div className="silo-reader-dock-pill" role="toolbar" aria-label="Reader tools">
-        {tools.map((tool) => (
-          <DockButton
-            key={tool.id}
-            tool={tool}
-            open={openId === tool.id}
-            sheetId={sheetId}
-            onToggle={() => setOpenId(openId === tool.id ? null : tool.id)}
-          />
-        ))}
+    <>
+      {prose && scroll && panel && (
+        <Suspense fallback={null}>
+          <OutlineRail prose={prose} scroll={scroll} panel={panel} />
+        </Suspense>
+      )}
+      <PencilOverlay pencil={pencil} prose={prose} scroll={scroll} />
+      <div className="silo-reader-dock">
+        <div className="silo-reader-dock-pill" role="toolbar" aria-label="Reader tools">
+          {tools.map((tool) => {
+            const toggle = () => setOpenId(openId === tool.id ? null : tool.id);
+            return tool.split ? (
+              <SplitDockButton
+                key={tool.id}
+                tool={tool}
+                split={tool.split}
+                api={api}
+                open={openId === tool.id}
+                sheetId={sheetId}
+                onToggle={toggle}
+              />
+            ) : (
+              <DockButton
+                key={tool.id}
+                tool={tool}
+                open={openId === tool.id}
+                sheetId={sheetId}
+                onToggle={toggle}
+              />
+            );
+          })}
+        </div>
+        <MenuPresence>
+          {openTool && Sheet && (
+            <MenuSurface
+              className="silo-type-sheet"
+              role="dialog"
+              label={openTool.label}
+              sheet={false}
+              onClose={() => setOpenId(null)}
+            >
+              <header className="silo-sheet-head">
+                <h3>{openTool.heading}</h3>
+                <button
+                  type="button"
+                  className="silo-reader-iconbtn"
+                  aria-label="Close sheet"
+                  title="Close (Esc)"
+                  onClick={() => setOpenId(null)}
+                >
+                  <ReaderIcon name="close" size={18} />
+                </button>
+              </header>
+              <div id={sheetId} className="silo-sheet-body">
+                <Sheet api={api} />
+              </div>
+            </MenuSurface>
+          )}
+        </MenuPresence>
       </div>
-      <MenuPresence>
-        {openTool && Sheet && (
-          <MenuSurface
-            className="silo-type-sheet"
-            role="dialog"
-            label={openTool.label}
-            sheet={false}
-            onClose={() => setOpenId(null)}
-          >
-            <header className="silo-sheet-head">
-              <h3>{openTool.heading}</h3>
-              <button
-                type="button"
-                className="silo-reader-iconbtn"
-                aria-label="Close sheet"
-                title="Close (Esc)"
-                onClick={() => setOpenId(null)}
-              >
-                <ReaderIcon name="close" size={18} />
-              </button>
-            </header>
-            <div id={sheetId} className="silo-sheet-body">
-              <Sheet />
-            </div>
-          </MenuSurface>
-        )}
-      </MenuPresence>
-    </div>,
+    </>,
     host,
   );
 }

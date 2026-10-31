@@ -154,7 +154,15 @@ export type LinkJson = {
   tags: string[];
   createdAt: string;
   updatedAt: string;
+  /**
+   * Where the reader stopped, as a share (0 to 1) of the article's words. Only single-link
+   * reads carry it: `null` means none saved, and a list row leaves it out.
+   */
+  readingPosition?: ReadingPositionJson | null;
 };
+
+/** `PUT /api/links/:id/reading-position` returns this; `updatedAt` is an ISO string. */
+export type ReadingPositionJson = { position: number; updatedAt: string };
 
 /**
  * `GET /api/links/:id/reader` -- the formatted Reader built live from the page.

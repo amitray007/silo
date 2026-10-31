@@ -229,3 +229,17 @@ export function apiPatch<T>(path: string, body: unknown): Promise<T> {
 export function apiDelete<T>(path: string): Promise<T> {
   return apiRequest<T>(path, 'DELETE');
 }
+
+/**
+ * Fire-and-forget `PUT` that survives the page closing (`keepalive`), for the `pagehide` save.
+ * No response is read and a failure is dropped: the page is already going away.
+ */
+export function apiPutKeepalive(path: string, body: unknown): void {
+  fetch(`${baseUrl}${path}`, {
+    method: 'PUT',
+    keepalive: true,
+    credentials: 'include',
+    headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => {});
+}

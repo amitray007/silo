@@ -1,7 +1,17 @@
 import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
-import { parseReaderType, readerTypeDefaults, readerTypeStyle, useReaderType } from './readerPrefs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  MAX_PENCIL_WPM,
+  MIN_PENCIL_WPM,
+  parsePencilPrefs,
+  parseReaderType,
+  pencilPrefsDefaults,
+  readerTypeDefaults,
+  readerTypeStyle,
+  usePencilPrefs,
+  useReaderType,
+} from './readerPrefs';
 
 const KEY = 'silo.readerType';
 // Vitest blanks CSS imports, so read the stylesheet source directly.
@@ -235,4 +245,51 @@ it('re-reads on a storage event that names no key', () => {
     window.dispatchEvent(new StorageEvent('storage', { key: null }));
   });
   expect(screen.getByText('mono-19')).toBeDefined();
+});
+
+describe('pencil prefs', () => {
+  const PENCIL_KEY = 'silo.readerPencil';
+
+  afterEach(() => localStorage.removeItem(PENCIL_KEY));
+
+  it('starts at Underline and 240 wpm', () => {
+    expect(pencilPrefsDefaults).toEqual({ style: 'underline', wpm: 240 });
+    expect(renderHook(usePencilPrefs).result.current.prefs).toEqual(pencilPrefsDefaults);
+  });
+
+  it('round-trips an update through storage', () => {
+    const first = renderHook(usePencilPrefs);
+    act(() => first.result.current.update({ style: 'highlighter', wpm: 320 }));
+    expect(JSON.parse(localStorage.getItem(PENCIL_KEY) ?? '{}')).toEqual({
+      v: 1,
+      style: 'highlighter',
+      wpm: 320,
+    });
+    first.unmount();
+    expect(renderHook(usePencilPrefs).result.current.prefs).toEqual({
+      style: 'highlighter',
+      wpm: 320,
+    });
+  });
+
+  it('falls back for damaged text and keeps a good field beside a bad one', () => {
+    for (const raw of ['{nope', 'null', '[1]', '7']) {
+      expect(parsePencilPrefs(raw)).toEqual(pencilPrefsDefaults);
+    }
+    expect(parsePencilPrefs(JSON.stringify({ style: 'neon', wpm: 300 }))).toEqual({
+      style: 'underline',
+      wpm: 300,
+    });
+    expect(parsePencilPrefs(JSON.stringify({ style: 'highlighter', wpm: 'fast' }))).toEqual({
+      style: 'highlighter',
+      wpm: 240,
+    });
+  });
+
+  it('clamps the pace to 100..600 and snaps it to steps of 20', () => {
+    expect(parsePencilPrefs(JSON.stringify({ wpm: 10 })).wpm).toBe(MIN_PENCIL_WPM);
+    expect(parsePencilPrefs(JSON.stringify({ wpm: 9000 })).wpm).toBe(MAX_PENCIL_WPM);
+    expect(parsePencilPrefs(JSON.stringify({ wpm: 251 })).wpm).toBe(260);
+    expect(parsePencilPrefs(JSON.stringify({ wpm: Number.NaN })).wpm).toBe(240);
+  });
 });

@@ -416,11 +416,20 @@ export function ReaderPane({
   const { type } = useReaderType();
   const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
   const [dockMounted, setDockMounted] = useState(false);
-  const dockHost = useMemo(() => ({ element: dockElement, report: setDockMounted }), [dockElement]);
+  // The scroll area and the pane exist from the first render; the dock's tools draw in them.
+  const [areas, setAreas] = useState<{ scroll: HTMLElement | null; panel: HTMLElement | null }>({
+    scroll: null,
+    panel: null,
+  });
   const shownOriginal = tab === 'original' && link ? original : undefined;
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setAreas({ scroll: scrollRef.current, panel: panelRef.current }), []);
+  const dockHost = useMemo(
+    () => ({ element: dockElement, ...areas, report: setDockMounted }),
+    [dockElement, areas],
+  );
   const [openMenu, setOpenMenu] = useState<'more' | 'settings' | null>(null);
   const [headerFocused, setHeaderFocused] = useState(false);
   const [headerHovered, setHeaderHovered] = useState(false);
