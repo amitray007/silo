@@ -47,6 +47,7 @@ export const foundLinkOutputShape = {
   createdAt: baseLinkShape.createdAt.optional(),
   updatedAt: baseLinkShape.updatedAt.optional(),
   readingPosition: baseLinkShape.readingPosition.optional(),
+  highlights: baseLinkShape.highlights.optional(),
 };
 
 /**

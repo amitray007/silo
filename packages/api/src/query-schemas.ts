@@ -1,5 +1,12 @@
 import type { PageParams } from '@silo/core';
-import { CAPTURE_SOURCES, normalizeFeedUrl, sourceDataSchema } from '@silo/core';
+import {
+  CAPTURE_SOURCES,
+  HIGHLIGHT_COLORS,
+  HIGHLIGHT_NOTE_MAX,
+  HIGHLIGHT_QUOTE_MAX,
+  normalizeFeedUrl,
+  sourceDataSchema,
+} from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -154,6 +161,26 @@ export const editBodySchema = z.object({
 /** `PUT /api/links/:id/reading-position` body: a finite share of the article's words, 0 to 1. */
 export const readingPositionBodySchema = z.object({
   position: z.number().min(0).max(1),
+});
+
+const highlightColorSchema = z.enum(HIGHLIGHT_COLORS);
+
+/** `POST /api/links/:id/highlights` body. Context and offsets are optional; without them the quote is matched in the saved text. */
+export const addHighlightBodySchema = z.object({
+  quote: z.string().min(1).max(HIGHLIGHT_QUOTE_MAX),
+  prefix: z.string().max(64).optional(),
+  suffix: z.string().max(64).optional(),
+  startOffset: z.number().int().min(0).nullable().optional(),
+  endOffset: z.number().int().min(1).nullable().optional(),
+  occurrence: z.number().int().min(1).optional(),
+  color: highlightColorSchema.optional(),
+  note: z.string().max(HIGHLIGHT_NOTE_MAX).nullable().optional(),
+});
+
+/** `PATCH /api/highlights/:id` body. `note: null` clears the note. */
+export const editHighlightBodySchema = z.object({
+  color: highlightColorSchema.optional(),
+  note: z.string().max(HIGHLIGHT_NOTE_MAX).nullable().optional(),
 });
 
 /** `POST /api/links/:id/tags` (add tag) body schema. */

@@ -5,6 +5,7 @@ import { serveStatic } from '@hono/node-server/serve-static';
 import {
   FeedPostNotEditableError,
   InvalidCursorError,
+  InvalidHighlightError,
   InvalidReadingPositionError,
 } from '@silo/core';
 import { Hono } from 'hono';
@@ -20,6 +21,7 @@ import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerFeedRoutes } from './routes/feeds.js';
+import { registerHighlightsRoutes } from './routes/highlights.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
@@ -237,6 +239,7 @@ export function createApp(): Hono {
   registerLinksSavedRoutes(api);
   registerLinksTitlesRoutes(api);
   registerLinksWriteRoutes(api);
+  registerHighlightsRoutes(api);
   registerIngestRoutes(api);
   registerTrashRoutes(api);
   registerTagsRoutes(api);
@@ -304,6 +307,9 @@ export function createApp(): Hono {
   app.onError((error, c) => {
     if (error instanceof FeedPostNotEditableError) {
       return c.json(errorBody(error.code, error.message), 409);
+    }
+    if (error instanceof InvalidHighlightError) {
+      return c.json(errorBody(error.code, error.message), 400);
     }
     if (error instanceof InvalidReadingPositionError) {
       return c.json(errorBody(error.code, error.message), 400);

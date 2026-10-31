@@ -9,6 +9,7 @@ import { registerFeedTools } from './tools/feeds.js';
 import { registerFindRelated } from './tools/find-related.js';
 import { registerGetLink } from './tools/get-link.js';
 import { registerHardDeleteLink } from './tools/hard-delete-link.js';
+import { registerHighlightTools } from './tools/highlights.js';
 import { registerListLinks } from './tools/list-links.js';
 import { registerListTags } from './tools/list-tags.js';
 import { registerListTrash } from './tools/list-trash.js';
@@ -82,6 +83,8 @@ export function createSiloMcpServer(): McpServer {
   registerFindRelated(server);
 
   registerHardDeleteLink(server);
+  // Reader tools slice 3a: passage highlights with notes.
+  registerHighlightTools(server);
 
   registerListTags(server);
 
