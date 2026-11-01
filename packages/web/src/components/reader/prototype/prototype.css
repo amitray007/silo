@@ -2114,37 +2114,6 @@
 .proto-place-label:hover {
   color: var(--ink);
 }
-.proto-place-mark[data-style="ribbon"] {
-  border: 0;
-}
-.proto-place-mark[data-style="ribbon"] .proto-place-label {
-  left: -27px;
-  width: 20px;
-  height: 26px;
-  padding: 0;
-  background: none;
-}
-.proto-place-mark[data-style="ribbon"] .proto-place-label > svg {
-  width: 18px;
-  height: 24px;
-  fill: var(--line-2);
-  color: var(--fnt);
-}
-.proto-place-mark[data-style="ribbon"] .proto-place-label > span {
-  position: absolute;
-  left: 27px;
-  padding: 0 6px;
-  border-radius: 4px;
-  background: var(--bg);
-  opacity: 0;
-  transition: opacity 120ms;
-  pointer-events: none;
-}
-.proto-place-mark[data-style="ribbon"]
-  .proto-place-label:is(:hover, :focus-visible, [aria-expanded="true"])
-  > span {
-  opacity: 1;
-}
 .proto-place-pop {
   position: absolute;
   z-index: 30;
@@ -2214,12 +2183,6 @@
   }
   .proto-place-pop {
     animation: none;
-  }
-}
-
-@media (max-width: 640px) {
-  .proto-place-mark[data-style="ribbon"] .proto-place-label {
-    left: -18px;
   }
 }
 
@@ -2321,4 +2284,74 @@
   .proto-place-button:active {
     scale: 0.96;
   }
+}
+
+/* Ribbon: only the first text line opens; the elbow lives in the paragraph gap. */
+.proto-place-inline {
+  position: absolute;
+  width: 18px;
+  height: 24px;
+  pointer-events: none;
+}
+.proto-place-ribbon {
+  display: grid;
+  place-items: center;
+  width: 18px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--fnt);
+  pointer-events: auto;
+  cursor: pointer;
+}
+.proto-place-ribbon > svg {
+  width: 18px;
+  height: 24px;
+  fill: var(--line-2);
+  color: var(--fnt);
+}
+.proto-place-elbow {
+  position: absolute;
+  left: 9px;
+  width: 48px;
+  border-top: 0.5px solid var(--line);
+  border-left: 0.5px solid var(--line);
+  pointer-events: none;
+}
+.proto-place-ribbon-label {
+  position: absolute;
+  left: 65px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 18px;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.proto-place-ribbon-label:hover {
+  color: var(--mut);
+}
+.proto-place-ribbon:focus-visible,
+.proto-place-ribbon-label:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: 3px;
+}
+.proto-place-ribbon-preview {
+  position: absolute;
+  opacity: 0.3;
+}
+.proto-place-ribbon-preview > svg {
+  fill: none;
+}
+.proto-place-pop[data-style="ribbon"] {
+  z-index: 32;
 }

@@ -28,12 +28,27 @@ export function SavedPlace({
 }) {
   const [menu, setMenu] = useState(false);
   const [gap, setGap] = useState({ top: 0, left: 0, width: 0 });
+  const [inline, setInline] = useState({ top: 0, left: 0, row: 0 });
+  const [preview, setPreview] = useState<{ top: number; left: number } | null>(null);
+  const labelButton = useRef<HTMLButtonElement>(null);
   const [pop, setPop] = useState({ top: 0, left: 0 });
   const markButton = useRef<HTMLButtonElement>(null);
   const firstAction = useRef<HTMLButtonElement>(null);
   const popover = useRef<HTMLDivElement>(null);
   const { saved, paragraphs, save } = place;
-  const spacing = useRef(new Map<HTMLElement, { original: string; base: number; extra: number }>());
+  const spacing = useRef(
+    new Map<
+      HTMLElement,
+      {
+        original: string;
+        base: number;
+        extra: number;
+        originalIndent: string;
+        baseIndent: number;
+        indent: number;
+      }
+    >(),
+  );
 
   // Animate real paragraph space; keep the first visible block fixed when space
   // changes above it. Disable native anchoring so the two do not compensate twice.
@@ -42,7 +57,10 @@ export function SavedPlace({
     scroll.style.overflowAnchor = 'none';
     return () => {
       scroll.style.overflowAnchor = originalAnchor;
-      for (const [el, value] of spacing.current) el.style.paddingTop = value.original;
+      for (const [el, value] of spacing.current) {
+        el.style.paddingTop = value.original;
+        el.style.textIndent = value.originalIndent;
+      }
       spacing.current.clear();
     };
   }, [scroll]);
@@ -50,7 +68,9 @@ export function SavedPlace({
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: animate the comparison row and hold one viewport anchor.
   useLayoutEffect(() => {
     const block =
-      place.style === 'line' && saved ? (paragraphs[saved.paragraph] as HTMLElement) : undefined;
+      place.style !== 'sentence' && saved
+        ? (paragraphs[saved.paragraph] as HTMLElement)
+        : undefined;
     const targets = new Map<HTMLElement, number>();
     if (block) {
       if (!spacing.current.has(block)) {
@@ -58,6 +78,9 @@ export function SavedPlace({
           original: block.style.paddingTop,
           base: Number.parseFloat(getComputedStyle(block).paddingTop) || 0,
           extra: 0,
+          originalIndent: block.style.textIndent,
+          baseIndent: Number.parseFloat(getComputedStyle(block).textIndent) || 0,
+          indent: 0,
         });
       }
       const value = spacing.current.get(block);
@@ -68,7 +91,9 @@ export function SavedPlace({
         : 0;
       targets.set(block, Math.max(0, 56 - normal));
     }
-    const starts = new Map([...spacing.current].map(([el, value]) => [el, value.extra]));
+    const starts = new Map(
+      [...spacing.current].map(([el, value]) => [el, { extra: value.extra, indent: value.indent }]),
+    );
     const viewport = scroll.getBoundingClientRect().top;
     const anchor = paragraphs.find((el) => el.getBoundingClientRect().bottom > viewport);
     const contentTop = (el: Element) =>
@@ -83,19 +108,23 @@ export function SavedPlace({
         : Math.min(1, (now - start) / 200);
       const eased = 1 - (1 - progress) ** 3;
       for (const [el, value] of spacing.current) {
-        const from = starts.get(el) ?? 0;
-        value.extra = from + ((targets.get(el) ?? 0) - from) * eased;
+        const from = starts.get(el) ?? { extra: 0, indent: 0 };
+        value.extra = from.extra + ((targets.get(el) ?? 0) - from.extra) * eased;
+        const indent = el === block && place.style === 'ribbon' ? 24 : 0;
+        value.indent = from.indent + (indent - from.indent) * eased;
+        el.style.textIndent = `${value.baseIndent + value.indent}px`;
         el.style.paddingTop = `${value.base + value.extra}px`;
       }
       if (anchor) scroll.scrollTop += contentTop(anchor) - anchoredTop;
       if (progress < 1) frame = requestAnimationFrame(tick);
     };
-    frame = requestAnimationFrame(tick);
+    if (matchMedia('(prefers-reduced-motion: reduce)').matches) tick(start);
+    else frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
   }, [place.style, saved, paragraphs, scroll]);
 
   useLayoutEffect(() => {
-    if (!prose || place.style === 'sentence' || !saved) return;
+    if (!prose || place.style !== 'line' || !saved) return;
     let frame = 0;
     const measure = () => {
       const block = paragraphs[saved.paragraph];
@@ -130,6 +159,51 @@ export function SavedPlace({
     };
   }, [prose, paragraphs, saved, scroll, place.style]);
 
+  useLayoutEffect(() => {
+    if (!prose || place.style !== 'ribbon') return;
+    let frame = 0;
+    const position = (block: Element) => {
+      const rect = block.getBoundingClientRect();
+      const css = getComputedStyle(block);
+      const box = scroll.getBoundingClientRect();
+      const lineTop =
+        rect.top + Number.parseFloat(css.paddingTop) + Number.parseFloat(css.borderTopWidth);
+      const lineHeight = Number.parseFloat(css.lineHeight);
+      return {
+        top: lineTop + (lineHeight - 24) / 2 - box.top + scroll.scrollTop,
+        left: rect.left + Number.parseFloat(css.paddingLeft) - box.left,
+        row: lineTop - 32 - box.top + scroll.scrollTop,
+      };
+    };
+    const measure = () => {
+      const block = saved && paragraphs[saved.paragraph];
+      if (block) setInline(position(block));
+      const hovered = place.hover ? position(place.hover) : null;
+      setPreview(hovered ? { top: hovered.top, left: hovered.left } : null);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    const observer = new ResizeObserver(schedule);
+    observer.observe(prose);
+    observer.observe(scroll);
+    const changes = new MutationObserver(schedule);
+    changes.observe(prose.closest('.silo-reader') ?? prose, {
+      attributes: true,
+      subtree: true,
+      attributeFilter: ['style'],
+    });
+    document.fonts.addEventListener('loadingdone', schedule);
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+      changes.disconnect();
+      document.fonts.removeEventListener('loadingdone', schedule);
+    };
+  }, [prose, scroll, paragraphs, saved, place.style, place.hover]);
+
   useEffect(() => {
     if (!prose) return;
     let hide: number | undefined;
@@ -142,11 +216,18 @@ export function SavedPlace({
       place.setHover(null);
     };
     const deferHide = () => {
-      // A brief crossing grace lets the pointer reach the gutter, without revealing over whitespace.
+      if (place.style === 'ribbon') {
+        leave();
+        return;
+      }
+      // A brief crossing grace lets the pointer reach the gutter.
       if (hide === undefined) hide = window.setTimeout(leave, 150);
     };
     const move = (event: PointerEvent) => {
-      if (event.target instanceof Element && event.target.closest('.proto-place-button')) {
+      if (
+        event.target instanceof Element &&
+        event.target.closest('.proto-place-button, .proto-place-ribbon')
+      ) {
         clearHide();
         return;
       }
@@ -187,7 +268,7 @@ export function SavedPlace({
       scroll.removeEventListener('pointerleave', leave);
       scroll.removeEventListener('scroll', leave);
     };
-  }, [prose, scroll, paragraphs, saved, place.setHover]);
+  }, [prose, scroll, paragraphs, saved, place.setHover, place.style]);
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -195,7 +276,7 @@ export function SavedPlace({
         return;
       const top = scroll.getBoundingClientRect().top + 24;
       const nearest =
-        place.hover ??
+        (place.style !== 'ribbon' ? place.hover : null) ??
         paragraphs
           .filter((el) => el.tagName === 'P')
           .sort(
@@ -211,7 +292,7 @@ export function SavedPlace({
     };
     window.addEventListener('keydown', key, true);
     return () => window.removeEventListener('keydown', key, true);
-  }, [paragraphs, save, scroll, place.hover]);
+  }, [paragraphs, save, scroll, place.hover, place.style]);
 
   useEffect(() => {
     if (!menu) return;
@@ -221,7 +302,8 @@ export function SavedPlace({
       if (
         event.target instanceof Node &&
         !popover.current?.contains(event.target) &&
-        !markButton.current?.contains(event.target)
+        !markButton.current?.contains(event.target) &&
+        !labelButton.current?.contains(event.target)
       )
         close();
     };
@@ -242,10 +324,12 @@ export function SavedPlace({
     window.addEventListener('keydown', onEscape, true);
     document.addEventListener('pointerdown', outside);
     scroll.addEventListener('scroll', close, { passive: true });
+    window.addEventListener('resize', close);
     return () => {
       window.removeEventListener('keydown', onEscape, true);
       document.removeEventListener('pointerdown', outside);
       scroll.removeEventListener('scroll', close);
+      window.removeEventListener('resize', close);
     };
   }, [menu, scroll]);
 
@@ -257,8 +341,17 @@ export function SavedPlace({
         : 'Stopped here · Yesterday';
   const open = () => {
     const rect = markButton.current?.getBoundingClientRect();
-    const box = scroll.getBoundingClientRect();
-    if (rect)
+    const box = (place.style === 'ribbon' ? panel : scroll).getBoundingClientRect();
+    if (rect && place.style === 'ribbon') {
+      const column = prose?.getBoundingClientRect();
+      setPop({
+        left: Math.max(
+          rect.left - box.left,
+          Math.min(rect.right - box.left + 6, (column?.right ?? box.right) - box.left - 244),
+        ),
+        top: rect.bottom - box.top + 6,
+      });
+    } else if (rect)
       setPop({
         left: Math.max(8, Math.min(rect.right - box.left - 244, scroll.clientWidth - 252)),
         top: rect.bottom - box.top + scroll.scrollTop + 6,
@@ -302,7 +395,53 @@ export function SavedPlace({
       )}
       {createPortal(
         <>
-          {saved && place.style !== 'sentence' && (
+          {saved && place.style === 'ribbon' && (
+            <div className="proto-place-inline" style={{ top: inline.top, left: inline.left }}>
+              <button
+                type="button"
+                className="proto-place-ribbon"
+                ref={markButton}
+                aria-label={label}
+                aria-expanded={menu}
+                aria-haspopup="dialog"
+                onClick={open}
+              >
+                <ProtoIcon name="bookmark" size={14} />
+              </button>
+              <i
+                className="proto-place-elbow"
+                aria-hidden="true"
+                style={{ top: inline.row - inline.top + 9, height: inline.top - inline.row - 4 }}
+              />
+              <button
+                type="button"
+                className="proto-place-ribbon-label"
+                ref={labelButton}
+                style={{ top: inline.row - inline.top }}
+                aria-expanded={menu}
+                aria-haspopup="dialog"
+                onClick={open}
+              >
+                {label}
+              </button>
+            </div>
+          )}
+          {place.style === 'ribbon' && place.hover && preview && (
+            <button
+              type="button"
+              className="proto-place-ribbon proto-place-ribbon-preview"
+              style={preview}
+              aria-label="Mark reading place"
+              title="Mark reading place"
+              onClick={() => {
+                if (place.hover) save(place.hover, 'manual');
+                setMenu(false);
+              }}
+            >
+              <ProtoIcon name="bookmark" size={14} />
+            </button>
+          )}
+          {saved && place.style === 'line' && (
             <div
               className="proto-place-mark"
               data-style={place.style}
@@ -311,53 +450,57 @@ export function SavedPlace({
               {bookmark('proto-place-label')}
             </div>
           )}
-          {menu && saved && (
-            <div
-              className="proto-place-pop"
-              role="dialog"
-              aria-label="Saved reading place"
-              ref={popover}
-              style={pop}
-            >
-              <div className="proto-place-meta">{label}</div>
-              <button
-                type="button"
-                ref={firstAction}
-                onClick={() => {
-                  place.continueFrom();
-                  if (place.segment) pencil.startAtRange(place.segment.range);
-                  setMenu(false);
-                }}
-              >
-                <ProtoIcon name="pencil" size={15} />
-                Continue with Pencil
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  place.continueFrom();
-                  ra.startAt(place.segment?.id ?? 0);
-                  setMenu(false);
-                }}
-              >
-                <ProtoIcon name="headphones" size={15} />
-                Listen from here
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  place.remove();
-                  setMenu(false);
-                }}
-              >
-                <ProtoIcon name="trash" size={15} />
-                Remove
-              </button>
-            </div>
-          )}
         </>,
         host,
       )}
+      {menu &&
+        saved &&
+        createPortal(
+          <div
+            className="proto-place-pop"
+            data-style={place.style}
+            role="dialog"
+            aria-label="Saved reading place"
+            ref={popover}
+            style={pop}
+          >
+            <div className="proto-place-meta">{label}</div>
+            <button
+              type="button"
+              ref={firstAction}
+              onClick={() => {
+                place.continueFrom();
+                if (place.segment) pencil.startAtRange(place.segment.range);
+                setMenu(false);
+              }}
+            >
+              <ProtoIcon name="pencil" size={15} />
+              Continue with Pencil
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                place.continueFrom();
+                ra.startAt(place.segment?.id ?? 0);
+                setMenu(false);
+              }}
+            >
+              <ProtoIcon name="headphones" size={15} />
+              Listen from here
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                place.remove();
+                setMenu(false);
+              }}
+            >
+              <ProtoIcon name="trash" size={15} />
+              Remove
+            </button>
+          </div>,
+          place.style === 'ribbon' ? panel : host,
+        )}
       {saved &&
         place.continuing &&
         createPortal(
