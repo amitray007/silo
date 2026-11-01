@@ -15,7 +15,6 @@ import { ProtoIcon, type ProtoIconName } from './ProtoIcon';
 import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import { inTextEntry, plain, useEscapeClose } from './protoKeys';
 import type { Tools } from './ReaderToolsPrototype';
-import { SavedPlace } from './SavedPlace';
 import { SelectionBar } from './SelectionBar';
 import { type HighlightColor, layerSize, type PassageHighlight } from './useHighlights';
 import { engineStatusLine, RATES } from './useReadAloud';
@@ -218,7 +217,10 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host, pla
     if (pencil.enabled) pencil.setEnabled(false);
     else {
       const block = place?.saved && place.paragraphs[place.saved.paragraph];
-      if (block) pencil.startAtBlock(block);
+      if (place?.segment) {
+        place.continueFrom();
+        pencil.startAtRange(place.segment.range);
+      } else if (block) pencil.startAtBlock(block);
       else pencil.start();
     }
   };
@@ -305,7 +307,6 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host, pla
   const note = hl.items.find((item) => item.id === openNote);
   return (
     <>
-      {place && <SavedPlace place={place} prose={prose} scroll={scroll} host={host} ra={ra} />}
       <OutlineRail
         prose={prose}
         scroll={scroll}
@@ -339,6 +340,9 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host, pla
         onRemove={hl.remove}
         onSetNote={hl.setNote}
         onDialHidden={setDialHidden}
+        place={place}
+        ra={ra}
+        pencil={pencil}
         resume={null}
         onResume={pencil.start}
       />

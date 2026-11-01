@@ -5,7 +5,11 @@ import { createPortal } from 'react-dom';
 import { ReaderIcon } from '../ReaderIcon';
 import { ProtoIcon } from './ProtoIcon';
 import { paragraphNumber, paragraphSections } from './paragraphs.prototype';
+import { SavedPlace } from './SavedPlace';
 import type { PassageHighlight } from './useHighlights';
+import type { PencilApi } from './usePencil';
+import type { ReadAloudApi } from './useReadAloud';
+import type { SavedPlaceApi } from './useSavedPlace';
 
 const LANE = 264;
 const LANE_GAP = 52; // gutter markers sit in the first part of this gap
@@ -131,8 +135,11 @@ export function MarginNotes({
   onRemove,
   onSetNote,
   onDialHidden,
-  resume,
+  resume: pencilResume,
   onResume,
+  place,
+  ra,
+  pencil,
 }: {
   items: PassageHighlight[];
   prose: HTMLElement | null;
@@ -154,7 +161,11 @@ export function MarginNotes({
   /** The pencil's resume line, drawn in the same gutter column as the note markers. */
   resume: { y: number } | null;
   onResume: () => void;
+  place?: SavedPlaceApi | undefined;
+  ra?: ReadAloudApi;
+  pencil?: PencilApi;
 }) {
+  const resume = place ? (place.style === 'sentence' ? place.anchor : null) : pencilResume;
   const reduced = useReducedMotion() ?? false;
   const [tick, setTick] = useState(0);
   const [adding, setAdding] = useState<string | null>(null);
@@ -212,7 +223,7 @@ export function MarginNotes({
       geometry(article, prose, scroll, applied.current, 0),
       open,
       has,
-      Boolean(resume),
+      Boolean(place || resume),
     );
     if (!(open && has && now.overlay) || sidebarCollapsed()) return now;
     // The lane does not fit beside the list. Would it fit if the sidebar collapsed?
@@ -222,10 +233,10 @@ export function MarginNotes({
       geometry(article, prose, scroll, applied.current, delta),
       open,
       has,
-      Boolean(resume),
+      Boolean(place || resume),
     );
     return wider.overlay ? now : { ...now, needsCollapse: true };
-  }, [article, prose, scroll, open, has, tick, Boolean(resume)]);
+  }, [article, prose, scroll, open, has, tick, Boolean(place || resume)]);
 
   // Collapse the sidebar through the app's own toggle while the lane needs the room, and put it
   // back afterwards, but only if the lane was what collapsed it.
@@ -465,7 +476,7 @@ export function MarginNotes({
       });
   }, [focusId, open]);
 
-  if (!plan || (!groups.length && !resume)) return null;
+  if (!plan || (!groups.length && !resume && !place)) return null;
   const gutterX = plan.proseRight + 6;
   const laneLeft = plan.proseRight - plan.shift + LANE_GAP;
   const hovered = hoveredIds[0];
@@ -492,7 +503,19 @@ export function MarginNotes({
       }}
       style={open && plan.overlay ? { visibility: 'hidden' } : {}}
     >
-      {resume && (
+      {place && ra && pencil && (
+        <SavedPlace
+          place={place}
+          prose={prose}
+          scroll={scroll}
+          host={host}
+          panel={panel}
+          ra={ra}
+          pencil={pencil}
+          gutterLeft={gutterLeft}
+        />
+      )}
+      {!place && resume && (
         <button
           type="button"
           className="proto-resume"

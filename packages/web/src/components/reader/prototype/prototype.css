@@ -2079,36 +2079,6 @@
 }
 
 /* Saved place: one quiet mark between blocks, shared by all three explicit stops. */
-.proto-place-gap {
-  position: absolute;
-  pointer-events: auto;
-}
-.proto-place-add {
-  position: absolute;
-  left: -6px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 100%;
-  max-height: 22px;
-  padding: 0;
-  border: 0;
-  border-radius: 6px;
-  background: var(--bg2);
-  box-shadow: var(--elev-1);
-  color: var(--fnt);
-  opacity: 0;
-  pointer-events: none;
-  cursor: pointer;
-  transition: opacity 120ms;
-}
-.proto-place-gap:hover .proto-place-add,
-.proto-place-add:focus-visible {
-  opacity: 1;
-  pointer-events: auto;
-}
 .proto-place-mark {
   position: absolute;
   height: 0;
@@ -2238,15 +2208,7 @@
 .silo-readerpane:has(.proto-sheet) .proto-continue {
   display: none;
 }
-.proto-place-sentence {
-  position: absolute;
-  width: 4px;
-  height: 4px;
-  border-radius: 50%;
-  background: var(--fnt);
-}
 @media (prefers-reduced-motion: reduce) {
-  .proto-place-add,
   .proto-place-label > span {
     transition: none;
   }
@@ -2258,5 +2220,105 @@
 @media (max-width: 640px) {
   .proto-place-mark[data-style="ribbon"] .proto-place-label {
     left: -18px;
+  }
+}
+
+/* Sentence place: a neutral wash below the five passage highlight colours. */
+.silo-readerpane {
+  --place-ink: 20% 0 0;
+  --place-alpha: 0.065;
+}
+:root[data-theme="dark"] .silo-readerpane {
+  --place-ink: 94% 0 0;
+  --place-alpha: 0.085;
+}
+.silo-readerpane[data-proto-theme="sepia"] {
+  --place-ink: 24% 0.03 60;
+  --place-alpha: 0.065;
+}
+:root[data-theme="dark"] .silo-readerpane[data-proto-theme="sepia"] {
+  --place-ink: 90% 0.03 80;
+  --place-alpha: 0.085;
+}
+.silo-reader-prose::highlight(proto-place) {
+  background-color: oklch(var(--place-ink) / calc(var(--place-alpha) * var(--place-opacity, 1)));
+}
+.proto-place-gutter {
+  position: absolute;
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+.proto-place-button {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: none;
+  color: var(--fnt);
+  pointer-events: auto;
+  cursor: pointer;
+  transition:
+    background-color 120ms,
+    color 120ms,
+    opacity 120ms;
+}
+.proto-place-button > svg {
+  fill: color-mix(in oklch, var(--ink) 9%, transparent);
+}
+.proto-place-button[aria-expanded="true"],
+.proto-place-button:focus-visible {
+  color: var(--ink);
+  background: var(--icon-hover);
+}
+.proto-place-hover {
+  opacity: 0.45;
+}
+@media (hover: hover) and (pointer: fine) {
+  .proto-place-button:hover {
+    color: var(--ink);
+    background: var(--icon-hover);
+    opacity: 1;
+  }
+}
+.proto-place-button:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: 2px;
+}
+.proto-place-mark[data-style="line"] {
+  border-top-color: var(--line-2);
+}
+.proto-place-mark[data-style="line"] .proto-place-label {
+  height: 24px;
+  border-radius: 4px;
+}
+.proto-place-pop {
+  width: 244px;
+  padding: 4px;
+  border-radius: 8px;
+  color: var(--mut);
+}
+.proto-place-meta {
+  padding: 8px 8px 9px;
+  margin-bottom: 4px;
+  border-bottom: 0.5px solid var(--line);
+  color: var(--fnt);
+  font-size: 11px;
+  font-weight: 400;
+  line-height: 16px;
+  white-space: nowrap;
+}
+.proto-place-pop button:focus-visible {
+  outline: 2px solid var(--fnt);
+  outline-offset: -2px;
+  background: var(--hov);
+  color: var(--ink);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .proto-place-button:active {
+    scale: 0.96;
   }
 }

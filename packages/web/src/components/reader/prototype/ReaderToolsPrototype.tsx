@@ -87,9 +87,21 @@ function Mounted({
       variant === 'B' &&
       ((previous.enabled && !pencil.enabled) || (previous.playing && !pencil.playing))
     )
-      place.save(pencil.currentBlock, 'pencil');
+      place.save(
+        pencil.currentBlock,
+        'pencil',
+        pencil.currentSentence(place.segments.map((segment) => segment.range)),
+      );
     previousPencil.current = { enabled: pencil.enabled, playing: pencil.playing };
-  }, [variant, pencil.enabled, pencil.playing, pencil.currentBlock, place.save]);
+  }, [
+    variant,
+    pencil.enabled,
+    pencil.playing,
+    pencil.currentBlock,
+    place.save,
+    pencil.currentSentence,
+    place.segments,
+  ]);
 
   useEffect(() => {
     panel.dataset.protoVariant = variant;

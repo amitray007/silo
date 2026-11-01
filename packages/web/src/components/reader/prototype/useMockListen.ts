@@ -22,6 +22,7 @@ export function useMockListen(
     setPlaying(false);
   };
   const startAt = (at: number) => {
+    place.continueFrom();
     setIndex(Math.min(segments.length - 1, Math.max(0, at)));
     setActive(true);
     setPlaying(true);
@@ -52,12 +53,12 @@ export function useMockListen(
     scrollToRange(scroll, current.range);
   }, [current, active, scroll]);
   useEffect(() => {
-    if (!current || !active || !('highlights' in CSS)) return;
+    if (!current || !active || !playing || !('highlights' in CSS)) return;
     CSS.highlights.set('proto-speak', new Highlight(current.range));
     return () => {
       CSS.highlights.delete('proto-speak');
     };
-  }, [current, active]);
+  }, [current, active, playing]);
   return {
     ...base,
     active,

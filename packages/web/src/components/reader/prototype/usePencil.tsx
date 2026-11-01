@@ -78,6 +78,7 @@ export function usePencil(
   const [progress, setProgress] = useState(0);
   const lines = useRef<Line[]>([]);
   const pendingBlock = useRef<Element | null>(null);
+  const pendingRange = useRef<Range | null>(null);
   const prefix = useRef<number[]>([]);
   const index = useRef(0);
   const sweep = useRef(0);
@@ -156,6 +157,23 @@ export function usePencil(
         const at = lines.current.findIndex((line) => pendingBlock.current?.contains(line.block));
         if (at >= 0) index.current = at;
         pendingBlock.current = null;
+      }
+      if (pendingRange.current) {
+        const rect = pendingRange.current.getClientRects()[0];
+        const y = rect
+          ? rect.top - scroll.getBoundingClientRect().top + scroll.scrollTop + rect.height / 2
+          : 0;
+        const at = lines.current.findIndex((line) => y >= line.top && y <= line.top + line.height);
+        if (at >= 0) {
+          index.current = at;
+          const line = lines.current[at];
+          if (line && rect)
+            sweep.current = Math.max(
+              0,
+              (rect.left - scroll.getBoundingClientRect().left - line.left) / line.width,
+            );
+        }
+        pendingRange.current = null;
       }
       setLineIndex(index.current);
       paint();
@@ -279,6 +297,56 @@ export function usePencil(
   return {
     enabled,
     currentBlock: lines.current[lineIndex]?.block,
+    currentSentence: (ranges: Range[]) => {
+      const line = lines.current[index.current];
+      if (!line || !scroll) return undefined;
+      const box = scroll.getBoundingClientRect();
+      const y = line.top + line.height / 2;
+      const x = line.left + line.width * sweep.current;
+      let at: number | undefined;
+      let closest = Number.POSITIVE_INFINITY;
+      ranges.forEach((range, i) => {
+        for (const rect of range.getClientRects()) {
+          if (
+            y < rect.top - box.top + scroll.scrollTop ||
+            y > rect.bottom - box.top + scroll.scrollTop
+          )
+            continue;
+          const distance = Math.max(rect.left - box.left - x, x - (rect.right - box.left), 0);
+          if (distance < closest) {
+            closest = distance;
+            at = i;
+          }
+        }
+      });
+      return at;
+    },
+    startAtRange: (range: Range) => {
+      pendingRange.current = range;
+      // Re-measure now as well when Pencil is already paused on another sentence.
+      if (enabled && scroll) {
+        const rect = range.getClientRects()[0];
+        const y = rect
+          ? rect.top - scroll.getBoundingClientRect().top + scroll.scrollTop + rect.height / 2
+          : 0;
+        const at = lines.current.findIndex((line) => y >= line.top && y <= line.top + line.height);
+        if (at >= 0) {
+          const line = lines.current[at];
+          goTo(
+            at,
+            line && rect
+              ? Math.max(
+                  0,
+                  (rect.left - scroll.getBoundingClientRect().left - line.left) / line.width,
+                )
+              : 0,
+          );
+        }
+        pendingRange.current = null;
+      }
+      setEnabled(true);
+      setPlaying(true);
+    },
     startAtBlock: (block: Element) => {
       pendingBlock.current = block;
       const at = lines.current.findIndex((line) => block.contains(line.block));
