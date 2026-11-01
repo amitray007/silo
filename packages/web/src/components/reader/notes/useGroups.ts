@@ -1,6 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
-import { paragraphOf, paragraphSections } from '../highlights/paragraphs';
+import { articleParagraphIndex } from '../highlights/paragraphs';
 import type { ResolvedHighlight } from '../highlights/useHighlightLayer';
+import { DECORATION, proseMutation } from '../place/proseVersion';
 
 /** The highlights of one paragraph, with where that paragraph sits. Coordinates are relative to the prose frame. */
 export type NoteGroup = {
@@ -47,18 +48,8 @@ function collectGroups(
   resolved: readonly ResolvedHighlight[],
 ): GroupLayout {
   const box = frame.getBoundingClientRect();
-  const sections = paragraphSections(prose);
+  const { sections, paragraph } = articleParagraphIndex(prose);
   const toContent = (viewportY: number) => viewportY - box.top - frame.clientTop + frame.scrollTop;
-  const numbers = new Map(sections.map((section, index) => [section, index + 1]));
-  const paragraph = (node: Node) => {
-    let element = node instanceof Element ? node : node.parentElement;
-    while (element && element !== prose) {
-      const number = numbers.get(element);
-      if (number !== undefined) return number;
-      element = element.parentElement;
-    }
-    return paragraphOf(sections, node);
-  };
   const byPara = new Map<number, NoteGroup>();
   const rangeYs = new Map<string, number>();
   for (const item of resolved) {
@@ -130,35 +121,66 @@ export function useGroups(
     // React owns the set of groups. Geometry subscribers own their positions.
     setMeasured(read());
     if (!prose || !frame || !scroll || !active) return;
+    let pending = false;
+    let disposed = false;
+    let dirty = false;
+    let membershipChanged = false;
     const paint = (invalidate = true) => {
-      if (invalidate) layout.invalidate();
+      pending = false;
+      if (invalidate || dirty) layout.invalidate();
+      dirty = false;
       const paints = Array.from(listeners, (measure) => measure());
       for (const paint of paints) paint?.();
+      if (membershipChanged) {
+        membershipChanged = false;
+        setMeasured(read());
+      }
     };
+    const schedule = () => {
+      dirty = true;
+      if (pending) return;
+      pending = true;
+      queueMicrotask(() => {
+        if (!pending || disposed) return;
+        // Consume mutations made since this delivery before the shared read/write pass.
+        onMutations(changes.takeRecords());
+        if (pending) paint();
+      });
+    };
+    // Resize delivery can consume a pending mutation pass. Microtasks also finish in this
+    // frame when a resize callback changes padding after the browser's resize-delivery depth.
     const observer = new ResizeObserver(() => paint());
     const article = prose.closest('.silo-reader') ?? frame;
     for (const element of new Set([prose, frame, scroll, article, ...prose.children]))
       observer.observe(element);
-    const changes = new MutationObserver((records) => {
+    const onMutations = (records: MutationRecord[]) => {
       const relevant = records.filter(
         (record) =>
-          !(record.target instanceof Element) ||
-          !record.target.closest(
-            '.silo-marker, .silo-notes-layer, .silo-place-ribbon-gutter, .silo-place-ribbon-preview, .silo-pencil',
-          ),
+          !(record.target instanceof Element && record.target.closest(DECORATION)) &&
+          proseMutation(record),
       );
-      if (relevant.length) {
-        // The frame carries its children through a transform. Their relative coordinates stay
-        // valid; subscribers still repaint gutter clamping and connectors in this same frame.
-        const reflow = relevant.some(
-          (record) =>
-            record.target !== article ||
-            record.attributeName !== 'style' ||
-            withoutTransform(record.oldValue) !== withoutTransform(article.getAttribute('style')),
-        );
-        paint(reflow);
+      if (!relevant.length) return;
+      const reflow = relevant.some(
+        (record) =>
+          record.target !== article ||
+          record.attributeName !== 'style' ||
+          withoutTransform(record.oldValue) !== withoutTransform(article.getAttribute('style')),
+      );
+      if (!reflow) {
+        // The frame and its marks move together; only gutter clamping/connectors need paint.
+        paint(false);
+        return;
       }
-    });
+      if (
+        relevant.some((record) => record.type !== 'attributes' && prose.contains(record.target))
+      ) {
+        for (const child of prose.children) observer.observe(child);
+        // Membership changes also change the React-owned set of paragraph groups.
+        membershipChanged = true;
+      }
+      schedule();
+    };
+    const changes = new MutationObserver(onMutations);
     changes.observe(article, {
       attributes: true,
       subtree: true,
@@ -167,10 +189,12 @@ export function useGroups(
       attributeFilter: ['style', 'class', 'data-width'],
       attributeOldValue: true,
     });
-    const reflow = () => paint();
+    const reflow = schedule;
     window.addEventListener('resize', reflow);
     document.fonts?.addEventListener('loadingdone', reflow);
     return () => {
+      disposed = true;
+      pending = false;
       observer.disconnect();
       changes.disconnect();
       window.removeEventListener('resize', reflow);

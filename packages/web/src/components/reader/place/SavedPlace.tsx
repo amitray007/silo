@@ -10,7 +10,7 @@ import { withinFirstLine } from './geometry';
 import { usePlaceGeometry } from './usePlaceGeometry';
 import { usePlaceSpacing } from './usePlaceSpacing';
 import { useSavedPlace } from './useSavedPlace';
-import { articleWords, wordAtShare } from './words';
+import { articleWordIndex } from './words';
 
 function inBridge(hover: Element | null, event: PointerEvent): boolean {
   if (!hover) return false;
@@ -185,7 +185,7 @@ export function SavedPlace({
   };
   const continueListen = () => {
     pencil.stop();
-    const word = wordAtShare(articleWords(prose), saved?.position ?? 0);
+    const word = articleWordIndex(prose).atShare(saved?.position ?? 0);
     const at = word
       ? segmentIndexAt(buildSegments(prose), word.startContainer, word.startOffset)
       : 0;
