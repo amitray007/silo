@@ -2292,6 +2292,8 @@
   padding-left: 32px;
 }
 .proto-place-ribbon-gutter {
+  --proto-place-line: color-mix(in oklab, var(--line) 60%, var(--fnt));
+  --proto-elbow-width: 2px;
   position: absolute;
   z-index: 23;
   width: 24px;
@@ -2325,13 +2327,41 @@
   position: absolute;
   left: 12px;
   width: 14px;
-  border-top: 0.5px solid var(--line);
-  border-left: 0.5px solid var(--line);
+  background:
+    linear-gradient(var(--proto-place-line), var(--proto-place-line)) left top / 100%
+    var(--proto-elbow-width) no-repeat,
+    linear-gradient(var(--proto-place-line), var(--proto-place-line)) left top /
+    var(--proto-elbow-width) 100% no-repeat;
   pointer-events: none;
 }
-.proto-place-ribbon-label {
+@media (min-resolution: 2dppx) {
+  .proto-place-ribbon-gutter {
+    --proto-elbow-width: 1.5px;
+  }
+}
+.proto-place-ribbon-row {
   position: absolute;
   left: 30px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 16px;
+  white-space: nowrap;
+}
+.proto-place-rule {
+  flex: 1;
+  min-width: 0;
+  height: 1px;
+  background: repeating-linear-gradient(
+    to right,
+    var(--proto-place-line) 0 4px,
+    transparent 4px 8px
+  );
+  /* Align with the label's x-height centre. */
+  transform: translateY(1px);
+}
+.proto-place-ribbon-label {
+  flex: none;
   height: 16px;
   padding: 0;
   border: 0;

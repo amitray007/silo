@@ -28,7 +28,14 @@ export function SavedPlace({
 }) {
   const [menu, setMenu] = useState(false);
   const [gap, setGap] = useState({ top: 0, left: 0, width: 0 });
-  const [ribbon, setRibbon] = useState({ top: 0, left: 0, row: 0 });
+  const [ribbon, setRibbon] = useState({
+    top: 0,
+    left: 0,
+    row: 0,
+    width: 0,
+    elbowX: 12,
+    elbowY: 0,
+  });
   const [preview, setPreview] = useState<{ top: number; left: number } | null>(null);
   const labelButton = useRef<HTMLButtonElement>(null);
   const [pop, setPop] = useState({ top: 0, left: 0 });
@@ -173,6 +180,16 @@ export function SavedPlace({
         top: lineTop + (lineHeight - 24) / 2 - box.top + scroll.scrollTop,
         left: rect.left + Number.parseFloat(css.paddingLeft) - box.left - 30,
         row: lineTop - 20 - box.top + scroll.scrollTop,
+        width:
+          rect.width - Number.parseFloat(css.paddingLeft) - Number.parseFloat(css.paddingRight),
+        // Snap only the connector; preserve the ribbon and label positions.
+        elbowX:
+          Math.round((rect.left + Number.parseFloat(css.paddingLeft) - 18) * devicePixelRatio) /
+            devicePixelRatio -
+          (rect.left + Number.parseFloat(css.paddingLeft) - 30),
+        elbowY:
+          Math.round((lineTop - 12) * devicePixelRatio) / devicePixelRatio -
+          (lineTop + (lineHeight - 24) / 2),
       };
     };
     const measure = () => {
@@ -502,19 +519,28 @@ export function SavedPlace({
               <i
                 className="proto-place-elbow"
                 aria-hidden="true"
-                style={{ top: ribbon.row - ribbon.top + 8, height: ribbon.top - ribbon.row - 10 }}
+                style={{
+                  left: ribbon.elbowX,
+                  top: ribbon.elbowY,
+                  height: ribbon.top - ribbon.row - 10,
+                }}
               />
-              <button
-                type="button"
-                className="proto-place-ribbon-label"
-                ref={labelButton}
-                style={{ top: ribbon.row - ribbon.top }}
-                aria-expanded={menu}
-                aria-haspopup="dialog"
-                onClick={open}
+              <div
+                className="proto-place-ribbon-row"
+                style={{ top: ribbon.row - ribbon.top, width: ribbon.width }}
               >
-                {label}
-              </button>
+                <button
+                  type="button"
+                  className="proto-place-ribbon-label"
+                  ref={labelButton}
+                  aria-expanded={menu}
+                  aria-haspopup="dialog"
+                  onClick={open}
+                >
+                  {label}
+                </button>
+                <i className="proto-place-rule" aria-hidden="true" />
+              </div>
             </div>
           )}
           {place.style === 'ribbon' && place.hover && preview && (
