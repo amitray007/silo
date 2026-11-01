@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { EdgeTrimmer } from './trim';
+import { EdgeTrimmer, type TrimmedChunk } from './trim';
 
 const RATE = 24000;
 const samples = (ms: number, value = 0) =>
   new Float32Array(Math.round((RATE * ms) / 1000)).fill(value);
+function joinTrimmed(chunks: TrimmedChunk[]): Float32Array {
+  return join(chunks.map((chunk) => chunk.pcm));
+}
 function join(chunks: Float32Array[]): Float32Array {
   const out = new Float32Array(chunks.reduce((n, chunk) => n + chunk.length, 0));
   let offset = 0;
@@ -15,7 +18,7 @@ function join(chunks: Float32Array[]): Float32Array {
 }
 function trim(chunks: Float32Array[]): Float32Array {
   const trimmer = new EdgeTrimmer(RATE);
-  return join([...chunks.flatMap((chunk) => trimmer.push(chunk)), ...trimmer.finish()]);
+  return joinTrimmed([...chunks.flatMap((chunk) => trimmer.push(chunk)), ...trimmer.finish()]);
 }
 
 describe('EdgeTrimmer', () => {
@@ -43,12 +46,16 @@ describe('EdgeTrimmer', () => {
   it('holds an internal pause until speech resumes and then releases every sample', () => {
     const trimmer = new EdgeTrimmer(RATE);
     const first = trimmer.push(join([samples(100), samples(200, 0.5)]));
-    expect(first.reduce((n, c) => n + c.length, 0)).toBeGreaterThan(0);
+    expect(first.reduce((n, c) => n + c.pcm.length, 0)).toBeGreaterThan(0);
     const keptTail = trimmer.push(samples(400));
-    expect(keptTail.reduce((n, c) => n + c.length, 0)).toBe(RATE * 0.06);
+    expect(keptTail.reduce((n, c) => n + c.pcm.length, 0)).toBe(RATE * 0.06);
     expect(trimmer.push(samples(100))).toEqual([]);
     const rest = trimmer.push(join([samples(200, 0.25), samples(500)]));
-    const out = join([...first, ...keptTail, ...rest, ...trimmer.finish()]);
+    const held = rest.filter((chunk) => chunk.silence);
+    expect(joinTrimmed(held)).toEqual(samples(445));
+    expect(first.every((chunk) => !chunk.silence)).toBe(true);
+    expect(keptTail.every((chunk) => !chunk.silence)).toBe(true);
+    const out = joinTrimmed([...first, ...keptTail, ...rest, ...trimmer.finish()]);
     expect(out.length).toBe(RATE * 0.99);
     expect(out.subarray(RATE * 0.23, RATE * 0.73)).toEqual(samples(500));
     expect(out[RATE * 0.73]).toBe(0.25);

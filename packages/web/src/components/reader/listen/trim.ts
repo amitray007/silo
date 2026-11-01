@@ -11,6 +11,17 @@ function append(chunks: Float32Array[], chunk: Float32Array): void {
   } else chunks.push(chunk);
 }
 
+export type TrimmedChunk = { pcm: Float32Array; silence: boolean };
+
+/** Keep released silence separate from speech, even when their sample views touch. */
+function emit(out: TrimmedChunk[], chunks: Float32Array[], silence = false): void {
+  const last = out.at(-1);
+  const joined = last?.silence === silence ? [last.pcm] : [];
+  for (const chunk of chunks) append(joined, chunk);
+  if (last?.silence === silence) out.pop();
+  for (const pcm of joined) out.push({ pcm, silence });
+}
+
 /** Streaming edge trim. Fixed RMS windows make the result independent of engine chunk boundaries. */
 export class EdgeTrimmer {
   private readonly window: number;
@@ -52,43 +63,46 @@ export class EdgeTrimmer {
     return out;
   }
 
-  private accept(window: Float32Array, out: Float32Array[]): void {
+  private accept(window: Float32Array, out: TrimmedChunk[]): void {
     let sum = 0;
     for (const value of window) sum += value * value;
     const speech = sum / window.length >= 1e-5; // -50 dBFS, squared RMS.
     append(this.pending, window);
     this.samples += window.length;
     if (speech) {
+      // The pending prefix is all silence once the kept tail has been emitted.
+      if (this.started && this.silent > this.tail)
+        emit(out, this.take(this.samples - window.length), true);
       this.started = true;
       this.silent = 0;
       // Retain enough audio to fade the end even if the stream stops in speech.
-      for (const chunk of this.take(Math.max(0, this.samples - this.fade))) append(out, chunk);
+      emit(out, this.take(Math.max(0, this.samples - this.fade)));
     } else if (this.started) {
       this.silent += window.length;
       // Release the kept tail as it arrives; only its fade and excess silence must wait.
       const hold = this.fade + Math.max(0, this.silent - this.tail);
-      for (const chunk of this.take(Math.max(0, this.samples - hold))) append(out, chunk);
+      emit(out, this.take(Math.max(0, this.samples - hold)));
     } else this.take(Math.max(0, this.samples - this.lead));
   }
 
-  private fadeIn(chunks: Float32Array[]): Float32Array[] {
-    const out: Float32Array[] = [];
-    for (const chunk of chunks) {
+  private fadeIn(chunks: TrimmedChunk[]): TrimmedChunk[] {
+    const out: TrimmedChunk[] = [];
+    for (const { pcm: chunk, silence } of chunks) {
       const count = Math.min(chunk.length, this.fade - this.faded);
       if (count > 0) {
         const edge = chunk.slice(0, count);
         for (let i = 0; i < count; i += 1)
           edge[i] = ((edge[i] ?? 0) * (this.faded + i)) / (this.fade - 1);
         this.faded += count;
-        out.push(edge);
+        emit(out, [edge], silence);
       }
-      append(out, chunk.subarray(count));
+      emit(out, [chunk.subarray(count)], silence);
     }
     return out;
   }
 
-  push(chunk: Float32Array): Float32Array[] {
-    const out: Float32Array[] = [];
+  push(chunk: Float32Array): TrimmedChunk[] {
+    const out: TrimmedChunk[] = [];
     let offset = 0;
     if (this.partial.length) {
       const count = Math.min(this.window - this.partial.length, chunk.length);
@@ -109,11 +123,12 @@ export class EdgeTrimmer {
     return this.fadeIn(out);
   }
 
-  finish(): Float32Array[] {
-    const out: Float32Array[] = [];
+  finish(): TrimmedChunk[] {
+    const out: TrimmedChunk[] = [];
     if (this.partial.length) this.accept(this.partial, out);
     this.partial = new Float32Array(0);
-    if (!this.started) return [new Float32Array(Math.round(this.sampleRate * 0.05))];
+    if (!this.started)
+      return [{ pcm: new Float32Array(Math.round(this.sampleRate * 0.05)), silence: false }];
     const keep = Math.min(this.samples, this.samples - this.silent + this.tail);
     const tail = this.take(keep);
     this.pending = [];
@@ -131,7 +146,7 @@ export class EdgeTrimmer {
       tail.splice(j, 1, chunk.subarray(0, chunk.length - count), edge);
       remaining -= count;
     }
-    for (const chunk of tail) append(out, chunk);
+    emit(out, tail);
     return this.fadeIn(out);
   }
 }

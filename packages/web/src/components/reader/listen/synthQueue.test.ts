@@ -118,6 +118,26 @@ describe('SynthQueue', () => {
     expect(queue.request(engine, 'trim me', '', 1, 0).chunks).toEqual(job.chunks);
   });
 
+  it('tags held internal silence only on the live job and caches the full pause', async () => {
+    const { engine } = fakeEngine(false);
+    engine.stream = async function* () {
+      yield new Float32Array(4800).fill(0.5);
+      yield new Float32Array(12000);
+      yield new Float32Array(4800).fill(0.25);
+    };
+    const queue = new SynthQueue();
+    const job = queue.request(engine, 'internal pause', '', 1, 0);
+    await settle();
+    expect(job.done).toBe(true);
+    const held = job.chunks.filter((_, index) => job.heldSilence.has(index));
+    expect(held.reduce((n, chunk) => n + chunk.length, 0)).toBe(10680); // 445 ms.
+    expect(held.every((chunk) => chunk.every((sample) => sample === 0))).toBe(true);
+    const replay = queue.request(engine, 'internal pause', '', 1, 0);
+    expect(replay.heldSilence.size).toBe(0);
+    expect(replay.chunks).toEqual(job.chunks);
+    expect(replay.chunks.reduce((n, chunk) => n + chunk.length, 0)).toBe(21600);
+  });
+
   it('keys the cache by voice and speed', async () => {
     const { engine, calls, finish } = fakeEngine();
     const queue = new SynthQueue();

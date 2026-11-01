@@ -1,11 +1,13 @@
 import type { TtsEngine } from './engines/types';
 import { type CachedAudio, ReplayCache } from './replayCache';
-import { EdgeTrimmer } from './trim';
+import { EdgeTrimmer, type TrimmedChunk } from './trim';
 
 /** Synthesized audio for one unit. Chunks arrive while the unit is still being generated. */
 export type Job = {
   key: string;
   chunks: Float32Array[];
+  /** Chunk indices containing silence released from hold; never used for replay. */
+  heldSilence: Set<number>;
   sampleRate: number;
   done: boolean;
   failed: string;
@@ -37,6 +39,7 @@ function settled(audio: CachedAudio, key: string): Job {
   return {
     key,
     chunks: audio.chunks,
+    heldSilence: new Set(),
     sampleRate: audio.sampleRate,
     done: true,
     failed: '',
@@ -72,6 +75,7 @@ export class SynthQueue {
     const job: Job = {
       key,
       chunks: [],
+      heldSilence: new Set(),
       sampleRate: engine.sampleRate,
       done: false,
       failed: '',
@@ -126,6 +130,13 @@ export class SynthQueue {
     }
   }
 
+  private append(job: Job, chunks: TrimmedChunk[]): void {
+    for (const { pcm, silence } of chunks) {
+      if (silence) job.heldSilence.add(job.chunks.length);
+      job.chunks.push(pcm);
+    }
+  }
+
   private async synthesize(next: Queued, abort: AbortController): Promise<void> {
     const { job } = next;
     try {
@@ -138,13 +149,13 @@ export class SynthQueue {
         if (abort.signal.aborted) break;
         job.sampleRate = next.engine.sampleRate;
         trimmer ??= new EdgeTrimmer(job.sampleRate);
-        job.chunks.push(...trimmer.push(chunk));
+        this.append(job, trimmer.push(chunk));
         for (const listener of job.listeners) listener();
       }
       if (!abort.signal.aborted) {
         trimmer ??= new EdgeTrimmer(next.engine.sampleRate);
         job.sampleRate = next.engine.sampleRate;
-        job.chunks.push(...trimmer.finish());
+        this.append(job, trimmer.finish());
         job.done = true;
         this.cache.set(job.key, { chunks: job.chunks, sampleRate: job.sampleRate });
       }

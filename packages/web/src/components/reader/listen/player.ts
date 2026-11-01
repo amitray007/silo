@@ -69,6 +69,9 @@ export class Player {
   private timer: ReturnType<typeof setInterval> | undefined;
   private pressedAt = 0;
   private waiting = false;
+  /** Samples to fade after cutting overdue held silence. */
+  private fadeRemaining = 0;
+  private silenceSkipUntil = 0;
   /** Units before this index have played and let go of their audio. */
   private released = 0;
 
@@ -137,6 +140,8 @@ export class Player {
         // Already stopped.
       }
     }
+    this.silenceSkipUntil = 0;
+    this.fadeRemaining = 0;
     this.sources = [];
     this.timeline = [];
     this.shown = -1;
@@ -187,8 +192,28 @@ export class Player {
     return fast;
   }
 
-  private schedule(pcm: Float32Array, sampleRate: number): number {
+  private schedule(pcm: Float32Array, sampleRate: number, silence = false): number {
     const audio = this.deps.context();
+    if (silence && this.cursor.nextTime < audio.currentTime)
+      // Include the restart lead: it is heard as part of the underrun too.
+      this.silenceSkipUntil = startTime(this.cursor.nextTime, audio.currentTime);
+    if (silence && this.cursor.nextTime < this.silenceSkipUntil) {
+      const overdue = this.silenceSkipUntil - this.cursor.nextTime;
+      const skip = Math.min(pcm.length, Math.ceil(overdue * sampleRate));
+      pcm = pcm.subarray(skip);
+      this.cursor.nextTime += skip / sampleRate;
+      this.fadeRemaining = Math.max(2, Math.round(sampleRate * 0.005));
+    }
+    if (!pcm.length) return this.cursor.nextTime;
+    this.silenceSkipUntil = 0;
+    if (this.fadeRemaining) {
+      const fade = Math.max(2, Math.round(sampleRate * 0.005));
+      const count = Math.min(pcm.length, this.fadeRemaining);
+      pcm = pcm.slice();
+      for (let i = 0; i < count; i += 1)
+        pcm[i] = ((pcm[i] ?? 0) * (fade - this.fadeRemaining + i)) / (fade - 1);
+      this.fadeRemaining -= count;
+    }
     const buffer = audio.createBuffer(1, pcm.length, sampleRate);
     buffer.getChannelData(0).set(pcm);
     const node = audio.createBufferSource();
@@ -235,12 +260,17 @@ export class Player {
       return true;
     }
     while ((plan.scheduled[u] ?? 0) < job.chunks.length) {
-      const at = this.schedule(job.chunks[plan.scheduled[u] ?? 0] as Float32Array, job.sampleRate);
+      const chunk = plan.scheduled[u] ?? 0;
+      const at = this.schedule(
+        job.chunks[chunk] as Float32Array,
+        job.sampleRate,
+        job.heldSilence.has(chunk),
+      );
       if (!plan.scheduled[u]) this.beginUnit(u, at);
       plan.scheduled[u] = (plan.scheduled[u] ?? 0) + 1;
     }
     if (!job.done || plan.scheduled[u] !== job.chunks.length) return false;
-    this.finishUnit(u, jobSeconds(job));
+    this.finishUnit(u, this.cursor.nextTime - (plan.unitStart[u] ?? this.cursor.nextTime));
     return true;
   }
 

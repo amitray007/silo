@@ -10,6 +10,7 @@ class FakeAudio {
   destination = {};
   starts: { at: number; duration: number }[] = [];
   stopped = 0;
+  pcm: Float32Array[] = [];
   resume = async () => {};
   createBuffer(_channels: number, length: number, sampleRate: number) {
     const data = new Float32Array(length);
@@ -17,10 +18,15 @@ class FakeAudio {
   }
   createBufferSource() {
     const node = {
-      buffer: undefined as { duration: number } | undefined,
+      buffer: undefined as
+        | { duration: number; getChannelData(channel: number): Float32Array }
+        | undefined,
       onended: null as (() => void) | null,
       connect: () => {},
-      start: (at: number) => this.starts.push({ at, duration: node.buffer?.duration ?? 0 }),
+      start: (at: number) => {
+        this.starts.push({ at, duration: node.buffer?.duration ?? 0 });
+        this.pcm.push(node.buffer?.getChannelData(0).slice() ?? new Float32Array());
+      },
       stop: () => {
         this.stopped += 1;
       },
@@ -98,7 +104,7 @@ function setup(segmentCount = 6, rate = 1) {
     events,
     now: () => clock,
   });
-  return { audio, events, player, settings, advance: (ms: number) => (clock += ms) };
+  return { audio, events, player, settings, list, advance: (ms: number) => (clock += ms) };
 }
 
 /** Group contiguous streaming buffers into the audible unit they form. */
@@ -183,6 +189,100 @@ describe('Player scheduling', () => {
     await flush();
     expect(scheduledUnits(audio)).toHaveLength(1);
     expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.29, 6);
+    player.halt();
+  });
+
+  it.each([
+    { now: 0.1, skipped: 0 },
+    { now: 0.5, skipped: 0.235 },
+    { now: 0.708, skipped: 0.443 },
+    { now: 1, skipped: 0.445 },
+  ])(
+    'schedules held silence after an underrun at $now s and keeps replay intact',
+    async ({ now, skipped }) => {
+      const { audio, player } = setup(1);
+      const { engine } = fakeEngine({ supportsSpeed: false });
+      let resume: (() => void) | undefined;
+      engine.stream = async function* () {
+        yield new Float32Array(4800).fill(0.5); // 200 ms speech.
+        // Separate buffers make the held silence span multiple tagged chunks.
+        for (let i = 0; i < 5; i += 1) yield new Float32Array(2400).fill(0.001);
+        await new Promise<void>((resolve) => {
+          resume = resolve;
+        });
+        yield new Float32Array(4800).fill(0.25);
+      };
+      player.start(engine, 0);
+      await flush();
+      expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.255, 6);
+      const before = audio.starts.length;
+      audio.currentTime = now;
+      await flush();
+      resume?.();
+      await flush();
+      expect(audio.starts.reduce((n, chunk) => n + chunk.duration, 0)).toBeCloseTo(
+        0.9 - skipped,
+        4,
+      );
+      const released = audio.starts.slice(before);
+      expect(released[0]?.at).toBeCloseTo(now > 0.285 ? now + 0.02 : 0.285, 4);
+      for (let i = before + 1; i < audio.starts.length; i += 1)
+        expect(audio.starts[i]?.at).toBeCloseTo(
+          (audio.starts[i - 1]?.at ?? 0) + (audio.starts[i - 1]?.duration ?? 0),
+          6,
+        );
+      if (skipped) {
+        const cut = Float32Array.from(audio.pcm.slice(before).flatMap((chunk) => [...chunk]));
+        expect(cut[0]).toBe(0);
+        expect(cut[119]).toBeCloseTo(now >= 0.708 ? 0.25 : 0.001, 6);
+      }
+      const live = Float32Array.from(audio.pcm.flatMap((chunk) => [...chunk]));
+      // Scheduling must never change the waveform stored for replay.
+      player.halt();
+      audio.starts = [];
+      audio.pcm = [];
+      audio.currentTime = 0;
+      player.start(engine, 0);
+      await flush();
+      expect(scheduledUnits(audio)).toHaveLength(1);
+      expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.9, 6);
+      const replay = Float32Array.from(audio.pcm.flatMap((chunk) => [...chunk]));
+      if (!skipped) expect(live).toEqual(replay);
+      expect(replay.subarray(4800, 16800).every((sample) => Math.abs(sample - 0.001) < 1e-8)).toBe(
+        true,
+      );
+      player.halt();
+    },
+  );
+
+  it('uses the elapsed playback span for highlights when an underrun exceeds the held silence', async () => {
+    const { audio, player, events, list } = setup(2);
+    // Merge the sentences into one unit, without changing the merge policy.
+    list[0] = { ...(list[0] as Segment), text: 'A'.repeat(80), block: list[1]?.block as Element };
+    list[1] = { ...(list[1] as Segment), text: 'Other.' };
+    const { engine } = fakeEngine({ supportsSpeed: false });
+    let resume: (() => void) | undefined;
+    engine.stream = async function* () {
+      yield new Float32Array(4800).fill(0.5);
+      yield new Float32Array(12000);
+      await new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      yield new Float32Array(4800).fill(0.25);
+    };
+    player.start(engine, 0);
+    await flush();
+    audio.currentTime = 1;
+    await flush();
+    resume?.();
+    await flush();
+    // The remaining real gap must count toward the estimated sentence times.
+    const end = audio.starts.at(-1);
+    expect((end?.at ?? 0) + (end?.duration ?? 0)).toBeCloseTo(1.22, 4);
+    expect(events.sentence).toHaveBeenLastCalledWith(0);
+    audio.currentTime = 1.15;
+    await flush();
+    expect(events.sentence).toHaveBeenLastCalledWith(1);
     player.halt();
   });
 
