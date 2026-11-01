@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import { db, linkReaderPrefs, links, linkTags, readingPositions, tags } from '@silo/db';
 import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { READER_VERSION } from '../capture.js';
 import type { FeedEntry } from '../feeds/types.js';
 import { parseStoredReaderPrefs, type ReaderPrefs } from '../settings/reader.js';
 import { canonicalize } from './canonicalize.js';
@@ -524,6 +525,8 @@ export type TextWindowOptions = {
 export type GetByIdOptions = {
   /** For a batch reader that already loaded the highlights in one query (`getByIds`). */
   preloadedHighlights?: Highlight[];
+  /** Presentation projection: current stored HTML replaces the redundant text. Windows win. */
+  reader?: boolean;
   /**
    * Request a character-sliced window of `extractedText` instead of the full
    * text — lets an agent read a relevant slice of a long article without
@@ -550,6 +553,7 @@ export type LinkWithTextWindow = LinkDetail & { extractedTextLength: number };
  * query per link read). List and search rows do not carry either.
  */
 export type LinkDetail = LinkSummaryWithTags & {
+  readerTextOmitted?: true;
   readerPrefs: ReaderPrefs;
   readingPosition: ReadingPosition | null;
   highlights: Highlight[];
@@ -589,9 +593,20 @@ export async function getById(
   id: string,
   opts?: GetByIdOptions,
 ): Promise<LinkDetail | LinkWithTextWindow | null> {
+  const omitText =
+    opts?.reader && !opts.textWindow
+      ? sql<boolean>`${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null and ${links.contentHtml} <> '' and ${links.sourceKind} <> 'twitter'`
+      : sql<boolean>`false`;
   const [found] = await db
     .select({
-      link: listColumns,
+      link: {
+        ...listColumns,
+        // Postgres returns no full text to Node when a current Reader can supply the prose.
+        extractedText: sql<
+          string | null
+        >`case when ${omitText} then null else ${links.extractedText} end`,
+      },
+      readerTextOmitted: omitText,
       readerPrefs: linkReaderPrefs.prefs,
       position: readingPositions.position,
       positionUpdatedAt: readingPositions.updatedAt,
@@ -607,6 +622,7 @@ export async function getById(
   if (!withTags) return null;
   const hydrated: LinkDetail = {
     ...withTags,
+    ...(found.readerTextOmitted ? { readerTextOmitted: true as const } : {}),
     readerPrefs: parseStoredReaderPrefs(found.readerPrefs),
     highlights: opts?.preloadedHighlights ?? (await listHighlights(id)),
     readingPosition:

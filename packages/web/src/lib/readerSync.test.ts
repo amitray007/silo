@@ -382,3 +382,24 @@ it('keeps a full newer snapshot when pagehide overtakes an in-flight write', asy
   expect(h.state()).toEqual(stored);
   h.sync.reset();
 });
+
+it('clears a drained disconnector once and ignores an old cleanup after reconnect', async () => {
+  const h = harness();
+  const detached = vi.fn();
+  const close = h.sync.connect(h.transport, true, detached);
+  h.sync.commit({ width: 'wide' }, 400);
+  close();
+  const newer = { send: vi.fn(async (value: State) => value), keepalive: vi.fn() };
+  const closeNew = h.sync.connect(newer, true, detached);
+  close();
+  h.replies[0]?.resolve({ ...START, width: 'wide' });
+  await Promise.resolve();
+  expect(detached).not.toHaveBeenCalled();
+  h.sync.commit({ width: 'narrow' });
+  await Promise.resolve();
+  expect(newer.send).toHaveBeenCalledTimes(1);
+  closeNew();
+  expect(detached).toHaveBeenCalledTimes(1);
+  closeNew();
+  expect(detached).toHaveBeenCalledTimes(1);
+});

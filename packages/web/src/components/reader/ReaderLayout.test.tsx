@@ -53,7 +53,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 function detailResponse(path: string, links: LinkJson[]) {
-  const link = links.find((link) => path === `/api/links/${link.id}`);
+  const link = links.find((link) => path.split('?')[0] === `/api/links/${link.id}`);
   return link ? json({ link }) : json({ error: 'not_found', message: 'Unknown link' }, 404);
 }
 
@@ -484,7 +484,9 @@ describe('reader selection and history', () => {
     const { fetchMock, container } = renderReader();
     await selectFirst();
     expect(screen.getByTestId('url').textContent).toBe('/?link=a');
-    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a')).toBe(true);
+    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a?view=reader')).toBe(
+      true,
+    );
     expect(container.querySelector('.silo-three-pane')?.getAttribute('data-reader')).toBe('true');
     fireEvent.click(screen.getByText('Browser back'));
     await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
@@ -495,14 +497,14 @@ describe('reader selection and history', () => {
     const { fetchMock } = renderReader({ extra: [hidden], route: '/?link=deep' });
     await selected('Deep link');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/links/deep',
+      '/api/links/deep?view=reader',
       expect.objectContaining({ credentials: 'include' }),
     );
   });
   it('shows an empty reader for an unknown id', async () => {
     const { fetchMock } = renderReader({ route: '/?link=missing' });
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith('/api/links/missing', expect.any(Object)),
+      expect(fetchMock).toHaveBeenCalledWith('/api/links/missing?view=reader', expect.any(Object)),
     );
     await waitFor(() => expect(reader().getByText('Select a link to read')).toBeDefined());
     expect(screen.queryByRole('alert')).toBeNull();
@@ -518,7 +520,9 @@ describe('reader selection and history', () => {
     const { fetchMock } = renderReader({ trash: [makeTrashLink(a)], route: '/trash?link=a' });
     await selected();
     expect(reader().getByText(/In trash · Purges in/)).toBeDefined();
-    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a')).toBe(false);
+    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a?view=reader')).toBe(
+      false,
+    );
   });
 });
 
@@ -1148,7 +1152,7 @@ describe('review regressions', () => {
     });
     await selected();
     await waitFor(() => expect(screen.getByText('Article heading')).toBeDefined());
-    expect(fetchMock).toHaveBeenCalledWith('/api/links/a', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/links/a?view=reader', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/links/a/reader', expect.any(Object));
     const prose = container.querySelector('.silo-reader-prose');
     expect(prose?.querySelector('script, [style], [onclick], [onerror]')).toBeNull();
