@@ -63,14 +63,17 @@ beforeEach(() => {
   });
   const original = Element.prototype.getBoundingClientRect;
   Element.prototype.getBoundingClientRect = function () {
-    const top = this.classList.contains('silo-lnote') ? blockTop : 0;
+    const group = this.closest<HTMLElement>('.silo-lgroup');
+    const groupTop = Number.parseFloat(group?.style.top ?? '0') || 0;
+    const top = groupTop + (this.classList.contains('silo-lnote') ? blockTop : 0);
+    const height = this.classList.contains('silo-lgroup-scroll') ? 112 : BLOCK;
     return {
       top,
-      bottom: top + BLOCK,
+      bottom: top + height,
       left: 0,
       right: 0,
       width: 0,
-      height: BLOCK,
+      height,
       x: 0,
       y: top,
       toJSON() {},
@@ -174,11 +177,12 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
     setNote: vi.fn(),
     remove: vi.fn(),
   };
-  const listeners = new Set<() => void>();
-  const current = { groups, frameTop: 0 };
+  const listeners = new Set<() => (() => void) | undefined>();
+  const current = { groups, frameTop: 0, rangeYs: new Map<string, number>() };
+  const read = vi.fn(() => current);
   const all: Groups = {
     ...current,
-    read: () => current,
+    read,
     subscribe: (paint) => {
       listeners.add(paint);
       return () => {
@@ -215,6 +219,7 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
     panel,
     scroll,
     frame,
+    read,
     current,
     listeners,
     setCollapsed,
@@ -324,12 +329,44 @@ it('paints group reflow and the connector synchronously, before a React update',
   current.groups = [group(2, ['a'], 290), group(3, ['b'], 500)];
   blockTop = 30;
   // No act, timer, or animation frame is needed for these positions to reach the DOM.
-  for (const paint of listeners) paint();
+  for (const measure of listeners) measure()?.();
   expect(tops(host)).toEqual([
     { key: 'p2', top: 288 },
     { key: 'p3', top: 498 },
   ]);
   expect(host.querySelector('.silo-hairline path')?.getAttribute('d')).toBe(
-    'M36 300C41 300 41 42 46 42',
+    'M36 300C41 300 41 330 46 330',
   );
+});
+
+it('updates only the connector when a group scrolls, without reading or painting the full layout', () => {
+  const { host, read, listeners } = mount({
+    groups: [group(2, ['a', 'b', 'c'], 190), group(3, ['d'], 400)],
+    lane: { hoveredIds: ['a'] },
+  });
+  read.mockClear();
+  const before = tops(host);
+  const height = vi.spyOn(
+    host.querySelector('[data-note="d"]') as HTMLElement,
+    'offsetHeight',
+    'get',
+  );
+  const range = vi.spyOn(
+    document.querySelector('[data-note="a"]') as HTMLElement,
+    'getBoundingClientRect',
+  );
+  blockTop = 30;
+  fireEvent.scroll(host.querySelector('.silo-lgroup-scroll') as HTMLElement);
+  expect(read).not.toHaveBeenCalled();
+  expect(height).not.toHaveBeenCalled();
+  expect(range).toHaveBeenCalled();
+  expect(tops(host)).toEqual(before);
+  expect(host.querySelector('.silo-hairline path')?.getAttribute('d')).toBe(
+    'M36 200C41 200 41 230 46 230',
+  );
+  for (const measure of listeners) measure()?.();
+  expect(read).toHaveBeenCalledOnce();
+  expect(height).toHaveBeenCalled();
+  height.mockRestore();
+  range.mockRestore();
 });

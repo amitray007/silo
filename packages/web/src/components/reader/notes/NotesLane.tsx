@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { createPortal } from 'react-dom';
 import type { HighlightsApi } from '../highlights/useHighlights';
 import { ReaderIcon } from '../ReaderIcon';
+import { hairlinePath } from './hairline';
 import { entryOf, LaneBlock, lostEntry, type NoteEntry } from './LaneBlock';
 import { LaneGroup } from './LaneGroup';
 import { LANE, LANE_GAP } from './plan';
@@ -88,7 +89,6 @@ export function NotesLane({
   const [blockTick, setBlockTick] = useState(0);
   const hairline = useRef<SVGPathElement>(null);
   const paintLayout = useRef(() => {});
-  const onScrolled = useCallback(() => paintLayout.current(), []);
   const [slots, setSlots] = useState<Map<string, Slot>>(new Map());
   const [laneEl, setLaneEl] = useState<HTMLElement | null>(null);
 
@@ -123,33 +123,28 @@ export function NotesLane({
   );
   const blockKey = `${keyed.map((g) => g.entries.map((e) => `${e.id}${e.note ? 1 : 0}`).join()).join('|')}/${lostEntries.length}/${adding ?? ''}`;
 
-  const paintHairline = useCallback(() => {
-    const path = hairline.current;
-    if (!path) return;
-    const hovered = hoveredIds[0];
-    const found = api.resolved.find((item) => item.id === hovered);
-    const target = hovered
-      ? laneEl?.querySelector<HTMLElement>(`[data-note="${CSS.escape(hovered)}"]`)
-      : null;
-    const scroller = target?.closest<HTMLElement>('.silo-lgroup-scroll');
-    let link = '';
-    if (stacked && found && target && scroller) {
-      const rect = target.getBoundingClientRect();
-      const view = scroller.getBoundingClientRect();
-      const range = found.range.getClientRects()[0] ?? found.range.getBoundingClientRect();
-      if (rect.bottom >= view.top + 4 && rect.top <= view.bottom - 4) {
-        const origin = frame.getBoundingClientRect().top + frame.clientTop - frame.scrollTop;
-        const y1 = range.top + range.height / 2 - origin;
-        const y2 = rect.top - origin + 12;
-        const x1 = frame.clientWidth + gutterOffset;
-        const x2 = frame.clientWidth + LANE_GAP - 6;
-        const mid = (x1 + x2) / 2;
-        link = `M${x1} ${y1}C${mid} ${y1} ${mid} ${y2} ${x2} ${y2}`;
-      }
-    }
-    path.setAttribute('d', link);
-    path.dataset.on = String(Boolean(link));
-  }, [stacked, api.resolved, hoveredIds, laneEl, frame, gutterOffset]);
+  const measureHairline = useCallback(
+    (next?: Map<string, Slot>, rangeYs?: ReadonlyMap<string, number>) => {
+      const path = hairline.current;
+      if (!path) return;
+      const hovered = hoveredIds[0];
+      const found = api.resolved.find((item) => item.id === hovered);
+      const target = hovered
+        ? laneEl?.querySelector<HTMLElement>(`[data-note="${CSS.escape(hovered)}"]`)
+        : null;
+      const link =
+        stacked && found && target
+          ? hairlinePath(frame, target, found.range, gutterOffset, next, rangeYs?.get(found.id))
+          : '';
+      return () => {
+        path.setAttribute('d', link);
+        path.dataset.on = String(Boolean(link));
+      };
+    },
+    [stacked, api.resolved, hoveredIds, laneEl, frame, gutterOffset],
+  );
+  // Internal scrolling changes only the hovered block's connector, never the paragraph layout.
+  const onScrolled = useCallback(() => measureHairline()?.(), [measureHairline]);
 
   const measure = useCallback(() => {
     if (!stacked || !laneEl) return;
@@ -170,27 +165,31 @@ export function NotesLane({
         blocks: blockHeights(laneEl, `p${group.para}`),
       });
     const next = stackRows(rows);
-    // Paint in the observer callback. React state is only for reveal and scroll affordances.
-    laneEl.style.left = `${frame.clientWidth + LANE_GAP}px`;
-    for (const [key, slot] of next) {
+    const left = frame.clientWidth + LANE_GAP;
+    const placements = Array.from(next, ([key, slot]) => {
       const group = laneEl.querySelector<HTMLElement>(`[data-group="${key}"]`);
-      const scroller = group?.querySelector<HTMLElement>('.silo-lgroup-scroll');
-      if (!group || !scroller) continue;
-      group.style.top = `${slot.top}px`;
-      group.dataset.placed = 'true';
-      scroller.style.maxHeight = `${slot.max}px`;
-    }
-    paintHairline();
-    setSlots((previous) => (sameSlots(previous, next) ? previous : next));
-  }, [stacked, laneEl, groups, lostEntries.length, frame, paintHairline]);
-  paintLayout.current = measure;
+      return { group, scroller: group?.querySelector<HTMLElement>('.silo-lgroup-scroll'), slot };
+    });
+    const paintHairline = measureHairline(next, current.rangeYs);
+    // All subscribers finish reading before this write phase runs in the same callback.
+    return () => {
+      laneEl.style.left = `${left}px`;
+      for (const { group, scroller, slot } of placements) {
+        if (!group || !scroller) continue;
+        group.style.top = `${slot.top}px`;
+        group.dataset.placed = 'true';
+        scroller.style.maxHeight = `${slot.max}px`;
+      }
+      paintHairline?.();
+      setSlots((previous) => (sameSlots(previous, next) ? previous : next));
+    };
+  }, [stacked, laneEl, groups, lostEntries.length, frame, measureHairline]);
+  paintLayout.current = () => measure()?.();
   // biome-ignore lint/correctness/useExhaustiveDependencies: blockKey and blockTick follow block content and height.
   useLayoutEffect(() => {
-    measure();
+    measure()?.();
     return groups.subscribe(measure);
   }, [measure, groups, blockKey, blockTick]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: a React slot commit can move the connector target.
-  useLayoutEffect(paintHairline, [paintHairline, slots]);
 
   // A field growing or a note being added must move later groups in this same resize callback.
   // biome-ignore lint/correctness/useExhaustiveDependencies: observers follow the set of blocks.

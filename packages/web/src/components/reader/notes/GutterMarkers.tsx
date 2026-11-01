@@ -34,7 +34,7 @@ export function GutterMarkers({
 }) {
   const markers = useRef(new Map<number, HTMLButtonElement>());
   useLayoutEffect(() => {
-    const paint = () => {
+    const measure = () => {
       const current = groups.read().groups;
       const ys = resolveMarkerYs(
         current.map((group) => ({ key: group.para, y: group.y, lineHeight: group.lineHeight })),
@@ -42,15 +42,17 @@ export function GutterMarkers({
         gutter.size + CLEARANCE,
       );
       const left = gutterLeft(frame, scroll, gutter);
-      for (const group of current) {
-        const marker = markers.current.get(group.para);
-        if (!marker) continue;
-        marker.style.top = `${(ys.get(group.para) ?? group.y) - gutter.size / 2}px`;
-        marker.style.left = `${left}px`;
-      }
+      return () => {
+        for (const group of current) {
+          const marker = markers.current.get(group.para);
+          if (!marker) continue;
+          marker.style.top = `${(ys.get(group.para) ?? group.y) - gutter.size / 2}px`;
+          marker.style.left = `${left}px`;
+        }
+      };
     };
-    paint();
-    return groups.subscribe(paint);
+    measure()();
+    return groups.subscribe(measure);
   }, [groups, frame, scroll, gutter, resumeY]);
   if (groups.groups.length === 0) return null;
   return createPortal(

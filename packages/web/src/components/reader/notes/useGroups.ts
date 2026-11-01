@@ -19,18 +19,20 @@ export type NoteGroup = {
 
 type GroupLayout = {
   groups: NoteGroup[];
+  /** Each highlighted range's first-line centre, in frame coordinates. */
+  rangeYs: ReadonlyMap<string, number>;
   /** The prose frame's top, to turn a `y` into the frame's own coordinates. */
   frameTop: number;
 };
 
 export type Groups = GroupLayout & {
-  /** Read the current layout without waiting for a React render. */
+  /** Read the shared snapshot, invalidated by each layout change. */
   read: () => GroupLayout;
-  /** Subscribers paint synchronously when layout changes, before the browser paints. */
-  subscribe: (paint: () => void) => () => void;
+  /** Read now and return a paint callback. Every subscriber reads before any subscriber paints. */
+  subscribe: (measure: () => (() => void) | undefined) => () => void;
 };
 
-const NONE: GroupLayout = { groups: [], frameTop: 0 };
+const NONE: GroupLayout = { groups: [], rangeYs: new Map(), frameTop: 0 };
 
 /** Group the resolved highlights by paragraph and measure each group against the prose. */
 function collectGroups(
@@ -42,10 +44,12 @@ function collectGroups(
   const sections = paragraphSections(prose);
   const toContent = (viewportY: number) => viewportY - box.top - frame.clientTop + frame.scrollTop;
   const byPara = new Map<number, NoteGroup>();
+  const rangeYs = new Map<string, number>();
   for (const item of resolved) {
     const para = paragraphOf(sections, item.range.startContainer);
     const rect = item.range.getClientRects()[0] ?? item.range.getBoundingClientRect();
     const y = toContent(rect.top + rect.height / 2);
+    rangeYs.set(item.id, y);
     const existing = byPara.get(para);
     if (existing) {
       existing.items.push(item);
@@ -65,6 +69,7 @@ function collectGroups(
   }
   return {
     groups: [...byPara.values()].sort((a, b) => a.y - b.y),
+    rangeYs,
     frameTop: 0,
   };
 }
@@ -81,17 +86,26 @@ export function useGroups(
   active: boolean,
 ): Groups {
   const frame = prose?.parentElement ?? prose;
-  const listeners = useMemo(() => new Set<() => void>(), []);
+  const listeners = useMemo(() => new Set<() => (() => void) | undefined>(), []);
   const [measured, setMeasured] = useState<GroupLayout>(NONE);
-  const read = useCallback(
-    () => (prose && frame && active ? collectGroups(prose, frame, resolved) : NONE),
-    [prose, frame, resolved, active],
-  );
+  const layout = useMemo(() => {
+    let snapshot: GroupLayout | undefined;
+    return {
+      read: () => {
+        snapshot ??= prose && frame && active ? collectGroups(prose, frame, resolved) : NONE;
+        return snapshot;
+      },
+      invalidate: () => {
+        snapshot = undefined;
+      },
+    };
+  }, [prose, frame, resolved, active]);
+  const { read } = layout;
   const subscribe = useCallback(
-    (paint: () => void) => {
-      listeners.add(paint);
+    (measure: () => (() => void) | undefined) => {
+      listeners.add(measure);
       return () => {
-        listeners.delete(paint);
+        listeners.delete(measure);
       };
     },
     [listeners],
@@ -101,7 +115,9 @@ export function useGroups(
     setMeasured(read());
     if (!prose || !frame || !scroll || !active) return;
     const paint = () => {
-      for (const listener of listeners) listener();
+      layout.invalidate();
+      const paints = Array.from(listeners, (measure) => measure());
+      for (const paint of paints) paint?.();
     };
     const observer = new ResizeObserver(paint);
     const article = prose.closest('.silo-reader') ?? frame;
@@ -134,6 +150,6 @@ export function useGroups(
       window.removeEventListener('resize', paint);
       document.fonts?.removeEventListener('loadingdone', paint);
     };
-  }, [prose, frame, scroll, active, read, listeners]);
+  }, [prose, frame, scroll, active, read, layout, listeners]);
   return useMemo(() => ({ ...measured, read, subscribe }), [measured, read, subscribe]);
 }
