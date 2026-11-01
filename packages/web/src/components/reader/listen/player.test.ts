@@ -302,6 +302,45 @@ describe('Player scheduling', () => {
     player.halt();
   });
 
+  it('adds streaming sentence boundaries only when covered by scheduled samples, then refines them', async () => {
+    const { audio, player, events, list } = setup(2);
+    const paragraph = block(0);
+    list[0] = { ...(list[0] as Segment), text: 'One comes here.', block: paragraph };
+    list[1] = { ...(list[1] as Segment), text: 'Two comes here.', block: paragraph };
+    const { engine } = fakeEngine({ supportsSpeed: false });
+    let next: (() => void) | undefined;
+    let finish: (() => void) | undefined;
+    engine.stream = async function* () {
+      yield new Float32Array(14400).fill(0.5);
+      await new Promise<void>((resolve) => {
+        next = resolve;
+      });
+      yield new Float32Array(43200).fill(0.5);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    };
+    player.start(engine, 0);
+    await flush();
+    audio.currentTime = 1.1;
+    await flush();
+    // The estimate is past, but its samples have not arrived yet.
+    expect(events.sentence).toHaveBeenLastCalledWith(0);
+    next?.();
+    await flush();
+    audio.currentTime = 1.2;
+    await flush();
+    expect(events.sentence).toHaveBeenLastCalledWith(1);
+    finish?.();
+    await flush();
+    // Completion refines the estimate with the full playback span, including the underrun.
+    expect(events.sentence).toHaveBeenLastCalledWith(0);
+    audio.currentTime = 1.6;
+    await flush();
+    expect(events.sentence).toHaveBeenLastCalledWith(1);
+    player.halt();
+  });
+
   it('reports the time from the press to the first scheduled sound', async () => {
     const { player, events, advance } = setup(1);
     const { engine } = fakeEngine();

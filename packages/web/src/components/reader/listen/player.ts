@@ -65,6 +65,8 @@ export class Player {
   private plan: Plan = { units: [], jobs: [], scheduled: [], unitStart: [] };
   private cursor = { unit: 0, requested: 0, nextTime: 0 };
   private timeline: { at: number; seg: number }[] = [];
+  /** Timeline offset of the unit currently being scheduled. */
+  private unitTimelineStart = 0;
   private sources: AudioBufferSourceNode[] = [];
   private shown = -1;
   private timer: ReturnType<typeof setInterval> | undefined;
@@ -243,16 +245,30 @@ export class Player {
   private finishUnit(index: number, duration: number): void {
     const unit = this.plan.units[index];
     if (!unit) return;
-    const start = this.plan.unitStart[index] ?? this.cursor.nextTime;
-    this.timeline.push(...sentenceTimes(unit, start, duration).slice(1));
+    this.trackSentences(index, duration);
     this.cursor.nextTime += unit.pause / 1000 / this.deps.settings().rate;
     this.cursor.unit = index + 1;
   }
 
   private beginUnit(index: number, at: number): void {
     this.plan.unitStart[index] = at;
+    this.unitTimelineStart = this.timeline.length;
     const first = this.plan.units[index]?.parts[0];
     if (first) this.timeline.push({ at, seg: first.seg });
+  }
+
+  /** Replace this unit's estimates; later units have not been scheduled yet. */
+  private trackSentences(index: number, duration: number, until = Infinity): void {
+    const unit = this.plan.units[index];
+    const start = this.plan.unitStart[index];
+    if (!unit || unit.parts.length < 2 || start === undefined) return;
+    this.timeline.splice(
+      this.unitTimelineStart + 1,
+      this.timeline.length,
+      ...sentenceTimes(unit, start, duration)
+        .slice(1)
+        .filter((entry) => entry.at <= until),
+    );
   }
 
   /** Schedule a unit's audio that is ready. Returns true when the unit is fully scheduled. */
@@ -276,7 +292,12 @@ export class Player {
       if (!plan.scheduled[u]) this.beginUnit(u, at);
       plan.scheduled[u] = (plan.scheduled[u] ?? 0) + 1;
     }
-    if (!job.done || plan.scheduled[u] !== job.chunks.length) return false;
+    if (!job.done || plan.scheduled[u] !== job.chunks.length) {
+      const unit = plan.units[u];
+      if (unit)
+        this.trackSentences(u, unit.text.length / CHARS_PER_SECOND / rate, this.cursor.nextTime);
+      return false;
+    }
     this.finishUnit(u, this.cursor.nextTime - (plan.unitStart[u] ?? this.cursor.nextTime));
     return true;
   }

@@ -10,6 +10,7 @@ const fake = vi.hoisted(() => ({
   hold: new Set<string>(),
   progress: new Map<string, [number, number, number]>(),
   streamed: [] as string[],
+  stream: undefined as TtsEngine['stream'] | undefined,
 }));
 
 vi.mock('./engines', async (original) => {
@@ -35,8 +36,12 @@ vi.mock('./engines', async (original) => {
       dispose: () => {
         record.disposed += 1;
       },
-      async *stream(text: string) {
+      async *stream(text, options) {
         fake.streamed.push(text);
+        if (fake.stream) {
+          yield* fake.stream(text, options);
+          return;
+        }
         yield new Float32Array(2400);
       },
     };
@@ -92,6 +97,7 @@ beforeEach(() => {
   fake.hold.clear();
   fake.progress.clear();
   fake.streamed = [];
+  fake.stream = undefined;
   localStorage.clear();
   vi.stubGlobal('AudioContext', FakeAudioContext);
   Range.prototype.getBoundingClientRect = () => new DOMRect(0, 100, 100, 20);
@@ -245,3 +251,48 @@ it('re-plans pause changes from the current sentence, including changes made in 
   expect(hook.result.current.listen.pauses).toBe('short');
   hook.unmount();
 });
+
+it.each(['pauses', 'settings', 'speed', 'voice', 'engine'] as const)(
+  're-plans a %s change from the sentence playing inside a streaming merged unit',
+  async (change) => {
+    vi.useFakeTimers();
+    const { prose, scroll } = article();
+    prose.innerHTML = '<p>One comes here. Two comes here.</p>';
+    let completed = 0;
+    fake.stream = async function* (_text, { signal }) {
+      yield new Float32Array(24000).fill(0.5);
+      yield new Float32Array(24000).fill(0.5);
+      await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve()));
+      completed += 1;
+    };
+    const hook = renderHook(() => ({
+      listen: useReadAloud({ prose, scroll }),
+      prefs: useReadAloudPrefs(),
+    }));
+    await act(async () => {
+      hook.result.current.listen.startAt(0);
+      await vi.advanceTimersByTimeAsync(40);
+    });
+    expect(fake.streamed).toEqual(['One comes here. Two comes here.']);
+    const context = FakeAudioContext.last as FakeAudioContext;
+    context.currentTime = 1.2;
+    await act(async () => vi.advanceTimersByTimeAsync(40));
+    expect(completed).toBe(0);
+    expect(hook.result.current.listen.index).toBe(1);
+    expect(hook.result.current.listen.current?.text).toBe('Two comes here.');
+    await act(async () => {
+      const { listen, prefs } = hook.result.current;
+      if (change === 'pauses') listen.setPauses('natural');
+      else if (change === 'settings') prefs.update({ pauses: 'short' });
+      else if (change === 'speed') listen.setRate(1.5);
+      else if (change === 'voice') listen.setVoice('v1');
+      else listen.setEngine('kokoro');
+      await vi.advanceTimersByTimeAsync(40);
+    });
+    expect(context.stopped).toBeGreaterThan(0);
+    expect(fake.streamed[1]).toBe('Two comes here.');
+    expect(hook.result.current.listen.index).toBe(1);
+    expect(hook.result.current.listen.playing).toBe(true);
+    hook.unmount();
+  },
+);
