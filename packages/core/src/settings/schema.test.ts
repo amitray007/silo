@@ -258,6 +258,20 @@ describe('hoverPreview schema and default', () => {
 });
 
 describe('reader setting schema', () => {
+  it('distinguishes full, stored and partial reader schemas', async () => {
+    const { readerSchema, readerStoredSchema, readerPatchSchema } = await import('./reader.js');
+    const partial = readerPatchSchema.parse({ readAloud: { voices: { kokoro: 'af_heart' } } });
+    expect(partial).toEqual({ readAloud: { voices: { kokoro: 'af_heart' } } });
+    const full = readerSchema.parse(partial);
+    // Typed field access also guards the inferred output of every schema mode.
+    expect(full.readAloud.voices.phonon).toBe('');
+    expect(full.type.size).toBe(16);
+    expect(readerStoredSchema.parse({ type: { size: 'bad', font: 'mono' } }).type.font).toBe(
+      'mono',
+    );
+    expect(() => readerPatchSchema.parse({ type: { unknown: true } })).toThrow();
+  });
+
   it('defaults to unset, and an empty value fills every field default', () => {
     expect(SETTINGS_DEFAULTS.reader).toBeNull();
     expect(parseSettingValue('reader', {})).toEqual({

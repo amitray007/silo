@@ -204,6 +204,7 @@ export async function updateSettings(patch: Record<string, unknown>): Promise<Se
   await db.transaction(async (tx) => {
     for (const [key, value] of validated) {
       if (key === 'reader') {
+        if (Object.keys(value).length === 0) continue;
         // Two patches to the same value must not lose each other's fields.
         await tx.execute(sql`select pg_advisory_xact_lock(hashtext('settings.reader'))`);
         const current = (await getSetting('reader', tx)) ?? READER_DEFAULTS;

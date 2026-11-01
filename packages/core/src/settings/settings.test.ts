@@ -331,6 +331,39 @@ describeIfPg('settings store (integration, plan 016)', () => {
   });
 
   describe('reader setting', () => {
+    it('keeps an empty reader patch in the never-saved state', async () => {
+      expect((await ops.updateSettings({ reader: {} })).reader).toBeNull();
+      expect(await ops.getSetting('reader')).toBeNull();
+      const rows = await rawDb.execute(sql`SELECT key FROM settings WHERE key = 'reader'`);
+      expect(rows.rows).toEqual([]);
+      await ops.updateSettings({ reader: { width: 'wide' } });
+      expect((await ops.updateSettings({ reader: {} })).reader?.width).toBe('wide');
+    });
+
+    it.each(['fresh', 'saved'])('preserves every concurrent reader patch (%s)', async (state) => {
+      if (state === 'saved') await ops.updateSettings({ reader: { width: 'medium' } });
+      await Promise.all(
+        [
+          { type: { font: 'serif' } },
+          { type: { size: 22 } },
+          { type: { leading: 'relaxed', theme: 'sepia' } },
+          { width: 'wide' },
+          { pencil: { style: 'highlighter', wpm: 300 } },
+          { highlight: { color: 'pink' } },
+          { readAloud: { engine: 'kokoro', rate: 2 } },
+          { readAloud: { voices: { phonon: 'zoey' } } },
+          { readAloud: { voices: { kokoro: 'af_heart' } } },
+        ].map((reader) => ops.updateSettings({ reader })),
+      );
+      expect(await ops.getSetting('reader')).toEqual({
+        type: { font: 'serif', size: 22, leading: 'relaxed', theme: 'sepia' },
+        width: 'wide',
+        pencil: { style: 'highlighter', wpm: 300 },
+        highlight: { color: 'pink' },
+        readAloud: { engine: 'kokoro', rate: 2, voices: { phonon: 'zoey', kokoro: 'af_heart' } },
+      });
+    });
+
     it('is unset until the first write, then a partial patch merges over it', async () => {
       expect(await ops.getSetting('reader')).toBeNull();
       await ops.updateSettings({ reader: { readAloud: { rate: 2 } } });

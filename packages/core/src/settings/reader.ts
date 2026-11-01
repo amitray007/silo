@@ -24,20 +24,31 @@ export const READER_DEFAULTS = {
   readAloud: { engine: 'phonon', voices: { phonon: '', kokoro: '' }, rate: 1 },
 } as const;
 
-function build(mode: Mode) {
-  const wrap = <T>(schema: z.ZodType<T>, fallback: NoInfer<T>): z.ZodType<T> => {
-    if (mode === 'write') return schema.default(fallback as never) as unknown as z.ZodType<T>;
-    if (mode === 'stored') return schema.catch(fallback);
-    return schema.optional() as unknown as z.ZodType<T>;
+function wrappers<S extends z.ZodType>(
+  schema: S,
+  fallback: NoInfer<z.util.NoUndefined<z.output<S>>>,
+) {
+  return {
+    write: schema.default(fallback),
+    stored: schema.catch(fallback),
+    patch: schema.optional(),
   };
-  const field = wrap;
-  const group = <T extends object>(
-    shape: { [K in keyof T]: z.ZodType<T[K]> },
-    fallback: NoInfer<T>,
-  ): z.ZodType<T> => {
+}
+
+function build<M extends Mode>(mode: M) {
+  const field = <S extends z.ZodType>(
+    schema: S,
+    fallback: NoInfer<z.util.NoUndefined<z.output<S>>>,
+  ) => wrappers(schema, fallback)[mode];
+  const group = <S extends z.ZodRawShape>(
+    shape: S,
+    fallback: NoInfer<z.util.NoUndefined<z.output<z.ZodObject<S>>>>,
+  ) => {
     // Unknown keys are an error on write and patch; a stored value just drops them.
-    const object = mode === 'stored' ? z.object(shape) : z.object(shape).strict();
-    return wrap(object as unknown as z.ZodType<T>, fallback);
+    const object = z.object(shape);
+    return mode === 'stored'
+      ? wrappers(object, fallback)[mode]
+      : wrappers(object.strict(), fallback)[mode];
   };
   const d = READER_DEFAULTS;
   const top = {
@@ -77,7 +88,7 @@ function build(mode: Mode) {
   return mode === 'stored' ? z.object(top) : z.object(top).strict();
 }
 
-type ReaderShape = ReturnType<typeof build>;
+type ReaderShape = typeof readerSchema;
 
 /** A complete reader value, as stored and returned. */
 export type ReaderSettings = z.output<ReaderShape>;
