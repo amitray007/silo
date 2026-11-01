@@ -1,24 +1,12 @@
+import { KOKORO_MODEL_FILE, KOKORO_SMALL_FILES, KOKORO_WEBGPU_DTYPE } from './files';
 import { fetchTtsManifest, ttsFilesBase } from './manifest';
 import { progressTracker, type TtsEngine, type Voice } from './types';
-
-/**
- * WebGPU runs Kokoro at fp32: the prototype measured fp16 as degraded. Without WebGPU the
- * worker runs q8 on WebAssembly.
- */
-const KOKORO_WEBGPU_DTYPE = 'fp32';
 
 /**
  * After an abort, the generation in the worker may finish on its own. Wait this long for it
  * before the worker is stopped and reloaded (a reload costs a second or more).
  */
 const STALE_MS = 750;
-
-/** The model files a load fetches for each dtype (voices load on first use, not here). */
-const SMALL_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json'];
-const MODEL_FILE: Record<string, string> = {
-  fp32: 'onnx/model.onnx',
-  q8: 'onnx/model_quantized.onnx',
-};
 
 type VoiceInfo = { name: string; language: string; gender: string };
 type Progress = { status?: string; file?: string; loaded?: number; total?: number };
@@ -142,9 +130,9 @@ export function createKokoroEngine(): TtsEngine {
       const files = manifest.engines.kokoro.files;
       /** Progress over the files this dtype loads, sized from the manifest. */
       const trackFor = (dtype: string | null) => {
-        const model = MODEL_FILE[dtype ?? 'q8'] as string;
+        const model = KOKORO_MODEL_FILE[dtype === null ? 'q8' : 'fp32'];
         const sizes = Object.fromEntries(
-          [model, ...SMALL_FILES].map((path) => [path, files[path]?.size ?? 0]),
+          [model, ...KOKORO_SMALL_FILES].map((path) => [path, files[path]?.size ?? 0]),
         );
         return progressTracker<Progress>(onProgress, sizes, (info) => {
           if (!info.file) return null;

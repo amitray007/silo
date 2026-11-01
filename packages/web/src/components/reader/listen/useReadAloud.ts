@@ -6,6 +6,7 @@ import { createEngine, ENGINES, type EngineId, type TtsEngine, type Voice } from
 import { isEnglishText } from './language';
 import { Player } from './player';
 import { buildSegments, type Segment, segmentIndexAt } from './segments';
+import { reportReaderLoad } from './voiceModels';
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -84,6 +85,17 @@ export function useReadAloud({
           )
         : true,
     [prose],
+  );
+
+  // Settings → Reader → Voices shows what this Reader has loaded or is downloading.
+  useEffect(() => {
+    for (const id of ['phonon', 'kokoro'] as const) reportReaderLoad(id, loads[id]);
+  }, [loads]);
+  useEffect(
+    () => () => {
+      for (const id of ['phonon', 'kokoro'] as const) reportReaderLoad(id, null);
+    },
+    [],
   );
 
   const engineId: EngineId = prefs.engine;
