@@ -204,6 +204,13 @@
       "when": 1793476424628,
       "tag": "0028_highlights",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1793558595510,
+      "tag": "0029_reading_position_source",
+      "breakpoints": true
     }
   ]
 }

@@ -259,7 +259,7 @@ export { type LiveReader, readLive, setLiveReader } from './links/live-reader.js
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
-export type { ReadingPosition } from './links/reading-position.js';
+export type { ReadingPosition, ReadingPositionSource } from './links/reading-position.js';
 export {
   clearReadingPosition,
   getReadingPosition,

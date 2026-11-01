@@ -102,7 +102,11 @@ function shapeSourceData(raw: unknown): SourceData {
 }
 
 /** Where the reader stopped: a share (0 to 1) of the article's words, and when it was saved. */
-type ReadingPositionJson = { position: number; updatedAt: string };
+type ReadingPositionJson = {
+  position: number;
+  source: 'pencil' | 'listen' | 'mark';
+  updatedAt: string;
+};
 
 /** One passage highlight. Picked field by field; `linkId` stays out (the link carries it). */
 export type HighlightJson = {
@@ -202,6 +206,7 @@ export function toLinkDetailJson(link: LinkDetail): LinkDetailJson {
     readingPosition: link.readingPosition
       ? {
           position: link.readingPosition.position,
+          source: link.readingPosition.source,
           updatedAt: link.readingPosition.updatedAt.toISOString(),
         }
       : null,

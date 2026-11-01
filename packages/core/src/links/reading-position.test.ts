@@ -60,6 +60,24 @@ describeIfPg('reading position (integration)', () => {
     expect(detail?.readingPosition?.updatedAt).toBeInstanceOf(Date);
   });
 
+  it('defaults core writes and old rows to pencil, and validates the source', async () => {
+    const link = await newLink();
+    expect((await ops.setReadingPosition(link.id, 0.25))?.source).toBe('pencil');
+    await rawDb.execute(sql`delete from reading_positions where link_id = ${link.id}`);
+    await rawDb.execute(
+      sql`insert into reading_positions (link_id, position) values (${link.id}, 0.25)`,
+    );
+    expect((await linksOps.getById(link.id))?.readingPosition?.source).toBe('pencil');
+    // @ts-expect-error -- untrusted callers must also be rejected at runtime.
+    await expect(ops.setReadingPosition(link.id, 0.5, 'scroll')).rejects.toBeInstanceOf(
+      ops.InvalidReadingPositionError,
+    );
+    for (const source of ['pencil', 'listen', 'mark'] as const) {
+      expect((await ops.setReadingPosition(link.id, 0.5, source))?.source).toBe(source);
+      expect((await linksOps.getById(link.id))?.readingPosition?.source).toBe(source);
+    }
+  });
+
   it('overwrites an earlier position and moves updatedAt forward', async () => {
     const link = await newLink();
     const first = await ops.setReadingPosition(link.id, 0.2);
@@ -158,7 +176,7 @@ describeIfPg('reading position (integration)', () => {
   describe('restore merge', () => {
     async function trashedWithLiveTwin(trashedAt: string, liveAt: string | null) {
       const original = await newLink('https://example.com/merge');
-      await ops.setReadingPosition(original.id, 0.8);
+      await ops.setReadingPosition(original.id, 0.8, 'listen');
       await rawDb.execute(
         sql`update reading_positions set updated_at = ${trashedAt}::timestamptz where link_id = ${original.id}`,
       );
@@ -185,6 +203,7 @@ describeIfPg('reading position (integration)', () => {
       const result = await linksOps.restore(original.id);
       expect(result.status).toBe('merged');
       expect((await ops.getReadingPosition(twinId))?.position).toBeCloseTo(0.8);
+      expect((await ops.getReadingPosition(twinId))?.source).toBe('listen');
     });
 
     it('keeps the live position when it is newer', async () => {
@@ -200,6 +219,7 @@ describeIfPg('reading position (integration)', () => {
       const { original, twinId } = await trashedWithLiveTwin('2026-01-01T00:00:00Z', null);
       await linksOps.restore(original.id);
       expect((await ops.getReadingPosition(twinId))?.position).toBeCloseTo(0.8);
+      expect((await ops.getReadingPosition(twinId))?.source).toBe('listen');
     });
   });
 
@@ -209,7 +229,10 @@ describeIfPg('reading position (integration)', () => {
       await newLink('https://example.com/none');
       await ops.setReadingPosition(link.id, 0.5);
       const json = JSON.parse((await exportOps.exportLinks({ format: 'json' })).body) as {
-        links: Array<{ id: string; readingPosition?: { position: number; updatedAt: string } }>;
+        links: Array<{
+          id: string;
+          readingPosition?: { position: number; source: string; updatedAt: string };
+        }>;
       };
       const withPosition = json.links.find((l) => l.id === link.id);
       expect(withPosition?.readingPosition?.position).toBe(0.5);
@@ -222,7 +245,7 @@ describeIfPg('reading position (integration)', () => {
 
     it('round-trips a position through export, wipe and import', async () => {
       const link = await newLink('https://example.com/round');
-      await ops.setReadingPosition(link.id, 0.42);
+      await ops.setReadingPosition(link.id, 0.42, 'listen');
       const body = JSON.parse((await exportOps.exportLinks()).body);
       await rawDb.execute(sql`truncate table links cascade`);
       const result = await importOps.importLinks(body);
@@ -231,6 +254,23 @@ describeIfPg('reading position (integration)', () => {
       expect(imported).not.toBeNull();
       const restored = imported ? await ops.getReadingPosition(imported.id) : null;
       expect(restored?.position).toBeCloseTo(0.42);
+      expect(restored?.source).toBe('listen');
+    });
+
+    it('imports old positions without source as pencil', async () => {
+      const result = await importOps.importLinks({
+        version: 1,
+        links: [
+          {
+            url: 'https://example.com/legacy',
+            sourceKind: 'link',
+            readingPosition: { position: 0.5, updatedAt: '2026-01-01T00:00:00Z' },
+          },
+        ],
+      });
+      expect(result.created).toBe(1);
+      const imported = await linksOps.findByCanonicalUrl('https://example.com/legacy');
+      expect(imported && (await ops.getReadingPosition(imported.id))?.source).toBe('pencil');
     });
 
     it('imports an old file without a position', async () => {

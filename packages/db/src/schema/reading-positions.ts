@@ -1,4 +1,4 @@
-import { pgTable, real, timestamp, uuid } from 'drizzle-orm/pg-core';
+import { pgTable, real, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { links } from './links.js';
 
 /**
@@ -12,5 +12,8 @@ export const readingPositions = pgTable('reading_positions', {
     .primaryKey()
     .references(() => links.id, { onDelete: 'cascade' }),
   position: real('position').notNull(),
+  source: varchar('source', { enum: ['pencil', 'listen', 'mark'] })
+    .notNull()
+    .default('pencil'),
   updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
 });

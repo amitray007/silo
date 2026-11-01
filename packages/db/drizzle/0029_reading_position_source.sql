@@ -1,0 +1,1 @@
+ALTER TABLE "reading_positions" ADD COLUMN "source" varchar DEFAULT 'pencil' NOT NULL;

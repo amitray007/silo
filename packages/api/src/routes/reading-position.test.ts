@@ -11,7 +11,7 @@ import { setupPgHarness } from '../test-support/pg-harness.js';
  */
 const describeIfPg = postgresReachable() ? describe : describe.skip;
 
-type Position = { position: number; updatedAt: string };
+type Position = { position: number; source: string; updatedAt: string };
 
 describeIfPg('reading position routes (integration)', () => {
   const harness = setupPgHarness('silo_api_reading_position_test', async () => {
@@ -50,9 +50,18 @@ describeIfPg('reading position routes (integration)', () => {
     const res = await put(`/api/links/${id}/reading-position`, { position: 0.4 });
     expect(res.status).toBe(200);
     const body = (await res.json()) as { readingPosition: Position };
+    expect(body.readingPosition.source).toBe('mark');
+    expect(Object.keys(body.readingPosition).sort()).toEqual(['position', 'source', 'updatedAt']);
     expect(body.readingPosition.position).toBeCloseTo(0.4);
     expect(Number.isNaN(Date.parse(body.readingPosition.updatedAt))).toBe(false);
     expect((await readLink(id)).readingPosition?.position).toBeCloseTo(0.4);
+  });
+
+  it.each(['pencil', 'listen', 'mark'])('round-trips source %s', async (source) => {
+    const id = await newLinkId(`https://example.com/source-${source}`);
+    const res = await put(`/api/links/${id}/reading-position`, { position: 0.5, source });
+    expect(res.status).toBe(200);
+    expect((await readLink(id)).readingPosition?.source).toBe(source);
   });
 
   it('PUT overwrites', async () => {
@@ -80,6 +89,8 @@ describeIfPg('reading position routes (integration)', () => {
     ['a string', { position: 'half' }],
     ['missing', {}],
     ['null', { position: null }],
+    ['bad source', { position: 0.5, source: 'scroll' }],
+    ['null source', { position: 0.5, source: null }],
   ])('PUT rejects %s with 400', async (_name, body) => {
     const id = await newLinkId(`https://example.com/rp-bad-${_name.replace(/\W/g, '')}`);
     const res = await put(`/api/links/${id}/reading-position`, body);

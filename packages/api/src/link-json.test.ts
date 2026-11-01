@@ -134,7 +134,11 @@ describeIfPg('link-json (integration)', () => {
     const json = toLinkDetailJson(link);
     expect(json.readingPosition?.position).toBe(0.5);
     expect(typeof json.readingPosition?.updatedAt).toBe('string');
-    expect(Object.keys(json.readingPosition ?? {}).sort()).toEqual(['position', 'updatedAt']);
+    expect(Object.keys(json.readingPosition ?? {}).sort()).toEqual([
+      'position',
+      'source',
+      'updatedAt',
+    ]);
     expectNoLeakedFields(json);
     expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
     // List-shaped and plain shapers never carry the field.

@@ -591,6 +591,7 @@ export async function getById(
       link: listColumns,
       position: readingPositions.position,
       positionUpdatedAt: readingPositions.updatedAt,
+      positionSource: readingPositions.source,
     })
     .from(links)
     .leftJoin(readingPositions, eq(readingPositions.linkId, links.id))
@@ -604,7 +605,11 @@ export async function getById(
     highlights: opts?.preloadedHighlights ?? (await listHighlights(id)),
     readingPosition:
       found.position !== null && found.positionUpdatedAt !== null
-        ? { position: found.position, updatedAt: found.positionUpdatedAt }
+        ? {
+            position: found.position,
+            source: found.positionSource ?? 'pencil',
+            updatedAt: found.positionUpdatedAt,
+          }
         : null,
   };
 
