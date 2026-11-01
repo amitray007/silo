@@ -10,6 +10,8 @@
  * every date field here is `string`, never `Date`.
  */
 import type { HighlightColor } from '../lib/highlights';
+import type { ReaderSettings } from '../lib/readerPrefs';
+import type { DeepPartial } from '../lib/readerSync';
 
 /** Mirrors `LinkJson['captureStatus']` in `packages/api/src/link-json.ts`. */
 export type CaptureStatus = 'enriching' | 'full' | 'partial' | 'bare';
@@ -305,6 +307,11 @@ export type SettingsMap = {
     // `packages/core/src/settings/schema.ts`'s doc comment.
     twitter: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
   };
+  /**
+   * Synced reader preferences; mirrors core's `readerSchema`. `null` until the first save, so a
+   * browser can upload the values it already holds once. A PATCH sends any subset of fields.
+   */
+  reader: ReaderSettings | null;
   /** Optional AI layer; mirrors core's `settingsSchema.ai`. The key is never a setting. */
   ai: {
     enabled: boolean;
@@ -316,7 +323,9 @@ export type SettingsMap = {
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
-export type UpdateSettingsRequest = Partial<SettingsMap>;
+export type UpdateSettingsRequest = Partial<Omit<SettingsMap, 'reader'>> & {
+  reader?: DeepPartial<ReaderSettings>;
+};
 
 export type AiProviderKind = 'anthropic' | 'openai' | 'gateway' | 'fireworks';
 

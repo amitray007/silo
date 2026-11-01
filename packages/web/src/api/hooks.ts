@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { HighlightColor } from '../lib/highlights';
+import { mergeDeep } from '../lib/readerSync';
 import {
   clearTitleReveal,
   getTitleReveal,
@@ -1283,7 +1284,13 @@ export function useUpdateSettings() {
       // settings haven't loaded yet the callers (PluginsTab) gate their
       // controls on `loading`, so no write originates from that window.
       if (previous) {
-        queryClient.setQueryData<SettingsMap>(queryKeys.settings(), { ...previous, ...patch });
+        // `reader` is a partial value that merges into the stored one; the rest replace.
+        const { reader, ...rest } = patch;
+        queryClient.setQueryData<SettingsMap>(queryKeys.settings(), {
+          ...previous,
+          ...rest,
+          ...(reader && previous.reader ? { reader: mergeDeep(previous.reader, reader) } : {}),
+        });
       }
       return { previous };
     },

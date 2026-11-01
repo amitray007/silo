@@ -1,85 +1,7 @@
-import { type CSSProperties, useCallback, useMemo, useSyncExternalStore } from 'react';
+import { type CSSProperties, useCallback, useMemo } from 'react';
 import { type HighlightColor, isHighlightColor } from './highlights';
-
-/**
- * A browser-local preference backed by `localStorage`: one validated value per key, shared by
- * every subscriber, synced across tabs, and kept in memory when storage is unavailable.
- * No server setting or account data changes.
- */
-export type PrefStore<T> = {
-  subscribe: (listener: () => void) => () => void;
-  getSnapshot: () => T;
-  getServerSnapshot: () => T;
-  set: (value: T) => void;
-};
-
-export function createPrefStore<T>({
-  key,
-  event,
-  initial,
-  parse,
-  serialize,
-}: {
-  key: string;
-  event: string;
-  initial: T;
-  /** Turn stored text into a valid value; unknown or damaged text yields defaults. */
-  parse: (raw: string) => T;
-  serialize: (value: T) => string;
-}): PrefStore<T> {
-  let memory = initial;
-  let memoryOnly = false;
-  // What storage held when the last write failed; a different value means storage moved on.
-  let memoryRaw: string | null = null;
-  // Object values need a stable identity between reads of the same stored text.
-  let cache: { raw: string | null; value: T } = { raw: null, value: initial };
-
-  const getSnapshot = (): T => {
-    try {
-      const raw = localStorage.getItem(key);
-      // A write failed earlier, so memory is newer than storage until storage changes under us.
-      if (memoryOnly && raw === memoryRaw) return memory;
-      memoryOnly = false;
-      if (raw === null) return initial;
-      if (cache.raw !== raw) cache = { raw, value: parse(raw) };
-      return cache.value;
-    } catch {
-      return memory;
-    }
-  };
-  const subscribe = (listener: () => void) => {
-    const onStorage = (change: StorageEvent) => {
-      if (change.key === null || change.key === key) listener();
-    };
-    window.addEventListener(event, listener);
-    window.addEventListener('storage', onStorage);
-    return () => {
-      window.removeEventListener(event, listener);
-      window.removeEventListener('storage', onStorage);
-    };
-  };
-  const set = (value: T) => {
-    memory = value;
-    memoryOnly = false;
-    try {
-      localStorage.setItem(key, serialize(value));
-    } catch {
-      // Keep this session usable.
-      memoryOnly = true;
-      try {
-        memoryRaw = localStorage.getItem(key);
-      } catch {
-        memoryRaw = null;
-      }
-    }
-    window.dispatchEvent(new Event(event));
-  };
-  return { subscribe, getSnapshot, getServerSnapshot: () => initial, set };
-}
-
-export function usePref<T>(store: PrefStore<T>) {
-  return useSyncExternalStore(store.subscribe, store.getSnapshot, store.getServerSnapshot);
-}
+import { createPrefStore, usePref } from './prefStore';
+import { createSync, type DeepPartial, mergeDeep } from './readerSync';
 
 const readerFonts = ['inter', 'serif', 'mono'] as const;
 const readerLeadings = ['compact', 'normal', 'relaxed'] as const;
@@ -124,22 +46,32 @@ function validSize(value: unknown): number {
     : readerTypeDefaults.size;
 }
 
-/** Each field falls back to its default alone, so one bad field keeps the rest. */
-export function parseReaderType(raw: string): ReaderType {
-  let data: unknown;
+function parseJson(raw: string): unknown {
   try {
-    data = JSON.parse(raw);
+    return JSON.parse(raw);
   } catch {
-    return readerTypeDefaults;
+    return undefined;
   }
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) return readerTypeDefaults;
-  const stored = data as Record<string, unknown>;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Each field falls back to its default alone, so one bad field keeps the rest. */
+function readerTypeFrom(data: unknown): ReaderType {
+  if (!isRecord(data)) return readerTypeDefaults;
+  const stored = data;
   return {
     font: oneOf(readerFonts, stored.font, readerTypeDefaults.font),
     size: validSize(stored.size),
     leading: oneOf(readerLeadings, stored.leading, readerTypeDefaults.leading),
     theme: oneOf(readerThemes, stored.theme, readerTypeDefaults.theme),
   };
+}
+
+export function parseReaderType(raw: string): ReaderType {
+  return readerTypeFrom(parseJson(raw));
 }
 
 const readerTypeStore = createPrefStore<ReaderType>({
@@ -163,7 +95,7 @@ export function useReaderType() {
   const type = usePref(readerTypeStore);
   const update = useCallback(
     (patch: Partial<ReaderType>) =>
-      readerTypeStore.set({ ...readerTypeStore.getSnapshot(), ...patch }),
+      readerSync.commit({ type: patch }, 'size' in patch ? STEPPER_DELAY_MS : 0),
     [],
   );
   const style = useMemo(() => readerTypeStyle(type), [type]);
@@ -187,19 +119,16 @@ function validWpm(value: unknown): number {
 }
 
 /** Each field falls back to its default alone, so one bad field keeps the other. */
-export function parsePencilPrefs(raw: string): PencilPrefs {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return pencilPrefsDefaults;
-  }
-  if (typeof data !== 'object' || data === null || Array.isArray(data)) return pencilPrefsDefaults;
-  const stored = data as Record<string, unknown>;
+function pencilPrefsFrom(data: unknown): PencilPrefs {
+  if (!isRecord(data)) return pencilPrefsDefaults;
   return {
-    style: oneOf(pencilStyles, stored.style, pencilPrefsDefaults.style),
-    wpm: validWpm(stored.wpm),
+    style: oneOf(pencilStyles, data.style, pencilPrefsDefaults.style),
+    wpm: validWpm(data.wpm),
   };
+}
+
+export function parsePencilPrefs(raw: string): PencilPrefs {
+  return pencilPrefsFrom(parseJson(raw));
 }
 
 const pencilPrefsStore = createPrefStore<PencilPrefs>({
@@ -210,12 +139,12 @@ const pencilPrefsStore = createPrefStore<PencilPrefs>({
   serialize: (value) => JSON.stringify({ v: 1, ...value }),
 });
 
-/** The pencil's style and pace, browser-local like the type settings. */
+/** The pencil's style and pace, kept on this device and synced to the server. */
 export function usePencilPrefs() {
   const prefs = usePref(pencilPrefsStore);
   const update = useCallback(
     (patch: Partial<PencilPrefs>) =>
-      pencilPrefsStore.set({ ...pencilPrefsStore.getSnapshot(), ...patch }),
+      readerSync.commit({ pencil: patch }, 'wpm' in patch ? STEPPER_DELAY_MS : 0),
     [],
   );
   return { prefs, update };
@@ -226,17 +155,13 @@ export type HighlightPrefs = { color: HighlightColor };
 export const highlightPrefsDefaults: HighlightPrefs = { color: 'yellow' };
 
 /** An unknown or damaged colour falls back to the default. */
+function highlightPrefsFrom(data: unknown): HighlightPrefs {
+  if (!isRecord(data)) return highlightPrefsDefaults;
+  return isHighlightColor(data.color) ? { color: data.color } : highlightPrefsDefaults;
+}
+
 export function parseHighlightPrefs(raw: string): HighlightPrefs {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return highlightPrefsDefaults;
-  }
-  if (typeof data !== 'object' || data === null || Array.isArray(data))
-    return highlightPrefsDefaults;
-  const { color } = data as Record<string, unknown>;
-  return isHighlightColor(color) ? { color } : highlightPrefsDefaults;
+  return highlightPrefsFrom(parseJson(raw));
 }
 
 const highlightPrefsStore = createPrefStore<HighlightPrefs>({
@@ -247,12 +172,11 @@ const highlightPrefsStore = createPrefStore<HighlightPrefs>({
   serialize: (value) => JSON.stringify({ v: 1, ...value }),
 });
 
-/** The colour new highlights start with, browser-local like the other reader settings. */
+/** The colour new highlights start with, kept on this device and synced to the server. */
 export function useHighlightPrefs() {
   const prefs = usePref(highlightPrefsStore);
   const setColor = useCallback(
-    (color: HighlightColor) =>
-      highlightPrefsStore.set({ ...highlightPrefsStore.getSnapshot(), color }),
+    (color: HighlightColor) => readerSync.commit({ highlight: { color } }),
     [],
   );
   return { color: prefs.color, setColor };
@@ -285,25 +209,18 @@ function validRate(value: unknown): number {
 }
 
 /** Each field falls back to its default alone, so one bad field keeps the rest. */
-export function parseReadAloudPrefs(raw: string): ReadAloudPrefs {
-  let data: unknown;
-  try {
-    data = JSON.parse(raw);
-  } catch {
-    return readAloudPrefsDefaults;
-  }
-  if (typeof data !== 'object' || data === null || Array.isArray(data))
-    return readAloudPrefsDefaults;
-  const stored = data as Record<string, unknown>;
-  const voices =
-    typeof stored.voices === 'object' && stored.voices !== null
-      ? (stored.voices as Record<string, unknown>)
-      : {};
+function readAloudPrefsFrom(data: unknown): ReadAloudPrefs {
+  if (!isRecord(data)) return readAloudPrefsDefaults;
+  const voices = isRecord(data.voices) ? data.voices : {};
   return {
-    engine: oneOf(readAloudEngines, stored.engine, readAloudPrefsDefaults.engine),
+    engine: oneOf(readAloudEngines, data.engine, readAloudPrefsDefaults.engine),
     voices: { phonon: validVoice(voices.phonon), kokoro: validVoice(voices.kokoro) },
-    rate: validRate(stored.rate),
+    rate: validRate(data.rate),
   };
+}
+
+export function parseReadAloudPrefs(raw: string): ReadAloudPrefs {
+  return readAloudPrefsFrom(parseJson(raw));
 }
 
 const readAloudPrefsStore = createPrefStore<ReadAloudPrefs>({
@@ -314,20 +231,101 @@ const readAloudPrefsStore = createPrefStore<ReadAloudPrefs>({
   serialize: (value) => JSON.stringify({ v: 1, ...value }),
 });
 
-/** The read-aloud engine, voices and speed, browser-local like the other reader settings. */
+/** The read-aloud engine, voices and speed, kept on this device and synced to the server. */
 export function useReadAloudPrefs() {
   const prefs = usePref(readAloudPrefsStore);
   const update = useCallback(
     (patch: Partial<Omit<ReadAloudPrefs, 'voices'>> & { voice?: [ReadAloudEngine, string] }) => {
-      const current = readAloudPrefsStore.getSnapshot();
       const { voice, ...rest } = patch;
-      readAloudPrefsStore.set({
-        ...current,
-        ...rest,
-        voices: voice ? { ...current.voices, [voice[0]]: voice[1] } : current.voices,
-      });
+      readerSync.commit(
+        { readAloud: { ...rest, ...(voice ? { voices: { [voice[0]]: voice[1] } } : {}) } },
+        'rate' in rest ? STEPPER_DELAY_MS : 0,
+      );
     },
     [],
   );
   return { prefs, update };
 }
+
+export type ReaderWidth = 'narrow' | 'medium' | 'wide';
+
+function widthFrom(data: unknown): ReaderWidth {
+  return data === 'narrow' || data === 'wide' ? data : 'medium';
+}
+
+export const readerWidthStore = createPrefStore<ReaderWidth>({
+  key: 'silo.readerWidth',
+  event: 'silo:reader-width',
+  initial: 'medium',
+  parse: widthFrom,
+  serialize: (value) => value,
+});
+
+/**
+ * Every reader preference, as the server's `reader` setting holds it. The browser keeps each
+ * group under its own `localStorage` key (the mirror that paints before the server answers).
+ */
+export type ReaderSettings = {
+  type: ReaderType;
+  width: ReaderWidth;
+  pencil: PencilPrefs;
+  highlight: HighlightPrefs;
+  readAloud: ReadAloudPrefs;
+};
+
+/** A stepper pauses this long before its change goes to the server. */
+const STEPPER_DELAY_MS = 400;
+
+const mirrorKeys = [
+  'silo.readerType',
+  'silo.readerWidth',
+  'silo.readerPencil',
+  'silo.readerHighlight',
+  'silo.readerReadAloud',
+];
+
+function readReader(): ReaderSettings {
+  return {
+    type: readerTypeStore.getSnapshot(),
+    width: readerWidthStore.getSnapshot(),
+    pencil: pencilPrefsStore.getSnapshot(),
+    highlight: highlightPrefsStore.getSnapshot(),
+    readAloud: readAloudPrefsStore.getSnapshot(),
+  };
+}
+
+/** Sets a store from a partial value, validating it, and skips the write when nothing changed. */
+function applyTo<T>(
+  store: { getSnapshot: () => T; set: (value: T) => void },
+  from: (data: unknown) => T,
+  patch: unknown,
+  force: boolean,
+): void {
+  if (patch === undefined) return;
+  const current = store.getSnapshot();
+  const next = from(mergeDeep(current, patch));
+  if (force || JSON.stringify(next) !== JSON.stringify(current)) store.set(next);
+}
+
+function applyReader(patch: DeepPartial<ReaderSettings>, force: boolean): void {
+  applyTo(readerTypeStore, readerTypeFrom, patch.type, force);
+  applyTo(readerWidthStore, widthFrom, patch.width, force);
+  applyTo(pencilPrefsStore, pencilPrefsFrom, patch.pencil, force);
+  applyTo(highlightPrefsStore, highlightPrefsFrom, patch.highlight, force);
+  applyTo(readAloudPrefsStore, readAloudPrefsFrom, patch.readAloud, force);
+}
+
+function hasLocalReader(): boolean {
+  try {
+    return mirrorKeys.some((key) => localStorage.getItem(key) !== null);
+  } catch {
+    return false;
+  }
+}
+
+/** The one writer of reader preferences: local first, then the server (see `readerSync`). */
+export const readerSync = createSync<ReaderSettings>({
+  read: readReader,
+  apply: applyReader,
+  hasLocal: hasLocalReader,
+});

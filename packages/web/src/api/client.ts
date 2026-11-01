@@ -235,8 +235,17 @@ export function apiDelete<T>(path: string): Promise<T> {
  * No response is read and a failure is dropped: the page is already going away.
  */
 export function apiPutKeepalive(path: string, body: unknown): void {
+  keepaliveRequest('PUT', path, body);
+}
+
+/** Like `apiPutKeepalive`, for a `PATCH`. */
+export function apiPatchKeepalive(path: string, body: unknown): void {
+  keepaliveRequest('PATCH', path, body);
+}
+
+function keepaliveRequest(method: string, path: string, body: unknown): void {
   fetch(`${baseUrl}${path}`, {
-    method: 'PUT',
+    method,
     keepalive: true,
     credentials: 'include',
     headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
