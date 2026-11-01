@@ -8,7 +8,7 @@ import {
   STEPPER_DELAY_MS,
 } from '../../../lib/readerPrefs';
 import { useReaderPrefs } from '../../../lib/useReaderPrefs';
-import { articleWords, wordAtShare } from '../place/words';
+import { articleWordIndex } from '../place/words';
 import {
   advance,
   type Line,
@@ -357,7 +357,7 @@ export function usePencil({
           lines.current = measureLines(prose, frame);
           prefix.current = wordPrefix(lines.current);
         }
-        const word = wordAtShare(articleWords(prose), share);
+        const word = articleWordIndex(prose).atShare(share);
         const rect = word?.getClientRects()[0];
         const index = rect
           ? lineNear(lines.current, rect.top + rect.height / 2 - frame.getBoundingClientRect().top)

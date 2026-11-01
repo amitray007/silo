@@ -1,3 +1,5 @@
+import { articleWordIndex } from '../place/words';
+
 /** One visual line of article text, in the coordinates of the frame that holds the prose. */
 export type Line = {
   top: number;
@@ -9,23 +11,9 @@ export type Line = {
   block: Element;
 };
 
-/** Text the pencil never sweeps: code, figures and captions, tables, math, controls, notes. */
-const SKIP_SELECTOR =
-  'pre, figure, figcaption, caption, table, math, svg, script, style, button, .silo-reader-card, [aria-hidden="true"], a[title="return to article"]';
+export { proseTextNodes } from './text';
 
 export const BLOCK_SELECTOR = 'h1, h2, h3, h4, h5, h6, p, li, blockquote, dd, dt, div';
-
-/** Visible prose text nodes in document order, minus code, figures and tables. */
-export function proseTextNodes(root: HTMLElement): Text[] {
-  const nodes: Text[] = [];
-  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-    const text = node as Text;
-    const parent = text.parentElement;
-    if (parent && text.data.trim() && !parent.closest(SKIP_SELECTOR)) nodes.push(text);
-  }
-  return nodes;
-}
 
 function visibleRects(range: Range): DOMRect[] {
   return Array.from(range.getClientRects()).filter((rect) => rect.width > 1 && rect.height > 1);
@@ -51,11 +39,12 @@ export function measureLines(root: HTMLElement, frame: HTMLElement): Line[] {
   const origin = frame.getBoundingClientRect();
   const lines: Line[] = [];
   const range = document.createRange();
-  for (const node of proseTextNodes(root)) {
+  for (const span of articleWordIndex(root).spans) {
+    const { node } = span;
     range.selectNodeContents(node);
     const rects = visibleRects(range);
     const total = rects.reduce((sum, rect) => sum + rect.width, 0);
-    const words = node.data.trim().split(/\s+/).length;
+    const words = span.starts.length;
     const block = node.parentElement?.closest(BLOCK_SELECTOR) ?? root;
     for (const rect of rects) {
       const fragment: Line = {
