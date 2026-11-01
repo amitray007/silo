@@ -41,23 +41,39 @@ function addFrame(
   }
 }
 
+/** Linear resampling: the fallback for audio too short to hold one frame (pitch moves, but it is a blip). */
+function resample(input: Float32Array, target: number): Float32Array {
+  const out = new Float32Array(target);
+  const step = target > 1 ? (input.length - 1) / (target - 1) : 0;
+  for (let i = 0; i < target; i += 1) {
+    const at = i * step;
+    const from = Math.floor(at);
+    const next = Math.min(input.length - 1, from + 1);
+    out[i] = (input[from] ?? 0) * (1 - (at - from)) + (input[next] ?? 0) * (at - from);
+  }
+  return out;
+}
+
 /**
  * Pitch-preserving time stretch (WSOLA). `rate` above 1 plays faster. It serves engines with no
- * native speed option, so a faster voice does not turn into a chipmunk.
+ * native speed option, so a faster voice does not turn into a chipmunk. The result is exactly
+ * `floor(length / rate)` samples: frames run until the target is covered, and the last ones sit
+ * on the end of the input, so the audio neither ends in silence nor is cut.
  */
 export function stretch(input: Float32Array, rate: number): Float32Array {
   if (Math.abs(rate - 1) < 0.01) return input;
   const target = Math.floor(input.length / rate);
+  if (target < 1 || input.length < WINDOW + TOLERANCE) return resample(input, target);
   const out = new Float32Array(target + WINDOW);
   const weight = new Float32Array(target + WINDOW);
+  const lastFrame = input.length - WINDOW;
   let previous = 0;
-  for (let frame = 0, at = 0; at <= target; frame += 1, at += HOP) {
-    const ideal = Math.round(frame * HOP * rate);
-    if (ideal + WINDOW + TOLERANCE >= input.length) break;
+  for (let frame = 0, at = 0; at < target; frame += 1, at += HOP) {
+    const ideal = Math.min(lastFrame, Math.round(frame * HOP * rate));
     previous = frame > 0 ? bestOffset(input, ideal, previous + HOP) : ideal;
     addFrame(out, weight, input, previous, at);
   }
-  for (let j = 0; j < out.length; j += 1) {
+  for (let j = 0; j < target; j += 1) {
     const w = weight[j] ?? 0;
     if (w > 1e-3) out[j] = (out[j] ?? 0) / w;
   }

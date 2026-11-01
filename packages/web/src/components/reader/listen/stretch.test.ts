@@ -55,4 +55,29 @@ describe('stretch', () => {
   it('copes with input shorter than one window', () => {
     expect(stretch(new Float32Array(300), 2).length).toBe(150);
   });
+
+  it('produces exactly the target length at every speed', () => {
+    for (const length of [24000, 24001, 47999, 100003]) {
+      const input = sine(180, length / RATE);
+      for (const rate of [0.75, 1.25, 1.5, 2, 3]) {
+        expect(stretch(input, rate).length).toBe(Math.floor(input.length / rate));
+      }
+    }
+  });
+
+  it('keeps the audio to the very end: no trailing silence, no hard cut', () => {
+    const rms = (samples: Float32Array) =>
+      Math.sqrt(samples.reduce((sum, value) => sum + value * value, 0) / samples.length);
+    const tail = RATE / 50; // the last 20 ms
+    const input = sine(150, 1.7);
+    const reference = rms(input.subarray(input.length - tail));
+    for (const rate of [0.75, 1.5, 3]) {
+      const out = stretch(input, rate);
+      const end = rms(out.subarray(out.length - tail));
+      expect(end).toBeGreaterThan(reference * 0.7);
+      expect(end).toBeLessThan(reference * 1.3);
+      // The last 2 ms must not have faded to nothing either.
+      expect(rms(out.subarray(out.length - 48))).toBeGreaterThan(reference * 0.3);
+    }
+  });
 });

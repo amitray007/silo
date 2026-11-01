@@ -83,19 +83,26 @@ export class SynthQueue {
     return job;
   }
 
-  /** Drop what is waiting and abort what is running. */
-  clear(): void {
-    for (const entry of this.queue) this.drop(entry.job);
-    this.queue = [];
-    if (this.running) {
+  /**
+   * Drop what is waiting and abort what is running, except the jobs whose keys are in `keep`
+   * (warm-up work the next start will use).
+   */
+  clear(keep: ReadonlySet<string> = new Set()): void {
+    this.queue = this.queue.filter((entry) => {
+      if (keep.has(entry.job.key)) return true;
+      this.drop(entry.job);
+      return false;
+    });
+    if (this.running && !keep.has(this.running.job.key)) {
       this.running.abort.abort();
       this.drop(this.running.job);
     }
   }
 
+  /** Mark a job dropped, and forget it unless a newer job already took its key. */
   private drop(job: Job): void {
     job.cancelled = true;
-    this.inflight.delete(job.key);
+    if (this.inflight.get(job.key) === job) this.inflight.delete(job.key);
   }
 
   private async run(): Promise<void> {
@@ -110,7 +117,7 @@ export class SynthQueue {
         this.running = { job: next.job, abort };
         await this.synthesize(next, abort);
         this.running = null;
-        this.inflight.delete(next.job.key);
+        if (this.inflight.get(next.job.key) === next.job) this.inflight.delete(next.job.key);
         for (const listener of next.job.listeners) listener();
       }
     } finally {

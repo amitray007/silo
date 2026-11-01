@@ -291,3 +291,94 @@ describe('Player queue', () => {
     player.halt();
   });
 });
+
+describe('Player warm-up, release and underrun', () => {
+  /** An engine that finishes a unit only when the test says so. */
+  function gated() {
+    const calls: { text: string; signal: AbortSignal | undefined }[] = [];
+    const gates = new Map<string, () => void>();
+    const engine: TtsEngine = {
+      ...fakeEngine().engine,
+      async *stream(text, { signal }) {
+        calls.push({ text, signal });
+        await new Promise<void>((resolve) => gates.set(text, resolve));
+        if (signal?.aborted) return;
+        yield new Float32Array(SAMPLE_RATE);
+      },
+    };
+    const finish = (n: number) => {
+      for (const [text, open] of gates) if (text.includes(`number ${n} `)) open();
+    };
+    return { engine, calls, finish };
+  }
+
+  it('keeps warm-up work that is still running when Play is pressed', async () => {
+    const { player, audio, events, advance } = setup(4);
+    const { engine, calls, finish } = gated();
+    player.warm(engine, 0);
+    await flush();
+    expect(calls).toHaveLength(1);
+    player.press();
+    advance(9);
+    player.start(engine, 0);
+    // The warm-up job was not aborted, and Play did not start a second synthesis of it.
+    expect(calls[0]?.signal?.aborted).toBe(false);
+    await flush();
+    expect(calls.filter((call) => /number 0 /.test(call.text))).toHaveLength(1);
+    finish(0);
+    await flush();
+    expect(audio.starts.length).toBeGreaterThan(0);
+    expect(events.firstAudio).toHaveBeenCalledWith(9);
+    player.halt();
+  });
+
+  it('still drops warm-up work for other sentences when the reader jumps elsewhere', async () => {
+    const { player } = setup(10);
+    const { engine, calls } = gated();
+    player.warm(engine, 0);
+    await flush();
+    player.start(engine, 6);
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    player.halt();
+  });
+
+  it('lets go of a unit once it has played, and replays it from the cache', async () => {
+    const { player, audio } = setup(6);
+    const { engine, calls } = fakeEngine({ seconds: 1 });
+    player.start(engine, 0);
+    for (let i = 0; i < 4; i += 1) await flush();
+    const plan = () => (player as unknown as { plan: { jobs: unknown[] } }).plan;
+    expect(plan().jobs[0]).toBeDefined();
+    audio.currentTime = 3.5;
+    await flush();
+    expect(
+      plan()
+        .jobs.slice(0, 3)
+        .every((job) => job === undefined),
+    ).toBe(true);
+    const made = calls.length;
+    audio.currentTime = 0;
+    player.start(engine, 1);
+    await flush();
+    expect(calls.length).toBe(made);
+    player.halt();
+  });
+
+  it('reports a dry buffer, then restarts the timeline just after now when audio arrives late', async () => {
+    const { player, audio, events } = setup(2);
+    const { engine, finish } = gated();
+    player.start(engine, 0);
+    await flush();
+    audio.currentTime = 2;
+    await flush();
+    expect(events.buffering).toHaveBeenCalledWith(true);
+    finish(0);
+    await flush();
+    expect(audio.starts).toHaveLength(1);
+    // Scheduled after "now" (2 s), not in the past.
+    expect(audio.starts[0]?.at).toBeGreaterThan(2);
+    expect(audio.starts[0]?.at).toBeLessThan(2.1);
+    expect(events.buffering).toHaveBeenLastCalledWith(false);
+    player.halt();
+  });
+});

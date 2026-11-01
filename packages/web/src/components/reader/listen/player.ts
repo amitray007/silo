@@ -43,7 +43,13 @@ export type PlayerDeps = {
   now?: () => number;
 };
 
-type Plan = { units: Unit[]; jobs: Job[]; scheduled: number[]; unitStart: number[] };
+type Plan = {
+  units: Unit[];
+  /** A unit's job, until the unit has played: the replay cache keeps the audio after that. */
+  jobs: (Job | undefined)[];
+  scheduled: number[];
+  unitStart: number[];
+};
 
 /**
  * Plays synthesized units gapless: each unit's buffers are scheduled on the `AudioContext`
@@ -63,6 +69,8 @@ export class Player {
   private timer: ReturnType<typeof setInterval> | undefined;
   private pressedAt = 0;
   private waiting = false;
+  /** Units before this index have played and let go of their audio. */
+  private released = 0;
 
   constructor(
     private readonly deps: PlayerDeps,
@@ -83,18 +91,21 @@ export class Player {
   /** Start speaking at a sentence with a loaded engine. */
   start(engine: TtsEngine, from: number): void {
     this.press();
-    this.halt(true);
+    const units = buildUnits(this.deps.segments(), from);
+    // Warm-up work for these units is kept, so Play after a warm-up does not synthesize again.
+    const { rate, voice } = this.deps.settings();
+    const speed = engine.supportsSpeed ? rate : 1;
+    const keep = new Set(
+      units.slice(0, WARM_UNITS).map((u) => jobKey(engine, voice, speed, u.text)),
+    );
+    this.halt(true, keep);
     const token = this.generation;
     this.active = true;
     this.engine = engine;
     const audio = this.deps.context();
     if (audio.state === 'suspended') void audio.resume();
-    this.plan = {
-      units: buildUnits(this.deps.segments(), from),
-      jobs: [],
-      scheduled: [],
-      unitStart: [],
-    };
+    this.plan = { units, jobs: [], scheduled: [], unitStart: [] };
+    this.released = 0;
     this.cursor = { unit: 0, requested: 0, nextTime: audio.currentTime + 0.03 };
     this.request(0, NOW);
     this.timer = setInterval(() => {
@@ -113,11 +124,11 @@ export class Player {
   }
 
   /** Stop what is playing and drop stale work. `keepPress` keeps the time-to-first-audio clock. */
-  halt(keepPress = false): void {
+  halt(keepPress = false, keep?: ReadonlySet<string>): void {
     this.generation += 1;
     this.active = false;
     clearInterval(this.timer);
-    this.queue.clear();
+    this.queue.clear(keep);
     for (const node of this.sources) {
       node.onended = null;
       try {
@@ -270,6 +281,8 @@ export class Player {
       0,
       plan.unitStart.findLastIndex((start) => start !== undefined && start <= audio.currentTime),
     );
+    // A unit that has played lets go of its audio; going back reads the replay cache.
+    for (; this.released < playing; this.released += 1) plan.jobs[this.released] = undefined;
     for (;;) {
       const next = cursor.requested;
       if (next >= plan.units.length || next - playing > MAX_AHEAD) break;
@@ -293,11 +306,5 @@ export class Player {
       this.halt();
       this.deps.events.finished();
     }
-  }
-
-  /** The key the replay cache uses for a unit, for tests and tooling. */
-  keyFor(engine: TtsEngine, text: string): string {
-    const { rate, voice } = this.deps.settings();
-    return jobKey(engine, voice, engine.supportsSpeed ? rate : 1, text);
   }
 }
