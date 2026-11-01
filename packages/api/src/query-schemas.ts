@@ -161,6 +161,7 @@ export const editBodySchema = z.object({
 
 /** `PUT /api/links/:id/reading-position` body: a finite share of the article's words, 0 to 1. */
 export const readingPositionBodySchema = z.object({
+  writtenAt: z.iso.datetime().optional(),
   source: z.enum(['pencil', 'listen', 'mark']).default('mark'),
   position: z.number().min(0).max(1),
 });

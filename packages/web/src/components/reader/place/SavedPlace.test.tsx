@@ -38,7 +38,7 @@ beforeEach(() => {
   scroll.scrollTo = vi.fn();
   save = vi.fn(async () => {});
   pencil = { startFrom: vi.fn(), stop: vi.fn() } as unknown as PencilApi;
-  listen = { startAt: vi.fn(), stop: vi.fn() } as unknown as ReadAloudApi;
+  listen = { startAt: vi.fn(), stop: vi.fn(), forgetPlace: vi.fn() } as unknown as ReadAloudApi;
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query.includes('reduced-motion'),
     addEventListener: () => {},
@@ -52,6 +52,7 @@ beforeEach(() => {
   };
 });
 afterEach(() => {
+  vi.useRealTimers();
   panel.remove();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
@@ -110,6 +111,7 @@ it('the ribbon and label open a keyboard popover with Pencil, Listen and Remove'
   fireEvent.click(label);
   fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
   expect(save).toHaveBeenCalledWith(null);
+  expect(listen.forgetPlace).toHaveBeenCalledOnce();
   expect(screen.queryByRole('dialog')).toBeNull();
 });
 
@@ -151,4 +153,23 @@ it('keeps a pill dismissed when the server replaces an optimistic timestamp', ()
     />,
   );
   expect(screen.queryByRole('button', { name: 'Continue reading at 50%' })).toBeNull();
+});
+
+it.each([
+  [30000, 30000, 'Just now', '1m ago'],
+  [59 * 60000 + 30000, 30000, '59m ago', '1h ago'],
+  [2 * 3600000 + 30000, 3600000 - 30000, '2h ago', '3h ago'],
+  [3 * 86400000 + 30000, 86400000 - 30000, '3d ago', '4d ago'],
+] as const)('updates the label at its next boundary for age %s', (age, delay, before, after) => {
+  vi.useFakeTimers();
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  vi.setSystemTime(now);
+  const view = mount({ ...saved, updatedAt: new Date(now - age).toISOString() });
+  expect(screen.getByText(`Stopped here · ${before}`)).toBeTruthy();
+  act(() => vi.advanceTimersByTime(delay - 1));
+  expect(screen.getByText(`Stopped here · ${before}`)).toBeTruthy();
+  act(() => vi.advanceTimersByTime(1));
+  expect(screen.getByText(`Stopped here · ${after}`)).toBeTruthy();
+  view.unmount();
+  expect(vi.getTimerCount()).toBe(0);
 });

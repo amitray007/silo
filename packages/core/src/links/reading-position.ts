@@ -52,18 +52,19 @@ export async function getReadingPosition(linkId: string): Promise<ReadingPositio
  * `FeedPostNotEditableError` for a feed post. The write goes to its own table,
  * so it never bumps `links.updated_at`.
  *
- * Last write wins on purpose. The web client sends one request at a time per link and queues
- * the newest position behind it, so a slow earlier request cannot land after a later one from
- * the same tab. The request carries no timestamp, so there is nothing to guard the upsert with;
- * two tabs reading the same article race, and the later request wins.
+ * Web writes carry a monotonically increasing timestamp, including pagehide writes that must
+ * leave immediately. The upsert ignores older timestamps even if those requests arrive late.
+ * Callers that omit the timestamp retain server-time, last-write-wins behavior.
  */
 export async function setReadingPosition(
   linkId: string,
   position: number,
   source: ReadingPositionSource = 'pencil',
+  writtenAt?: Date,
 ): Promise<ReadingPosition | null> {
   assertValidPosition(position);
   assertValidSource(source);
+  if (writtenAt && !Number.isFinite(writtenAt.getTime())) throw new InvalidReadingPositionError();
   await assertLibraryWrite(linkId);
   const [saved] = await db
     .insert(readingPositions)
@@ -73,7 +74,10 @@ export async function setReadingPosition(
           linkId: links.id,
           position: sql<number>`${position}::real`.as('position'),
           source: sql<ReadingPositionSource>`${source}::varchar`.as('source'),
-          updatedAt: sql<Date>`now()`.as('updated_at'),
+          updatedAt: (writtenAt
+            ? sql<Date>`${writtenAt.toISOString()}::timestamptz`
+            : sql<Date>`now()`
+          ).as('updated_at'),
         })
         .from(links)
         .where(whereLibrary(eq(links.id, linkId))),
@@ -85,13 +89,14 @@ export async function setReadingPosition(
         source: sql`excluded.source`,
         updatedAt: sql`excluded.updated_at`,
       },
+      ...(writtenAt ? { setWhere: sql`excluded.updated_at > ${readingPositions.updatedAt}` } : {}),
     })
     .returning({
       position: readingPositions.position,
       source: readingPositions.source,
       updatedAt: readingPositions.updatedAt,
     });
-  return saved ?? null;
+  return saved ?? (writtenAt ? getReadingPosition(linkId) : null);
 }
 
 /**

@@ -71,6 +71,30 @@ describeIfPg('reading position routes (integration)', () => {
     expect((await readLink(id)).readingPosition?.position).toBeCloseTo(0.9);
   });
 
+  it('ignores stale client timestamps, including a late pre-pagehide PUT', async () => {
+    const id = await newLinkId('https://example.com/rp-write-order');
+    const path = `/api/links/${id}/reading-position`;
+    const newer = { position: 0.9, source: 'listen', writtenAt: '2026-11-02T12:00:00.001Z' };
+    expect((await put(path, newer)).status).toBe(200);
+    const stale = await put(path, {
+      position: 0.1,
+      source: 'pencil',
+      writtenAt: '2026-11-02T12:00:00.000Z',
+    });
+    expect(stale.status).toBe(200);
+    expect(
+      ((await stale.json()) as { readingPosition: Position }).readingPosition.position,
+    ).toBeCloseTo(0.9);
+    expect((await readLink(id)).readingPosition?.source).toBe('listen');
+    expect((await readLink(id)).readingPosition?.updatedAt).toBe(newer.writtenAt);
+    expect((await put(path, { ...newer, position: 0.2 })).status).toBe(200);
+    expect((await readLink(id)).readingPosition?.position).toBeCloseTo(0.9);
+    expect(
+      (await put(path, { ...newer, position: 0.7, writtenAt: '2026-11-02T12:00:00.002Z' })).status,
+    ).toBe(200);
+    expect((await readLink(id)).readingPosition?.position).toBeCloseTo(0.7);
+  });
+
   it('PATCH edits keep returning the position', async () => {
     const id = await newLinkId('https://example.com/rp-patch');
     await put(`/api/links/${id}/reading-position`, { position: 0.3 });
@@ -91,6 +115,7 @@ describeIfPg('reading position routes (integration)', () => {
     ['null', { position: null }],
     ['bad source', { position: 0.5, source: 'scroll' }],
     ['null source', { position: 0.5, source: null }],
+    ['invalid timestamp', { position: 0.5, writtenAt: 'yesterday' }],
   ])('PUT rejects %s with 400', async (_name, body) => {
     const id = await newLinkId(`https://example.com/rp-bad-${_name.replace(/\W/g, '')}`);
     const res = await put(`/api/links/${id}/reading-position`, body);

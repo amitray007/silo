@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   READ_ALOUD_SPEEDS,
   type ReadAloudPauses,
@@ -141,6 +141,11 @@ export function useReadAloud({
     void now.onSave(share, options).catch(() => {
       /* The save adapter reports the failure. */
     });
+  }, []);
+
+  const forgetPlace = useCallback(() => {
+    begun.current = false;
+    currentShare.current = null;
   }, []);
 
   const mark = useCallback((segment: Segment | undefined) => {
@@ -348,16 +353,20 @@ export function useReadAloud({
       : firstVisible();
   }, [ensure, firstVisible]);
 
-  // A new manual or Pencil write replaces a paused Listen place too.
-  useEffect(() => {
-    if (
+  // Removal from any source discards Listen's pending position before teardown can flush it.
+  const previousSaved = useRef(saved);
+  useLayoutEffect(() => {
+    const removed = previousSaved.current !== null && saved === null;
+    previousSaved.current = saved;
+    if (removed) forgetPlace();
+    else if (
       !playing &&
       saved !== null &&
       currentShare.current !== null &&
       Math.abs(saved - currentShare.current) > 1e-7
     )
       begun.current = false;
-  }, [saved, playing]);
+  }, [saved, playing, forgetPlace]);
 
   const play = useCallback(() => {
     void startAt(begun.current ? live.current.index : savedSentence());
@@ -575,6 +584,7 @@ export function useReadAloud({
     jump,
     startAt: (at: number) => void startAt(at),
     startHere,
+    forgetPlace,
     warm: warmUp,
     retry: () => {
       patch(live.current.engineId, { status: 'idle', error: '' });

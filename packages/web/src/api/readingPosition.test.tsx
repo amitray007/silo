@@ -18,7 +18,10 @@ beforeEach(() => {
     link: makeLink({ id: 'a', readingPosition: null }),
   });
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 it('updates the cached link at once, then takes the server timestamp, with no refetch', async () => {
   const fetchMock = vi.fn(
@@ -37,7 +40,11 @@ it('updates the cached link at once, then takes the server timestamp, with no re
   const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
   expect(url).toBe('/api/links/a/reading-position');
   expect(init.method).toBe('PUT');
-  expect(JSON.parse(String(init.body))).toEqual({ position: 0.25, source: 'mark' });
+  expect(JSON.parse(String(init.body))).toEqual({
+    position: 0.25,
+    source: 'mark',
+    writtenAt: expect.any(String),
+  });
 });
 
 it('rolls the cache back and rejects when the save fails', async () => {
@@ -51,11 +58,11 @@ it('rolls the cache back and rejects when the save fails', async () => {
   expect(cached()?.readingPosition).toBeNull();
 });
 
-it('sends a keepalive request that survives the page closing', () => {
-  const fetchMock = vi.fn(async () => new Response(null, { status: 204 }));
+it('sends a keepalive request that survives the page closing', async () => {
+  const fetchMock = vi.fn(async () => ok(0.9));
   vi.stubGlobal('fetch', fetchMock);
   const { result } = renderHook(() => useSaveReadingPosition('a'), { wrapper });
-  result.current(0.9, { keepalive: true });
+  await result.current(0.9, { keepalive: true });
   expect(fetchMock).toHaveBeenCalledTimes(1);
   const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
   expect(init.keepalive).toBe(true);
@@ -174,6 +181,67 @@ it('keeps the newest source and serializes Remove behind an in-flight save', asy
   first.resolve(ok(0.4));
   await pending;
   expect(calls.map((call) => call.method)).toEqual(['PUT', 'DELETE']);
-  expect(JSON.parse(String(calls[0]?.body))).toEqual({ position: 0.4, source: 'listen' });
+  expect(JSON.parse(String(calls[0]?.body))).toEqual({
+    position: 0.4,
+    source: 'listen',
+    writtenAt: expect.any(String),
+  });
+  expect(cached()?.readingPosition).toBeNull();
+});
+
+it('keeps the pagehide place when the in-flight PUT lands after it, and discards older queued work', async () => {
+  vi.spyOn(Date, 'now').mockReturnValue(Date.parse('2026-11-02T12:00:00Z'));
+  const first = deferred();
+  let stored = { position: 0, writtenAt: '' };
+  const calls: Array<{ position: number; writtenAt: string }> = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init: RequestInit) => {
+      const body = JSON.parse(String(init.body)) as typeof stored;
+      calls.push(body);
+      if (calls.length === 1) await first.promise;
+      // The core/API integration tests prove this same stale-write guard on real Postgres.
+      if (body.writtenAt > stored.writtenAt) stored = body;
+      return ok(stored.position);
+    }),
+  );
+  const { result } = renderHook(() => useSaveReadingPosition('a'), { wrapper });
+  const one = result.current(0.1);
+  void result.current(0.4);
+  const hidden = result.current(0.9, { keepalive: true, source: 'listen' });
+  await waitFor(() => expect(stored.position).toBe(0.9));
+  first.resolve(ok(0.1));
+  await Promise.all([one, hidden]);
+  expect(calls.map((call) => call.position)).toEqual([0.1, 0.9]);
+  expect(stored.position).toBe(0.9);
+  expect(cached()?.readingPosition?.position).toBe(0.9);
+  expect(Date.parse(calls[1]?.writtenAt ?? '')).toBeGreaterThan(
+    Date.parse(calls[0]?.writtenAt ?? ''),
+  );
+});
+
+it('waits for every overlapping pagehide PUT before Remove, so none can recreate the place', async () => {
+  const first = deferred();
+  const hidden = deferred();
+  const calls: string[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init: RequestInit) => {
+      calls.push(init.method ?? '');
+      if (calls.length === 1) return first.promise;
+      if (calls.length === 2) return hidden.promise;
+      return new Response(null, { status: 204 });
+    }),
+  );
+  const { result } = renderHook(() => useSaveReadingPosition('a'), { wrapper });
+  const pending = result.current(0.1);
+  void result.current(0.9, { keepalive: true });
+  void result.current(null);
+  first.resolve(ok(0.1));
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(calls).toEqual(['PUT', 'PUT']);
+  hidden.resolve(ok(0.9));
+  await pending;
+  expect(calls).toEqual(['PUT', 'PUT', 'DELETE']);
   expect(cached()?.readingPosition).toBeNull();
 });

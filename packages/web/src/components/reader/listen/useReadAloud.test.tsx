@@ -396,3 +396,49 @@ it('does not save when playback advances into another sentence', async () => {
   expect(onSave).toHaveBeenCalledExactlyOnceWith(0.5, undefined);
   hook.unmount();
 });
+
+it.each(['close', 'unmount', 'pagehide'] as const)(
+  'does not recreate a removed place on %s after Listen pauses',
+  async (exit) => {
+    const { prose, scroll } = article();
+    const onSave = vi.fn(async () => {});
+    const hook = renderHook(
+      ({ saved }: { saved: number | null }) =>
+        useReadAloud({ prose, scroll, saved, canSave: true, onSave }),
+      { initialProps: { saved: 0 as number | null } },
+    );
+    act(() => hook.result.current.startAt(0));
+    await waitFor(() => expect(hook.result.current.playing).toBe(true));
+    act(() => hook.result.current.pause());
+    expect(onSave).toHaveBeenCalledOnce();
+    onSave.mockClear();
+    hook.rerender({ saved: null });
+    if (exit === 'unmount') hook.unmount();
+    else {
+      act(() => {
+        if (exit === 'close') hook.result.current.stop();
+        else window.dispatchEvent(new Event('pagehide'));
+      });
+      hook.unmount();
+    }
+    expect(onSave).not.toHaveBeenCalled();
+  },
+);
+
+it('discards the Listen position synchronously when Remove and pagehide precede the cache render', async () => {
+  const { prose, scroll } = article();
+  const onSave = vi.fn(async () => {});
+  const hook = renderHook(() => useReadAloud({ prose, scroll, saved: 0, canSave: true, onSave }));
+  act(() => hook.result.current.startAt(0));
+  await waitFor(() => expect(hook.result.current.playing).toBe(true));
+  act(() => hook.result.current.pause());
+  expect(onSave).toHaveBeenCalledOnce();
+  onSave.mockClear();
+  act(() => {
+    hook.result.current.forgetPlace();
+    window.dispatchEvent(new Event('pagehide'));
+    hook.result.current.stop();
+  });
+  hook.unmount();
+  expect(onSave).not.toHaveBeenCalled();
+});

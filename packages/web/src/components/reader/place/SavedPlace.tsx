@@ -34,6 +34,33 @@ function placeLabel(saved: ReadingPositionJson): string {
   return `${saved.source === 'listen' ? 'Stopped listening here' : 'Stopped here'} · ${time}`;
 }
 
+/** Only this component ticks; the reader and its prose do not render on time changes. */
+function usePlaceLabel(saved: ReadingPositionJson | null): string {
+  const [, tick] = useState(0);
+  const updatedAt = saved?.updatedAt;
+  useEffect(() => {
+    if (!updatedAt) return;
+    let timer: ReturnType<typeof setTimeout>;
+    const schedule = () => {
+      const now = Date.now();
+      const age = Math.max(0, now - Date.parse(updatedAt));
+      const unit = age < 3600000 ? 60000 : age < 86400000 ? 3600000 : 86400000;
+      const midnight = new Date(now);
+      midnight.setHours(24, 0, 0, 0);
+      timer = setTimeout(
+        () => {
+          tick((value) => value + 1);
+          schedule();
+        },
+        Math.min(unit - (age % unit), midnight.getTime() - now),
+      );
+    };
+    schedule();
+    return () => clearTimeout(timer);
+  }, [updatedAt]);
+  return saved ? placeLabel(saved) : '';
+}
+
 /** The one saved place, shared by manual marks, the Pencil and Listen. */
 export function SavedPlace({
   prose,
@@ -149,7 +176,7 @@ export function SavedPlace({
     }
     setMenu((value) => !value);
   };
-  const label = saved ? placeLabel(saved) : '';
+  const label = usePlaceLabel(saved);
   const continuePencil = () => {
     listen.stop();
     place.dismiss();
@@ -254,6 +281,7 @@ export function SavedPlace({
               <button
                 type="button"
                 onClick={() => {
+                  listen.forgetPlace();
                   place.remove();
                   setMenu(false);
                 }}

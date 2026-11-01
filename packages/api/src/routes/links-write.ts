@@ -123,7 +123,7 @@ export function registerLinksWriteRoutes(app: Hono): void {
 
   /**
    * `PUT /api/links/:id/reading-position` — save where the reader stopped.
-   * Body: `{ position, source? }` (source defaults to mark), a share of the article's words from 0 to 1. Returns
+   * Body: `{ position, source?, writtenAt? }` (source defaults to mark), a share of the article's words from 0 to 1. Returns
    * `{ readingPosition }`. Idempotent; the write never bumps `links.updated_at`.
    * An unknown or trashed id is a `404`; a feed post is a `409` (core's
    * `FeedPostNotEditableError`).
@@ -131,7 +131,12 @@ export function registerLinksWriteRoutes(app: Hono): void {
   app.put('/links/:id/reading-position', async (c) => {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
     const body = readingPositionBodySchema.parse(await c.req.json().catch(() => ({})));
-    const saved = await setReadingPosition(id, body.position, body.source);
+    const saved = await setReadingPosition(
+      id,
+      body.position,
+      body.source,
+      body.writtenAt ? new Date(body.writtenAt) : undefined,
+    );
     if (!saved) {
       return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
     }

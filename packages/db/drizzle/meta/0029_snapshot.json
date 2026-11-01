@@ -1140,7 +1140,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "reading_positions_source_check": {
+          "name": "reading_positions_source_check",
+          "value": "\"reading_positions\".\"source\" in ('pencil', 'listen', 'mark')"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.settings": {

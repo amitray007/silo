@@ -20,7 +20,7 @@ import {
   transferTitleReveal,
 } from '../lib/titleReveals';
 import { deriveTitleFromUrl } from '../lib/url';
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiPutKeepalive } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './client';
 import type {
   AccessTokensResponse,
   AiProviderKind,
@@ -214,15 +214,24 @@ function withReadingPosition(
   return data && { ...data, link: { ...data.link, readingPosition } };
 }
 
-type SaveQueue = {
-  /** The request in flight, plus any queued behind it. */
-  flight: Promise<void> | null;
-  /** The newest position waiting for the one in flight to finish. */
-  pending: { position: number | null; source: ReadingPositionSource; generation: number } | null;
-  /** Counts saves, so a response for an older one never overwrites a newer position. */
+type PositionWrite = {
+  position: number | null;
+  source: ReadingPositionSource;
   generation: number;
-  /** The last position the server confirmed. */
+  writtenAt: string;
+  keepalive: boolean;
+};
+
+type SaveQueue = {
+  flight: Promise<void> | null;
+  pending: PositionWrite | null;
+  /** Keepalive requests leave immediately; later writes wait for all of them. */
+  urgent: Promise<void>[];
+  generation: number;
+  writtenAt: number;
+  confirmedGeneration: number;
   confirmed: ReadingPositionJson | null | undefined;
+  failure: { generation: number; error: unknown } | null;
 };
 
 /** Set the link's cached reading position, or clear it. */
@@ -236,56 +245,95 @@ function putCachedPosition(
   );
 }
 
-/** Send one position, then whatever newer one queued behind it. See `useSaveReadingPosition`. */
+/** Send a write, retaining only the newest confirmed result or failure. */
+async function sendPosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  write: PositionWrite,
+): Promise<void> {
+  const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
+  try {
+    let saved: ReadingPositionJson | null;
+    if (write.position === null) {
+      await apiDelete(path);
+      saved = null;
+    } else {
+      const response = await apiPut<{ readingPosition: ReadingPositionJson }>(
+        path,
+        {
+          position: write.position,
+          source: write.source,
+          writtenAt: write.writtenAt,
+        },
+        write.keepalive,
+      );
+      saved = response.readingPosition;
+    }
+    if (write.generation >= q.confirmedGeneration) {
+      q.confirmed = saved;
+      q.confirmedGeneration = write.generation;
+    }
+    if (write.generation === q.generation) putCachedPosition(queryClient, id, saved);
+  } catch (error) {
+    if (!q.failure || write.generation > q.failure.generation)
+      q.failure = { generation: write.generation, error };
+  }
+}
+
+/** Drain normal writes and all immediate keepalives before sending a later write or Remove. */
 async function drainSaves(
   queryClient: ReturnType<typeof useQueryClient>,
   q: SaveQueue,
   id: string,
-  position: number | null,
-  source: ReadingPositionSource,
-  sent: number,
+  write: PositionWrite,
 ): Promise<void> {
-  const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
-  try {
-    let saved: { readingPosition: ReadingPositionJson | null };
-    if (position === null) {
-      await apiDelete(path);
-      saved = { readingPosition: null };
-    } else
-      saved = await apiPut<{ readingPosition: ReadingPositionJson }>(path, { position, source });
-    q.confirmed = saved.readingPosition;
-    if (sent === q.generation) putCachedPosition(queryClient, id, saved.readingPosition);
-  } catch (error) {
-    // A newer position is waiting: it goes next, and its result decides what the cache shows.
-    if (!q.pending) {
-      if (sent === q.generation && q.confirmed !== undefined)
-        putCachedPosition(queryClient, id, q.confirmed);
-      throw error;
-    }
-  }
+  await sendPosition(queryClient, q, id, write);
+  while (q.urgent.length) await Promise.all(q.urgent.splice(0));
   const waiting = q.pending;
   q.pending = null;
-  if (waiting)
-    await drainSaves(queryClient, q, id, waiting.position, waiting.source, waiting.generation);
+  if (waiting) return drainSaves(queryClient, q, id, waiting);
+  if (q.failure?.generation === q.generation) {
+    if (q.confirmed !== undefined) putCachedPosition(queryClient, id, q.confirmed);
+    throw q.failure.error;
+  }
+}
+
+function queuePosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  write: PositionWrite,
+): Promise<void> {
+  if (q.flight) {
+    if (write.keepalive && write.position !== null) {
+      q.pending = null;
+      q.urgent.push(sendPosition(queryClient, q, id, write));
+    } else q.pending = write;
+    return q.flight;
+  }
+  q.flight = drainSaves(queryClient, q, id, write).finally(() => {
+    q.flight = null;
+  });
+  return q.flight;
 }
 
 /**
- * Save where the reader stopped (`PUT /api/links/:id/reading-position`). The link query updates
- * at once, so the resume point is right without a refetch, and an in-flight refetch is
- * cancelled so it cannot overwrite the new value. Saves run one at a time: while a request is
- * in flight the newest position waits behind it, so a slow request cannot land after a later
- * one. The server's timestamp replaces the local one only when no newer save has started. The
- * promise settles when the queue drains and rejects when the last request failed; the cache
- * then returns to the last confirmed position. `keepalive` sends one request that survives the
- * page closing, outside the queue.
+ * Optimistically save the link's place. Normal writes coalesce behind the active request.
+ * Pagehide sends immediately with a newer timestamp and supersedes queued work; the server
+ * rejects stale PUTs. Later saves and Remove wait for every outstanding request to finish.
  */
 export function useSaveReadingPosition(id: string) {
   const queryClient = useQueryClient();
   const queue = useRef<SaveQueue>({
     flight: null,
     pending: null,
+    urgent: [],
     generation: 0,
+    writtenAt: 0,
+    confirmedGeneration: 0,
     confirmed: undefined,
+    failure: null,
   });
   return useCallback(
     (
@@ -294,29 +342,30 @@ export function useSaveReadingPosition(id: string) {
     ): Promise<void> => {
       const source = options.source ?? 'mark';
       const key = queryKeys.link(id);
-      const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
       const q = queue.current;
       const generation = ++q.generation;
-      if (q.confirmed === undefined)
-        q.confirmed = queryClient.getQueryData<LinkResponse>(key)?.link.readingPosition ?? null;
+      const cached = queryClient.getQueryData<LinkResponse>(key)?.link.readingPosition;
+      q.writtenAt = Math.max(
+        Date.now(),
+        q.writtenAt + 1,
+        cached ? Date.parse(cached.updatedAt) + 1 : 0,
+      );
+      const writtenAt = new Date(q.writtenAt).toISOString();
+      const write = {
+        position,
+        source,
+        generation,
+        writtenAt,
+        keepalive: options.keepalive ?? false,
+      };
+      if (q.confirmed === undefined) q.confirmed = cached ?? null;
       void queryClient.cancelQueries({ queryKey: key });
       putCachedPosition(
         queryClient,
         id,
-        position === null ? null : { position, source, updatedAt: new Date().toISOString() },
+        position === null ? null : { position, source, updatedAt: writtenAt },
       );
-      if (options.keepalive && position !== null) {
-        apiPutKeepalive(path, { position, source });
-        return Promise.resolve();
-      }
-      if (q.flight) {
-        q.pending = { position, source, generation };
-        return q.flight;
-      }
-      q.flight = drainSaves(queryClient, q, id, position, source, generation).finally(() => {
-        q.flight = null;
-      });
-      return q.flight;
+      return queuePosition(queryClient, q, id, write);
     },
     [id, queryClient],
   );

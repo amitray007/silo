@@ -1,7 +1,8 @@
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { Pool } from 'pg';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 import type * as ExportOps from './export.js';
 import type * as ImportOps from './import.js';
@@ -89,6 +90,59 @@ describeIfPg('reading position (integration)', () => {
       sql`select count(*) as n from reading_positions where link_id = ${link.id}`,
     );
     expect(count.rows[0]?.n).toBe('1');
+  });
+
+  it('the database rejects an invalid source on insert and update', async () => {
+    const link = await newLink();
+    await expect(
+      rawDb.execute(sql`
+      insert into reading_positions (link_id, position, source) values (${link.id}, 0.5, 'scroll')
+    `),
+    ).rejects.toMatchObject({
+      cause: { code: '23514', constraint: 'reading_positions_source_check' },
+    });
+    await ops.setReadingPosition(link.id, 0.5, 'listen');
+    await expect(
+      rawDb.execute(sql`
+      update reading_positions set source = 'scroll' where link_id = ${link.id}
+    `),
+    ).rejects.toMatchObject({
+      cause: { code: '23514', constraint: 'reading_positions_source_check' },
+    });
+    expect((await ops.getReadingPosition(link.id))?.source).toBe('listen');
+  });
+
+  it('ignores an older PUT that is in flight when a newer pagehide write commits', async () => {
+    const link = await newLink();
+    await ops.setReadingPosition(link.id, 0.1, 'mark', new Date('2026-01-01T00:00:00Z'));
+    const pool = new Pool({ connectionString: harness.databaseUrl() });
+    const blocker = await pool.connect();
+    let older: ReturnType<typeof ops.setReadingPosition> | undefined;
+    try {
+      await blocker.query('BEGIN');
+      await blocker.query('select 1 from reading_positions where link_id = $1 for update', [
+        link.id,
+      ]);
+      older = ops.setReadingPosition(link.id, 0.2, 'pencil', new Date('2026-01-02T00:00:00Z'));
+      await vi.waitFor(async () => {
+        const waiting = await pool.query<{ n: string }>(
+          "select count(*) as n from pg_stat_activity where datname = current_database() and wait_event_type = 'Lock' and query like 'insert into %reading_positions%'",
+        );
+        expect(Number(waiting.rows[0]?.n)).toBeGreaterThan(0);
+      });
+      await blocker.query(
+        "update reading_positions set position = 0.9, source = 'listen', updated_at = '2026-01-03T00:00:00Z' where link_id = $1",
+        [link.id],
+      );
+      await blocker.query('COMMIT');
+      expect((await older)?.position).toBeCloseTo(0.9);
+      expect((await ops.getReadingPosition(link.id))?.source).toBe('listen');
+    } finally {
+      await blocker.query('ROLLBACK');
+      blocker.release();
+      await older;
+      await pool.end();
+    }
   });
 
   it('accepts the bounds 0 and 1', async () => {

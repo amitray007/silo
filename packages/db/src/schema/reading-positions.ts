@@ -1,4 +1,5 @@
-import { pgTable, real, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import { check, pgTable, real, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { links } from './links.js';
 
 /**
@@ -7,13 +8,19 @@ import { links } from './links.js';
  * `links.updated_at`. The cascade purges it with the link; trash and restore
  * keep it because the link row survives.
  */
-export const readingPositions = pgTable('reading_positions', {
-  linkId: uuid('link_id')
-    .primaryKey()
-    .references(() => links.id, { onDelete: 'cascade' }),
-  position: real('position').notNull(),
-  source: varchar('source', { enum: ['pencil', 'listen', 'mark'] })
-    .notNull()
-    .default('pencil'),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
-});
+export const readingPositions = pgTable(
+  'reading_positions',
+  {
+    linkId: uuid('link_id')
+      .primaryKey()
+      .references(() => links.id, { onDelete: 'cascade' }),
+    position: real('position').notNull(),
+    source: varchar('source', { enum: ['pencil', 'listen', 'mark'] })
+      .notNull()
+      .default('pencil'),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [
+    check('reading_positions_source_check', sql`${table.source} in ('pencil', 'listen', 'mark')`),
+  ],
+);
