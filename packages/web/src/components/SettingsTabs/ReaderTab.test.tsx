@@ -122,7 +122,11 @@ describe('Reader settings tab', () => {
   it('writes the type controls to the same store the Reader reads', () => {
     open();
     fireEvent.click(screen.getByRole('radio', { name: 'Mono' }));
-    fireEvent.click(screen.getByRole('radio', { name: 'Relaxed' }));
+    fireEvent.click(
+      within(screen.getByRole('radiogroup', { name: 'Line height' })).getByRole('radio', {
+        name: 'Relaxed',
+      }),
+    );
     fireEvent.click(screen.getByRole('radio', { name: 'Wide' }));
     fireEvent.click(screen.getByRole('radio', { name: 'Sepia' }));
     fireEvent.click(screen.getByRole('button', { name: 'Increase size' }));
@@ -216,4 +220,22 @@ it('shares one manifest query between the voice picker and both download rows', 
   fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
   await screen.findByRole('option', { name: /Zoey/ });
   expect(fetchTtsManifest).toHaveBeenCalledTimes(1);
+});
+
+it('persists Pauses and restores it when Settings opens again', () => {
+  const view = open();
+  const group = screen.getByRole('radiogroup', { name: 'Pauses' });
+  expect(within(group).getByRole('radio', { name: 'Relaxed' }).getAttribute('aria-checked')).toBe(
+    'true',
+  );
+  fireEvent.click(within(group).getByRole('radio', { name: 'Natural' }));
+  expect(seen().aloud.pauses).toBe('natural');
+  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').pauses).toBe('natural');
+  view.unmount();
+  open();
+  expect(
+    within(screen.getByRole('radiogroup', { name: 'Pauses' }))
+      .getByRole('radio', { name: 'Natural' })
+      .getAttribute('aria-checked'),
+  ).toBe('true');
 });

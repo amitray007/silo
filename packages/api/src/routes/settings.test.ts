@@ -258,18 +258,31 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       width: 'medium',
       pencil: { style: 'underline', wpm: 240 },
       highlight: { color: 'yellow' },
-      readAloud: { engine: 'phonon', voices: { phonon: '', kokoro: '' }, rate: 1 },
+      readAloud: {
+        engine: 'phonon',
+        pauses: 'relaxed',
+        voices: { phonon: '', kokoro: '' },
+        rate: 1,
+      },
     });
 
     // A second patch changes its own fields only, including one nested voice.
     const second = await patchSettings(app, {
-      reader: { readAloud: { voices: { kokoro: 'af_heart' }, rate: 1.5 }, width: 'wide' },
+      reader: {
+        readAloud: { voices: { kokoro: 'af_heart' }, rate: 1.5, pauses: 'natural' },
+        width: 'wide',
+      },
     });
     const merged = ((await second.json()) as { reader: Record<string, unknown> }).reader;
     expect(merged).toMatchObject({
       type: { size: 20 },
       width: 'wide',
-      readAloud: { engine: 'phonon', voices: { phonon: '', kokoro: 'af_heart' }, rate: 1.5 },
+      readAloud: {
+        engine: 'phonon',
+        pauses: 'natural',
+        voices: { phonon: '', kokoro: 'af_heart' },
+        rate: 1.5,
+      },
     });
 
     for (const bad of [
@@ -280,6 +293,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       { pencil: { wpm: 250 } },
       { highlight: { color: 'red' } },
       { readAloud: { rate: 4 } },
+      { readAloud: { pauses: 'fast' } },
       { readAloud: { voices: { phonon: 'x'.repeat(65) } } },
       { readAloud: { voices: { piper: 'x' } } },
       { colour: 'blue' },

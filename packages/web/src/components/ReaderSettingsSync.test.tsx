@@ -107,7 +107,12 @@ describe('ReaderSettingsSync', () => {
       ...FULL,
       type: { font: 'serif', size: 20, leading: 'relaxed', theme: 'sepia' },
       width: 'narrow',
-      readAloud: { engine: 'kokoro', voices: { phonon: '', kokoro: 'af_heart' }, rate: 1.5 },
+      readAloud: {
+        engine: 'kokoro',
+        pauses: 'relaxed',
+        voices: { phonon: '', kokoro: 'af_heart' },
+        rate: 1.5,
+      },
     });
     render(<Probe />, { wrapper: Providers });
     // First paint: the mirror, before the server answers.
@@ -270,4 +275,16 @@ it('times out a hung PATCH and sends the next queued edit', async () => {
   await act(async () => vi.advanceTimersByTimeAsync(15_000));
   expect(server.patches).toEqual([{ type: { font: 'serif' } }]);
   expect(screen.getByRole('status').textContent).toBe('serif/16/medium/1/');
+});
+
+it('syncs Pauses to the server and restores it for the next reader', async () => {
+  const server = fakeServer(FULL);
+  const first = renderHook(() => useReadAloudPrefs(), { wrapper: Providers });
+  await waitFor(() => expect(first.result.current.prefs.pauses).toBe('relaxed'));
+  await act(async () => first.result.current.update({ pauses: 'natural' }));
+  await waitFor(() => expect(server.reader?.readAloud.pauses).toBe('natural'));
+  expect(server.patches).toContainEqual({ readAloud: { pauses: 'natural' } });
+  first.unmount();
+  const next = renderHook(() => useReadAloudPrefs(), { wrapper: Providers });
+  await waitFor(() => expect(next.result.current.prefs.pauses).toBe('natural'));
 });

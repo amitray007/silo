@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { READ_ALOUD_SPEEDS, useReadAloudPrefs } from '../../../lib/readerPrefs';
+import {
+  READ_ALOUD_SPEEDS,
+  type ReadAloudPauses,
+  useReadAloudPrefs,
+} from '../../../lib/readerPrefs';
 import { paintSpeaking } from '../highlights/paint';
 import { proseTextNodes } from '../pencil/lines';
 import { createEngine, ENGINES, type EngineId, type TtsEngine, type Voice } from './engines';
@@ -102,10 +106,11 @@ export function useReadAloud({
   const { status, progress, bytes, error, voices } = loads[engineId];
   const voiceId = prefs.voices[engineId];
   const rate = prefs.rate;
+  const pauses = prefs.pauses;
 
   // Everything callbacks need to see now, without re-creating them.
-  const live = useRef({ index: 0, playing: false, engineId, voiceId, rate, scroll });
-  live.current = { index, playing, engineId, voiceId, rate, scroll };
+  const live = useRef({ index: 0, playing: false, engineId, voiceId, rate, pauses, scroll });
+  live.current = { index, playing, engineId, voiceId, rate, pauses, scroll };
 
   const list = useRef<Segment[]>([]);
   const engines = useRef(new Map<EngineId, TtsEngine>());
@@ -145,7 +150,11 @@ export function useReadAloud({
           return audioContext();
         },
         segments: () => list.current,
-        settings: () => ({ rate: live.current.rate, voice: live.current.voiceId }),
+        settings: () => ({
+          rate: live.current.rate,
+          voice: live.current.voiceId,
+          pauses: live.current.pauses,
+        }),
         events: {
           sentence: (at) => {
             setIndex(at);
@@ -361,6 +370,17 @@ export function useReadAloud({
     [update, restartIfPlaying, warm],
   );
 
+  // Store changes also come from Settings or a server sync, outside this sheet.
+  const plannedPauses = useRef(pauses);
+  useEffect(() => {
+    if (plannedPauses.current === pauses) return;
+    plannedPauses.current = pauses;
+    restartIfPlaying();
+    if (active && !live.current.playing) void warm();
+  }, [pauses, active, restartIfPlaying, warm]);
+
+  const setPauses = useCallback((value: ReadAloudPauses) => update({ pauses: value }), [update]);
+
   const setVoice = useCallback(
     (id: string) => {
       update({ voice: [live.current.engineId, id] });
@@ -464,6 +484,8 @@ export function useReadAloud({
     current: segments[index],
     rate,
     setRate,
+    pauses,
+    setPauses,
     stepRate,
     engineId,
     engines: ENGINES,

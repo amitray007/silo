@@ -353,6 +353,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
           { readAloud: { engine: 'kokoro', rate: 2 } },
           { readAloud: { voices: { phonon: 'zoey' } } },
           { readAloud: { voices: { kokoro: 'af_heart' } } },
+          { readAloud: { pauses: 'natural' } },
         ].map((reader) => ops.updateSettings({ reader })),
       );
       expect(await ops.getSetting('reader')).toEqual({
@@ -360,7 +361,12 @@ describeIfPg('settings store (integration, plan 016)', () => {
         width: 'wide',
         pencil: { style: 'highlighter', wpm: 300 },
         highlight: { color: 'pink' },
-        readAloud: { engine: 'kokoro', rate: 2, voices: { phonon: 'zoey', kokoro: 'af_heart' } },
+        readAloud: {
+          engine: 'kokoro',
+          pauses: 'natural',
+          rate: 2,
+          voices: { phonon: 'zoey', kokoro: 'af_heart' },
+        },
       });
     });
 
@@ -370,6 +376,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       const created = await ops.getSetting('reader');
       expect(created?.readAloud).toEqual({
         engine: 'phonon',
+        pauses: 'relaxed',
         voices: { phonon: '', kokoro: '' },
         rate: 2,
       });

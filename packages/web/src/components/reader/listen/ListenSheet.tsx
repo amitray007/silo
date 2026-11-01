@@ -1,5 +1,6 @@
-import { READ_ALOUD_SPEEDS } from '../../../lib/readerPrefs';
+import { READ_ALOUD_PAUSES, READ_ALOUD_SPEEDS } from '../../../lib/readerPrefs';
 import { SettingsSelect } from '../../SettingsTabs/SettingsSelect';
+import { SegmentedRow } from '../dock/Segmented';
 import { Stepper } from '../dock/Stepper';
 import { ReaderIcon } from '../ReaderIcon';
 import type { EngineId } from './engines';
@@ -107,6 +108,12 @@ export function ListenSheet({ listen }: { listen: ReadAloudApi }) {
           }}
         />
       </div>
+      <SegmentedRow
+        label="Pauses"
+        value={listen.pauses}
+        options={READ_ALOUD_PAUSES}
+        onChange={listen.setPauses}
+      />
     </div>
   );
 }

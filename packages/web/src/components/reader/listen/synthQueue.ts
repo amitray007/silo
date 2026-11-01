@@ -23,10 +23,17 @@ type Queued = {
   speed: number;
   voice: string;
   engine: TtsEngine;
+  trim: boolean;
 };
 
-export function jobKey(engine: TtsEngine, voice: string, speed: number, text: string): string {
-  return `${engine.id}|${voice}|${speed}|${text}`;
+export function jobKey(
+  engine: TtsEngine,
+  voice: string,
+  speed: number,
+  text: string,
+  trim = true,
+): string {
+  return `${engine.id}|${voice}|${speed}|${trim ? 'trimmed' : 'natural'}|${text}`;
 }
 
 export function jobSeconds(job: { chunks: readonly Float32Array[]; sampleRate: number }): number {
@@ -62,8 +69,15 @@ export class SynthQueue {
 
   constructor(readonly cache = new ReplayCache()) {}
 
-  request(engine: TtsEngine, text: string, voice: string, speed: number, priority: number): Job {
-    const key = jobKey(engine, voice, speed, text);
+  request(
+    engine: TtsEngine,
+    text: string,
+    voice: string,
+    speed: number,
+    priority: number,
+    trim = true,
+  ): Job {
+    const key = jobKey(engine, voice, speed, text, trim);
     const cached = this.cache.get(key);
     if (cached) return settled(cached, key);
     const shared = this.inflight.get(key);
@@ -83,7 +97,7 @@ export class SynthQueue {
       listeners: new Set(),
     };
     this.inflight.set(key, job);
-    this.queue.push({ job, text, priority, speed, voice, engine });
+    this.queue.push({ job, text, priority, speed, voice, engine, trim });
     void this.run();
     return job;
   }
@@ -148,17 +162,20 @@ export class SynthQueue {
       })) {
         if (abort.signal.aborted) break;
         job.sampleRate = next.engine.sampleRate;
-        trimmer ??= new EdgeTrimmer(job.sampleRate);
-        this.append(job, trimmer.push(chunk));
+        if (next.trim) {
+          trimmer ??= new EdgeTrimmer(job.sampleRate);
+          this.append(job, trimmer.push(chunk));
+        } else job.chunks.push(chunk);
         for (const listener of job.listeners) listener();
       }
-      if (!abort.signal.aborted) {
-        trimmer ??= new EdgeTrimmer(next.engine.sampleRate);
-        job.sampleRate = next.engine.sampleRate;
+      if (abort.signal.aborted) return;
+      job.sampleRate = next.engine.sampleRate;
+      if (next.trim) {
+        trimmer ??= new EdgeTrimmer(job.sampleRate);
         this.append(job, trimmer.finish());
-        job.done = true;
-        this.cache.set(job.key, { chunks: job.chunks, sampleRate: job.sampleRate });
       }
+      job.done = true;
+      this.cache.set(job.key, { chunks: job.chunks, sampleRate: job.sampleRate });
     } catch (reason) {
       if (!abort.signal.aborted)
         job.failed = reason instanceof Error ? reason.message : String(reason);

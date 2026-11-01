@@ -1,3 +1,6 @@
+export const KEPT_LEAD_MS = 30;
+export const KEPT_TAIL_MS = 60;
+
 /** Append adjacent views without copying their samples. */
 function append(chunks: Float32Array[], chunk: Float32Array): void {
   if (!chunk.length) return;
@@ -37,8 +40,8 @@ export class EdgeTrimmer {
 
   constructor(private readonly sampleRate: number) {
     this.window = Math.max(1, Math.round(sampleRate * 0.01));
-    this.lead = Math.round(sampleRate * 0.03);
-    this.tail = Math.round(sampleRate * 0.06);
+    this.lead = Math.round((sampleRate * KEPT_LEAD_MS) / 1000);
+    this.tail = Math.round((sampleRate * KEPT_TAIL_MS) / 1000);
     this.fade = Math.max(2, Math.round(sampleRate * 0.005));
   }
 

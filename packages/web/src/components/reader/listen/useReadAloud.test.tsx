@@ -1,5 +1,6 @@
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { useReadAloudPrefs } from '../../../lib/readerPrefs';
 import type { EngineId, LoadProgress, TtsEngine } from './engines';
 import { useReadAloud } from './useReadAloud';
 
@@ -50,6 +51,7 @@ class FakeAudioContext {
   destination = {};
   onstatechange: (() => void) | null = null;
   closed = false;
+  stopped = 0;
   constructor() {
     FakeAudioContext.last = this;
   }
@@ -61,7 +63,15 @@ class FakeAudioContext {
     return { duration: length / rate, getChannelData: () => new Float32Array(length) };
   }
   createBufferSource() {
-    return { buffer: null, onended: null, connect: () => {}, start: () => {}, stop: () => {} };
+    return {
+      buffer: null,
+      onended: null,
+      connect: () => {},
+      start: () => {},
+      stop: () => {
+        this.stopped += 1;
+      },
+    };
   }
 }
 
@@ -210,5 +220,28 @@ it('pauses playback that stays in a hidden tab, but not one that comes back in t
   act(() => vi.advanceTimersByTime(2 * 60_000 + 10));
   expect(hook.result.current.playing).toBe(false);
   hidden(false);
+  hook.unmount();
+});
+
+it('re-plans pause changes from the current sentence, including changes made in Settings', async () => {
+  const { prose, scroll } = article();
+  const hook = renderHook(() => ({
+    listen: useReadAloud({ prose, scroll }),
+    prefs: useReadAloudPrefs(),
+  }));
+  act(() => hook.result.current.listen.startAt(2));
+  await waitFor(() => expect(fake.streamed.length).toBeGreaterThan(0));
+  const firstText = fake.streamed[0];
+  const context = FakeAudioContext.last as FakeAudioContext;
+  await act(async () => hook.result.current.listen.setPauses('natural'));
+  await waitFor(() => expect(context.stopped).toBeGreaterThan(0));
+  expect(hook.result.current.listen.index).toBe(2);
+  expect(hook.result.current.listen.playing).toBe(true);
+  expect(fake.streamed.filter((text) => text === firstText).length).toBe(2);
+  const stopped = context.stopped;
+  await act(async () => hook.result.current.prefs.update({ pauses: 'short' }));
+  await waitFor(() => expect(context.stopped).toBeGreaterThan(stopped));
+  expect(hook.result.current.listen.index).toBe(2);
+  expect(hook.result.current.listen.pauses).toBe('short');
   hook.unmount();
 });

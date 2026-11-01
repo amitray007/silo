@@ -1,4 +1,6 @@
+import type { ReadAloudPauses } from '../../../lib/readerPrefs';
 import type { Segment } from './segments';
+import { KEPT_LEAD_MS, KEPT_TAIL_MS } from './trim';
 
 /** A synthesis unit: one or more sentences merged, or a clause-split piece of a long sentence. */
 export type Unit = {
@@ -11,9 +13,12 @@ export type Unit = {
 
 type Planned = Pick<Segment, 'text' | 'block' | 'kind'>;
 
-const HEADING_PAUSE_MS = 600;
-const BLOCK_PAUSE_MS = 450;
-const SENTENCE_PAUSE_MS = 200;
+const keptEdges = KEPT_LEAD_MS + KEPT_TAIL_MS;
+const PAUSES = {
+  short: { sentence: 200, block: 450, heading: 600 },
+  relaxed: { sentence: 450 - keptEdges, block: 700 - keptEdges, heading: 850 - keptEdges },
+  natural: { sentence: 0, block: 150, heading: 250 },
+} as const;
 /** Adjacent sentences merge while either is shorter than this. */
 const SHORT = 60;
 const MERGE_MAX = 200;
@@ -47,11 +52,12 @@ export function splitLong(text: string): string[] {
   });
 }
 
-function pauseAfter(segments: readonly Planned[], at: number): number {
+function pauseAfter(segments: readonly Planned[], at: number, mode: ReadAloudPauses): number {
   const segment = segments[at] as Planned;
   const next = segments[at + 1];
-  if (segment.kind === 'heading') return HEADING_PAUSE_MS;
-  return !next || next.block !== segment.block ? BLOCK_PAUSE_MS : SENTENCE_PAUSE_MS;
+  const pauses = PAUSES[mode];
+  if (segment.kind === 'heading') return pauses.heading;
+  return !next || next.block !== segment.block ? pauses.block : pauses.sentence;
 }
 
 function canMerge(unit: Unit, last: Planned, candidate: Planned): boolean {
@@ -65,13 +71,17 @@ function canMerge(unit: Unit, last: Planned, candidate: Planned): boolean {
 }
 
 /** Plan synthesis from a sentence onward. Headings never merge. */
-export function buildUnits(segments: readonly Planned[], from: number): Unit[] {
+export function buildUnits(
+  segments: readonly Planned[],
+  from: number,
+  mode: ReadAloudPauses = 'relaxed',
+): Unit[] {
   const units: Unit[] = [];
   for (let i = from; i < segments.length; i += 1) {
     const segment = segments[i] as Planned;
     if (segment.text.length > LONG) {
       const pieces = splitLong(segment.text);
-      const pause = pauseAfter(segments, i);
+      const pause = pauseAfter(segments, i, mode);
       pieces.forEach((piece, k) => {
         units.push({
           text: piece,
@@ -84,7 +94,7 @@ export function buildUnits(segments: readonly Planned[], from: number): Unit[] {
     const unit: Unit = {
       text: segment.text,
       parts: [{ seg: i, chars: segment.text.length }],
-      pause: pauseAfter(segments, i),
+      pause: pauseAfter(segments, i, mode),
     };
     let last = segment;
     while (i + 1 < segments.length) {
@@ -94,7 +104,7 @@ export function buildUnits(segments: readonly Planned[], from: number): Unit[] {
       unit.parts.push({ seg: i + 1, chars: candidate.text.length });
       i += 1;
       last = candidate;
-      unit.pause = pauseAfter(segments, i);
+      unit.pause = pauseAfter(segments, i, mode);
     }
     units.push(unit);
   }

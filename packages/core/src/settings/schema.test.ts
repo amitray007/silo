@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readerPatchSchema, readerSchema } from './reader.js';
 import {
   normalizePluginsValue,
   parseSettingValue,
@@ -279,7 +280,12 @@ describe('reader setting schema', () => {
       width: 'medium',
       pencil: { style: 'underline', wpm: 240 },
       highlight: { color: 'yellow' },
-      readAloud: { engine: 'phonon', voices: { phonon: '', kokoro: '' }, rate: 1 },
+      readAloud: {
+        engine: 'phonon',
+        pauses: 'relaxed',
+        voices: { phonon: '', kokoro: '' },
+        rate: 1,
+      },
     });
   });
 
@@ -411,4 +417,21 @@ describe('ai setting', () => {
       expect(() => parseSettingValue('ai', value)).toThrow();
     }
   });
+});
+
+it('defaults old read-aloud settings to relaxed pauses and validates pause writes strictly', () => {
+  const old = { readAloud: { engine: 'kokoro', rate: 1.5 } };
+  expect(readerSchema.parse(old).readAloud).toMatchObject({
+    engine: 'kokoro',
+    rate: 1.5,
+    pauses: 'relaxed',
+  });
+  expect(parseStoredSettingValue('reader', old)?.readAloud.pauses).toBe('relaxed');
+  for (const pauses of ['short', 'relaxed', 'natural']) {
+    expect(readerPatchSchema.parse({ readAloud: { pauses } })).toEqual({ readAloud: { pauses } });
+  }
+  for (const pauses of ['fast', null, 1]) {
+    expect(() => readerSchema.parse({ readAloud: { pauses } })).toThrow();
+    expect(() => readerPatchSchema.parse({ readAloud: { pauses } })).toThrow();
+  }
 });

@@ -21,7 +21,7 @@ export const READER_DEFAULTS = {
   width: 'medium',
   pencil: { style: 'underline', wpm: 240 },
   highlight: { color: 'yellow' },
-  readAloud: { engine: 'phonon', voices: { phonon: '', kokoro: '' }, rate: 1 },
+  readAloud: { engine: 'phonon', voices: { phonon: '', kokoro: '' }, rate: 1, pauses: 'relaxed' },
 } as const;
 
 function wrappers<S extends z.ZodType>(
@@ -81,6 +81,7 @@ function build<M extends Mode>(mode: M) {
           d.readAloud.voices,
         ),
         rate: field(z.literal(SPEEDS), d.readAloud.rate),
+        pauses: field(z.enum(['short', 'relaxed', 'natural']), d.readAloud.pauses),
       },
       d.readAloud,
     ),

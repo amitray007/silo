@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReadAloudPauses } from '../../../lib/readerPrefs';
 import type { TtsEngine } from './engines/types';
 import { Player, type PlayerEvents } from './player';
 import type { Segment } from './segments';
@@ -85,7 +86,7 @@ function fakeEngine({
   return { engine, calls };
 }
 
-function setup(segmentCount = 6, rate = 1) {
+function setup(segmentCount = 6, rate = 1, pauses: ReadAloudPauses = 'relaxed') {
   const audio = new FakeAudio();
   const events = {
     sentence: vi.fn(),
@@ -96,7 +97,7 @@ function setup(segmentCount = 6, rate = 1) {
   } satisfies PlayerEvents;
   const list = sentences(segmentCount);
   let clock = 1000;
-  const settings = { rate, voice: '' };
+  const settings = { rate, voice: '', pauses };
   const player = new Player({
     context: () => audio as unknown as AudioContext,
     segments: () => list,
@@ -133,24 +134,28 @@ describe('Player scheduling', () => {
     await flush();
     expect(scheduledUnits(audio)).toHaveLength(3);
     const [a, b, c] = scheduledUnits(audio);
-    // Each unit ends a paragraph, so 450 ms of silence follows it.
-    expect(b?.at).toBeCloseTo((a?.at ?? 0) + 1 + 0.45, 6);
-    expect(c?.at).toBeCloseTo((b?.at ?? 0) + 1 + 0.45, 6);
+    // Each unit ends a paragraph, so 610 ms of silence follows it.
+    expect(b?.at).toBeCloseTo((a?.at ?? 0) + 1 + 0.61, 6);
+    expect(c?.at).toBeCloseTo((b?.at ?? 0) + 1 + 0.61, 6);
     player.halt();
   });
 
-  it.each([true, false])(
-    'scales scheduled pauses by speed (native speed: %s)',
-    async (supportsSpeed) => {
-      const { audio, player } = setup(2, 2);
-      player.start(fakeEngine({ supportsSpeed, seconds: 1 }).engine, 0);
-      await flush();
-      await flush();
-      const [first, second] = scheduledUnits(audio);
-      expect(second?.at).toBeCloseTo((first?.at ?? 0) + (first?.duration ?? 0) + 0.225, 6);
-      player.halt();
-    },
-  );
+  it.each([
+    [true, 'short', 0.225],
+    [false, 'short', 0.225],
+    [true, 'relaxed', 0.305],
+    [false, 'relaxed', 0.305],
+    [true, 'natural', 0.075],
+    [false, 'natural', 0.075],
+  ] as const)('scales %s engine %s pauses by speed', async (supportsSpeed, pauses, gap) => {
+    const { audio, player } = setup(2, 2, pauses);
+    player.start(fakeEngine({ supportsSpeed, seconds: 1 }).engine, 0);
+    await flush();
+    await flush();
+    const [first, second] = scheduledUnits(audio);
+    expect(second?.at).toBeCloseTo((first?.at ?? 0) + (first?.duration ?? 0) + gap, 6);
+    player.halt();
+  });
 
   it('streams a unit chunk by chunk when the engine has no speed option and speed is 1x', async () => {
     const { audio, player } = setup(1);
@@ -317,9 +322,9 @@ describe('Player scheduling', () => {
     await flush();
     audio.currentTime = 0.5;
     await flush();
-    audio.currentTime = 1.5;
+    audio.currentTime = 1.7;
     await flush();
-    audio.currentTime = 3.1;
+    audio.currentTime = 3.3;
     await flush();
     expect(events.sentence.mock.calls.map((call) => call[0])).toEqual([0, 1, 2]);
     player.halt();
@@ -500,7 +505,7 @@ describe('Player warm-up, release and underrun', () => {
     for (let i = 0; i < 4; i += 1) await flush();
     const plan = () => (player as unknown as { plan: { jobs: unknown[] } }).plan;
     expect(plan().jobs[0]).toBeDefined();
-    audio.currentTime = 4.5;
+    audio.currentTime = 5;
     await flush();
     expect(
       plan()

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { TtsEngine } from './engines/types';
 import { ReplayCache } from './replayCache';
-import { SynthQueue } from './synthQueue';
+import { jobKey, SynthQueue } from './synthQueue';
 
 type Call = { text: string; signal: AbortSignal | undefined };
 
@@ -191,4 +191,33 @@ describe('SynthQueue', () => {
     cache.set('b', { chunks: [new Float32Array(2)], sampleRate: 1 });
     expect(queue.cache.size).toBe(1);
   });
+});
+
+it('keeps natural audio unchanged and isolates its jobs and replay cache from trimmed audio', async () => {
+  const { engine, calls } = fakeEngine();
+  const lead = new Float32Array(2400);
+  const speech = new Float32Array(4800).fill(0.5);
+  const tail = new Float32Array(12000);
+  engine.stream = async function* (text, { signal }) {
+    calls.push({ text, signal });
+    yield lead;
+    yield speech;
+    yield tail;
+  };
+  const queue = new SynthQueue();
+  const natural = queue.request(engine, 'same text', '', 1, 0, false);
+  const trimmed = queue.request(engine, 'same text', '', 1, 0, true);
+  expect(natural).not.toBe(trimmed);
+  expect(jobKey(engine, '', 1, 'same text', false)).not.toBe(
+    jobKey(engine, '', 1, 'same text', true),
+  );
+  await settle();
+  expect(natural.done).toBe(true);
+  expect(trimmed.done).toBe(true);
+  expect(natural.chunks).toEqual([lead, speech, tail]);
+  expect(natural.heldSilence.size).toBe(0);
+  expect(trimmed.chunks.reduce((n, chunk) => n + chunk.length, 0)).toBe(6960);
+  const replay = queue.request(engine, 'same text', '', 1, 0, false);
+  expect(replay.chunks).toEqual([lead, speech, tail]);
+  expect(calls).toHaveLength(2);
 });

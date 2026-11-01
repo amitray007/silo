@@ -6,6 +6,7 @@ import {
   MIN_PENCIL_WPM,
   MIN_READER_SIZE,
   PENCIL_WPM_STEP,
+  READ_ALOUD_PAUSES,
   READ_ALOUD_SPEEDS,
   useHighlightPrefs,
   usePencilPrefs,
@@ -33,7 +34,7 @@ function Row({
   children,
 }: {
   label: string;
-  desc: string;
+  desc?: string;
   children: (labelId: string) => ReactNode;
 }) {
   const labelId = useId();
@@ -43,7 +44,7 @@ function Row({
         <div id={labelId} style={rowLabel}>
           {label}
         </div>
-        <div style={rowDesc}>{desc}</div>
+        {desc && <div style={rowDesc}>{desc}</div>}
       </div>
       {children(labelId)}
     </div>
@@ -200,6 +201,16 @@ function ReadAloudRows() {
             loading={voices === null}
             groups={voiceGroups(voices ?? [])}
             onChange={(voice) => update({ voice: [prefs.engine, voice] })}
+          />
+        )}
+      </Row>
+      <Row label="Pauses">
+        {(labelId) => (
+          <Segmented
+            labelId={labelId}
+            value={prefs.pauses}
+            options={READ_ALOUD_PAUSES}
+            onChange={(pauses) => update({ pauses })}
           />
         )}
       </Row>

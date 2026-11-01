@@ -1,3 +1,4 @@
+import type { ReadAloudPauses } from '../../../lib/readerPrefs';
 import type { TtsEngine } from './engines/types';
 import { ReplayCache } from './replayCache';
 import {
@@ -20,7 +21,7 @@ const NOW = -1;
 const WARM = 100;
 const WARM_UNITS = 2;
 
-type PlayerSettings = { rate: number; voice: string };
+type PlayerSettings = { rate: number; voice: string; pauses: ReadAloudPauses };
 
 export type PlayerEvents = {
   /** The sentence being spoken changed. */
@@ -94,12 +95,14 @@ export class Player {
   /** Start speaking at a sentence with a loaded engine. */
   start(engine: TtsEngine, from: number): void {
     this.press();
-    const units = buildUnits(this.deps.segments(), from);
+    const units = buildUnits(this.deps.segments(), from, this.deps.settings().pauses);
     // Warm-up work for these units is kept, so Play after a warm-up does not synthesize again.
-    const { rate, voice } = this.deps.settings();
+    const { rate, voice, pauses } = this.deps.settings();
     const speed = engine.supportsSpeed ? rate : 1;
     const keep = new Set(
-      units.slice(0, WARM_UNITS).map((u) => jobKey(engine, voice, speed, u.text)),
+      units
+        .slice(0, WARM_UNITS)
+        .map((u) => jobKey(engine, voice, speed, u.text, pauses !== 'natural')),
     );
     this.halt(true, keep);
     const token = this.generation;
@@ -119,10 +122,13 @@ export class Player {
 
   /** Synthesize the first units from a sentence now, so Play later is instant. */
   warm(engine: TtsEngine, from: number): void {
-    const { rate, voice } = this.deps.settings();
+    const { rate, voice, pauses } = this.deps.settings();
     const speed = engine.supportsSpeed ? rate : 1;
-    for (const unit of buildUnits(this.deps.segments(), from).slice(0, WARM_UNITS)) {
-      this.queue.request(engine, unit.text, voice, speed, WARM);
+    for (const unit of buildUnits(this.deps.segments(), from, this.deps.settings().pauses).slice(
+      0,
+      WARM_UNITS,
+    )) {
+      this.queue.request(engine, unit.text, voice, speed, WARM, pauses !== 'natural');
     }
   }
 
@@ -160,13 +166,14 @@ export class Player {
     const { engine } = this;
     const unit = this.plan.units[index];
     if (!engine || !unit) return;
-    const { rate, voice } = this.deps.settings();
+    const { rate, voice, pauses } = this.deps.settings();
     const job = this.queue.request(
       engine,
       unit.text,
       voice,
       engine.supportsSpeed ? rate : 1,
       priority,
+      pauses !== 'natural',
     );
     const token = this.generation;
     job.listeners.add(() => {

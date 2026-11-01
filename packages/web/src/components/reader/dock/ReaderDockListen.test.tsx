@@ -281,6 +281,7 @@ it('shows the download state with its percentage and size while the voice loads'
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   const status = await within(sheet).findByRole('status');
   expect(status.textContent).toContain('Downloading voice \u00b7 42%');
+  expect(screen.getAllByRole('radiogroup', { name: 'Pauses' })).toHaveLength(1);
   expect(status.textContent).toContain('4.2 / 10.0 MB');
   // Skeleton rows stand in for voices that have not loaded.
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice' }));
@@ -424,4 +425,28 @@ it('keeps Listen keys out of a focused text field', async () => {
   expect(space.defaultPrevented).toBe(false);
   expect(within(toolbar()).getByRole('button', { name: 'Pause' })).toBeDefined();
   field.remove();
+});
+
+it('renders the Pauses choices and keeps the selection for the next read', async () => {
+  const first = renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  const group = screen.getByRole('radiogroup', { name: 'Pauses' });
+  expect(
+    within(group)
+      .getAllByRole('radio')
+      .map((option) => option.textContent),
+  ).toEqual(['Short', 'Relaxed', 'Natural']);
+  expect(within(group).getByRole('radio', { name: 'Relaxed' }).getAttribute('aria-checked')).toBe(
+    'true',
+  );
+  fireEvent.click(within(group).getByRole('radio', { name: 'Natural' }));
+  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').pauses).toBe('natural');
+  first.unmount();
+  renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  expect(
+    within(screen.getByRole('radiogroup', { name: 'Pauses' }))
+      .getByRole('radio', { name: 'Natural' })
+      .getAttribute('aria-checked'),
+  ).toBe('true');
 });

@@ -183,15 +183,24 @@ const readAloudEngines = ['phonon', 'kokoro'] as const;
 export const READ_ALOUD_SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2, 2.5, 3] as const;
 
 export type ReadAloudEngine = (typeof readAloudEngines)[number];
+export const READ_ALOUD_PAUSES = [
+  { value: 'short', label: 'Short' },
+  { value: 'relaxed', label: 'Relaxed' },
+  { value: 'natural', label: 'Natural' },
+] as const;
+export type ReadAloudPauses = (typeof READ_ALOUD_PAUSES)[number]['value'];
+
 export type ReadAloudPrefs = {
   engine: ReadAloudEngine;
   /** The chosen voice per engine; an empty id is the engine's default voice. */
   voices: Record<ReadAloudEngine, string>;
   rate: number;
+  pauses: ReadAloudPauses;
 };
 
 export const readAloudPrefsDefaults: ReadAloudPrefs = {
   engine: 'phonon',
+  pauses: 'relaxed',
   voices: { phonon: '', kokoro: '' },
   rate: 1,
 };
@@ -212,6 +221,7 @@ function readAloudPrefsFrom(data: unknown): ReadAloudPrefs {
     engine: oneOf(readAloudEngines, data.engine, readAloudPrefsDefaults.engine),
     voices: { phonon: validVoice(voices.phonon), kokoro: validVoice(voices.kokoro) },
     rate: validRate(data.rate),
+    pauses: oneOf(['short', 'relaxed', 'natural'], data.pauses, readAloudPrefsDefaults.pauses),
   };
 }
 
