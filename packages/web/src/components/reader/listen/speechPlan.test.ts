@@ -11,7 +11,7 @@ const text = (value: string, parent = A, kind: 'text' | 'heading' = 'text') => (
 });
 
 describe('buildUnits', () => {
-  it('pauses 150 ms at a paragraph end and 250 ms after a heading', () => {
+  it('pauses 450 ms at a paragraph end and 600 ms after a heading', () => {
     const units = buildUnits(
       [
         text('A heading.', A, 'heading'),
@@ -19,7 +19,7 @@ describe('buildUnits', () => {
       ],
       0,
     );
-    expect(units.map((unit) => unit.pause)).toEqual([250, 150]);
+    expect(units.map((unit) => unit.pause)).toEqual([600, 450]);
   });
 
   it('merges adjacent short sentences of one paragraph up to 200 characters', () => {
@@ -27,12 +27,13 @@ describe('buildUnits', () => {
     expect(units).toHaveLength(1);
     expect(units[0]?.text).toBe('Short one. Short two. Short three.');
     expect(units[0]?.parts.map((part) => part.seg)).toEqual([0, 1, 2]);
-    expect(units[0]?.pause).toBe(150);
+    expect(units[0]?.pause).toBe(450);
   });
 
   it('does not merge two long sentences, or sentences of different blocks', () => {
     const long = 'x'.repeat(80);
-    expect(buildUnits([text(`${long}.`), text(`${long}!`)], 0)).toHaveLength(2);
+    const units = buildUnits([text(`${long}.`), text(`${long}!`)], 0);
+    expect(units.map((unit) => unit.pause)).toEqual([200, 450]);
     expect(buildUnits([text('Hi.', A), text('Yo.', B)], 0)).toHaveLength(2);
   });
 
@@ -58,7 +59,7 @@ describe('buildUnits', () => {
     const units = buildUnits([text(long)], 0);
     expect(units.length).toBeGreaterThan(1);
     expect(units.every((unit) => unit.text.length <= 300)).toBe(true);
-    expect(units.at(-1)?.pause).toBe(150);
+    expect(units.at(-1)?.pause).toBe(450);
     expect(units.slice(0, -1).every((unit) => unit.pause === 0)).toBe(true);
     expect(units.every((unit) => unit.parts[0]?.seg === 0)).toBe(true);
   });

@@ -212,9 +212,15 @@ export class Player {
     const unit = this.plan.units[index];
     if (!unit) return;
     const start = this.plan.unitStart[index] ?? this.cursor.nextTime;
-    this.timeline.push(...sentenceTimes(unit, start, duration));
-    this.cursor.nextTime += unit.pause / 1000;
+    this.timeline.push(...sentenceTimes(unit, start, duration).slice(1));
+    this.cursor.nextTime += unit.pause / 1000 / this.deps.settings().rate;
     this.cursor.unit = index + 1;
+  }
+
+  private beginUnit(index: number, at: number): void {
+    this.plan.unitStart[index] = at;
+    const first = this.plan.units[index]?.parts[0];
+    if (first) this.timeline.push({ at, seg: first.seg });
   }
 
   /** Schedule a unit's audio that is ready. Returns true when the unit is fully scheduled. */
@@ -224,13 +230,13 @@ export class Player {
       // Pitch-preserving speed needs the whole unit, so it does not stream.
       if (!job.done) return false;
       const pcm = this.whole(job, rate);
-      plan.unitStart[u] = this.schedule(pcm, job.sampleRate);
+      this.beginUnit(u, this.schedule(pcm, job.sampleRate));
       this.finishUnit(u, pcm.length / job.sampleRate);
       return true;
     }
     while ((plan.scheduled[u] ?? 0) < job.chunks.length) {
       const at = this.schedule(job.chunks[plan.scheduled[u] ?? 0] as Float32Array, job.sampleRate);
-      if (!plan.scheduled[u]) plan.unitStart[u] = at;
+      if (!plan.scheduled[u]) this.beginUnit(u, at);
       plan.scheduled[u] = (plan.scheduled[u] ?? 0) + 1;
     }
     if (!job.done || plan.scheduled[u] !== job.chunks.length) return false;

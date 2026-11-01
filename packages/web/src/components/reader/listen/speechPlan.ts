@@ -11,8 +11,9 @@ export type Unit = {
 
 type Planned = Pick<Segment, 'text' | 'block' | 'kind'>;
 
-const HEADING_PAUSE_MS = 250;
-const BLOCK_PAUSE_MS = 150;
+const HEADING_PAUSE_MS = 600;
+const BLOCK_PAUSE_MS = 450;
+const SENTENCE_PAUSE_MS = 200;
 /** Adjacent sentences merge while either is shorter than this. */
 const SHORT = 60;
 const MERGE_MAX = 200;
@@ -50,7 +51,7 @@ function pauseAfter(segments: readonly Planned[], at: number): number {
   const segment = segments[at] as Planned;
   const next = segments[at + 1];
   if (segment.kind === 'heading') return HEADING_PAUSE_MS;
-  return !next || next.block !== segment.block ? BLOCK_PAUSE_MS : 0;
+  return !next || next.block !== segment.block ? BLOCK_PAUSE_MS : SENTENCE_PAUSE_MS;
 }
 
 function canMerge(unit: Unit, last: Planned, candidate: Planned): boolean {

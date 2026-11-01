@@ -1,5 +1,6 @@
 import type { TtsEngine } from './engines/types';
 import { type CachedAudio, ReplayCache } from './replayCache';
+import { EdgeTrimmer } from './trim';
 
 /** Synthesized audio for one unit. Chunks arrive while the unit is still being generated. */
 export type Job = {
@@ -128,17 +129,22 @@ export class SynthQueue {
   private async synthesize(next: Queued, abort: AbortController): Promise<void> {
     const { job } = next;
     try {
+      let trimmer: EdgeTrimmer | undefined;
       for await (const chunk of next.engine.stream(next.text, {
         voice: next.voice,
         speed: next.speed,
         signal: abort.signal,
       })) {
         if (abort.signal.aborted) break;
-        job.chunks.push(chunk);
         job.sampleRate = next.engine.sampleRate;
+        trimmer ??= new EdgeTrimmer(job.sampleRate);
+        job.chunks.push(...trimmer.push(chunk));
         for (const listener of job.listeners) listener();
       }
       if (!abort.signal.aborted) {
+        trimmer ??= new EdgeTrimmer(next.engine.sampleRate);
+        job.sampleRate = next.engine.sampleRate;
+        job.chunks.push(...trimmer.finish());
         job.done = true;
         this.cache.set(job.key, { chunks: job.chunks, sampleRate: job.sampleRate });
       }

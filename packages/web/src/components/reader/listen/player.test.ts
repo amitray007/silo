@@ -101,6 +101,18 @@ function setup(segmentCount = 6, rate = 1) {
   return { audio, events, player, settings, advance: (ms: number) => (clock += ms) };
 }
 
+/** Group contiguous streaming buffers into the audible unit they form. */
+function scheduledUnits(audio: FakeAudio) {
+  const units: { at: number; duration: number }[] = [];
+  for (const start of audio.starts) {
+    const last = units.at(-1);
+    if (last && Math.abs(last.at + last.duration - start.at) < 1e-6)
+      last.duration += start.duration;
+    else units.push({ ...start });
+  }
+  return units;
+}
+
 const flush = () => vi.advanceTimersByTimeAsync(40);
 
 beforeEach(() => vi.useFakeTimers());
@@ -113,13 +125,26 @@ describe('Player scheduling', () => {
     player.start(engine, 0);
     await flush();
     await flush();
-    expect(audio.starts).toHaveLength(3);
-    const [a, b, c] = audio.starts;
-    // Each unit ends a paragraph, so 150 ms of silence follows it.
-    expect(b?.at).toBeCloseTo((a?.at ?? 0) + 1 + 0.15, 6);
-    expect(c?.at).toBeCloseTo((b?.at ?? 0) + 1 + 0.15, 6);
+    expect(scheduledUnits(audio)).toHaveLength(3);
+    const [a, b, c] = scheduledUnits(audio);
+    // Each unit ends a paragraph, so 450 ms of silence follows it.
+    expect(b?.at).toBeCloseTo((a?.at ?? 0) + 1 + 0.45, 6);
+    expect(c?.at).toBeCloseTo((b?.at ?? 0) + 1 + 0.45, 6);
     player.halt();
   });
+
+  it.each([true, false])(
+    'scales scheduled pauses by speed (native speed: %s)',
+    async (supportsSpeed) => {
+      const { audio, player } = setup(2, 2);
+      player.start(fakeEngine({ supportsSpeed, seconds: 1 }).engine, 0);
+      await flush();
+      await flush();
+      const [first, second] = scheduledUnits(audio);
+      expect(second?.at).toBeCloseTo((first?.at ?? 0) + (first?.duration ?? 0) + 0.225, 6);
+      player.halt();
+    },
+  );
 
   it('streams a unit chunk by chunk when the engine has no speed option and speed is 1x', async () => {
     const { audio, player } = setup(1);
@@ -127,11 +152,37 @@ describe('Player scheduling', () => {
     player.start(engine, 0);
     await flush();
     await flush();
-    expect(audio.starts).toHaveLength(10);
+    expect(audio.starts.length).toBeGreaterThan(1);
+    expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.8, 6);
     for (let i = 1; i < audio.starts.length; i += 1) {
       const previous = audio.starts[i - 1];
       expect(audio.starts[i]?.at).toBeCloseTo((previous?.at ?? 0) + (previous?.duration ?? 0), 6);
     }
+    player.halt();
+  });
+
+  it('highlights streaming speech immediately and schedules the held tail without a gap', async () => {
+    const { audio, player, events } = setup(1);
+    const { engine } = fakeEngine({ supportsSpeed: false });
+    let finish: (() => void) | undefined;
+    engine.stream = async function* () {
+      yield new Float32Array(2400);
+      yield new Float32Array(4800).fill(0.5);
+      yield new Float32Array(12000);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    };
+    player.start(engine, 0);
+    await flush();
+    expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.285, 6);
+    audio.currentTime = 0.05;
+    await flush();
+    expect(events.sentence).toHaveBeenCalledWith(0);
+    finish?.();
+    await flush();
+    expect(scheduledUnits(audio)).toHaveLength(1);
+    expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.29, 6);
     player.halt();
   });
 
@@ -168,7 +219,7 @@ describe('Player scheduling', () => {
     await flush();
     audio.currentTime = 1.5;
     await flush();
-    audio.currentTime = 2.8;
+    audio.currentTime = 3.1;
     await flush();
     expect(events.sentence.mock.calls.map((call) => call[0])).toEqual([0, 1, 2]);
     player.halt();
@@ -349,7 +400,7 @@ describe('Player warm-up, release and underrun', () => {
     for (let i = 0; i < 4; i += 1) await flush();
     const plan = () => (player as unknown as { plan: { jobs: unknown[] } }).plan;
     expect(plan().jobs[0]).toBeDefined();
-    audio.currentTime = 3.5;
+    audio.currentTime = 4.5;
     await flush();
     expect(
       plan()

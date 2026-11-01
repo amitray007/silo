@@ -95,6 +95,29 @@ describe('SynthQueue', () => {
     expect(calls).toHaveLength(1);
   });
 
+  it('streams trimmed speech before completion, flushes the kept tail once, and replays it unchanged', async () => {
+    const { engine } = fakeEngine(false);
+    let resume: (() => void) | undefined;
+    engine.stream = async function* () {
+      yield new Float32Array(2400); // 100 ms lead.
+      yield new Float32Array(4800).fill(0.5); // 200 ms speech.
+      yield new Float32Array(12000); // Excess silence is held until completion.
+      await new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+    };
+    const queue = new SynthQueue();
+    const job = queue.request(engine, 'trim me', '', 1, 0);
+    await settle();
+    expect(job.done).toBe(false);
+    expect(job.chunks.reduce((n, c) => n + c.length, 0)).toBe(6840); // 285 ms, only the final 5 ms fade waits.
+    resume?.();
+    await settle();
+    expect(job.done).toBe(true);
+    expect(job.chunks.reduce((n, c) => n + c.length, 0)).toBe(6960); // 30 + 200 + 60 ms.
+    expect(queue.request(engine, 'trim me', '', 1, 0).chunks).toEqual(job.chunks);
+  });
+
   it('keys the cache by voice and speed', async () => {
     const { engine, calls, finish } = fakeEngine();
     const queue = new SynthQueue();
