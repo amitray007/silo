@@ -543,3 +543,73 @@ another language (Listen disabled, no "Listen from here"), offline after caching
 request to a third-party host. Then
 compare the dock player and Listen sheet side by side with prototype variant B
 and fix every unintended difference.
+
+## Slice 5: Reader settings
+
+### Why
+
+The owner wants reader choices to stick everywhere: a voice, speed or type
+setting changed in one article should be the default for every article, it
+should be editable from Settings, and voices should be downloadable from
+Settings before the first Listen. Engine names should not carry model sizes.
+
+### Decisions
+
+- **One synced setting.** All reader preferences move into one server setting,
+  `reader`, in the existing settings store (`packages/core/src/settings/schema.ts`
+  allowlist, `GET`/`PATCH /api/settings`). It holds `type` (font, size,
+  leading, theme), `width`, `pencil` (style, wpm), `highlight` (default
+  colour) and `readAloud` (engine, voice per engine, rate). The Zod schema
+  validates each field with per-field defaults, the same bounds the browser
+  stores use today.
+- **Instant first paint.** The browser keeps a local mirror under the existing
+  keys, so a reload paints from it before `/api/settings` answers. The server
+  value wins once it arrives. A change in the Reader or in Settings updates
+  the mirror and PATCHes the server (optimistic, rolled back on error,
+  debounced for steppers).
+- **Migration.** When the server has no `reader` value yet and the browser has
+  local values, the first load uploads them once, so nobody loses their
+  current settings.
+- **No MCP tool.** These are presentation settings with no agent use; this
+  follows the existing settings surface.
+- **Engine names.** The UI says "Phonon" and "Kokoro" everywhere. The Listen
+  sheet's engine list shows a short muted trait next to each name ("Fast" and
+  "More voices"). Model sizes and details appear only in Settings.
+
+### Settings → Reader tab
+
+A new tab in the Settings modal, built from the existing `SettingsTabs` rows
+(`rowStyles`, `SettingsSelect`, `ToggleSwitch`) plus the slice 1 `Segmented`
+and `Stepper`:
+
+- **Type**: font, size, line height, width, theme.
+- **Pencil**: style, speed.
+- **Highlights**: default colour.
+- **Read aloud**: engine, voice (grouped by language, as in the sheet), speed.
+- **Voices**: one row per engine. Name, a muted line with language, download
+  size and what it is good for (for example "English · 62 MB · Fast, streams
+  as it speaks"), and a status: Not downloaded, Downloading 42% (bar and
+  loading-dev spinner), or Downloaded. Actions: Download, Cancel while
+  downloading, and Remove. Kokoro shows the size for this browser's device
+  (fp32 on WebGPU, q8 otherwise). "Downloaded" means the files are in this
+  browser's cache, checked against the manifest URLs; Remove deletes exactly
+  those cache entries. Downloading from Settings uses the same engine load
+  path as Listen and then releases the engine, so the cache is identical.
+
+### Tests
+
+Core and API: schema bounds and defaults, a partial patch keeps other fields,
+an unknown field is rejected. Web: mirror hydration and server-wins, the
+one-time upload, rollback on a failed PATCH, the Reader and Settings staying
+in sync both ways, the Settings tab controls, and the voices rows (status
+detection, download progress, cancel, remove) with mocked engines and Cache
+API.
+
+### QA
+
+Change speed and voice in one article, open another: it keeps them; reload:
+it keeps them; open Settings: it shows them. Change them in Settings: the
+Reader follows. A second browser profile picks up the same settings. Download
+a voice from Settings, then press Listen: no download. Remove it: the next
+Listen downloads again. No engine name shows a size outside Settings. Light,
+dark and sepia; 1440 and 390.
