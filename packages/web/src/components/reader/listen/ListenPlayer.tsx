@@ -83,7 +83,7 @@ export function ListenPlayer({
       <button
         type="button"
         className="silo-listen-text"
-        aria-label="Speed"
+        aria-label={`Speed ${listen.rate}x`}
         title="Speed (+ / -)"
         onClick={() => listen.setRate(nextSpeed(listen.rate))}
       >

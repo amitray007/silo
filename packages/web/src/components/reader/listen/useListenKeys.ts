@@ -13,7 +13,8 @@ function command(event: KeyboardEvent, listen: ReadAloudApi): boolean {
       return true;
     case 'ArrowRight':
     case 'ArrowLeft':
-      if (target?.closest(OWN_ARROWS)) return false;
+      // A modified arrow belongs to the browser or the page (selection, history), not to Listen.
+      if (event.shiftKey || target?.closest(OWN_ARROWS)) return false;
       listen.jump(listen.index + (event.key === 'ArrowRight' ? 1 : -1));
       return true;
     case '+':

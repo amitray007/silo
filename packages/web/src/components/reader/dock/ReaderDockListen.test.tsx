@@ -157,12 +157,12 @@ it('plays and pauses on Space, and changes speed on + and -', async () => {
 
   fireEvent.keyDown(document.body, { key: '+' });
   await waitFor(() =>
-    expect(within(toolbar()).getByRole('button', { name: 'Speed' }).textContent).toBe('1.25x'),
+    expect(within(toolbar()).getByRole('button', { name: /^Speed/ }).textContent).toBe('1.25x'),
   );
   fireEvent.keyDown(document.body, { key: '-' });
   fireEvent.keyDown(document.body, { key: '-' });
   await waitFor(() =>
-    expect(within(toolbar()).getByRole('button', { name: 'Speed' }).textContent).toBe('0.75x'),
+    expect(within(toolbar()).getByRole('button', { name: /^Speed/ }).textContent).toBe('0.75x'),
   );
   expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').rate).toBe(0.75);
 });
@@ -331,4 +331,86 @@ it('switches the engine while playing and carries on with the new one', async ()
   fireEvent.click(await screen.findByRole('option', { name: /Kokoro \(82M\)/ }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
   expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro');
+});
+
+it('names the speed button with its visible value', async () => {
+  renderArticle(ENGLISH);
+  await listen();
+  expect(within(toolbar()).getByRole('button', { name: 'Speed 1x' }).textContent).toBe('1x');
+  fireEvent.keyDown(document.body, { key: '+' });
+  expect(await within(toolbar()).findByRole('button', { name: 'Speed 1.25x' })).toBeDefined();
+});
+
+it('ignores arrows held with Shift, Alt, Meta or Ctrl', async () => {
+  renderArticle(ENGLISH);
+  await listen();
+  const before = toolbar().textContent;
+  for (const mod of [{ shiftKey: true }, { altKey: true }, { metaKey: true }, { ctrlKey: true }]) {
+    fireEvent.keyDown(document.body, { key: 'ArrowRight', ...mod });
+  }
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  expect(toolbar().textContent).toBe(before);
+  fireEvent.keyDown(document.body, { key: 'ArrowRight' });
+  await waitFor(() => expect(toolbar().textContent).not.toBe(before));
+});
+
+it('turns the pencil off when Listen opens, and leaves it off', async () => {
+  renderArticle(ENGLISH);
+  const pencil = await screen.findByRole('button', { name: 'Pencil' });
+  fireEvent.click(pencil);
+  expect(pencil.getAttribute('aria-pressed')).toBe('true');
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  fireEvent.click(await within(toolbar()).findByRole('button', { name: 'Play' }));
+  await within(toolbar()).findByRole('button', { name: 'Pause' });
+  // The player replaced the tools; closing it shows the pencil off.
+  fireEvent.click(screen.getByRole('button', { name: 'Stop reading aloud' }));
+  expect((await screen.findByRole('button', { name: 'Pencil' })).getAttribute('aria-pressed')).toBe(
+    'false',
+  );
+});
+
+it('moves focus to Play when the dock becomes the player, and back to Listen when it closes', async () => {
+  renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  const play = await within(toolbar()).findByRole('button', { name: 'Play' });
+  await waitFor(() => expect(document.activeElement).toBe(play));
+  fireEvent.click(screen.getByRole('button', { name: 'Stop reading aloud' }));
+  const back = await screen.findByRole('button', { name: 'Listen' });
+  await waitFor(() => expect(document.activeElement).toBe(back));
+});
+
+it('does not take focus on first render', async () => {
+  renderArticle(ENGLISH);
+  await screen.findByRole('button', { name: 'Listen' });
+  expect(document.activeElement).toBe(document.body);
+});
+
+it('leaves Escape to the reader once the sheet is closed, and the sheet takes it first', async () => {
+  const outer = vi.fn();
+  document.addEventListener('keydown', outer);
+  renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  const sheet = await screen.findByRole('dialog', { name: 'Listen' });
+  fireEvent.keyDown(sheet, { key: 'Escape' });
+  expect(outer).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Listen' })).toBeNull());
+  // Listen itself does not swallow Escape: with nothing else open it reaches the reader.
+  fireEvent.keyDown(document.body, { key: 'Escape' });
+  expect(outer).toHaveBeenCalledTimes(1);
+  document.removeEventListener('keydown', outer);
+});
+
+it('keeps Listen keys out of a focused text field', async () => {
+  renderArticle(ENGLISH);
+  await listen();
+  const field = document.createElement('input');
+  document.body.append(field);
+  field.focus();
+  const space = new KeyboardEvent('keydown', { key: ' ', bubbles: true, cancelable: true });
+  act(() => {
+    field.dispatchEvent(space);
+  });
+  expect(space.defaultPrevented).toBe(false);
+  expect(within(toolbar()).getByRole('button', { name: 'Pause' })).toBeDefined();
+  field.remove();
 });

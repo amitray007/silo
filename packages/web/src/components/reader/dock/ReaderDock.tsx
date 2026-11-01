@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useId,
+  useRef,
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -179,6 +180,7 @@ function DockButton({
     <button
       type="button"
       className="silo-reader-dockbtn"
+      data-tool={tool.id}
       title={unavailable ? tool.unavailable?.title : tool.title}
       aria-haspopup={tool.press ? undefined : 'dialog'}
       aria-expanded={tool.press ? undefined : open}
@@ -299,6 +301,16 @@ export function ReaderDock({
   useEffect(() => {
     if (openId === 'listen') warmListen();
   }, [openId, warmListen]);
+  // Focus follows the dock as it morphs: to Play when the player opens, back to Listen when it
+  // closes. The first render does neither.
+  const pill = useRef<HTMLDivElement>(null);
+  const wasListening = useRef(false);
+  useEffect(() => {
+    if (listening === wasListening.current) return;
+    wasListening.current = listening;
+    const target = listening ? '.silo-listen-play' : '[data-tool="listen"]';
+    pill.current?.querySelector<HTMLElement>(target)?.focus({ preventScroll: true });
+  }, [listening]);
   // Stopping Listen closes its sheet with it.
   useEffect(() => {
     if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
@@ -338,6 +350,7 @@ export function ReaderDock({
       />
       <div className="silo-reader-dock">
         <div
+          ref={pill}
           className="silo-reader-dock-pill"
           data-mode={listen.active ? 'player' : 'tools'}
           role="toolbar"

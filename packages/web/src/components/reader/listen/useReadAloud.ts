@@ -9,6 +9,25 @@ import { buildSegments, type Segment, segmentIndexAt } from './segments';
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
 
+/** One engine's load: where it is, how far, what failed, and its voices once it is ready. */
+type Load = {
+  status: Status;
+  progress: number | null;
+  bytes: { loaded: number; total: number };
+  error: string;
+  voices: Voice[];
+};
+const IDLE: Load = {
+  status: 'idle',
+  progress: null,
+  bytes: { loaded: 0, total: 0 },
+  error: '',
+  voices: [],
+};
+
+/** Playback that stays in a hidden tab this long is paused. */
+const HIDDEN_PAUSE_MS = 2 * 60 * 1000;
+
 export type SpeechStats = { loadMs?: number; firstAudioMs?: number; device?: string };
 
 /** The sentence stays this far from the pane's edges while it is read. */
@@ -46,11 +65,13 @@ export function useReadAloud({
   const [buffering, setBuffering] = useState(false);
   const [index, setIndex] = useState(0);
   const [segments, setSegments] = useState<Segment[]>([]);
-  const [voices, setVoices] = useState<Voice[]>([]);
-  const [status, setStatus] = useState<Status>('idle');
-  const [progress, setProgress] = useState<number | null>(null);
-  const [bytes, setBytes] = useState({ loaded: 0, total: 0 });
-  const [error, setError] = useState('');
+  // Each engine keeps its own download, so switching to one that is still loading shows it.
+  const [loads, setLoads] = useState<Record<EngineId, Load>>({ phonon: IDLE, kokoro: IDLE });
+  const patch = useCallback(
+    (id: EngineId, change: Partial<Load>) =>
+      setLoads((previous) => ({ ...previous, [id]: { ...previous[id], ...change } })),
+    [],
+  );
   const [stats, setStats] = useState<SpeechStats>({});
 
   const english = useMemo(
@@ -66,6 +87,7 @@ export function useReadAloud({
   );
 
   const engineId: EngineId = prefs.engine;
+  const { status, progress, bytes, error, voices } = loads[engineId];
   const voiceId = prefs.voices[engineId];
   const rate = prefs.rate;
 
@@ -75,6 +97,9 @@ export function useReadAloud({
 
   const list = useRef<Segment[]>([]);
   const engines = useRef(new Map<EngineId, TtsEngine>());
+  /** Engines whose load has started and not yet finished. */
+  const building = useRef(new Map<EngineId, TtsEngine>());
+  const disposed = useRef(false);
   const loading = useRef(new Map<EngineId, Promise<TtsEngine>>());
   const context = useRef<AudioContext>(undefined);
   const begun = useRef(false);
@@ -88,12 +113,24 @@ export function useReadAloud({
     if (segment && pane) scrollToSentence(pane, segment.range);
   }, []);
 
+  const pauseRef = useRef<() => void>(() => {});
+  /** The one audio device. If it is suspended or interrupted while playing, playback pauses. */
+  const audioContext = useCallback((): AudioContext => {
+    if (!context.current) {
+      const created = new AudioContext();
+      created.onstatechange = () => {
+        if (created.state !== 'running' && live.current.playing) pauseRef.current();
+      };
+      context.current = created;
+    }
+    return context.current;
+  }, []);
+
   const player = useMemo(
     () =>
       new Player({
         context: () => {
-          context.current ??= new AudioContext();
-          return context.current;
+          return audioContext();
         },
         segments: () => list.current,
         settings: () => ({ rate: live.current.rate, voice: live.current.voiceId }),
@@ -109,14 +146,13 @@ export function useReadAloud({
             mark(undefined);
           },
           failed: (message) => {
-            setStatus('error');
-            setError(message);
+            patch(live.current.engineId, { status: 'error', error: message });
             setPlaying(false);
           },
           firstAudio: (ms) => setStats((previous) => ({ ...previous, firstAudioMs: ms })),
         },
       }),
-    [mark],
+    [mark, audioContext, patch],
   );
 
   const ensure = useCallback((): Segment[] => {
@@ -151,49 +187,50 @@ export function useReadAloud({
     return () => prose.removeEventListener('mousedown', remember);
   }, [prose]);
 
-  const loadEngine = useCallback((id: EngineId): Promise<TtsEngine> => {
-    const ready = engines.current.get(id);
-    if (ready) return Promise.resolve(ready);
-    const pending = loading.current.get(id);
-    if (pending) return pending;
-    const engine = createEngine(id);
-    const started = performance.now();
-    setStatus('loading');
-    setProgress(null);
-    setBytes({ loaded: 0, total: 0 });
-    setError('');
-    // Ask the browser to keep the cached model.
-    void navigator.storage?.persist?.();
-    const promise = engine
-      .load((percent, loaded, total) => {
-        setProgress(percent);
-        setBytes({ loaded, total });
-      })
-      .then(() => {
-        engines.current.set(id, engine);
-        if (live.current.engineId === id) {
-          setStatus('ready');
-          setVoices(engine.voices());
-        }
-        setStats((previous) => ({
-          ...previous,
-          loadMs: Math.round(performance.now() - started),
-          device: engine.device,
-        }));
-        return engine;
-      })
-      .catch((reason: unknown) => {
-        loading.current.delete(id);
-        engine.dispose();
-        if (live.current.engineId === id) {
-          setStatus('error');
-          setError(messageOf(reason));
-        }
-        throw reason;
-      });
-    loading.current.set(id, promise);
-    return promise;
-  }, []);
+  const loadEngine = useCallback(
+    (id: EngineId): Promise<TtsEngine> => {
+      const ready = engines.current.get(id);
+      if (ready) return Promise.resolve(ready);
+      const pending = loading.current.get(id);
+      if (pending) return pending;
+      const engine = createEngine(id);
+      building.current.set(id, engine);
+      const started = performance.now();
+      patch(id, { status: 'loading', progress: null, bytes: { loaded: 0, total: 0 }, error: '' });
+      // Ask the browser to keep the cached model.
+      void navigator.storage?.persist?.();
+      const promise = engine
+        .load((percent, loaded, total) => {
+          if (!disposed.current) patch(id, { progress: percent, bytes: { loaded, total } });
+        })
+        .then(() => {
+          building.current.delete(id);
+          if (disposed.current) {
+            // The article closed while the model loaded: free what finished late.
+            engine.dispose();
+            throw new Error('The voice model was closed while it loaded');
+          }
+          engines.current.set(id, engine);
+          patch(id, { status: 'ready', voices: engine.voices() });
+          setStats((previous) => ({
+            ...previous,
+            loadMs: Math.round(performance.now() - started),
+            device: engine.device,
+          }));
+          return engine;
+        })
+        .catch((reason: unknown) => {
+          building.current.delete(id);
+          loading.current.delete(id);
+          engine.dispose();
+          if (!disposed.current) patch(id, { status: 'error', error: messageOf(reason) });
+          throw reason;
+        });
+      loading.current.set(id, promise);
+      return promise;
+    },
+    [patch],
+  );
 
   const firstVisible = useCallback((): number => {
     const pane = live.current.scroll;
@@ -219,8 +256,7 @@ export function useReadAloud({
       setIndex(from);
       mark(sentences[from]);
       // Created inside the press, so the browser lets it play.
-      context.current ??= new AudioContext();
-      void context.current.resume();
+      void audioContext().resume();
       let engine: TtsEngine;
       try {
         engine = await loadEngine(live.current.engineId);
@@ -230,7 +266,7 @@ export function useReadAloud({
       }
       if (token === run.current) player.start(engine, from);
     },
-    [player, ensure, mark, loadEngine],
+    [player, ensure, mark, loadEngine, audioContext],
   );
 
   /** Load the model and synthesize the first sentences, so Play is instant. */
@@ -261,6 +297,8 @@ export function useReadAloud({
     setPlaying(false);
     setBuffering(false);
   }, [player]);
+
+  pauseRef.current = pause;
 
   const stop = useCallback(() => {
     run.current += 1;
@@ -328,10 +366,6 @@ export function useReadAloud({
       update({ engine: id });
       live.current.engineId = id;
       live.current.voiceId = prefs.voices[id];
-      const ready = engines.current.get(id);
-      setVoices(ready ? ready.voices() : []);
-      setStatus(ready ? 'ready' : 'idle');
-      setError('');
       if (wasPlaying) void startAt(live.current.index);
       else {
         setPlaying(false);
@@ -357,8 +391,8 @@ export function useReadAloud({
     setActive(true);
     // Opening the audio device takes a moment (about 250 ms measured); do it on this press, so
     // Play does not wait for it.
-    context.current ??= new AudioContext();
-  }, [ensure]);
+    audioContext();
+  }, [ensure, audioContext]);
 
   // A voice the loaded engine does not have falls back to its default.
   useEffect(() => {
@@ -373,16 +407,40 @@ export function useReadAloud({
   }, [status, voiceId, voices, engineId, update]);
 
   useEffect(() => {
+    disposed.current = false;
     const map = engines.current;
+    const unfinished = building.current;
     return () => {
+      disposed.current = true;
       run.current += 1;
       player.halt();
       void context.current?.close();
+      context.current = undefined;
       for (const engine of map.values()) engine.dispose();
       map.clear();
+      // A load still running when the article closes is cancelled; if it finishes anyway,
+      // `loadEngine` frees it.
+      for (const engine of unfinished.values()) engine.dispose();
+      unfinished.clear();
+      loading.current.clear();
       paintSpeaking(null);
     };
   }, [player]);
+
+  // A tab that stays hidden pauses, and so does a suspended or interrupted audio device, so
+  // Play resumes cleanly from the same sentence instead of the UI claiming it is playing.
+  useEffect(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const onVisibility = () => {
+      clearTimeout(timer);
+      if (document.hidden && live.current.playing) timer = setTimeout(pause, HIDDEN_PAUSE_MS);
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [pause]);
 
   return {
     english,
@@ -418,8 +476,7 @@ export function useReadAloud({
     startHere,
     warm: warmUp,
     retry: () => {
-      setStatus('idle');
-      setError('');
+      patch(live.current.engineId, { status: 'idle', error: '' });
       play();
     },
   };
