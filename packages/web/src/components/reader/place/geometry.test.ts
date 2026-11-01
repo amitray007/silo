@@ -1,7 +1,35 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { dialClip, withinFirstLine } from './geometry';
+import { dialClip, ribbonPosition, withinFirstLine } from './geometry';
 
 afterEach(() => vi.restoreAllMocks());
+
+it('keeps frame-relative coordinates unchanged when the whole column moves', () => {
+  const frame = document.createElement('div');
+  const paragraph = document.createElement('p');
+  paragraph.style.cssText = 'line-height:28px;padding:10px 4px;border:0px';
+  let x = 0;
+  let y = 0;
+  vi.spyOn(frame, 'getBoundingClientRect').mockImplementation(
+    () => new DOMRect(100 + x, 50 + y, 320, 600),
+  );
+  vi.spyOn(paragraph, 'getBoundingClientRect').mockImplementation(
+    () => new DOMRect(110 + x, 80 + y, 300, 60),
+  );
+  expect(ribbonPosition(paragraph, frame)).toMatchObject({
+    top: 42,
+    left: -16,
+    row: 20,
+    width: 292,
+  });
+  x = -122;
+  y = 83;
+  expect(ribbonPosition(paragraph, frame)).toMatchObject({
+    top: 42,
+    left: -16,
+    row: 20,
+    width: 292,
+  });
+});
 
 it('hits only actual fragments on the first line, including nested inline fragments', () => {
   const paragraph = document.createElement('p');

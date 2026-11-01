@@ -8,7 +8,13 @@ import { SavedPlace } from './SavedPlace';
 let panel: HTMLElement;
 let scroll: HTMLElement;
 let prose: HTMLElement;
+let frame: HTMLElement;
 let tops: number[];
+let observers: {
+  elements: Set<Element>;
+  notify: () => void;
+  disconnect: ReturnType<typeof vi.fn>;
+}[];
 let save: ReturnType<typeof vi.fn<(position: number | null) => Promise<void>>>;
 let pencil: PencilApi;
 let listen: ReadAloudApi;
@@ -23,11 +29,32 @@ beforeEach(() => {
   panel = document.createElement('div');
   scroll = document.createElement('div');
   prose = document.createElement('div');
+  frame = document.createElement('div');
+  frame.className = 'silo-prose-frame';
   panel.append(scroll);
-  scroll.append(prose);
+  scroll.append(frame);
+  frame.append(prose);
   document.body.append(panel);
   prose.innerHTML = '<p>One two three four.</p><p>Five six seven eight.</p>';
   tops = [100, 300];
+  observers = [];
+  vi.stubGlobal(
+    'ResizeObserver',
+    class {
+      elements = new Set<Element>();
+      disconnect = vi.fn();
+      constructor(callback: ResizeObserverCallback) {
+        observers.push({
+          elements: this.elements,
+          notify: () => callback([], this as unknown as ResizeObserver),
+          disconnect: this.disconnect,
+        });
+      }
+      observe(element: Element) {
+        this.elements.add(element);
+      }
+    },
+  );
   for (const [i, p] of [...prose.children].entries()) {
     (p as HTMLElement).style.cssText = 'line-height:28px;padding:0px;border:0px;';
     vi.spyOn(p, 'getBoundingClientRect').mockImplementation(() => rect(tops[i] ?? 0));
@@ -71,6 +98,60 @@ function mount(position: ReadingPositionJson | null = saved) {
     />,
   );
 }
+
+it('hosts the mark beside the prose and paints a paragraph resize synchronously', () => {
+  const view = mount();
+  const gutter = frame.querySelector<HTMLElement>('.silo-place-ribbon-gutter');
+  const paragraph = prose.children[1];
+  expect(gutter?.parentElement).toBe(frame);
+  expect(gutter?.style.top).toBe('302px');
+  expect(gutter?.style.left).toBe('2px');
+  const observer = observers.find((item) => paragraph && item.elements.has(paragraph));
+  expect(observer?.elements.has(frame)).toBe(true);
+  expect(observer?.elements.has(prose)).toBe(true);
+  tops[1] = 380;
+  observer?.notify();
+  // No act, timer, or animation frame is needed to paint a ResizeObserver measurement.
+  expect(gutter?.style.top).toBe('382px');
+  expect(gutter?.style.getPropertyValue('--silo-place-row-top')).toBe('-22px');
+  view.unmount();
+  expect(observer?.disconnect).toHaveBeenCalledOnce();
+});
+
+it('moves the ribbon in the same callback that opens the paragraph gap', () => {
+  tops[1] = 130;
+  vi.stubGlobal('matchMedia', () => ({ matches: false }));
+  vi.spyOn(performance, 'now').mockReturnValue(0);
+  const frames = new Map<number, FrameRequestCallback>();
+  let next = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frames.set(++next, callback);
+    return next;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (id: number) => frames.delete(id));
+  mount();
+  const gutter = frame.querySelector<HTMLElement>('.silo-place-ribbon-gutter');
+  expect(gutter?.style.top).toBe('132px');
+  const tick = frames.get(1);
+  expect(tick).toBeDefined();
+  tick?.(100);
+  expect((prose.children[1] as HTMLElement).style.paddingTop).toBe('33.25px');
+  expect(gutter?.style.top).toBe('165.25px');
+});
+
+it('updates the dial window during the scroll event, without scheduling another frame', () => {
+  const cluster = document.createElement('div');
+  cluster.className = 'silo-outline-cluster';
+  panel.append(cluster);
+  vi.spyOn(cluster, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 100, 52, 300));
+  mount();
+  const ribbon = frame.querySelector('.silo-place-ribbon');
+  expect(ribbon).not.toBeNull();
+  if (!ribbon) return;
+  vi.spyOn(ribbon, 'getBoundingClientRect').mockReturnValue(new DOMRect(2, 188, 24, 24));
+  fireEvent.scroll(scroll);
+  expect(panel.style.getPropertyValue('--silo-ribbon-clip')).toContain('M 0 77 H 52 V 123 H 0 Z');
+});
 
 it('B saves the paragraph nearest the top; text entries and modified keys do not write', () => {
   mount(null);

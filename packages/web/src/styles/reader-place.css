@@ -109,7 +109,9 @@
 }
 .silo-place-elbow {
   position: absolute;
-  left: 12px;
+  left: var(--silo-place-elbow-x);
+  top: var(--silo-place-elbow-y);
+  height: var(--silo-place-elbow-height);
   width: 14px;
   background:
     linear-gradient(var(--silo-place-line), var(--silo-place-line)) left top / 100%
@@ -125,6 +127,8 @@
 }
 .silo-place-ribbon-row {
   position: absolute;
+  top: var(--silo-place-row-top);
+  width: var(--silo-place-row-width);
   left: 30px;
   display: flex;
   align-items: center;

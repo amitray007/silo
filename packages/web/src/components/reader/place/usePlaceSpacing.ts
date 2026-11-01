@@ -28,8 +28,11 @@ export function usePlaceSpacing(
   block: Element | undefined,
   paragraphs: readonly Element[],
   scroll: HTMLElement,
+  measure: () => void,
 ) {
   const spacing = useRef(new Map<HTMLElement, Space>());
+  const afterLayout = useRef(measure);
+  afterLayout.current = measure;
   useLayoutEffect(() => {
     const original = scroll.style.overflowAnchor;
     scroll.style.overflowAnchor = 'none';
@@ -65,6 +68,8 @@ export function usePlaceSpacing(
       const eased = 1 - (1 - progress) ** 3;
       paintSpaces(spaces, starts, target, extra, eased);
       if (anchor) scroll.scrollTop += contentTop(anchor) - anchored;
+      // Paint in this animation callback, after padding and scroll anchoring.
+      afterLayout.current();
       if (progress < 1) frame = requestAnimationFrame(tick);
     };
     if (reduced) tick(start);

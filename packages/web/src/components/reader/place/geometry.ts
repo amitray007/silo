@@ -1,16 +1,16 @@
-/** Ribbon and first-line label in the scroll content's coordinates. */
-export function ribbonPosition(block: Element, scroll: HTMLElement) {
+/** Ribbon and first-line label in the positioned prose frame's coordinates. */
+export function ribbonPosition(block: Element, frame: HTMLElement) {
   const rect = block.getBoundingClientRect();
   const css = getComputedStyle(block);
-  const box = scroll.getBoundingClientRect();
+  const box = frame.getBoundingClientRect();
   const lineTop =
     rect.top + Number.parseFloat(css.paddingTop) + Number.parseFloat(css.borderTopWidth);
   const lineHeight = Number.parseFloat(css.lineHeight);
   const left = rect.left + Number.parseFloat(css.paddingLeft);
   return {
-    top: lineTop + (lineHeight - 24) / 2 - box.top + scroll.scrollTop,
-    left: left - box.left - 30,
-    row: lineTop - 20 - box.top + scroll.scrollTop,
+    top: lineTop + (lineHeight - 24) / 2 - box.top - frame.clientTop + frame.scrollTop,
+    left: left - box.left - frame.clientLeft + frame.scrollLeft - 30,
+    row: lineTop - 20 - box.top - frame.clientTop + frame.scrollTop,
     width: rect.width - Number.parseFloat(css.paddingLeft) - Number.parseFloat(css.paddingRight),
     elbowX: Math.round((left - 18) * devicePixelRatio) / devicePixelRatio - (left - 30),
     elbowY:

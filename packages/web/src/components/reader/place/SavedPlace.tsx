@@ -81,8 +81,8 @@ export function SavedPlace({
 }) {
   const place = useSavedPlace({ prose, scroll, saved, onSave });
   const { block, paragraphs, hover, setHover, save } = place;
-  usePlaceSpacing(block, paragraphs, scroll);
-  const { ribbon, preview } = usePlaceGeometry(prose, scroll, panel, block, hover);
+  const { frame, gutter, preview, measure } = usePlaceGeometry(prose, scroll, panel, block, hover);
+  usePlaceSpacing(block, paragraphs, scroll, measure);
   const [menu, setMenu] = useState(false);
   const [pop, setPop] = useState({ top: 0, left: 0 });
   const markButton = useRef<HTMLButtonElement>(null);
@@ -197,11 +197,8 @@ export function SavedPlace({
     <>
       {createPortal(
         <>
-          {saved && ribbon && (
-            <div
-              className="silo-place-ribbon-gutter"
-              style={{ top: ribbon.top, left: ribbon.left }}
-            >
+          {saved && block && (
+            <div className="silo-place-ribbon-gutter" ref={gutter}>
               <button
                 type="button"
                 className="silo-place-ribbon"
@@ -213,19 +210,8 @@ export function SavedPlace({
               >
                 <ReaderIcon name="bookmark" size={14} />
               </button>
-              <i
-                className="silo-place-elbow"
-                aria-hidden="true"
-                style={{
-                  left: ribbon.elbowX,
-                  top: ribbon.elbowY,
-                  height: ribbon.top - ribbon.row - 10,
-                }}
-              />
-              <div
-                className="silo-place-ribbon-row"
-                style={{ top: ribbon.row - ribbon.top, width: ribbon.width }}
-              >
+              <i className="silo-place-elbow" aria-hidden="true" />
+              <div className="silo-place-ribbon-row">
                 <button
                   type="button"
                   className="silo-place-ribbon-label"
@@ -240,11 +226,11 @@ export function SavedPlace({
               </div>
             </div>
           )}
-          {hover && preview && (
+          {hover && (
             <button
               type="button"
               className="silo-place-ribbon silo-place-ribbon-preview"
-              style={{ top: preview.top, left: preview.left }}
+              ref={preview}
               aria-label="Mark reading place"
               title="Mark reading place (B)"
               onClick={() => {
@@ -256,7 +242,7 @@ export function SavedPlace({
             </button>
           )}
         </>,
-        scroll,
+        frame,
       )}
       {createPortal(
         <>
