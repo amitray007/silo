@@ -50,12 +50,12 @@ describe('mergeDeep', () => {
 });
 
 describe('commit', () => {
-  it('applies locally at once and sends a partial patch', async () => {
+  it('applies locally at once and sends the full scope', async () => {
     const h = harness();
     connections.push(h.sync.connect(h.transport));
     h.sync.commit({ type: { font: 'serif' } });
     expect(h.state().type).toEqual({ size: 16, font: 'serif' });
-    expect(h.sent).toEqual([{ type: { font: 'serif' } }]);
+    expect(h.sent).toEqual([{ ...START, type: { ...START.type, font: 'serif' } }]);
   });
 
   it('debounces: only the last of several quick changes is sent', () => {
@@ -67,7 +67,7 @@ describe('commit', () => {
     vi.advanceTimersByTime(399);
     expect(h.sent).toEqual([]);
     vi.advanceTimersByTime(1);
-    expect(h.sent).toEqual([{ type: { size: 19 } }]);
+    expect(h.sent).toEqual([{ ...START, type: { ...START.type, size: 19 } }]);
   });
 
   it('a discrete change sends the waiting stepper change with it', () => {
@@ -75,7 +75,7 @@ describe('commit', () => {
     connections.push(h.sync.connect(h.transport));
     h.sync.commit({ type: { size: 20 } }, 400);
     h.sync.commit({ width: 'wide' });
-    expect(h.sent).toEqual([{ type: { size: 20 }, width: 'wide' }]);
+    expect(h.sent).toEqual([{ ...START, type: { ...START.type, size: 20 }, width: 'wide' }]);
   });
 
   it('sends one request at a time and the next carries what changed meanwhile', async () => {
@@ -86,7 +86,7 @@ describe('commit', () => {
     expect(h.sent).toHaveLength(1);
     h.replies[0]?.resolve({ ...START, width: 'wide' });
     await vi.advanceTimersByTimeAsync(0);
-    expect(h.sent[1]).toEqual({ type: { font: 'mono' } });
+    expect(h.sent[1]).toEqual({ ...START, width: 'wide', type: { ...START.type, font: 'mono' } });
     // The first answer did not undo the newer local change.
     expect(h.state().type.font).toBe('mono');
   });
@@ -96,7 +96,7 @@ describe('commit', () => {
     h.sync.commit({ width: 'narrow' });
     expect(h.state().width).toBe('narrow');
     connections.push(h.sync.connect(h.transport));
-    expect(h.sent).toEqual([{ width: 'narrow' }]);
+    expect(h.sent).toEqual([{ ...START, width: 'narrow' }]);
   });
 
   it('adopts the server value once the request settles and nothing waits', async () => {
@@ -137,7 +137,10 @@ describe('commit', () => {
     connections.push(h.sync.connect(h.transport));
     h.sync.commit({ type: { size: 21 } }, 400);
     dispatchEvent(new Event('pagehide'));
-    expect(h.transport.keepalive).toHaveBeenCalledWith({ type: { size: 21 } });
+    expect(h.transport.keepalive).toHaveBeenCalledWith(
+      { ...START, type: { ...START.type, size: 21 } },
+      expect.any(String),
+    );
   });
 });
 
@@ -243,7 +246,7 @@ describe('sync failure and lifecycle regressions', () => {
     h.sync.commit({ width: 'wide' });
     h.sync.hydrate({ type: { size: 22, font: 'mono' }, width: 'narrow' });
     expect(h.state()).toEqual({ type: { size: 22, font: 'mono' }, width: 'wide' });
-    expect(h.sent).toEqual([{ width: 'wide' }]);
+    expect(h.sent).toEqual([{ type: { size: 22, font: 'mono' }, width: 'wide' }]);
   });
 
   it('sends debounced work with keepalive only when visibility changes to hidden', () => {
@@ -255,7 +258,10 @@ describe('sync failure and lifecycle regressions', () => {
     expect(h.transport.keepalive).not.toHaveBeenCalled();
     vi.spyOn(document, 'visibilityState', 'get').mockReturnValue('hidden');
     document.dispatchEvent(new Event('visibilitychange'));
-    expect(h.transport.keepalive).toHaveBeenCalledWith({ type: { size: 21 } });
+    expect(h.transport.keepalive).toHaveBeenCalledWith(
+      { ...START, type: { ...START.type, size: 21 } },
+      expect.any(String),
+    );
   });
 
   it('keeps the full local value in an early pagehide migration', () => {
@@ -263,7 +269,10 @@ describe('sync failure and lifecycle regressions', () => {
     connections.push(h.sync.connect(h.transport));
     h.sync.commit({ width: 'wide' }, 400);
     dispatchEvent(new Event('pagehide'));
-    expect(h.transport.keepalive).toHaveBeenCalledWith({ ...START, width: 'wide' });
+    expect(h.transport.keepalive).toHaveBeenCalledWith(
+      { ...START, width: 'wide' },
+      expect.any(String),
+    );
   });
 });
 
@@ -273,7 +282,7 @@ describe('article queue lifecycle', () => {
     const close = h.sync.connect(h.transport, true);
     h.sync.commit({ type: { size: 20 } }, 400);
     close();
-    expect(h.sent).toEqual([{ type: { size: 20 } }]);
+    expect(h.sent).toEqual([{ ...START, type: { ...START.type, size: 20 } }]);
     h.replies[0]?.resolve({ ...START, type: { ...START.type, size: 20 } });
     await Promise.resolve();
     h.sync.commit({ width: 'wide' }, 400);
@@ -290,7 +299,10 @@ describe('article queue lifecycle', () => {
     close();
     expect(h.sent).toHaveLength(1);
     dispatchEvent(new Event('pagehide'));
-    expect(h.transport.keepalive).toHaveBeenCalledWith({ width: 'wide' });
+    expect(h.transport.keepalive).toHaveBeenCalledWith(
+      { ...START, type: { ...START.type, size: 20 }, width: 'wide' },
+      expect.any(String),
+    );
     h.replies[0]?.resolve({ ...START, type: { ...START.type, size: 20 } });
     await Promise.resolve();
     expect(h.sent).toHaveLength(2);
@@ -330,4 +342,43 @@ describe('article queue lifecycle', () => {
     sync.reset();
     close();
   });
+});
+
+it('keeps a full newer snapshot when pagehide overtakes an in-flight write', async () => {
+  const h = harness();
+  const writes: Array<{ value: State; writtenAt: string }> = [];
+  let stored = START;
+  let savedAt = '';
+  const save = (value: State, writtenAt: string) => {
+    if (writtenAt > savedAt) {
+      stored = value;
+      savedAt = writtenAt;
+    }
+    return stored;
+  };
+  let finishOld = () => {};
+  connections.push(
+    h.sync.connect({
+      send: (value, writtenAt) => {
+        writes.push({ value, writtenAt });
+        return new Promise((resolve) => {
+          finishOld = () => resolve(save(value, writtenAt));
+        });
+      },
+      keepalive: (value, writtenAt) => {
+        writes.push({ value, writtenAt });
+        save(value, writtenAt);
+      },
+    }),
+  );
+  h.sync.commit({ type: { size: 20 } });
+  h.sync.commit({ width: 'wide' }, 400);
+  dispatchEvent(new Event('pagehide'));
+  finishOld();
+  await Promise.resolve();
+  expect(writes[0]?.writtenAt).toBeDefined();
+  expect((writes[0]?.writtenAt ?? '') < (writes[1]?.writtenAt ?? '')).toBe(true);
+  expect(stored).toEqual({ type: { size: 20, font: 'inter' }, width: 'wide' });
+  expect(h.state()).toEqual(stored);
+  h.sync.reset();
 });

@@ -10,7 +10,8 @@ import {
 } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import type { LinkJson } from '../api/types';
+import { queryKeys, useLink } from '../api/hooks';
+import type { LinkJson, LinkResponse } from '../api/types';
 import { TypeSheet } from '../components/reader/dock/TypeSheet';
 import { HighlightSheet } from '../components/reader/highlights/HighlightSheet';
 import { useHighlights } from '../components/reader/highlights/useHighlights';
@@ -48,7 +49,9 @@ beforeEach(() => {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (path: string, init?: RequestInit) => {
-      const body = JSON.parse(String(init?.body ?? '{}')) as Overrides;
+      const { writtenAt: _writtenAt, ...body } = JSON.parse(
+        String(init?.body ?? '{}'),
+      ) as Overrides & { writtenAt?: string };
       requests.push({ path, body, keepalive: Boolean(init?.keepalive) });
       if (fail)
         return Response.json({ error: 'unavailable', message: 'Try again' }, { status: 503 });
@@ -251,4 +254,98 @@ it('Type, width, Pencil, highlight, Listen choices and player speed all write th
     true,
   );
   expect(localStorage.getItem('silo.readerType')).toBeNull();
+});
+
+it('ignores an old detail prop after a successful write, and accepts a fresh GET', async () => {
+  const { client, link } = setup();
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  let prefs: ReturnType<typeof useReaderPrefs>;
+  function Probe() {
+    prefs = useReaderPrefs();
+    return <output>{prefs.prefs.type.size}</output>;
+  }
+  const view = render(
+    <ReaderPrefsProvider link={link}>
+      <Probe />
+    </ReaderPrefsProvider>,
+    { wrapper },
+  );
+  await act(async () => prefs.update({ type: { size: 20 } }));
+  await waitFor(() =>
+    expect(rows.get(`/api/links/${link.id}/reader-prefs`)).toEqual({ type: { size: 20 } }),
+  );
+  view.rerender(
+    <ReaderPrefsProvider link={{ ...link, readerPrefs: { type: { size: 16 } } }}>
+      <Probe />
+    </ReaderPrefsProvider>,
+  );
+  expect(screen.getByRole('status').textContent).toBe('20');
+  // A GET started after the write carries the current local version and can hydrate.
+  vi.mocked(fetch).mockResolvedValue(
+    Response.json({ link: { ...link, readerPrefs: { type: { size: 22 } } } }),
+  );
+  const detail = renderHook(() => useLink(link.id), { wrapper });
+  await waitFor(() =>
+    expect(detail.result.current.data?.link.readerPrefs).toEqual({ type: { size: 22 } }),
+  );
+  const fresh = detail.result.current.data?.link;
+  if (!fresh) throw new Error('Missing fresh detail');
+  view.rerender(
+    <ReaderPrefsProvider link={fresh}>
+      <Probe />
+    </ReaderPrefsProvider>,
+  );
+  expect(screen.getByRole('status').textContent).toBe('22');
+});
+
+it('cancels an in-flight detail GET on edit, even when fetch ignores abort and resolves after PATCH', async () => {
+  const { client, link } = setup();
+  client.setQueryData<LinkResponse>(queryKeys.link(link.id), { link });
+  let finishGet: (response: Response) => void = () => {};
+  let signal: AbortSignal | null | undefined;
+  const serve = vi.mocked(fetch).getMockImplementation();
+  vi.mocked(fetch).mockImplementation((input, init) => {
+    if (init?.method !== 'PATCH') {
+      signal = init?.signal;
+      return new Promise<Response>((resolve) => {
+        finishGet = resolve;
+      });
+    }
+    if (!serve) throw new Error('Missing server');
+    return serve(input, init);
+  });
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  let prefs: ReturnType<typeof useReaderPrefs>;
+  function Probe() {
+    prefs = useReaderPrefs();
+    return <output>{prefs.prefs.type.size}</output>;
+  }
+  function Detail() {
+    const { data } = useLink(link.id);
+    return (
+      <ReaderPrefsProvider link={data?.link ?? link}>
+        <Probe />
+      </ReaderPrefsProvider>
+    );
+  }
+  render(<Detail />, { wrapper });
+  await waitFor(() => expect(signal).toBeDefined());
+  await act(async () => prefs.update({ type: { size: 20 } }));
+  await waitFor(() =>
+    expect(client.getQueryData<LinkResponse>(queryKeys.link(link.id))?.link.readerPrefs).toEqual({
+      type: { size: 20 },
+    }),
+  );
+  expect(signal?.aborted).toBe(true);
+  await act(async () =>
+    finishGet(Response.json({ link: { ...link, readerPrefs: { type: { size: 16 } } } })),
+  );
+  expect(screen.getByRole('status').textContent).toBe('20');
+  expect(client.getQueryData<LinkResponse>(queryKeys.link(link.id))?.link.readerPrefs).toEqual({
+    type: { size: 20 },
+  });
 });

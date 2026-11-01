@@ -1,5 +1,6 @@
 import { db, linkReaderPrefs, links } from '@silo/db';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
+import { z } from 'zod';
 import {
   mergeReader,
   parseStoredReaderPrefs,
@@ -20,12 +21,19 @@ async function lockLink(tx: Tx, linkId: string): Promise<boolean> {
   return Boolean(link);
 }
 
-/** Deep-merge a validated partial value. Unknown and trashed links return null; feeds refuse writes. */
+/**
+ * Deep-merge legacy deltas or a timestamped full override snapshot. Older snapshots are ignored.
+ * Callers with writtenAt must include all their overrides so rejection cannot lose earlier fields.
+ * Future timestamps are clamped to the server clock. Omitting writtenAt keeps last-write-wins.
+ * Unknown and trashed links return null; feeds refuse writes.
+ */
 export async function patchReaderPrefs(
   linkId: string,
   patch: unknown,
+  writtenAt?: Date,
 ): Promise<ReaderPrefs | null> {
   const parsed = readerPatchSchema.parse(patch);
+  if (writtenAt) z.date().parse(writtenAt);
   await assertLibraryWrite(linkId);
   return db.transaction(async (tx) => {
     if (!(await lockLink(tx, linkId))) return null;
@@ -33,12 +41,23 @@ export async function patchReaderPrefs(
     const prefs = readerPatchSchema.parse(mergeReader(parseStoredReaderPrefs(row?.prefs), parsed));
     await tx
       .insert(linkReaderPrefs)
-      .values({ linkId, prefs })
+      .values({
+        linkId,
+        prefs,
+        updatedAt: writtenAt
+          ? sql`least(${writtenAt.toISOString()}::timestamptz, now())`
+          : sql`now()`,
+      })
       .onConflictDoUpdate({
         target: linkReaderPrefs.linkId,
-        set: { prefs, updatedAt: new Date() },
+        set: { prefs, updatedAt: sql`excluded.updated_at` },
+        ...(writtenAt ? { setWhere: sql`excluded.updated_at > ${linkReaderPrefs.updatedAt}` } : {}),
       });
-    return prefs;
+    const [saved] = await tx
+      .select()
+      .from(linkReaderPrefs)
+      .where(eq(linkReaderPrefs.linkId, linkId));
+    return parseStoredReaderPrefs(saved?.prefs);
   });
 }
 

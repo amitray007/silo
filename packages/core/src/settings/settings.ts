@@ -186,7 +186,11 @@ export async function getAllSettings(): Promise<SettingsMap> {
  * failure now rolls every key in this patch back together; a caller either
  * sees the whole patch land or none of it.
  */
-export async function updateSettings(patch: Record<string, unknown>): Promise<SettingsMap> {
+export async function updateSettings(
+  patch: Record<string, unknown>,
+  writtenAt?: Date,
+): Promise<SettingsMap> {
+  if (writtenAt) z.date().parse(writtenAt);
   const entries = Object.entries(patch);
   for (const [key] of entries) {
     if (!isSettingKey(key)) {
@@ -205,10 +209,7 @@ export async function updateSettings(patch: Record<string, unknown>): Promise<Se
     for (const [key, value] of validated) {
       if (key === 'reader') {
         if (Object.keys(value).length === 0) continue;
-        // Two patches to the same value must not lose each other's fields.
-        await tx.execute(sql`select pg_advisory_xact_lock(hashtext('settings.reader'))`);
-        const current = (await getSetting('reader', tx)) ?? READER_DEFAULTS;
-        await setSetting(key, mergeReader(current, value), tx);
+        await patchReaderSetting(value, tx, writtenAt);
       } else {
         await setSetting(key, value, tx);
       }
@@ -216,6 +217,32 @@ export async function updateSettings(patch: Record<string, unknown>): Promise<Se
   });
 
   return getAllSettings();
+}
+
+/** Serializes legacy deltas and guards timestamped reader snapshots without changing other keys. */
+async function patchReaderSetting(
+  value: unknown,
+  executor: Executor,
+  writtenAt?: Date,
+): Promise<void> {
+  // Two patches to the same value must not lose each other's fields.
+  await executor.execute(sql`select pg_advisory_xact_lock(hashtext('settings.reader'))`);
+  const current = (await getSetting('reader', executor)) ?? READER_DEFAULTS;
+  const reader = parseSettingValue('reader', mergeReader(current, value));
+  await executor
+    .insert(settings)
+    .values({
+      key: 'reader',
+      value: reader,
+      updatedAt: writtenAt
+        ? sql`least(${writtenAt.toISOString()}::timestamptz, now())`
+        : sql`now()`,
+    })
+    .onConflictDoUpdate({
+      target: settings.key,
+      set: { value: reader, updatedAt: sql`excluded.updated_at` },
+      ...(writtenAt ? { setWhere: sql`excluded.updated_at > ${settings.updatedAt}` } : {}),
+    });
 }
 
 async function validateProviderSelection(

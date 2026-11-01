@@ -1,20 +1,13 @@
 import { isRecord } from './prefStore';
 
-/**
- * Keeps a browser-local preference object in step with a server copy, without owning either.
- * The local copy is what the UI reads, so every change shows at once. A change is also queued
- * for the server as a partial value (so two browsers changing different fields do not undo each
- * other), sent at once or after a short pause for steppers, one request at a time. If the server
- * refuses a change, the fields it touched go back to the last confirmed value. When the server answers
- * with its own copy and nothing is waiting to be sent, the server copy wins.
- */
+/** Syncs optimistic local reader choices with ordered, full-snapshot server writes. */
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
 
 export type SyncTransport<T extends object> = {
-  /** Sends a partial value; resolves with the server's whole value. */
-  send(patch: DeepPartial<T>): Promise<T>;
+  /** Sends the complete scope with a monotonically increasing client timestamp. */
+  send(value: T, writtenAt: string): Promise<T>;
   /** Best effort while the page is closing: must survive the page. */
-  keepalive(patch: DeepPartial<T>): void;
+  keepalive(value: T, writtenAt: string): void;
 };
 
 type Plain = Record<string, unknown>;
@@ -64,6 +57,11 @@ export function createSync<T extends object>(deps: {
   let serverValue: T | null | undefined;
   let confirmed = deps.read();
   let generation = 0;
+  let lastWrittenAt = 0;
+  const writtenAt = () => {
+    lastWrittenAt = Math.max(Date.now(), lastWrittenAt + 1);
+    return new Date(lastWrittenAt).toISOString();
+  };
   let detachWhenIdle: (() => void) | undefined;
   const settled = () => {
     if (!inflight && !pending) {
@@ -78,13 +76,12 @@ export function createSync<T extends object>(deps: {
     if (!transport || inflight || serverValue === undefined) return;
     if (!pending && !(serverValue === null && !uploaded && deps.hasLocal())) return;
     const changes = pending;
-    // Until migration succeeds, every send includes the whole local value, even after a failure.
-    const patch = serverValue === null ? mergeDeep(deps.read(), changes ?? {}) : changes;
-    if (!patch) return;
+    // A newer snapshot includes every earlier field, even if that earlier request is rejected.
+    const value = deps.read();
     const run = generation;
     pending = null;
     inflight = true;
-    transport.send(patch).then(
+    transport.send(value, writtenAt()).then(
       (server) => {
         if (run !== generation) return;
         inflight = false;
@@ -111,9 +108,7 @@ export function createSync<T extends object>(deps: {
 
   const onHide = () => {
     if (!transport || !pending) return;
-    const patch =
-      serverValue === null || serverValue === undefined ? mergeDeep(deps.read(), pending) : pending;
-    transport.keepalive(patch);
+    transport.keepalive(deps.read(), writtenAt());
   };
   const onVisibilityChange = () => {
     if (document.visibilityState === 'hidden') onHide();

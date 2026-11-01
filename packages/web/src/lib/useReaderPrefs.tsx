@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
 } from 'react';
 import { apiPatchKeepalive } from '../api/client';
-import { useUpdateReaderPrefs } from '../api/hooks';
+import { queryKeys, useUpdateReaderPrefs } from '../api/hooks';
 import type { LinkJson } from '../api/types';
 import {
   type ReadAloudEngine,
@@ -20,11 +20,12 @@ import {
   STEPPER_DELAY_MS,
   useReaderDefaults,
 } from './readerPrefs';
+import { advanceReaderPrefsVersion, readerPrefsVersion } from './readerPrefsVersion';
 import { createSync, type DeepPartial, mergeDeep } from './readerSync';
 
 type Overrides = DeepPartial<ReaderSettings>;
 
-function createArticle(initial: Overrides, sessionOnly = false) {
+function createArticle(initial: Overrides, sessionOnly = false, onWrite = () => {}) {
   let value = initial;
   const listeners = new Set<() => void>();
   const replace = (next: Overrides) => {
@@ -47,6 +48,10 @@ function createArticle(initial: Overrides, sessionOnly = false) {
       return disconnect;
     },
     sync,
+    commit: (patch: Overrides, delay: number) => {
+      onWrite();
+      sync.commit(patch, delay);
+    },
     read: () => value,
     subscribe: (listener: () => void) => {
       listeners.add(listener);
@@ -70,7 +75,10 @@ function articleFor(client: QueryClient, link: LinkJson) {
   }
   let entry = entries.get(link.id);
   if (!entry) {
-    entry = createArticle(link.readerPrefs ?? {}, link.feedId != null);
+    entry = createArticle(link.readerPrefs ?? {}, link.feedId != null, () => {
+      advanceReaderPrefsVersion(client, link.id);
+      void client.cancelQueries({ queryKey: queryKeys.link(link.id) });
+    });
     entries.set(link.id, entry);
   }
   return entry;
@@ -78,18 +86,28 @@ function articleFor(client: QueryClient, link: LinkJson) {
 
 /** Mount once around an article. Hydrate before paint when its detail arrives. */
 export function ReaderPrefsProvider({ link, children }: { link: LinkJson; children: ReactNode }) {
-  const article = articleFor(useQueryClient(), link);
+  const client = useQueryClient();
+  const article = articleFor(client, link);
   const update = useUpdateReaderPrefs(link.id);
   const feed = link.feedId != null;
   useLayoutEffect(() => {
-    if (!feed && link.readerPrefs !== undefined) article.sync.hydrate(link.readerPrefs);
-  }, [article, feed, link.readerPrefs]);
+    if (
+      !feed &&
+      link.readerPrefs !== undefined &&
+      (link.readerPrefsVersion ?? 0) >= readerPrefsVersion(client, link.id)
+    ) {
+      article.sync.hydrate(link.readerPrefs);
+    }
+  }, [article, client, feed, link.id, link.readerPrefs, link.readerPrefsVersion]);
   useEffect(() => {
     if (feed) return;
     return article.connect({
       send: update,
-      keepalive: (patch) =>
-        apiPatchKeepalive(`/api/links/${encodeURIComponent(link.id)}/reader-prefs`, patch),
+      keepalive: (patch, writtenAt) =>
+        apiPatchKeepalive(`/api/links/${encodeURIComponent(link.id)}/reader-prefs`, {
+          ...patch,
+          writtenAt,
+        }),
     });
   }, [article, feed, link.id, update]);
   // Disconnect after queued edits settle, including a final stepper change on navigation.
@@ -113,7 +131,7 @@ export function useReaderPrefs() {
       // Outside an article this hook is read-only; Settings uses its defaults hooks explicitly.
       if (!article) return;
       if (article.sessionOnly) article.session(patch);
-      else article.sync.commit(patch, delay);
+      else article.commit(patch, delay);
     },
     [article],
   );

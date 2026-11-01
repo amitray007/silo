@@ -10,6 +10,7 @@ import { kokoroDtype } from '../components/reader/listen/engines/files';
 import { fetchTtsManifest } from '../components/reader/listen/engines/manifest';
 import type { HighlightColor } from '../lib/highlights';
 import type { ReaderSettings } from '../lib/readerPrefs';
+import { advanceReaderPrefsVersion, readerPrefsVersion } from '../lib/readerPrefsVersion';
 import type { DeepPartial } from '../lib/readerSync';
 import { mergeDeep } from '../lib/readerSync';
 import {
@@ -199,9 +200,16 @@ export function useRefreshReader(linkId: string) {
 
 /** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.link(id ?? ''),
-    queryFn: () => apiGet<LinkResponse>(`/api/links/${encodeURIComponent(id ?? '')}`),
+    queryFn: async ({ signal }) => {
+      const version = readerPrefsVersion(client, id ?? '');
+      const data = await apiGet<LinkResponse>(`/api/links/${encodeURIComponent(id ?? '')}`, signal);
+      return version === 0
+        ? data
+        : { ...data, link: { ...data.link, readerPrefsVersion: version } };
+    },
     enabled: Boolean(id) && (options.enabled ?? true),
     retry: false,
     refetchInterval: (query) =>
@@ -213,13 +221,25 @@ export function useLink(id: string | undefined, options: { enabled?: boolean } =
 export function useUpdateReaderPrefs(linkId: string) {
   const client = useQueryClient();
   return useCallback(
-    async (patch: DeepPartial<ReaderSettings>) => {
+    async (patch: DeepPartial<ReaderSettings>, writtenAt: string) => {
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
       const { readerPrefs } = await apiPatch<{ readerPrefs: DeepPartial<ReaderSettings> }>(
         `/api/links/${encodeURIComponent(linkId)}/reader-prefs`,
-        patch,
+        { ...patch, writtenAt },
       );
+      advanceReaderPrefsVersion(client, linkId);
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
       client.setQueryData<LinkResponse>(queryKeys.link(linkId), (data) =>
-        data ? { ...data, link: { ...data.link, readerPrefs } } : data,
+        data
+          ? {
+              ...data,
+              link: {
+                ...data.link,
+                readerPrefs,
+                readerPrefsVersion: readerPrefsVersion(client, linkId),
+              },
+            }
+          : data,
       );
       return readerPrefs;
     },

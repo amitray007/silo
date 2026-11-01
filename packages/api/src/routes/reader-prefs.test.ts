@@ -1,3 +1,4 @@
+import type { ReaderPrefs } from '@silo/core';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { describe, expect, it } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
@@ -120,4 +121,136 @@ describeIfPg('article reader preferences routes', () => {
       expect(await response.json()).toMatchObject({ error: 'feed_post_not_editable' });
     }
   });
+
+  it.each(['article', 'defaults'] as const)(
+    'keeps the newer %s snapshot when an older in-flight request arrives last',
+    async (scope) => {
+      const { app, core } = harness.mod();
+      const link = await create();
+      const path = scope === 'article' ? `/api/links/${link.id}/reader-prefs` : '/api/settings';
+      const base: ReaderPrefs | null =
+        scope === 'defaults'
+          ? (
+              await core.updateSettings(
+                { reader: { type: { size: 16 } } },
+                new Date(Date.now() - 3000),
+              )
+            ).reader
+          : {};
+      const earlier = { ...base, type: { ...base?.type, size: 20 } };
+      const latest = { ...earlier, width: 'wide' };
+      const olderTime = new Date(Date.now() - 2000).toISOString();
+      const newerTime = new Date(Date.now() - 1000).toISOString();
+      const body = (value: unknown, writtenAt?: string) => ({
+        ...(scope === 'article' ? (value as object) : { reader: value }),
+        ...(writtenAt ? { writtenAt } : {}),
+      });
+      // The older HTTP request is already in flight, but its body finishes after pagehide's write.
+      let finishBody = () => {};
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          finishBody = () => {
+            controller.enqueue(new TextEncoder().encode(JSON.stringify(body(earlier, olderTime))));
+            controller.close();
+          };
+        },
+      });
+      const pending = app.request(path, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: stream,
+        ...{ duplex: 'half' },
+      });
+      const keepalive = await app.request(path, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body(latest, newerTime)),
+        // Fetch keepalive is a browser option; the received server Request does not carry it.
+      });
+      expect(keepalive.status, await keepalive.clone().text()).toBe(200);
+      finishBody();
+      const late = await pending;
+      expect(late.status).toBe(200);
+      const response = (await late.json()) as { readerPrefs?: unknown; reader?: unknown };
+      expect(scope === 'article' ? response.readerPrefs : response.reader).toEqual(latest);
+      const stored =
+        scope === 'article'
+          ? (await core.getById(link.id))?.readerPrefs
+          : (await core.getAllSettings()).reader;
+      expect(stored).toEqual(latest);
+      // Old clients without timestamps still deep-merge, with last-write-wins behavior.
+      const legacy = await app.request(path, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body({ type: { size: 18 } })),
+      });
+      expect(legacy.status).toBe(200);
+      expect(await legacy.json()).toMatchObject(
+        scope === 'article'
+          ? { readerPrefs: { type: { size: 18 }, width: 'wide' } }
+          : { reader: { type: { size: 18 }, width: 'wide' } },
+      );
+    },
+  );
+
+  it.each(['article', 'defaults'] as const)(
+    'clamps future %s timestamps to the server clock',
+    async (scope) => {
+      const { core, pool } = harness.mod();
+      const link = await create();
+      const future = new Date(Date.now() + 86_400_000);
+      if (scope === 'article') await core.patchReaderPrefs(link.id, { width: 'wide' }, future);
+      else await core.updateSettings({ reader: { width: 'wide' } }, future);
+      const result =
+        scope === 'article'
+          ? await pool.query(
+              'select updated_at <= now() as clamped from link_reader_prefs where link_id = $1',
+              [link.id],
+            )
+          : await pool.query(
+              "select updated_at <= now() as clamped from settings where key = 'reader'",
+            );
+      expect(result.rows[0]).toEqual({ clamped: true });
+      // Move beyond JavaScript's millisecond precision after Postgres's finer clock stamp.
+      await pool.query('select pg_sleep(0.002)');
+      // A subsequent normal-clock request is accepted, rather than blocked for a day.
+      if (scope === 'article') {
+        expect(await core.patchReaderPrefs(link.id, { width: 'narrow' }, new Date())).toMatchObject(
+          { width: 'narrow' },
+        );
+      } else {
+        expect(
+          await core.updateSettings({ reader: { width: 'narrow' } }, new Date()),
+        ).toMatchObject({ reader: { width: 'narrow' } });
+      }
+    },
+  );
+
+  it.each([false, true])(
+    'rejects oversized JSON before parsing (content length: %s)',
+    async (withLength) => {
+      const { app, core } = harness.mod();
+      const link = await create();
+      const defaults = (await core.getAllSettings()).reader;
+      // Invalid JSON proves the size limit runs before the JSON/validation handler.
+      const body = `{${'x'.repeat(16 * 1024)}`;
+      for (const path of [`/api/links/${link.id}/reader-prefs`, '/api/settings']) {
+        const res = await app.request(path, {
+          method: 'PATCH',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(withLength ? { 'Content-Length': String(body.length) } : {}),
+          },
+          body,
+        });
+        expect(res.status).toBe(413);
+        expect(await res.json()).toEqual({
+          error: 'payload_too_large',
+          message: expect.any(String),
+        });
+      }
+      expect((await core.getById(link.id))?.readerPrefs).toEqual({});
+      expect((await core.getAllSettings()).reader).toEqual(defaults);
+    },
+  );
 });
