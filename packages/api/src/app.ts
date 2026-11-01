@@ -9,6 +9,7 @@ import {
   InvalidReadingPositionError,
 } from '@silo/core';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
@@ -123,6 +124,25 @@ function readIndexHtml(indexPath: string): string {
  */
 export function createApp(): Hono {
   const app = new Hono();
+
+  // Select the exception before buffering: a preceding 1 MiB limiter would
+  // reject valid exports. Import permits 50,000 links with extracted text.
+  const defaultBodyLimit = bodyLimit({
+    maxSize: 1024 * 1024,
+    onError: (c) =>
+      c.json({ error: 'payload_too_large', message: 'Request body exceeds 1 MB' }, 413),
+  });
+  const importBodyLimit = bodyLimit({
+    maxSize: 25 * 1024 * 1024,
+    onError: (c) =>
+      c.json({ error: 'payload_too_large', message: 'Import body exceeds 25 MB' }, 413),
+  });
+  app.use('*', (c, next) => {
+    if (c.req.method === 'GET' || c.req.method === 'HEAD' || !c.req.raw.body) return next();
+    const limit =
+      c.req.method === 'POST' && c.req.path === '/api/import' ? importBodyLimit : defaultBodyLimit;
+    return limit(c, next);
+  });
 
   // Web dist resolved ONCE per app build (not per-request) — matches how
   // `corsMiddleware()`'s allowlist is captured at `createApp()` time (see its
