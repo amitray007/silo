@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { Slot } from './stack';
 
 type Edges = { up: boolean; down: boolean; hidden: number };
@@ -41,8 +41,6 @@ export function LaneGroup({
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState<Edges>(NO_EDGES);
-  // Moves animate only once the group has been placed, so it never slides in from the top.
-  const [armed, setArmed] = useState(false);
   const measure = useCallback(() => {
     const el = scroller.current;
     if (!el) return;
@@ -56,17 +54,11 @@ export function LaneGroup({
   // biome-ignore lint/correctness/useExhaustiveDependencies: the slot and version are the triggers.
   useLayoutEffect(measure, [measure, slot?.max, slot?.top, version]);
   const placed = slot !== undefined;
-  useEffect(() => {
-    if (!placed) return;
-    const frame = requestAnimationFrame(() => setArmed(true));
-    return () => cancelAnimationFrame(frame);
-  }, [placed]);
   return (
     <div
       className="silo-lgroup"
       data-group={groupKey}
       data-placed={placed}
-      data-armed={armed}
       style={{ top: slot?.top ?? 0 }}
     >
       <div

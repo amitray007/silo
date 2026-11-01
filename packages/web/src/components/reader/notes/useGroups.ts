@@ -1,8 +1,8 @@
-import { useLayoutEffect, useState } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useState } from 'react';
 import { paragraphOf, paragraphSections } from '../highlights/paragraphs';
 import type { ResolvedHighlight } from '../highlights/useHighlightLayer';
 
-/** The highlights of one paragraph, with where that paragraph sits. Coordinates are the scroll area's content. */
+/** The highlights of one paragraph, with where that paragraph sits. Coordinates are relative to the prose frame. */
 export type NoteGroup = {
   /** The 1-based paragraph number. */
   para: number;
@@ -17,23 +17,30 @@ export type NoteGroup = {
   paragraphHeight: number;
 };
 
-export type Groups = {
+type GroupLayout = {
   groups: NoteGroup[];
   /** The prose frame's top, to turn a `y` into the frame's own coordinates. */
   frameTop: number;
 };
 
-const NONE: Groups = { groups: [], frameTop: 0 };
+export type Groups = GroupLayout & {
+  /** Read the current layout without waiting for a React render. */
+  read: () => GroupLayout;
+  /** Subscribers paint synchronously when layout changes, before the browser paints. */
+  subscribe: (paint: () => void) => () => void;
+};
+
+const NONE: GroupLayout = { groups: [], frameTop: 0 };
 
 /** Group the resolved highlights by paragraph and measure each group against the prose. */
 function collectGroups(
   prose: HTMLElement,
-  scroll: HTMLElement,
+  frame: HTMLElement,
   resolved: readonly ResolvedHighlight[],
-): Groups {
-  const box = scroll.getBoundingClientRect();
+): GroupLayout {
+  const box = frame.getBoundingClientRect();
   const sections = paragraphSections(prose);
-  const toContent = (viewportY: number) => viewportY - box.top + scroll.scrollTop;
+  const toContent = (viewportY: number) => viewportY - box.top - frame.clientTop + frame.scrollTop;
   const byPara = new Map<number, NoteGroup>();
   for (const item of resolved) {
     const para = paragraphOf(sections, item.range.startContainer);
@@ -56,10 +63,9 @@ function collectGroups(
       paragraphHeight: section?.height ?? 0,
     });
   }
-  const frame = prose.parentElement ?? prose;
   return {
     groups: [...byPara.values()].sort((a, b) => a.y - b.y),
-    frameTop: toContent(frame.getBoundingClientRect().top),
+    frameTop: 0,
   };
 }
 
@@ -74,26 +80,60 @@ export function useGroups(
   resolved: readonly ResolvedHighlight[],
   active: boolean,
 ): Groups {
-  const [tick, setTick] = useState(0);
-  const [measured, setMeasured] = useState<Groups>(NONE);
+  const frame = prose?.parentElement ?? prose;
+  const listeners = useMemo(() => new Set<() => void>(), []);
+  const [measured, setMeasured] = useState<GroupLayout>(NONE);
+  const read = useCallback(
+    () => (prose && frame && active ? collectGroups(prose, frame, resolved) : NONE),
+    [prose, frame, resolved, active],
+  );
+  const subscribe = useCallback(
+    (paint: () => void) => {
+      listeners.add(paint);
+      return () => {
+        listeners.delete(paint);
+      };
+    },
+    [listeners],
+  );
   useLayoutEffect(() => {
-    if (!prose || !scroll || !active) return;
-    const bump = () => setTick((value) => value + 1);
-    const observer = new ResizeObserver(bump);
-    observer.observe(prose);
-    observer.observe(scroll);
-    // Content above the prose (a wrapping title, a note card) moves it without resizing it.
-    const article = prose.closest('.silo-reader');
-    if (article) observer.observe(article);
-    document.fonts?.addEventListener('loadingdone', bump);
+    // React owns the set of groups. Geometry subscribers own their positions.
+    setMeasured(read());
+    if (!prose || !frame || !scroll || !active) return;
+    const paint = () => {
+      for (const listener of listeners) listener();
+    };
+    const observer = new ResizeObserver(paint);
+    const article = prose.closest('.silo-reader') ?? frame;
+    for (const element of new Set([prose, frame, scroll, article, ...prose.children]))
+      observer.observe(element);
+    const changes = new MutationObserver((records) => {
+      if (
+        records.some(
+          (record) =>
+            !(record.target instanceof Element) ||
+            !record.target.closest(
+              '.silo-marker, .silo-notes-layer, .silo-place-ribbon-gutter, .silo-place-ribbon-preview, .silo-pencil',
+            ),
+        )
+      )
+        paint();
+    });
+    changes.observe(article, {
+      attributes: true,
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributeFilter: ['style', 'class', 'data-width'],
+    });
+    window.addEventListener('resize', paint);
+    document.fonts?.addEventListener('loadingdone', paint);
     return () => {
       observer.disconnect();
-      document.fonts?.removeEventListener('loadingdone', bump);
+      changes.disconnect();
+      window.removeEventListener('resize', paint);
+      document.fonts?.removeEventListener('loadingdone', paint);
     };
-  }, [prose, scroll, active]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: tick re-reads the layout after it changes.
-  useLayoutEffect(() => {
-    setMeasured(prose && scroll && active ? collectGroups(prose, scroll, resolved) : NONE);
-  }, [prose, scroll, resolved, active, tick]);
-  return measured;
+  }, [prose, frame, scroll, active, read, listeners]);
+  return useMemo(() => ({ ...measured, read, subscribe }), [measured, read, subscribe]);
 }

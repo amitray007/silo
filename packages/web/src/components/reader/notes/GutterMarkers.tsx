@@ -1,8 +1,9 @@
+import { useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import type { Gutter } from '../gutter';
+import { type Gutter, gutterLeft } from '../gutter';
 import { ReaderIcon } from '../ReaderIcon';
 import { resolveMarkerYs } from './markerLayout';
-import type { NoteGroup } from './useGroups';
+import type { Groups } from './useGroups';
 import type { NotesLaneApi } from './useNotesLane';
 
 /** The least space between two items in the gutter column. */
@@ -15,50 +16,60 @@ const CLEARANCE = 4;
 export function GutterMarkers({
   frame,
   groups,
-  frameTop,
+  scroll,
   gutter,
-  left,
   resumeY,
   lane,
   hidden,
 }: {
   frame: HTMLElement;
-  groups: readonly NoteGroup[];
-  frameTop: number;
+  groups: Groups;
+  scroll: HTMLElement;
   gutter: Gutter;
-  left: number;
   /** The resume button's centre, in the frame's coordinates; null when there is none. */
   resumeY: number | null;
   lane: NotesLaneApi;
   /** The lane is an overlay panel: the markers step aside. */
   hidden: boolean;
 }) {
-  if (groups.length === 0) return null;
-  const ys = resolveMarkerYs(
-    groups.map((group) => ({
-      key: group.para,
-      y: group.y - frameTop,
-      lineHeight: group.lineHeight,
-    })),
-    resumeY,
-    gutter.size + CLEARANCE,
-  );
+  const markers = useRef(new Map<number, HTMLButtonElement>());
+  useLayoutEffect(() => {
+    const paint = () => {
+      const current = groups.read().groups;
+      const ys = resolveMarkerYs(
+        current.map((group) => ({ key: group.para, y: group.y, lineHeight: group.lineHeight })),
+        resumeY,
+        gutter.size + CLEARANCE,
+      );
+      const left = gutterLeft(frame, scroll, gutter);
+      for (const group of current) {
+        const marker = markers.current.get(group.para);
+        if (!marker) continue;
+        marker.style.top = `${(ys.get(group.para) ?? group.y) - gutter.size / 2}px`;
+        marker.style.left = `${left}px`;
+      }
+    };
+    paint();
+    return groups.subscribe(paint);
+  }, [groups, frame, scroll, gutter, resumeY]);
+  if (groups.groups.length === 0) return null;
   return createPortal(
-    groups.map((group) => {
+    groups.groups.map((group) => {
       const ids = group.items.map((item) => item.id);
       const count = ids.length;
-      const y = ys.get(group.para) ?? group.y - frameTop;
       return (
         <button
           key={group.para}
+          ref={(element) => {
+            if (element) markers.current.set(group.para, element);
+            else markers.current.delete(group.para);
+          }}
           type="button"
           className="silo-marker"
           data-active={lane.open && lane.focusIds.some((id) => ids.includes(id))}
           data-count={count > 1 ? count : undefined}
           aria-label={`${count} highlight${count > 1 ? 's' : ''} on paragraph ${group.para}`}
           style={{
-            top: y - gutter.size / 2,
-            left,
             width: gutter.size,
             height: gutter.size,
             visibility: hidden ? 'hidden' : undefined,

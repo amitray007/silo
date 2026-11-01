@@ -92,7 +92,9 @@ function found(id: string, color: HighlightColor = 'yellow'): ResolvedHighlight 
     start: 0,
     end: 1,
     how: 'offsets',
-    range: document.createRange(),
+    range: Object.assign(document.createRange(), {
+      getClientRects: () => [new DOMRect(0, 190, 100, 20)],
+    }),
     highlight: {
       id,
       quote: `quote ${id}`,
@@ -160,12 +162,30 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
   scroll.append(article);
   const host = document.createElement('div');
   const panel = document.createElement('div');
-  document.body.append(scroll, host, panel);
+  frame.append(host);
+  document.body.append(scroll, panel);
   const setCollapsed = vi.fn();
   const onDialHidden = vi.fn();
   const onOverlay = vi.fn();
-  const api = { orphans: [], canWrite: true, resolved: [], setNote: vi.fn(), remove: vi.fn() };
-  const all: Groups = { groups, frameTop: 100 };
+  const api = {
+    orphans: [],
+    canWrite: true,
+    resolved: groups.flatMap((g) => g.items),
+    setNote: vi.fn(),
+    remove: vi.fn(),
+  };
+  const listeners = new Set<() => void>();
+  const current = { groups, frameTop: 0 };
+  const all: Groups = {
+    ...current,
+    read: () => current,
+    subscribe: (paint) => {
+      listeners.add(paint);
+      return () => {
+        listeners.delete(paint);
+      };
+    },
+  };
   const tree = (
     <SidebarControlContext.Provider
       value={{
@@ -189,7 +209,18 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
     </SidebarControlContext.Provider>
   );
   const view = render(tree);
-  return { view, host, panel, scroll, setCollapsed, onDialHidden, onOverlay };
+  return {
+    view,
+    host,
+    panel,
+    scroll,
+    frame,
+    current,
+    listeners,
+    setCollapsed,
+    onDialHidden,
+    onOverlay,
+  };
 }
 
 const tops = (host: HTMLElement) =>
@@ -279,4 +310,26 @@ it('scrolls the reader to the emphasised group on the first docked open', () => 
   expect(scrollTo).toHaveBeenCalled();
   const call = scrollTo.mock.calls.find((args) => 'top' in (args[0] as object));
   expect((call?.[0] as { top: number }).top).toBe(188 - 0);
+});
+
+it('paints group reflow and the connector synchronously, before a React update', () => {
+  const { host, current, listeners, frame } = mount({
+    groups: [group(2, ['a'], 190), group(3, ['b'], 400)],
+    lane: { hoveredIds: ['a'] },
+  });
+  expect(host.parentElement).toBe(frame);
+  Object.assign(current.groups[0]?.items[0]?.range ?? {}, {
+    getClientRects: () => [new DOMRect(0, 290, 100, 20)],
+  });
+  current.groups = [group(2, ['a'], 290), group(3, ['b'], 500)];
+  blockTop = 30;
+  // No act, timer, or animation frame is needed for these positions to reach the DOM.
+  for (const paint of listeners) paint();
+  expect(tops(host)).toEqual([
+    { key: 'p2', top: 288 },
+    { key: 'p3', top: 498 },
+  ]);
+  expect(host.querySelector('.silo-hairline path')?.getAttribute('d')).toBe(
+    'M36 300C41 300 41 42 46 42',
+  );
 });

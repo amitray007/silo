@@ -86,9 +86,9 @@ export function NotesLane({
   const focusId = focusIds[0] ?? null;
   const [adding, setAdding] = useState<string | null>(null);
   const [blockTick, setBlockTick] = useState(0);
-  // A group scrolling inside itself moves its blocks, so the connector re-reads their place.
-  const [, setScrolled] = useState(0);
-  const onScrolled = useCallback(() => setScrolled((value) => value + 1), []);
+  const hairline = useRef<SVGPathElement>(null);
+  const paintLayout = useRef(() => {});
+  const onScrolled = useCallback(() => paintLayout.current(), []);
   const [slots, setSlots] = useState<Map<string, Slot>>(new Map());
   const [laneEl, setLaneEl] = useState<HTMLElement | null>(null);
 
@@ -105,6 +105,7 @@ export function NotesLane({
     onDialHidden,
   });
   const { plan, stacked, overlay } = shift;
+  const frame = prose.parentElement ?? prose;
   useEffect(() => {
     onOverlay(open && (overlay || Boolean(plan?.overlay)));
     return () => onOverlay(false);
@@ -122,40 +123,86 @@ export function NotesLane({
   );
   const blockKey = `${keyed.map((g) => g.entries.map((e) => `${e.id}${e.note ? 1 : 0}`).join()).join('|')}/${lostEntries.length}/${adding ?? ''}`;
 
-  // Re-stack whenever a block's real height changes: a field growing, a bare block gaining a note.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: observers follow the set of blocks.
-  useEffect(() => {
-    if (!stacked || !laneEl) return;
-    const bump = () => setBlockTick((value) => value + 1);
-    const resize = new ResizeObserver(bump);
-    for (const block of laneEl.querySelectorAll('[data-note]')) resize.observe(block);
-    void document.fonts?.ready.then(bump);
-    return () => resize.disconnect();
-  }, [stacked, laneEl, blockKey]);
+  const paintHairline = useCallback(() => {
+    const path = hairline.current;
+    if (!path) return;
+    const hovered = hoveredIds[0];
+    const found = api.resolved.find((item) => item.id === hovered);
+    const target = hovered
+      ? laneEl?.querySelector<HTMLElement>(`[data-note="${CSS.escape(hovered)}"]`)
+      : null;
+    const scroller = target?.closest<HTMLElement>('.silo-lgroup-scroll');
+    let link = '';
+    if (stacked && found && target && scroller) {
+      const rect = target.getBoundingClientRect();
+      const view = scroller.getBoundingClientRect();
+      const range = found.range.getClientRects()[0] ?? found.range.getBoundingClientRect();
+      if (rect.bottom >= view.top + 4 && rect.top <= view.bottom - 4) {
+        const origin = frame.getBoundingClientRect().top + frame.clientTop - frame.scrollTop;
+        const y1 = range.top + range.height / 2 - origin;
+        const y2 = rect.top - origin + 12;
+        const x1 = frame.clientWidth + gutterOffset;
+        const x2 = frame.clientWidth + LANE_GAP - 6;
+        const mid = (x1 + x2) / 2;
+        link = `M${x1} ${y1}C${mid} ${y1} ${mid} ${y2} ${x2} ${y2}`;
+      }
+    }
+    path.setAttribute('d', link);
+    path.dataset.on = String(Boolean(link));
+  }, [stacked, api.resolved, hoveredIds, laneEl, frame, gutterOffset]);
 
-  // Each paragraph's group goes at the paragraph's top, no taller than the paragraph (at least
-  // 112px), and below the group before it. Heights are measured, never estimated.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: blockTick and blockKey are the triggers.
-  useLayoutEffect(() => {
+  const measure = useCallback(() => {
     if (!stacked || !laneEl) return;
+    const current = groups.read();
     const rows: StackRow[] = [];
     if (lostEntries.length > 0)
       rows.push({
         key: ORPHANS,
-        anchor: groups.frameTop,
+        anchor: current.frameTop,
         max: ORPHANS_MAX,
         blocks: blockHeights(laneEl, ORPHANS),
       });
-    for (const { key, group } of keyed)
+    for (const group of current.groups)
       rows.push({
-        key,
+        key: `p${group.para}`,
         anchor: group.top - 2,
         max: groupMax(group.paragraphHeight),
-        blocks: blockHeights(laneEl, key),
+        blocks: blockHeights(laneEl, `p${group.para}`),
       });
     const next = stackRows(rows);
+    // Paint in the observer callback. React state is only for reveal and scroll affordances.
+    laneEl.style.left = `${frame.clientWidth + LANE_GAP}px`;
+    for (const [key, slot] of next) {
+      const group = laneEl.querySelector<HTMLElement>(`[data-group="${key}"]`);
+      const scroller = group?.querySelector<HTMLElement>('.silo-lgroup-scroll');
+      if (!group || !scroller) continue;
+      group.style.top = `${slot.top}px`;
+      group.dataset.placed = 'true';
+      scroller.style.maxHeight = `${slot.max}px`;
+    }
+    paintHairline();
     setSlots((previous) => (sameSlots(previous, next) ? previous : next));
-  }, [stacked, laneEl, keyed, lostEntries, groups.frameTop, blockTick, blockKey]);
+  }, [stacked, laneEl, groups, lostEntries.length, frame, paintHairline]);
+  paintLayout.current = measure;
+  // biome-ignore lint/correctness/useExhaustiveDependencies: blockKey and blockTick follow block content and height.
+  useLayoutEffect(() => {
+    measure();
+    return groups.subscribe(measure);
+  }, [measure, groups, blockKey, blockTick]);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a React slot commit can move the connector target.
+  useLayoutEffect(paintHairline, [paintHairline, slots]);
+
+  // A field growing or a note being added must move later groups in this same resize callback.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: observers follow the set of blocks.
+  useLayoutEffect(() => {
+    if (!stacked || !laneEl) return;
+    const resize = new ResizeObserver(() => {
+      paintLayout.current();
+      setBlockTick((value) => value + 1);
+    });
+    for (const block of laneEl.querySelectorAll('[data-note]')) resize.observe(block);
+    return () => resize.disconnect();
+  }, [stacked, laneEl, blockKey]);
 
   // Dev assertion: no two groups may overlap once the layout has settled.
   useEffect(() => {
@@ -185,8 +232,10 @@ export function NotesLane({
     const behavior = reduced ? 'auto' : 'smooth';
     const target = laneEl.querySelector<HTMLElement>(`[data-note="${CSS.escape(focusId)}"]`);
     if (target) revealInGroup(target, behavior);
-    revealGroup(scroll, top, behavior);
-  }, [focusId, focusIds, open, stacked, laneEl, slots, groups.groups, reduced, scroll]);
+    const frameTop =
+      frame.getBoundingClientRect().top - scroll.getBoundingClientRect().top + scroll.scrollTop;
+    revealGroup(scroll, top + frameTop, behavior);
+  }, [focusId, focusIds, open, stacked, laneEl, slots, groups.groups, reduced, scroll, frame]);
 
   const block = (entry: NoteEntry, index: number) => (
     <LaneBlock
@@ -206,26 +255,7 @@ export function NotesLane({
     />
   );
 
-  // The hairline from the gutter to the hovered block (hidden when it is scrolled out of its group).
-  const hovered = hoveredIds[0];
-  const link = (() => {
-    if (!stacked || !plan || !hovered || !laneEl) return null;
-    const hoveredGroup = groups.groups.find((g) => g.items.some((item) => item.id === hovered));
-    const target = laneEl.querySelector<HTMLElement>(`[data-note="${CSS.escape(hovered)}"]`);
-    const scroller = target?.closest<HTMLElement>('.silo-lgroup-scroll');
-    if (!hoveredGroup || !target || !scroller) return null;
-    const rect = target.getBoundingClientRect();
-    const view = scroller.getBoundingClientRect();
-    if (rect.bottom < view.top + 4 || rect.top > view.bottom - 4) return null;
-    const y2 = rect.top - scroll.getBoundingClientRect().top + scroll.scrollTop + 12;
-    const x1 = plan.proseRight - plan.shift + gutterOffset;
-    const x2 = plan.proseRight - plan.shift + LANE_GAP - 6;
-    const mid = (x1 + x2) / 2;
-    return `M${x1} ${hoveredGroup.y}C${mid} ${hoveredGroup.y} ${mid} ${y2} ${x2} ${y2}`;
-  })();
-
   if (!plan) return null;
-  const laneLeft = plan.proseRight - plan.shift + LANE_GAP;
   const everything: NoteEntry[] = [...lostEntries, ...keyed.flatMap((g) => g.entries)];
   return (
     <>
@@ -233,7 +263,7 @@ export function NotesLane({
         <>
           {stacked && (
             <svg className="silo-hairline" aria-hidden="true">
-              <path d={link ?? ''} data-on={Boolean(link)} />
+              <path ref={hairline} />
             </svg>
           )}
           {stacked && (
@@ -242,7 +272,7 @@ export function NotesLane({
               aria-label="Notes"
               data-notes-lane
               ref={setLaneEl}
-              style={{ left: laneLeft, width: LANE }}
+              style={{ width: LANE }}
             >
               {lostEntries.length > 0 && (
                 <LaneGroup
