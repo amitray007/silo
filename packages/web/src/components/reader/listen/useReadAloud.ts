@@ -299,9 +299,9 @@ export function useReadAloud({
   const startAt = useCallback(
     async (from: number) => {
       player.press();
-      player.halt(true);
-      const token = ++run.current;
       const sentences = ensure();
+      const units = player.prepare(engines.current.get(live.current.engineId), from);
+      const token = ++run.current;
       setActive(true);
       if (!sentences[from]) {
         setPlaying(false);
@@ -321,18 +321,23 @@ export function useReadAloud({
         if (token === run.current) setPlaying(false);
         return;
       }
-      if (token === run.current) player.start(engine, from);
+      if (token === run.current) player.start(engine, from, units);
     },
     [player, ensure, mark, loadEngine, audioContext],
   );
 
   /** Load the model and synthesize the first sentences, so Play is instant. */
   const warm = useCallback(async () => {
+    const token = run.current;
+    const id = live.current.engineId;
     try {
-      const engine = await loadEngine(live.current.engineId);
+      const engine = await loadEngine(id);
       ensure();
-      if (!live.current.playing)
-        player.warm(engine, Math.min(list.current.length - 1, firstVisible()));
+      if (token === run.current && id === live.current.engineId && !live.current.playing)
+        player.warm(
+          engine,
+          Math.min(list.current.length - 1, begun.current ? live.current.index : firstVisible()),
+        );
     } catch {
       // The error state is already set.
     }
@@ -376,7 +381,7 @@ export function useReadAloud({
   const pause = useCallback(() => {
     flush();
     run.current += 1;
-    player.halt();
+    player.prepare(engines.current.get(live.current.engineId), live.current.index);
     setPlaying(false);
     setBuffering(false);
   }, [player, flush]);
@@ -400,11 +405,13 @@ export function useReadAloud({
       if (live.current.playing) void startAt(next);
       else {
         begun.current = true;
+        live.current.index = next;
         setIndex(next);
         mark(list.current[next]);
+        void warm();
       }
     },
-    [startAt, mark],
+    [startAt, mark, warm],
   );
 
   /** The sentence a selection starts in, else the last click, else the first one on screen. */
@@ -449,20 +456,21 @@ export function useReadAloud({
       update({ voice: [live.current.engineId, id] });
       live.current.voiceId = id;
       restartIfPlaying();
+      if (!live.current.playing) void warm();
     },
-    [update, restartIfPlaying],
+    [update, restartIfPlaying, warm],
   );
 
   const setEngine = useCallback(
     (id: EngineId) => {
       const wasPlaying = live.current.playing;
       run.current += 1;
-      player.halt();
       update({ engine: id });
       live.current.engineId = id;
       live.current.voiceId = prefs.voices[id];
       if (wasPlaying) void startAt(live.current.index);
       else {
+        player.prepare(engines.current.get(id), live.current.index);
         setPlaying(false);
         void warm();
       }

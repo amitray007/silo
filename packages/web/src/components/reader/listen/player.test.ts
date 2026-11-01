@@ -3,6 +3,7 @@ import type { ReadAloudPauses } from '../../../lib/readerPrefs';
 import type { TtsEngine } from './engines/types';
 import { Player, type PlayerEvents } from './player';
 import type { Segment } from './segments';
+import { stretch } from './stretch';
 
 /** A clock and a buffer source that only record what was scheduled. */
 class FakeAudio {
@@ -104,6 +105,18 @@ function setup(segmentCount = 6, rate = 1, pauses: ReadAloudPauses = 'relaxed') 
     settings: () => settings,
     events,
     now: () => clock,
+    transform: {
+      process: async (chunks: readonly Float32Array[], rate: number) => {
+        const joined = new Float32Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+        let offset = 0;
+        for (const chunk of chunks) {
+          joined.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return stretch(joined, rate);
+      },
+      cancel: () => {},
+    },
   });
   return { audio, events, player, settings, list, advance: (ms: number) => (clock += ms) };
 }
@@ -128,7 +141,7 @@ afterEach(() => vi.useRealTimers());
 describe('Player scheduling', () => {
   it('schedules units back to back with the planned pause between them', async () => {
     const { audio, player } = setup(3);
-    const { engine } = fakeEngine({ seconds: 1 });
+    const { engine } = fakeEngine({ supportsSpeed: false, seconds: 1 });
     player.start(engine, 0);
     await flush();
     await flush();
@@ -393,9 +406,9 @@ describe('Player scheduling', () => {
 });
 
 describe('Player queue', () => {
-  it('keeps about 20 seconds and at least 3 units synthesized ahead, not the whole article', async () => {
+  it('keeps about 20 seconds of streaming synthesis ahead, not the whole article', async () => {
     const { audio, player } = setup(40);
-    const { engine, calls } = fakeEngine({ seconds: 4 });
+    const { engine, calls } = fakeEngine({ supportsSpeed: false, seconds: 4 });
     player.start(engine, 0);
     for (let i = 0; i < 12; i += 1) await flush();
     // Each unit is 4 s: 20 s needs 5 units; more than 12 ahead is never requested.
@@ -409,10 +422,13 @@ describe('Player queue', () => {
   });
 
   it('asks for the clicked unit first and in order after it', async () => {
-    const { player } = setup(10);
+    const { player, audio } = setup(10);
     const { engine, calls } = fakeEngine({ seconds: 2 });
     player.start(engine, 4);
     for (let i = 0; i < 6; i += 1) await flush();
+    expect(calls).toHaveLength(2);
+    audio.currentTime = 2.7;
+    await flush();
     expect(calls.slice(0, 3).map((call) => call.text.match(/number (\d+)/)?.[1])).toEqual([
       '4',
       '5',
@@ -458,7 +474,7 @@ describe('Player queue', () => {
 
   it('replays from the cache without synthesizing again', async () => {
     const { player, audio } = setup(2);
-    const { engine, calls } = fakeEngine({ seconds: 1 });
+    const { engine, calls } = fakeEngine({ supportsSpeed: false, seconds: 1 });
     player.start(engine, 0);
     await flush();
     await flush();
@@ -527,6 +543,43 @@ describe('Player warm-up, release and underrun', () => {
     player.halt();
   });
 
+  it('keeps the next in-flight warm job when jumping to its key', async () => {
+    const { player, audio } = setup(5);
+    const { engine, calls, finish } = gated();
+    player.warm(engine, 0);
+    await flush();
+    finish(0);
+    await flush();
+    expect(calls).toHaveLength(2);
+    player.prepare(engine, 1);
+    player.start(engine, 1);
+    expect(calls[1]?.signal?.aborted).toBe(false);
+    finish(1);
+    await flush();
+    expect(calls.filter((call) => /number 1 /.test(call.text))).toHaveLength(1);
+    expect(audio.starts.length).toBeGreaterThan(0);
+    player.halt();
+  });
+
+  it('keeps raw Phonon synthesis across a rate change, with a different transformed cache key', async () => {
+    const { player, settings, audio } = setup(1);
+    const { engine, calls } = fakeEngine({ supportsSpeed: false });
+    player.start(engine, 0);
+    await flush();
+    settings.rate = 1.25;
+    player.prepare(engine, 0);
+    player.start(engine, 0);
+    await flush();
+    expect(calls).toHaveLength(1);
+    expect(audio.starts.at(-1)?.duration).toBeCloseTo(0.8);
+    settings.rate = 2;
+    player.start(engine, 0);
+    await flush();
+    expect(calls).toHaveLength(1);
+    expect(audio.starts.at(-1)?.duration).toBeCloseTo(0.5);
+    player.halt();
+  });
+
   it('still drops warm-up work for other sentences when the reader jumps elsewhere', async () => {
     const { player } = setup(10);
     const { engine, calls } = gated();
@@ -539,7 +592,7 @@ describe('Player warm-up, release and underrun', () => {
 
   it('lets go of a unit once it has played, and replays it from the cache', async () => {
     const { player, audio } = setup(6);
-    const { engine, calls } = fakeEngine({ seconds: 1 });
+    const { engine, calls } = fakeEngine({ supportsSpeed: false, seconds: 1 });
     player.start(engine, 0);
     for (let i = 0; i < 4; i += 1) await flush();
     const plan = () => (player as unknown as { plan: { jobs: unknown[] } }).plan;
@@ -576,4 +629,45 @@ describe('Player warm-up, release and underrun', () => {
     expect(events.buffering).toHaveBeenLastCalledWith(false);
     player.halt();
   });
+});
+
+it('prepares a later transformed unit before its deadline and ignores results after Stop', async () => {
+  const audio = new FakeAudio();
+  const pending: { resolve: (pcm: Float32Array) => void; chunks: readonly Float32Array[] }[] = [];
+  const transform = {
+    process: (chunks: readonly Float32Array[]) =>
+      new Promise<Float32Array>((resolve) => pending.push({ resolve, chunks })),
+    cancel: vi.fn(),
+  };
+  const events = {
+    sentence: vi.fn(),
+    buffering: vi.fn(),
+    finished: vi.fn(),
+    failed: vi.fn(),
+    firstAudio: vi.fn(),
+  };
+  const player = new Player({
+    context: () => audio as unknown as AudioContext,
+    segments: () => sentences(3),
+    settings: () => ({ rate: 1.25, voice: '', pauses: 'natural' }),
+    events,
+    transform,
+  });
+  player.start(fakeEngine({ supportsSpeed: false }).engine, 0);
+  await flush();
+  // Later units are processing even though no first-unit audio has been scheduled.
+  expect(pending).toHaveLength(3);
+  expect(audio.starts).toHaveLength(0);
+  pending[1]?.resolve(new Float32Array(19200).fill(0.25));
+  pending[0]?.resolve(new Float32Array(19200).fill(0.5));
+  await flush();
+  expect(audio.starts).toHaveLength(2);
+  expect(audio.starts[1]?.at).toBeCloseTo((audio.starts[0]?.at ?? 0) + 0.8 + 0.15 / 1.25);
+  const count = audio.starts.length;
+  player.halt();
+  pending[2]?.resolve(new Float32Array(19200));
+  await flush();
+  expect(audio.starts).toHaveLength(count);
+  expect(events.failed).not.toHaveBeenCalled();
+  expect(transform.cancel).toHaveBeenCalled();
 });

@@ -461,3 +461,27 @@ it('discards the Listen position synchronously when Remove and pagehide precede 
   hook.unmount();
   expect(onSave).not.toHaveBeenCalled();
 });
+
+it('keeps useful in-flight warm synthesis through the hook start path', async () => {
+  let finish: () => void = () => {};
+  let signal: AbortSignal | undefined;
+  fake.stream = async function* (_text, options) {
+    signal = options.signal;
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    if (!signal?.aborted) yield new Float32Array(2400).fill(0.5);
+  };
+  const { prose, scroll } = article();
+  const hook = renderHook(() => useReadAloud({ prose, scroll }));
+  act(() => hook.result.current.begin());
+  act(() => hook.result.current.warm());
+  await waitFor(() => expect(fake.streamed).toHaveLength(1));
+  const warmed = fake.streamed[0];
+  act(() => hook.result.current.startAt(0));
+  await waitFor(() => expect(hook.result.current.playing).toBe(true));
+  expect(signal?.aborted).toBe(false);
+  await act(async () => finish());
+  expect(fake.streamed.filter((text) => text === warmed)).toHaveLength(1);
+  hook.unmount();
+});
