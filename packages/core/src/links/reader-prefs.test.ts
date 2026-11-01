@@ -38,6 +38,14 @@ describeIfPg('article reader preferences', () => {
     expect(detail).not.toHaveProperty('prefs');
   });
 
+  it('keeps presentation choices out of exports', async () => {
+    const link = await create();
+    await harness.mod().prefs.patchReaderPrefs(link.id, { type: { size: 20 } });
+    const exported = await harness.mod().exporter.exportLinks();
+    expect(exported.body).not.toContain('readerPrefs');
+    expect(exported.body).not.toContain('prefs');
+  });
+
   it('keeps concurrent nested patches', async () => {
     const { prefs, links } = harness.mod();
     const link = await create();

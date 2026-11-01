@@ -2,8 +2,8 @@ import { HIGHLIGHT_COLORS } from '@silo/db';
 import { z } from 'zod';
 
 /**
- * The synced reader preferences: one setting, `reader`, holding everything the Reader's dock and
- * Settings → Reader edit. The bounds match the browser's own parsers (`packages/web/src/lib/
+ * The synced reader preferences: one setting, `reader`, holding the defaults edited in
+ * Settings → Reader. The dock uses per-article overrides. The bounds match the browser's own parsers (`packages/web/src/lib/
  * readerPrefs.ts`), which the web mirrors by hand because it must not import core.
  *
  * One field list, three wrappers, so the defaults and bounds live in one place:

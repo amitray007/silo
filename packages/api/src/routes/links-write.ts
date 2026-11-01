@@ -126,7 +126,7 @@ export function registerLinksWriteRoutes(app: Hono): void {
 
   app.patch('/links/:id/reader-prefs', async (c) => {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
-    const body = readerPatchSchema.parse(await c.req.json());
+    const body = readerPatchSchema.parse(await c.req.json().catch(() => undefined));
     const readerPrefs = await patchReaderPrefs(id, body);
     if (readerPrefs === null) {
       return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);

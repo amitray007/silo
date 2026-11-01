@@ -80,6 +80,17 @@ describeIfPg('article reader preferences routes', () => {
     });
   });
 
+  it('rejects malformed JSON with the validation envelope', async () => {
+    const link = await create();
+    const res = await harness.mod().app.request(`/api/links/${link.id}/reader-prefs`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: '{',
+    });
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'validation_error' });
+  });
+
   it('rejects malformed ids, missing and trashed links, and feed writes', async () => {
     const { core, app } = harness.mod();
     expect((await patch('bad-id', {})).status).toBe(400);
