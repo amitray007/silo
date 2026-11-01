@@ -9,6 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { kokoroDtype } from '../components/reader/listen/engines/files';
 import { fetchTtsManifest } from '../components/reader/listen/engines/manifest';
 import type { HighlightColor } from '../lib/highlights';
+import type { ReaderSettings } from '../lib/readerPrefs';
+import type { DeepPartial } from '../lib/readerSync';
 import { mergeDeep } from '../lib/readerSync';
 import {
   clearTitleReveal,
@@ -205,6 +207,24 @@ export function useLink(id: string | undefined, options: { enabled?: boolean } =
     refetchInterval: (query) =>
       query.state.data?.link.captureStatus === 'enriching' ? 1500 : false,
   });
+}
+
+/** The article sync queue owns optimistic state and rollback; this hook keeps detail cache current. */
+export function useUpdateReaderPrefs(linkId: string) {
+  const client = useQueryClient();
+  return useCallback(
+    async (patch: DeepPartial<ReaderSettings>) => {
+      const { readerPrefs } = await apiPatch<{ readerPrefs: DeepPartial<ReaderSettings> }>(
+        `/api/links/${encodeURIComponent(linkId)}/reader-prefs`,
+        patch,
+      );
+      client.setQueryData<LinkResponse>(queryKeys.link(linkId), (data) =>
+        data ? { ...data, link: { ...data.link, readerPrefs } } : data,
+      );
+      return readerPrefs;
+    },
+    [client, linkId],
+  );
 }
 
 function withReadingPosition(

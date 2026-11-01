@@ -14,8 +14,8 @@ import {
 import { createPortal } from 'react-dom';
 import { useSaveReadingPosition } from '../../../api/hooks';
 import type { LinkJson } from '../../../api/types';
-import { useHighlightPrefs } from '../../../lib/readerPrefs';
 import { deriveTitleFromUrl } from '../../../lib/url';
+import { useReaderPrefs } from '../../../lib/useReaderPrefs';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
 import { HighlightSheet } from '../highlights/HighlightSheet';
@@ -300,7 +300,11 @@ export function ReaderDock({
     (position: number | null) => save(position, { source: 'mark' }),
     [save],
   );
-  const { color: highlightColor } = useHighlightPrefs();
+  const {
+    prefs: {
+      highlight: { color: highlightColor },
+    },
+  } = useReaderPrefs();
   const [dialHidden, setDialHidden] = useState(false);
   const highlights = useHighlights({
     link,

@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import {
-  READ_ALOUD_SPEEDS,
-  type ReadAloudPauses,
-  useReadAloudPrefs,
-} from '../../../lib/readerPrefs';
+import { READ_ALOUD_SPEEDS, type ReadAloudPauses } from '../../../lib/readerPrefs';
+import { useArticleReadAloudPrefs } from '../../../lib/useReaderPrefs';
 import { paintSpeaking } from '../highlights/paint';
 import { proseTextNodes } from '../pencil/lines';
 import { articleWords, shareAtPoint, wordAtShare } from '../place/words';
@@ -71,7 +68,7 @@ export function useReadAloud({
   canSave?: boolean;
   onSave?: (share: number, options?: { keepalive?: boolean }) => Promise<void>;
 }) {
-  const { prefs, update } = useReadAloudPrefs();
+  const { prefs, update } = useArticleReadAloudPrefs();
   const [active, setActive] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
@@ -111,7 +108,11 @@ export function useReadAloud({
 
   const engineId: EngineId = prefs.engine;
   const { status, progress, bytes, error, voices } = loads[engineId];
-  const voiceId = prefs.voices[engineId];
+  const selectedVoice = prefs.voices[engineId];
+  const voiceId =
+    status === 'ready' && voices.length > 0 && !voices.some((voice) => voice.id === selectedVoice)
+      ? ''
+      : selectedVoice;
   const rate = prefs.rate;
   const pauses = prefs.pauses;
 
@@ -487,18 +488,6 @@ export function useReadAloud({
     // Play does not wait for it.
     audioContext();
   }, [ensure, audioContext]);
-
-  // A voice the loaded engine does not have falls back to its default.
-  useEffect(() => {
-    if (
-      status === 'ready' &&
-      voiceId &&
-      voices.length > 0 &&
-      !voices.some((v) => v.id === voiceId)
-    ) {
-      update({ voice: [engineId, ''] });
-    }
-  }, [status, voiceId, voices, engineId, update]);
 
   useEffect(() => {
     disposed.current = false;

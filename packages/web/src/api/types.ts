@@ -161,6 +161,7 @@ export type LinkJson = {
    * Where the reader stopped, as a share (0 to 1) of the article's words. Only single-link
    * reads carry it: `null` means none saved, and a list row leaves it out.
    */
+  readerPrefs?: DeepPartial<ReaderSettings>;
   readingPosition?: ReadingPositionJson | null;
   /** Passage highlights. Only single-link reads carry them; a list row leaves them out. */
   highlights?: HighlightJson[];

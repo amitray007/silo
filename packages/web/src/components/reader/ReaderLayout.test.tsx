@@ -11,6 +11,7 @@ import type {
   TrashLinkJson,
 } from '../../api/types';
 import { layoutMedia } from '../../lib/breakpoints';
+import { mergeDeep } from '../../lib/readerSync';
 import {
   githubSourceData,
   hackerNewsSourceData,
@@ -82,6 +83,23 @@ function HistoryProbe() {
   );
 }
 
+function requestMethod(init?: RequestInit) {
+  return init?.method ?? 'GET';
+}
+
+function patchArticlePrefs(
+  path: string,
+  method: string,
+  init: RequestInit | undefined,
+  links: LinkJson[],
+) {
+  if (method !== 'PATCH' || !path.endsWith('/reader-prefs')) return undefined;
+  const link = links.find((link) => path === `/api/links/${link.id}/reader-prefs`);
+  if (!link) return undefined;
+  link.readerPrefs = mergeDeep(link.readerPrefs ?? {}, JSON.parse(String(init?.body)));
+  return json({ readerPrefs: link.readerPrefs });
+}
+
 function renderReader({
   live = [a, b],
   trash = [],
@@ -105,10 +123,16 @@ function renderReader({
   pageSize?: number;
   frameHint?: FrameHint;
 } = {}) {
-  const state = { live: [...live], trash: [...trash], settings: { ...settings } };
+  const state = {
+    live: structuredClone(live),
+    trash: structuredClone(trash),
+    settings: { ...settings },
+  };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    const method = init?.method ?? 'GET';
+    const method = requestMethod(init);
+    const prefsResponse = patchArticlePrefs(path, method, init, state.live);
+    if (prefsResponse) return prefsResponse;
     const url = new URL(path, 'https://silo.test');
     const reads: Record<string, () => Response> = {
       '/api/auth/check': () => json({ authRequired: false }),
@@ -1355,7 +1379,7 @@ it('opens the Type sheet from the dock, applies and persists settings, and close
   ] as const) {
     fireEvent.click(screen.getByRole('radio', { name: label }));
     expect(article.getAttribute('data-width')).toBe(value);
-    expect(localStorage.getItem('silo.readerWidth')).toBe(value);
+    expect(localStorage.getItem('silo.readerWidth')).toBeNull();
   }
   fireEvent.click(screen.getByRole('radio', { name: 'Sepia' }));
   expect(container.querySelector('.silo-readerpane')?.getAttribute('data-reader-theme')).toBe(
@@ -1363,10 +1387,7 @@ it('opens the Type sheet from the dock, applies and persists settings, and close
   );
   fireEvent.click(screen.getByRole('button', { name: 'Increase size' }));
   expect(article.style.getPropertyValue('--reader-size')).toBe('17px');
-  expect(JSON.parse(localStorage.getItem('silo.readerType') ?? '{}')).toMatchObject({
-    size: 17,
-    theme: 'sepia',
-  });
+  expect(localStorage.getItem('silo.readerType')).toBeNull();
   fireEvent.keyDown(document, { key: 'Escape' });
   await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Type' })).toBeNull());
   await waitFor(() => expect(document.activeElement).toBe(trigger));
