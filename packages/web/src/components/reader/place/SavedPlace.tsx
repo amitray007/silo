@@ -31,7 +31,7 @@ function placeLabel(saved: ReadingPositionJson): string {
   const yesterday =
     new Date(saved.updatedAt).toDateString() === new Date(Date.now() - 86400000).toDateString();
   const time = yesterday ? 'Yesterday' : age === 'just now' ? 'Just now' : age;
-  return `${saved.source === 'listen' ? 'Stopped listening here' : 'Stopped here'} · ${time}`;
+  return `${saved.source === 'listen' ? 'Continue listening here' : 'Continue here'} · ${time}`;
 }
 
 /** Only this component ticks; the reader and its prose do not render on time changes. */

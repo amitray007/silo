@@ -179,7 +179,7 @@ it('sets a manual mark from the hover outline and removes it through the popover
 
 it('the ribbon and label open a keyboard popover with Pencil, Listen and Remove', () => {
   mount();
-  const label = screen.getByText(/Stopped here/);
+  const label = screen.getByText(/Continue here/);
   fireEvent.click(label);
   const first = screen.getByRole('button', { name: 'Continue with Pencil' });
   expect(document.activeElement).toBe(first);
@@ -194,6 +194,24 @@ it('the ribbon and label open a keyboard popover with Pencil, Listen and Remove'
   expect(save).toHaveBeenCalledWith(null);
   expect(listen.forgetPlace).toHaveBeenCalledOnce();
   expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+it.each([
+  ['mark', 'Continue here'],
+  ['pencil', 'Continue here'],
+  ['listen', 'Continue listening here'],
+] as const)('uses the same label, time and accessible name for source %s', (source, text) => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-11-02T12:00:00Z'));
+  mount({ ...saved, source });
+  const label = `${text} · Yesterday`;
+  expect(screen.getByText(label)).toBeTruthy();
+  const buttons = screen.getAllByRole('button', { name: label });
+  expect(buttons).toHaveLength(2);
+  const ribbon = buttons[0];
+  if (!ribbon) throw new Error('Expected the saved-place ribbon');
+  fireEvent.click(ribbon);
+  expect(screen.getByRole('dialog').querySelector('.silo-place-meta')?.textContent).toBe(label);
 });
 
 it('shows an offscreen continue pill, jumps to one third, and dismisses with Escape', () => {
@@ -246,11 +264,11 @@ it.each([
   const now = Date.parse('2026-11-10T12:00:00Z');
   vi.setSystemTime(now);
   const view = mount({ ...saved, updatedAt: new Date(now - age).toISOString() });
-  expect(screen.getByText(`Stopped here · ${before}`)).toBeTruthy();
+  expect(screen.getByText(`Continue here · ${before}`)).toBeTruthy();
   act(() => vi.advanceTimersByTime(delay - 1));
-  expect(screen.getByText(`Stopped here · ${before}`)).toBeTruthy();
+  expect(screen.getByText(`Continue here · ${before}`)).toBeTruthy();
   act(() => vi.advanceTimersByTime(1));
-  expect(screen.getByText(`Stopped here · ${after}`)).toBeTruthy();
+  expect(screen.getByText(`Continue here · ${after}`)).toBeTruthy();
   view.unmount();
   expect(vi.getTimerCount()).toBe(0);
 });

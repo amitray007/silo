@@ -656,7 +656,7 @@ Match the mockup exactly:
   line box. Text never moves.
 - **Label row.** It sits in the paragraph gap above the marked paragraph:
   - a 1.5 to 2px elbow from the ribbon;
-  - the muted label "Stopped here · Yesterday", or "Stopped listening here"
+  - the muted label "Continue here · Yesterday", or "Continue listening here"
     when the source is `listen`, with the time relative to `updatedAt`;
   - an 8px space, then a dashed rule (4px dashes, 4px gaps) that ends exactly
     at the column's right text edge.
@@ -665,7 +665,7 @@ Match the mockup exactly:
     stable.
 - **Outline dial.** Where the ribbon falls inside the dial's band, a 46px
   window clears the dial ticks and hit areas behind it.
-- **Popover.** A click on the ribbon or the label opens "Stopped here · time",
+- **Popover.** A click on the ribbon or the label opens "Continue here · time",
   Continue with Pencil, Listen from here, and Remove. It opens below and to
   the right and never covers the dial.
 - **Manual mark.** Hovering a paragraph's first line, within its line boxes
