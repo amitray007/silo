@@ -1,6 +1,6 @@
 import { useReducedMotion } from 'motion/react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
+import { createPortal, flushSync } from 'react-dom';
 import type { HighlightsApi } from '../highlights/useHighlights';
 import { ReaderIcon } from '../ReaderIcon';
 import { hairlinePath } from './hairline';
@@ -11,6 +11,7 @@ import { groupMax, type Slot, type StackRow, slotsOverlap, stackRows } from './s
 import { useColumnShift } from './useColumnShift';
 import type { Groups } from './useGroups';
 import type { NotesLaneApi } from './useNotesLane';
+import { laneWindow } from './window';
 
 const ORPHANS = 'orphans';
 /** The orphan group scrolls inside itself past this height. */
@@ -51,10 +52,25 @@ function sameSlots(a: Map<string, Slot>, b: Map<string, Slot>): boolean {
   return true;
 }
 
+function atGroupEdge(group: HTMLElement, target: HTMLElement, backwards: boolean) {
+  const controls = [...group.querySelectorAll<HTMLElement>('button, textarea')];
+  return target === (backwards ? controls[0] : controls.at(-1));
+}
+
+/** Tab across a window boundary without skipping the unmounted paragraph's controls. */
+function focusGroupEdge(lane: HTMLElement | null, key: string, backwards: boolean) {
+  const targets = lane
+    ?.querySelector(`[data-group="${key}"]`)
+    ?.querySelectorAll<HTMLElement>('button, textarea');
+  if (!targets?.length) return;
+  const target = backwards ? targets[targets.length - 1] : targets[0];
+  target?.focus();
+}
+
 /**
  * The notes lane: every highlight as a block beside its paragraph, grouped per paragraph. The
  * article column makes room on a spring; the lane lists blocks in a panel over the pane when
- * nothing fits. Loaded the first time the lane opens.
+ * nothing fits. Only its buffered window mounts; it stays hidden and ready while closed.
  */
 export function NotesLane({
   api,
@@ -89,6 +105,9 @@ export function NotesLane({
   const [blockTick, setBlockTick] = useState(0);
   const hairline = useRef<SVGPathElement>(null);
   const paintLayout = useRef(() => {});
+  const scrollPositions = useRef(new Map<string, number>());
+  const heights = useRef(new Map<string, number[]>());
+  const [tabGroup, setTabGroup] = useState<string | null>(null);
   const [slots, setSlots] = useState<Map<string, Slot>>(new Map());
   const [laneEl, setLaneEl] = useState<HTMLElement | null>(null);
 
@@ -121,6 +140,45 @@ export function NotesLane({
       })),
     [groups.groups],
   );
+  const focusGroup = keyed.find(({ entries }) =>
+    entries.some((entry) => entry.id === focusId),
+  )?.key;
+  const addingGroup = keyed.find(({ entries }) =>
+    entries.some((entry) => entry.id === adding),
+  )?.key;
+  const windowKeys = useCallback(
+    (next: Map<string, Slot>) => {
+      const top = scroll.getBoundingClientRect().top - frame.getBoundingClientRect().top;
+      const active = laneEl?.contains(document.activeElement)
+        ? document.activeElement?.closest<HTMLElement>('[data-group]')?.dataset.group
+        : undefined;
+      return laneWindow(
+        next,
+        top,
+        scroll.clientHeight,
+        [focusGroup, addingGroup, tabGroup, active].filter((key): key is string => Boolean(key)),
+      );
+    },
+    [scroll, frame, laneEl, focusGroup, addingGroup, tabGroup],
+  );
+  const [visible, setVisible] = useState<string[]>(() => {
+    const rows = keyed.map(({ key, group }) => ({
+      key,
+      anchor: group.top - 2,
+      max: groupMax(group.paragraphHeight),
+      blocks: [groupMax(group.paragraphHeight)],
+    }));
+    if (lostEntries.length)
+      rows.unshift({
+        key: ORPHANS,
+        anchor: groups.frameTop,
+        max: ORPHANS_MAX,
+        blocks: [ORPHANS_MAX],
+      });
+    return windowKeys(stackRows(rows));
+  });
+  const mounted = new Set([...visible, focusGroup, addingGroup, tabGroup]);
+  const visibleKey = visible.join('|');
   const blockKey = `${keyed.map((g) => g.entries.map((e) => `${e.id}${e.note ? 1 : 0}`).join()).join('|')}/${lostEntries.length}/${adding ?? ''}`;
 
   const measureHairline = useCallback(
@@ -147,49 +205,66 @@ export function NotesLane({
   const onScrolled = useCallback(() => measureHairline()?.(), [measureHairline]);
 
   const measure = useCallback(() => {
-    if (!stacked || !laneEl) return;
+    if (!laneEl || (!stacked && open)) return;
     const current = groups.read();
+    // Only mounted blocks participate in DOM measurement. Reserve an unmeasured group's cap
+    // until it enters the buffer; measured heights survive unmounting and closing the lane.
+    for (const group of laneEl.querySelectorAll<HTMLElement>('[data-group]')) {
+      const key = group.dataset.group;
+      if (key) heights.current.set(key, blockHeights(laneEl, key));
+    }
     const rows: StackRow[] = [];
     if (lostEntries.length > 0)
       rows.push({
         key: ORPHANS,
         anchor: current.frameTop,
         max: ORPHANS_MAX,
-        blocks: blockHeights(laneEl, ORPHANS),
+        blocks: heights.current.get(ORPHANS) ?? [ORPHANS_MAX],
       });
     for (const group of current.groups)
       rows.push({
         key: `p${group.para}`,
         anchor: group.top - 2,
         max: groupMax(group.paragraphHeight),
-        blocks: blockHeights(laneEl, `p${group.para}`),
+        blocks: heights.current.get(`p${group.para}`) ?? [groupMax(group.paragraphHeight)],
       });
     const next = stackRows(rows);
     const left = frame.clientWidth + LANE_GAP;
-    const placements = Array.from(next, ([key, slot]) => {
-      const group = laneEl.querySelector<HTMLElement>(`[data-group="${key}"]`);
-      return { group, scroller: group?.querySelector<HTMLElement>('.silo-lgroup-scroll'), slot };
-    });
+    const placements = Array.from(
+      laneEl.querySelectorAll<HTMLElement>('[data-group]'),
+      (group) => ({
+        group,
+        scroller: group.querySelector<HTMLElement>('.silo-lgroup-scroll'),
+        slot: next.get(group.dataset.group ?? ''),
+      }),
+    );
     const paintHairline = measureHairline(next, current.rangeYs);
+    const nextVisible = windowKeys(next);
     // All subscribers finish reading before this write phase runs in the same callback.
     return () => {
       laneEl.style.left = `${left}px`;
       for (const { group, scroller, slot } of placements) {
-        if (!group || !scroller) continue;
+        if (!slot || !scroller) continue;
         group.style.top = `${slot.top}px`;
         group.dataset.placed = 'true';
         scroller.style.maxHeight = `${slot.max}px`;
       }
       paintHairline?.();
+      setVisible((previous) =>
+        previous.length === nextVisible.length &&
+        previous.every((key, index) => key === nextVisible[index])
+          ? previous
+          : nextVisible,
+      );
       setSlots((previous) => (sameSlots(previous, next) ? previous : next));
     };
-  }, [stacked, laneEl, groups, lostEntries.length, frame, measureHairline]);
+  }, [stacked, open, laneEl, groups, lostEntries.length, frame, measureHairline, windowKeys]);
   paintLayout.current = () => measure()?.();
   // biome-ignore lint/correctness/useExhaustiveDependencies: blockKey and blockTick follow block content and height.
   useLayoutEffect(() => {
     measure()?.();
     return groups.subscribe(measure);
-  }, [measure, groups, blockKey, blockTick]);
+  }, [measure, groups, blockKey, blockTick, visibleKey]);
 
   // A field growing or a note being added must move later groups in this same resize callback.
   // biome-ignore lint/correctness/useExhaustiveDependencies: observers follow the set of blocks.
@@ -201,16 +276,27 @@ export function NotesLane({
     });
     for (const block of laneEl.querySelectorAll('[data-note]')) resize.observe(block);
     return () => resize.disconnect();
-  }, [stacked, laneEl, blockKey]);
+  }, [stacked, laneEl, blockKey, visibleKey]);
+
+  // Scroll can jump by more than a buffer in one event. Commit the new window before paint.
+  useLayoutEffect(() => {
+    if (!stacked) return;
+    const update = () => flushSync(() => paintLayout.current());
+    scroll.addEventListener('scroll', update, { passive: true });
+    return () => scroll.removeEventListener('scroll', update);
+  }, [stacked, scroll]);
 
   // Dev assertion: no two groups may overlap once the layout has settled.
   useEffect(() => {
     if (!import.meta.env.DEV || !stacked) return;
     const timer = window.setTimeout(() => {
-      const placed = [...slots.entries()];
-      for (const [i, [keyA, a]] of placed.entries())
-        for (const [keyB, b] of placed.slice(i + 1))
-          if (slotsOverlap(a, b)) console.warn('[notes lane] groups overlap', keyA, keyB);
+      const placed = [...slots.entries()].sort((a, b) => a[1].top - b[1].top);
+      for (let i = 1; i < placed.length; i++) {
+        const previous = placed[i - 1];
+        const current = placed[i];
+        if (previous && current && slotsOverlap(previous[1], current[1]))
+          console.warn('[notes lane] groups overlap', previous[0], current[0]);
+      }
     }, SETTLE_MS);
     return () => window.clearTimeout(timer);
   }, [stacked, slots]);
@@ -236,16 +322,33 @@ export function NotesLane({
     revealGroup(scroll, top + frameTop, behavior);
   }, [focusId, focusIds, open, stacked, laneEl, slots, groups.groups, reduced, scroll, frame]);
 
+  const onTab = (event: React.KeyboardEvent<HTMLElement>) => {
+    if (event.key !== 'Tab' || !(event.target instanceof HTMLElement)) return;
+    const group = event.target.closest<HTMLElement>('[data-group]');
+    if (!group) return;
+    if (!atGroupEdge(group, event.target, event.shiftKey)) return;
+    const order = [...slots.keys()];
+    const direction = event.shiftKey ? -1 : 1;
+    const next = order[order.indexOf(group.dataset.group ?? '') + direction];
+    if (!next) return;
+    if (laneEl?.querySelector(`[data-group="${next}"]`)) return;
+    event.preventDefault();
+    flushSync(() => setTabGroup(next));
+    focusGroupEdge(laneEl, next, event.shiftKey);
+  };
+
+  const focusBlock = useCallback((id: string) => lane.focus([id]), [lane.focus]);
   const block = (entry: NoteEntry, index: number) => (
     <LaneBlock
       key={entry.id}
       entry={entry}
       index={index}
+      enter={overlay}
       emphasised={focusIds.includes(entry.id)}
       hovered={hoveredIds.includes(entry.id)}
       adding={adding === entry.id}
       canWrite={canWrite}
-      onFocus={(id) => lane.focus([id])}
+      onFocus={focusBlock}
       onHover={lane.setHoveredIds}
       onAdd={setAdding}
       onSetNote={api.setNote}
@@ -265,37 +368,49 @@ export function NotesLane({
               <path ref={hairline} />
             </svg>
           )}
-          {stacked && (
+          {(stacked || !open) && (
             <section
               className="silo-lane"
               aria-label="Notes"
-              data-notes-lane
+              data-notes-lane={stacked || undefined}
+              aria-hidden={!stacked}
+              inert={!stacked}
               ref={setLaneEl}
-              style={{ width: LANE }}
+              onKeyDownCapture={onTab}
+              style={{
+                width: LANE,
+                visibility: stacked ? undefined : 'hidden',
+                height: stacked ? undefined : 0,
+                overflow: stacked ? undefined : 'clip',
+              }}
             >
-              {lostEntries.length > 0 && (
+              {lostEntries.length > 0 && mounted.has(ORPHANS) && (
                 <LaneGroup
                   groupKey={ORPHANS}
                   slot={slots.get(ORPHANS)}
                   version={blockTick}
                   smooth={!reduced}
                   onScrolled={onScrolled}
+                  scrollPositions={scrollPositions.current}
                 >
                   {lostEntries.map(block)}
                 </LaneGroup>
               )}
-              {keyed.map(({ key, entries }) => (
-                <LaneGroup
-                  key={key}
-                  groupKey={key}
-                  slot={slots.get(key)}
-                  version={blockTick}
-                  smooth={!reduced}
-                  onScrolled={onScrolled}
-                >
-                  {entries.map(block)}
-                </LaneGroup>
-              ))}
+              {keyed
+                .filter(({ key }) => mounted.has(key))
+                .map(({ key, entries }) => (
+                  <LaneGroup
+                    key={key}
+                    groupKey={key}
+                    slot={slots.get(key)}
+                    version={blockTick}
+                    smooth={!reduced}
+                    onScrolled={onScrolled}
+                    scrollPositions={scrollPositions.current}
+                  >
+                    {entries.map(block)}
+                  </LaneGroup>
+                ))}
             </section>
           )}
         </>,

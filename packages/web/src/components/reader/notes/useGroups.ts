@@ -32,6 +32,12 @@ export type Groups = GroupLayout & {
   subscribe: (measure: () => (() => void) | undefined) => () => void;
 };
 
+const withoutTransform = (style: string | null) =>
+  (style ?? '')
+    .replace(/(?:^|;)\s*transform\s*:[^;]*/g, '')
+    .replace(/;\s*$/, '')
+    .trim();
+
 const NONE: GroupLayout = { groups: [], rangeYs: new Map(), frameTop: 0 };
 
 /** Group the resolved highlights by paragraph and measure each group against the prose. */
@@ -43,10 +49,20 @@ function collectGroups(
   const box = frame.getBoundingClientRect();
   const sections = paragraphSections(prose);
   const toContent = (viewportY: number) => viewportY - box.top - frame.clientTop + frame.scrollTop;
+  const numbers = new Map(sections.map((section, index) => [section, index + 1]));
+  const paragraph = (node: Node) => {
+    let element = node instanceof Element ? node : node.parentElement;
+    while (element && element !== prose) {
+      const number = numbers.get(element);
+      if (number !== undefined) return number;
+      element = element.parentElement;
+    }
+    return paragraphOf(sections, node);
+  };
   const byPara = new Map<number, NoteGroup>();
   const rangeYs = new Map<string, number>();
   for (const item of resolved) {
-    const para = paragraphOf(sections, item.range.startContainer);
+    const para = paragraph(item.range.startContainer);
     const rect = item.range.getClientRects()[0] ?? item.range.getBoundingClientRect();
     const y = toContent(rect.top + rect.height / 2);
     rangeYs.set(item.id, y);
@@ -114,26 +130,34 @@ export function useGroups(
     // React owns the set of groups. Geometry subscribers own their positions.
     setMeasured(read());
     if (!prose || !frame || !scroll || !active) return;
-    const paint = () => {
-      layout.invalidate();
+    const paint = (invalidate = true) => {
+      if (invalidate) layout.invalidate();
       const paints = Array.from(listeners, (measure) => measure());
       for (const paint of paints) paint?.();
     };
-    const observer = new ResizeObserver(paint);
+    const observer = new ResizeObserver(() => paint());
     const article = prose.closest('.silo-reader') ?? frame;
     for (const element of new Set([prose, frame, scroll, article, ...prose.children]))
       observer.observe(element);
     const changes = new MutationObserver((records) => {
-      if (
-        records.some(
+      const relevant = records.filter(
+        (record) =>
+          !(record.target instanceof Element) ||
+          !record.target.closest(
+            '.silo-marker, .silo-notes-layer, .silo-place-ribbon-gutter, .silo-place-ribbon-preview, .silo-pencil',
+          ),
+      );
+      if (relevant.length) {
+        // The frame carries its children through a transform. Their relative coordinates stay
+        // valid; subscribers still repaint gutter clamping and connectors in this same frame.
+        const reflow = relevant.some(
           (record) =>
-            !(record.target instanceof Element) ||
-            !record.target.closest(
-              '.silo-marker, .silo-notes-layer, .silo-place-ribbon-gutter, .silo-place-ribbon-preview, .silo-pencil',
-            ),
-        )
-      )
-        paint();
+            record.target !== article ||
+            record.attributeName !== 'style' ||
+            withoutTransform(record.oldValue) !== withoutTransform(article.getAttribute('style')),
+        );
+        paint(reflow);
+      }
     });
     changes.observe(article, {
       attributes: true,
@@ -141,14 +165,16 @@ export function useGroups(
       childList: true,
       characterData: true,
       attributeFilter: ['style', 'class', 'data-width'],
+      attributeOldValue: true,
     });
-    window.addEventListener('resize', paint);
-    document.fonts?.addEventListener('loadingdone', paint);
+    const reflow = () => paint();
+    window.addEventListener('resize', reflow);
+    document.fonts?.addEventListener('loadingdone', reflow);
     return () => {
       observer.disconnect();
       changes.disconnect();
-      window.removeEventListener('resize', paint);
-      document.fonts?.removeEventListener('loadingdone', paint);
+      window.removeEventListener('resize', reflow);
+      document.fonts?.removeEventListener('loadingdone', reflow);
     };
   }, [prose, frame, scroll, active, read, layout, listeners]);
   return useMemo(() => ({ ...measured, read, subscribe }), [measured, read, subscribe]);

@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { memo, useRef } from 'react';
 import type { HighlightJson } from '../../../api/types';
 import type { HighlightColor } from '../../../lib/highlights';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
@@ -83,9 +83,10 @@ function AddNoteField({
  * One highlight in the lane: a colour rule and its note (14px), or a muted two-line snippet with
  * "Add note", which turns into an inline field. Edit and delete show on hover at the first line.
  */
-export function LaneBlock({
+export const LaneBlock = memo(function LaneBlock({
   entry,
   index,
+  enter,
   emphasised,
   hovered,
   adding,
@@ -100,6 +101,8 @@ export function LaneBlock({
   entry: NoteEntry;
   /** The block's place in its group, for the entrance stagger. */
   index: number;
+  /** Windowed groups must be visible immediately, including during a jump. */
+  enter: boolean;
   emphasised: boolean;
   hovered: boolean;
   adding: boolean;
@@ -120,7 +123,10 @@ export function LaneBlock({
       data-color={entry.color}
       data-focus={emphasised}
       data-hover={hovered}
-      style={{ animationDelay: `${Math.min(index, 8) * 30}ms` }}
+      style={{
+        animation: enter ? undefined : 'none',
+        animationDelay: `${Math.min(index, 8) * 30}ms`,
+      }}
       onMouseEnter={() => onHover([id])}
       onMouseLeave={() => onHover([])}
     >
@@ -180,4 +186,4 @@ export function LaneBlock({
       )}
     </div>
   );
-}
+});
