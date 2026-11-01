@@ -319,16 +319,8 @@ it.each(['pauses', 'settings', 'speed', 'voice', 'engine'] as const)(
 it('resumes the saved sentence and saves only explicit pause, close, and pagehide', async () => {
   const { prose, scroll } = article();
   const onSave = vi.fn(async () => {});
-  const { articleWords, shareAtPoint } = await import('../place/words');
-  const { buildSegments } = await import('./segments');
-  const sentences = buildSegments(prose);
-  const sentence = sentences[2];
-  if (!sentence) throw new Error('Missing fixture sentence');
-  const position = shareAtPoint(
-    articleWords(prose),
-    sentence.range.startContainer,
-    sentence.range.startOffset,
-  );
+  // Legacy word stream: 20 words precede the second paragraph, 51 in total.
+  const position = 20 / 51;
   const hook = renderHook(() =>
     useReadAloud({ prose, scroll, saved: position, canSave: true, onSave }),
   );
@@ -483,5 +475,25 @@ it('keeps useful in-flight warm synthesis through the hook start path', async ()
   expect(signal?.aborted).toBe(false);
   await act(async () => finish());
   expect(fake.streamed.filter((text) => text === warmed)).toHaveLength(1);
+  hook.unmount();
+});
+
+it('round-trips legacy word shares through inline markup and skipped blocks', async () => {
+  const { prose, scroll } = article();
+  prose.innerHTML =
+    '<h2>A title</h2><p>One <em>small</em> sentence. Two more words.</p><pre>skip these words</pre><p>Last words.</p>';
+  const onSave = vi.fn(async () => {});
+  // The final paragraph starts at word 8 of 10. Postgres stores this as real.
+  const hook = renderHook(() =>
+    useReadAloud({ prose, scroll, saved: Math.fround(0.8), canSave: true, onSave }),
+  );
+  act(() => hook.result.current.play());
+  await waitFor(() => expect(hook.result.current.current?.text).toBe('Last words.'));
+  act(() => hook.result.current.pause());
+  expect(onSave).toHaveBeenLastCalledWith(0.8, undefined);
+  act(() => hook.result.current.play());
+  await waitFor(() => expect(hook.result.current.current?.text).toBe('Last words.'));
+  act(() => hook.result.current.stop());
+  expect(onSave).toHaveBeenLastCalledWith(0.8, undefined);
   hook.unmount();
 });

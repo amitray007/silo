@@ -3,7 +3,7 @@ import { READ_ALOUD_SPEEDS, type ReadAloudPauses } from '../../../lib/readerPref
 import { useArticleReadAloudPrefs } from '../../../lib/useReaderPrefs';
 import { paintSpeaking } from '../highlights/paint';
 import { proseTextNodes } from '../pencil/lines';
-import { articleWords, shareAtPoint, wordAtShare } from '../place/words';
+import { type ArticleWordIndex, articleWordIndex } from '../place/words';
 import { createEngine, ENGINES, type EngineId, type TtsEngine, type Voice } from './engines';
 import { isEnglishText } from './language';
 import { Player } from './player';
@@ -131,7 +131,7 @@ export function useReadAloud({
   const lastClick = useRef<Node | null>(null);
   // Bumped by every start, stop and engine change; an async start that sees a newer value quits.
   const run = useRef(0);
-  const wordList = useRef<Range[]>([]);
+  const words = useRef<ArticleWordIndex | null>(null);
   const currentShare = useRef<number | null>(null);
   const position = useRef({ saved, canSave, onSave, prose });
   position.current = { saved, canSave, onSave, prose };
@@ -151,11 +151,9 @@ export function useReadAloud({
 
   const mark = useCallback((segment: Segment | undefined) => {
     if (segment)
-      currentShare.current = shareAtPoint(
-        wordList.current,
-        segment.range.startContainer,
-        segment.range.startOffset,
-      );
+      currentShare.current =
+        words.current?.shareAtPoint(segment.range.startContainer, segment.range.startOffset) ??
+        null;
     paintSpeaking(segment?.range ?? null);
     const pane = live.current.scroll;
     if (segment && pane) scrollToSentence(pane, segment.range);
@@ -211,7 +209,7 @@ export function useReadAloud({
   const ensure = useCallback((): Segment[] => {
     if (list.current.length === 0 && prose) {
       list.current = buildSegments(prose);
-      wordList.current = articleWords(prose);
+      words.current = articleWordIndex(prose);
       setSegments(list.current);
     }
     return list.current;
@@ -223,7 +221,7 @@ export function useReadAloud({
     run.current += 1;
     player.halt();
     list.current = [];
-    wordList.current = [];
+    words.current = null;
     currentShare.current = null;
     begun.current = false;
     setSegments([]);
@@ -353,7 +351,7 @@ export function useReadAloud({
     const now = position.current;
     const sentences = ensure();
     const word =
-      now.prose && now.saved !== null ? wordAtShare(articleWords(now.prose), now.saved) : undefined;
+      now.prose && now.saved !== null ? articleWordIndex(now.prose).atShare(now.saved) : undefined;
     return word
       ? Math.max(0, segmentIndexAt(sentences, word.startContainer, word.startOffset))
       : firstVisible();

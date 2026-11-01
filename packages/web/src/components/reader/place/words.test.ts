@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { buildSegments, segmentIndexAt } from '../listen/segments';
-import { articleWordIndex, articleWords, shareAtBlock, shareAtPoint, wordAtShare } from './words';
+import { articleWordIndex } from './words';
 
 function article() {
   const prose = document.createElement('div');
@@ -12,8 +12,8 @@ function article() {
 describe('one saved word stream', () => {
   it('maps shares to paragraphs and sentences, ignoring code and preserving inline text', () => {
     const prose = article();
-    const words = articleWords(prose);
-    expect(words.map(String)).toEqual([
+    const words = articleWordIndex(prose);
+    expect(Array.from({ length: words.length }, (_, i) => String(words.rangeAt(i)))).toEqual([
       'A',
       'title',
       'One',
@@ -25,7 +25,7 @@ describe('one saved word stream', () => {
       'Last',
       'words.',
     ]);
-    const word = wordAtShare(words, 0.65);
+    const word = words.atShare(0.65);
     expect(word?.toString()).toBe('more');
     expect(word && prose.querySelector('p')?.contains(word.startContainer)).toBe(true);
     const sentences = buildSegments(prose);
@@ -33,19 +33,19 @@ describe('one saved word stream', () => {
     const second = sentences[2];
     expect(second?.text).toBe('Two more words.');
     expect(
-      second && shareAtPoint(words, second.range.startContainer, second.range.startOffset),
+      second && words.shareAtPoint(second.range.startContainer, second.range.startOffset),
     ).toBe(0.5);
-    expect(shareAtBlock(words, prose.querySelectorAll('p')[1] as Element)).toBe(0.8);
+    expect(words.shareAtBlock(prose.querySelectorAll('p')[1] as Element)).toBe(0.8);
   });
 
   it('round-trips a paragraph boundary through Postgres real precision', () => {
     const prose = article();
-    const words = articleWords(prose);
-    const share = Math.fround(shareAtBlock(words, prose.querySelectorAll('p')[1] as Element));
-    expect(wordAtShare(words, share)?.toString()).toBe('Last');
-    expect(wordAtShare(words, 0)?.toString()).toBe('A');
-    expect(wordAtShare(words, 1)?.toString()).toBe('words.');
-    expect(wordAtShare([], 0.5)).toBeUndefined();
+    const words = articleWordIndex(prose);
+    const share = Math.fround(words.shareAtBlock(prose.querySelectorAll('p')[1] as Element));
+    expect(words.atShare(share)?.toString()).toBe('Last');
+    expect(words.atShare(0)?.toString()).toBe('A');
+    expect(words.atShare(1)?.toString()).toBe('words.');
+    expect(articleWordIndex(document.createElement('div')).atShare(0.5)).toBeUndefined();
   });
 });
 
@@ -80,7 +80,6 @@ describe('articleWordIndex', () => {
     const index = articleWordIndex(prose);
     expect(index.length).toBe(old.length);
     expect(index.spans.map((span) => span.prefix)).toEqual([0, 2, 3, 5, 9, 10, 11]);
-    expect(articleWords(prose).map(String)).toEqual(old.map(String));
     for (let i = 0; i < old.length; i++) {
       const word = index.rangeAt(i);
       expect(word?.startContainer).toBe(old[i]?.startContainer);
@@ -153,3 +152,23 @@ describe('articleWordIndex', () => {
     expect(empty.shareAtPoint(prose, 0)).toBe(1);
   });
 });
+
+// Frozen legacy share mapping for parity checks.
+function shareIndex(length: number, share: number): number {
+  return Math.min(length - 1, Math.max(0, Math.floor((share + 4e-8) * length)));
+}
+/** The word holding a share, clamped at either end of the article. */
+function wordAtShare(words: readonly Range[], share: number): Range | undefined {
+  return words[shareIndex(words.length, share)];
+}
+
+/** Share before the word that starts at or contains a DOM point. */
+function shareAtPoint(words: readonly Range[], node: Node, offset: number): number {
+  const index = words.findIndex((word) => word.comparePoint(node, offset) <= 0);
+  return index < 0 ? 1 : index / words.length;
+}
+
+function shareAtBlock(words: readonly Range[], block: Element): number {
+  const index = words.findIndex((word) => block.contains(word.startContainer));
+  return index < 0 ? 0 : index / words.length;
+}

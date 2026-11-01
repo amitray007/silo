@@ -106,34 +106,6 @@ export function articleWordIndex(prose: HTMLElement): ArticleWordIndex {
   return index;
 }
 
-/** Compatibility for Listen until it migrates to the shared index. */
-export function articleWords(prose: HTMLElement): Range[] {
-  const words: Range[] = [];
-  for (const span of articleWordIndex(prose).spans) {
-    for (let i = 0; i < span.starts.length; i++) {
-      const range = wordRange(span, i);
-      if (range) words.push(range);
-    }
-  }
-  return words;
-}
-
 function shareIndex(length: number, share: number): number {
   return Math.min(length - 1, Math.max(0, Math.floor((share + 4e-8) * length)));
-}
-
-/** The word holding a share, clamped at either end of the article. */
-export function wordAtShare(words: readonly Range[], share: number): Range | undefined {
-  return words[shareIndex(words.length, share)];
-}
-
-/** Share before the word that starts at or contains a DOM point. */
-export function shareAtPoint(words: readonly Range[], node: Node, offset: number): number {
-  const index = words.findIndex((word) => word.comparePoint(node, offset) <= 0);
-  return index < 0 ? 1 : index / words.length;
-}
-
-export function shareAtBlock(words: readonly Range[], block: Element): number {
-  const index = words.findIndex((word) => block.contains(word.startContainer));
-  return index < 0 ? 0 : index / words.length;
 }
