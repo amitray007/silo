@@ -78,11 +78,9 @@ function build(mode: Mode) {
 }
 
 type ReaderShape = ReturnType<typeof build>;
-type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
 
 /** A complete reader value, as stored and returned. */
 export type ReaderSettings = z.output<ReaderShape>;
-export type ReaderSettingsPatch = DeepPartial<ReaderSettings>;
 
 export const readerSchema = build('write');
 export const readerStoredSchema = build('stored');

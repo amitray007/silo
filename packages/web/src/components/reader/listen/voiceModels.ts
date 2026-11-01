@@ -55,7 +55,7 @@ function messageOf(reason: unknown): string {
 }
 
 /** Re-reads the cache, unless a download is running or a Reader holds the engine. */
-export async function refreshVoiceModel(id: EngineId): Promise<void> {
+async function refreshVoiceModel(id: EngineId): Promise<void> {
   const present = await isDownloaded(id);
   const now = read(id);
   if (now.phase === 'downloading') return;
