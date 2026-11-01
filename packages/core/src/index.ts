@@ -341,6 +341,8 @@ export {
 // reads + writes. Appended as its own minimal block (this barrel is shared
 // with the parallel scheduling slice) — see `settings/schema.ts` for the
 // per-key allowlist + defaults.
+export type { ReaderSettings } from './settings/reader.js';
+export { readerPatchSchema } from './settings/reader.js';
 export type { SettingKey, SettingsMap, SettingValue } from './settings/schema.js';
 export { SETTINGS_DEFAULTS } from './settings/schema.js';
 export { getAllSettings, getSetting, setSetting, updateSettings } from './settings/settings.js';

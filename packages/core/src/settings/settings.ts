@@ -1,8 +1,9 @@
 import { aiProviders, db, settings } from '@silo/db';
-import { eq, inArray } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import { z } from 'zod';
 import { parseStoredModels, storedProviderModels } from '../ai/model-store.js';
 import type { Executor } from '../links/executor.js';
+import { mergeReader, READER_DEFAULTS, readerPatchSchema } from './reader.js';
 import {
   isSettingKey,
   parseSettingValue,
@@ -192,15 +193,24 @@ export async function updateSettings(patch: Record<string, unknown>): Promise<Se
       throw new Error(`Unknown settings key: ${key}`);
     }
   }
-  // Validate every value against its schema before writing any of them.
+  // Validate every value against its schema before writing any of them. A `reader` patch may be
+  // partial, so it is checked as a patch here and merged over the stored value below.
   const validated = entries.map(([key, value]) => {
     const settingKey = key as SettingKey;
+    if (settingKey === 'reader') return [settingKey, readerPatchSchema.parse(value)] as const;
     return [settingKey, parseSettingValue(settingKey, value)] as const;
   });
 
   await db.transaction(async (tx) => {
     for (const [key, value] of validated) {
-      await setSetting(key, value, tx);
+      if (key === 'reader') {
+        // Two patches to the same value must not lose each other's fields.
+        await tx.execute(sql`select pg_advisory_xact_lock(hashtext('settings.reader'))`);
+        const current = (await getSetting('reader', tx)) ?? READER_DEFAULTS;
+        await setSetting(key, mergeReader(current, value), tx);
+      } else {
+        await setSetting(key, value, tx);
+      }
     }
   });
 

@@ -257,6 +257,62 @@ describe('hoverPreview schema and default', () => {
   });
 });
 
+describe('reader setting schema', () => {
+  it('defaults to unset, and an empty value fills every field default', () => {
+    expect(SETTINGS_DEFAULTS.reader).toBeNull();
+    expect(parseSettingValue('reader', {})).toEqual({
+      type: { font: 'inter', size: 16, leading: 'normal', theme: 'default' },
+      width: 'medium',
+      pencil: { style: 'underline', wpm: 240 },
+      highlight: { color: 'yellow' },
+      readAloud: { engine: 'phonon', voices: { phonon: '', kokoro: '' }, rate: 1 },
+    });
+  });
+
+  it.each([
+    [{ type: { size: 14 } }],
+    [{ type: { size: 24 } }],
+    [{ pencil: { wpm: 100 } }],
+    [{ pencil: { wpm: 600 } }],
+    [{ readAloud: { rate: 0.75 } }],
+    [{ readAloud: { rate: 3 } }],
+    [{ readAloud: { voices: { kokoro: 'x'.repeat(64) } } }],
+  ])('accepts the bound %j', (value) => {
+    expect(() => parseSettingValue('reader', value)).not.toThrow();
+  });
+
+  it.each([
+    [{ type: { size: 13 } }],
+    [{ type: { size: 25 } }],
+    [{ type: { size: 15.5 } }],
+    [{ type: { font: 'comic' } }],
+    [{ width: 'huge' }],
+    [{ pencil: { wpm: 99 } }],
+    [{ pencil: { wpm: 620 } }],
+    [{ pencil: { wpm: 250 } }],
+    [{ highlight: { color: 'red' } }],
+    [{ readAloud: { engine: 'piper' } }],
+    [{ readAloud: { rate: 1.1 } }],
+    [{ readAloud: { voices: { kokoro: 'x'.repeat(65) } } }],
+    [{ readAloud: { voices: { piper: 'x' } } }],
+    [{ unknown: true }],
+    [null],
+  ])('rejects %j', (value) => {
+    expect(() => parseSettingValue('reader', value)).toThrow();
+  });
+
+  it('a stored read defaults a bad field alone and drops an unknown one', () => {
+    const read = parseStoredSettingValue('reader', {
+      type: { size: 99, font: 'mono' },
+      readAloud: { rate: 9, engine: 'kokoro' },
+      extra: 1,
+    });
+    expect(read?.type).toEqual({ font: 'mono', size: 16, leading: 'normal', theme: 'default' });
+    expect(read?.readAloud).toMatchObject({ engine: 'kokoro', rate: 1 });
+    expect(read).not.toHaveProperty('extra');
+  });
+});
+
 describe('ai setting', () => {
   const selection = (provider: string, id: string) => ({
     enabled: true,
