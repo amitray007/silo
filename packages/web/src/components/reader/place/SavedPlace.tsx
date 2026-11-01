@@ -124,6 +124,11 @@ export function SavedPlace({
     if (!menu) return;
     popover.current?.querySelector('button')?.focus({ preventScroll: true });
     const close = () => setMenu(false);
+    const openedAt = { top: scroll.scrollTop, left: scroll.scrollLeft };
+    // Focusing the popover can emit a scroll event without moving the Reader.
+    const moved = () => {
+      if (scroll.scrollTop !== openedAt.top || scroll.scrollLeft !== openedAt.left) close();
+    };
     const outside = (event: PointerEvent) => {
       if (
         event.target instanceof Node &&
@@ -148,12 +153,12 @@ export function SavedPlace({
     };
     window.addEventListener('keydown', key, true);
     document.addEventListener('pointerdown', outside);
-    scroll.addEventListener('scroll', close, { passive: true });
+    scroll.addEventListener('scroll', moved, { passive: true });
     window.addEventListener('resize', close);
     return () => {
       window.removeEventListener('keydown', key, true);
       document.removeEventListener('pointerdown', outside);
-      scroll.removeEventListener('scroll', close);
+      scroll.removeEventListener('scroll', moved);
       window.removeEventListener('resize', close);
     };
   }, [menu, scroll]);
