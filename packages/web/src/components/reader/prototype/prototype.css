@@ -959,6 +959,7 @@
   pointer-events: none;
 }
 .proto-cluster {
+  clip-path: var(--proto-ribbon-clip, none);
   display: flex;
   flex-direction: column;
   padding: 6px 0;
@@ -2286,25 +2287,33 @@
   }
 }
 
-/* Ribbon: only the first text line opens; the elbow lives in the paragraph gap. */
-.proto-place-inline {
+/* Ribbon: mirror the 24px note marker, 6px outside the text; borrow the paragraph gap. */
+.silo-readerpane[data-proto-mark="ribbon"] .silo-reader {
+  padding-left: 32px;
+}
+.proto-place-ribbon-gutter {
   position: absolute;
-  width: 18px;
+  z-index: 23;
+  width: 24px;
   height: 24px;
   pointer-events: none;
 }
 .proto-place-ribbon {
   display: grid;
   place-items: center;
-  width: 18px;
+  width: 24px;
   height: 24px;
   padding: 0;
   border: 0;
-  border-radius: 3px;
+  border-radius: 50%;
   background: none;
   color: var(--fnt);
   pointer-events: auto;
   cursor: pointer;
+  transition:
+    background-color 120ms var(--ease-out),
+    color 120ms var(--ease-out),
+    opacity 120ms var(--ease-out);
 }
 .proto-place-ribbon > svg {
   width: 18px;
@@ -2314,16 +2323,16 @@
 }
 .proto-place-elbow {
   position: absolute;
-  left: 9px;
-  width: 48px;
+  left: 12px;
+  width: 14px;
   border-top: 0.5px solid var(--line);
   border-left: 0.5px solid var(--line);
   pointer-events: none;
 }
 .proto-place-ribbon-label {
   position: absolute;
-  left: 65px;
-  height: 18px;
+  left: 30px;
+  height: 16px;
   padding: 0;
   border: 0;
   border-radius: 3px;
@@ -2332,13 +2341,25 @@
   font: inherit;
   font-size: 12px;
   font-weight: 400;
-  line-height: 18px;
+  line-height: 16px;
   white-space: nowrap;
   pointer-events: auto;
   cursor: pointer;
 }
-.proto-place-ribbon-label:hover {
-  color: var(--mut);
+@media (hover: hover) and (pointer: fine) {
+  .proto-place-ribbon:hover {
+    background: var(--hov);
+    color: var(--ink);
+    opacity: 1;
+  }
+  .proto-place-ribbon-label:hover {
+    color: var(--mut);
+  }
+}
+.proto-place-ribbon[aria-expanded="true"],
+.proto-place-ribbon:focus-visible {
+  background: var(--hov);
+  color: var(--ink);
 }
 .proto-place-ribbon:focus-visible,
 .proto-place-ribbon-label:focus-visible {
@@ -2347,6 +2368,7 @@
 }
 .proto-place-ribbon-preview {
   position: absolute;
+  z-index: 23;
   opacity: 0.3;
 }
 .proto-place-ribbon-preview > svg {

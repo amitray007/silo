@@ -28,7 +28,7 @@ export function SavedPlace({
 }) {
   const [menu, setMenu] = useState(false);
   const [gap, setGap] = useState({ top: 0, left: 0, width: 0 });
-  const [inline, setInline] = useState({ top: 0, left: 0, row: 0 });
+  const [ribbon, setRibbon] = useState({ top: 0, left: 0, row: 0 });
   const [preview, setPreview] = useState<{ top: number; left: number } | null>(null);
   const labelButton = useRef<HTMLButtonElement>(null);
   const [pop, setPop] = useState({ top: 0, left: 0 });
@@ -43,12 +43,18 @@ export function SavedPlace({
         original: string;
         base: number;
         extra: number;
-        originalIndent: string;
-        baseIndent: number;
-        indent: number;
       }
     >(),
   );
+
+  // Reserve the gutter before a mark exists, including on the narrow Reader.
+  useLayoutEffect(() => {
+    if (place.style !== 'ribbon') return;
+    panel.dataset.protoMark = 'ribbon';
+    return () => {
+      delete panel.dataset.protoMark;
+    };
+  }, [panel, place.style]);
 
   // Animate real paragraph space; keep the first visible block fixed when space
   // changes above it. Disable native anchoring so the two do not compensate twice.
@@ -59,7 +65,6 @@ export function SavedPlace({
       scroll.style.overflowAnchor = originalAnchor;
       for (const [el, value] of spacing.current) {
         el.style.paddingTop = value.original;
-        el.style.textIndent = value.originalIndent;
       }
       spacing.current.clear();
     };
@@ -78,9 +83,6 @@ export function SavedPlace({
           original: block.style.paddingTop,
           base: Number.parseFloat(getComputedStyle(block).paddingTop) || 0,
           extra: 0,
-          originalIndent: block.style.textIndent,
-          baseIndent: Number.parseFloat(getComputedStyle(block).textIndent) || 0,
-          indent: 0,
         });
       }
       const value = spacing.current.get(block);
@@ -89,11 +91,13 @@ export function SavedPlace({
       const normal = previous
         ? block.getBoundingClientRect().top + value.base - previous.bottom
         : 0;
-      targets.set(block, Math.max(0, 56 - normal));
+      // The ribbon label borrows the existing gap; reserve at most 8px more.
+      targets.set(
+        block,
+        place.style === 'ribbon' ? Math.min(8, Math.max(0, 20 - normal)) : Math.max(0, 56 - normal),
+      );
     }
-    const starts = new Map(
-      [...spacing.current].map(([el, value]) => [el, { extra: value.extra, indent: value.indent }]),
-    );
+    const starts = new Map([...spacing.current].map(([el, value]) => [el, value.extra]));
     const viewport = scroll.getBoundingClientRect().top;
     const anchor = paragraphs.find((el) => el.getBoundingClientRect().bottom > viewport);
     const contentTop = (el: Element) =>
@@ -101,18 +105,14 @@ export function SavedPlace({
     const anchoredTop = anchor ? contentTop(anchor) : 0;
     const start = performance.now();
     let frame = 0;
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one frame updates spacing and its scroll anchor together.
     const tick = (now: number) => {
       const progress = matchMedia('(prefers-reduced-motion: reduce)').matches
         ? 1
         : Math.min(1, (now - start) / 200);
       const eased = 1 - (1 - progress) ** 3;
       for (const [el, value] of spacing.current) {
-        const from = starts.get(el) ?? { extra: 0, indent: 0 };
-        value.extra = from.extra + ((targets.get(el) ?? 0) - from.extra) * eased;
-        const indent = el === block && place.style === 'ribbon' ? 24 : 0;
-        value.indent = from.indent + (indent - from.indent) * eased;
-        el.style.textIndent = `${value.baseIndent + value.indent}px`;
+        const from = starts.get(el) ?? 0;
+        value.extra = from + ((targets.get(el) ?? 0) - from) * eased;
         el.style.paddingTop = `${value.base + value.extra}px`;
       }
       if (anchor) scroll.scrollTop += contentTop(anchor) - anchoredTop;
@@ -171,13 +171,13 @@ export function SavedPlace({
       const lineHeight = Number.parseFloat(css.lineHeight);
       return {
         top: lineTop + (lineHeight - 24) / 2 - box.top + scroll.scrollTop,
-        left: rect.left + Number.parseFloat(css.paddingLeft) - box.left,
-        row: lineTop - 32 - box.top + scroll.scrollTop,
+        left: rect.left + Number.parseFloat(css.paddingLeft) - box.left - 30,
+        row: lineTop - 20 - box.top + scroll.scrollTop,
       };
     };
     const measure = () => {
       const block = saved && paragraphs[saved.paragraph];
-      if (block) setInline(position(block));
+      if (block) setRibbon(position(block));
       const hovered = place.hover ? position(place.hover) : null;
       setPreview(hovered ? { top: hovered.top, left: hovered.left } : null);
     };
@@ -204,6 +204,73 @@ export function SavedPlace({
     };
   }, [prose, scroll, paragraphs, saved, place.style, place.hover]);
 
+  // Keep the shared gutter quiet: cut a 4px-clearance window in the dial
+  // around each visible ribbon. Recompute in viewport coordinates as it scrolls.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: ribbon geometry and visibility trigger DOM measurement.
+  useLayoutEffect(() => {
+    if (place.style !== 'ribbon') return;
+    let frame = 0;
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merge at most two ribbon windows for one CSS clipping path.
+    const measure = () => {
+      const cluster = panel.querySelector<HTMLElement>('.proto-cluster');
+      if (!cluster) return;
+      const box = cluster.getBoundingClientRect();
+      const windows = Array.from(host.querySelectorAll<HTMLElement>('.proto-place-ribbon'))
+        .map((el) => {
+          const rect = el.getBoundingClientRect();
+          const elbow = el.parentElement
+            ?.querySelector('.proto-place-elbow')
+            ?.getBoundingClientRect();
+          return {
+            left: rect.left,
+            right: rect.right,
+            top: Math.min(rect.top, elbow?.top ?? rect.top),
+            bottom: rect.bottom,
+          };
+        })
+        .filter((rect) => rect.left < box.right && rect.right > box.left)
+        .map((rect) => ({
+          top: Math.max(0, rect.top - box.top - 4),
+          bottom: Math.min(box.height, rect.bottom - box.top + 4),
+        }))
+        .filter((rect) => rect.top < rect.bottom)
+        .sort((a, b) => a.top - b.top);
+      const merged: typeof windows = [];
+      for (const window of windows) {
+        const previous = merged.at(-1);
+        if (previous && window.top <= previous.bottom)
+          previous.bottom = Math.max(previous.bottom, window.bottom);
+        else merged.push({ ...window });
+      }
+      // Clipping also removes tick hit areas, so the ribbon remains clickable.
+      const cutouts = merged
+        .map(({ top, bottom }) => `M 0 ${top} H ${box.width} V ${bottom} H 0 Z`)
+        .join(' ');
+      const clip = merged.length
+        ? `path(evenodd, "M 0 0 H ${box.width} V ${box.height} H 0 Z ${cutouts}")`
+        : 'none';
+      if (panel.style.getPropertyValue('--proto-ribbon-clip') !== clip)
+        panel.style.setProperty('--proto-ribbon-clip', clip);
+    };
+    const schedule = () => {
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(measure);
+    };
+    measure();
+    scroll.addEventListener('scroll', schedule, { passive: true });
+    const resize = new ResizeObserver(schedule);
+    resize.observe(panel);
+    const changes = new MutationObserver(schedule);
+    changes.observe(panel, { childList: true, subtree: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      scroll.removeEventListener('scroll', schedule);
+      resize.disconnect();
+      changes.disconnect();
+      panel.style.removeProperty('--proto-ribbon-clip');
+    };
+  }, [place.style, ribbon, preview, saved, place.hover, panel, scroll, host]);
+
   useEffect(() => {
     if (!prose) return;
     let hide: number | undefined;
@@ -216,12 +283,42 @@ export function SavedPlace({
       place.setHover(null);
     };
     const deferHide = () => {
-      if (place.style === 'ribbon') {
-        leave();
-        return;
-      }
       // A brief crossing grace lets the pointer reach the gutter.
       if (hide === undefined) hide = window.setTimeout(leave, 150);
+    };
+    const hideOutside = () => (place.style === 'ribbon' ? leave() : deferHide());
+    const inGutterBridge = (event: PointerEvent) => {
+      if (place.style !== 'ribbon' || !place.hover) return false;
+      const range = document.createRange();
+      range.selectNodeContents(place.hover);
+      const first = range.getClientRects()[0];
+      // Keep the outlined ribbon reachable across the 6px gutter gap.
+      return Boolean(
+        first &&
+          event.clientX >= first.left - 30 &&
+          event.clientX < first.left &&
+          event.clientY >= first.top &&
+          event.clientY <= first.bottom,
+      );
+    };
+    const withinFirstLine = (block: Element, event: PointerEvent) => {
+      const range = document.createRange();
+      range.selectNodeContents(block);
+      const rects = Array.from(range.getClientRects()).filter(
+        (rect) => rect.width > 1 && rect.height > 1,
+      );
+      const first = rects[0];
+      return Boolean(
+        first &&
+          rects.some(
+            (rect) =>
+              Math.abs(rect.top - first.top) < 3 &&
+              event.clientX >= rect.left &&
+              event.clientX <= rect.right &&
+              event.clientY >= rect.top &&
+              event.clientY <= rect.bottom,
+          ),
+      );
     };
     const move = (event: PointerEvent) => {
       if (
@@ -231,33 +328,20 @@ export function SavedPlace({
         clearHide();
         return;
       }
+      if (inGutterBridge(event)) return;
       const block = paragraphs.find(
         (el) => el.tagName === 'P' && el.contains(event.target as Node),
       );
       if (!block || block === paragraphs[saved?.paragraph ?? -1]) {
-        deferHide();
+        hideOutside();
         return;
       }
-      const range = document.createRange();
-      range.selectNodeContents(block);
-      const rects = Array.from(range.getClientRects()).filter(
-        (rect) => rect.width > 1 && rect.height > 1,
-      );
-      const first = rects[0];
-      const within =
-        first &&
-        rects.some(
-          (rect) =>
-            Math.abs(rect.top - first.top) < 3 &&
-            event.clientX >= rect.left &&
-            event.clientX <= rect.right &&
-            event.clientY >= rect.top &&
-            event.clientY <= rect.bottom,
-        );
-      if (within) {
-        clearHide();
-        place.setHover(block);
-      } else deferHide();
+      if (!withinFirstLine(block, event)) {
+        hideOutside();
+        return;
+      }
+      clearHide();
+      place.setHover(block);
     };
     scroll.addEventListener('pointermove', move);
     scroll.addEventListener('pointerleave', leave);
@@ -268,7 +352,7 @@ export function SavedPlace({
       scroll.removeEventListener('pointerleave', leave);
       scroll.removeEventListener('scroll', leave);
     };
-  }, [prose, scroll, paragraphs, saved, place.setHover, place.style]);
+  }, [prose, scroll, paragraphs, saved, place.setHover, place.style, place.hover]);
 
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
@@ -276,7 +360,7 @@ export function SavedPlace({
         return;
       const top = scroll.getBoundingClientRect().top + 24;
       const nearest =
-        (place.style !== 'ribbon' ? place.hover : null) ??
+        place.hover ??
         paragraphs
           .filter((el) => el.tagName === 'P')
           .sort(
@@ -292,7 +376,7 @@ export function SavedPlace({
     };
     window.addEventListener('keydown', key, true);
     return () => window.removeEventListener('keydown', key, true);
-  }, [paragraphs, save, scroll, place.hover, place.style]);
+  }, [paragraphs, save, scroll, place.hover]);
 
   useEffect(() => {
     if (!menu) return;
@@ -344,12 +428,16 @@ export function SavedPlace({
     const box = (place.style === 'ribbon' ? panel : scroll).getBoundingClientRect();
     if (rect && place.style === 'ribbon') {
       const column = prose?.getBoundingClientRect();
+      const dial = panel.querySelector('.proto-cluster')?.getBoundingClientRect();
       setPop({
-        left: Math.max(
-          rect.left - box.left,
-          Math.min(rect.right - box.left + 6, (column?.right ?? box.right) - box.left - 244),
+        left: Math.min(
+          box.width - 252,
+          Math.max(
+            (column?.left ?? rect.right + 6) - box.left,
+            (dial?.right ?? box.left) - box.left + 8,
+          ),
         ),
-        top: rect.bottom - box.top + 6,
+        top: Math.max(52, Math.min(rect.bottom - box.top + 6, box.height - 168)),
       });
     } else if (rect)
       setPop({
@@ -396,7 +484,10 @@ export function SavedPlace({
       {createPortal(
         <>
           {saved && place.style === 'ribbon' && (
-            <div className="proto-place-inline" style={{ top: inline.top, left: inline.left }}>
+            <div
+              className="proto-place-ribbon-gutter"
+              style={{ top: ribbon.top, left: ribbon.left }}
+            >
               <button
                 type="button"
                 className="proto-place-ribbon"
@@ -411,13 +502,13 @@ export function SavedPlace({
               <i
                 className="proto-place-elbow"
                 aria-hidden="true"
-                style={{ top: inline.row - inline.top + 9, height: inline.top - inline.row - 4 }}
+                style={{ top: ribbon.row - ribbon.top + 8, height: ribbon.top - ribbon.row - 10 }}
               />
               <button
                 type="button"
                 className="proto-place-ribbon-label"
                 ref={labelButton}
-                style={{ top: inline.row - inline.top }}
+                style={{ top: ribbon.row - ribbon.top }}
                 aria-expanded={menu}
                 aria-haspopup="dialog"
                 onClick={open}
