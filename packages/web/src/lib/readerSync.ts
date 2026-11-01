@@ -29,23 +29,16 @@ export function mergeDeep<T>(base: T, patch: unknown): T {
   return merged as T;
 }
 
-/** The part of `source` that `shape` names: the same keys, `source`'s values. */
-function pick(source: unknown, shape: unknown): unknown {
-  if (!isRecord(shape)) return source;
-  const out: Plain = {};
-  const from = isRecord(source) ? source : {};
-  for (const key of Object.keys(shape)) out[key] = pick(from[key], shape[key]);
-  return out;
-}
-
-/** The leaves of `undo` whose field still holds the value `sent` put there. */
-function revertable(undo: unknown, sent: unknown, current: unknown): unknown {
-  if (!isRecord(undo) || !isRecord(sent)) return Object.is(sent, current) ? undo : undefined;
-  const out: Plain = {};
-  const now = isRecord(current) ? current : {};
-  for (const key of Object.keys(undo)) {
-    const value = revertable(undo[key], sent[key], now[key]);
-    if (value !== undefined) out[key] = value;
+/** Restore failed leaves, including removing a newly added override, without undoing later edits. */
+function rollback(current: unknown, confirmed: unknown, changes: unknown): unknown {
+  if (!isRecord(changes)) return Object.is(current, changes) ? confirmed : current;
+  const out: Plain = isRecord(current) ? { ...current } : {};
+  const back = isRecord(confirmed) ? confirmed : {};
+  for (const [key, value] of Object.entries(changes)) {
+    const reverted = rollback(out[key], back[key], value);
+    if (reverted === undefined) delete out[key];
+    else if (isRecord(reverted) && !Object.keys(reverted).length && !(key in back)) delete out[key];
+    else out[key] = reverted;
   }
   return out;
 }
@@ -57,9 +50,12 @@ export function createSync<T extends object>(deps: {
    * value looks unchanged, so a change the user makes also repairs a mirror that failed to save.
    */
   apply: (patch: DeepPartial<T>, force: boolean) => void;
+  /** Replace the local value, including deleting absent override fields. */
+  replace?: (value: T) => void;
   /** True when this browser holds values of its own worth uploading. */
   hasLocal: () => boolean;
 }) {
+  const replace = deps.replace ?? ((value: T) => deps.apply(value as DeepPartial<T>, false));
   let transport: SyncTransport<T> | null = null;
   let pending: DeepPartial<T> | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -68,6 +64,13 @@ export function createSync<T extends object>(deps: {
   let serverValue: T | null | undefined;
   let confirmed = deps.read();
   let generation = 0;
+  let detachWhenIdle: (() => void) | undefined;
+  const settled = () => {
+    if (!inflight && !pending) {
+      detachWhenIdle?.();
+      detachWhenIdle = undefined;
+    }
+  };
 
   const flush = (): void => {
     clearTimeout(timer);
@@ -88,19 +91,20 @@ export function createSync<T extends object>(deps: {
         uploaded = true;
         serverValue = server;
         confirmed = server;
-        deps.apply(mergeDeep(server, pending ?? {}) as DeepPartial<T>, false);
+        replace(mergeDeep(server, pending ?? {}));
         if (pending && timer === undefined) flush();
+        settled();
       },
       () => {
         if (run !== generation) return;
         inflight = false;
         if (changes) {
-          const back = pick(confirmed, changes);
-          deps.apply(revertable(back, changes, deps.read()) as DeepPartial<T>, false);
+          replace(rollback(deps.read(), confirmed, changes) as T);
           // An equal-valued queued edit still belongs to the next request.
           if (pending) deps.apply(pending, false);
         }
         if (pending && timer === undefined) flush();
+        settled();
       },
     );
   };
@@ -133,19 +137,27 @@ export function createSync<T extends object>(deps: {
       serverValue = server;
       if (server !== null) {
         confirmed = server;
-        deps.apply(mergeDeep(server, pending ?? {}) as DeepPartial<T>, false);
+        replace(mergeDeep(server, pending ?? {}));
       }
       if (timer === undefined) flush();
     },
-    connect(next: SyncTransport<T>): () => void {
+    connect(next: SyncTransport<T>, drain = false): () => void {
+      detachWhenIdle = undefined;
       transport = next;
       addEventListener('pagehide', onHide);
       document.addEventListener('visibilitychange', onVisibilityChange);
       flush();
-      return () => {
+      const detach = () => {
+        if (transport !== next) return;
         removeEventListener('pagehide', onHide);
         document.removeEventListener('visibilitychange', onVisibilityChange);
-        if (transport === next) transport = null;
+        transport = null;
+      };
+      return () => {
+        if (!drain) return detach();
+        detachWhenIdle = detach;
+        flush();
+        settled();
       };
     },
     /** Test hook: discard queued work and ignore replies from an earlier test. */

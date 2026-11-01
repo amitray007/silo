@@ -266,3 +266,68 @@ describe('sync failure and lifecycle regressions', () => {
     expect(h.transport.keepalive).toHaveBeenCalledWith({ ...START, width: 'wide' });
   });
 });
+
+describe('article queue lifecycle', () => {
+  it('flushes a debounced edit on disconnect and releases pagehide after it settles', async () => {
+    const h = harness();
+    const close = h.sync.connect(h.transport, true);
+    h.sync.commit({ type: { size: 20 } }, 400);
+    close();
+    expect(h.sent).toEqual([{ type: { size: 20 } }]);
+    h.replies[0]?.resolve({ ...START, type: { ...START.type, size: 20 } });
+    await Promise.resolve();
+    h.sync.commit({ width: 'wide' }, 400);
+    dispatchEvent(new Event('pagehide'));
+    expect(h.transport.keepalive).not.toHaveBeenCalled();
+    h.sync.reset();
+  });
+
+  it('drains an edit queued behind a request before disconnecting', async () => {
+    const h = harness();
+    const close = h.sync.connect(h.transport, true);
+    h.sync.commit({ type: { size: 20 } });
+    h.sync.commit({ width: 'wide' }, 400);
+    close();
+    expect(h.sent).toHaveLength(1);
+    dispatchEvent(new Event('pagehide'));
+    expect(h.transport.keepalive).toHaveBeenCalledWith({ width: 'wide' });
+    h.replies[0]?.resolve({ ...START, type: { ...START.type, size: 20 } });
+    await Promise.resolve();
+    expect(h.sent).toHaveLength(2);
+    h.replies[1]?.resolve({ type: { size: 20, font: 'inter' }, width: 'wide' });
+    await Promise.resolve();
+    expect(h.state().width).toBe('wide');
+    h.sync.reset();
+  });
+
+  it('removes a failed override and preserves another leaf that succeeded later locally', async () => {
+    type Overrides = DeepPartial<State>;
+    let state: Overrides = {};
+    let reject: (error: Error) => void = () => {};
+    const sync = createSync<Overrides>({
+      read: () => state,
+      apply: (patch) => {
+        state = mergeDeep(state, patch);
+      },
+      replace: (value) => {
+        state = value;
+      },
+      hasLocal: () => false,
+    });
+    sync.hydrate({});
+    const close = sync.connect({
+      send: () =>
+        new Promise((_, fail) => {
+          reject = fail;
+        }),
+      keepalive: () => {},
+    });
+    sync.commit({ type: { size: 20 } });
+    sync.commit({ type: { font: 'serif' } }, 400);
+    reject(new Error('offline'));
+    await Promise.resolve();
+    expect(state).toEqual({ type: { font: 'serif' } });
+    sync.reset();
+    close();
+  });
+});
