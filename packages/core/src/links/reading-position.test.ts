@@ -145,6 +145,15 @@ describeIfPg('reading position (integration)', () => {
     }
   });
 
+  it('clamps a client timestamp ahead of the server clock to now', async () => {
+    const link = await newLink();
+    const future = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+    const saved = await ops.setReadingPosition(link.id, 0.3, 'listen', future);
+    expect(saved?.updatedAt.getTime()).toBeLessThan(future.getTime());
+    const later = await ops.setReadingPosition(link.id, 0.5, 'mark', new Date(Date.now() + 1000));
+    expect(later?.position).toBeCloseTo(0.5);
+  });
+
   it('accepts the bounds 0 and 1', async () => {
     const link = await newLink();
     expect((await ops.setReadingPosition(link.id, 0))?.position).toBe(0);

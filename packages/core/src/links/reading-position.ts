@@ -54,6 +54,8 @@ export async function getReadingPosition(linkId: string): Promise<ReadingPositio
  *
  * Web writes carry a monotonically increasing timestamp, including pagehide writes that must
  * leave immediately. The upsert ignores older timestamps even if those requests arrive late.
+ * A timestamp ahead of the server clock is clamped to now, so a fast client clock cannot
+ * block later writes.
  * Callers that omit the timestamp retain server-time, last-write-wins behavior.
  */
 export async function setReadingPosition(
@@ -75,7 +77,7 @@ export async function setReadingPosition(
           position: sql<number>`${position}::real`.as('position'),
           source: sql<ReadingPositionSource>`${source}::varchar`.as('source'),
           updatedAt: (writtenAt
-            ? sql<Date>`${writtenAt.toISOString()}::timestamptz`
+            ? sql<Date>`least(${writtenAt.toISOString()}::timestamptz, now())`
             : sql<Date>`now()`
           ).as('updated_at'),
         })
