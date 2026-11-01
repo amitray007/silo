@@ -74,12 +74,15 @@ describeIfPg('reading position routes (integration)', () => {
   it('ignores stale client timestamps, including a late pre-pagehide PUT', async () => {
     const id = await newLinkId('https://example.com/rp-write-order');
     const path = `/api/links/${id}/reading-position`;
-    const newer = { position: 0.9, source: 'listen', writtenAt: '2026-11-02T12:00:00.001Z' };
+    // Past timestamps: the server clamps anything ahead of its clock to now.
+    const base = Date.now() - 60_000;
+    const at = (ms: number) => new Date(base + ms).toISOString();
+    const newer = { position: 0.9, source: 'listen', writtenAt: at(1) };
     expect((await put(path, newer)).status).toBe(200);
     const stale = await put(path, {
       position: 0.1,
       source: 'pencil',
-      writtenAt: '2026-11-02T12:00:00.000Z',
+      writtenAt: at(0),
     });
     expect(stale.status).toBe(200);
     expect(
@@ -89,9 +92,7 @@ describeIfPg('reading position routes (integration)', () => {
     expect((await readLink(id)).readingPosition?.updatedAt).toBe(newer.writtenAt);
     expect((await put(path, { ...newer, position: 0.2 })).status).toBe(200);
     expect((await readLink(id)).readingPosition?.position).toBeCloseTo(0.9);
-    expect(
-      (await put(path, { ...newer, position: 0.7, writtenAt: '2026-11-02T12:00:00.002Z' })).status,
-    ).toBe(200);
+    expect((await put(path, { ...newer, position: 0.7, writtenAt: at(2) })).status).toBe(200);
     expect((await readLink(id)).readingPosition?.position).toBeCloseTo(0.7);
   });
 
