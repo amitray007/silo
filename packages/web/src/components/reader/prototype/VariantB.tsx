@@ -15,6 +15,7 @@ import { ProtoIcon, type ProtoIconName } from './ProtoIcon';
 import { ProtoSpinner, useDelayed } from './ProtoSpinner';
 import { inTextEntry, plain, useEscapeClose } from './protoKeys';
 import type { Tools } from './ReaderToolsPrototype';
+import { SavedPlace } from './SavedPlace';
 import { SelectionBar } from './SelectionBar';
 import { type HighlightColor, layerSize, type PassageHighlight } from './useHighlights';
 import { engineStatusLine, RATES } from './useReadAloud';
@@ -118,7 +119,7 @@ function sentenceAt(event: MouseEvent, ra: Tools['ra']): number {
 }
 
 /** B: the head stays as it is; a floating dock opens sheets and turns into the player. */
-export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: Tools) {
+export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host, place }: Tools) {
   const [sheet, setSheet] = useState<Sheet | null>(null);
   const [color, setColor] = useState<HighlightColor>('yellow');
   const [openNote, setOpenNote] = useState<string | null>(null);
@@ -215,7 +216,11 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
 
   const togglePencil = () => {
     if (pencil.enabled) pencil.setEnabled(false);
-    else pencil.start();
+    else {
+      const block = place?.saved && place.paragraphs[place.saved.paragraph];
+      if (block) pencil.startAtBlock(block);
+      else pencil.start();
+    }
   };
 
   const toggle = (next: Sheet) => {
@@ -300,6 +305,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
   const note = hl.items.find((item) => item.id === openNote);
   return (
     <>
+      {place && <SavedPlace place={place} prose={prose} scroll={scroll} host={host} ra={ra} />}
       <OutlineRail
         prose={prose}
         scroll={scroll}
@@ -333,7 +339,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
         onRemove={hl.remove}
         onSetNote={hl.setNote}
         onDialHidden={setDialHidden}
-        resume={pencil.resume}
+        resume={null}
         onResume={pencil.start}
       />
       <SelectionBar
@@ -533,7 +539,7 @@ export function VariantB({ typo, pencil, hl, ra, prose, scroll, panel, host }: T
               label="Listen"
               title="Read aloud (L)"
               active={false}
-              onClick={() => toggle('listen')}
+              onClick={ra.open}
             />
             <DockButton
               icon="notes"

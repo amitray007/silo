@@ -77,6 +77,7 @@ export function usePencil(
   const [lineCount, setLineCount] = useState(0);
   const [progress, setProgress] = useState(0);
   const lines = useRef<Line[]>([]);
+  const pendingBlock = useRef<Element | null>(null);
   const prefix = useRef<number[]>([]);
   const index = useRef(0);
   const sweep = useRef(0);
@@ -127,6 +128,7 @@ export function usePencil(
   useEffect(() => {
     if (!(enabled || (persist && hasSaved)) || !root || !scroll) return;
     let frame = 0;
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: throwaway line measurement and resume
     const measure = () => {
       const first = lines.current.length === 0;
       const previous = lines.current.length ? index.current / lines.current.length : 0;
@@ -149,6 +151,11 @@ export function usePencil(
         const at = (prefix.current.at(-1) ?? 0) * restore;
         const found = lines.current.findIndex((_, i) => (prefix.current[i + 1] ?? 0) > at);
         index.current = found < 0 ? lines.current.length - 1 : found;
+      }
+      if (pendingBlock.current) {
+        const at = lines.current.findIndex((line) => pendingBlock.current?.contains(line.block));
+        if (at >= 0) index.current = at;
+        pendingBlock.current = null;
       }
       setLineIndex(index.current);
       paint();
@@ -271,6 +278,17 @@ export function usePencil(
 
   return {
     enabled,
+    currentBlock: lines.current[lineIndex]?.block,
+    startAtBlock: (block: Element) => {
+      pendingBlock.current = block;
+      const at = lines.current.findIndex((line) => block.contains(line.block));
+      if (enabled && at >= 0) {
+        pendingBlock.current = null;
+        goTo(at);
+      }
+      setEnabled(true);
+      setPlaying(true);
+    },
     setEnabled: (value: boolean) => {
       setEnabled(value);
       if (!value) setPlaying(false);

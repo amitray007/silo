@@ -2077,3 +2077,186 @@
 .proto-lgroup-more:hover {
   color: var(--ink);
 }
+
+/* Saved place: one quiet mark between blocks, shared by all three explicit stops. */
+.proto-place-gap {
+  position: absolute;
+  pointer-events: auto;
+}
+.proto-place-add {
+  position: absolute;
+  left: -6px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 100%;
+  max-height: 22px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: var(--bg2);
+  box-shadow: var(--elev-1);
+  color: var(--fnt);
+  opacity: 0;
+  pointer-events: none;
+  cursor: pointer;
+  transition: opacity 120ms;
+}
+.proto-place-gap:hover .proto-place-add,
+.proto-place-add:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.proto-place-mark {
+  position: absolute;
+  height: 0;
+  border-top: 0.5px solid var(--line-2);
+  pointer-events: none;
+}
+.proto-place-label {
+  position: absolute;
+  left: -4px;
+  top: 0;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 22px;
+  padding: 0 8px 0 4px;
+  border: 0;
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--fnt);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 20px;
+  white-space: nowrap;
+  pointer-events: auto;
+  cursor: pointer;
+}
+.proto-place-label svg {
+  color: var(--mut);
+  flex-shrink: 0;
+}
+.proto-place-label:hover {
+  color: var(--ink);
+}
+.proto-place-mark[data-style="ribbon"] {
+  border: 0;
+}
+.proto-place-mark[data-style="ribbon"] .proto-place-label {
+  left: -27px;
+  width: 20px;
+  height: 26px;
+  padding: 0;
+  background: none;
+}
+.proto-place-mark[data-style="ribbon"] .proto-place-label > svg {
+  width: 18px;
+  height: 24px;
+  fill: var(--line-2);
+  color: var(--fnt);
+}
+.proto-place-mark[data-style="ribbon"] .proto-place-label > span {
+  position: absolute;
+  left: 27px;
+  padding: 0 6px;
+  border-radius: 4px;
+  background: var(--bg);
+  opacity: 0;
+  transition: opacity 120ms;
+  pointer-events: none;
+}
+.proto-place-mark[data-style="ribbon"]
+  .proto-place-label:is(:hover, :focus-visible, [aria-expanded="true"])
+  > span {
+  opacity: 1;
+}
+.proto-place-pop {
+  position: absolute;
+  z-index: 30;
+  top: 16px;
+  left: 0;
+  width: 138px;
+  padding: 4px;
+  border-radius: 8px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  pointer-events: auto;
+  animation: protoPopDown 120ms var(--ease-out);
+}
+.proto-place-pop :where(button) {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 5px;
+  background: none;
+  color: var(--mut);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 20px;
+  cursor: pointer;
+}
+.proto-place-pop :where(button):hover {
+  background: var(--hov);
+  color: var(--ink);
+}
+.proto-continue {
+  position: absolute;
+  z-index: 25;
+  left: 50%;
+  bottom: 80px;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg2);
+  box-shadow: var(--elev-1);
+  color: var(--mut);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 20px;
+  cursor: pointer;
+}
+.proto-continue:hover {
+  color: var(--ink);
+  background: var(--hov);
+}
+.silo-readerpane:has(.proto-sheet) .proto-continue {
+  display: none;
+}
+.proto-place-sentence {
+  position: absolute;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--fnt);
+}
+@media (prefers-reduced-motion: reduce) {
+  .proto-place-add,
+  .proto-place-label > span {
+    transition: none;
+  }
+  .proto-place-pop {
+    animation: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .proto-place-mark[data-style="ribbon"] .proto-place-label {
+    left: -18px;
+  }
+}

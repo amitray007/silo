@@ -1,4 +1,5 @@
 const paths = {
+  bookmark: 'M6 3h12v18l-6-4-6 4z',
   pencil: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
   highlighter: 'm13.5 4.5 6 6-8.5 8.5H5.5v-6zM4 21h7',
   headphones: 'M4 15v-3a8 8 0 0 1 16 0v3M4 15h3v5H5a1 1 0 0 1-1-1zM20 15h-3v5h2a1 1 0 0 0 1-1z',

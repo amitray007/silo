@@ -1,15 +1,17 @@
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: throwaway prototype
 import '@fontsource-variable/literata';
 import './prototype.css';
-import { type RefObject, useEffect, useState } from 'react';
+import { type RefObject, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchParams } from 'react-router';
 import { SelectionPopover } from './controls';
 import { inTextEntry, onControl, plain } from './protoKeys';
 import { useHighlights } from './useHighlights';
+import { useMockListen } from './useMockListen';
 import { usePencil } from './usePencil';
 import { useProseRoot } from './useProseRoot';
 import { useReadAloud } from './useReadAloud';
+import { type SavedPlaceApi, useSavedPlace } from './useSavedPlace';
 import { useTypography } from './useTypography';
 import { VariantA } from './VariantA';
 import { VariantB } from './VariantB';
@@ -25,6 +27,7 @@ export type Tools = {
   panel: HTMLElement;
   prose: HTMLElement | null;
   host: HTMLElement;
+  place?: SavedPlaceApi;
 };
 
 /**
@@ -70,10 +73,23 @@ function Mounted({
   const [params] = useSearchParams();
   const pencil = usePencil(prose, scroll, host, {
     linkId: params.get('link'),
-    persist: variant === 'B',
+    persist: false,
   });
   const hl = useHighlights(prose, scroll);
-  const ra = useReadAloud(prose, scroll);
+  const realRa = useReadAloud(prose, scroll);
+  const place = useSavedPlace(prose, scroll);
+  const mockRa = useMockListen(prose, scroll, realRa, place);
+  const ra = variant === 'B' ? mockRa : realRa;
+  const previousPencil = useRef({ enabled: false, playing: false });
+  useEffect(() => {
+    const previous = previousPencil.current;
+    if (
+      variant === 'B' &&
+      ((previous.enabled && !pencil.enabled) || (previous.playing && !pencil.playing))
+    )
+      place.save(pencil.currentBlock, 'pencil');
+    previousPencil.current = { enabled: pencil.enabled, playing: pencil.playing };
+  }, [variant, pencil.enabled, pencil.playing, pencil.currentBlock, place.save]);
 
   useEffect(() => {
     panel.dataset.protoVariant = variant;
@@ -133,7 +149,7 @@ function Mounted({
     return () => window.removeEventListener('keydown', onKey, true);
   });
 
-  const tools: Tools = { typo, pencil, hl, ra, scroll, panel, prose, host };
+  const tools: Tools = { typo, pencil, hl, ra, scroll, panel, prose, host, place };
   return (
     <>
       {pencil.overlay}
