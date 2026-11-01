@@ -9,14 +9,16 @@ import {
   type TtsFileEntry,
   type TtsFiles,
   type TtsLocalFile,
+  type TtsServe,
 } from '@silo/core';
 import type { Context, Hono } from 'hono';
 
 /**
  * Read aloud model files (reader tools, slice 4). The browser runs the voice models, so it needs
- * their weights, and it must not call Hugging Face to get them. `GET /api/tts/files/:engine/*`
- * serves only files in the pinned manifest: the first request downloads the file into the data
- * directory (`tts-cache/`), checks its sha256, and serves it; later requests read the cache.
+ * their weights, and it must not call Hugging Face to get them. `GET /api/tts/files/:engine/:revision/*`
+ * serves only files in the pinned manifest. The first request starts the download into the data
+ * directory (`tts-cache/`) and streams it to the browser as it arrives; the sha256 is checked
+ * before the file is kept, and a failed check errors the stream. Later requests read the cache.
  * `GET /api/tts/manifest` lists what can be served, without the upstream URLs.
  */
 
@@ -51,12 +53,16 @@ function contentType(path: string): string {
   return path.endsWith('.json') ? 'application/json; charset=utf-8' : 'application/octet-stream';
 }
 
-/** The manifest path a request names, or null when it is not valid text. */
-function requestedPath(c: Context, engine: string): string | null {
-  const prefix = `/api/tts/files/${engine}/`;
-  const raw = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : '';
+/**
+ * The manifest path a request names, or null when it is not valid text or carries the wrong
+ * revision. The URL is `/api/tts/files/<engine>/<revision>/<path>`; the revision changes
+ * whenever a pin does, so an old URL (and whatever a browser cached under it) is never served.
+ */
+function requestedPath(c: Context, engine: string, revision: string | undefined): string | null {
+  const prefix = `/api/tts/files/${engine}/${revision}/`;
+  if (revision === undefined || !c.req.path.startsWith(prefix)) return null;
   try {
-    return raw.split('/').map(decodeURIComponent).join('/');
+    return c.req.path.slice(prefix.length).split('/').map(decodeURIComponent).join('/');
   } catch {
     return null;
   }
@@ -96,15 +102,37 @@ function fileResponse(c: Context, local: TtsLocalFile, path: string): Response {
   });
 }
 
-function manifestJson() {
+/** A download in progress, streamed as it arrives. A failed download errors the stream. */
+function liveResponse(live: Extract<TtsServe, { kind: 'live' }>, path: string): Response {
+  return new Response(live.body, {
+    status: 200,
+    headers: {
+      'Cache-Control': IMMUTABLE,
+      ETag: `"${live.sha256}"`,
+      'Content-Type': contentType(path),
+      'Content-Length': String(live.size),
+      'X-Content-Type-Options': 'nosniff',
+    },
+  });
+}
+
+function manifestJson(files: TtsFiles) {
   const engines = Object.entries(TTS_MANIFEST).map(([id, engine]) => {
-    const files = Object.entries(engine.files as Record<string, TtsFileEntry>).map(
+    const listed = Object.entries(engine.files as Record<string, TtsFileEntry>).map(
       ([path, entry]) => [
         path,
         { size: entry.size, sha256: entry.sha256, ...(entry.voice ? { voice: entry.voice } : {}) },
       ],
     );
-    return [id, { label: engine.label, license: engine.license, files: Object.fromEntries(files) }];
+    return [
+      id,
+      {
+        label: engine.label,
+        license: engine.license,
+        revision: files.revision(id),
+        files: Object.fromEntries(listed),
+      },
+    ];
   });
   return { engines: Object.fromEntries(engines) };
 }
@@ -115,15 +143,19 @@ export function registerTtsRoutes(api: Hono, files?: TtsFiles): void {
   const filesNow = (): TtsFiles =>
     (store ??= createTtsFiles({ dir: join(dataDir(), 'tts-cache'), manifest: TTS_MANIFEST }));
 
-  api.get('/tts/manifest', (c) => c.json(manifestJson()));
+  api.get('/tts/manifest', (c) => c.json(manifestJson(filesNow())));
 
-  api.get('/tts/files/:engine/*', async (c) => {
+  api.get('/tts/files/:engine/:revision/*', async (c) => {
     const engine = c.req.param('engine');
-    const path = requestedPath(c, engine);
     const found = filesNow();
+    const revision = c.req.param('revision');
+    const path = revision === found.revision(engine) ? requestedPath(c, engine, revision) : null;
     if (path === null || !found.entry(engine, path)) return notFound(c);
     try {
-      return fileResponse(c, await found.ensure(engine, path), path);
+      const served = await found.open(engine, path);
+      return served.kind === 'file'
+        ? fileResponse(c, served.file, path)
+        : liveResponse(served, path);
     } catch (error) {
       if (!(error instanceof TtsDownloadError)) throw error;
       console.error('[silo/api] model file download failed:', engine, path, error.message);

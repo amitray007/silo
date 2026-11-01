@@ -40,34 +40,41 @@ beforeEach(async () => {
 });
 afterEach(() => rm(dir, { recursive: true, force: true }));
 
-function appWith(): Hono {
+let revision = '';
+
+function appWith(overrides: { sha256?: string } = {}): Hono {
   const manifest: TtsManifest = {
     phonon: {
       label: 'Phonon',
       license: 'Apache-2.0',
       files: {
-        'model.q8.gguf': { url: `${origin}/m`, size: BODY.length, sha256 },
+        'model.q8.gguf': {
+          url: `${origin}/m`,
+          size: BODY.length,
+          sha256: overrides.sha256 ?? sha256,
+        },
         'config.json': { url: `${origin}/c`, size: BODY.length, sha256 },
         'voices/Zoe y.safetensors': { url: `${origin}/v`, size: BODY.length, sha256 },
       },
     },
   };
   const api = new Hono();
-  registerTtsRoutes(api, createTtsFiles({ dir, manifest }));
+  const files = createTtsFiles({ dir, manifest });
+  revision = files.revision('phonon') ?? '';
+  registerTtsRoutes(api, files);
   return new Hono().route('/api', api);
 }
 
 const get = (app: Hono, path: string, headers: Record<string, string> = {}) =>
-  app.request(`/api/tts/files/phonon/${path}`, { headers });
+  app.request(`/api/tts/files/phonon/${revision}/${path}`, { headers });
 
-describe('GET /api/tts/files/:engine/*', () => {
+describe('GET /api/tts/files/:engine/:revision/*', () => {
   it('serves a manifest file with immutable cache headers', async () => {
     const res = await get(appWith(), 'model.q8.gguf');
     expect(res.status).toBe(200);
     expect(Buffer.from(await res.arrayBuffer()).equals(BODY)).toBe(true);
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable');
     expect(res.headers.get('etag')).toBe(`"${sha256}"`);
-    expect(res.headers.get('accept-ranges')).toBe('bytes');
     expect(res.headers.get('content-length')).toBe(String(BODY.length));
     expect(res.headers.get('content-type')).toBe('application/octet-stream');
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
@@ -89,7 +96,9 @@ describe('GET /api/tts/files/:engine/*', () => {
   });
 
   it('answers a byte range with 206 and the matching Content-Range', async () => {
-    const res = await get(appWith(), 'model.q8.gguf', { Range: 'bytes=10-19' });
+    const app = appWith();
+    await (await get(app, 'model.q8.gguf')).arrayBuffer();
+    const res = await get(app, 'model.q8.gguf', { Range: 'bytes=10-19' });
     expect(res.status).toBe(206);
     expect(res.headers.get('content-range')).toBe(`bytes 10-19/${BODY.length}`);
     expect(res.headers.get('content-length')).toBe('10');
@@ -98,6 +107,7 @@ describe('GET /api/tts/files/:engine/*', () => {
 
   it('answers open-ended and suffix ranges', async () => {
     const app = appWith();
+    await (await get(app, 'model.q8.gguf')).arrayBuffer();
     const open = await get(app, 'model.q8.gguf', { Range: 'bytes=990-' });
     expect(open.headers.get('content-range')).toBe(`bytes 990-999/${BODY.length}`);
     const tail = await get(app, 'model.q8.gguf', { Range: 'bytes=-5' });
@@ -105,13 +115,17 @@ describe('GET /api/tts/files/:engine/*', () => {
   });
 
   it('answers 416 for a range past the end', async () => {
-    const res = await get(appWith(), 'model.q8.gguf', { Range: `bytes=${BODY.length}-` });
+    const app = appWith();
+    await (await get(app, 'model.q8.gguf')).arrayBuffer();
+    const res = await get(app, 'model.q8.gguf', { Range: `bytes=${BODY.length}-` });
     expect(res.status).toBe(416);
     expect(res.headers.get('content-range')).toBe(`bytes */${BODY.length}`);
   });
 
   it('answers 304 when the ETag matches', async () => {
-    const res = await get(appWith(), 'model.q8.gguf', { 'If-None-Match': `"${sha256}"` });
+    const app = appWith();
+    await (await get(app, 'model.q8.gguf')).arrayBuffer();
+    const res = await get(app, 'model.q8.gguf', { 'If-None-Match': `"${sha256}"` });
     expect(res.status).toBe(304);
   });
 
@@ -128,7 +142,7 @@ describe('GET /api/tts/files/:engine/*', () => {
       expect(res.status).toBe(404);
       expect(((await res.json()) as { error: string }).error).toBe('not_found');
     }
-    expect((await app.request('/api/tts/files/other/model.q8.gguf')).status).toBe(404);
+    expect((await app.request('/api/tts/files/other/x/model.q8.gguf')).status).toBe(404);
     expect(requests).toBe(0);
   });
 
@@ -137,6 +151,41 @@ describe('GET /api/tts/files/:engine/*', () => {
     const res = await get(appWith(), 'model.q8.gguf');
     expect(res.status).toBe(502);
     expect(((await res.json()) as { error: string }).error).toBe('upstream_failed');
+    expect(await readdir(dir)).toEqual([]);
+  });
+});
+
+describe('revision in the URL', () => {
+  it('serves only URLs that carry the current revision; old and unversioned URLs are 404', async () => {
+    const app = appWith();
+    for (const url of [
+      '/api/tts/files/phonon/model.q8.gguf',
+      '/api/tts/files/phonon/000000000000/model.q8.gguf',
+      `/api/tts/files/phonon/${revision}x/model.q8.gguf`,
+    ]) {
+      expect((await app.request(url)).status).toBe(404);
+    }
+    expect(requests).toBe(0);
+  });
+});
+
+describe('streaming the first download', () => {
+  it('sends Content-Length and ETag with the first bytes, then serves ranges from the cache', async () => {
+    const app = appWith();
+    const first = await get(app, 'model.q8.gguf');
+    expect(first.headers.get('content-length')).toBe(String(BODY.length));
+    expect(first.headers.get('etag')).toBe(`"${sha256}"`);
+    expect(Buffer.from(await first.arrayBuffer()).equals(BODY)).toBe(true);
+    const range = await get(app, 'model.q8.gguf', { Range: 'bytes=0-3' });
+    expect(range.status).toBe(206);
+    expect(requests).toBe(1);
+  });
+
+  it('breaks the transfer, and keeps no file, when the hash does not match', async () => {
+    const app = appWith({ sha256: createHash('sha256').update('other').digest('hex') });
+    const res = await get(app, 'model.q8.gguf');
+    expect(res.status).toBe(200);
+    await expect(res.arrayBuffer()).rejects.toBeDefined();
     expect(await readdir(dir)).toEqual([]);
   });
 });
@@ -171,6 +220,7 @@ describe('GET /api/tts/manifest (the real manifest)', () => {
     expect(Object.keys(json.engines).sort()).toEqual(['kokoro', 'phonon']);
     for (const engine of Object.values(json.engines)) {
       expect(engine.license).toBe('Apache-2.0');
+      expect((engine as { revision?: string }).revision).toMatch(/^[0-9a-f]{12}$/);
       for (const file of Object.values(engine.files)) {
         expect(file.sha256).toMatch(/^[0-9a-f]{64}$/);
         expect(file.size).toBeGreaterThan(0);

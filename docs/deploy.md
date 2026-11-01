@@ -95,6 +95,10 @@ its own domain:
    - Env: `DATABASE_URL`, `HOST=0.0.0.0`, `SILO_APP_PASSWORD`,
      `SILO_SESSION_SECRET`, `SILO_API_TOKEN`, and `SILO_PUBLIC_MCP_URL`
      (see below). `SILO_WEB_DIST` is baked into the image (`/app/packages/web/dist`).
+   - Read aloud: set `SILO_DATA_DIR=/data` and add a Dokploy **volume** mounted at `/data`
+     (a persistent volume, not a bind to the image). Read aloud downloads its voice models
+     (about 0.6 GB) into `/data/tts-cache` once; without the volume they download again
+     after every redeploy. The mcp service does not need it.
 
 3. **mcp service** — same image.
    - Command: `pnpm exec tsx packages/app/src/mcp-http-main.ts`

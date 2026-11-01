@@ -344,7 +344,7 @@ export {
 export type { SettingKey, SettingsMap, SettingValue } from './settings/schema.js';
 export { SETTINGS_DEFAULTS } from './settings/schema.js';
 export { getAllSettings, getSetting, setSetting, updateSettings } from './settings/settings.js';
-export type { TtsFiles, TtsLocalFile } from './tts/files.js';
+export type { TtsFiles, TtsLocalFile, TtsServe } from './tts/files.js';
 // Read aloud model files (reader tools, slice 4): the pinned manifest, the download-once file
 // store, and the data directory. `@silo/api` serves them at `/api/tts/files`.
 export { createTtsFiles, dataDir, TtsDownloadError } from './tts/files.js';
