@@ -7,6 +7,19 @@ import { progressTracker, type TtsEngine, type Voice } from './types';
  */
 const KOKORO_WEBGPU_DTYPE = 'fp32';
 
+/**
+ * After an abort, the generation in the worker may finish on its own. Wait this long for it
+ * before the worker is stopped and reloaded (a reload costs a second or more).
+ */
+const STALE_MS = 750;
+
+/** The model files a load fetches for each dtype (voices load on first use, not here). */
+const SMALL_FILES = ['config.json', 'tokenizer.json', 'tokenizer_config.json'];
+const MODEL_FILE: Record<string, string> = {
+  fp32: 'onnx/model.onnx',
+  q8: 'onnx/model_quantized.onnx',
+};
+
 type VoiceInfo = { name: string; language: string; gender: string };
 type Progress = { status?: string; file?: string; loaded?: number; total?: number };
 type Ready = { device: string; dtype: string; voices: Record<string, VoiceInfo> };
@@ -26,6 +39,8 @@ type Channel = {
   worker: Worker;
   pending: Map<number, Pending>;
   ready: Promise<Ready>;
+  /** Settles when the request ahead of the next one has finished: the worker does one at a time. */
+  tail: Promise<void>;
   /** Reject the load and every request waiting on this worker. */
   fail(error: Error): void;
 };
@@ -64,7 +79,7 @@ function startWorker(
   worker.onmessageerror = () =>
     fail(new Error('The voice worker sent a message that could not be read'));
   worker.postMessage({ type: 'load', filesBase, webgpuDtype });
-  return { worker, pending, ready, fail };
+  return { worker, pending, ready, tail: Promise.resolve(), fail };
 }
 
 /** Kokoro 82M in a module Web Worker that silo owns. */
@@ -86,30 +101,69 @@ export function createKokoroEngine(): TtsEngine {
     channel.ready.catch(() => undefined);
   };
 
+  /**
+   * Wait for the worker (it does one request at a time) and take the next turn on it. If the
+   * worker is replaced while waiting, the turn moves to the new one.
+   */
+  const takeTurn = async (): Promise<{ current: Channel; release: () => void }> => {
+    for (;;) {
+      const current = channel;
+      if (!current) throw new Error('The voice model was closed');
+      await current.ready;
+      let release: () => void = () => {};
+      const ahead = current.tail;
+      current.tail = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      await ahead;
+      if (channel === current) return { current, release };
+      release();
+    }
+  };
+
+  /**
+   * A request nobody wants any more. Its generation may still finish soon, and its result is
+   * dropped; the worker restarts only if it is still busy after STALE_MS.
+   */
+  const abandon = (stale: Channel, result: Promise<unknown>) => {
+    const timer = setTimeout(() => replace(stale), STALE_MS);
+    const done = () => clearTimeout(timer);
+    result.then(done, done);
+  };
+
   const engine: TtsEngine = {
     id: 'kokoro',
     supportsSpeed: true,
     sampleRate: 24000,
     device: 'not loaded',
     async load(onProgress) {
-      const filesBase = ttsFilesBase(await fetchTtsManifest(), 'kokoro');
-      const track = progressTracker<Progress>(onProgress, (info) =>
-        info.status === 'progress' && info.file && info.total
-          ? [info.file, info.loaded ?? 0, info.total]
-          : null,
-      );
+      const manifest = await fetchTtsManifest();
+      const filesBase = ttsFilesBase(manifest, 'kokoro');
+      const files = manifest.engines.kokoro.files;
+      /** Progress over the files this dtype loads, sized from the manifest. */
+      const trackFor = (dtype: string | null) => {
+        const model = MODEL_FILE[dtype ?? 'q8'] as string;
+        const sizes = Object.fromEntries(
+          [model, ...SMALL_FILES].map((path) => [path, files[path]?.size ?? 0]),
+        );
+        return progressTracker<Progress>(onProgress, sizes, (info) => {
+          if (!info.file) return null;
+          if (info.status === 'done') return [info.file, sizes[info.file] ?? 0];
+          return info.status === 'progress' ? [info.file, info.loaded ?? 0] : null;
+        });
+      };
       let dtype: string | null = KOKORO_WEBGPU_DTYPE;
       let info: Ready;
       try {
-        channel = startWorker(filesBase, track, dtype);
+        channel = startWorker(filesBase, trackFor(dtype), dtype);
         info = await channel.ready;
       } catch (error) {
         if (disposed) throw error;
         // The GPU run failed to start. ONNX Runtime keeps that failure, so WebAssembly gets a
-        // fresh worker.
+        // fresh worker (and a fresh progress total: q8 is a different file).
         channel?.worker.terminate();
         dtype = null;
-        channel = startWorker(filesBase, track, dtype);
+        channel = startWorker(filesBase, trackFor(dtype), dtype);
         info = await channel.ready;
       }
       if (disposed) {
@@ -130,28 +184,35 @@ export function createKokoroEngine(): TtsEngine {
     },
     async *stream(text, { voice, speed, signal }) {
       if (!channel) throw new Error('The voice model is not loaded');
-      const current = channel;
-      await current.ready;
+      const { current, release } = await takeTurn();
+      if (signal?.aborted) {
+        release();
+        return;
+      }
       const id = ++sequence;
       const result = new Promise<{ samples: Float32Array; sampleRate: number }>(
         (resolve, reject) => {
           current.pending.set(id, { resolve, reject });
         },
       );
-      const stop = () => replace(current);
-      signal?.addEventListener('abort', stop, { once: true });
+      // The worker is busy until this request settles, whether or not anyone still wants it.
+      result.then(release, release);
       current.worker.postMessage({ type: 'generate', id, text, voice, speed });
-      let audio: { samples: Float32Array; sampleRate: number };
+      const gone = new Promise<null>((resolve) => {
+        if (signal?.aborted) resolve(null);
+        else signal?.addEventListener('abort', () => resolve(null), { once: true });
+      });
+      let audio: { samples: Float32Array; sampleRate: number } | null;
       try {
-        audio = await result;
+        audio = await Promise.race([result, gone]);
       } catch (error) {
         if (signal?.aborted) return;
         throw error;
-      } finally {
-        // The request is over; an abort after this must not restart the worker.
-        signal?.removeEventListener('abort', stop);
       }
-      if (signal?.aborted) return;
+      if (audio === null) {
+        abandon(current, result);
+        return;
+      }
       engine.sampleRate = audio.sampleRate;
       yield audio.samples;
     },

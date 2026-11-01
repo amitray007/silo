@@ -43,10 +43,10 @@ vi.mock('./manifest', async (original) => ({
         license: 'Apache-2.0',
         revision: 'abc123abc123',
         files: {
-          'config.json': { size: 1, sha256: 'a' },
-          'tokenizer.json': { size: 1, sha256: 'b' },
-          'model.q8.gguf': { size: 1, sha256: 'c' },
-          'default-voice.safetensors': { size: 1, sha256: 'd' },
+          'config.json': { size: 100, sha256: 'a' },
+          'tokenizer.json': { size: 100, sha256: 'b' },
+          'model.q8.gguf': { size: 600, sha256: 'c' },
+          'default-voice.safetensors': { size: 200, sha256: 'd' },
           'voices/Zoe0.safetensors': {
             size: 1,
             sha256: 'e',
@@ -114,17 +114,24 @@ describe('createPhononEngine', () => {
     expect(engine.device).toBe('webgpu');
   });
 
-  it('sums download progress across files', async () => {
+  it('measures progress against the manifest sizes of every file the load fetches', async () => {
     const engine = createPhononEngine();
     const seen: [number | null, number, number][] = [];
-    const load = engine.load((percent, loaded, total) => seen.push([percent, loaded, total]));
-    await load;
+    await engine.load((percent, loaded, total) => seen.push([percent, loaded, total]));
+    // The total (600 + 100 + 100 + 200) is known before any byte arrives.
+    expect(seen[0]).toEqual([0, 0, 1000]);
     const onProgress = state.options?.onProgress as (event: unknown) => void;
-    onProgress({ file: 'weights', loaded: 50, total: 100, cached: false });
-    onProgress({ file: 'tokenizer', loaded: 10, total: 100, cached: false });
-    expect(seen.at(-1)).toEqual([30, 60, 200]);
-    onProgress({ file: 'config', loaded: 1, total: null, cached: false });
-    expect(seen).toHaveLength(2);
+    // A small file finishing first does not read as a finished download.
+    onProgress({ file: 'config', loaded: 100, total: 100, cached: false });
+    expect(seen.at(-1)).toEqual([10, 100, 1000]);
+    onProgress({ file: 'weights', loaded: 300, total: 600, cached: false });
+    expect(seen.at(-1)).toEqual([40, 400, 1000]);
+    onProgress({ file: 'voice:default', loaded: 50, total: null, cached: false });
+    expect(seen.at(-1)).toEqual([45, 450, 1000]);
+    // A file Phonon fetches that is not in the plan does not move the bar.
+    const count = seen.length;
+    onProgress({ file: 'voice:Zoe0', loaded: 99, total: 99, cached: false });
+    expect(seen).toHaveLength(count);
   });
 
   it('speaks with the default voice when none is named', async () => {

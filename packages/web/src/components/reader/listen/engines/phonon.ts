@@ -49,8 +49,17 @@ export function createPhononEngine(): TtsEngine {
         voices,
         defaultVoice: DEFAULT_VOICE,
       };
-      const track = progressTracker<PhononProgress>(onProgress, (event) =>
-        event.total ? [event.file, event.loaded, event.total] : null,
+      // Every file this load fetches, with its manifest size (the default voice loads up front).
+      const size = (path: string) => files[path]?.size ?? 0;
+      const track = progressTracker<PhononProgress>(
+        onProgress,
+        {
+          weights: size('model.q8.gguf'),
+          tokenizer: size('tokenizer.json'),
+          config: size('config.json'),
+          [`voice:${DEFAULT_VOICE}`]: size('default-voice.safetensors'),
+        },
+        (event) => [event.file, event.loaded],
       );
       tts = await PhononTTS.load({
         lang: 'en',

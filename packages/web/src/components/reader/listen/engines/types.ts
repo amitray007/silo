@@ -31,22 +31,29 @@ export type TtsEngine = {
   dispose(): void;
 };
 
-/** Sum progress events from several files into one percentage. */
+/**
+ * Download progress over every file an engine will load. The sizes come from the manifest, so
+ * the total is known before the first byte and the figure never jumps when a big file starts.
+ * `files` maps an event to `[file, bytes loaded]`, or null for events that are not progress;
+ * files not in `sizes` are ignored. Calls `onProgress(0, 0, total)` at once.
+ */
 export function progressTracker<E>(
   onProgress: LoadProgress,
-  files: (event: E) => [file: string, loaded: number, total: number] | null,
+  sizes: Readonly<Record<string, number>>,
+  files: (event: E) => [file: string, loaded: number] | null,
 ): (event: E) => void {
-  const seen = new Map<string, [number, number]>();
+  const total = Object.values(sizes).reduce((sum, size) => sum + size, 0);
+  const seen = new Map<string, number>();
+  const report = () => {
+    let loaded = 0;
+    for (const [file, bytes] of seen) loaded += Math.min(bytes, sizes[file] ?? 0);
+    onProgress(total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null, loaded, total);
+  };
+  report();
   return (event) => {
     const entry = files(event);
-    if (!entry) return;
-    seen.set(entry[0], [entry[1], entry[2]]);
-    let loaded = 0;
-    let total = 0;
-    for (const [l, t] of seen.values()) {
-      loaded += l;
-      total += t;
-    }
-    onProgress(total > 0 ? Math.min(100, Math.round((loaded / total) * 100)) : null, loaded, total);
+    if (!entry || !Object.hasOwn(sizes, entry[0])) return;
+    seen.set(entry[0], entry[1]);
+    report();
   };
 }

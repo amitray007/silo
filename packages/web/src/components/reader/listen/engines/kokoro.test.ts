@@ -4,7 +4,20 @@ import { createKokoroEngine } from './kokoro';
 vi.mock('./manifest', async (original) => ({
   ...(await original<typeof import('./manifest')>()),
   fetchTtsManifest: async () => ({
-    engines: { kokoro: { label: 'K', license: 'Apache-2.0', revision: 'abc123abc123', files: {} } },
+    engines: {
+      kokoro: {
+        label: 'K',
+        license: 'Apache-2.0',
+        revision: 'abc123abc123',
+        files: {
+          'onnx/model.onnx': { size: 800, sha256: 'a' },
+          'onnx/model_quantized.onnx': { size: 300, sha256: 'b' },
+          'config.json': { size: 100, sha256: 'c' },
+          'tokenizer.json': { size: 50, sha256: 'd' },
+          'tokenizer_config.json': { size: 50, sha256: 'e' },
+        },
+      },
+    },
   }),
 }));
 
@@ -121,24 +134,50 @@ describe('createKokoroEngine loading', () => {
     expect(FakeWorker.all).toHaveLength(2 - 1);
   });
 
-  it('sums download progress across files', async () => {
+  it('measures progress against the manifest sizes of the files this dtype loads', async () => {
     const engine = createKokoroEngine();
-    const seen: (number | null)[] = [];
-    const loading = engine.load((percent) => seen.push(percent));
+    const seen: [number | null, number, number][] = [];
+    const loading = engine.load((percent, loaded, total) => seen.push([percent, loaded, total]));
     await vi.waitFor(() => expect(FakeWorker.all).toHaveLength(1));
     const worker = FakeWorker.all[0] as FakeWorker;
+    // fp32: 800 + 100 + 50 + 50, known before the first byte.
+    expect(seen[0]).toEqual([0, 0, 1000]);
+    // A small file done first is 10%, not a finished download.
+    worker.reply({ type: 'progress', info: { status: 'done', file: 'config.json' } });
+    expect(seen.at(-1)).toEqual([10, 100, 1000]);
     worker.reply({
       type: 'progress',
-      info: { status: 'progress', file: 'a', loaded: 25, total: 100 },
+      info: { status: 'progress', file: 'onnx/model.onnx', loaded: 400, total: 800 },
     });
+    expect(seen.at(-1)).toEqual([50, 500, 1000]);
+    // More bytes than the manifest says cannot pass the file's share; other events are ignored.
     worker.reply({
       type: 'progress',
-      info: { status: 'progress', file: 'b', loaded: 75, total: 100 },
+      info: { status: 'progress', file: 'onnx/model.onnx', loaded: 9999, total: 800 },
     });
-    worker.reply({ type: 'progress', info: { status: 'download', file: 'c' } });
+    expect(seen.at(-1)).toEqual([90, 900, 1000]);
+    const count = seen.length;
+    worker.reply({ type: 'progress', info: { status: 'initiate', file: 'tokenizer.json' } });
+    worker.reply({
+      type: 'progress',
+      info: { status: 'progress', file: 'voices/af_heart.bin', loaded: 5, total: 5 },
+    });
+    expect(seen).toHaveLength(count);
     worker.ready();
     await loading;
-    expect(seen).toEqual([25, 50]);
+  });
+
+  it('starts the progress over, against the q8 model, when it falls back to WebAssembly', async () => {
+    const engine = createKokoroEngine();
+    const seen: [number | null, number, number][] = [];
+    const loading = engine.load((percent, loaded, total) => seen.push([percent, loaded, total]));
+    await vi.waitFor(() => expect(FakeWorker.all).toHaveLength(1));
+    (FakeWorker.all[0] as FakeWorker).reply({ type: 'error', message: 'no gpu' });
+    await vi.waitFor(() => expect(FakeWorker.all).toHaveLength(2));
+    // q8: 300 + 100 + 50 + 50.
+    expect(seen.at(-1)).toEqual([0, 0, 500]);
+    (FakeWorker.all[1] as FakeWorker).ready('wasm', 'q8');
+    await loading;
   });
 });
 
@@ -199,44 +238,121 @@ describe('createKokoroEngine generating', () => {
     await expect(pending).rejects.toThrow(/could not be read/);
   });
 
-  it('terminates the worker and reloads the model when a running request is aborted', async () => {
-    const engine = await loaded();
-    const first = FakeWorker.all[0] as FakeWorker;
-    const abort = new AbortController();
-    const pending = ask(engine, abort.signal);
-    await tick();
-    abort.abort();
-    // The stale generation ends at once and yields nothing.
-    expect((await pending).done).toBe(true);
-    expect(first.terminated).toBe(true);
-    expect(FakeWorker.all).toHaveLength(2);
-    const second = FakeWorker.all[1] as FakeWorker;
-    expect(second.posted[0]).toEqual({ type: 'load', filesBase: FILES, webgpuDtype: 'fp32' });
-    // The next request waits for the reloaded model, then runs on the new worker.
-    const next = ask(engine);
-    await tick();
-    expect(second.posted.some((message) => message.type === 'generate')).toBe(false);
-    second.ready();
-    await tick();
-    const request = second.posted.at(-1) as { type: string; id: number };
-    expect(request.type).toBe('generate');
-    second.reply({
-      type: 'audio',
-      id: request.id,
-      samples: new Float32Array([9]),
-      sampleRate: 24000,
-    });
-    expect((await next).value).toEqual(new Float32Array([9]));
-  });
+  describe('after an abort', () => {
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
 
-  it('reloads on WebAssembly after an abort when the model runs there', async () => {
-    const engine = await loaded('wasm');
-    const abort = new AbortController();
-    const pending = ask(engine, abort.signal);
-    await tick();
-    abort.abort();
-    await pending;
-    expect((FakeWorker.all[1] as FakeWorker).posted[0]).toMatchObject({ webgpuDtype: null });
+    const settle = () => vi.advanceTimersByTimeAsync(0);
+
+    async function running(device = 'webgpu') {
+      const engine = await loaded(device);
+      const first = FakeWorker.all[0] as FakeWorker;
+      const abort = new AbortController();
+      const pending = engine
+        .stream('One.', { voice: 'af_heart', speed: 1, signal: abort.signal })
+        [Symbol.asyncIterator]()
+        .next();
+      await settle();
+      const request = first.posted.at(-1) as unknown as { id: number };
+      return { engine, first, abort, pending, request };
+    }
+
+    it('lets a generation that finishes within 750 ms be dropped, with no restart', async () => {
+      const { first, abort, pending, request } = await running();
+      abort.abort();
+      // The stream ends at once and yields nothing.
+      expect((await pending).done).toBe(true);
+      await vi.advanceTimersByTimeAsync(500);
+      first.reply({
+        type: 'audio',
+        id: request.id,
+        samples: new Float32Array([1]),
+        sampleRate: 24000,
+      });
+      await vi.advanceTimersByTimeAsync(2000);
+      expect(first.terminated).toBe(false);
+      expect(FakeWorker.all).toHaveLength(1);
+    });
+
+    it('restarts the worker, on the same device, when it is still busy after 750 ms', async () => {
+      const { first, abort, pending } = await running();
+      abort.abort();
+      await pending;
+      await vi.advanceTimersByTimeAsync(740);
+      expect(first.terminated).toBe(false);
+      await vi.advanceTimersByTimeAsync(20);
+      expect(first.terminated).toBe(true);
+      expect(FakeWorker.all).toHaveLength(2);
+      expect((FakeWorker.all[1] as FakeWorker).posted[0]).toEqual({
+        type: 'load',
+        filesBase: FILES,
+        webgpuDtype: 'fp32',
+      });
+    });
+
+    it('reloads on WebAssembly after a restart when the model runs there', async () => {
+      const { abort, pending } = await running('wasm');
+      abort.abort();
+      await pending;
+      await vi.advanceTimersByTimeAsync(800);
+      expect((FakeWorker.all[1] as FakeWorker).posted[0]).toMatchObject({ webgpuDtype: null });
+    });
+
+    it('queues new work behind the stale generation instead of running two at once', async () => {
+      const { engine, first, abort, pending, request } = await running();
+      abort.abort();
+      await pending;
+      const next = engine
+        .stream('Two.', { voice: 'af_heart', speed: 1 })
+        [Symbol.asyncIterator]()
+        .next();
+      await vi.advanceTimersByTimeAsync(300);
+      // The worker is still busy with the stale one: the new request has not been sent.
+      expect(first.posted.filter((m) => m.type === 'generate')).toHaveLength(1);
+      first.reply({
+        type: 'audio',
+        id: request.id,
+        samples: new Float32Array([1]),
+        sampleRate: 24000,
+      });
+      await vi.advanceTimersByTimeAsync(0);
+      const sent = first.posted.filter((m) => m.type === 'generate');
+      expect(sent).toHaveLength(2);
+      expect(sent[1]).toMatchObject({ text: 'Two.' });
+      first.reply({
+        type: 'audio',
+        id: (sent[1] as unknown as { id: number }).id,
+        samples: new Float32Array([2]),
+        sampleRate: 24000,
+      });
+      expect((await next).value).toEqual(new Float32Array([2]));
+      expect(FakeWorker.all).toHaveLength(1);
+    });
+
+    it('moves queued work to the new worker when a stale generation forces a restart', async () => {
+      const { engine, first, abort, pending } = await running();
+      abort.abort();
+      await pending;
+      const next = engine
+        .stream('Two.', { voice: 'af_heart', speed: 1 })
+        [Symbol.asyncIterator]()
+        .next();
+      await vi.advanceTimersByTimeAsync(800);
+      const second = FakeWorker.all[1] as FakeWorker;
+      expect(first.terminated).toBe(true);
+      expect(second.posted.some((m) => m.type === 'generate')).toBe(false);
+      second.ready();
+      await vi.advanceTimersByTimeAsync(0);
+      const request = second.posted.at(-1) as unknown as { type: string; id: number; text: string };
+      expect(request).toMatchObject({ type: 'generate', text: 'Two.' });
+      second.reply({
+        type: 'audio',
+        id: request.id,
+        samples: new Float32Array([3]),
+        sampleRate: 24000,
+      });
+      expect((await next).value).toEqual(new Float32Array([3]));
+    });
   });
 
   it('does not restart for an abort that arrives after the audio did', async () => {
