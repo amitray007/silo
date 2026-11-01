@@ -24,7 +24,7 @@ import { makeLink } from '../test/fixtures';
 import type { ReaderSettings } from './readerPrefs';
 import { readerSync, useReaderType } from './readerPrefs';
 import { type DeepPartial, mergeDeep } from './readerSync';
-import { ReaderPrefsProvider, useReaderPrefs } from './useReaderPrefs';
+import { articleScopeCount, ReaderPrefsProvider, useReaderPrefs } from './useReaderPrefs';
 
 vi.mock('../components/reader/listen/engines', async (original) => ({
   ...(await original<typeof import('../components/reader/listen/engines')>()),
@@ -348,4 +348,63 @@ it('cancels an in-flight detail GET on edit, even when fetch ignores abort and r
   expect(client.getQueryData<LinkResponse>(queryKeys.link(link.id))?.link.readerPrefs).toEqual({
     type: { size: 20 },
   });
+});
+
+it('releases a drained article scope and keeps only preferences across navigation', async () => {
+  const { wrapper, client } = setup({ extractedText: 'Large article body'.repeat(10_000) });
+  const first = renderHook(useReaderPrefs, { wrapper });
+  expect(articleScopeCount(client)).toBe(1);
+  act(() => first.result.current.update({ type: { size: 20 } }, 400));
+  first.unmount();
+  await waitFor(() => expect(articleScopeCount(client)).toBe(0));
+  expect(requests).toHaveLength(1);
+  expect(requests[0]?.body).toEqual({ type: { size: 20 } });
+  // The original detail prop is stale. The version guard preserves the small saved snapshot.
+  const next = renderHook(useReaderPrefs, { wrapper });
+  expect(next.result.current.prefs.type.size).toBe(20);
+  expect(articleScopeCount(client)).toBe(1);
+  await act(async () => next.result.current.update({ width: 'wide' }));
+  await waitFor(() => expect(requests.at(-1)?.body).toEqual({ type: { size: 20 }, width: 'wide' }));
+  next.unmount();
+  await waitFor(() => expect(articleScopeCount(client)).toBe(0));
+});
+
+it('keeps a later mount connected while the final navigation write drains', async () => {
+  const { wrapper, client } = setup();
+  let finish: (res: Response) => void = () => {};
+  vi.mocked(fetch).mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  const first = renderHook(useReaderPrefs, { wrapper });
+  act(() => first.result.current.update({ type: { size: 20 } }, 400));
+  first.unmount();
+  await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+  expect(articleScopeCount(client)).toBe(1);
+  const next = renderHook(useReaderPrefs, { wrapper });
+  expect(next.result.current.prefs.type.size).toBe(20);
+  await act(async () => finish(Response.json({ readerPrefs: { type: { size: 20 } } })));
+  expect(articleScopeCount(client)).toBe(1);
+  await act(async () => next.result.current.update({ width: 'wide' }));
+  await waitFor(() => expect(requests.at(-1)?.body).toEqual({ type: { size: 20 }, width: 'wide' }));
+  next.unmount();
+  await waitFor(() => expect(articleScopeCount(client)).toBe(0));
+});
+
+it('evicts a failed final write after rollback and lets the next visit write', async () => {
+  const { wrapper, client } = setup({ readerPrefs: { type: { size: 18 } } });
+  const first = renderHook(useReaderPrefs, { wrapper });
+  fail = true;
+  act(() => first.result.current.update({ type: { size: 20 } }, 400));
+  first.unmount();
+  await waitFor(() => expect(articleScopeCount(client)).toBe(0));
+  fail = false;
+  const next = renderHook(useReaderPrefs, { wrapper });
+  expect(next.result.current.prefs.type.size).toBe(18);
+  await act(async () => next.result.current.update({ width: 'wide' }));
+  await waitFor(() => expect(requests.at(-1)?.body).toEqual({ type: { size: 18 }, width: 'wide' }));
+  next.unmount();
+  await waitFor(() => expect(articleScopeCount(client)).toBe(0));
 });

@@ -205,7 +205,21 @@ export function useLink(id: string | undefined, options: { enabled?: boolean } =
     queryKey: queryKeys.link(id ?? ''),
     queryFn: async ({ signal }) => {
       const version = readerPrefsVersion(client, id ?? '');
-      const data = await apiGet<LinkResponse>(`/api/links/${encodeURIComponent(id ?? '')}`, signal);
+      const path = `/api/links/${encodeURIComponent(id ?? '')}`;
+      let data = await apiGet<LinkResponse>(`${path}?view=reader`, signal);
+      if (data.link.readerTextOmitted) {
+        try {
+          // Share the Reader query with useLiveReader. A failed HTML read still gets full text.
+          await client.fetchQuery({
+            queryKey: queryKeys.liveReader(id ?? ''),
+            queryFn: ({ signal }) => apiGet<LiveReaderJson>(`${path}/reader`, signal),
+            staleTime: 10 * 60 * 1000,
+            retry: false,
+          });
+        } catch {
+          data = await apiGet<LinkResponse>(path, signal);
+        }
+      }
       return version === 0
         ? data
         : { ...data, link: { ...data.link, readerPrefsVersion: version } };
