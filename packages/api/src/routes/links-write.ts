@@ -3,12 +3,15 @@ import {
   addTag,
   addTagMany,
   captureMany,
+  clearReaderPrefs,
   clearReadingPosition,
   createTag,
   deleteTag,
   editLink,
   getById,
   getByIds,
+  patchReaderPrefs,
+  readerPatchSchema,
   removeTag,
   removeTagMany,
   setReadingPosition,
@@ -119,6 +122,24 @@ export function registerLinksWriteRoutes(app: Hono): void {
       return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
     }
     return respondWithLink(c, id, 200);
+  });
+
+  app.patch('/links/:id/reader-prefs', async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    const body = readerPatchSchema.parse(await c.req.json());
+    const readerPrefs = await patchReaderPrefs(id, body);
+    if (readerPrefs === null) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.json({ readerPrefs });
+  });
+
+  app.delete('/links/:id/reader-prefs', async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    if (!(await clearReaderPrefs(id))) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.body(null, 204);
   });
 
   /**

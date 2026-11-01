@@ -112,3 +112,20 @@ export function mergeReader(base: unknown, patch: unknown): unknown {
   }
   return merged;
 }
+
+export type ReaderPrefs = z.output<typeof readerPatchSchema>;
+
+/** Keep only stored override leaves, using the same per-field fallbacks as defaults reads. */
+export function parseStoredReaderPrefs(value: unknown): ReaderPrefs {
+  if (!isPlain(value)) return {};
+  const stored = readerStoredSchema.parse(value);
+  function present(raw: unknown, parsed: unknown): unknown {
+    if (!isPlain(raw) || !isPlain(parsed)) return parsed;
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([key]) => Object.hasOwn(raw, key))
+        .map(([key, child]) => [key, present(raw[key], child)]),
+    );
+  }
+  return isPlain(value) ? (present(value, stored) as ReaderPrefs) : {};
+}

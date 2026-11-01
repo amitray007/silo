@@ -211,6 +211,13 @@
       "when": 1793558595510,
       "tag": "0029_reading_position_source",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1793565040111,
+      "tag": "0030_link_reader_prefs",
+      "breakpoints": true
     }
   ]
 }

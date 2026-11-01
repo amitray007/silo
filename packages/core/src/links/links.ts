@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import { db, links, linkTags, readingPositions, tags } from '@silo/db';
+import { db, linkReaderPrefs, links, linkTags, readingPositions, tags } from '@silo/db';
 import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
 import type { FeedEntry } from '../feeds/types.js';
+import { parseStoredReaderPrefs, type ReaderPrefs } from '../settings/reader.js';
 import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
@@ -19,6 +20,7 @@ import {
   listColumns,
   type PageParams,
 } from './pagination.js';
+import { moveReaderPrefs } from './reader-prefs.js';
 import { mergeReadingPosition, type ReadingPosition } from './reading-position.js';
 import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
@@ -548,6 +550,7 @@ export type LinkWithTextWindow = LinkDetail & { extractedTextLength: number };
  * query per link read). List and search rows do not carry either.
  */
 export type LinkDetail = LinkSummaryWithTags & {
+  readerPrefs: ReaderPrefs;
   readingPosition: ReadingPosition | null;
   highlights: Highlight[];
 };
@@ -589,12 +592,14 @@ export async function getById(
   const [found] = await db
     .select({
       link: listColumns,
+      readerPrefs: linkReaderPrefs.prefs,
       position: readingPositions.position,
       positionUpdatedAt: readingPositions.updatedAt,
       positionSource: readingPositions.source,
     })
     .from(links)
     .leftJoin(readingPositions, eq(readingPositions.linkId, links.id))
+    .leftJoin(linkReaderPrefs, eq(linkReaderPrefs.linkId, links.id))
     .where(whereLiveAnywhere(eq(links.id, id)))
     .limit(1);
   if (!found) return null;
@@ -602,6 +607,7 @@ export async function getById(
   if (!withTags) return null;
   const hydrated: LinkDetail = {
     ...withTags,
+    readerPrefs: parseStoredReaderPrefs(found.readerPrefs),
     highlights: opts?.preloadedHighlights ?? (await listHighlights(id)),
     readingPosition:
       found.position !== null && found.positionUpdatedAt !== null
@@ -1405,6 +1411,7 @@ export async function restore(id: string): Promise<RestoreResult> {
         }
         await mergeReadingPosition(tx, trashedRow.id, mergedRow.id);
         await moveHighlights(tx, trashedRow.id, mergedRow.id);
+        await moveReaderPrefs(tx, trashedRow.id, mergedRow.id);
         const [finalMerged] = await tx.select().from(links).where(eq(links.id, mergedRow.id));
         return finalMerged ?? mergedRow;
       });
