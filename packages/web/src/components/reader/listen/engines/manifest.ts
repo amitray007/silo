@@ -11,6 +11,8 @@ type TtsFileInfo = {
 type TtsEngineInfo = {
   label: string;
   license: string;
+  /** The URL revision for this engine's files; it changes whenever a pinned file does. */
+  revision: string;
   files: Record<string, TtsFileInfo>;
 };
 
@@ -48,10 +50,11 @@ export async function fetchTtsManifest(): Promise<TtsManifestJson> {
 }
 
 /** The absolute URL of silo's route for an engine's files (no trailing slash). */
-export function ttsFilesBase(engine: EngineId): string {
-  return new URL(apiUrl(`/api/tts/files/${engine}`), location.href).href;
+export function ttsFilesBase(manifest: TtsManifestJson, engine: EngineId): string {
+  const revision = manifest.engines[engine].revision;
+  return new URL(apiUrl(`/api/tts/files/${engine}/${revision}`), location.href).href;
 }
 
-export function ttsFileUrl(engine: EngineId, path: string): string {
-  return `${ttsFilesBase(engine)}/${path.split('/').map(encodeURIComponent).join('/')}`;
+export function ttsFileUrl(manifest: TtsManifestJson, engine: EngineId, path: string): string {
+  return `${ttsFilesBase(manifest, engine)}/${path.split('/').map(encodeURIComponent).join('/')}`;
 }

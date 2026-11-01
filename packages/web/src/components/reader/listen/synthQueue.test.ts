@@ -11,7 +11,6 @@ function fakeEngine(supportsSpeed = true) {
   const release = new Map<string, () => void>();
   const engine: TtsEngine = {
     id: 'kokoro',
-    label: 'Fake',
     supportsSpeed,
     sampleRate: 24000,
     device: 'test',

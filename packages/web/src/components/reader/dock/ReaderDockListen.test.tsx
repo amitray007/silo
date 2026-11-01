@@ -18,7 +18,6 @@ vi.mock('../listen/engines', async (original) => {
   const real = await original<typeof import('../listen/engines')>();
   const make = (id: 'phonon' | 'kokoro'): TtsEngine => ({
     id,
-    label: id,
     supportsSpeed: id === 'kokoro',
     sampleRate: 24000,
     device: 'test',

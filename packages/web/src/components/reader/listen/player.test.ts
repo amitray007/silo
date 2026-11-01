@@ -60,7 +60,6 @@ function fakeEngine({
   const calls: Fake['calls'] = [];
   const engine: TtsEngine = {
     id: supportsSpeed ? 'kokoro' : 'phonon',
-    label: 'Fake',
     supportsSpeed,
     sampleRate: SAMPLE_RATE,
     device: 'test',

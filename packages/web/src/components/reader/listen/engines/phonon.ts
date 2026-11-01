@@ -15,9 +15,9 @@ const VOICE_FILE = /^voices\/(.+)\.safetensors$/;
 export function createPhononEngine(): TtsEngine {
   let tts: PhononTTS | undefined;
   let voiceList: Voice[] = [];
+  let disposed = false;
   const engine: TtsEngine = {
     id: 'phonon',
-    label: 'Phonon (31M)',
     supportsSpeed: false,
     sampleRate: 24000,
     device: 'not loaded',
@@ -28,13 +28,13 @@ export function createPhononEngine(): TtsEngine {
       ]);
       const files = manifest.engines.phonon.files;
       const voices: Record<string, string> = {
-        [DEFAULT_VOICE]: ttsFileUrl('phonon', 'default-voice.safetensors'),
+        [DEFAULT_VOICE]: ttsFileUrl(manifest, 'phonon', 'default-voice.safetensors'),
       };
       voiceList = [];
       for (const [path, info] of Object.entries(files)) {
         const id = VOICE_FILE.exec(path)?.[1];
         if (!id || !info.voice) continue;
-        voices[id] = ttsFileUrl('phonon', path);
+        voices[id] = ttsFileUrl(manifest, 'phonon', path);
         voiceList.push({
           id,
           label: info.voice.name,
@@ -43,9 +43,9 @@ export function createPhononEngine(): TtsEngine {
         });
       }
       const spec: ModelSpec = {
-        weights: { q8: ttsFileUrl('phonon', 'model.q8.gguf') },
-        tokenizer: ttsFileUrl('phonon', 'tokenizer.json'),
-        config: ttsFileUrl('phonon', 'config.json'),
+        weights: { q8: ttsFileUrl(manifest, 'phonon', 'model.q8.gguf') },
+        tokenizer: ttsFileUrl(manifest, 'phonon', 'tokenizer.json'),
+        config: ttsFileUrl(manifest, 'phonon', 'config.json'),
         voices,
         defaultVoice: DEFAULT_VOICE,
       };
@@ -60,6 +60,12 @@ export function createPhononEngine(): TtsEngine {
         voices: [DEFAULT_VOICE],
         onProgress: track,
       });
+      if (disposed) {
+        // The article closed while the model loaded: free it now, nobody will.
+        tts.dispose();
+        tts = undefined;
+        throw new Error('The voice model was closed while it loaded');
+      }
       engine.sampleRate = tts.sampleRate;
       engine.device = tts.device === 'webgpu' ? 'webgpu' : `cpu x${tts.threads}`;
     },
@@ -69,6 +75,7 @@ export function createPhononEngine(): TtsEngine {
       yield* tts.stream(text, { voice: voice || DEFAULT_VOICE, ...(signal ? { signal } : {}) });
     },
     dispose() {
+      disposed = true;
       tts?.dispose();
       tts = undefined;
     },

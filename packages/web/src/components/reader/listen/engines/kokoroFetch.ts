@@ -2,7 +2,7 @@
  * `kokoro-js` loads each voice from a fixed Hugging Face address, outside the transformers.js
  * `env` settings that redirect the model files. This fetch wrapper, installed in the Kokoro
  * worker, sends those voice requests to silo's file route and refuses any other request to
- * Hugging Face, so the browser never calls it.
+ * Hugging Face or a CDN, so the browser never calls them.
  */
 const KOKORO_VOICES =
   'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/';
@@ -12,15 +12,13 @@ function urlOf(input: RequestInfo | URL): string {
   return input instanceof URL ? input.href : input.url;
 }
 
-export function isHuggingFace(url: string): boolean {
+/** Hosts a model load might reach by default: Hugging Face, and the CDN ONNX Runtime uses. */
+const BLOCKED = ['huggingface.co', 'hf.co', 'jsdelivr.net'];
+
+export function isBlockedHost(url: string): boolean {
   try {
     const host = new URL(url).hostname;
-    return (
-      host === 'huggingface.co' ||
-      host === 'hf.co' ||
-      host.endsWith('.huggingface.co') ||
-      host.endsWith('.hf.co')
-    );
+    return BLOCKED.some((blocked) => host === blocked || host.endsWith(`.${blocked}`));
   } catch {
     return false;
   }
@@ -33,9 +31,9 @@ export function siloFetch(filesBase: string, upstream: typeof fetch): typeof fet
     if (url.startsWith(KOKORO_VOICES)) {
       return upstream(`${filesBase}/voices/${url.slice(KOKORO_VOICES.length)}`, init);
     }
-    if (isHuggingFace(url)) {
+    if (isBlockedHost(url)) {
       return Promise.reject(
-        new TypeError('Requests to Hugging Face are blocked; silo serves the model files'),
+        new TypeError('Requests to Hugging Face and CDNs are blocked; silo serves the model files'),
       );
     }
     return upstream(input, init);

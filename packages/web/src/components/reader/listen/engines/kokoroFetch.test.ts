@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { isHuggingFace, siloFetch } from './kokoroFetch';
+import { isBlockedHost, siloFetch } from './kokoroFetch';
 
 const BASE = 'https://silo.test/api/tts/files/kokoro';
 const HF_VOICE =
@@ -25,13 +25,14 @@ describe('siloFetch', () => {
     expect(upstream).toHaveBeenNthCalledWith(2, `${BASE}/voices/af_heart.bin`, undefined);
   });
 
-  it('never lets any other request to Hugging Face out', async () => {
+  it('never lets any other request to Hugging Face or a CDN out', async () => {
     const { upstream, fetch } = setup();
     for (const url of [
       'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/config.json',
       'https://cdn-lfs.huggingface.co/repos/x/y/model.onnx',
       'https://huggingface.co/api/models/x',
       'https://hf.co/x',
+      'https://cdn.jsdelivr.net/npm/@huggingface/transformers@3.8.1/dist/ort-wasm-simd-threaded.jsep.wasm',
     ]) {
       await expect(fetch(url)).rejects.toThrow(/blocked/);
     }
@@ -47,11 +48,11 @@ describe('siloFetch', () => {
   });
 });
 
-describe('isHuggingFace', () => {
-  it('matches Hugging Face hosts only', () => {
-    expect(isHuggingFace('https://huggingface.co/a')).toBe(true);
-    expect(isHuggingFace('https://cdn-lfs.huggingface.co/a')).toBe(true);
-    expect(isHuggingFace('https://example.com/huggingface.co')).toBe(false);
-    expect(isHuggingFace('not a url')).toBe(false);
+describe('isBlockedHost', () => {
+  it('matches Hugging Face and CDN hosts only', () => {
+    expect(isBlockedHost('https://huggingface.co/a')).toBe(true);
+    expect(isBlockedHost('https://cdn-lfs.huggingface.co/a')).toBe(true);
+    expect(isBlockedHost('https://example.com/huggingface.co')).toBe(false);
+    expect(isBlockedHost('not a url')).toBe(false);
   });
 });

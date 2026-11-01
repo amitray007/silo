@@ -1,7 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { fetchTtsManifest, ttsFilesBase, ttsFileUrl } from './manifest';
 
-const MANIFEST = { engines: { phonon: { label: 'P', license: 'Apache-2.0', files: {} } } };
+const MANIFEST = {
+  engines: {
+    phonon: { label: 'P', license: 'Apache-2.0', revision: 'abc123abc123', files: {} },
+    kokoro: { label: 'K', license: 'Apache-2.0', revision: 'def456def456', files: {} },
+  },
+};
 
 beforeEach(() => localStorage.clear());
 afterEach(() => vi.unstubAllGlobals());
@@ -32,9 +37,11 @@ describe('fetchTtsManifest', () => {
 
 describe('model file addresses', () => {
   it('point at silo, as absolute URLs the workers can use', () => {
-    expect(ttsFilesBase('kokoro')).toBe(`${location.origin}/api/tts/files/kokoro`);
-    expect(ttsFileUrl('phonon', 'voices/a b.safetensors')).toBe(
-      `${location.origin}/api/tts/files/phonon/voices/a%20b.safetensors`,
+    expect(ttsFilesBase(MANIFEST, 'kokoro')).toBe(
+      `${location.origin}/api/tts/files/kokoro/def456def456`,
+    );
+    expect(ttsFileUrl(MANIFEST, 'phonon', 'voices/a b.safetensors')).toBe(
+      `${location.origin}/api/tts/files/phonon/abc123abc123/voices/a%20b.safetensors`,
     );
   });
 });

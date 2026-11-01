@@ -1,4 +1,7 @@
-export type EngineId = 'phonon' | 'kokoro';
+import type { ReadAloudEngine } from '../../../../lib/readerPrefs';
+
+/** The engine ids are the stored preference's, so there is one list of them. */
+export type EngineId = ReadAloudEngine;
 
 export type Voice = {
   id: string;
@@ -14,7 +17,6 @@ export type LoadProgress = (percent: number | null, loaded: number, total: numbe
 
 export type TtsEngine = {
   id: EngineId;
-  label: string;
   /** True when the engine takes a speed option; otherwise the player stretches the audio. */
   supportsSpeed: boolean;
   sampleRate: number;
