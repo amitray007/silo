@@ -185,8 +185,14 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
  * (`undefined`) omits the `body`/`content-type` entirely (used by e.g. a
  * no-body `DELETE`); most callers pass a JSON-serializable object.
  */
-async function apiRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
+async function apiRequest<T>(
+  path: string,
+  method: string,
+  body?: unknown,
+  signal?: AbortSignal,
+): Promise<T> {
   const response = await apiFetch(path, {
+    ...(signal ? { signal } : {}),
     method,
     headers: {
       'X-Silo-CSRF': '1',
@@ -218,8 +224,14 @@ export function apiPut<T>(path: string, body: unknown): Promise<T> {
  * trivial given `apiRequest` and keeps every write verb's error handling
  * identical. Unused by this slice.
  */
-export function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  return apiRequest<T>(path, 'PATCH', body);
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await apiRequest<T>(path, 'PATCH', body, controller.signal);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**

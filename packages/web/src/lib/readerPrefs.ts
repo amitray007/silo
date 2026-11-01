@@ -1,6 +1,6 @@
 import { type CSSProperties, useCallback, useMemo } from 'react';
 import { type HighlightColor, isHighlightColor } from './highlights';
-import { createPrefStore, usePref } from './prefStore';
+import { createPrefStore, isRecord, usePref } from './prefStore';
 import { createSync, type DeepPartial, mergeDeep } from './readerSync';
 
 const readerFonts = ['inter', 'serif', 'mono'] as const;
@@ -52,10 +52,6 @@ function parseJson(raw: string): unknown {
   } catch {
     return undefined;
   }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 /** Each field falls back to its default alone, so one bad field keeps the rest. */
@@ -277,12 +273,12 @@ export type ReaderSettings = {
 const STEPPER_DELAY_MS = 400;
 
 const mirrorKeys = [
-  'silo.readerType',
-  'silo.readerWidth',
-  'silo.readerPencil',
-  'silo.readerHighlight',
-  'silo.readerReadAloud',
-];
+  readerTypeStore,
+  readerWidthStore,
+  pencilPrefsStore,
+  highlightPrefsStore,
+  readAloudPrefsStore,
+].map((store) => store.key);
 
 function readReader(): ReaderSettings {
   return {

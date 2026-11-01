@@ -6,11 +6,16 @@ import { useSyncExternalStore } from 'react';
  * The reader settings keep a server copy in step with these stores (see `readerSync`).
  */
 export type PrefStore<T> = {
+  key: string;
   subscribe: (listener: () => void) => () => void;
   getSnapshot: () => T;
   getServerSnapshot: () => T;
   set: (value: T) => void;
 };
+
+export function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
 
 export function createPrefStore<T>({
   key,
@@ -73,7 +78,7 @@ export function createPrefStore<T>({
     }
     window.dispatchEvent(new Event(event));
   };
-  return { subscribe, getSnapshot, getServerSnapshot: () => initial, set };
+  return { key, subscribe, getSnapshot, getServerSnapshot: () => initial, set };
 }
 
 export function usePref<T>(store: PrefStore<T>) {

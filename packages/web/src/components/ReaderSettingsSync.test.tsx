@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   type ReaderSettings,
   readAloudPrefsDefaults,
+  readerSync,
   readerTypeDefaults,
   useReadAloudPrefs,
   useReaderType,
@@ -89,12 +90,14 @@ function Probe() {
 
 beforeEach(() => {
   for (const key of KEYS) localStorage.removeItem(key);
+  readerSync.reset();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   // Put the stores back to defaults for the next test.
   for (const key of KEYS) localStorage.removeItem(key);
+  readerSync.reset();
 });
 
 describe('ReaderSettingsSync', () => {
@@ -140,8 +143,12 @@ describe('ReaderSettingsSync', () => {
   it('uploads nothing for a browser with no local values', async () => {
     const server = fakeServer(null);
     render(<Probe />, { wrapper: Providers });
+    await waitFor(() => expect(fetch).toHaveBeenCalled());
     await new Promise((resolve) => setTimeout(resolve, 50));
     expect(server.patches).toEqual([]);
+    // Positive control: this fresh sync still sends when the user edits.
+    act(() => screen.getByText('wide').click());
+    await waitFor(() => expect(server.patches).toHaveLength(1));
   });
 
   it('sends a change as a partial patch and every subscriber follows', async () => {
@@ -200,4 +207,67 @@ describe('ReaderSettingsSync', () => {
     await waitFor(() => expect(screen.getByRole('status').textContent).toContain('mono/'));
     expect(server.patches).toEqual([]);
   });
+});
+
+it.each([
+  ['silo.readerType', JSON.stringify({ font: 'mono' }), { type: { font: 'mono' } }],
+  ['silo.readerWidth', 'wide', { width: 'wide' }],
+  ['silo.readerPencil', JSON.stringify({ wpm: 300 }), { pencil: { wpm: 300 } }],
+  ['silo.readerHighlight', JSON.stringify({ color: 'pink' }), { highlight: { color: 'pink' } }],
+  ['silo.readerReadAloud', JSON.stringify({ rate: 2 }), { readAloud: { rate: 2 } }],
+])('migrates an existing mirror from %s', async (key, value, expected) => {
+  localStorage.setItem(key, value);
+  const server = fakeServer(null);
+  render(<Probe />, { wrapper: Providers });
+  await waitFor(() => expect(server.patches).toHaveLength(1));
+  expect(server.patches[0]).toMatchObject(expected);
+});
+
+it('preserves the full mirror when the user edits before the initial GET answers', async () => {
+  localStorage.setItem('silo.readerType', JSON.stringify({ font: 'mono', size: 22 }));
+  const server = fakeServer(null);
+  const serve = vi.mocked(fetch).getMockImplementation();
+  let answer: (() => void) | undefined;
+  const ready = new Promise<void>((resolve) => {
+    answer = resolve;
+  });
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (init?.method !== 'PATCH') await ready;
+    if (!serve) throw new Error('Missing fake server');
+    return serve(input, init);
+  });
+  render(<Probe />, { wrapper: Providers });
+  act(() => screen.getByText('wide').click());
+  expect(server.patches).toEqual([]);
+  await act(async () => answer?.());
+  await waitFor(() => expect(server.patches).toHaveLength(1));
+  expect(server.reader?.type).toMatchObject({ font: 'mono', size: 22 });
+  expect(server.reader?.width).toBe('wide');
+});
+
+it('times out a hung PATCH and sends the next queued edit', async () => {
+  const server = fakeServer({ ...FULL, type: { ...FULL.type, font: 'mono' } });
+  const serve = vi.mocked(fetch).getMockImplementation();
+  let hung = true;
+  vi.mocked(fetch).mockImplementation(async (input, init) => {
+    if (init?.method === 'PATCH' && hung) {
+      hung = false;
+      return new Promise<Response>((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () =>
+          reject(new DOMException('Timed out', 'AbortError')),
+        );
+      });
+    }
+    if (!serve) throw new Error('Missing fake server');
+    return serve(input, init);
+  });
+  render(<Probe />, { wrapper: Providers });
+  await waitFor(() => expect(screen.getByRole('status').textContent).toBe('mono/16/medium/1/'));
+  vi.useFakeTimers();
+  act(() => screen.getByText('wide').click());
+  await act(async () => vi.advanceTimersByTimeAsync(0));
+  act(() => screen.getByText('serif').click());
+  await act(async () => vi.advanceTimersByTimeAsync(15_000));
+  expect(server.patches).toEqual([{ type: { font: 'serif' } }]);
+  expect(screen.getByRole('status').textContent).toBe('serif/16/medium/1/');
 });

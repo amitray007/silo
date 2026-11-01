@@ -1,9 +1,11 @@
+import { isRecord } from './prefStore';
+
 /**
  * Keeps a browser-local preference object in step with a server copy, without owning either.
  * The local copy is what the UI reads, so every change shows at once. A change is also queued
  * for the server as a partial value (so two browsers changing different fields do not undo each
  * other), sent at once or after a short pause for steppers, one request at a time. If the server
- * refuses a change, the fields it touched go back to what they were. When the server answers
+ * refuses a change, the fields it touched go back to the last confirmed value. When the server answers
  * with its own copy and nothing is waiting to be sent, the server copy wins.
  */
 export type DeepPartial<T> = { [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K] };
@@ -17,13 +19,9 @@ export type SyncTransport<T extends object> = {
 
 type Plain = Record<string, unknown>;
 
-function isPlain(value: unknown): value is Plain {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
 /** Lays `patch` over `base` one level at a time, so an untouched field keeps its value. */
 export function mergeDeep<T>(base: T, patch: unknown): T {
-  if (!isPlain(base) || !isPlain(patch)) return (patch === undefined ? base : patch) as T;
+  if (!isRecord(base) || !isRecord(patch)) return (patch === undefined ? base : patch) as T;
   const merged: Plain = { ...base };
   for (const [key, value] of Object.entries(patch)) {
     if (value !== undefined) merged[key] = key in base ? mergeDeep(base[key], value) : value;
@@ -33,18 +31,18 @@ export function mergeDeep<T>(base: T, patch: unknown): T {
 
 /** The part of `source` that `shape` names: the same keys, `source`'s values. */
 function pick(source: unknown, shape: unknown): unknown {
-  if (!isPlain(shape)) return source;
+  if (!isRecord(shape)) return source;
   const out: Plain = {};
-  const from = isPlain(source) ? source : {};
+  const from = isRecord(source) ? source : {};
   for (const key of Object.keys(shape)) out[key] = pick(from[key], shape[key]);
   return out;
 }
 
 /** The leaves of `undo` whose field still holds the value `sent` put there. */
 function revertable(undo: unknown, sent: unknown, current: unknown): unknown {
-  if (!isPlain(undo) || !isPlain(sent)) return Object.is(sent, current) ? undo : undefined;
+  if (!isRecord(undo) || !isRecord(sent)) return Object.is(sent, current) ? undo : undefined;
   const out: Plain = {};
-  const now = isPlain(current) ? current : {};
+  const now = isRecord(current) ? current : {};
   for (const key of Object.keys(undo)) {
     const value = revertable(undo[key], sent[key], now[key]);
     if (value !== undefined) out[key] = value;
@@ -64,43 +62,62 @@ export function createSync<T extends object>(deps: {
 }) {
   let transport: SyncTransport<T> | null = null;
   let pending: DeepPartial<T> | null = null;
-  let undo: DeepPartial<T> | null = null;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let inflight = false;
   let uploaded = false;
+  let serverValue: T | null | undefined;
+  let confirmed = deps.read();
+  let generation = 0;
 
   const flush = (): void => {
     clearTimeout(timer);
     timer = undefined;
-    if (!transport || inflight || !pending) return;
-    const patch = pending;
-    const back = undo;
+    if (!transport || inflight || serverValue === undefined) return;
+    if (!pending && !(serverValue === null && !uploaded && deps.hasLocal())) return;
+    const changes = pending;
+    // Until migration succeeds, every send includes the whole local value, even after a failure.
+    const patch = serverValue === null ? mergeDeep(deps.read(), changes ?? {}) : changes;
+    if (!patch) return;
+    const run = generation;
     pending = null;
-    undo = null;
     inflight = true;
     transport.send(patch).then(
       (server) => {
+        if (run !== generation) return;
         inflight = false;
-        if (!pending) deps.apply(server as DeepPartial<T>, false);
-        else if (timer === undefined) flush();
+        uploaded = true;
+        serverValue = server;
+        confirmed = server;
+        deps.apply(mergeDeep(server, pending ?? {}) as DeepPartial<T>, false);
+        if (pending && timer === undefined) flush();
       },
       () => {
+        if (run !== generation) return;
         inflight = false;
-        if (back) deps.apply(revertable(back, patch, deps.read()) as DeepPartial<T>, false);
+        if (changes) {
+          const back = pick(confirmed, changes);
+          deps.apply(revertable(back, changes, deps.read()) as DeepPartial<T>, false);
+          // An equal-valued queued edit still belongs to the next request.
+          if (pending) deps.apply(pending, false);
+        }
         if (pending && timer === undefined) flush();
       },
     );
   };
 
   const onHide = () => {
-    if (transport && pending) transport.keepalive(pending);
+    if (!transport || !pending) return;
+    const patch =
+      serverValue === null || serverValue === undefined ? mergeDeep(deps.read(), pending) : pending;
+    transport.keepalive(patch);
+  };
+  const onVisibilityChange = () => {
+    if (document.visibilityState === 'hidden') onHide();
   };
 
   return {
     /** Applies `patch` here now and queues it for the server, after `delayMs` (0 = now). */
     commit(patch: DeepPartial<T>, delayMs = 0): void {
-      // The first value of a field since the last send is the one a refusal restores.
-      undo = mergeDeep(pick(deps.read(), patch) as DeepPartial<T>, undo ?? {});
       pending = mergeDeep(pending ?? ({} as DeepPartial<T>), patch);
       deps.apply(patch, true);
       clearTimeout(timer);
@@ -110,25 +127,37 @@ export function createSync<T extends object>(deps: {
     },
     /** The server value arrived (or changed). Null means it has none: upload ours, once. */
     hydrate(server: T | null): void {
-      if (inflight || pending) return;
+      if (inflight || (pending && serverValue !== undefined)) return;
+      // A stale null refetch must not undo a successful upload.
+      if (server === null && uploaded) return;
+      serverValue = server;
       if (server !== null) {
-        deps.apply(server as DeepPartial<T>, false);
-      } else if (!uploaded && deps.hasLocal()) {
-        uploaded = true;
-        pending = deps.read() as DeepPartial<T>;
-        undo = null;
-        flush();
+        confirmed = server;
+        deps.apply(mergeDeep(server, pending ?? {}) as DeepPartial<T>, false);
       }
+      if (timer === undefined) flush();
     },
     connect(next: SyncTransport<T>): () => void {
       transport = next;
       addEventListener('pagehide', onHide);
+      document.addEventListener('visibilitychange', onVisibilityChange);
       flush();
       return () => {
         removeEventListener('pagehide', onHide);
+        document.removeEventListener('visibilitychange', onVisibilityChange);
         if (transport === next) transport = null;
       };
     },
-    busy: () => inflight || pending !== null,
+    /** Test hook: discard queued work and ignore replies from an earlier test. */
+    reset(): void {
+      generation += 1;
+      clearTimeout(timer);
+      timer = undefined;
+      pending = null;
+      inflight = false;
+      uploaded = false;
+      serverValue = undefined;
+      confirmed = deps.read();
+    },
   };
 }
