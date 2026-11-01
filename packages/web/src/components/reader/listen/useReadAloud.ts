@@ -6,6 +6,7 @@ import {
 } from '../../../lib/readerPrefs';
 import { paintSpeaking } from '../highlights/paint';
 import { proseTextNodes } from '../pencil/lines';
+import { articleWords, shareAtPoint, wordAtShare } from '../place/words';
 import { createEngine, ENGINES, type EngineId, type TtsEngine, type Voice } from './engines';
 import { isEnglishText } from './language';
 import { Player } from './player';
@@ -60,9 +61,15 @@ function messageOf(reason: unknown): string {
 export function useReadAloud({
   prose,
   scroll,
+  saved = null,
+  canSave = false,
+  onSave,
 }: {
   prose: HTMLElement | null;
   scroll: HTMLElement | null;
+  saved?: number | null;
+  canSave?: boolean;
+  onSave?: (share: number, options?: { keepalive?: boolean }) => Promise<void>;
 }) {
   const { prefs, update } = useReadAloudPrefs();
   const [active, setActive] = useState(false);
@@ -123,8 +130,26 @@ export function useReadAloud({
   const lastClick = useRef<Node | null>(null);
   // Bumped by every start, stop and engine change; an async start that sees a newer value quits.
   const run = useRef(0);
+  const wordList = useRef<Range[]>([]);
+  const currentShare = useRef<number | null>(null);
+  const position = useRef({ saved, canSave, onSave, prose });
+  position.current = { saved, canSave, onSave, prose };
+  const flush = useCallback((options?: { keepalive?: boolean }) => {
+    const now = position.current;
+    const share = currentShare.current;
+    if (!begun.current || share === null || !now.canSave || !now.onSave) return;
+    void now.onSave(share, options).catch(() => {
+      /* The save adapter reports the failure. */
+    });
+  }, []);
 
   const mark = useCallback((segment: Segment | undefined) => {
+    if (segment)
+      currentShare.current = shareAtPoint(
+        wordList.current,
+        segment.range.startContainer,
+        segment.range.startOffset,
+      );
     paintSpeaking(segment?.range ?? null);
     const pane = live.current.scroll;
     if (segment && pane) scrollToSentence(pane, segment.range);
@@ -157,6 +182,7 @@ export function useReadAloud({
         }),
         events: {
           sentence: (at) => {
+            live.current.index = at;
             setIndex(at);
             mark(list.current[at]);
           },
@@ -179,6 +205,7 @@ export function useReadAloud({
   const ensure = useCallback((): Segment[] => {
     if (list.current.length === 0 && prose) {
       list.current = buildSegments(prose);
+      wordList.current = articleWords(prose);
       setSegments(list.current);
     }
     return list.current;
@@ -190,6 +217,8 @@ export function useReadAloud({
     run.current += 1;
     player.halt();
     list.current = [];
+    wordList.current = [];
+    currentShare.current = null;
     begun.current = false;
     setSegments([]);
     setIndex(0);
@@ -274,6 +303,7 @@ export function useReadAloud({
       }
       setPlaying(true);
       begun.current = true;
+      live.current.index = from;
       setIndex(from);
       mark(sentences[from]);
       // Created inside the press, so the browser lets it play.
@@ -308,20 +338,43 @@ export function useReadAloud({
     if (live.current.playing) void startAt(live.current.index);
   }, [startAt]);
 
+  const savedSentence = useCallback(() => {
+    const now = position.current;
+    const sentences = ensure();
+    const word =
+      now.prose && now.saved !== null ? wordAtShare(articleWords(now.prose), now.saved) : undefined;
+    return word
+      ? Math.max(0, segmentIndexAt(sentences, word.startContainer, word.startOffset))
+      : firstVisible();
+  }, [ensure, firstVisible]);
+
+  // A new manual or Pencil write replaces a paused Listen place too.
+  useEffect(() => {
+    if (
+      !playing &&
+      saved !== null &&
+      currentShare.current !== null &&
+      Math.abs(saved - currentShare.current) > 1e-7
+    )
+      begun.current = false;
+  }, [saved, playing]);
+
   const play = useCallback(() => {
-    void startAt(begun.current ? live.current.index : firstVisible());
-  }, [startAt, firstVisible]);
+    void startAt(begun.current ? live.current.index : savedSentence());
+  }, [startAt, savedSentence]);
 
   const pause = useCallback(() => {
+    flush();
     run.current += 1;
     player.halt();
     setPlaying(false);
     setBuffering(false);
-  }, [player]);
+  }, [player, flush]);
 
   pauseRef.current = pause;
 
   const stop = useCallback(() => {
+    flush();
     run.current += 1;
     player.halt();
     setPlaying(false);
@@ -329,7 +382,7 @@ export function useReadAloud({
     setBuffering(false);
     begun.current = false;
     mark(undefined);
-  }, [player, mark]);
+  }, [player, mark, flush]);
 
   const jump = useCallback(
     (to: number) => {
@@ -356,8 +409,8 @@ export function useReadAloud({
       const node = lastClick.current;
       at = sentences.findIndex((segment) => segment.block.contains(node));
     }
-    void startAt(at >= 0 ? at : firstVisible());
-  }, [prose, ensure, startAt, firstVisible]);
+    void startAt(at >= 0 ? at : savedSentence());
+  }, [prose, ensure, startAt, savedSentence]);
 
   const setRate = useCallback(
     (value: number) => {
@@ -458,6 +511,20 @@ export function useReadAloud({
       paintSpeaking(null);
     };
   }, [player]);
+
+  useEffect(() => {
+    const hide = () => flush({ keepalive: true });
+    const visibility = () => {
+      if (document.hidden) hide();
+    };
+    window.addEventListener('pagehide', hide);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      window.removeEventListener('pagehide', hide);
+      document.removeEventListener('visibilitychange', visibility);
+      flush();
+    };
+  }, [flush]);
 
   // A tab that stays hidden pauses, and so does a suspended or interrupted audio device, so
   // Play resumes cleanly from the same sentence instead of the UI claiming it is playing.

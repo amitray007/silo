@@ -43,6 +43,7 @@ import type {
   LiveReaderJson,
   OAuthClientsResponse,
   ReadingPositionJson,
+  ReadingPositionSource,
   RestoreResponse,
   SaveAiKeyResponse,
   SavedLinksResponse,
@@ -217,7 +218,7 @@ type SaveQueue = {
   /** The request in flight, plus any queued behind it. */
   flight: Promise<void> | null;
   /** The newest position waiting for the one in flight to finish. */
-  pending: { position: number; generation: number } | null;
+  pending: { position: number | null; source: ReadingPositionSource; generation: number } | null;
   /** Counts saves, so a response for an older one never overwrites a newer position. */
   generation: number;
   /** The last position the server confirmed. */
@@ -240,12 +241,18 @@ async function drainSaves(
   queryClient: ReturnType<typeof useQueryClient>,
   q: SaveQueue,
   id: string,
-  position: number,
+  position: number | null,
+  source: ReadingPositionSource,
   sent: number,
 ): Promise<void> {
   const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
   try {
-    const saved = await apiPut<{ readingPosition: ReadingPositionJson }>(path, { position });
+    let saved: { readingPosition: ReadingPositionJson | null };
+    if (position === null) {
+      await apiDelete(path);
+      saved = { readingPosition: null };
+    } else
+      saved = await apiPut<{ readingPosition: ReadingPositionJson }>(path, { position, source });
     q.confirmed = saved.readingPosition;
     if (sent === q.generation) putCachedPosition(queryClient, id, saved.readingPosition);
   } catch (error) {
@@ -258,7 +265,8 @@ async function drainSaves(
   }
   const waiting = q.pending;
   q.pending = null;
-  if (waiting) await drainSaves(queryClient, q, id, waiting.position, waiting.generation);
+  if (waiting)
+    await drainSaves(queryClient, q, id, waiting.position, waiting.source, waiting.generation);
 }
 
 /**
@@ -280,7 +288,11 @@ export function useSaveReadingPosition(id: string) {
     confirmed: undefined,
   });
   return useCallback(
-    (position: number, options: { keepalive?: boolean } = {}): Promise<void> => {
+    (
+      position: number | null,
+      options: { keepalive?: boolean; source?: ReadingPositionSource } = {},
+    ): Promise<void> => {
+      const source = options.source ?? 'mark';
       const key = queryKeys.link(id);
       const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
       const q = queue.current;
@@ -288,16 +300,20 @@ export function useSaveReadingPosition(id: string) {
       if (q.confirmed === undefined)
         q.confirmed = queryClient.getQueryData<LinkResponse>(key)?.link.readingPosition ?? null;
       void queryClient.cancelQueries({ queryKey: key });
-      putCachedPosition(queryClient, id, { position, updatedAt: new Date().toISOString() });
-      if (options.keepalive) {
-        apiPutKeepalive(path, { position });
+      putCachedPosition(
+        queryClient,
+        id,
+        position === null ? null : { position, source, updatedAt: new Date().toISOString() },
+      );
+      if (options.keepalive && position !== null) {
+        apiPutKeepalive(path, { position, source });
         return Promise.resolve();
       }
       if (q.flight) {
-        q.pending = { position, generation };
+        q.pending = { position, source, generation };
         return q.flight;
       }
-      q.flight = drainSaves(queryClient, q, id, position, generation).finally(() => {
+      q.flight = drainSaves(queryClient, q, id, position, source, generation).finally(() => {
         q.flight = null;
       });
       return q.flight;

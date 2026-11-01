@@ -296,3 +296,103 @@ it.each(['pauses', 'settings', 'speed', 'voice', 'engine'] as const)(
     hook.unmount();
   },
 );
+
+it('resumes the saved sentence and saves only explicit pause, close, and pagehide', async () => {
+  const { prose, scroll } = article();
+  const onSave = vi.fn(async () => {});
+  const { articleWords, shareAtPoint } = await import('../place/words');
+  const { buildSegments } = await import('./segments');
+  const sentences = buildSegments(prose);
+  const sentence = sentences[2];
+  if (!sentence) throw new Error('Missing fixture sentence');
+  const position = shareAtPoint(
+    articleWords(prose),
+    sentence.range.startContainer,
+    sentence.range.startOffset,
+  );
+  const hook = renderHook(() =>
+    useReadAloud({ prose, scroll, saved: position, canSave: true, onSave }),
+  );
+  act(() => hook.result.current.play());
+  await waitFor(() => expect(hook.result.current.index).toBe(2));
+  expect(onSave).not.toHaveBeenCalled();
+  act(() => hook.result.current.pause());
+  expect(onSave).toHaveBeenLastCalledWith(position, undefined);
+  onSave.mockClear();
+  act(() => hook.result.current.startAt(3));
+  await waitFor(() => expect(hook.result.current.index).toBe(3));
+  expect(onSave).not.toHaveBeenCalled();
+  act(() => window.dispatchEvent(new Event('pagehide')));
+  expect(onSave).toHaveBeenCalledTimes(1);
+  expect(onSave).toHaveBeenLastCalledWith(expect.any(Number), { keepalive: true });
+  act(() => hook.result.current.stop());
+  expect(onSave).toHaveBeenCalledTimes(2);
+  hook.unmount();
+});
+
+it('does not save Listen positions for feed posts', async () => {
+  const { prose, scroll } = article();
+  const onSave = vi.fn(async () => {});
+  const hook = renderHook(() =>
+    useReadAloud({ prose, scroll, saved: 0.5, canSave: false, onSave }),
+  );
+  act(() => hook.result.current.startAt(1));
+  await waitFor(() => expect(hook.result.current.index).toBe(1));
+  act(() => {
+    hook.result.current.pause();
+    hook.result.current.stop();
+    window.dispatchEvent(new Event('pagehide'));
+  });
+  expect(onSave).not.toHaveBeenCalled();
+  hook.unmount();
+});
+
+it('uses a new saved mark when Listen was already paused', async () => {
+  const { prose, scroll } = article();
+  const hook = renderHook(({ saved }) => useReadAloud({ prose, scroll, saved }), {
+    initialProps: { saved: 0 },
+  });
+  act(() => hook.result.current.startAt(0));
+  await waitFor(() => expect(hook.result.current.index).toBe(0));
+  act(() => hook.result.current.pause());
+  hook.rerender({ saved: 0.9 });
+  act(() => hook.result.current.play());
+  await waitFor(() => expect(hook.result.current.current?.text).toMatch(/third paragraph/));
+  hook.unmount();
+});
+
+it('closing saves even after the article DOM has been removed', async () => {
+  const { prose, scroll } = article();
+  const onSave = vi.fn(async () => {});
+  const hook = renderHook(() => useReadAloud({ prose, scroll, canSave: true, onSave }));
+  act(() => hook.result.current.startAt(2));
+  await waitFor(() => expect(hook.result.current.index).toBe(2));
+  document.body.replaceChildren();
+  hook.unmount();
+  expect(onSave).toHaveBeenCalledExactlyOnceWith(expect.any(Number), undefined);
+});
+
+it('does not save when playback advances into another sentence', async () => {
+  vi.useFakeTimers();
+  const { prose, scroll } = article();
+  prose.innerHTML = '<p>One comes here. Two comes here.</p>';
+  fake.stream = async function* (_text, { signal }) {
+    yield new Float32Array(24000).fill(0.5);
+    yield new Float32Array(24000).fill(0.5);
+    await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve()));
+  };
+  const onSave = vi.fn(async () => {});
+  const hook = renderHook(() => useReadAloud({ prose, scroll, canSave: true, onSave }));
+  await act(async () => {
+    hook.result.current.startAt(0);
+    await vi.advanceTimersByTimeAsync(40);
+  });
+  const context = FakeAudioContext.last as FakeAudioContext;
+  context.currentTime = 1.2;
+  await act(async () => vi.advanceTimersByTimeAsync(40));
+  expect(hook.result.current.index).toBe(1);
+  expect(onSave).not.toHaveBeenCalled();
+  act(() => hook.result.current.pause());
+  expect(onSave).toHaveBeenCalledExactlyOnceWith(0.5, undefined);
+  hook.unmount();
+});

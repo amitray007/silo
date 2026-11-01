@@ -4,6 +4,7 @@ import {
   lazy,
   type ReactNode,
   Suspense,
+  useCallback,
   useContext,
   useEffect,
   useId,
@@ -32,6 +33,7 @@ import { PencilOverlay } from '../pencil/PencilOverlay';
 import { PencilSheet } from '../pencil/PencilSheet';
 import { type PencilApi, usePencil } from '../pencil/usePencil';
 import { usePencilKeys } from '../pencil/usePencilKeys';
+import { SavedPlace } from '../place/SavedPlace';
 import { ReaderIcon } from '../ReaderIcon';
 import { TypeSheet } from './TypeSheet';
 
@@ -267,7 +269,37 @@ export function ReaderDock({
   const { element: host, scroll, panel, report } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
-  const save = useSaveReadingPosition(link.id);
+  const writePosition = useSaveReadingPosition(link.id);
+  const [saveError, setSaveError] = useState('');
+  const save = useCallback(
+    async (
+      position: number | null,
+      options?: { source?: 'pencil' | 'listen' | 'mark'; keepalive?: boolean },
+    ) => {
+      try {
+        await writePosition(position, options);
+        setSaveError('');
+      } catch (error) {
+        setSaveError('Could not save your reading place. Try again.');
+        throw error;
+      }
+    },
+    [writePosition],
+  );
+  const savePencil = useCallback(
+    (position: number, options?: { keepalive?: boolean }) =>
+      save(position, { ...options, source: 'pencil' }),
+    [save],
+  );
+  const saveListen = useCallback(
+    (position: number, options?: { keepalive?: boolean }) =>
+      save(position, { ...options, source: 'listen' }),
+    [save],
+  );
+  const saveMark = useCallback(
+    (position: number | null) => save(position, { source: 'mark' }),
+    [save],
+  );
   const { color: highlightColor } = useHighlightPrefs();
   const [dialHidden, setDialHidden] = useState(false);
   const highlights = useHighlights({
@@ -283,11 +315,17 @@ export function ReaderDock({
     scroll,
     saved: link.readingPosition?.position ?? null,
     canSave: canSavePosition(link, trashed),
-    onSave: save,
+    onSave: savePencil,
   });
   usePencilKeys(pencil);
   const lane = useNotesLane(highlights);
-  const listen = useReadAloud({ prose, scroll });
+  const listen = useReadAloud({
+    prose,
+    scroll,
+    saved: link.readingPosition?.position ?? null,
+    canSave: canSavePosition(link, trashed),
+    onSave: saveListen,
+  });
   useListenKeys(listen);
   useListenClicks(prose, listen);
   // Two guides at once would fight over Space; reading aloud wins.
@@ -333,11 +371,27 @@ export function ReaderDock({
           <OutlineRail prose={prose} scroll={scroll} panel={panel} hidden={dialHidden} />
         </Suspense>
       )}
-      <PencilOverlay pencil={pencil} prose={prose} scroll={scroll} />
+      <PencilOverlay pencil={pencil} prose={prose} />
+      {prose && scroll && panel && canSavePosition(link, trashed) && (
+        <SavedPlace
+          prose={prose}
+          scroll={scroll}
+          panel={panel}
+          saved={link.readingPosition ?? null}
+          onSave={saveMark}
+          pencil={pencil}
+          listen={listen}
+        />
+      )}
+      {saveError && (
+        <div className="silo-sb-toast" role="alert">
+          {saveError}
+        </div>
+      )}
       <NotesLayer
         api={highlights}
         lane={lane}
-        resumeY={pencil.resume?.y ?? null}
+        resumeY={null}
         panel={panel}
         onDialHidden={setDialHidden}
       />

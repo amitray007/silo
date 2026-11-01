@@ -37,7 +37,7 @@ it('updates the cached link at once, then takes the server timestamp, with no re
   const [url, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
   expect(url).toBe('/api/links/a/reading-position');
   expect(init.method).toBe('PUT');
-  expect(JSON.parse(String(init.body))).toEqual({ position: 0.25 });
+  expect(JSON.parse(String(init.body))).toEqual({ position: 0.25, source: 'mark' });
 });
 
 it('rolls the cache back and rejects when the save fails', async () => {
@@ -153,4 +153,27 @@ it('moves on to the newest position when an earlier request fails', async () => 
   first.resolve(new Response('{}', { status: 500 }));
   await Promise.all([one, two]);
   expect(cached()?.readingPosition?.position).toBe(0.7);
+});
+
+it('keeps the newest source and serializes Remove behind an in-flight save', async () => {
+  const first = deferred();
+  const calls: RequestInit[] = [];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_url: string, init: RequestInit) => {
+      calls.push(init);
+      if (calls.length === 1) return first.promise;
+      return new Response(null, { status: 204 });
+    }),
+  );
+  const { result } = renderHook(() => useSaveReadingPosition('a'), { wrapper });
+  const pending = result.current(0.4, { source: 'listen' });
+  expect(cached()?.readingPosition?.source).toBe('listen');
+  void result.current(null);
+  expect(cached()?.readingPosition).toBeNull();
+  first.resolve(ok(0.4));
+  await pending;
+  expect(calls.map((call) => call.method)).toEqual(['PUT', 'DELETE']);
+  expect(JSON.parse(String(calls[0]?.body))).toEqual({ position: 0.4, source: 'listen' });
+  expect(cached()?.readingPosition).toBeNull();
 });

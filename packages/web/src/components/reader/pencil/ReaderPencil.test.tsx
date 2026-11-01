@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { LinkJson } from '../../../api/types';
@@ -117,7 +117,11 @@ beforeEach(() => {
           return json({ error: 'internal_error', message: 'boom' }, 500);
         }
         return json({
-          readingPosition: { position: body.position, updatedAt: '2026-11-01T00:00:00Z' },
+          readingPosition: {
+            source: 'pencil',
+            position: body.position,
+            updatedAt: '2026-11-01T00:00:00Z',
+          },
         });
       }
       return url.endsWith('/reader') ? json(reader) : json({ error: 'not_found' }, 404);
@@ -125,6 +129,7 @@ beforeEach(() => {
   );
 });
 afterEach(() => {
+  cleanup();
   vi.useRealTimers();
   vi.unstubAllGlobals();
   restoreRects();
@@ -207,20 +212,17 @@ it('does not save for a feed post', async () => {
   expect(puts).toHaveLength(0);
 });
 
-it('shows the resume button in the gutter on the saved line, and plays from there', async () => {
+it('replaces the right-gutter resume button with a ribbon and P resumes its word line', async () => {
   await open(
     makeLink({
       id: 'resume',
-      readingPosition: { position: 0.5, updatedAt: '2026-11-01T00:00:00Z' },
+      readingPosition: { position: 0.5, source: 'mark', updatedAt: '2026-11-01T00:00:00Z' },
     }),
   );
-  const resume = screen.getByRole('button', { name: 'Resume reading' });
-  expect(resume.closest('.silo-prose-frame')).not.toBeNull();
-  // Half of the 80 words falls on line 5; the 24px button centres on it.
-  expect(resume.style.top).toBe(`${LINE_TOP(5) + 10 - 12}px`);
-  expect(guide()).toBeNull();
-  fireEvent.click(resume);
   expect(screen.queryByRole('button', { name: 'Resume reading' })).toBeNull();
+  expect(document.querySelector('.silo-place-ribbon')).not.toBeNull();
+  expect(guide()).toBeNull();
+  press('p');
   expect(guideY()).toBe(GUIDE_Y(5));
   play(2.1);
   expect(guideY()).toBe(GUIDE_Y(6));
@@ -233,7 +235,10 @@ it('shows no resume button when nothing is saved or the article was finished', a
 
 it('shows no resume button for a finished article', async () => {
   await open(
-    makeLink({ id: 'done', readingPosition: { position: 1, updatedAt: '2026-11-01T00:00:00Z' } }),
+    makeLink({
+      id: 'done',
+      readingPosition: { source: 'pencil', position: 1, updatedAt: '2026-11-01T00:00:00Z' },
+    }),
   );
   expect(screen.queryByRole('button', { name: 'Resume reading' })).toBeNull();
 });
@@ -360,9 +365,12 @@ it('moves to the clicked line while on', async () => {
 
 it('keeps the line in view with a smooth scroll', async () => {
   await open(
-    makeLink({ id: 'far', readingPosition: { position: 0.95, updatedAt: '2026-11-01T00:00:00Z' } }),
+    makeLink({
+      id: 'far',
+      readingPosition: { source: 'pencil', position: 0.95, updatedAt: '2026-11-01T00:00:00Z' },
+    }),
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Resume reading' }));
+  press('p');
   expect(scrollArea.scrollTo).toHaveBeenCalledWith({ top: LINE_TOP(9) - 240, behavior: 'smooth' });
 });
 
@@ -374,9 +382,12 @@ it('jumps instead of scrolling smoothly with reduced motion', async () => {
     removeEventListener: () => {},
   }));
   await open(
-    makeLink({ id: 'far', readingPosition: { position: 0.95, updatedAt: '2026-11-01T00:00:00Z' } }),
+    makeLink({
+      id: 'far',
+      readingPosition: { source: 'pencil', position: 0.95, updatedAt: '2026-11-01T00:00:00Z' },
+    }),
   );
-  fireEvent.click(screen.getByRole('button', { name: 'Resume reading' }));
+  press('p');
   expect(scrollArea.scrollTo).toHaveBeenCalledWith({ top: LINE_TOP(9) - 240, behavior: 'auto' });
 });
 
@@ -466,15 +477,18 @@ it('toggles once for a held Space', async () => {
   expect(held.defaultPrevented).toBe(true); // and the page did not scroll
 });
 
-it('starts a finished article from the first line in view, not the last line', async () => {
+it('resumes a saved place at the end of the article', async () => {
   await open(
-    makeLink({ id: 'done', readingPosition: { position: 1, updatedAt: '2026-11-01T00:00:00Z' } }),
+    makeLink({
+      id: 'done',
+      readingPosition: { source: 'pencil', position: 1, updatedAt: '2026-11-01T00:00:00Z' },
+    }),
   );
   press('p');
-  expect(guideY()).toBe(GUIDE_Y(0));
+  expect(guideY()).toBe(GUIDE_Y(9));
 });
 
-it('sizes the resume button to the 20px phone padding', async () => {
+it('keeps the saved ribbon on the phone and removes the old resume button', async () => {
   vi.stubGlobal('matchMedia', (query: string) => ({
     matches: query === '(max-width: 640px)',
     media: query,
@@ -484,9 +498,9 @@ it('sizes the resume button to the 20px phone padding', async () => {
   await open(
     makeLink({
       id: 'phone',
-      readingPosition: { position: 0.5, updatedAt: '2026-11-01T00:00:00Z' },
+      readingPosition: { source: 'pencil', position: 0.5, updatedAt: '2026-11-01T00:00:00Z' },
     }),
   );
-  const resume = screen.getByRole('button', { name: 'Resume reading' });
-  expect(resume.style.top).toBe(`${LINE_TOP(5) + 10 - 10}px`);
+  expect(document.querySelector('.silo-place-ribbon')).not.toBeNull();
+  expect(screen.queryByRole('button', { name: 'Resume reading' })).toBeNull();
 });

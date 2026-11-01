@@ -9,6 +9,7 @@ import {
   useReaderType,
 } from '../../../lib/readerPrefs';
 import { useReaderWidth } from '../../../lib/useReaderWidth';
+import { articleWords, wordAtShare } from '../place/words';
 import {
   advance,
   type Line,
@@ -344,18 +345,51 @@ export function usePencil({
     setPlaying(false);
     live.current = { ...live.current, enabled: false };
   }, [flush]);
-  const start = useCallback(() => {
-    // With nothing to resume, start where the reader is: the first line in view.
-    if (!live.current.enabled && viewportStart.current && lines.current.length && frame && scroll) {
-      point.current = { index: firstLineInView(lines.current, frame, scroll), sweep: 0 };
-      viewportStart.current = false;
-      paint();
-    }
-    live.current = { ...live.current, enabled: true };
-    setEnabled(true);
-    setPlaying(true);
-    if (lines.current.length) reveal();
-  }, [reveal, frame, scroll, paint]);
+  const placeAtShare = useCallback(
+    (share: number | null) => {
+      if (prose && frame && share !== null) {
+        if (!lines.current.length) {
+          lines.current = measureLines(prose, frame);
+          prefix.current = wordPrefix(lines.current);
+        }
+        const word = wordAtShare(articleWords(prose), share);
+        const rect = word?.getClientRects()[0];
+        const index = rect
+          ? lineNear(lines.current, rect.top + rect.height / 2 - frame.getBoundingClientRect().top)
+          : -1;
+        if (index >= 0) point.current = { index, sweep: 0 };
+        viewportStart.current = false;
+        paint();
+      }
+    },
+    [prose, frame, paint],
+  );
+  const startFrom = useCallback(
+    (share: number | null) => {
+      placeAtShare(share);
+      // With nothing to resume, start where the reader is: the first line in view.
+      if (
+        !live.current.enabled &&
+        viewportStart.current &&
+        lines.current.length &&
+        frame &&
+        scroll
+      ) {
+        point.current = { index: firstLineInView(lines.current, frame, scroll), sweep: 0 };
+        viewportStart.current = false;
+        paint();
+      }
+      live.current = { ...live.current, enabled: true };
+      setEnabled(true);
+      setPlaying(true);
+      if (lines.current.length) reveal();
+    },
+    [reveal, frame, scroll, paint, placeAtShare],
+  );
+  const start = useCallback(
+    () => startFrom(live.current.enabled ? null : live.current.saved),
+    [startFrom],
+  );
   const pause = useCallback(() => {
     setPlaying(false);
     flush();
@@ -392,6 +426,7 @@ export function usePencil({
     bindGuide,
     bindFill,
     start,
+    startFrom,
     stop,
     pause,
     togglePlay,

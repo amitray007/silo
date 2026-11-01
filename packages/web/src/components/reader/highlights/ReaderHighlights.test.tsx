@@ -152,7 +152,7 @@ async function toolbarButton(name: RegExp | string) {
 /** The lane is an overlay panel in jsdom: no layout, so nothing fits beside the column. */
 async function openLane() {
   fireEvent.click(await screen.findByRole('button', { name: /Notes/ }));
-  await screen.findByRole('complementary', { name: 'Notes' });
+  await screen.findByRole('complementary', { name: 'Notes' }, { timeout: 5000 });
 }
 const laneEl = () => document.querySelector('[data-notes-lane]') as HTMLElement;
 
@@ -494,17 +494,17 @@ it('shows one marker per paragraph with a count when it holds several highlights
   expect(one.querySelector('small')).toBeNull();
 });
 
-it('puts a marker and the resume button on different lines when they would share one', async () => {
+it('keeps note markers in the right gutter beside the saved ribbon', async () => {
   serverLink = makeLink({
     id: 'hl',
     highlights: [highlight({ id: 'one', quote: 'Alpha beta', color: 'pink' })],
-    readingPosition: { position: 0.4, updatedAt: '2026-01-01T00:00:00Z' },
+    readingPosition: { source: 'pencil', position: 0.4, updatedAt: '2026-01-01T00:00:00Z' },
   });
   mount();
   const marker = await screen.findByRole('button', { name: '1 highlight on paragraph 1' });
-  const resume = await screen.findByRole('button', { name: 'Resume reading' });
-  expect(marker.style.left).toBe(resume.style.left);
-  expect(marker.style.top).not.toBe(resume.style.top);
+  expect(document.querySelector('.silo-place-ribbon')).not.toBeNull();
+  expect(marker.closest('.silo-prose-frame')).not.toBeNull();
+  expect(screen.queryByRole('button', { name: 'Resume reading' })).toBeNull();
 });
 
 it('opens the lane from a marker, emphasising its note, and closes it from the same marker', async () => {

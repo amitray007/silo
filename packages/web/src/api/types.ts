@@ -182,7 +182,12 @@ export type HighlightJson = {
 };
 
 /** `PUT /api/links/:id/reading-position` returns this; `updatedAt` is an ISO string. */
-export type ReadingPositionJson = { position: number; updatedAt: string };
+export type ReadingPositionSource = 'pencil' | 'listen' | 'mark';
+export type ReadingPositionJson = {
+  position: number;
+  source: ReadingPositionSource;
+  updatedAt: string;
+};
 
 /**
  * `GET /api/links/:id/reader` -- the formatted Reader built live from the page.
