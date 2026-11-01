@@ -64,7 +64,7 @@ const kokoro = pinned(
 
 export const TTS_MANIFEST = {
   phonon: {
-    label: 'Phonon 31M',
+    label: 'Phonon',
     license: 'Apache-2.0',
     files: {
       'config.json': phonon(
@@ -240,7 +240,7 @@ export const TTS_MANIFEST = {
     },
   },
   kokoro: {
-    label: 'Kokoro 82M',
+    label: 'Kokoro',
     license: 'Apache-2.0',
     files: {
       'config.json': kokoro(

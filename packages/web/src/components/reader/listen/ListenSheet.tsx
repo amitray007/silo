@@ -101,6 +101,7 @@ export function ListenSheet({ listen }: { listen: ReadAloudApi }) {
                 options: listen.engines.map((engine) => ({
                   value: engine.id,
                   label: engine.label,
+                  hint: engine.trait,
                   ...(engine.id === 'kokoro' && slow ? { triggerHint: 'may be slower' } : {}),
                 })),
               },

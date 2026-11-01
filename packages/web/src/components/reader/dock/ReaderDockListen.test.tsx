@@ -228,9 +228,7 @@ it('shows the engine, voice and speed controls, and closes the sheet on Escape',
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
-  expect(within(sheet).getByRole('button', { name: 'Voice engine' }).textContent).toContain(
-    'Phonon (31M)',
-  );
+  expect(within(sheet).getByRole('button', { name: 'Voice engine' }).textContent).toBe('Phonon');
   expect(within(sheet).getByRole('button', { name: 'Voice' }).textContent).toContain('Default');
   expect(within(sheet).getByRole('spinbutton', { name: 'Speed' }).textContent).toBe('1x');
   fireEvent.keyDown(sheet, { key: 'Escape' });
@@ -310,12 +308,25 @@ it('shows a failed load with Retry, and Retry loads again', async () => {
   expect(attempts).toBe(2);
 });
 
+it('names the engines with a muted trait and no model size', async () => {
+  renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  const sheet = await screen.findByRole('dialog', { name: 'Listen' });
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Voice engine' }));
+  const options = await screen.findAllByRole('option');
+  expect(options.map((option) => option.textContent)).toEqual([
+    'Phonon Fast',
+    'Kokoro More voices',
+  ]);
+  expect(document.body.textContent).not.toMatch(/\d+\s?M\b|MB/);
+});
+
 it('switches the engine from the sheet and keeps it for the next play', async () => {
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice engine' }));
-  fireEvent.click(await screen.findByRole('option', { name: /Kokoro \(82M\)/ }));
+  fireEvent.click(await screen.findByRole('option', { name: /^Kokoro/ }));
   await waitFor(() =>
     expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro'),
   );
@@ -328,7 +339,7 @@ it('switches the engine while playing and carries on with the new one', async ()
   await listen();
   // Pressing Listen opened the sheet, and it is still open.
   fireEvent.click(await screen.findByRole('button', { name: 'Voice engine' }));
-  fireEvent.click(await screen.findByRole('option', { name: /Kokoro \(82M\)/ }));
+  fireEvent.click(await screen.findByRole('option', { name: /^Kokoro/ }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
   expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro');
 });
