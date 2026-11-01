@@ -98,10 +98,11 @@ export function SavedPlace({
       const normal = previous
         ? block.getBoundingClientRect().top + value.base - previous.bottom
         : 0;
-      // The ribbon label borrows the existing gap; reserve at most 8px more.
+      // Leave 18px above the 16px label and preserve its 4px gap to the line.
+      // Measure the preceding block so headings, lists and quotes keep their margins.
       targets.set(
         block,
-        place.style === 'ribbon' ? Math.min(8, Math.max(0, 20 - normal)) : Math.max(0, 56 - normal),
+        place.style === 'ribbon' ? Math.max(0, 38 - normal) : Math.max(0, 56 - normal),
       );
     }
     const starts = new Map([...spacing.current].map(([el, value]) => [el, value.extra]));
