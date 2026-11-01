@@ -1,12 +1,11 @@
-import { type CSSProperties, useEffect, useState } from 'react';
+import type { CSSProperties } from 'react';
+import { useKokoroDtype, useTtsManifest } from '../../api/hooks';
 import { ENGINES } from '../reader/listen/engines';
 import {
   KOKORO_WEBGPU_DTYPE,
   type KokoroDtype,
-  kokoroDtype,
   requiredBytes,
 } from '../reader/listen/engines/files';
-import { fetchTtsManifest } from '../reader/listen/engines/manifest';
 import type { EngineId } from '../reader/listen/engines/types';
 import { Spinner } from '../reader/listen/Spinner';
 import { megabytes } from '../reader/listen/voiceGroups';
@@ -27,21 +26,11 @@ const GOOD_FOR: Record<EngineId, string> = {
 type Size = { bytes: number; dtype: KokoroDtype };
 
 /** The download size for this browser: Kokoro is bigger on WebGPU (fp32) than on the CPU (q8). */
-function useDownloadSize(id: EngineId): Size | null {
-  const [size, setSize] = useState<Size | null>(null);
-  useEffect(() => {
-    let current = true;
-    Promise.all([fetchTtsManifest(), kokoroDtype()])
-      .then(([manifest, dtype]) => {
-        if (current) setSize({ bytes: requiredBytes(manifest, id, dtype), dtype });
-      })
-      // No size is shown when silo cannot be reached; the row still works.
-      .catch(() => undefined);
-    return () => {
-      current = false;
-    };
-  }, [id]);
-  return size;
+function useDownloadSize(id: EngineId, variant: VoiceModelState['variant']): Size | null {
+  const { data: manifest } = useTtsManifest();
+  const { data: preferred } = useKokoroDtype();
+  const dtype = variant && variant !== 'phonon' ? variant : preferred;
+  return manifest && dtype ? { bytes: requiredBytes(manifest, id, dtype), dtype } : null;
 }
 
 function details(id: EngineId, size: Size | null): string {
@@ -65,10 +54,16 @@ function statusText(state: VoiceModelState): string {
       return `Downloading${state.progress === null ? '' : ` ${state.progress}%`}${
         state.by === 'reader' ? ' for the open article' : ''
       }`;
-    case 'downloaded':
-      return state.loaded ? 'Downloaded, loaded in the open article' : 'Downloaded';
+    case 'finishing':
+      return 'Finishing…';
+    case 'downloaded': {
+      const variant = state.variant && state.variant !== 'phonon' ? ` (${state.variant})` : '';
+      return `Downloaded${variant}${state.loaded ? ', loaded in the open article' : ''}`;
+    }
     case 'error':
-      return `Download failed: ${state.error}`;
+      return state.failedAction === 'remove'
+        ? `Couldn't remove: ${state.error}`
+        : `Download failed: ${state.error}`;
   }
 }
 
@@ -108,13 +103,21 @@ function Actions({ id, state }: { id: EngineId; state: VoiceModelState }) {
       </button>
     );
   }
+  if (state.phase === 'finishing')
+    return (
+      <button type="button" className="silo-settings-btn" disabled>
+        Finishing…
+      </button>
+    );
   if (state.phase === 'checking') return null;
   return (
     <button
       type="button"
       className="silo-settings-btn"
       aria-label={`${state.phase === 'error' ? 'Retry' : 'Download'} ${name}`}
-      onClick={() => void downloadVoiceModel(id)}
+      onClick={() =>
+        void (state.failedAction === 'remove' ? removeVoiceModel(id) : downloadVoiceModel(id))
+      }
     >
       {state.phase === 'error' ? 'Retry' : 'Download'}
     </button>
@@ -123,7 +126,7 @@ function Actions({ id, state }: { id: EngineId; state: VoiceModelState }) {
 
 function VoiceRow({ id, label }: { id: EngineId; label: string }) {
   const state = useVoiceModel(id);
-  const size = useDownloadSize(id);
+  const size = useDownloadSize(id, state.variant);
   const downloading = state.phase === 'downloading';
   return (
     <div style={settingsRowDivided} data-voice-engine={id}>

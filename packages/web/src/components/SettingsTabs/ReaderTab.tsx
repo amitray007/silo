@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useId, useState } from 'react';
+import { type ReactNode, useId } from 'react';
+import { useTtsManifest } from '../../api/hooks';
 import {
   MAX_PENCIL_WPM,
   MAX_READER_SIZE,
@@ -16,8 +17,7 @@ import { Segmented } from '../reader/dock/Segmented';
 import { Stepper } from '../reader/dock/Stepper';
 import { fonts, leadings, StepGlyph, themes, widths } from '../reader/dock/TypeSheet';
 import { ColorDots } from '../reader/highlights/ColorDots';
-import { ENGINES, type EngineId, type Voice } from '../reader/listen/engines';
-import { fetchTtsManifest } from '../reader/listen/engines/manifest';
+import { ENGINES } from '../reader/listen/engines';
 import { manifestVoices } from '../reader/listen/engines/voices';
 import { voiceGroups } from '../reader/listen/voiceGroups';
 import { pencilStyles } from '../reader/pencil/PencilSheet';
@@ -161,27 +161,10 @@ function HighlightRows() {
   );
 }
 
-/** The engine's voices, from the manifest, so they can be chosen before the model loads. */
-function useEngineVoices(engine: EngineId): Voice[] | null {
-  const [voices, setVoices] = useState<{ engine: EngineId; list: Voice[] } | null>(null);
-  useEffect(() => {
-    let current = true;
-    fetchTtsManifest()
-      .then((manifest) => manifestVoices(manifest, engine))
-      .catch(() => [])
-      .then((list) => {
-        if (current) setVoices({ engine, list });
-      });
-    return () => {
-      current = false;
-    };
-  }, [engine]);
-  return voices?.engine === engine ? voices.list : null;
-}
-
 function ReadAloudRows() {
   const { prefs, update } = useReadAloudPrefs();
-  const voices = useEngineVoices(prefs.engine);
+  const { data: manifest, isError } = useTtsManifest();
+  const voices = manifest ? manifestVoices(manifest, prefs.engine) : isError ? [] : null;
   const engineName = ENGINES.find((engine) => engine.id === prefs.engine)?.label ?? '';
   const speedAt = Math.max(
     0,

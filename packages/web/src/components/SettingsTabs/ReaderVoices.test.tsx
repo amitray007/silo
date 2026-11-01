@@ -1,7 +1,12 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LoadProgress } from '../reader/listen/engines';
-import { reportReaderLoad, resetVoiceModels } from '../reader/listen/voiceModels';
+import {
+  downloadVoiceModel,
+  reportReaderLoad,
+  resetVoiceModels,
+} from '../reader/listen/voiceModels';
 import { ReaderVoices } from './ReaderVoices';
 
 /** What the fake browser cache holds, per engine. */
@@ -11,11 +16,13 @@ const removed: string[] = [];
 type Fake = {
   engine: string;
   progress: LoadProgress | null;
-  resolve: () => void;
+  resolve: (cache?: boolean) => void;
   reject: (error: Error) => void;
   disposed: number;
 };
 const engines: Fake[] = [];
+let removeFails = false;
+let cachedVariant: 'q8' | 'fp32' = 'q8';
 
 vi.mock('../reader/listen/engines', async (original) => ({
   ...(await original<typeof import('../reader/listen/engines')>()),
@@ -33,8 +40,8 @@ vi.mock('../reader/listen/engines', async (original) => ({
       load: (onProgress: LoadProgress) =>
         new Promise<void>((resolve, reject) => {
           fake.progress = onProgress;
-          fake.resolve = () => {
-            stored.add(id);
+          fake.resolve = (cache = true) => {
+            if (cache) stored.add(id);
             resolve();
           };
           fake.reject = reject;
@@ -48,9 +55,11 @@ vi.mock('../reader/listen/engines', async (original) => ({
 
 vi.mock('../reader/listen/engines/files', async (original) => ({
   ...(await original<typeof import('../reader/listen/engines/files')>()),
-  isDownloaded: async (id: string) => stored.has(id),
+  downloadedVariant: async (id: string) =>
+    stored.has(id) ? (id === 'phonon' ? 'phonon' : cachedVariant) : null,
   removeDownload: async (id: string) => {
     removed.push(id);
+    if (removeFails) throw new Error('Cache locked');
     stored.delete(id);
   },
   kokoroDtype: async () => 'q8',
@@ -88,6 +97,8 @@ vi.mock('../reader/listen/engines/manifest', async (original) => ({
 }));
 
 beforeEach(() => {
+  removeFails = false;
+  cachedVariant = 'q8';
   stored.clear();
   removed.length = 0;
   engines.length = 0;
@@ -102,17 +113,29 @@ function row(engine: string): HTMLElement {
   return found;
 }
 
+function open() {
+  return render(<ReaderVoices />, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider
+        client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+      >
+        {children}
+      </QueryClientProvider>
+    ),
+  });
+}
+
 describe('Voices rows: status', () => {
   it('shows Not downloaded and a Download button when the cache has nothing', async () => {
-    render(<ReaderVoices />);
+    open();
     expect(await within(row('phonon')).findByText('Not downloaded')).toBeDefined();
     expect(within(row('phonon')).getByRole('button', { name: 'Download Phonon' })).toBeDefined();
   });
 
   it('shows Downloaded and a Remove button when the cache has the files', async () => {
     stored.add('kokoro');
-    render(<ReaderVoices />);
-    expect(await within(row('kokoro')).findByText('Downloaded')).toBeDefined();
+    open();
+    expect(await within(row('kokoro')).findByText('Downloaded (q8)')).toBeDefined();
     expect(within(row('kokoro')).getByRole('button', { name: 'Remove Kokoro' })).toBeDefined();
     expect(within(row('phonon')).getByText('Not downloaded')).toBeDefined();
   });
@@ -120,7 +143,7 @@ describe('Voices rows: status', () => {
 
 describe('Voices rows: download', () => {
   it('reports progress, then Downloaded, and releases the engine', async () => {
-    render(<ReaderVoices />);
+    open();
     fireEvent.click(await screen.findByRole('button', { name: 'Download Phonon' }));
     const phonon = row('phonon');
     expect(within(phonon).getByText('Downloading')).toBeDefined();
@@ -136,20 +159,23 @@ describe('Voices rows: download', () => {
     expect(within(phonon).getByRole('button', { name: 'Remove Phonon' })).toBeDefined();
   });
 
-  it('Cancel releases the engine and goes back to the cache state', async () => {
-    render(<ReaderVoices />);
+  it('Cancel waits for the load to settle before returning to the cache state', async () => {
+    open();
     fireEvent.click(await screen.findByRole('button', { name: 'Download Kokoro' }));
     act(() => engines[0]?.progress?.(10, 1, 10));
     fireEvent.click(screen.getByRole('button', { name: 'Cancel Kokoro download' }));
     expect(engines[0]?.disposed).toBe(1);
-    await waitFor(() => expect(within(row('kokoro')).getByText('Not downloaded')).toBeDefined());
+    expect(
+      within(row('kokoro')).getByRole('button', { name: 'Finishing…' }).hasAttribute('disabled'),
+    ).toBe(true);
     // The load that fails after cancelling does not turn into an error.
     await act(async () => engines[0]?.reject(new Error('Stopped')));
     expect(within(row('kokoro')).queryByText(/failed/)).toBeNull();
+    await within(row('kokoro')).findByText('Not downloaded');
   });
 
   it('shows a failed download with Retry', async () => {
-    render(<ReaderVoices />);
+    open();
     fireEvent.click(await screen.findByRole('button', { name: 'Download Phonon' }));
     await act(async () => engines[0]?.reject(new Error('Network down')));
     const phonon = row('phonon');
@@ -164,7 +190,7 @@ describe('Voices rows: download', () => {
 describe('Voices rows: remove', () => {
   it('Remove deletes the engine files and shows Not downloaded', async () => {
     stored.add('phonon');
-    render(<ReaderVoices />);
+    open();
     fireEvent.click(await screen.findByRole('button', { name: 'Remove Phonon' }));
     await waitFor(() => expect(within(row('phonon')).getByText('Not downloaded')).toBeDefined());
     expect(removed).toEqual(['phonon']);
@@ -173,7 +199,7 @@ describe('Voices rows: remove', () => {
 
 describe('Voices rows: an open Reader', () => {
   it('shows the Reader download progress without a Cancel button', async () => {
-    render(<ReaderVoices />);
+    open();
     await within(row('kokoro')).findByText('Not downloaded');
     act(() =>
       reportReaderLoad('kokoro', {
@@ -188,7 +214,7 @@ describe('Voices rows: an open Reader', () => {
   });
 
   it('shows an engine the Reader has loaded as Downloaded, and rechecks when it closes', async () => {
-    render(<ReaderVoices />);
+    open();
     await within(row('phonon')).findByText('Not downloaded');
     stored.add('phonon');
     act(() =>
@@ -198,9 +224,78 @@ describe('Voices rows: an open Reader', () => {
         bytes: { loaded: 1, total: 1 },
       }),
     );
-    expect(within(row('phonon')).getByText('Downloaded, loaded in the open article')).toBeDefined();
+    await within(row('phonon')).findByText('Downloaded, loaded in the open article');
     stored.delete('phonon');
     act(() => reportReaderLoad('phonon', null));
     await waitFor(() => expect(within(row('phonon')).getByText('Not downloaded')).toBeDefined());
   });
+});
+
+it('keeps a cancelled Phonon transfer blocked and refreshes a cache filled before rejection', async () => {
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Download Phonon' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel Phonon download' }));
+  const finishing = within(row('phonon')).getByRole('button', { name: 'Finishing…' });
+  expect(finishing.hasAttribute('disabled')).toBe(true);
+  await act(async () => downloadVoiceModel('phonon'));
+  expect(engines).toHaveLength(1);
+  act(() => engines[0]?.progress?.(90, 9, 10));
+  expect(within(row('phonon')).getByRole('status').textContent).toBe('Finishing…');
+  stored.add('phonon');
+  await act(async () => engines[0]?.reject(new Error('Closed after caching')));
+  await within(row('phonon')).findByText('Downloaded');
+  expect(within(row('phonon')).queryByRole('button', { name: 'Download Phonon' })).toBeNull();
+});
+
+it('refreshes the cache after a successful cancelled load too', async () => {
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Download Phonon' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Cancel Phonon download' }));
+  await act(async () => engines[0]?.resolve());
+  await within(row('phonon')).findByText('Downloaded');
+  act(() =>
+    reportReaderLoad('phonon', { status: 'ready', progress: 100, bytes: { loaded: 1, total: 1 } }),
+  );
+  await within(row('phonon')).findByText('Downloaded, loaded in the open article');
+});
+
+it('checks the cache after loading instead of assuming it was persisted', async () => {
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Download Phonon' }));
+  await act(async () => engines[0]?.resolve(false));
+  await within(row('phonon')).findByText('Not downloaded');
+  expect(within(row('phonon')).getByRole('button', { name: 'Download Phonon' })).toBeDefined();
+});
+
+it('retries a failed removal as a removal, without creating a download', async () => {
+  stored.add('phonon');
+  removeFails = true;
+  open();
+  fireEvent.click(await screen.findByRole('button', { name: 'Remove Phonon' }));
+  await within(row('phonon')).findByText("Couldn't remove: Cache locked");
+  removeFails = false;
+  fireEvent.click(within(row('phonon')).getByRole('button', { name: 'Retry Phonon' }));
+  await within(row('phonon')).findByText('Not downloaded');
+  expect(removed).toEqual(['phonon', 'phonon']);
+  expect(engines).toHaveLength(0);
+});
+
+it.each([
+  ['q8', '88 MB on the CPU'],
+  ['fp32', '310 MB on WebGPU'],
+] as const)('shows the cached Kokoro %s variant and its size', async (variant, size) => {
+  cachedVariant = variant;
+  stored.add('kokoro');
+  open();
+  await within(row('kokoro')).findByText(`Downloaded (${variant})`);
+  await within(row('kokoro')).findByText((text) => text.includes(size));
+});
+
+it('shows a loaded Reader separately when its files are not cached', async () => {
+  open();
+  await within(row('phonon')).findByText('Not downloaded');
+  act(() =>
+    reportReaderLoad('phonon', { status: 'ready', progress: 100, bytes: { loaded: 1, total: 1 } }),
+  );
+  await within(row('phonon')).findByText('Loaded in the open article, not stored');
 });

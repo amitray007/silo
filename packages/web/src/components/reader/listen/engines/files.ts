@@ -41,7 +41,7 @@ export const KOKORO_MODEL_FILE: Record<KokoroDtype, string> = {
 
 let dtype: Promise<KokoroDtype> | undefined;
 
-/** The dtype Kokoro will use in this browser: fp32 when a real GPU adapter exists, else q8. */
+/** The preferred Kokoro dtype (a failed GPU load can fall back to q8): fp32 when a real GPU adapter exists, else q8. */
 export function kokoroDtype(): Promise<KokoroDtype> {
   dtype ??= (async () => {
     const gpu = (navigator as Navigator & { gpu?: { requestAdapter(): Promise<unknown> } }).gpu;
@@ -61,16 +61,18 @@ export function requiredEntries(
   manifest: TtsManifestJson,
   engine: EngineId,
   kokoro: KokoroDtype,
-): Entry[] {
+): Array<Entry & { bytes: number }> {
   if (engine === 'phonon') {
     return Object.values(PHONON_FILES).map((path) => ({
       cache: PHONON_CACHE,
       key: ttsFileUrl(manifest, 'phonon', path),
+      bytes: manifest.engines.phonon.files[path]?.size ?? 0,
     }));
   }
   return [KOKORO_MODEL_FILE[kokoro], ...KOKORO_SMALL_FILES].map((path) => ({
     cache: KOKORO_MODEL_CACHE,
     key: ttsFileUrl(manifest, 'kokoro', path),
+    bytes: manifest.engines.kokoro.files[path]?.size ?? 0,
   }));
 }
 
@@ -93,27 +95,34 @@ export function requiredBytes(
   engine: EngineId,
   kokoro: KokoroDtype,
 ): number {
-  const files = manifest.engines[engine].files;
-  const paths =
-    engine === 'phonon'
-      ? Object.values(PHONON_FILES)
-      : [KOKORO_MODEL_FILE[kokoro], ...KOKORO_SMALL_FILES];
-  return paths.reduce((sum, path) => sum + (files[path]?.size ?? 0), 0);
+  return requiredEntries(manifest, engine, kokoro).reduce((sum, entry) => sum + entry.bytes, 0);
 }
 
 async function hasEntry({ cache, key }: Entry): Promise<boolean> {
   return Boolean(await (await caches.open(cache)).match(key));
 }
 
-/** True when every required file is in this browser's cache. False when the cache is unusable. */
-export async function isDownloaded(engine: EngineId): Promise<boolean> {
-  if (typeof caches === 'undefined') return false;
+export type DownloadedVariant = 'phonon' | KokoroDtype;
+
+/** The complete variant in cache, including a CPU fallback on a browser with WebGPU. */
+export async function downloadedVariant(engine: EngineId): Promise<DownloadedVariant | null> {
+  if (typeof caches === 'undefined') return null;
   try {
     const manifest = await fetchTtsManifest();
-    const needed = requiredEntries(manifest, engine, await kokoroDtype());
-    return (await Promise.all(needed.map(hasEntry))).every(Boolean);
+    const preferred = await kokoroDtype();
+    const variants =
+      engine === 'phonon'
+        ? [preferred]
+        : ([preferred, preferred === 'q8' ? 'fp32' : 'q8'] as const);
+    for (const variant of variants) {
+      const needed = requiredEntries(manifest, engine, variant);
+      if ((await Promise.all(needed.map(hasEntry))).every(Boolean)) {
+        return engine === 'phonon' ? 'phonon' : variant;
+      }
+    }
+    return null;
   } catch {
-    return false;
+    return null;
   }
 }
 

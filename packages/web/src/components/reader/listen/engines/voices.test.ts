@@ -27,6 +27,8 @@ const MANIFEST: TtsManifestJson = {
         'voices/af_heart.bin': f(),
         'voices/bm_lewis.bin': f(),
         'voices/odd.bin': f(),
+        'voices/af_.bin': f(),
+        'voices/am.bin': f(),
       },
     },
   },

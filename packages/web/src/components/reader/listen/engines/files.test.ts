@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { isDownloaded, removeDownload, requiredBytes, requiredEntries } from './files';
+import { downloadedVariant, removeDownload, requiredBytes, requiredEntries } from './files';
 import type { TtsManifestJson } from './manifest';
 
 const file = (size: number) => ({ size, sha256: 'x' });
@@ -87,14 +87,14 @@ describe('required files and size', () => {
   });
 });
 
-describe('isDownloaded and removeDownload', () => {
+describe('downloadedVariant and removeDownload', () => {
   it('Phonon is downloaded when all four files are in phonon-tts-v1', async () => {
     const root = base('phonon', 'pr');
     const keys = ['model.q8.gguf', 'tokenizer.json', 'config.json'].map((f) => `${root}/${f}`);
     const store = stubCaches({ 'phonon-tts-v1': keys });
-    expect(await isDownloaded('phonon')).toBe(false);
+    expect(await downloadedVariant('phonon')).toBeNull();
     store.get('phonon-tts-v1')?.add(`${root}/default-voice.safetensors`);
-    expect(await isDownloaded('phonon')).toBe(true);
+    expect(await downloadedVariant('phonon')).toBe('phonon');
   });
 
   it('Kokoro checks the model file for this device (q8 without WebGPU)', async () => {
@@ -106,7 +106,7 @@ describe('isDownloaded and removeDownload', () => {
       ),
     });
     const files = await import('./files');
-    expect(await files.isDownloaded('kokoro')).toBe(false);
+    expect(await files.downloadedVariant('kokoro')).toBeNull();
     const store = stubCaches({
       'transformers-cache': [
         'config.json',
@@ -115,13 +115,13 @@ describe('isDownloaded and removeDownload', () => {
         'onnx/model_quantized.onnx',
       ].map((f) => `${root}/${f}`),
     });
-    expect(await files.isDownloaded('kokoro')).toBe(true);
+    expect(await files.downloadedVariant('kokoro')).toBe('q8');
     expect(store.size).toBe(1);
   });
 
   it('is false when the Cache API is missing', async () => {
     vi.stubGlobal('caches', undefined);
-    expect(await isDownloaded('phonon')).toBe(false);
+    expect(await downloadedVariant('phonon')).toBeNull();
   });
 
   it('Remove deletes exactly the engine files, from every cache that holds them', async () => {
@@ -130,7 +130,12 @@ describe('isDownloaded and removeDownload', () => {
     const hf = 'https://huggingface.co/onnx-community/Kokoro-82M-v1.0-ONNX/resolve/main/voices/';
     const store = stubCaches({
       'phonon-tts-v1': [`${phonon}/model.q8.gguf`, `${phonon}/voices/abc.safetensors`, 'other'],
-      'transformers-cache': [`${kokoro}/onnx/model.onnx`, `${kokoro}/config.json`, 'foreign'],
+      'transformers-cache': [
+        `${kokoro}/onnx/model.onnx`,
+        `${kokoro}/onnx/model_quantized.onnx`,
+        `${kokoro}/config.json`,
+        'foreign',
+      ],
       'kokoro-voices': [`${hf}af_heart.bin`, `${hf}not-listed.bin`],
     });
     await removeDownload('kokoro');
@@ -141,4 +146,43 @@ describe('isDownloaded and removeDownload', () => {
     await removeDownload('phonon');
     expect([...(store.get('phonon-tts-v1') ?? [])]).toEqual(['other']);
   });
+});
+
+it.each(['fp32', 'q8'] as const)('detects cached %s on a WebGPU browser', async (variant) => {
+  vi.stubGlobal('navigator', { gpu: { requestAdapter: async () => ({}) } });
+  const files = await import('./files');
+  const root = base('kokoro', 'kr');
+  const model = variant === 'fp32' ? 'onnx/model.onnx' : 'onnx/model_quantized.onnx';
+  const store = stubCaches({
+    'transformers-cache': [model, 'config.json', 'tokenizer.json', 'tokenizer_config.json'].map(
+      (path) => `${root}/${path}`,
+    ),
+  });
+  expect(await files.downloadedVariant('kokoro')).toBe(variant);
+  store.get('transformers-cache')?.delete(`${root}/tokenizer.json`);
+  expect(await files.downloadedVariant('kokoro')).toBeNull();
+});
+
+it('reports an fp32 cache even without a GPU adapter', async () => {
+  noGpu();
+  const files = await import('./files');
+  const root = base('kokoro', 'kr');
+  stubCaches({
+    'transformers-cache': [
+      'onnx/model.onnx',
+      'config.json',
+      'tokenizer.json',
+      'tokenizer_config.json',
+    ].map((path) => `${root}/${path}`),
+  });
+  expect(await files.downloadedVariant('kokoro')).toBe('fp32');
+});
+
+it('sizes exactly the required entries and ignores optional voices and unknown sizes', () => {
+  const manifest = structuredClone(MANIFEST);
+  delete manifest.engines.phonon.files['tokenizer.json'];
+  manifest.engines.phonon.files['voices/large.safetensors'] = file(999_999);
+  const entries = requiredEntries(manifest, 'phonon', 'q8');
+  expect(entries.map((entry) => entry.bytes)).toEqual([1000, 0, 1, 5]);
+  expect(requiredBytes(manifest, 'phonon', 'q8')).toBe(1006);
 });

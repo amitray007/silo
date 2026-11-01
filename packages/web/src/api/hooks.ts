@@ -6,6 +6,8 @@ import {
   useQueryClient,
 } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { kokoroDtype } from '../components/reader/listen/engines/files';
+import { fetchTtsManifest } from '../components/reader/listen/engines/manifest';
 import type { HighlightColor } from '../lib/highlights';
 import { mergeDeep } from '../lib/readerSync';
 import {
@@ -1230,6 +1232,20 @@ export function useRetryCapture(id: string, baselineTitle?: string) {
       void queryClient.invalidateQueries({ queryKey: ['feed-posts'] });
     },
   });
+}
+
+/** The shared voice catalog and model-file manifest, including its offline fallback. */
+export function useTtsManifest() {
+  return useQuery({
+    queryKey: ['tts', 'manifest'],
+    queryFn: fetchTtsManifest,
+    staleTime: Infinity,
+  });
+}
+
+/** Preferred model size for this browser; the cache can also hold its fallback variant. */
+export function useKokoroDtype() {
+  return useQuery({ queryKey: ['tts', 'dtype'], queryFn: kokoroDtype, staleTime: Infinity });
 }
 
 /**

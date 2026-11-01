@@ -14,9 +14,10 @@ function kokoroVoice(id: string): Voice | null {
   const match = /^([ab])([fm])_(.+)$/.exec(id);
   if (!match) return null;
   const [, accent, gender, name] = match;
+  if (name === undefined) return null;
   return {
     id,
-    label: (name as string).replace(/^./, (letter) => letter.toUpperCase()),
+    label: name.replace(/^./, (letter) => letter.toUpperCase()),
     language: accent === 'a' ? 'en-us' : 'en-gb',
     trait: gender === 'f' ? 'female' : 'male',
   };

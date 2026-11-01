@@ -12,6 +12,7 @@ import {
   useReaderType,
 } from '../../lib/readerPrefs';
 import { useReaderWidth } from '../../lib/useReaderWidth';
+import { fetchTtsManifest } from '../reader/listen/engines/manifest';
 import { ReaderTab } from './ReaderTab';
 
 const MANIFEST = {
@@ -55,7 +56,7 @@ const MANIFEST = {
 
 vi.mock('../reader/listen/engines/manifest', async (original) => ({
   ...(await original<typeof import('../reader/listen/engines/manifest')>()),
-  fetchTtsManifest: async () => MANIFEST,
+  fetchTtsManifest: vi.fn(async () => MANIFEST),
 }));
 
 function Providers({ children }: { children: React.ReactNode }) {
@@ -78,6 +79,7 @@ function seen() {
 }
 
 beforeEach(() => {
+  vi.mocked(fetchTtsManifest).mockClear();
   vi.stubGlobal('caches', undefined);
 });
 afterEach(() => {
@@ -207,3 +209,11 @@ function row(engine: string): HTMLElement {
   if (!found) throw new Error(`no row for ${engine}`);
   return found;
 }
+
+it('shares one manifest query between the voice picker and both download rows', async () => {
+  open();
+  await screen.findByText(/English · 62 MB/);
+  fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+  await screen.findByRole('option', { name: /Zoey/ });
+  expect(fetchTtsManifest).toHaveBeenCalledTimes(1);
+});
