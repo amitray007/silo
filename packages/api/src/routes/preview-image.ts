@@ -1,6 +1,7 @@
 import { getById } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
+import { withETag } from '../conditional-response.js';
 import { allowedImageContentType, imageResponse } from '../image-response.js';
 import { fetchImageSafely } from '../ssrf-safe-image-fetch.js';
 
@@ -94,7 +95,11 @@ export function registerPreviewImageRoutes(app: Hono): void {
 
     const cached = cacheGet(linkId);
     if (cached) {
-      return imageResponse(cached.bytes, cached.contentType);
+      return withETag(
+        imageResponse(cached.bytes, cached.contentType),
+        cached.bytes,
+        c.req.header('If-None-Match'),
+      );
     }
 
     // linkId is used ONLY as a lookup key — see the SSRF-safety doc comment
@@ -131,7 +136,11 @@ export function registerPreviewImageRoutes(app: Hono): void {
 
     cacheSet(linkId, { bytes: result.bytes, contentType, ts: Date.now() });
 
-    return imageResponse(result.bytes, contentType);
+    return withETag(
+      imageResponse(result.bytes, contentType),
+      result.bytes,
+      c.req.header('If-None-Match'),
+    );
   });
 }
 

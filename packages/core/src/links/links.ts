@@ -702,7 +702,7 @@ function truncatedSnippet(text: string | null | undefined): string | null {
 }
 
 /** Build a `list()` result row: strip `extractedText`, add its truncated `snippet`. */
-function toListResultRow(link: LinkSummaryWithTags): ListResultRow {
+export function toListResultRow(link: LinkSummaryWithTags): ListResultRow {
   const { extractedText, ...rest } = link;
   return { ...rest, snippet: truncatedSnippet(extractedText ?? link.description) };
 }

@@ -506,7 +506,11 @@ export type FeedJson = {
 export type FeedsResponse = { feeds: FeedJson[] };
 export type FeedResponse = { feed: FeedJson };
 export type FeedPostsResponse = {
-  links: (LinkJson & { feedId: string; publishedAt: string | null })[];
+  links: (Omit<LinkJson, 'extractedText'> & {
+    snippet: string | null;
+    feedId: string;
+    publishedAt: string | null;
+  })[];
   nextCursor?: string;
 };
 export type SubscribeFeedRequest = { url: string; syncRecents: boolean };
