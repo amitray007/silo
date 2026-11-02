@@ -197,7 +197,7 @@ function shapeSourceData(raw: unknown): BaseLinkContent['sourceData'] {
  * fields (e.g. `search_links`'s `rank`) spread this result and add their own
  * on top.
  */
-export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
+function toSummaryLinkContent(link: Omit<LinkSummaryWithTags, 'extractedText'>) {
   return {
     id: link.id,
     url: link.url,
@@ -206,7 +206,6 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
     description: link.description,
     imageUrl: link.imageUrl,
     siteName: link.siteName,
-    extractedText: link.extractedText,
     sourceKind: link.sourceKind,
     sourceData: shapeSourceData(link.sourceData),
     captureStatus: link.captureStatus,
@@ -216,6 +215,13 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
     tags: link.tags,
     createdAt: link.createdAt.toISOString(),
     updatedAt: link.updatedAt.toISOString(),
+  };
+}
+
+export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
+  return {
+    ...toSummaryLinkContent(link),
+    extractedText: link.extractedText,
     readingPosition: link.readingPosition
       ? {
           position: link.readingPosition.position,
@@ -236,32 +242,9 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
  */
 type SnippetSourceRow = Omit<LinkSummaryWithTags, 'extractedText'> & { snippet: string | null };
 
-/**
- * Builds the whitelisted `search_links`/`list_links` result-row fields by
- * delegating to `toBaseLinkContent` (same field-by-field whitelist pick, so
- * the two can never drift on which fields are exposed) — `link` is missing
- * `extractedText` (`SnippetSourceRow` omits it), so a placeholder `null` is
- * passed through to satisfy `toBaseLinkContent`'s `LinkWithTags` param and
- * immediately dropped from the result — then swaps in `snippet`. Never a
- * spread of the raw row. Callers that need extra fields (e.g. `search_links`'s
- * `rank`) spread this result and add their own on top.
- */
+/** Build discovery rows from the same summary whitelist as detail reads. */
 export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent {
-  const {
-    extractedText: _extractedText,
-    readingPosition: _readingPosition,
-    highlights: _highlights,
-    ...base
-  } = toBaseLinkContent({
-    ...link,
-    extractedText: null,
-    readerPrefs: {},
-    readingPosition: null,
-    highlights: [],
-  });
-  void _extractedText;
-  void _readingPosition;
-  void _highlights;
+  const base = toSummaryLinkContent(link);
   const sourceData = base.sourceData;
   if (sourceData.kind === 'feed_media') {
     const { content: _content, ...summary } = sourceData;
