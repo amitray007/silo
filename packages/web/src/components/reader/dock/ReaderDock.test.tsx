@@ -223,8 +223,13 @@ it('hides Ask when Librarian is not ready', async () => {
 });
 it('opens Ask, focuses its input and restores tools and focus on fold', async () => {
   renderContent(undefined, prose, true);
-  fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
-  const input = await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  // Ask waits for the AI status query, and the chat chunk loads lazily on first open.
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask' }, { timeout: 5000 }));
+  const input = await screen.findByRole(
+    'textbox',
+    { name: 'Ask the Librarian' },
+    { timeout: 5000 },
+  );
   await waitFor(() => expect(document.activeElement).toBe(input));
   fireEvent.keyDown(document, { key: 'Escape' });
   const ask = await screen.findByRole('button', { name: 'Ask' });
