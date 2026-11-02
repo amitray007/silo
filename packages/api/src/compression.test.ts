@@ -1,6 +1,6 @@
 import { gunzipSync, inflateSync } from 'node:zlib';
 import { Hono } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { compression } from './compression.js';
 
 const body = 'A page of repeated article text. '.repeat(100);
@@ -13,6 +13,31 @@ function responseApp(contentType: string, extra: Record<string, string> = {}) {
 }
 
 describe('API compression', () => {
+  it.each([40, 4096])('checks the byte length of a %i-byte c.json response', async (bytes) => {
+    const payload = { text: 'a'.repeat(bytes - 11) };
+    const app = new Hono().use('*', compression).get('/', (c) => c.json(payload));
+    const res = await app.request('/', { headers });
+    expect(res.headers.get('content-encoding')).toBe(bytes < 1024 ? null : 'gzip');
+    const encoded = Buffer.from(await res.arrayBuffer());
+    expect(bytes < 1024 ? encoded.toString() : gunzipSync(encoded).toString()).toBe(
+      JSON.stringify(payload),
+    );
+  });
+
+  it('does not read a streaming JSON body before returning the response', async () => {
+    const pull = vi.fn();
+    const app = new Hono().use('*', compression).get(
+      '/',
+      () =>
+        new Response(new ReadableStream({ pull }, { highWaterMark: 0 }), {
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    );
+    const res = await app.request('/');
+    expect(pull).not.toHaveBeenCalled();
+    await res.body?.cancel();
+  });
+
   it.each([201, 400, 500])('compresses JSON responses with status %i', async (status) => {
     const app = new Hono()
       .use('*', compression)
