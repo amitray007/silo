@@ -225,9 +225,13 @@ it.each(['trash_link'])('resumes $name and refreshes its queries', async (name) 
   act(() =>
     requestDock(`approval-integration-${name}`, {
       passage: { quote: 'A selected passage', paragraph: 2 },
+      question: 'Why this passage?',
     }),
   );
   await screen.findByText('A selected passage');
+  expect(
+    (screen.getByRole('textbox', { name: 'Ask the Librarian' }) as HTMLTextAreaElement).value,
+  ).toBe('Why this passage?');
   for (const label of ['Explain', 'Simplify', 'Counterpoint'])
     expect(screen.getByRole('button', { name: label }).hasAttribute('disabled')).toBe(true);
   fireEvent.submit(screen.getByRole('button', { name: 'Send' }).closest('form')!);

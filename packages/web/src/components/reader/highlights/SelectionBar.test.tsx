@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SelectionBar } from './SelectionBar';
 import type { PendingSelection } from './useSelectionWatcher';
@@ -42,12 +42,12 @@ function setup(overrides: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
     hidden: new Set<string>(),
     ...overrides,
   };
-  render(
+  const rendered = render(
     <QueryClientProvider client={new QueryClient()}>
       <SelectionBar {...props} />
     </QueryClientProvider>,
   );
-  return props;
+  return Object.assign(props, { rendered });
 }
 
 it('renders nothing without a selection', () => {
@@ -326,5 +326,100 @@ it('saves only the answer text, never the step text written before a tool call',
   );
   fireEvent.click(screen.getByRole('button', { name: 'Save as note' }));
   await waitFor(() => expect(onSaveAnswer).toHaveBeenCalledWith('The real answer.'));
+  vi.unstubAllGlobals();
+});
+
+function answerStream(text: string, open = false) {
+  return new Response(
+    new ReadableStream({
+      start(controller) {
+        const chunks = [
+          { type: 'start', messageId: text },
+          { type: 'text-start', id: 't' },
+          { type: 'text-delta', id: 't', delta: text },
+          ...(!open ? [{ type: 'text-end', id: 't' }, { type: 'finish' }] : []),
+        ];
+        controller.enqueue(
+          new TextEncoder().encode(
+            chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') +
+              (!open ? 'data: [DONE]\n\n' : ''),
+          ),
+        );
+        if (!open) controller.close();
+      },
+    }),
+    { headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } },
+  );
+}
+
+it('aborts passage A and saves only passage B after the selection changes', async () => {
+  let signal: AbortSignal | null | undefined;
+  let calls = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls++;
+      if (calls === 1) {
+        signal = init?.signal;
+        return answerStream('Answer A', true);
+      }
+      return answerStream('Answer B');
+    }),
+  );
+  const onSaveAnswer = vi.fn(async () => {});
+  const props = setup({ askReady: true, linkId: 'selection-regression', onSaveAnswer });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('Answer A');
+  const range = document.createRange();
+  range.selectNodeContents(prose.querySelector('p')!);
+  props.rendered.rerender(
+    <QueryClientProvider client={new QueryClient()}>
+      <SelectionBar {...props} pending={{ ...pending, range }} />
+    </QueryClientProvider>,
+  );
+  await waitFor(() => expect(signal?.aborted).toBe(true));
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('Answer B');
+  expect(screen.queryByText('Answer A')).toBeNull();
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Save as note' }));
+  await waitFor(() => expect(onSaveAnswer).toHaveBeenCalledWith('Answer B'));
+  vi.unstubAllGlobals();
+});
+
+it.each([
+  ['approval_pending', 'Allow or deny the waiting request first.'],
+  ['ai_not_ready', 'Turn on the Librarian in Settings first.'],
+])('keeps the answer open when import returns %s', async (error, message) => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/quick')) return answerStream('Keep this answer');
+      if (String(input).endsWith('/import'))
+        return new Response(JSON.stringify({ error, message: error }), {
+          status: 409,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      return new Response(JSON.stringify({ chats: [{ id: 'import-errors' }] }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }),
+  );
+  setup({ askReady: true, linkId: `import-${error}` });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('Keep this answer');
+  const button = screen.getByRole('button', { name: 'Continue in Librarian' });
+  await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
+  fireEvent.click(button);
+  await screen.findByText(message);
+  expect(screen.getByRole('region', { name: 'Passage answer' })).toBeTruthy();
+  expect(screen.getByText('Keep this answer')).toBeTruthy();
   vi.unstubAllGlobals();
 });
