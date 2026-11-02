@@ -259,7 +259,8 @@ export { type LiveReader, readLive, setLiveReader } from './links/live-reader.js
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
-export type { ReadingPosition } from './links/reading-position.js';
+export { clearReaderPrefs, patchReaderPrefs } from './links/reader-prefs.js';
+export type { ReadingPosition, ReadingPositionSource } from './links/reading-position.js';
 export {
   clearReadingPosition,
   getReadingPosition,
@@ -341,6 +342,8 @@ export {
 // reads + writes. Appended as its own minimal block (this barrel is shared
 // with the parallel scheduling slice) — see `settings/schema.ts` for the
 // per-key allowlist + defaults.
+export type { ReaderPrefs, ReaderSettings } from './settings/reader.js';
+export { readerPatchSchema } from './settings/reader.js';
 export type { SettingKey, SettingsMap, SettingValue } from './settings/schema.js';
 export { SETTINGS_DEFAULTS } from './settings/schema.js';
 export { getAllSettings, getSetting, setSetting, updateSettings } from './settings/settings.js';

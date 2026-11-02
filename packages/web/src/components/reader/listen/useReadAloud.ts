@@ -1,11 +1,14 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { READ_ALOUD_SPEEDS, useReadAloudPrefs } from '../../../lib/readerPrefs';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { READ_ALOUD_SPEEDS, type ReadAloudPauses } from '../../../lib/readerPrefs';
+import { useArticleReadAloudPrefs } from '../../../lib/useReaderPrefs';
 import { paintSpeaking } from '../highlights/paint';
 import { proseTextNodes } from '../pencil/lines';
+import { type ArticleWordIndex, articleWordIndex } from '../place/words';
 import { createEngine, ENGINES, type EngineId, type TtsEngine, type Voice } from './engines';
 import { isEnglishText } from './language';
 import { Player } from './player';
 import { buildSegments, type Segment, segmentIndexAt } from './segments';
+import { reportReaderLoad } from './voiceModels';
 
 type Status = 'idle' | 'loading' | 'ready' | 'error';
 
@@ -55,11 +58,17 @@ function messageOf(reason: unknown): string {
 export function useReadAloud({
   prose,
   scroll,
+  saved = null,
+  canSave = false,
+  onSave,
 }: {
   prose: HTMLElement | null;
   scroll: HTMLElement | null;
+  saved?: number | null;
+  canSave?: boolean;
+  onSave?: (share: number, options?: { keepalive?: boolean }) => Promise<void>;
 }) {
-  const { prefs, update } = useReadAloudPrefs();
+  const { prefs, update } = useArticleReadAloudPrefs();
   const [active, setActive] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [buffering, setBuffering] = useState(false);
@@ -86,14 +95,30 @@ export function useReadAloud({
     [prose],
   );
 
+  // Settings → Reader → Voices shows what this Reader has loaded or is downloading.
+  useEffect(() => {
+    for (const id of ['phonon', 'kokoro'] as const) reportReaderLoad(id, loads[id]);
+  }, [loads]);
+  useEffect(
+    () => () => {
+      for (const id of ['phonon', 'kokoro'] as const) reportReaderLoad(id, null);
+    },
+    [],
+  );
+
   const engineId: EngineId = prefs.engine;
   const { status, progress, bytes, error, voices } = loads[engineId];
-  const voiceId = prefs.voices[engineId];
+  const selectedVoice = prefs.voices[engineId];
+  const voiceId =
+    status === 'ready' && voices.length > 0 && !voices.some((voice) => voice.id === selectedVoice)
+      ? ''
+      : selectedVoice;
   const rate = prefs.rate;
+  const pauses = prefs.pauses;
 
   // Everything callbacks need to see now, without re-creating them.
-  const live = useRef({ index: 0, playing: false, engineId, voiceId, rate, scroll });
-  live.current = { index, playing, engineId, voiceId, rate, scroll };
+  const live = useRef({ index: 0, playing: false, engineId, voiceId, rate, pauses, scroll });
+  live.current = { index, playing, engineId, voiceId, rate, pauses, scroll };
 
   const list = useRef<Segment[]>([]);
   const engines = useRef(new Map<EngineId, TtsEngine>());
@@ -106,8 +131,29 @@ export function useReadAloud({
   const lastClick = useRef<Node | null>(null);
   // Bumped by every start, stop and engine change; an async start that sees a newer value quits.
   const run = useRef(0);
+  const words = useRef<ArticleWordIndex | null>(null);
+  const currentShare = useRef<number | null>(null);
+  const position = useRef({ saved, canSave, onSave, prose });
+  position.current = { saved, canSave, onSave, prose };
+  const flush = useCallback((options?: { keepalive?: boolean }) => {
+    const now = position.current;
+    const share = currentShare.current;
+    if (!begun.current || share === null || !now.canSave || !now.onSave) return;
+    void now.onSave(share, options).catch(() => {
+      /* The save adapter reports the failure. */
+    });
+  }, []);
+
+  const forgetPlace = useCallback(() => {
+    begun.current = false;
+    currentShare.current = null;
+  }, []);
 
   const mark = useCallback((segment: Segment | undefined) => {
+    if (segment)
+      currentShare.current =
+        words.current?.shareAtPoint(segment.range.startContainer, segment.range.startOffset) ??
+        null;
     paintSpeaking(segment?.range ?? null);
     const pane = live.current.scroll;
     if (segment && pane) scrollToSentence(pane, segment.range);
@@ -133,9 +179,14 @@ export function useReadAloud({
           return audioContext();
         },
         segments: () => list.current,
-        settings: () => ({ rate: live.current.rate, voice: live.current.voiceId }),
+        settings: () => ({
+          rate: live.current.rate,
+          voice: live.current.voiceId,
+          pauses: live.current.pauses,
+        }),
         events: {
           sentence: (at) => {
+            live.current.index = at;
             setIndex(at);
             mark(list.current[at]);
           },
@@ -158,6 +209,7 @@ export function useReadAloud({
   const ensure = useCallback((): Segment[] => {
     if (list.current.length === 0 && prose) {
       list.current = buildSegments(prose);
+      words.current = articleWordIndex(prose);
       setSegments(list.current);
     }
     return list.current;
@@ -169,6 +221,8 @@ export function useReadAloud({
     run.current += 1;
     player.halt();
     list.current = [];
+    words.current = null;
+    currentShare.current = null;
     begun.current = false;
     setSegments([]);
     setIndex(0);
@@ -243,9 +297,9 @@ export function useReadAloud({
   const startAt = useCallback(
     async (from: number) => {
       player.press();
-      player.halt(true);
-      const token = ++run.current;
       const sentences = ensure();
+      const units = player.prepare(engines.current.get(live.current.engineId), from);
+      const token = ++run.current;
       setActive(true);
       if (!sentences[from]) {
         setPlaying(false);
@@ -253,6 +307,7 @@ export function useReadAloud({
       }
       setPlaying(true);
       begun.current = true;
+      live.current.index = from;
       setIndex(from);
       mark(sentences[from]);
       // Created inside the press, so the browser lets it play.
@@ -264,18 +319,23 @@ export function useReadAloud({
         if (token === run.current) setPlaying(false);
         return;
       }
-      if (token === run.current) player.start(engine, from);
+      if (token === run.current) player.start(engine, from, units);
     },
     [player, ensure, mark, loadEngine, audioContext],
   );
 
   /** Load the model and synthesize the first sentences, so Play is instant. */
   const warm = useCallback(async () => {
+    const token = run.current;
+    const id = live.current.engineId;
     try {
-      const engine = await loadEngine(live.current.engineId);
+      const engine = await loadEngine(id);
       ensure();
-      if (!live.current.playing)
-        player.warm(engine, Math.min(list.current.length - 1, firstVisible()));
+      if (token === run.current && id === live.current.engineId && !live.current.playing)
+        player.warm(
+          engine,
+          Math.min(list.current.length - 1, begun.current ? live.current.index : firstVisible()),
+        );
     } catch {
       // The error state is already set.
     }
@@ -287,20 +347,47 @@ export function useReadAloud({
     if (live.current.playing) void startAt(live.current.index);
   }, [startAt]);
 
+  const savedSentence = useCallback(() => {
+    const now = position.current;
+    const sentences = ensure();
+    const word =
+      now.prose && now.saved !== null ? articleWordIndex(now.prose).atShare(now.saved) : undefined;
+    return word
+      ? Math.max(0, segmentIndexAt(sentences, word.startContainer, word.startOffset))
+      : firstVisible();
+  }, [ensure, firstVisible]);
+
+  // Removal from any source discards Listen's pending position before teardown can flush it.
+  const previousSaved = useRef(saved);
+  useLayoutEffect(() => {
+    const removed = previousSaved.current !== null && saved === null;
+    previousSaved.current = saved;
+    if (removed) forgetPlace();
+    else if (
+      !playing &&
+      saved !== null &&
+      currentShare.current !== null &&
+      Math.abs(saved - currentShare.current) > 1e-7
+    )
+      begun.current = false;
+  }, [saved, playing, forgetPlace]);
+
   const play = useCallback(() => {
-    void startAt(begun.current ? live.current.index : firstVisible());
-  }, [startAt, firstVisible]);
+    void startAt(begun.current ? live.current.index : savedSentence());
+  }, [startAt, savedSentence]);
 
   const pause = useCallback(() => {
+    flush();
     run.current += 1;
-    player.halt();
+    player.prepare(engines.current.get(live.current.engineId), live.current.index);
     setPlaying(false);
     setBuffering(false);
-  }, [player]);
+  }, [player, flush]);
 
   pauseRef.current = pause;
 
   const stop = useCallback(() => {
+    flush();
     run.current += 1;
     player.halt();
     setPlaying(false);
@@ -308,7 +395,7 @@ export function useReadAloud({
     setBuffering(false);
     begun.current = false;
     mark(undefined);
-  }, [player, mark]);
+  }, [player, mark, flush]);
 
   const jump = useCallback(
     (to: number) => {
@@ -316,11 +403,13 @@ export function useReadAloud({
       if (live.current.playing) void startAt(next);
       else {
         begun.current = true;
+        live.current.index = next;
         setIndex(next);
         mark(list.current[next]);
+        void warm();
       }
     },
-    [startAt, mark],
+    [startAt, mark, warm],
   );
 
   /** The sentence a selection starts in, else the last click, else the first one on screen. */
@@ -335,8 +424,8 @@ export function useReadAloud({
       const node = lastClick.current;
       at = sentences.findIndex((segment) => segment.block.contains(node));
     }
-    void startAt(at >= 0 ? at : firstVisible());
-  }, [prose, ensure, startAt, firstVisible]);
+    void startAt(at >= 0 ? at : savedSentence());
+  }, [prose, ensure, startAt, savedSentence]);
 
   const setRate = useCallback(
     (value: number) => {
@@ -349,25 +438,37 @@ export function useReadAloud({
     [update, restartIfPlaying, warm],
   );
 
+  // Store changes also come from Settings or a server sync, outside this sheet.
+  const plannedPauses = useRef(pauses);
+  useEffect(() => {
+    if (plannedPauses.current === pauses) return;
+    plannedPauses.current = pauses;
+    restartIfPlaying();
+    if (active && !live.current.playing) void warm();
+  }, [pauses, active, restartIfPlaying, warm]);
+
+  const setPauses = useCallback((value: ReadAloudPauses) => update({ pauses: value }), [update]);
+
   const setVoice = useCallback(
     (id: string) => {
       update({ voice: [live.current.engineId, id] });
       live.current.voiceId = id;
       restartIfPlaying();
+      if (!live.current.playing) void warm();
     },
-    [update, restartIfPlaying],
+    [update, restartIfPlaying, warm],
   );
 
   const setEngine = useCallback(
     (id: EngineId) => {
       const wasPlaying = live.current.playing;
       run.current += 1;
-      player.halt();
       update({ engine: id });
       live.current.engineId = id;
       live.current.voiceId = prefs.voices[id];
       if (wasPlaying) void startAt(live.current.index);
       else {
+        player.prepare(engines.current.get(id), live.current.index);
         setPlaying(false);
         void warm();
       }
@@ -394,18 +495,6 @@ export function useReadAloud({
     audioContext();
   }, [ensure, audioContext]);
 
-  // A voice the loaded engine does not have falls back to its default.
-  useEffect(() => {
-    if (
-      status === 'ready' &&
-      voiceId &&
-      voices.length > 0 &&
-      !voices.some((v) => v.id === voiceId)
-    ) {
-      update({ voice: [engineId, ''] });
-    }
-  }, [status, voiceId, voices, engineId, update]);
-
   useEffect(() => {
     disposed.current = false;
     const map = engines.current;
@@ -426,6 +515,20 @@ export function useReadAloud({
       paintSpeaking(null);
     };
   }, [player]);
+
+  useEffect(() => {
+    const hide = () => flush({ keepalive: true });
+    const visibility = () => {
+      if (document.hidden) hide();
+    };
+    window.addEventListener('pagehide', hide);
+    document.addEventListener('visibilitychange', visibility);
+    return () => {
+      window.removeEventListener('pagehide', hide);
+      document.removeEventListener('visibilitychange', visibility);
+      flush();
+    };
+  }, [flush]);
 
   // A tab that stays hidden pauses, and so does a suspended or interrupted audio device, so
   // Play resumes cleanly from the same sentence instead of the UI claiming it is playing.
@@ -452,6 +555,8 @@ export function useReadAloud({
     current: segments[index],
     rate,
     setRate,
+    pauses,
+    setPauses,
     stepRate,
     engineId,
     engines: ENGINES,
@@ -474,6 +579,7 @@ export function useReadAloud({
     jump,
     startAt: (at: number) => void startAt(at),
     startHere,
+    forgetPlace,
     warm: warmUp,
     retry: () => {
       patch(live.current.engineId, { status: 'idle', error: '' });

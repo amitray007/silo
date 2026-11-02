@@ -345,6 +345,7 @@ describe('read aloud prefs', () => {
   it('starts on Phonon at 1x with default voices', () => {
     expect(readAloudPrefsDefaults).toEqual({
       engine: 'phonon',
+      pauses: 'relaxed',
       voices: { phonon: '', kokoro: '' },
       rate: 1,
     });
@@ -355,7 +356,12 @@ describe('read aloud prefs', () => {
       parseReadAloudPrefs(
         JSON.stringify({ engine: 'kokoro', voices: { phonon: 'zoe', kokoro: 7 }, rate: 1.25 }),
       ),
-    ).toEqual({ engine: 'kokoro', voices: { phonon: 'zoe', kokoro: '' }, rate: 1.25 });
+    ).toEqual({
+      engine: 'kokoro',
+      pauses: 'relaxed',
+      voices: { phonon: 'zoe', kokoro: '' },
+      rate: 1.25,
+    });
     expect(parseReadAloudPrefs(JSON.stringify({ engine: 'mystery', rate: 1.3 }))).toEqual(
       readAloudPrefsDefaults,
     );
@@ -378,6 +384,7 @@ describe('read aloud prefs', () => {
     act(() => result.current.update({ voice: ['kokoro', 'af_heart'], engine: 'kokoro', rate: 2 }));
     expect(result.current.prefs).toEqual({
       engine: 'kokoro',
+      pauses: 'relaxed',
       voices: { phonon: 'zoe', kokoro: 'af_heart' },
       rate: 2,
     });

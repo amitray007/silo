@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { makeLink } from '../../../test/fixtures';
+import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import type { LoadProgress, TtsEngine } from '../listen/engines';
 import { ReaderContent } from '../ReaderContent';
 import { DockHostContext } from './ReaderDock';
@@ -65,7 +66,11 @@ function Host({ children }: { children: ReactNode }) {
   );
 }
 
-function renderArticle(html: string) {
+function renderArticle(
+  html: string,
+  readerPrefs: import('../../../api/types').LinkJson['readerPrefs'] = {},
+) {
+  const link = makeLink({ id: 'listen', readerPrefs });
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) =>
@@ -79,7 +84,9 @@ function renderArticle(html: string) {
   return render(
     <QueryClientProvider client={client}>
       <Host>
-        <ReaderContent link={makeLink({ id: 'listen' })} />
+        <TestArticlePrefs link={link}>
+          <ReaderContent link={link} />
+        </TestArticlePrefs>
       </Host>
     </QueryClientProvider>,
   );
@@ -164,7 +171,7 @@ it('plays and pauses on Space, and changes speed on + and -', async () => {
   await waitFor(() =>
     expect(within(toolbar()).getByRole('button', { name: /^Speed/ }).textContent).toBe('0.75x'),
   );
-  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').rate).toBe(0.75);
+  expect(articlePrefs().readAloud.rate).toBe(0.75);
 });
 
 it('steps a sentence on the arrow keys', async () => {
@@ -228,9 +235,7 @@ it('shows the engine, voice and speed controls, and closes the sheet on Escape',
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
-  expect(within(sheet).getByRole('button', { name: 'Voice engine' }).textContent).toContain(
-    'Phonon (31M)',
-  );
+  expect(within(sheet).getByRole('button', { name: 'Voice engine' }).textContent).toBe('Phonon');
   expect(within(sheet).getByRole('button', { name: 'Voice' }).textContent).toContain('Default');
   expect(within(sheet).getByRole('spinbutton', { name: 'Speed' }).textContent).toBe('1x');
   fireEvent.keyDown(sheet, { key: 'Escape' });
@@ -264,11 +269,7 @@ it('groups voices by locale, lets the reader pick one, and remembers it', async 
   );
   expect(within(list).getByRole('group', { name: 'English (UK)' })).toBeDefined();
   fireEvent.click(within(list).getByRole('option', { name: /Maeve/ }));
-  await waitFor(() =>
-    expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').voices.phonon).toBe(
-      'maeve',
-    ),
-  );
+  await waitFor(() => expect(articlePrefs().readAloud.voices.phonon).toBe('maeve'));
 });
 
 it('shows the download state with its percentage and size while the voice loads', async () => {
@@ -283,6 +284,7 @@ it('shows the download state with its percentage and size while the voice loads'
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   const status = await within(sheet).findByRole('status');
   expect(status.textContent).toContain('Downloading voice \u00b7 42%');
+  expect(screen.getAllByRole('radiogroup', { name: 'Pauses' })).toHaveLength(1);
   expect(status.textContent).toContain('4.2 / 10.0 MB');
   // Skeleton rows stand in for voices that have not loaded.
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice' }));
@@ -310,15 +312,26 @@ it('shows a failed load with Retry, and Retry loads again', async () => {
   expect(attempts).toBe(2);
 });
 
+it('names the engines with a muted trait and no model size', async () => {
+  renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  const sheet = await screen.findByRole('dialog', { name: 'Listen' });
+  fireEvent.click(within(sheet).getByRole('button', { name: 'Voice engine' }));
+  const options = await screen.findAllByRole('option');
+  expect(options.map((option) => option.textContent)).toEqual([
+    'Phonon Fast',
+    'Kokoro More voices',
+  ]);
+  expect(document.body.textContent).not.toMatch(/\d+\s?M\b|MB/);
+});
+
 it('switches the engine from the sheet and keeps it for the next play', async () => {
   renderArticle(ENGLISH);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice engine' }));
-  fireEvent.click(await screen.findByRole('option', { name: /Kokoro \(82M\)/ }));
-  await waitFor(() =>
-    expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro'),
-  );
+  fireEvent.click(await screen.findByRole('option', { name: /^Kokoro/ }));
+  await waitFor(() => expect(articlePrefs().readAloud.engine).toBe('kokoro'));
   fireEvent.click(within(toolbar()).getByRole('button', { name: 'Play' }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
 });
@@ -328,9 +341,9 @@ it('switches the engine while playing and carries on with the new one', async ()
   await listen();
   // Pressing Listen opened the sheet, and it is still open.
   fireEvent.click(await screen.findByRole('button', { name: 'Voice engine' }));
-  fireEvent.click(await screen.findByRole('option', { name: /Kokoro \(82M\)/ }));
+  fireEvent.click(await screen.findByRole('option', { name: /^Kokoro/ }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
-  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro');
+  expect(articlePrefs().readAloud.engine).toBe('kokoro');
 });
 
 it('names the speed button with its visible value', async () => {
@@ -413,4 +426,29 @@ it('keeps Listen keys out of a focused text field', async () => {
   expect(space.defaultPrevented).toBe(false);
   expect(within(toolbar()).getByRole('button', { name: 'Pause' })).toBeDefined();
   field.remove();
+});
+
+it('renders the Pauses choices and keeps the selection for the next read', async () => {
+  const first = renderArticle(ENGLISH);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  const group = screen.getByRole('radiogroup', { name: 'Pauses' });
+  expect(
+    within(group)
+      .getAllByRole('radio')
+      .map((option) => option.textContent),
+  ).toEqual(['Short', 'Relaxed', 'Natural']);
+  expect(within(group).getByRole('radio', { name: 'Relaxed' }).getAttribute('aria-checked')).toBe(
+    'true',
+  );
+  fireEvent.click(within(group).getByRole('radio', { name: 'Natural' }));
+  expect(articlePrefs().readAloud.pauses).toBe('natural');
+  const saved = { readAloud: { pauses: articlePrefs().readAloud.pauses } };
+  first.unmount();
+  renderArticle(ENGLISH, saved);
+  fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
+  expect(
+    within(screen.getByRole('radiogroup', { name: 'Pauses' }))
+      .getByRole('radio', { name: 'Natural' })
+      .getAttribute('aria-checked'),
+  ).toBe('true');
 });

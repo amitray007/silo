@@ -36,6 +36,7 @@ function renderPreview(link: LinkJson, plugins?: SettingsMap['plugins'], linkPre
       linkPreviewImages,
       hoverPreview: true,
       plugins,
+      reader: null,
       ai: { enabled: false, features: {} },
     } satisfies SettingsMap);
   }
@@ -682,6 +683,7 @@ describe('HoverPreview', () => {
         linkPreviewImages: true,
         hoverPreview: true,
         plugins: allOn,
+        reader: null,
         ai: { enabled: false, features: {} },
       } satisfies SettingsMap);
       const { rerender } = render(
@@ -736,6 +738,7 @@ describe('HoverPreview', () => {
         linkPreviewImages: true,
         hoverPreview: true,
         plugins: allOn,
+        reader: null,
         ai: { enabled: false, features: {} },
       } satisfies SettingsMap);
       const renderFor = (id: string) => (
@@ -777,6 +780,7 @@ describe('HoverPreview', () => {
         linkPreviewImages: true,
         hoverPreview: true,
         plugins: allOn,
+        reader: null,
         ai: { enabled: false, features: {} },
       } satisfies SettingsMap);
       const { rerender } = render(

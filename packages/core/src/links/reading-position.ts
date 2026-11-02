@@ -9,7 +9,8 @@ import { whereLibrary } from './live.js';
  * article's words, from 0 (the start) to 1 (the end). `updatedAt` is when it
  * was saved.
  */
-export type ReadingPosition = { position: number; updatedAt: Date };
+export type ReadingPositionSource = 'pencil' | 'listen' | 'mark';
+export type ReadingPosition = { position: number; source: ReadingPositionSource; updatedAt: Date };
 
 /** Thrown when a position is not a finite number from 0 to 1. */
 export class InvalidReadingPositionError extends Error {
@@ -18,6 +19,10 @@ export class InvalidReadingPositionError extends Error {
     super('invalid_reading_position: position must be a finite number from 0 to 1.');
     this.name = 'InvalidReadingPositionError';
   }
+}
+
+function assertValidSource(source: ReadingPositionSource): void {
+  if (!['pencil', 'listen', 'mark'].includes(source)) throw new InvalidReadingPositionError();
 }
 
 function assertValidPosition(position: number): void {
@@ -29,7 +34,11 @@ function assertValidPosition(position: number): void {
 /** The saved position of a link, or `null` when none is saved (or the link is not live). */
 export async function getReadingPosition(linkId: string): Promise<ReadingPosition | null> {
   const [row] = await db
-    .select({ position: readingPositions.position, updatedAt: readingPositions.updatedAt })
+    .select({
+      position: readingPositions.position,
+      source: readingPositions.source,
+      updatedAt: readingPositions.updatedAt,
+    })
     .from(readingPositions)
     .innerJoin(links, eq(links.id, readingPositions.linkId))
     .where(whereLibrary(eq(readingPositions.linkId, linkId)));
@@ -43,16 +52,21 @@ export async function getReadingPosition(linkId: string): Promise<ReadingPositio
  * `FeedPostNotEditableError` for a feed post. The write goes to its own table,
  * so it never bumps `links.updated_at`.
  *
- * Last write wins on purpose. The web client sends one request at a time per link and queues
- * the newest position behind it, so a slow earlier request cannot land after a later one from
- * the same tab. The request carries no timestamp, so there is nothing to guard the upsert with;
- * two tabs reading the same article race, and the later request wins.
+ * Web writes carry a monotonically increasing timestamp, including pagehide writes that must
+ * leave immediately. The upsert ignores older timestamps even if those requests arrive late.
+ * A timestamp ahead of the server clock is clamped to now, so a fast client clock cannot
+ * block later writes.
+ * Callers that omit the timestamp retain server-time, last-write-wins behavior.
  */
 export async function setReadingPosition(
   linkId: string,
   position: number,
+  source: ReadingPositionSource = 'pencil',
+  writtenAt?: Date,
 ): Promise<ReadingPosition | null> {
   assertValidPosition(position);
+  assertValidSource(source);
+  if (writtenAt && !Number.isFinite(writtenAt.getTime())) throw new InvalidReadingPositionError();
   await assertLibraryWrite(linkId);
   const [saved] = await db
     .insert(readingPositions)
@@ -61,17 +75,30 @@ export async function setReadingPosition(
         .select({
           linkId: links.id,
           position: sql<number>`${position}::real`.as('position'),
-          updatedAt: sql<Date>`now()`.as('updated_at'),
+          source: sql<ReadingPositionSource>`${source}::varchar`.as('source'),
+          updatedAt: (writtenAt
+            ? sql<Date>`least(${writtenAt.toISOString()}::timestamptz, now())`
+            : sql<Date>`now()`
+          ).as('updated_at'),
         })
         .from(links)
         .where(whereLibrary(eq(links.id, linkId))),
     )
     .onConflictDoUpdate({
       target: readingPositions.linkId,
-      set: { position: sql`excluded.position`, updatedAt: sql`excluded.updated_at` },
+      set: {
+        position: sql`excluded.position`,
+        source: sql`excluded.source`,
+        updatedAt: sql`excluded.updated_at`,
+      },
+      ...(writtenAt ? { setWhere: sql`excluded.updated_at > ${readingPositions.updatedAt}` } : {}),
     })
-    .returning({ position: readingPositions.position, updatedAt: readingPositions.updatedAt });
-  return saved ?? null;
+    .returning({
+      position: readingPositions.position,
+      source: readingPositions.source,
+      updatedAt: readingPositions.updatedAt,
+    });
+  return saved ?? (writtenAt ? getReadingPosition(linkId) : null);
 }
 
 /**
@@ -106,6 +133,7 @@ export async function mergeReadingPosition(
         .select({
           linkId: sql<string>`${toLinkId}::uuid`.as('link_id'),
           position: readingPositions.position,
+          source: readingPositions.source,
           updatedAt: readingPositions.updatedAt,
         })
         .from(readingPositions)
@@ -113,7 +141,11 @@ export async function mergeReadingPosition(
     )
     .onConflictDoUpdate({
       target: readingPositions.linkId,
-      set: { position: sql`excluded.position`, updatedAt: sql`excluded.updated_at` },
+      set: {
+        position: sql`excluded.position`,
+        source: sql`excluded.source`,
+        updatedAt: sql`excluded.updated_at`,
+      },
       setWhere: sql`excluded.updated_at > ${readingPositions.updatedAt}`,
     });
 }
@@ -127,6 +159,7 @@ export async function restoreReadingPosition(
   saved: ReadingPosition,
 ): Promise<void> {
   assertValidPosition(saved.position);
+  assertValidSource(saved.source);
   await db
     .insert(readingPositions)
     .select(
@@ -134,6 +167,7 @@ export async function restoreReadingPosition(
         .select({
           linkId: links.id,
           position: sql<number>`${saved.position}::real`.as('position'),
+          source: sql<ReadingPositionSource>`${saved.source}::varchar`.as('source'),
           updatedAt: sql<Date>`${saved.updatedAt.toISOString()}::timestamptz`.as('updated_at'),
         })
         .from(links)
@@ -141,7 +175,11 @@ export async function restoreReadingPosition(
     )
     .onConflictDoUpdate({
       target: readingPositions.linkId,
-      set: { position: sql`excluded.position`, updatedAt: sql`excluded.updated_at` },
+      set: {
+        position: sql`excluded.position`,
+        source: sql`excluded.source`,
+        updatedAt: sql`excluded.updated_at`,
+      },
       setWhere: sql`excluded.updated_at > ${readingPositions.updatedAt}`,
     });
 }

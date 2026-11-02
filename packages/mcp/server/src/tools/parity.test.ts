@@ -213,12 +213,16 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       expect(edited.isError).toBeFalsy();
       expect(edited.structuredContent).toMatchObject({
         found: true,
-        readingPosition: { position: expect.closeTo(0.37, 5), updatedAt: expect.any(String) },
+        readingPosition: {
+          position: expect.closeTo(0.37, 5),
+          source: 'mark',
+          updatedAt: expect.any(String),
+        },
       });
 
       const read = await client.callTool({ name: 'get_link', arguments: { id } });
       expect(read.structuredContent).toMatchObject({
-        readingPosition: { position: expect.closeTo(0.37, 5) },
+        readingPosition: { position: expect.closeTo(0.37, 5), source: 'mark' },
       });
       expect(JSON.stringify(read.content)).toContain('reading position: 37%');
 

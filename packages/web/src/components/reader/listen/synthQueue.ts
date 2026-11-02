@@ -1,10 +1,13 @@
 import type { TtsEngine } from './engines/types';
 import { type CachedAudio, ReplayCache } from './replayCache';
+import { EdgeTrimmer, type TrimmedChunk } from './trim';
 
 /** Synthesized audio for one unit. Chunks arrive while the unit is still being generated. */
 export type Job = {
   key: string;
   chunks: Float32Array[];
+  /** Chunk indices containing silence released from hold; never used for replay. */
+  heldSilence: Set<number>;
   sampleRate: number;
   done: boolean;
   failed: string;
@@ -20,10 +23,17 @@ type Queued = {
   speed: number;
   voice: string;
   engine: TtsEngine;
+  trim: boolean;
 };
 
-export function jobKey(engine: TtsEngine, voice: string, speed: number, text: string): string {
-  return `${engine.id}|${voice}|${speed}|${text}`;
+export function jobKey(
+  engine: TtsEngine,
+  voice: string,
+  speed: number,
+  text: string,
+  trim = true,
+): string {
+  return `${engine.id}|${voice}|${speed}|${trim ? 'trimmed' : 'natural'}|${text}`;
 }
 
 export function jobSeconds(job: { chunks: readonly Float32Array[]; sampleRate: number }): number {
@@ -36,6 +46,7 @@ function settled(audio: CachedAudio, key: string): Job {
   return {
     key,
     chunks: audio.chunks,
+    heldSilence: new Set(),
     sampleRate: audio.sampleRate,
     done: true,
     failed: '',
@@ -58,8 +69,15 @@ export class SynthQueue {
 
   constructor(readonly cache = new ReplayCache()) {}
 
-  request(engine: TtsEngine, text: string, voice: string, speed: number, priority: number): Job {
-    const key = jobKey(engine, voice, speed, text);
+  request(
+    engine: TtsEngine,
+    text: string,
+    voice: string,
+    speed: number,
+    priority: number,
+    trim = true,
+  ): Job {
+    const key = jobKey(engine, voice, speed, text, trim);
     const cached = this.cache.get(key);
     if (cached) return settled(cached, key);
     const shared = this.inflight.get(key);
@@ -71,6 +89,7 @@ export class SynthQueue {
     const job: Job = {
       key,
       chunks: [],
+      heldSilence: new Set(),
       sampleRate: engine.sampleRate,
       done: false,
       failed: '',
@@ -78,7 +97,7 @@ export class SynthQueue {
       listeners: new Set(),
     };
     this.inflight.set(key, job);
-    this.queue.push({ job, text, priority, speed, voice, engine });
+    this.queue.push({ job, text, priority, speed, voice, engine, trim });
     void this.run();
     return job;
   }
@@ -125,23 +144,38 @@ export class SynthQueue {
     }
   }
 
+  private append(job: Job, chunks: TrimmedChunk[]): void {
+    for (const { pcm, silence } of chunks) {
+      if (silence) job.heldSilence.add(job.chunks.length);
+      job.chunks.push(pcm);
+    }
+  }
+
   private async synthesize(next: Queued, abort: AbortController): Promise<void> {
     const { job } = next;
     try {
+      let trimmer: EdgeTrimmer | undefined;
       for await (const chunk of next.engine.stream(next.text, {
         voice: next.voice,
         speed: next.speed,
         signal: abort.signal,
       })) {
         if (abort.signal.aborted) break;
-        job.chunks.push(chunk);
         job.sampleRate = next.engine.sampleRate;
+        if (next.trim) {
+          trimmer ??= new EdgeTrimmer(job.sampleRate);
+          this.append(job, trimmer.push(chunk));
+        } else job.chunks.push(chunk);
         for (const listener of job.listeners) listener();
       }
-      if (!abort.signal.aborted) {
-        job.done = true;
-        this.cache.set(job.key, { chunks: job.chunks, sampleRate: job.sampleRate });
+      if (abort.signal.aborted) return;
+      job.sampleRate = next.engine.sampleRate;
+      if (next.trim) {
+        trimmer ??= new EdgeTrimmer(job.sampleRate);
+        this.append(job, trimmer.finish());
       }
+      job.done = true;
+      this.cache.set(job.key, { chunks: job.chunks, sampleRate: job.sampleRate });
     } catch (reason) {
       if (!abort.signal.aborted)
         job.failed = reason instanceof Error ? reason.message : String(reason);

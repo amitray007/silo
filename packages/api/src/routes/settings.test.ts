@@ -64,6 +64,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       mcpAccess: true,
       linkPreviewImages: true,
       hoverPreview: false,
+      reader: null,
       ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
       plugins: {
         hacker_news: { enabled: true, inline: true, hover: true, palette: true },
@@ -88,6 +89,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       'linkPreviewImages',
       'mcpAccess',
       'plugins',
+      'reader',
       'theme',
       'trashPurgeDays',
     ]);
@@ -243,6 +245,69 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     expect(getBody.theme).toBe('light');
   });
 
+  it('reader: starts unset, a partial patch keeps other fields, bad values and unknown fields are rejected', async () => {
+    const { app } = harness.mod();
+    expect((await expectOk<{ reader: unknown }>(app, '/api/settings')).reader).toBeNull();
+
+    const first = await patchSettings(app, { reader: { type: { size: 20 } } });
+    expect(first.status).toBe(200);
+    const created = ((await first.json()) as { reader: Record<string, unknown> }).reader;
+    // The first write fills every other field with its default.
+    expect(created).toEqual({
+      type: { font: 'inter', size: 20, leading: 'normal', theme: 'default' },
+      width: 'medium',
+      pencil: { style: 'underline', wpm: 240 },
+      highlight: { color: 'yellow' },
+      readAloud: {
+        engine: 'phonon',
+        pauses: 'relaxed',
+        voices: { phonon: '', kokoro: '' },
+        rate: 1,
+      },
+    });
+
+    // A second patch changes its own fields only, including one nested voice.
+    const second = await patchSettings(app, {
+      reader: {
+        readAloud: { voices: { kokoro: 'af_heart' }, rate: 1.5, pauses: 'natural' },
+        width: 'wide',
+      },
+    });
+    const merged = ((await second.json()) as { reader: Record<string, unknown> }).reader;
+    expect(merged).toMatchObject({
+      type: { size: 20 },
+      width: 'wide',
+      readAloud: {
+        engine: 'phonon',
+        pauses: 'natural',
+        voices: { phonon: '', kokoro: 'af_heart' },
+        rate: 1.5,
+      },
+    });
+
+    for (const bad of [
+      { type: { size: 13 } },
+      { type: { size: 16.5 } },
+      { type: { font: 'comic' } },
+      { pencil: { wpm: 90 } },
+      { pencil: { wpm: 250 } },
+      { highlight: { color: 'red' } },
+      { readAloud: { rate: 4 } },
+      { readAloud: { pauses: 'fast' } },
+      { readAloud: { voices: { phonon: 'x'.repeat(65) } } },
+      { readAloud: { voices: { piper: 'x' } } },
+      { colour: 'blue' },
+      { type: { weight: 'bold' } },
+    ]) {
+      const res = await patchSettings(app, { reader: bad });
+      expect(res.status, JSON.stringify(bad)).toBe(400);
+    }
+    // Nothing from the rejected requests landed.
+    expect(
+      (await expectOk<{ reader: Record<string, unknown> }>(app, '/api/settings')).reader,
+    ).toEqual(merged);
+  });
+
   it('drift guard: every key in core.SETTINGS_DEFAULTS is accepted by the edge PATCH schema (200, not 400)', async () => {
     // The edge schema (settingsPatchBodySchema in routes/settings.ts) is
     // hand-duplicated from core's allowlist (schema.ts's settingsSchema),
@@ -261,7 +326,8 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     // production.
     const { core, app } = harness.mod();
     for (const [key, value] of Object.entries(core.SETTINGS_DEFAULTS)) {
-      const res = await patchSettings(app, { [key]: value });
+      // `reader` defaults to null (never saved), which is not a valid write; an empty patch is.
+      const res = await patchSettings(app, { [key]: value ?? {} });
       expect(res.status, `PATCH { ${key}: ... } should be accepted at the edge`).toBe(200);
     }
   });

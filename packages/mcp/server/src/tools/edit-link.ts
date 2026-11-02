@@ -24,7 +24,7 @@ export function registerEditLink(server: McpServer): void {
         'edit with no fields is a no-op that returns the link unchanged). ' +
         'A title you set here is kept permanently: later page or AI titles ' +
         'will not replace it. ' +
-        'Also sets or clears the reading position: `readingPosition` is a ' +
+        'Also sets or clears the reading position (agent writes record source mark): `readingPosition` is a ' +
         "number from 0 to 1, the share of the article's words already read " +
         '(0 is the start, 1 is the end), and `null` clears it. Saving a ' +
         "position does not change the link's updated time. " +
@@ -72,7 +72,7 @@ export function registerEditLink(server: McpServer): void {
       // Position writes go to their own table; `editLink` already proved the
       // link is live.
       if (readingPosition === null) await clearReadingPosition(id);
-      else if (readingPosition !== undefined) await setReadingPosition(id, readingPosition);
+      else if (readingPosition !== undefined) await setReadingPosition(id, readingPosition, 'mark');
 
       // `editLink` returns a bare `Link` (no `tags`) — re-fetch via
       // `getById` to hydrate tags before shaping, same pattern

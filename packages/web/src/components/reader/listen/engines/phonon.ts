@@ -1,11 +1,10 @@
 import type { ModelSpec, LoadProgress as PhononProgress, PhononTTS } from 'phonon-tts';
+import { PHONON_FILES } from './files';
 import { fetchTtsManifest, ttsFileUrl } from './manifest';
 import { progressTracker, type TtsEngine, type Voice } from './types';
+import { PHONON_VOICE_FILE } from './voices';
 
 const DEFAULT_VOICE = 'default';
-
-/** Voice ids are file names under `voices/`; the catalog's names come from the manifest. */
-const VOICE_FILE = /^voices\/(.+)\.safetensors$/;
 
 /**
  * Phonon 31m (English). `phonon-tts` runs its own worker and streams audio as it is generated.
@@ -28,11 +27,11 @@ export function createPhononEngine(): TtsEngine {
       ]);
       const files = manifest.engines.phonon.files;
       const voices: Record<string, string> = {
-        [DEFAULT_VOICE]: ttsFileUrl(manifest, 'phonon', 'default-voice.safetensors'),
+        [DEFAULT_VOICE]: ttsFileUrl(manifest, 'phonon', PHONON_FILES.defaultVoice),
       };
       voiceList = [];
       for (const [path, info] of Object.entries(files)) {
-        const id = VOICE_FILE.exec(path)?.[1];
+        const id = PHONON_VOICE_FILE.exec(path)?.[1];
         if (!id || !info.voice) continue;
         voices[id] = ttsFileUrl(manifest, 'phonon', path);
         voiceList.push({
@@ -43,9 +42,9 @@ export function createPhononEngine(): TtsEngine {
         });
       }
       const spec: ModelSpec = {
-        weights: { q8: ttsFileUrl(manifest, 'phonon', 'model.q8.gguf') },
-        tokenizer: ttsFileUrl(manifest, 'phonon', 'tokenizer.json'),
-        config: ttsFileUrl(manifest, 'phonon', 'config.json'),
+        weights: { q8: ttsFileUrl(manifest, 'phonon', PHONON_FILES.weights) },
+        tokenizer: ttsFileUrl(manifest, 'phonon', PHONON_FILES.tokenizer),
+        config: ttsFileUrl(manifest, 'phonon', PHONON_FILES.config),
         voices,
         defaultVoice: DEFAULT_VOICE,
       };
@@ -54,10 +53,10 @@ export function createPhononEngine(): TtsEngine {
       const track = progressTracker<PhononProgress>(
         onProgress,
         {
-          weights: size('model.q8.gguf'),
-          tokenizer: size('tokenizer.json'),
-          config: size('config.json'),
-          [`voice:${DEFAULT_VOICE}`]: size('default-voice.safetensors'),
+          weights: size(PHONON_FILES.weights),
+          tokenizer: size(PHONON_FILES.tokenizer),
+          config: size(PHONON_FILES.config),
+          [`voice:${DEFAULT_VOICE}`]: size(PHONON_FILES.defaultVoice),
         },
         (event) => [event.file, event.loaded],
       );

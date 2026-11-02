@@ -1,3 +1,4 @@
+import type { ReadAloudPauses } from '../../../lib/readerPrefs';
 import type { TtsEngine } from './engines/types';
 import { ReplayCache } from './replayCache';
 import {
@@ -10,7 +11,7 @@ import {
 } from './schedule';
 import type { Segment } from './segments';
 import { buildUnits, type Unit } from './speechPlan';
-import { stretch } from './stretch';
+import { StretchProcessor } from './stretchProcessor';
 import { type Job, jobKey, jobSeconds, SynthQueue } from './synthQueue';
 
 /** How often the player checks its audio clock. */
@@ -20,7 +21,7 @@ const NOW = -1;
 const WARM = 100;
 const WARM_UNITS = 2;
 
-type PlayerSettings = { rate: number; voice: string };
+type PlayerSettings = { rate: number; voice: string; pauses: ReadAloudPauses };
 
 export type PlayerEvents = {
   /** The sentence being spoken changed. */
@@ -41,6 +42,7 @@ export type PlayerDeps = {
   settings: () => PlayerSettings;
   events: PlayerEvents;
   now?: () => number;
+  transform?: Pick<StretchProcessor, 'process' | 'cancel'>;
 };
 
 type Plan = {
@@ -64,19 +66,28 @@ export class Player {
   private plan: Plan = { units: [], jobs: [], scheduled: [], unitStart: [] };
   private cursor = { unit: 0, requested: 0, nextTime: 0 };
   private timeline: { at: number; seg: number }[] = [];
+  /** Timeline offset of the unit currently being scheduled. */
+  private unitTimelineStart = 0;
   private sources: AudioBufferSourceNode[] = [];
   private shown = -1;
   private timer: ReturnType<typeof setInterval> | undefined;
   private pressedAt = 0;
   private waiting = false;
+  /** Samples to fade after cutting overdue held silence. */
+  private fadeRemaining = 0;
+  private silenceSkipUntil = 0;
   /** Units before this index have played and let go of their audio. */
   private released = 0;
+  private readonly transform: Pick<StretchProcessor, 'process' | 'cancel'>;
+  private readonly transforming = new Set<string>();
+  private readonly subscriptions = new Map<Job, () => void>();
 
   constructor(
     private readonly deps: PlayerDeps,
     cache = new ReplayCache(),
   ) {
     this.queue = new SynthQueue(cache);
+    this.transform = deps.transform ?? new StretchProcessor();
   }
 
   private get clock(): number {
@@ -89,16 +100,10 @@ export class Player {
   }
 
   /** Start speaking at a sentence with a loaded engine. */
-  start(engine: TtsEngine, from: number): void {
+  start(engine: TtsEngine, from: number, prepared?: Unit[]): void {
     this.press();
-    const units = buildUnits(this.deps.segments(), from);
-    // Warm-up work for these units is kept, so Play after a warm-up does not synthesize again.
-    const { rate, voice } = this.deps.settings();
-    const speed = engine.supportsSpeed ? rate : 1;
-    const keep = new Set(
-      units.slice(0, WARM_UNITS).map((u) => jobKey(engine, voice, speed, u.text)),
-    );
-    this.halt(true, keep);
+    const units = prepared ?? buildUnits(this.deps.segments(), from, this.deps.settings().pauses);
+    this.prepare(engine, from, units);
     const token = this.generation;
     this.active = true;
     this.engine = engine;
@@ -114,12 +119,36 @@ export class Player {
     this.tick();
   }
 
+  /** Choose useful synthesis keys before stopping sound or clearing any work. */
+  prepare(engine: TtsEngine | undefined, from: number, units?: Unit[]): Unit[] {
+    const { rate, voice, pauses } = this.deps.settings();
+    const target = units ?? buildUnits(this.deps.segments(), from, pauses);
+    const keep = new Set<string>();
+    if (engine) {
+      const speed = engine.supportsSpeed ? rate : 1;
+      let seconds = 0;
+      for (const unit of target) {
+        if (keep.size >= this.aheadLimit(engine) || aheadEnough(seconds, keep.size)) break;
+        keep.add(jobKey(engine, voice, speed, unit.text, pauses !== 'natural'));
+        seconds += unit.text.length / CHARS_PER_SECOND / rate;
+      }
+    }
+    this.halt(true, keep);
+    return target;
+  }
+
+  /** Whole-waveform synthesis cannot be interrupted; keep only the current and next unit. */
+  private aheadLimit(engine = this.engine): number {
+    return engine?.id === 'kokoro' ? WARM_UNITS : MAX_AHEAD + 1;
+  }
+
   /** Synthesize the first units from a sentence now, so Play later is instant. */
   warm(engine: TtsEngine, from: number): void {
-    const { rate, voice } = this.deps.settings();
+    const { rate, voice, pauses } = this.deps.settings();
     const speed = engine.supportsSpeed ? rate : 1;
-    for (const unit of buildUnits(this.deps.segments(), from).slice(0, WARM_UNITS)) {
-      this.queue.request(engine, unit.text, voice, speed, WARM);
+    const units = this.prepare(engine, from);
+    for (const unit of units.slice(0, WARM_UNITS)) {
+      this.queue.request(engine, unit.text, voice, speed, WARM, pauses !== 'natural');
     }
   }
 
@@ -129,6 +158,10 @@ export class Player {
     this.active = false;
     clearInterval(this.timer);
     this.queue.clear(keep);
+    this.transform.cancel();
+    this.transforming.clear();
+    for (const [job, listener] of this.subscriptions) job.listeners.delete(listener);
+    this.subscriptions.clear();
     for (const node of this.sources) {
       node.onended = null;
       try {
@@ -137,6 +170,8 @@ export class Player {
         // Already stopped.
       }
     }
+    this.silenceSkipUntil = 0;
+    this.fadeRemaining = 0;
     this.sources = [];
     this.timeline = [];
     this.shown = -1;
@@ -155,40 +190,76 @@ export class Player {
     const { engine } = this;
     const unit = this.plan.units[index];
     if (!engine || !unit) return;
-    const { rate, voice } = this.deps.settings();
+    const { rate, voice, pauses } = this.deps.settings();
     const job = this.queue.request(
       engine,
       unit.text,
       voice,
       engine.supportsSpeed ? rate : 1,
       priority,
+      pauses !== 'natural',
     );
     const token = this.generation;
-    job.listeners.add(() => {
-      if (token === this.generation) this.step();
-    });
+    const ready = () => {
+      if (token !== this.generation) return;
+      this.prepareAudio(job);
+      this.step();
+    };
+    if (!this.subscriptions.has(job)) {
+      job.listeners.add(ready);
+      this.subscriptions.set(job, ready);
+    }
     this.plan.jobs[index] = job;
+    this.prepareAudio(job);
     this.cursor.requested = index + 1;
   }
 
-  /** The unit's whole waveform, stretched to the current speed when the engine has no speed option. */
-  private whole(job: Job, rate: number): Float32Array {
+  /** Transform lookahead as soon as synthesis finishes, before it reaches the audio deadline. */
+  private prepareAudio(job: Job): void {
+    const { rate } = this.deps.settings();
+    if (!job.done || this.engine?.supportsSpeed || Math.abs(rate - 1) <= 0.01) return;
     const key = `${job.key}|x${rate}`;
-    const cached = this.queue.cache.get(key)?.chunks[0];
-    if (cached) return cached;
-    const joined = new Float32Array(job.chunks.reduce((sum, chunk) => sum + chunk.length, 0));
-    let offset = 0;
-    for (const chunk of job.chunks) {
-      joined.set(chunk, offset);
-      offset += chunk.length;
-    }
-    const fast = stretch(joined, rate);
-    this.queue.cache.set(key, { chunks: [fast], sampleRate: job.sampleRate });
-    return fast;
+    if (this.queue.cache.get(key) || this.transforming.has(key)) return;
+    this.transforming.add(key);
+    const token = this.generation;
+    void this.transform.process(job.chunks, rate).then(
+      (pcm) => {
+        if (token !== this.generation) return;
+        this.transforming.delete(key);
+        this.queue.cache.set(key, { chunks: [pcm], sampleRate: job.sampleRate });
+        this.step();
+      },
+      (reason: unknown) => {
+        if (token !== this.generation) return;
+        this.transforming.delete(key);
+        this.halt();
+        this.deps.events.failed(reason instanceof Error ? reason.message : String(reason));
+      },
+    );
   }
 
-  private schedule(pcm: Float32Array, sampleRate: number): number {
+  private schedule(pcm: Float32Array, sampleRate: number, silence = false): number {
     const audio = this.deps.context();
+    if (silence && this.cursor.nextTime < audio.currentTime)
+      // Include the restart lead: it is heard as part of the underrun too.
+      this.silenceSkipUntil = startTime(this.cursor.nextTime, audio.currentTime);
+    if (silence && this.cursor.nextTime < this.silenceSkipUntil) {
+      const overdue = this.silenceSkipUntil - this.cursor.nextTime;
+      const skip = Math.min(pcm.length, Math.ceil(overdue * sampleRate));
+      pcm = pcm.subarray(skip);
+      this.cursor.nextTime += skip / sampleRate;
+      this.fadeRemaining = Math.max(2, Math.round(sampleRate * 0.005));
+    }
+    if (!pcm.length) return this.cursor.nextTime;
+    this.silenceSkipUntil = 0;
+    if (this.fadeRemaining) {
+      const fade = Math.max(2, Math.round(sampleRate * 0.005));
+      const count = Math.min(pcm.length, this.fadeRemaining);
+      pcm = pcm.slice();
+      for (let i = 0; i < count; i += 1)
+        pcm[i] = ((pcm[i] ?? 0) * (fade - this.fadeRemaining + i)) / (fade - 1);
+      this.fadeRemaining -= count;
+    }
     const buffer = audio.createBuffer(1, pcm.length, sampleRate);
     buffer.getChannelData(0).set(pcm);
     const node = audio.createBufferSource();
@@ -211,30 +282,65 @@ export class Player {
   private finishUnit(index: number, duration: number): void {
     const unit = this.plan.units[index];
     if (!unit) return;
-    const start = this.plan.unitStart[index] ?? this.cursor.nextTime;
-    this.timeline.push(...sentenceTimes(unit, start, duration));
-    this.cursor.nextTime += unit.pause / 1000;
+    this.trackSentences(index, duration);
+    this.cursor.nextTime += unit.pause / 1000 / this.deps.settings().rate;
     this.cursor.unit = index + 1;
+  }
+
+  private beginUnit(index: number, at: number): void {
+    this.plan.unitStart[index] = at;
+    this.unitTimelineStart = this.timeline.length;
+    const first = this.plan.units[index]?.parts[0];
+    if (first) this.timeline.push({ at, seg: first.seg });
+  }
+
+  /** Replace this unit's estimates; later units have not been scheduled yet. */
+  private trackSentences(index: number, duration: number, until = Infinity): void {
+    const unit = this.plan.units[index];
+    const start = this.plan.unitStart[index];
+    if (!unit || unit.parts.length < 2 || start === undefined) return;
+    this.timeline.splice(
+      this.unitTimelineStart + 1,
+      this.timeline.length,
+      ...sentenceTimes(unit, start, duration)
+        .slice(1)
+        .filter((entry) => entry.at <= until),
+    );
+  }
+
+  private scheduleStretched(index: number, job: Job, rate: number): boolean {
+    if (!job.done) return false;
+    const pcm = this.queue.cache.get(`${job.key}|x${rate}`)?.chunks[0];
+    if (!pcm) {
+      this.prepareAudio(job);
+      return false;
+    }
+    this.beginUnit(index, this.schedule(pcm, job.sampleRate));
+    this.finishUnit(index, pcm.length / job.sampleRate);
+    return true;
   }
 
   /** Schedule a unit's audio that is ready. Returns true when the unit is fully scheduled. */
   private scheduleUnit(u: number, job: Job, stretching: boolean, rate: number): boolean {
     const { plan } = this;
-    if (stretching) {
-      // Pitch-preserving speed needs the whole unit, so it does not stream.
-      if (!job.done) return false;
-      const pcm = this.whole(job, rate);
-      plan.unitStart[u] = this.schedule(pcm, job.sampleRate);
-      this.finishUnit(u, pcm.length / job.sampleRate);
-      return true;
-    }
+    if (stretching) return this.scheduleStretched(u, job, rate);
     while ((plan.scheduled[u] ?? 0) < job.chunks.length) {
-      const at = this.schedule(job.chunks[plan.scheduled[u] ?? 0] as Float32Array, job.sampleRate);
-      if (!plan.scheduled[u]) plan.unitStart[u] = at;
+      const chunk = plan.scheduled[u] ?? 0;
+      const at = this.schedule(
+        job.chunks[chunk] as Float32Array,
+        job.sampleRate,
+        job.heldSilence.has(chunk),
+      );
+      if (!plan.scheduled[u]) this.beginUnit(u, at);
       plan.scheduled[u] = (plan.scheduled[u] ?? 0) + 1;
     }
-    if (!job.done || plan.scheduled[u] !== job.chunks.length) return false;
-    this.finishUnit(u, jobSeconds(job));
+    if (!job.done || plan.scheduled[u] !== job.chunks.length) {
+      const unit = plan.units[u];
+      if (unit)
+        this.trackSentences(u, unit.text.length / CHARS_PER_SECOND / rate, this.cursor.nextTime);
+      return false;
+    }
+    this.finishUnit(u, this.cursor.nextTime - (plan.unitStart[u] ?? this.cursor.nextTime));
     return true;
   }
 
@@ -282,10 +388,18 @@ export class Player {
       plan.unitStart.findLastIndex((start) => start !== undefined && start <= audio.currentTime),
     );
     // A unit that has played lets go of its audio; going back reads the replay cache.
-    for (; this.released < playing; this.released += 1) plan.jobs[this.released] = undefined;
+    for (; this.released < playing; this.released += 1) {
+      const job = plan.jobs[this.released];
+      const listener = job && this.subscriptions.get(job);
+      if (job && listener) {
+        job.listeners.delete(listener);
+        this.subscriptions.delete(job);
+      }
+      plan.jobs[this.released] = undefined;
+    }
     for (;;) {
       const next = cursor.requested;
-      if (next >= plan.units.length || next - playing > MAX_AHEAD) break;
+      if (next >= plan.units.length || next - playing >= this.aheadLimit()) break;
       if (aheadEnough(this.secondsAhead(playing, next, rate), next - playing)) break;
       this.request(next, next);
     }
