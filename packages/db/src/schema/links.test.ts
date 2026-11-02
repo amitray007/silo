@@ -498,9 +498,7 @@ describeIfPg('links schema (integration)', () => {
       const plan = explain.rows.map((r) => r['QUERY PLAN']).join('\n');
       expect(plan).toContain('links_trgm_live_idx');
       expect(plan.toLowerCase()).toContain('bitmap index scan');
-      // The 40,000-row fixture also maintains the library/feed indexes from 0031.
-      // Allow their write cost on shared Postgres without shrinking the fixture
-      // needed for the planner to choose the trigram index.
-    }, 90_000);
+      // Measured 4.1-5.2 s, including the full gate; 15 s allows about 3x that time.
+    }, 15_000);
   });
 });
