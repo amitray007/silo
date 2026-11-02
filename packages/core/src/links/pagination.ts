@@ -139,6 +139,11 @@ function isCursorTimestamp(timestamp: string): boolean {
   if (Number.isNaN(calendarDate.getTime()) || calendarDate.toISOString() !== `${local}Z`) {
     return false;
   }
+  if (zone !== 'Z' && zone !== undefined) {
+    const hours = Number(zone.slice(1, 3));
+    const minutes = Number(zone.slice(3).replace(':', '') || '0');
+    if (hours > 15 || minutes > 59) return false;
+  }
   const offset = zone?.length === 3 ? `${zone}:00` : zone;
   return !Number.isNaN(new Date(`${local}${offset}`).getTime());
 }

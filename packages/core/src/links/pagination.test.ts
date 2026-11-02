@@ -41,6 +41,12 @@ describe.each(cursors)('$kind cursor timestamps', ({ encode, decode, field }) =>
     '2026-13-01T00:00:00Z',
     '2026-01-00T00:00:00Z',
     '2026-01-01T00:00:00+24:00',
+    '2026-01-01T00:00:00+16:00',
+    '2026-01-01T00:00:00-16:00',
+    '2026-01-01T00:00:00+15:60',
+    '2026-01-01T00:00:00-15:60',
+    '2026-01-01T00:00:00+16',
+    '2026-01-01T00:00:00-1600',
     '0000-01-01T00:00:00Z',
     'not a timestamp',
   ])('rejects an invalid instant: %s', (timestamp) => {
@@ -55,6 +61,10 @@ describe.each(cursors)('$kind cursor timestamps', ({ encode, decode, field }) =>
     '2026-01-01T23:59:59.123456-0530',
     '2026-01-01 00:00:00+00',
     '2026-01-01T00:00:00.1Z',
+    '2026-01-01T00:00:00.123456+15:59',
+    '2026-01-01T00:00:00.123456-15:59',
+    '2026-01-01T00:00:00.123456+1559',
+    '2026-01-01T00:00:00.123456-15',
   ])('preserves every timestamp digit: %s', (timestamp) => {
     expect(decode(encode(timestamp))).toMatchObject({ [field]: timestamp, id });
   });

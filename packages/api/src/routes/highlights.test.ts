@@ -236,17 +236,19 @@ describeIfPg('highlight routes (integration)', () => {
   it.each([
     ['/api/highlights', 'highlights'],
     ['/api/reading-positions', 'reading_positions'],
-  ])('%s returns 400 for a calendar-invalid cursor', async (path, kind) => {
-    const cursor = Buffer.from(
-      JSON.stringify({
-        kind,
-        timestamp: '2026-02-30T00:00:00Z',
-        id: '00000000-0000-4000-8000-000000000001',
-      }),
-    ).toString('base64url');
-    const res = await send('GET', `${path}?cursor=${cursor}`);
-    expect(res.status).toBe(400);
-    expect(await res.json()).toMatchObject({ error: 'invalid_cursor' });
+  ])('%s returns 400 for invalid cursor timestamps', async (path, kind) => {
+    for (const timestamp of ['2026-02-30T00:00:00Z', '2026-01-01T00:00:00+16:00']) {
+      const cursor = Buffer.from(
+        JSON.stringify({
+          kind,
+          timestamp,
+          id: '00000000-0000-4000-8000-000000000001',
+        }),
+      ).toString('base64url');
+      const res = await send('GET', `${path}?cursor=${cursor}`);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: 'invalid_cursor' });
+    }
   });
 
   describe('GET /api/highlights', () => {

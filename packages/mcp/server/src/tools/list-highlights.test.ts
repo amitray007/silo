@@ -119,23 +119,25 @@ describeMcpTool('silo_mcp_library_highlights_test', 'list_highlights', (getConte
   it.each([
     ['list_highlights', 'highlights'],
     ['list_reading_positions', 'reading_positions'],
-  ])('%s rejects a calendar-invalid cursor with guidance and no SQL', async (name, kind) => {
-    const cursor = Buffer.from(
-      JSON.stringify({
-        kind,
-        timestamp: '2026-02-30T00:00:00Z',
-        id: '00000000-0000-4000-8000-000000000001',
-      }),
-    ).toString('base64url');
-    const result = await getContext().client.callTool({ name, arguments: { cursor } });
-    expectInvalidCursorError(result);
-    expect(result.content).toEqual([
-      {
-        type: 'text',
-        text: 'Invalid or expired cursor; omit cursor to restart from the first page.',
-      },
-    ]);
-    expect(JSON.stringify(result)).not.toMatch(/select\s|timestamptz|failed query|params:/i);
+  ])('%s rejects invalid cursor timestamps with guidance and no SQL', async (name, kind) => {
+    for (const timestamp of ['2026-02-30T00:00:00Z', '2026-01-01T00:00:00+16:00']) {
+      const cursor = Buffer.from(
+        JSON.stringify({
+          kind,
+          timestamp,
+          id: '00000000-0000-4000-8000-000000000001',
+        }),
+      ).toString('base64url');
+      const result = await getContext().client.callTool({ name, arguments: { cursor } });
+      expectInvalidCursorError(result);
+      expect(result.content).toEqual([
+        {
+          type: 'text',
+          text: 'Invalid or expired cursor; omit cursor to restart from the first page.',
+        },
+      ]);
+      expect(JSON.stringify(result)).not.toMatch(/select\s|timestamptz|failed query|params:/i);
+    }
   });
 
   it('truncates only the text quote and rejects malformed input', async () => {
