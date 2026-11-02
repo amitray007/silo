@@ -65,7 +65,9 @@ web (useChat) ──POST /api/librarian/chats/:id/messages──▶ api (Hono ro
   `LibrarianToolSource` port defined in core:
   `{ list(): Promise<ToolSpec[]>; call(name, args, signal): Promise<ToolOutcome> }`
   where `ToolSpec = { name, description, inputSchema /* JSON Schema */ }` and
-  `ToolOutcome = { text: string; isError: boolean }`. The worker turns each spec
+  `ToolOutcome = { text: string; structured?: unknown; isError: boolean }`. The
+  model gets the text plus the structured content as JSON: `get_link` keeps the
+  article text only in `structuredContent.extractedText` (found in QA). The worker turns each spec
   into an AI SDK tool with `jsonSchema()`. No MCP tool changes; parity is exact
   by construction, and a new MCP tool reaches the chat automatically. This
   replaces the earlier "extract a shared registry" idea: the tools have no
@@ -86,7 +88,8 @@ web (useChat) ──POST /api/librarian/chats/:id/messages──▶ api (Hono ro
   selection and readiness (`isAiFeatureOn('librarian')`). It never throws to the
   route: failures become fixed codes (`AI_ERROR_CODES`) in a stream error part.
 - Feature registration. Add `librarian` to `AI_FEATURES` (no plugin, so its
-  toggle and model picker show on the AI tab), its settings default
+  toggle and model picker show on the AI tab; QA found the AI tab had no switch
+  for plugin-free features, so one was added), its settings default
   `{ enabled: false, model: null }`, and the worker registry entry. The chat is
   the first feature with no non-AI fallback: its "fallback" is that Ask is
   absent. Update `docs/rules/ai.md` rule 1 to say so.
@@ -122,6 +125,10 @@ Indexes: `librarian_chats (link_id, updated_at desc, id)` and
 `(updated_at desc, id)` for the cursor lists.
 
 - The full transcript is always stored; the UI always shows all of it.
+- From slice 1, tool results older than the last two messages reach the model
+  as a one-line stub (`worker/src/ai/librarian/history.ts`); the calls stay, so the
+  model knows it read its sources. Removing the calls (`pruneMessages` tool
+  pruning) made the model doubt its own earlier answers in QA.
 - Compaction (slice 5) changes only what the model sees. Before each call,
   estimate tokens of the model input (characters / 4). When it passes 60 % of
   the model's `contextWindow` (fallback 32k tokens), summarize every message
@@ -188,7 +195,7 @@ provider key → fix → PR.
 | --- | --- | --- |
 | 1 | Dock chat, read-only | `librarian` feature + settings + AI tab toggle/model; tables + core chat CRUD; both ports; worker runner with persona and read-only MCP tools; routes; web dock Ask → chat bar/panel with streaming; one chat per article that resumes; trace line |
 | 2 | Write tools + approvals | all tools except `export_links`; approval row; approval secret; denial handling |
-| 3 | Selection Ask | icon-only selection bar + Ask; note/pencil glyph swap; composer with quick actions; inline answer card; Save as note; Continue in Librarian (import); passage attached to the open chat |
+| 3 | Selection Ask | icon-only selection bar + Ask; note/pencil glyph swap; composer with quick actions; inline answer card; Save as note; Continue in Librarian (import); passage attached to the open chat; titles in answers link to the item in the Reader |
 | 4 | Chat history | title menu with cursor-paged infinite list; new chat; delete with confirm; dot on the dock Ask |
 | 5 | Compaction | summary + `summary_through`; `pruneMessages`; token estimate; tests on a long transcript |
 | 6 | Librarian page | sidebar nav entry; all chats with infinite scroll and delete; chats not tied to an article; the persona published as an MCP prompt (`librarian`) so Claude Desktop gets the same behavior |
