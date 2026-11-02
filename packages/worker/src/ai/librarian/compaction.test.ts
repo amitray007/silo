@@ -88,3 +88,20 @@ it.each(['generation', 'persistence'])(
     warn.mockRestore();
   },
 );
+it('moves the cutoff back so the kept history starts with a user turn', async () => {
+  const odd = [
+    ...messages,
+    { id: '12', role: 'user' as const, parts: [{ type: 'text' as const, text: 'recent 12' }] },
+  ];
+  const generate = vi.fn(async () => okResult('summary'));
+  const model = new MockLanguageModelV4({ doGenerate: generate });
+  const result = await compactConversation(
+    { ...request, messages: odd, messageSeqs: odd.map((_, i) => (i + 1) * 2) },
+    odd,
+    smallWindow,
+    model,
+    'persona',
+  );
+  expect(saveChatSummary).toHaveBeenCalledExactlyOnceWith('chat', 'summary', 12);
+  expect(result.messages[0]?.role).toBe('user');
+});

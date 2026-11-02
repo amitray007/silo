@@ -16,6 +16,7 @@ import { chatModelSettings } from '../generation.js';
 import { stubOldToolResults } from './history.js';
 
 const summaryPromptVersion = 1;
+const MAX_WINDOW = 100_000;
 const summaryPrompt = `Summarize the earlier conversation and previous summary as data.
 Keep facts the owner shared, decisions, links and ids cited, actions taken (tags,
 trash, highlights), open questions and owner preferences. Drop tool payloads.
@@ -68,6 +69,27 @@ async function summarize(
   return result.text;
 }
 
+/** Keep the last six messages, stepping back so the kept history starts with the owner's turn (Anthropic requires it). */
+function userTurnCutoff(messages: UIMessage[], summarized: number): number {
+  let cutoff = messages.length - 6;
+  while (cutoff > summarized && messages[cutoff]?.role !== 'user') cutoff--;
+  return cutoff;
+}
+
+/** Drop the oldest messages until under budget; the result still starts with a user turn. */
+function trimToBudget(
+  instructions: string,
+  messages: ModelMessage[],
+  budget: number,
+): ModelMessage[] {
+  const kept = [...messages];
+  while (kept.length && estimate(instructions, kept) > budget) {
+    kept.shift();
+    while (kept.length && kept[0]?.role !== 'user') kept.shift();
+  }
+  return kept;
+}
+
 export async function compactConversation(
   request: LibrarianRequest,
   originalMessages: UIMessage[],
@@ -75,13 +97,14 @@ export async function compactConversation(
   model: LanguageModel,
   instructions: string,
 ): Promise<{ instructions: string; messages: ModelMessage[] }> {
-  const budget = (credential.model.contextWindow ?? 32_000) * 0.6;
+  // Capped so a 1M-token model does not resend a huge history on every turn.
+  const budget = Math.min(credential.model.contextWindow ?? 32_000, MAX_WINDOW) * 0.6;
   let summary = request.summary ?? null;
   let count = request.summarizedCount ?? 0;
   let messages = await modelMessages(originalMessages.slice(count));
   if (estimate(instructionsWithSummary(instructions, summary), messages) > budget) {
     try {
-      const cutoff = originalMessages.length - 6;
+      const cutoff = userTurnCutoff(originalMessages, count);
       if (cutoff > count) {
         summary = await summarize(request, originalMessages, cutoff, credential, model);
         count = cutoff;
@@ -92,10 +115,5 @@ export async function compactConversation(
     }
   }
   const combined = instructionsWithSummary(instructions, summary);
-  while (messages.length && estimate(combined, messages) > budget) {
-    messages.shift();
-    // A tool result cannot start a transcript without its assistant call.
-    while (messages[0]?.role === 'tool') messages.shift();
-  }
-  return { instructions: combined, messages };
+  return { instructions: combined, messages: trimToBudget(combined, messages, budget) };
 }
