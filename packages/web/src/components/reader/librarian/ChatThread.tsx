@@ -1,6 +1,5 @@
 import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
 import { reducedMotion } from '../../../lib/motion';
-import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
 import { ComposerBar, type QuickAction } from './Composer';
@@ -113,8 +112,6 @@ export function ChatThread({
   const log = useStickyLog(chat.messages);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
-  // The panel's height follows its content on the surface spring; the page's pane fills its column.
-  const surface = useSurfaceMotion('panel', 'bottom', { size: 'height' });
   const panel = (
     <section ref={panelRef} className="silo-chat-panel" aria-label="Librarian conversation">
       {header}
@@ -175,10 +172,8 @@ export function ChatThread({
       }
     >
       {variant === 'dock' ? (
-        <div ref={surface.root} className="silo-chat-surface">
-          <div ref={surface.shell} className="silo-chat-shell">
-            {panel}
-          </div>
+        <div className="silo-chat-surface">
+          <div className="silo-chat-shell">{panel}</div>
         </div>
       ) : (
         panel

@@ -25,8 +25,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   font-size: 14px;
   line-height: 1.55;
 }
-/* The dock's panel: the surface is the sheet, and its shell clips the content only while the
-   height moves (the spring in useSurfaceMotion). */
+/* The sheet grows in normal flow; only its entrance moves. */
 .silo-chat-surface {
   overflow: hidden;
   border-radius: 16px;
@@ -38,10 +37,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-shell {
   position: relative;
   border-radius: inherit;
-}
-.silo-chat-shell[data-morphing] {
-  height: 100%;
-  overflow: hidden;
 }
 .silo-chat-panel {
   display: grid;
@@ -677,7 +672,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   border-radius: 16px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
-  transition: box-shadow 200ms var(--ease-out);
   animation: siloChatBar 160ms var(--ease-out);
 }
 .silo-chat-bar:focus-within {

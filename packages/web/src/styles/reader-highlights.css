@@ -196,7 +196,6 @@
   background: var(--bg2);
   box-shadow: var(--elev-2);
   transform-origin: 50% 100%;
-  transition: box-shadow 200ms var(--ease-out);
   animation: siloSbPop 120ms var(--ease-out);
 }
 .silo-sb[data-flip="true"] {

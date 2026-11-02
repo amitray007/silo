@@ -6,7 +6,6 @@ import {
   useLayoutEffect,
   useRef,
 } from 'react';
-import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { ReaderIcon } from '../ReaderIcon';
 
 /** The field stops growing here and scrolls: about four lines. */
@@ -146,15 +145,12 @@ export function Composer({
 }
 
 /**
- * The composer on a surface of its own (the dock and the page): it lifts when focused and its
- * height follows its content on the same no-bounce spring as the rest of the Librarian, so the
- * quick actions leaving or a second line arriving never jumps the surface above it.
+ * The dock and page composer grow in normal flow, without restarting a size animation on input.
  */
 export function ComposerBar(props: Parameters<typeof Composer>[0]) {
-  const { root, shell } = useSurfaceMotion('composer', 'bottom', { size: 'height' });
   return (
-    <div ref={root} className="silo-chat-bar">
-      <div ref={shell} className="silo-chat-shell">
+    <div className="silo-chat-bar">
+      <div className="silo-chat-shell">
         <Composer {...props} />
       </div>
     </div>
