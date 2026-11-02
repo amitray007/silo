@@ -17,6 +17,7 @@ export type AiFeatureDef = {
 };
 
 export const AI_FEATURES = [
+  { id: 'librarian', label: 'Librarian', description: 'Ask about what you read and your library' },
   {
     id: 'x-post-title',
     label: 'AI titles',

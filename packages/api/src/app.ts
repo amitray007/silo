@@ -28,6 +28,7 @@ import { registerFeedRoutes } from './routes/feeds.js';
 import { registerHighlightsRoutes } from './routes/highlights.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
+import { registerLibrarianRoutes } from './routes/librarian.js';
 import { registerLinksRoutes } from './routes/links.js';
 import { registerLinksSavedRoutes } from './routes/links-saved.js';
 import { registerLinksTitlesRoutes } from './routes/links-titles.js';
@@ -283,6 +284,7 @@ export function createApp(): Hono {
   registerImportRoutes(api);
   registerAccessTokenRoutes(api);
   registerAiRoutes(api);
+  registerLibrarianRoutes(api);
   registerTtsRoutes(api);
   app.route('/api', api);
 

@@ -336,12 +336,18 @@ describe('reader setting schema', () => {
 describe('ai setting', () => {
   const selection = (provider: string, id: string) => ({
     enabled: true,
-    features: { 'x-post-title': { enabled: true, model: { provider, id } } },
+    features: {
+      librarian: { enabled: false, model: null },
+      'x-post-title': { enabled: true, model: { provider, id } },
+    },
   });
   it('defaults off with no selected model', () => {
     expect(parseSettingValue('ai', SETTINGS_DEFAULTS.ai)).toEqual({
       enabled: false,
-      features: { 'x-post-title': { enabled: false, model: null } },
+      features: {
+        librarian: { enabled: false, model: null },
+        'x-post-title': { enabled: false, model: null },
+      },
     });
   });
   it('parses model ids without a static list and rejects invalid shapes', () => {
@@ -365,12 +371,18 @@ describe('ai setting', () => {
     const stored = { enabled: true, features: { retired: { enabled: true, model: null } } };
     expect(parseStoredSettingValue('ai', stored)).toEqual({
       enabled: true,
-      features: { 'x-post-title': { enabled: false, model: null } },
+      features: {
+        librarian: { enabled: false, model: null },
+        'x-post-title': { enabled: false, model: null },
+      },
     });
     expect(() => parseSettingValue('ai', stored)).toThrow();
     expect(parseSettingValue('ai', { enabled: true, features: {} })).toEqual({
       enabled: true,
-      features: { 'x-post-title': { enabled: false, model: null } },
+      features: {
+        librarian: { enabled: false, model: null },
+        'x-post-title': { enabled: false, model: null },
+      },
     });
   });
   it('rejects an explicit null feature instead of filling its default', () => {
@@ -387,7 +399,10 @@ describe('ai setting', () => {
       const old = { enabled: true, provider, model: null, features: { 'x-post-title': true } };
       expect(parseStoredSettingValue('ai', old)).toEqual({
         enabled: true,
-        features: { 'x-post-title': { enabled: true, model: null } },
+        features: {
+          librarian: { enabled: false, model: null },
+          'x-post-title': { enabled: true, model: null },
+        },
       });
       expect(() => parseSettingValue('ai', old)).toThrow();
     },
@@ -400,7 +415,13 @@ describe('ai setting', () => {
         model: null,
         features: { 'x-post-title': true },
       }),
-    ).toEqual({ enabled: true, features: { 'x-post-title': { enabled: true, model: null } } });
+    ).toEqual({
+      enabled: true,
+      features: {
+        librarian: { enabled: false, model: null },
+        'x-post-title': { enabled: true, model: null },
+      },
+    });
   });
   it('retains ids for stored-list validation in the settings store', () => {
     expect(parseStoredSettingValue('ai', selection('anthropic', 'future-model'))).toEqual(

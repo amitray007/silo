@@ -5,6 +5,7 @@ import {
   closeBrowserReader,
   registerAiConnectionTester,
   registerFeedResolver,
+  registerLibrarian,
   registerLinkTitles,
   registerLiveReader,
   registerPageViewer,
@@ -47,6 +48,8 @@ import {
  * to multiple api replicas needs a separate design that moves the worker out
  * of this process.
  */
+
+import { registerLibrarianTools } from './librarian-tools.js';
 
 const DEFAULT_PORT = 8787;
 const LOOPBACK_HOST = '127.0.0.1';
@@ -112,6 +115,8 @@ async function main(): Promise<void> {
   const viewer = registerPageViewer();
   const titles = registerLinkTitles();
   const aiTester = registerAiConnectionTester();
+  const librarianTools = await registerLibrarianTools();
+  const librarian = registerLibrarian();
   const feedResolver = registerFeedResolver();
   const liveReader = registerLiveReader();
   const siteIcons = registerSiteIcons();
@@ -145,6 +150,8 @@ async function main(): Promise<void> {
       try {
         titles.close();
         aiTester.close();
+        librarian.close();
+        await librarianTools.close();
         liveReader.close();
         feedResolver.close();
         siteIcons.close();

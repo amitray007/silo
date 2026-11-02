@@ -4,6 +4,13 @@
  * (web/api/mcp) must not (Biome `noRestrictedImports` + dependency-cruiser).
  */
 
+export {
+  getLibrarianToolSource,
+  type LibrarianRequest,
+  type LibrarianToolSource,
+  setLibrarianRunner,
+  setLibrarianToolSource,
+} from '../librarian/ports.js';
 export type { AiModelsFetcher, AiProviderModelsFetcher } from './models.js';
 export { setAiModelsFetcher } from './models.js';
 export type { AiCredential } from './status.js';

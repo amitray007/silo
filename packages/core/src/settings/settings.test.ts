@@ -53,7 +53,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
-        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+        ai: {
+          enabled: false,
+          features: {
+            librarian: { enabled: false, model: null },
+            'x-post-title': { enabled: false, model: null },
+          },
+        },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -226,7 +232,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
-        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+        ai: {
+          enabled: false,
+          features: {
+            librarian: { enabled: false, model: null },
+            'x-post-title': { enabled: false, model: null },
+          },
+        },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -262,7 +274,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
-        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+        ai: {
+          enabled: false,
+          features: {
+            librarian: { enabled: false, model: null },
+            'x-post-title': { enabled: false, model: null },
+          },
+        },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
           github: { enabled: true, hover: true, palette: true },
@@ -301,7 +319,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
-        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+        ai: {
+          enabled: false,
+          features: {
+            librarian: { enabled: false, model: null },
+            'x-post-title': { enabled: false, model: null },
+          },
+        },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -316,7 +340,13 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
-        ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+        ai: {
+          enabled: false,
+          features: {
+            librarian: { enabled: false, model: null },
+            'x-post-title': { enabled: false, model: null },
+          },
+        },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
           github: { enabled: false, hover: false, palette: false },
@@ -415,6 +445,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
       const ai = {
         enabled: true,
         features: {
+          librarian: { enabled: false, model: null },
           'x-post-title': {
             enabled: true,
             model: null,
@@ -445,7 +476,10 @@ describeIfPg('settings store (integration, plan 016)', () => {
       );
       expect(await ops.getSetting('ai')).toEqual({
         enabled: true,
-        features: { 'x-post-title': { enabled: false, model: null } },
+        features: {
+          librarian: { enabled: false, model: null },
+          'x-post-title': { enabled: false, model: null },
+        },
       });
       expect((await ops.getAllSettings()).ai.enabled).toBe(true);
     });

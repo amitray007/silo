@@ -25,6 +25,6 @@ export function assertAiRegistryMatchesCore(
 
 // Module-load guard (like enrich-source/index.ts).
 assertAiRegistryMatchesCore(
-  AI_FEATURE_DEFINITIONS.map((definition) => definition.id),
+  [...AI_FEATURE_DEFINITIONS.map((definition) => definition.id), 'librarian'],
   AI_FEATURES.map((feature) => feature.id),
 );
