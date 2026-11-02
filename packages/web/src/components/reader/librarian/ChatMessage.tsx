@@ -189,7 +189,9 @@ export function ChatMessage({
       >
         {answer}
       </Streamdown>
-      <div className="silo-chat-trace">{traceLine(message)}</div>
+      {!message.parts.some((part) => 'state' in part && part.state === 'approval-requested') && (
+        <div className="silo-chat-trace">{traceLine(message)}</div>
+      )}
     </div>
   );
 }

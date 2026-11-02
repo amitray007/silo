@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatMessage } from './ChatMessage';
 import { DockChat } from './DockChat';
+import { requestDock } from './selectionStore';
 
 const summary = {
   id: 'chat-1',
@@ -71,7 +72,7 @@ it('resumes stored messages and folds with minus, grid and Escape', async () => 
   await screen.findByText('Stored question');
   expect(screen.getByText('Saved title')).toBeTruthy();
   expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
-  fireEvent.click(screen.getByRole('button', { name: 'Fold back into the dock' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Fold chat' }));
   fireEvent.click(screen.getByRole('button', { name: 'Back to tools' }));
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(fold).toHaveBeenCalledTimes(3);
@@ -377,4 +378,13 @@ it('invalidates the refreshed link live Reader after a direct refresh finishes',
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['live-reader', 'refreshed-link'] }),
   );
   expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['live-reader', 'refresh-direct-chat'] });
+});
+
+it('focuses an open dock when a passage arrives', async () => {
+  setup();
+  await screen.findByRole('textbox');
+  screen.getByRole('button', { name: 'Back to tools' }).focus();
+  requestDock(`article-${linkSequence}`, { passage: { quote: 'Attached passage', paragraph: 2 } });
+  await screen.findByText('Attached passage');
+  expect(document.activeElement).toBe(screen.getByRole('textbox'));
 });

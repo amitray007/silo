@@ -86,6 +86,7 @@ it('offers Allow and Deny for an approval and sends the matching decision', asyn
     </QueryClientProvider>,
   );
   expect(await screen.findByRole('group', { name: 'Move “Named article” to trash?' })).toBeTruthy();
+  expect(screen.queryByText('Answered from the conversation')).toBeNull();
   vi.unstubAllGlobals();
   fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
   expect(onApproval).toHaveBeenLastCalledWith({ id: 'approve', approved: true });

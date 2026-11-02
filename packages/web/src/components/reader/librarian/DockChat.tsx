@@ -40,15 +40,28 @@ export function DockChat({
   const request = useDockRequest(linkId);
   const [passage, setPassage] = useState(request?.passage);
   useEffect(() => {
-    if (!request || chat.loading || chat.busy) return;
+    if (!request) return;
+    field.current?.focus();
     if (request.chatId) void chat.loadImported(request.chatId).catch(() => setImportError(true));
     setPassage(request.passage);
     if (request.question) {
-      void chat.send(request.question, undefined, request.passage);
-      setPassage(undefined);
+      if (chat.loading || chat.busy || chat.pendingApproval) {
+        setInput(request.question);
+      } else {
+        void chat.send(request.question, undefined, request.passage);
+        setPassage(undefined);
+      }
     }
     clearDockRequest(linkId);
-  }, [request, chat.loading, chat.busy, chat.send, chat.loadImported, linkId]);
+  }, [
+    request,
+    chat.loading,
+    chat.busy,
+    chat.send,
+    chat.loadImported,
+    chat.pendingApproval,
+    linkId,
+  ]);
   const field = useRef<HTMLInputElement>(null);
   const messages = useRef<HTMLDivElement>(null);
   useEscapeLayer(true, onFold);
@@ -72,11 +85,11 @@ export function DockChat({
           <button
             type="button"
             className="silo-reader-iconbtn"
-            aria-label="Fold back into the dock"
+            aria-label="Fold chat"
             title="Fold back (Esc)"
             onClick={onFold}
           >
-            <ReaderIcon name="close" size={18} />
+            <ReaderIcon name="minus" size={18} />
           </button>
         </header>
         <div

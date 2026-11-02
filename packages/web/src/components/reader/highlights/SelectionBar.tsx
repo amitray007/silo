@@ -2,12 +2,13 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { type FocusEvent, type KeyboardEvent, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { apiUrl } from '../../../api/client';
+import { ApiError, apiUrl } from '../../../api/client';
 import { useImportLibrarianTurn } from '../../../api/librarian';
 import { HIGHLIGHT_COLORS, type HighlightColor } from '../../../lib/highlights';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { ChatMessage, splitSteps } from '../librarian/ChatMessage';
 import { selectionActions as quickActions, requestDock } from '../librarian/selectionStore';
+import { chatErrorText } from '../librarian/useLibrarianChat';
 import { ReaderIcon } from '../ReaderIcon';
 import { paragraphNumber } from './paragraphs';
 import { type SelectionAction, type SelectionContext, selectionActions } from './selectionActions';
@@ -199,6 +200,7 @@ function useSelectionAnswer(
   const [saving, setSaving] = useState(false);
   const importTurn = useImportLibrarianTurn();
   const quick = useChat({
+    id: JSON.stringify([linkId, passage.quote, passage.paragraph]),
     transport: new DefaultChatTransport({
       api: apiUrl('/api/librarian/quick'),
       credentials: 'include',
@@ -206,6 +208,12 @@ function useSelectionAnswer(
       prepareSendMessagesRequest: ({ body }) => ({ body: body ?? {} }),
     }),
   });
+  useEffect(
+    () => () => {
+      void quick.stop();
+    },
+    [quick.stop],
+  );
   const busy = quick.status === 'submitted' || quick.status === 'streaming';
   // Only the text after the last tool call is the answer; text before it is the model thinking aloud.
   const answer = quick.messages
@@ -214,6 +222,7 @@ function useSelectionAnswer(
     .filter(Boolean)
     .join('\n\n');
   const runQuick = (action: string, label: string) => {
+    void quick.stop();
     quick.setMessages([]);
     quick.clearError();
     setFailure('');
@@ -375,6 +384,8 @@ export function SelectionBar({
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection closes the menu.
   useEffect(() => {
+    void quick.stop();
+    quick.setMessages([]);
     setComposer(false);
     setAnswerAction(undefined);
     setMenu(false);
@@ -590,8 +601,12 @@ export function SelectionBar({
                       requestDock(linkId, { chatId: importedChatId });
                       setAnswerAction(undefined);
                       onDismiss();
-                    } catch {
-                      setFailure('Could not continue in Librarian. Try again.');
+                    } catch (error) {
+                      setFailure(
+                        error instanceof ApiError
+                          ? chatErrorText(error.error)
+                          : 'Could not continue in Librarian. Try again.',
+                      );
                     } finally {
                       setSaving(false);
                     }

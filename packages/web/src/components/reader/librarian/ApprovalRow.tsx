@@ -86,7 +86,7 @@ function approvalSentence(
     case 'hard_delete_link':
       return `Permanently delete ${target}?`;
     case 'delete_tag':
-      return `Delete the tag “${String(args.name ?? '')}”?`;
+      return `Delete the tag “${String(args.tag ?? '')}”?`;
     case 'delete_highlight':
       return `Delete ${quote ? `“${quote}”` : 'a highlight'}?`;
     case 'rename_tag':
