@@ -3,6 +3,7 @@ import { DefaultChatTransport } from 'ai';
 import { useEffect, useState } from 'react';
 import { apiUrl } from '../../../api/client';
 import { useImportLibrarianTurn } from '../../../api/librarian';
+import { STREAM_UPDATE_MS } from '../../../lib/motion';
 import { splitSteps } from '../librarian/ChatMessage';
 import { paragraphNumber } from './paragraphs';
 import type { PendingSelection } from './useSelectionWatcher';
@@ -26,6 +27,7 @@ export function useSelectionAnswer(linkId: string | undefined, passage: Passage)
   const [saving, setSaving] = useState(false);
   const importTurn = useImportLibrarianTurn();
   const quick = useChat({
+    throttle: STREAM_UPDATE_MS,
     id: JSON.stringify([linkId, passage.quote, passage.paragraph]),
     transport: new DefaultChatTransport({
       api: apiUrl('/api/librarian/quick'),

@@ -277,6 +277,13 @@ function useChatFocus(open: boolean, pill: { current: HTMLDivElement | null }) {
   }, [open, pill]);
 }
 
+/** Keep rendered messages when folding, and release them when the article changes. */
+function useRetainedChat(linkId: string, open: boolean) {
+  const [mounted, setMounted] = useState<string | null>(null);
+  if (open && mounted !== linkId) setMounted(linkId);
+  return open || mounted === linkId;
+}
+
 /**
  * A floating pill at the bottom of the reader pane. Each tool opens a sheet above it. It also
  * runs the pencil, the outline rail and the resume point, which draw in the prose and the pane.
@@ -301,6 +308,7 @@ export function ReaderDock({
   const askReady = aiStatus?.status?.features?.librarian?.ready === true;
   const hasChats = useHasLibrarianChat(link.id, askReady);
   const chatOpen = isChatOpen(openId, askReady);
+  const mountedChat = useRetainedChat(link.id, chatOpen);
   const writePosition = useSaveReadingPosition(link.id);
   const [saveError, setSaveError] = useState('');
   const save = useCallback(
@@ -446,11 +454,20 @@ export function ReaderDock({
         listen={listen}
       />
       <div className="silo-reader-dock" data-chat={chatOpen}>
-        {chatOpen ? (
-          <Suspense fallback={<div role="status">Loading Librarian…</div>}>
-            <DockChat key={link.id} linkId={link.id} panel={panel} onFold={closeSheet} />
-          </Suspense>
-        ) : (
+        {askReady && mountedChat && (
+          <div className="silo-reader-chat-cache" hidden={!chatOpen} inert={!chatOpen}>
+            <Suspense fallback={<div role="status">Loading Librarian…</div>}>
+              <DockChat
+                key={link.id}
+                linkId={link.id}
+                panel={panel}
+                active={chatOpen}
+                onFold={closeSheet}
+              />
+            </Suspense>
+          </div>
+        )}
+        {!chatOpen && (
           <div
             ref={pill}
             className="silo-reader-dock-pill"

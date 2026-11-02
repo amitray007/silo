@@ -13,6 +13,10 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   color: var(--markt);
 }
 
+.silo-reader-chat-cache:not([hidden]) {
+  display: contents;
+}
+
 /* Chat: sheet, passage card, hint and bar stack from the dock upward. */
 .silo-chat {
   position: relative;
@@ -974,39 +978,55 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   animation: siloStatusOut 100ms var(--ease-out) both;
 }
 .silo-shimmer {
-  background:
-    linear-gradient(90deg, var(--fnt) 40%, var(--ink) 50%, var(--fnt) 60%) 100% 0 / 300% 100%
-    no-repeat;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  animation:
-    siloStatusIn 160ms var(--ease-out) both,
-    siloShimmer 1.8s linear infinite;
+  position: relative;
+  display: inline-block;
+  overflow: hidden;
+  color: var(--fnt);
 }
+.silo-shimmer-glint {
+  position: absolute;
+  inset: 0;
+  color: var(--ink);
+  mask-image: linear-gradient(90deg, transparent 35%, currentcolor 50%, transparent 65%);
+  animation: siloShimmer 1.8s linear infinite;
+}
+.silo-shimmer-glint::before {
+  content: attr(data-label);
+  display: block;
+  animation: siloShimmerText 1.8s linear infinite;
+}
+@keyframes siloShimmer {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(100%);
+  }
+}
+@keyframes siloShimmerText {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(-100%);
+  }
+}
+
 @keyframes siloStatusIn {
   from {
     opacity: 0;
-    translate: 0 2px;
+    transform: translateY(2px);
   }
 }
 @keyframes siloStatusOut {
   to {
     opacity: 0;
-    translate: 0 -2px;
-  }
-}
-@keyframes siloShimmer {
-  to {
-    background-position: 0 0;
+    transform: translateY(-2px);
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .silo-shimmer {
-    background: none;
-    -webkit-text-fill-color: currentcolor;
-    color: var(--fnt);
-    animation: siloStatusIn 160ms ease both;
+  .silo-shimmer-glint {
+    display: none;
   }
   .silo-status-in,
   .silo-status-out {

@@ -37,7 +37,7 @@ const JUMP_MS = 600;
  * Keeps a message log at its end while the reader is there, and lets go when they scroll up: new
  * lines then raise `away`, and `jump` brings them back. Sending a message always returns to the end.
  */
-function useStickyLog(messages: readonly { role: string }[]) {
+function useStickyLog(messages: readonly { role: string }[], active: boolean) {
   const ref = useRef<HTMLDivElement>(null);
   const pinned = useRef(true);
   /** A smooth jump is under way until this time, so its scroll events do not unpin the log. */
@@ -45,15 +45,15 @@ function useStickyLog(messages: readonly { role: string }[]) {
   const [away, setAway] = useState(false);
   useEffect(() => {
     const element = ref.current;
-    if (!element || messages.length === 0) return;
+    if (!active || !element || messages.length === 0) return;
     if (pinned.current || messages.at(-1)?.role === 'user') {
       pinned.current = true;
       element.scrollTop = element.scrollHeight;
     } else setAway(true);
-  }, [messages]);
+  }, [messages, active]);
   const onScroll = () => {
     const element = ref.current;
-    if (!element || performance.now() < jumping.current) return;
+    if (!active || !element || performance.now() < jumping.current) return;
     pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < PINNED_PX;
     setAway(!pinned.current);
   };
@@ -88,6 +88,7 @@ export function ChatThread({
   panelRef,
   maxHeight,
   variant = 'dock',
+  active = true,
 }: {
   chat: ThreadChat;
   composer: Composer;
@@ -107,9 +108,11 @@ export function ChatThread({
   /** The tallest the dock's panel may grow, in pixels. */
   maxHeight?: number | undefined;
   variant?: 'dock' | 'page';
+  /** A folded dock keeps its rendered messages but does not move its scroll position. */
+  active?: boolean;
 }) {
   const { input, setInput, passage, setPassage, field } = composer;
-  const log = useStickyLog(chat.messages);
+  const log = useStickyLog(chat.messages, active);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
   const panel = (

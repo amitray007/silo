@@ -207,3 +207,33 @@ it.each([false, true])('uses the motion preference when jumping: reduced=%s', (r
   expect(log.scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: reduced ? 'auto' : 'smooth' });
   vi.unstubAllGlobals();
 });
+
+it('does not scroll a folded chat and restores its pinned end when it reopens', () => {
+  const chat = fakeChat();
+  const view = mount(chat);
+  const log = screen.getByRole('log', { name: 'Messages' });
+  Object.defineProperties(log, {
+    scrollHeight: { configurable: true, value: 1000 },
+    clientHeight: { configurable: true, value: 300 },
+  });
+  log.scrollTop = 700;
+  fireEvent.scroll(log);
+  const compose = composer();
+  const renderThread = (active: boolean, messages = chat.messages) => (
+    <ChatThread
+      active={active}
+      chat={{ ...chat, messages }}
+      composer={compose}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />
+  );
+  view.rerender(renderThread(false));
+  Object.defineProperty(log, 'scrollHeight', { configurable: true, value: 1300 });
+  const messages = [...chat.messages, text('last', 'assistant', 'New text while folded')];
+  view.rerender(renderThread(false, messages));
+  expect(log.scrollTop).toBe(700);
+  view.rerender(renderThread(true, messages));
+  expect(log.scrollTop).toBe(1300);
+});

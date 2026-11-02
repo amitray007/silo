@@ -18,3 +18,6 @@ export const SPRING = critical(28);
 export function reducedMotion(): boolean {
   return typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
 }
+
+/** Publish streamed text in small chunks; status and terminal updates remain immediate. */
+export const STREAM_UPDATE_MS = 50;

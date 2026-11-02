@@ -67,10 +67,12 @@ export function DockChat({
   linkId,
   onFold,
   panel = null,
+  active = true,
 }: {
   linkId: string;
   onFold: () => void;
   panel?: HTMLElement | null;
+  active?: boolean;
 }) {
   const maxHeight = usePanelHeight(panel);
   const chat = useLibrarianChat(linkId);
@@ -79,7 +81,7 @@ export function DockChat({
   const composer = useChatComposer(request?.passage);
   const { setInput, setPassage, field } = composer;
   useEffect(() => {
-    if (!request) return;
+    if (!active || !request) return;
     field.current?.focus();
     if (request.chatId) void chat.loadImported(request.chatId).catch(() => setImportError(true));
     setPassage(request.passage);
@@ -93,6 +95,7 @@ export function DockChat({
     }
     clearDockRequest(linkId);
   }, [
+    active,
     request,
     chat.loading,
     chat.busy,
@@ -108,10 +111,10 @@ export function DockChat({
   const root = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
-  useHistoryPlacement(historyOpen, root, sheet, titleButton);
-  useEscapeLayer(true, onFold);
+  useHistoryPlacement(historyOpen && active, root, sheet, titleButton);
+  useEscapeLayer(active, onFold);
   useEffect(() => {
-    if (!historyOpen) return;
+    if (!active || !historyOpen) return;
     // A press anywhere else in the chat counts as leaving the menu.
     const leave = (event: MouseEvent) => {
       if (event.target instanceof Element && !event.target.closest(HISTORY_SCOPE))
@@ -119,16 +122,18 @@ export function DockChat({
     };
     document.addEventListener('mousedown', leave);
     return () => document.removeEventListener('mousedown', leave);
-  }, [historyOpen]);
+  }, [historyOpen, active]);
   const closeHistory = () => {
     setHistoryOpen(false);
     titleButton.current?.focus();
   };
   useEffect(() => {
-    field.current?.focus();
-  }, [field]);
+    if (active) field.current?.focus();
+    else setHistoryOpen(false);
+  }, [field, active]);
   return (
     <ChatThread
+      active={active}
       chat={chat}
       composer={composer}
       linkId={linkId}
@@ -186,20 +191,22 @@ export function DockChat({
         )
       }
       menu={
-        <MenuPresence>
-          {historyOpen && (
-            <ChatHistoryMenu
-              linkId={linkId}
-              currentId={chat.chatId}
-              onPick={(id) => {
-                chat.open(id);
-                closeHistory();
-              }}
-              onDelete={chat.deleteChat}
-              onClose={closeHistory}
-            />
-          )}
-        </MenuPresence>
+        active ? (
+          <MenuPresence>
+            {historyOpen && (
+              <ChatHistoryMenu
+                linkId={linkId}
+                currentId={chat.chatId}
+                onPick={(id) => {
+                  chat.open(id);
+                  closeHistory();
+                }}
+                onDelete={chat.deleteChat}
+                onClose={closeHistory}
+              />
+            )}
+          </MenuPresence>
+        ) : null
       }
     />
   );

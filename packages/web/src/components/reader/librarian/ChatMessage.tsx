@@ -1,4 +1,5 @@
 import type { UIMessage } from '@ai-sdk/react';
+import { memo } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { defaultRehypePlugins, Streamdown } from 'streamdown';
 import { ApprovalRow } from './ApprovalRow';
@@ -31,6 +32,11 @@ const citationPlugins: NonNullable<React.ComponentProps<typeof Streamdown>['rehy
         ]
       : plugin,
   );
+
+const markdownComponents: NonNullable<React.ComponentProps<typeof Streamdown>['components']> = {
+  a: ({ href, children }) => <Citation href={href}>{children}</Citation>,
+  img: () => null,
+};
 
 function textCount(text: string): number | null {
   try {
@@ -138,7 +144,7 @@ export function splitSteps(message: UIMessage): { steps: string[]; answer: strin
   return { steps, answer: answer.join('\n\n') };
 }
 
-export function ChatMessage({
+export const ChatMessage = memo(function ChatMessage({
   message,
   onApproval,
   expired = false,
@@ -205,10 +211,7 @@ export function ChatMessage({
         animated={streaming ? CHUNK_FADE : false}
         isAnimating={streaming}
         rehypePlugins={citationPlugins}
-        components={{
-          a: ({ href, children }) => <Citation href={href}>{children}</Citation>,
-          img: () => null,
-        }}
+        components={markdownComponents}
       >
         {answer}
       </Streamdown>
@@ -218,4 +221,4 @@ export function ChatMessage({
         )}
     </div>
   );
-}
+});
