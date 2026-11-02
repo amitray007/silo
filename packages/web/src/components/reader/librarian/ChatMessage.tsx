@@ -1,6 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { Link, useInRouterContext } from 'react-router';
 import { defaultRehypePlugins, Streamdown } from 'streamdown';
+import { ApprovalRow } from './ApprovalRow';
 
 const itemCitation = /^\/\?link=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function Citation({ href, children }: { href?: string | undefined; children?: React.ReactNode }) {
@@ -126,21 +127,15 @@ function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
   return { steps, answer: answer.join('\n\n') };
 }
 
-function approvalSentence(name: string, input: unknown): string {
-  const args = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-  const count = Array.isArray(args.ids) ? args.ids.length : 1;
-  if (name === 'trash_link') return `Move ${count} ${count === 1 ? 'link' : 'links'} to trash?`;
-  if (name === 'hard_delete_link')
-    return `Permanently delete ${count} ${count === 1 ? 'link' : 'links'}?`;
-  if (name === 'delete_tag') return `Delete the tag “${String(args.name ?? args.tag ?? '')}”?`;
-  if (name === 'delete_highlight') return 'Delete this highlight?';
-  return 'Unsubscribe from this feed?';
-}
 export function ChatMessage({
   message,
   onApproval,
+  expired = false,
+  linkId,
 }: {
   message: UIMessage;
+  expired?: boolean;
+  linkId?: string;
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
   if (message.role === 'user') {
@@ -167,24 +162,16 @@ export function ChatMessage({
         if (part.state === 'output-denied') return <p key={part.toolCallId}>Not done.</p>;
         if (part.state !== 'approval-requested') return null;
         return (
-          <div key={part.toolCallId} className="silo-chat-approval">
-            <p>{approvalSentence(toolName(part) ?? '', part.input)}</p>
-            <button
-              type="button"
-              className="silo-chat-allow"
-              disabled={!onApproval}
-              onClick={() => onApproval?.({ id: part.approval.id, approved: true })}
-            >
-              Allow
-            </button>
-            <button
-              type="button"
-              disabled={!onApproval}
-              onClick={() => onApproval?.({ id: part.approval.id, approved: false })}
-            >
-              Deny
-            </button>
-          </div>
+          <ApprovalRow
+            key={part.toolCallId}
+            name={toolName(part) ?? ''}
+            input={part.input}
+            expired={expired}
+            linkId={linkId}
+            onDecision={
+              onApproval ? (approved) => onApproval({ id: part.approval.id, approved }) : undefined
+            }
+          />
         );
       })}
       <Streamdown

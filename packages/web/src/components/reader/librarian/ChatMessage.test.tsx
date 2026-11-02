@@ -1,4 +1,5 @@
 import type { UIMessage } from '@ai-sdk/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { ChatMessage } from './ChatMessage';
@@ -57,28 +58,35 @@ describe('ChatMessage', () => {
   });
 });
 
-it('offers Allow and Deny for an approval and sends the matching decision', () => {
+it('offers Allow and Deny for an approval and sends the matching decision', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(JSON.stringify({ link: { title: 'Named article' } }))),
+  );
   const onApproval = vi.fn();
   render(
-    <ChatMessage
-      onApproval={onApproval}
-      message={{
-        id: 'approval',
-        role: 'assistant',
-        parts: [
-          {
-            type: 'dynamic-tool',
-            toolName: 'trash_link',
-            toolCallId: 'call',
-            state: 'approval-requested',
-            input: { id: 'link' },
-            approval: { id: 'approve' },
-          },
-        ],
-      }}
-    />,
+    <QueryClientProvider client={new QueryClient()}>
+      <ChatMessage
+        onApproval={onApproval}
+        message={{
+          id: 'approval',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'trash_link',
+              toolCallId: 'call',
+              state: 'approval-requested',
+              input: { id: 'link' },
+              approval: { id: 'approve' },
+            },
+          ],
+        }}
+      />
+    </QueryClientProvider>,
   );
-  expect(screen.getByText('Move 1 link to trash?')).toBeTruthy();
+  expect(await screen.findByRole('group', { name: 'Move “Named article” to trash?' })).toBeTruthy();
+  vi.unstubAllGlobals();
   fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
   expect(onApproval).toHaveBeenLastCalledWith({ id: 'approve', approved: true });
   fireEvent.click(screen.getByRole('button', { name: 'Deny' }));
