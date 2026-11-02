@@ -10,6 +10,7 @@ describeIfPg('library query equivalence (Postgres)', () => {
     ...(await import('./links.js')),
     ...(await import('../test-support/legacy-library-search.js')),
     ...(await import('./live.js')),
+    ...(await import('./tags.js')),
   }));
 
   async function seed() {
@@ -135,5 +136,103 @@ describeIfPg('library query equivalence (Postgres)', () => {
         topTags: tagRows.map((row) => ({ tag: row.tag, count: Number(row.count) })),
       });
     }
+  });
+
+  it('preserves tag-only prefixes with stemming and parser punctuation', async () => {
+    await seed();
+    const core = harness.mod();
+    const tags = [
+      'C++',
+      'up-to-date',
+      'naïve',
+      "o'brien",
+      'generously',
+      'skies',
+      'john@example.com',
+      'foo_bar',
+      '100%',
+      'βήτα',
+      'foo\\bar',
+    ];
+    await core.createLink({ url: 'https://edge.example/one', sourceKind: 'link', tags });
+    for (const query of tags.flatMap((tag) => [tag, tag.slice(0, -1)])) {
+      const before = await core.runLegacyUnionSearch(
+        core.whereLibrary(),
+        core.tagSearchVector,
+        query,
+        undefined,
+        { limit: 100 },
+        { snippetFor: core.buildSnippetHeadline },
+      );
+      expect(await core.search(query, {}, { limit: 100 }), query).toEqual(before);
+    }
+  });
+
+  it('keeps filtered pages and counts identical', async () => {
+    await seed();
+    const core = harness.mod();
+    const { links, linkTags, tags, db } = await import('@silo/db');
+    for (const tag of ['space', 'missing']) {
+      const scope = sql`exists (select 1 from ${linkTags} join ${tags} on ${tags.id} = ${linkTags.tagId}
+        where ${linkTags.linkId} = ${links.id} and ${tags.normalizedKey} = ${tag})`;
+      const extraConditions = [
+        sql`${links.sourceKind} = 'link'`,
+        sql`${links.createdAt} >= '2026-01-01'::timestamptz`,
+        sql`${links.createdAt} < '2026-01-02'::timestamptz`,
+      ];
+      const oldPage = await core.runLegacyUnionSearch(
+        core.whereLibrary(),
+        core.tagSearchVector,
+        'nebula',
+        scope,
+        { limit: 1 },
+        { extraConditions, sort: 'newest', snippetFor: core.buildSnippetHeadline },
+      );
+      expect(
+        await core.search(
+          'nebula',
+          { tag, source: 'link', since: '2026-01-01', until: '2026-01-02', sort: 'newest' },
+          { limit: 1 },
+        ),
+      ).toEqual(oldPage);
+      const textMatch = sql`(${links.searchVector} @@ websearch_to_tsquery('english', 'nebula') or ${core.tagSearchVector} @@ websearch_to_tsquery('english', 'nebula'))`;
+      const oldTotal = await db
+        .select({ count: sql<string>`count(*)` })
+        .from(links)
+        .where(core.whereLibrary(textMatch, scope, ...extraConditions));
+      const counted = await core.countLinks({
+        query: 'nebula',
+        tags: [tag, tag.toUpperCase()],
+        source: 'link',
+        since: '2026-01-01',
+        until: '2026-01-02',
+      });
+      expect(counted.total).toBe(Number(oldTotal[0]?.count));
+    }
+  });
+
+  it('keeps sidebar counts equal to DISTINCT across empty, trashed and feed-only tags', async () => {
+    await seed();
+    await harness.rawDb().execute(sql`
+      insert into tags(name, normalized_key) values ('Empty', 'empty');
+      insert into link_tags(link_id, tag_id) values
+        (md5('equivalence10')::uuid, md5('nebula')::uuid),
+        (md5('equivalence11')::uuid, md5('space')::uuid);
+    `);
+    const core = harness.mod();
+    const { db, links, linkTags, tags } = await import('@silo/db');
+    const { eq, asc, desc } = await import('drizzle-orm');
+    const count = sql<string>`count(distinct ${links.id})`;
+    const expected = await db
+      .select({ name: tags.name, count })
+      .from(tags)
+      .leftJoin(linkTags, eq(linkTags.tagId, tags.id))
+      .leftJoin(links, core.whereLibrary(eq(links.id, linkTags.linkId)))
+      .groupBy(tags.id, tags.name)
+      .orderBy(desc(count), asc(tags.name));
+    expect(await core.listTagsWithCounts()).toEqual(
+      expected.map((row) => ({ ...row, count: Number(row.count) })),
+    );
+    expect(await core.listTagsWithCounts()).toContainEqual({ name: 'Empty', count: 0 });
   });
 });
