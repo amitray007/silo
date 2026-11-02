@@ -118,12 +118,48 @@ let queryClient: QueryClient;
 /** When set, the POST waits for this before answering. */
 let holdPost: Promise<void> | null = null;
 
-function mount() {
+function selectionFixture(url: string, ready: boolean) {
+  if (url.includes('/librarian/chats?'))
+    return json({ chats: [{ id: 'imported-chat', title: 'Imported', linkId: 'hl' }] });
+  if (url.endsWith('/librarian/chats/imported-chat'))
+    return json({
+      chat: { id: 'imported-chat', title: 'Imported', linkId: 'hl' },
+      messages: [
+        {
+          id: 'imported-answer',
+          role: 'assistant',
+          parts: [{ type: 'text', text: 'An answer saved on the passage.' }],
+        },
+      ],
+    });
+  if (url.endsWith('/librarian/chats/imported-chat/import'))
+    return new Response(null, { status: 204 });
+  if (url.endsWith('/api/ai')) return json({ status: { features: { librarian: { ready } } } });
+  if (url.endsWith('/librarian/quick')) {
+    const chunks = [
+      { type: 'start', messageId: 'note-answer' },
+      { type: 'text-start', id: 't' },
+      { type: 'text-delta', id: 't', delta: 'An answer saved on the passage.' },
+      { type: 'text-end', id: 't' },
+      { type: 'finish' },
+    ];
+    return new Response(
+      `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+      {
+        headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+      },
+    );
+  }
+}
+
+function mount(ready = false) {
   holdPost = null;
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
+      const selectionResponse = selectionFixture(url, ready);
+      if (selectionResponse) return selectionResponse;
       if (url.endsWith('/reader')) return json(prose);
       if (url.endsWith('/highlights') && init?.method === 'POST') {
         const body = JSON.parse(String(init.body)) as Record<string, unknown>;
@@ -410,7 +446,7 @@ it('moves the toolbar with the selection when the window resizes', async () => {
   await screen.findByText(/Alpha beta/);
   select('brown fox');
   const bar = await screen.findByRole('toolbar', { name: 'Selection' });
-  const before = bar.style.left;
+  const before = bar.style.getPropertyValue('--selection-left');
   stubGlobal(Range.prototype, 'getBoundingClientRect', () => ({
     left: 300,
     top: 400,
@@ -420,8 +456,8 @@ it('moves the toolbar with the selection when the window resizes', async () => {
     height: 20,
   }));
   fireEvent(window, new Event('resize'));
-  await waitFor(() => expect(bar.style.left).not.toBe(before));
-  expect(bar.style.top).toBe('350px');
+  await waitFor(() => expect(bar.style.getPropertyValue('--selection-left')).not.toBe(before));
+  expect(bar.style.getPropertyValue('--selection-top')).toBe('350px');
 });
 
 it('turns off, in the toolbar picker, colours used by highlights the selection overlaps', async () => {
@@ -752,4 +788,46 @@ it('shows an orphan with its label, quote and note, and lets the note be edited 
   fireEvent.blur(field);
   await waitFor(() => expect(posts.some((body) => body.note === 'rewritten')).toBe(true));
   expect(within(block).getByRole('button', { name: 'Delete highlight' })).toBeDefined();
+});
+
+it('saves a quick answer through the normal highlight create path with its note', async () => {
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  fireEvent.click(await toolbarButton('Ask'));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('An answer saved on the passage.');
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Save as note' }));
+  await waitFor(() =>
+    expect(posts).toContainEqual(
+      expect.objectContaining({
+        quote: 'quick brown fox',
+        note: 'An answer saved on the passage.',
+      }),
+    ),
+  );
+  await screen.findByText('Saved as a note on ¶2');
+});
+
+it('continues the temporary answer in the open dock chat after importing it', async () => {
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  fireEvent.click(await toolbarButton('Ask'));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('An answer saved on the passage.');
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue in Librarian' }).hasAttribute('disabled'),
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Continue in Librarian' }));
+  const dock = await screen.findByRole('region', { name: 'Librarian conversation' });
+  await within(dock).findByText('An answer saved on the passage.');
+  expect(screen.queryByRole('region', { name: 'Passage answer' })).toBeNull();
 });

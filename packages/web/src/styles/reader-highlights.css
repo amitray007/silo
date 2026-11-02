@@ -523,3 +523,9 @@
     animation: none;
   }
 }
+
+/* Keep the selected passage visible while the question input owns focus. */
+::highlight(silo-librarian-selection) {
+  background: var(--sel);
+  color: var(--ink);
+}

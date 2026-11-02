@@ -223,3 +223,41 @@ it('resumes an approval with only the assistant message and refreshes write quer
   for (const key of ['links', 'link', 'counts'])
     expect(invalidate).toHaveBeenCalledWith({ queryKey: [key] });
 });
+
+it('attaches a passage and carries it in the next sent message', async () => {
+  const { act } = await import('@testing-library/react');
+  const { requestDock } = await import('./selectionStore');
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/messages'))
+      return new Response('data: [DONE]\n\n', {
+        headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+      });
+    if (url.includes('?')) return json({ chats: [{ ...summary, id: 'attached-chat' }] });
+    return json({ chat: { ...summary, id: 'attached-chat' }, messages: [] });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <DockChat linkId="attach-test" onFold={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByText('Ask about this article or your library.');
+  act(() => requestDock('attach-test', { passage: { quote: 'Chosen passage', paragraph: 3 } }));
+  await screen.findByText('Chosen passage');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+    target: { value: 'Why?' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() =>
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/messages'))).toBe(true),
+  );
+  const request = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/messages'));
+  expect(JSON.parse(String(request?.[1]?.body)).message.metadata).toEqual({
+    quote: 'Chosen passage',
+    paragraph: 3,
+  });
+  expect(screen.queryByText('Chosen passage')).toBeNull();
+});

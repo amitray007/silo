@@ -1,5 +1,35 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { Streamdown } from 'streamdown';
+import { Link, useInRouterContext } from 'react-router';
+import { defaultRehypePlugins, Streamdown } from 'streamdown';
+
+const itemCitation = /^\/\?link=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function Citation({ href, children }: { href?: string | undefined; children?: React.ReactNode }) {
+  const router = useInRouterContext();
+  if (href && itemCitation.test(href) && router) return <Link to={href}>{children}</Link>;
+  if (href && !itemCitation.test(href) && !/^https?:\/\//i.test(href))
+    return <span>{children}</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+}
+const citationPlugins: NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']> =
+  Object.entries(defaultRehypePlugins).map<
+    NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']>[number]
+  >(([name, plugin]) =>
+    name === 'harden' && Array.isArray(plugin)
+      ? [
+          plugin[0],
+          {
+            ...plugin[1],
+            allowedLinkPrefixes: ['*'],
+            allowedProtocols: ['http', 'https'],
+            defaultOrigin: 'https://silo.invalid',
+          },
+        ]
+      : plugin,
+  );
 
 function textCount(text: string): number | null {
   try {
@@ -159,12 +189,9 @@ export function ChatMessage({
       })}
       <Streamdown
         skipHtml
+        rehypePlugins={citationPlugins}
         components={{
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => <Citation href={href}>{children}</Citation>,
           img: () => null,
         }}
       >

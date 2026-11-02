@@ -1,3 +1,4 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { SelectionBar } from './SelectionBar';
@@ -41,7 +42,11 @@ function setup(overrides: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
     hidden: new Set<string>(),
     ...overrides,
   };
-  render(<SelectionBar {...props} />);
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <SelectionBar {...props} />
+    </QueryClientProvider>,
+  );
   return props;
 }
 
@@ -190,4 +195,95 @@ it('leaves Listen from here out when the article cannot be read aloud', () => {
   setup({ hidden: new Set(['listen']) });
   expect(screen.queryByRole('button', { name: /Listen from here/ })).toBeNull();
   expect(screen.getByRole('button', { name: /Highlight/ })).toBeTruthy();
+});
+
+it('keeps labels without readiness and uses icon actions with Ask when ready', () => {
+  setup({ askReady: true, linkId: 'article' });
+  expect(screen.getByRole('button', { name: 'Highlight' }).textContent).toBe('');
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(screen.getByRole('button', { name: 'Explain' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Simplify' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Counterpoint' })).toBeTruthy();
+  window.getSelection()?.removeAllRanges();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy();
+  expect(window.getSelection()?.toString()).toBe('second paragraph');
+});
+it('offers word actions for a single short word', () => {
+  pending.range.setEnd(pending.range.startContainer, 10);
+  setup({ askReady: true, linkId: 'article' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(screen.getByRole('button', { name: 'Define' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'In context' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Related' })).toBeTruthy();
+});
+
+it('streams a quick answer, saves its text as a note, and imports only the text turn', async () => {
+  const { waitFor } = await import('@testing-library/react');
+  const calls: { url: string; body: unknown }[] = [];
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    calls.push({ url, body });
+    if (url.endsWith('/quick')) {
+      const chunks = [
+        { type: 'start', messageId: 'answer' },
+        { type: 'text-start', id: 't' },
+        { type: 'text-delta', id: 't', delta: 'Plain answer.' },
+        { type: 'text-end', id: 't' },
+        { type: 'finish' },
+      ];
+      return new Response(
+        chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('') + 'data: [DONE]\n\n',
+        { headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } },
+      );
+    }
+    if (url.endsWith('/import')) return new Response(null, { status: 204 });
+    return new Response(JSON.stringify({ chats: [{ id: 'chat' }] }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  const onSaveAnswer = vi.fn(async () => {});
+  setup({ askReady: true, linkId: 'quick-test', onSaveAnswer });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('Plain answer.');
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+  expect(calls[0]?.body).toEqual({
+    linkId: 'quick-test',
+    action: 'explain',
+    quote: 'second paragraph',
+    paragraph: 2,
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Continue in Librarian' }));
+  await waitFor(() => expect(calls.some((call) => call.url.endsWith('/import'))).toBe(true));
+  const imported = calls.find((call) => call.url.endsWith('/import'))?.body as {
+    messages: { role: string; parts: unknown[]; metadata?: unknown }[];
+  };
+  expect(imported.messages.map((message) => message.role)).toEqual(['user', 'assistant']);
+  expect(imported.messages[1]?.parts).toEqual([{ type: 'text', text: 'Plain answer.' }]);
+  expect(imported.messages[0]?.metadata).toEqual({
+    action: 'explain',
+    quote: 'second paragraph',
+    paragraph: 2,
+  });
+  // Return to the bar and make a new temporary answer to exercise saving independently.
+  await waitFor(() => expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy());
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('Plain answer.');
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Save as note' }));
+  await waitFor(() => expect(onSaveAnswer).toHaveBeenCalledWith('Plain answer.'));
+  await screen.findByText('Saved as a note on ¶2');
+  vi.unstubAllGlobals();
 });

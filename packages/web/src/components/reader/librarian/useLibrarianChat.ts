@@ -106,7 +106,11 @@ export function useLibrarianChat(linkId: string) {
   }, [detail.data, chat, chatId, entry, state.status]);
   const loading = list.isPending || (list.data?.chats.length !== 0 && !chatId.current);
   const busy = creating || state.status === 'submitted' || state.status === 'streaming';
-  async function send(text: string, action?: string) {
+  async function send(
+    text: string,
+    action?: string,
+    passage?: { quote: string; paragraph: number },
+  ) {
     if (!text.trim() || busy || loading || list.error || detail.error) return;
     setFailure(false);
     setCreating(true);
@@ -117,15 +121,26 @@ export function useLibrarianChat(linkId: string) {
         entry.title = text.trim().slice(0, 60);
         setTitle(entry.title);
       }
-      await state.sendMessage({ text: text.trim(), ...(action ? { metadata: { action } } : {}) });
+      await state.sendMessage({
+        text: text.trim(),
+        ...(action || passage ? { metadata: { ...(action ? { action } : {}), ...passage } } : {}),
+      });
     } catch {
       setFailure(true);
     } finally {
       setCreating(false);
     }
   }
+  async function loadImported(id: string) {
+    const detail = await librarianApi.get(id);
+    chatId.current = id;
+    chat.messages = detail.messages;
+    entry.title = detail.chat.title;
+    setTitle(entry.title);
+  }
   return {
     ...state,
+    loadImported,
     title,
     send,
     busy,

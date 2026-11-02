@@ -96,7 +96,7 @@ export function useHighlights({
    * it); otherwise it moves on when an overlapping highlight already has it.
    */
   const create = useCallback(
-    (wanted: HighlightColor, opts: { note?: boolean; exact?: boolean } = {}) => {
+    (wanted: HighlightColor, opts: { note?: boolean; exact?: boolean; answer?: string } = {}) => {
       if (!pending || !map || !canWrite) return;
       const quote = map.text.slice(pending.start, pending.end);
       if (quote.length > HIGHLIGHT_QUOTE_MAX) {
@@ -113,13 +113,17 @@ export function useHighlights({
         startOffset: pending.start,
         endOffset: pending.end,
         color: chosen,
+        ...(opts.answer ? { note: opts.answer } : {}),
       });
       saved.catch(fail("Couldn't save the highlight"));
       setColor(chosen);
       pulseRange(pending.range);
-      window.getSelection()?.removeAllRanges();
-      clear();
+      if (!opts.answer) {
+        window.getSelection()?.removeAllRanges();
+        clear();
+      }
       if (opts.note) setOpenNote(id);
+      return saved;
     },
     [pending, map, canWrite, resolved, add, setColor, clear, fail],
   );

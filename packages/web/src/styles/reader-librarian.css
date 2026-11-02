@@ -1,3 +1,11 @@
+.silo-selection-answer blockquote,
+.silo-chat-passage > span {
+  display: block;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  color: var(--mut);
+}
 .silo-chat-bar,
 .silo-chat-panel {
   position: absolute;
@@ -224,4 +232,96 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-approval button:focus-visible {
   outline: 2px solid var(--ink);
   outline-offset: 2px;
+}
+
+.silo-selection-compose,
+.silo-selection-answer {
+  width: min(360px, calc(100vw - 32px));
+  padding: 8px;
+}
+.silo-selection-compose > div,
+.silo-selection-answer header,
+.silo-selection-answer footer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.silo-selection-compose input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+}
+.silo-selection-compose button,
+.silo-selection-answer button,
+.silo-chat-passage button {
+  border: 0;
+  border-radius: 6px;
+  background: var(--hov);
+  color: var(--ink);
+  padding: 6px 8px;
+  cursor: pointer;
+  font: inherit;
+}
+.silo-selection-answer {
+  max-height: 55vh;
+  overflow: auto;
+  font-size: 13px;
+}
+.silo-selection-answer header {
+  font-weight: 500;
+}
+.silo-selection-answer header button {
+  margin-left: auto;
+}
+
+.silo-chat-passage {
+  background: var(--bg2);
+  border-radius: 12px;
+  padding: 10px;
+}
+.silo-sb {
+  left: var(--selection-left);
+  top: var(--selection-top);
+}
+@container (max-width: 519px) {
+  .silo-sb:has(.silo-selection-answer) {
+    position: absolute;
+    left: 12px;
+    right: 12px;
+    top: auto;
+    bottom: calc(84px + env(safe-area-inset-bottom, 0px));
+    transform: none;
+  }
+  .silo-selection-answer {
+    width: 100%;
+  }
+}
+
+.silo-sb[data-answer="true"]::after {
+  display: none;
+}
+.silo-selection-answer {
+  width: min(440px, calc(100vw - 32px));
+}
+.silo-selection-compose .silo-chat-actions {
+  padding: 6px 2px 0;
+}
+.silo-selection-answer footer {
+  border-top: 1px solid var(--line);
+  margin-top: 6px;
+  padding-top: 6px;
+}
+.silo-selection-answer blockquote {
+  margin: 6px 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-2);
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-selection-compose button,
+  .silo-selection-answer button {
+    min-height: 40px;
+  }
 }

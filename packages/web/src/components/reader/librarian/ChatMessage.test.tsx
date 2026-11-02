@@ -115,3 +115,27 @@ it('shows denied calls and successful write traces', () => {
   expect(screen.getByText('Tagged')).toBeTruthy();
   expect(screen.queryByText('Moved to trash')).toBeNull();
 });
+
+it('opens saved-item citations through the router and keeps external links in a new tab', async () => {
+  const { MemoryRouter } = await import('react-router');
+  render(
+    <MemoryRouter>
+      <ChatMessage
+        message={{
+          id: 'citation',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: '[Saved](/?link=00000000-0000-4000-8000-000000000001) [Web](https://example.com)',
+            },
+          ],
+        }}
+      />
+    </MemoryRouter>,
+  );
+  const saved = await screen.findByRole('link', { name: 'Saved' });
+  expect(saved.getAttribute('href')).toBe('/?link=00000000-0000-4000-8000-000000000001');
+  expect(saved.getAttribute('target')).toBeNull();
+  expect(screen.getByRole('link', { name: 'Web' }).getAttribute('target')).toBe('_blank');
+});
