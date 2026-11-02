@@ -13,6 +13,7 @@ const summary = {
 };
 const json = (data: unknown) =>
   new Response(JSON.stringify(data), { headers: { 'Content-Type': 'application/json' } });
+let linkSequence = 0;
 function setup(resume = false) {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -44,7 +45,7 @@ function setup(resume = false) {
     <QueryClientProvider
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
-      <DockChat linkId="article-1" onFold={fold} />
+      <DockChat linkId={`article-${++linkSequence}`} onFold={fold} />
     </QueryClientProvider>,
   );
   return { fetcher, fold };
@@ -113,4 +114,54 @@ it('shows a fixed error without provider details', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Summarize' }));
   await screen.findByRole('alert');
   expect(screen.queryByText('secret provider detail')).toBeNull();
+});
+
+it('keeps a delayed answer alive across fold and reopen', async () => {
+  let controller: ReadableStreamDefaultController<Uint8Array>;
+  const encoder = new TextEncoder();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input).endsWith('/messages'))
+        return new Response(
+          new ReadableStream({
+            start(c) {
+              controller = c;
+            },
+          }),
+          {
+            headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+          },
+        );
+      return json({ chats: [summary], nextCursor: null, chat: summary, messages: [] });
+    }),
+  );
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const view = (open: boolean) => (
+    <QueryClientProvider client={client}>
+      {open && <DockChat linkId="delayed-link" onFold={() => {}} />}
+    </QueryClientProvider>
+  );
+  const rendered = render(view(true));
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Summarize' }).hasAttribute('disabled')).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Summarize' }));
+  await waitFor(() => expect(controller!).toBeTruthy());
+  rendered.rerender(view(false));
+  rendered.rerender(view(true));
+  const chunks = [
+    { type: 'start', messageId: 'delayed' },
+    { type: 'text-start', id: 't' },
+    { type: 'text-delta', id: 't', delta: 'Survived folding' },
+    { type: 'text-end', id: 't' },
+    { type: 'finish' },
+  ];
+  controller!.enqueue(
+    encoder.encode(
+      `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+    ),
+  );
+  controller!.close();
+  await screen.findByText('Survived folding');
 });

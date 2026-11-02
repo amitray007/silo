@@ -116,6 +116,7 @@ export {
   createChat,
   deleteChat,
   getChat,
+  incomingUserMessageSchema,
   type LibrarianMessage,
   librarianMessageSchema,
   listChats,

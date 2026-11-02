@@ -1,7 +1,7 @@
-import { Chat, useChat } from '@ai-sdk/react';
+import { Chat, type UIMessage, useChat } from '@ai-sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DefaultChatTransport } from 'ai';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   librarianApi,
   useCreateLibrarianChat,
@@ -15,6 +15,7 @@ const ERROR_WORDS: Record<string, string> = {
   model_not_found: 'The chosen model is gone. Pick another in Settings → AI.',
   quota: 'Your AI provider is out of credit or over its limit.',
   rate_limited: 'Your AI provider is busy. Try again in a moment.',
+  busy: 'The Librarian is still answering in another tab.',
   timeout: 'The answer took too long. Try again.',
   network: 'Could not reach your AI provider. Try again.',
   ai_not_ready: 'The Librarian is off. Turn it on in Settings → AI.',
@@ -27,41 +28,60 @@ function chatErrorText(message: string | undefined): string {
   return (code && ERROR_WORDS[code]) ?? 'Could not answer. Try again.';
 }
 
+const chatsByLink = new Map<
+  string,
+  { chat: Chat<UIMessage>; chatId: { current: string | null }; title: string }
+>();
+
 export function useLibrarianChat(linkId: string) {
   const client = useQueryClient();
   const list = useLibrarianChats(linkId);
   const detail = useLibrarianChatDetail(list.data?.chats[0]?.id);
   const create = useCreateLibrarianChat();
-  const chatId = useRef<string | null>(null);
-  const [title, setTitle] = useState('New chat');
+
   const [failure, setFailure] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [chat] = useState(
-    () =>
-      new Chat({
-        onFinish: () => {
-          void client.invalidateQueries({ queryKey: ['librarian'] });
+  const entry = useMemo(() => {
+    const cached = chatsByLink.get(linkId);
+    if (cached) return cached;
+    const chatId = { current: null as string | null };
+    const chat = new Chat({
+      onFinish: () => {
+        void client.invalidateQueries({ queryKey: ['librarian'] });
+      },
+      transport: new DefaultChatTransport({
+        credentials: 'include',
+        headers: { 'X-Silo-CSRF': '1' },
+        prepareSendMessagesRequest: ({ messages }) => {
+          if (!chatId.current) throw new Error('Chat is not ready');
+          return {
+            api: librarianApi.messagesUrl(chatId.current),
+            body: { message: messages.at(-1) },
+          };
         },
-        transport: new DefaultChatTransport({
-          credentials: 'include',
-          headers: { 'X-Silo-CSRF': '1' },
-          prepareSendMessagesRequest: ({ messages }) => {
-            if (!chatId.current) throw new Error('Chat is not ready');
-            return {
-              api: librarianApi.messagesUrl(chatId.current),
-              body: { message: messages.at(-1) },
-            };
-          },
-        }),
       }),
-  );
+    });
+    const entry = { chat, chatId, title: 'New chat' };
+    chatsByLink.set(linkId, entry);
+    return entry;
+  }, [linkId, client]);
+  const { chat, chatId } = entry;
+  const [title, setTitle] = useState(entry.title);
   const state = useChat({ chat });
   useEffect(() => {
-    if (!detail.data || chatId.current) return;
+    if (!detail.data) return;
+    if (chatId.current && chatId.current !== detail.data.chat.id) return;
+    const initial = !chatId.current;
     chatId.current = detail.data.chat.id;
-    setTitle(detail.data.chat.title);
-    chat.messages = detail.data.messages;
-  }, [detail.data, chat]);
+    entry.title = detail.data.chat.title;
+    setTitle(entry.title);
+    if (
+      initial ||
+      ((state.status === 'ready' || state.status === 'error') &&
+        detail.data.messages.length > chat.messages.length)
+    )
+      chat.messages = detail.data.messages;
+  }, [detail.data, chat, chatId, entry, state.status]);
   const loading = list.isPending || (list.data?.chats.length !== 0 && !chatId.current);
   const busy = creating || state.status === 'submitted' || state.status === 'streaming';
   async function send(text: string, action?: string) {
@@ -72,7 +92,8 @@ export function useLibrarianChat(linkId: string) {
       if (!chatId.current) {
         const created = await create.mutateAsync(linkId);
         chatId.current = created.id;
-        setTitle(text.trim().slice(0, 60));
+        entry.title = text.trim().slice(0, 60);
+        setTitle(entry.title);
       }
       await state.sendMessage({ text: text.trim(), ...(action ? { metadata: { action } } : {}) });
     } catch {

@@ -49,6 +49,8 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     });
     const result = streamText({
       model: languageModelFor(credential),
+      // The UI stream logs the fixed code; the SDK default logs raw provider errors.
+      onError: () => {},
       instructions: `${persona}\nRequest context (data):\n${requestContext(request)}`,
       messages: stubOldToolResults(
         pruneMessages({
@@ -71,18 +73,26 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       generateMessageId: createIdGenerator({ prefix: 'msg', size: 16 }),
       onError: failure,
       onEnd: async ({ messages }) => {
-        await saveChatMessages(
-          request.chatId,
-          messages.map((message) => librarianMessageSchema.parse(message)),
-        );
+        try {
+          await saveChatMessages(
+            request.chatId,
+            messages.map((message) => librarianMessageSchema.parse(message)),
+          );
+        } finally {
+          request.endRun?.();
+        }
       },
     });
     // Consume the UI stream too: its onEnd persists after the HTTP reader disconnects.
     const [responseStream, persistenceStream] = stream.tee();
-    void persistenceStream.pipeTo(new WritableStream({ write() {} })).catch(() => {});
+    void persistenceStream
+      .pipeTo(new WritableStream({ write() {} }))
+      .catch(() => {})
+      .finally(() => request.endRun?.());
     void result.consumeStream();
     return createUIMessageStreamResponse({ stream: responseStream });
   } catch (error) {
+    request.endRun?.();
     const code = failure(error);
     return createUIMessageStreamResponse({
       stream: createUIMessageStream({

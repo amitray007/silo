@@ -9,6 +9,7 @@ export type LibrarianToolSource = {
 };
 export type LibrarianRequest = {
   chatId: string;
+  endRun?: () => void;
   messages: LibrarianMessage[];
   link: { id: string; title: string | null; url: string; site: string | null } | null;
   abortSignal?: AbortSignal | undefined;
@@ -27,4 +28,18 @@ export function getLibrarianRunner(): LibrarianRunner | undefined {
 }
 export function getLibrarianToolSource(): LibrarianToolSource | undefined {
   return source;
+}
+
+const activeRuns = new Map<string, symbol>();
+export function beginLibrarianRun(chatId: string): (() => void) | undefined {
+  if (activeRuns.has(chatId)) return undefined;
+  const token = Symbol();
+  activeRuns.set(chatId, token);
+  const timer = setTimeout(release, 5 * 60 * 1000);
+  timer.unref();
+  function release() {
+    clearTimeout(timer);
+    if (activeRuns.get(chatId) === token) activeRuns.delete(chatId);
+  }
+  return release;
 }

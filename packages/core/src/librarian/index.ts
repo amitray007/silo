@@ -2,10 +2,14 @@ import { librarianChats as chats, db, links, librarianMessages as messages } fro
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { isAiFeatureOn } from '../ai/status.js';
 import { decodeListCursor, encodeListCursor } from '../links/pagination.js';
-import { getLibrarianRunner } from './ports.js';
-import type { LibrarianMessage } from './types.js';
+import { beginLibrarianRun, getLibrarianRunner } from './ports.js';
+import { incomingUserMessageSchema, type LibrarianMessage } from './types.js';
 
-export { type LibrarianMessage, librarianMessageSchema } from './types.js';
+export {
+  incomingUserMessageSchema,
+  type LibrarianMessage,
+  librarianMessageSchema,
+} from './types.js';
 
 const PLACEHOLDER = 'New chat';
 export async function createChat({ linkId }: { linkId?: string | undefined } = {}) {
@@ -152,22 +156,31 @@ export async function streamLibrarianReply({
   if (!stored) return { ok: false, code: 'not_found' } as const;
   const runner = getLibrarianRunner();
   if (!runner) return { ok: false, code: 'unavailable' } as const;
-  const last = stored.messages.at(-1);
-  if (message.role !== 'user' && !(last?.role === 'assistant' && last.id === message.id))
+  if (!incomingUserMessageSchema.safeParse(message).success)
     return { ok: false, code: 'invalid_message' } as const;
-  const merged =
-    last?.role === 'assistant' && last.id === message.id
-      ? [...stored.messages.slice(0, -1), message]
-      : [...stored.messages, message];
-  await saveChatMessages(chatId, [message]);
-  const [link] = stored.chat.linkId
-    ? await db
-        .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
-        .from(links)
-        .where(and(eq(links.id, stored.chat.linkId), isNull(links.deletedAt)))
-    : [];
-  return {
-    ok: true,
-    response: await runner({ chatId, messages: merged, link: link ?? null, abortSignal }),
-  } as const;
+  const [existing] = await db
+    .select({ chatId: messages.chatId })
+    .from(messages)
+    .where(eq(messages.id, message.id));
+  if (existing && existing.chatId !== chatId)
+    return { ok: false, code: 'invalid_message' } as const;
+  const endRun = beginLibrarianRun(chatId);
+  if (!endRun) return { ok: false, code: 'busy' } as const;
+  try {
+    const merged = [...stored.messages, message];
+    await saveChatMessages(chatId, [message]);
+    const [link] = stored.chat.linkId
+      ? await db
+          .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
+          .from(links)
+          .where(and(eq(links.id, stored.chat.linkId), isNull(links.deletedAt)))
+      : [];
+    return {
+      ok: true,
+      response: await runner({ chatId, messages: merged, link: link ?? null, abortSignal, endRun }),
+    } as const;
+  } catch (error) {
+    endRun();
+    throw error;
+  }
 }

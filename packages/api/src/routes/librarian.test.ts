@@ -40,10 +40,48 @@ describe('Librarian route access', () => {
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ message: { id: 'u', role: 'user', parts: [] } }),
+        body: JSON.stringify({
+          message: { id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
+        }),
       },
     );
     expect(response.status).toBe(409);
     expect(await response.json()).toMatchObject({ error: 'ai_not_ready' });
   });
+});
+
+it.each([[null], [{ type: 'file', url: 'https://example.com', mediaType: 'text/plain' }]])(
+  'rejects invalid parts before running',
+  async (...[parts]) => {
+    const { streamLibrarianReply } = await import('@silo/core');
+    vi.mocked(streamLibrarianReply).mockClear();
+    const response = await app('env_token').request(
+      '/librarian/chats/00000000-0000-4000-8000-000000000001/messages',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message: { id: 'bad', role: 'user', parts: [parts] } }),
+      },
+    );
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: 'invalid_message' });
+    expect(streamLibrarianReply).not.toHaveBeenCalled();
+  },
+);
+
+it('maps an active run to HTTP 409 busy', async () => {
+  const { streamLibrarianReply } = await import('@silo/core');
+  vi.mocked(streamLibrarianReply).mockResolvedValueOnce({ ok: false, code: 'busy' });
+  const response = await app('env_token').request(
+    '/librarian/chats/00000000-0000-4000-8000-000000000001/messages',
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        message: { id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
+      }),
+    },
+  );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: 'busy' });
 });

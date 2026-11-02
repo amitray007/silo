@@ -1,7 +1,9 @@
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
+
+vi.mock('../ai/status.js', () => ({ isAiFeatureOn: async () => true }));
 
 const suite = postgresReachable() ? describe : describe.skip;
 suite('Librarian persistence', () => {
@@ -58,5 +60,53 @@ suite('Librarian persistence', () => {
     ]);
     expect((await c.getChat(chat.id))?.chat.title).toBe('x'.repeat(60));
     await c.deleteChat(chat.id);
+  });
+  it('rejects invalid parts and foreign ids without saving or running', async () => {
+    const c = h.mod();
+    const { setLibrarianRunner } = await import('./ports.js');
+    const runner = vi.fn(async () => new Response());
+    setLibrarianRunner(runner);
+    const first = await c.createChat();
+    const second = await c.createChat();
+    if (!first || !second) throw new Error('missing');
+    await c.saveChatMessages(first.id, [
+      { id: 'owned', role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
+    ]);
+    for (const message of [
+      { id: 'bad', role: 'user' as const, parts: [null] },
+      { id: 'file', role: 'user' as const, parts: [{ type: 'file', url: 'secret' }] },
+      { id: 'owned', role: 'user' as const, parts: [{ type: 'text', text: 'Hi' }] },
+    ]) {
+      expect(await c.streamLibrarianReply({ chatId: second.id, message })).toEqual({
+        ok: false,
+        code: 'invalid_message',
+      });
+      expect((await c.getChat(second.id))?.messages).toEqual([]);
+    }
+    expect(runner).not.toHaveBeenCalled();
+    setLibrarianRunner(undefined);
+  });
+  it('keeps a chat busy until its runner releases it', async () => {
+    const c = h.mod();
+    const { setLibrarianRunner } = await import('./ports.js');
+    let finish: (() => void) | undefined;
+    setLibrarianRunner(async ({ endRun }) => {
+      finish = endRun;
+      return new Response('answer');
+    });
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    const send = (id: string) =>
+      c.streamLibrarianReply({
+        chatId: chat.id,
+        message: { id, role: 'user', parts: [{ type: 'text', text: 'Hi' }] },
+      });
+    expect((await send('run1')).ok).toBe(true);
+    expect(await send('run2')).toEqual({ ok: false, code: 'busy' });
+    expect((await c.getChat(chat.id))?.messages.map((m) => m.id)).toEqual(['run1']);
+    finish?.();
+    expect((await send('run3')).ok).toBe(true);
+    finish?.();
+    setLibrarianRunner(undefined);
   });
 });

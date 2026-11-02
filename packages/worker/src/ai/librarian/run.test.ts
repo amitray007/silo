@@ -48,12 +48,15 @@ describe('Librarian streaming', () => {
         }),
       }),
     );
+    const endRun = vi.fn();
     const response = await runLibrarian({
+      endRun,
       chatId: 'chat',
       messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
       link: null,
     });
     expect(await response.text()).toContain('Hello');
+    expect(endRun).toHaveBeenCalled();
     expect(saveChatMessages).toHaveBeenCalledWith(
       'chat',
       expect.arrayContaining([
@@ -68,7 +71,9 @@ describe('Librarian streaming', () => {
     vi.mocked(resolveAiFeatureCredential).mockRejectedValue(
       Object.assign(new Error('secret'), { statusCode: 401 }),
     );
-    const response = await runLibrarian({ chatId: 'chat', messages: [], link: null });
+    const endRun = vi.fn();
+    const response = await runLibrarian({ chatId: 'chat', messages: [], link: null, endRun });
+    expect(endRun).toHaveBeenCalled();
     const body = await response.text();
     expect(body).toContain('invalid_key');
     expect(body).not.toContain('secret');
@@ -128,7 +133,9 @@ describe('Librarian streaming', () => {
         }),
       }),
     );
+    const endRun = vi.fn();
     const response = await runLibrarian({
+      endRun,
       chatId: 'chat',
       messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Read' }] }],
       link: null,
@@ -137,6 +144,9 @@ describe('Librarian streaming', () => {
     expect(call).toHaveBeenCalledWith('get_link', { id: 'link1' }, undefined);
   });
   it('maps streamed provider errors to fixed codes', async () => {
+    const spies = ['error', 'warn', 'log'].map((method) =>
+      vi.spyOn(console, method as 'error').mockImplementation(() => {}),
+    );
     vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
     vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
     vi.mocked(languageModelFor).mockReturnValue(
@@ -146,7 +156,7 @@ describe('Librarian streaming', () => {
             start(c) {
               c.enqueue({
                 type: 'error',
-                error: Object.assign(new Error('secret body'), { statusCode: 401 }),
+                error: Object.assign(new Error('SENTINEL_SECRET'), { statusCode: 401 }),
               });
               c.close();
             },
@@ -154,13 +164,20 @@ describe('Librarian streaming', () => {
         }),
       }),
     );
+    const endRun = vi.fn();
     const response = await runLibrarian({
+      endRun,
       chatId: 'chat',
       messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
       link: null,
     });
     const body = await response.text();
     expect(body).toContain('invalid_key');
-    expect(body).not.toContain('secret body');
+    expect(endRun).toHaveBeenCalled();
+    expect(body).not.toContain('SENTINEL_SECRET');
+    for (const spy of spies) {
+      expect(spy.mock.calls.flat().map(String).join(' ')).not.toContain('SENTINEL_SECRET');
+      spy.mockRestore();
+    }
   });
 });

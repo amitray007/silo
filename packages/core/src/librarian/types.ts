@@ -18,3 +18,13 @@ export type LibrarianMessage = {
   parts: unknown[];
   metadata?: unknown;
 };
+
+export const incomingUserMessageSchema = librarianMessageSchema
+  .extend({
+    role: z.literal('user'),
+    parts: z
+      .array(z.object({ type: z.literal('text'), text: z.string().min(1).max(20000) }).strict())
+      .min(1)
+      .max(50),
+  })
+  .strict();
