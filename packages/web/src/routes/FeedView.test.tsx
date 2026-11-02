@@ -402,13 +402,15 @@ it('opens all feeds from the breadcrumb and adds a feed through a body portal', 
   mount();
   await screen.findByText('Today post');
   fireEvent.click(screen.getByRole('link', { name: 'Feeds /' }));
-  const region = await screen.findByRole('region', { name: 'Feeds' });
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('region', { name: 'Feeds' }))
+        .getByRole('link', { name: /Publisher/ })
+        .getAttribute('href'),
+    ).toBe('/feeds/feed'),
+  );
+  const region = screen.getByRole('region', { name: 'Feeds' });
   expect(within(region).getByRole('heading', { name: 'Feeds' })).toBeDefined();
-  expect(
-    within(region)
-      .getByRole('link', { name: /Publisher/ })
-      .getAttribute('href'),
-  ).toBe('/feeds/feed');
   fireEvent.click(within(region).getByRole('button', { name: 'Add feed' }));
   expect(screen.getByRole('dialog', { name: 'Add feed' }).parentElement?.parentElement).toBe(
     document.body,
