@@ -3,6 +3,7 @@ import {
   deleteChat,
   getChat,
   incomingUserMessageSchema,
+  librarianMessageSchema,
   listChats,
   streamLibrarianReply,
 } from '@silo/core';
@@ -56,7 +57,12 @@ export function registerLibrarianRoutes(app: Hono): void {
   app.post('/librarian/chats/:id/messages', async (c) => {
     const id = chatId.parse(c.req.param('id'));
     const parsed = z
-      .object({ message: incomingUserMessageSchema })
+      .object({
+        message: z.union([
+          incomingUserMessageSchema,
+          librarianMessageSchema.extend({ role: z.literal('assistant') }).strict(),
+        ]),
+      })
       .strict()
       .safeParse(await c.req.json());
     if (!parsed.success) return c.json({ error: 'invalid_message' }, 400);

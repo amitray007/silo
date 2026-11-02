@@ -1,6 +1,6 @@
 import { Chat, type UIMessage, useChat } from '@ai-sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai';
 import { useEffect, useMemo, useState } from 'react';
 import {
   librarianApi,
@@ -8,6 +8,8 @@ import {
   useLibrarianChatDetail,
   useLibrarianChats,
 } from '../../../api/librarian';
+
+import { toolName, WRITE_TRACES } from './ChatMessage';
 
 const ERROR_WORDS: Record<string, string> = {
   invalid_key: 'Your AI key was rejected. Check Settings → AI.',
@@ -46,7 +48,27 @@ export function useLibrarianChat(linkId: string) {
     if (cached) return cached;
     const chatId = { current: null as string | null };
     const chat = new Chat({
-      onFinish: () => {
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+      onFinish: ({ message }) => {
+        if (message.parts.some((part) => toolName(part) && WRITE_TRACES[toolName(part) ?? ''])) {
+          for (const key of [
+            'links',
+            'links-recents',
+            'links-tag-only',
+            'search',
+            'link-titles',
+            'link',
+            'tags',
+            'counts',
+            'saved-links',
+            'trash',
+            'trash-search',
+            'feeds',
+            'feed',
+            'feed-posts',
+          ])
+            void client.invalidateQueries({ queryKey: [key] });
+        }
         void client.invalidateQueries({ queryKey: ['librarian'] });
       },
       transport: new DefaultChatTransport({

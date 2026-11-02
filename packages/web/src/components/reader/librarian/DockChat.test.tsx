@@ -165,3 +165,61 @@ it('keeps a delayed answer alive across fold and reopen', async () => {
   controller!.close();
   await screen.findByText('Survived folding');
 });
+
+it('resumes an approval with only the assistant message and refreshes write queries', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
+    const url = String(input);
+    if (url.endsWith('/messages')) {
+      const chunks = [
+        { type: 'start', messageId: 'approval-last' },
+        { type: 'tool-output-available', toolCallId: 'trash-call', output: 'Moved' },
+        { type: 'finish' },
+      ];
+      return new Response(
+        `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+        { headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } },
+      );
+    }
+    if (url.includes('?')) return json({ chats: [summary], nextCursor: null });
+    return json({
+      chat: summary,
+      messages: [
+        {
+          id: 'approval-last',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'dynamic-tool',
+              toolName: 'trash_link',
+              toolCallId: 'trash-call',
+              state: 'approval-requested',
+              input: { id: 'link' },
+              approval: { id: 'approval-id', signature: 'signed' },
+            },
+          ],
+        },
+      ],
+    });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  render(
+    <QueryClientProvider client={client}>
+      <DockChat linkId="approval-integration" onFold={() => {}} />
+    </QueryClientProvider>,
+  );
+  fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
+  await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tags'] }));
+  const request = fetcher.mock.calls.find(([url]) => String(url).endsWith('/messages'));
+  const body = JSON.parse(String(request?.[1]?.body));
+  expect(Object.keys(body)).toEqual(['message']);
+  expect(body.message.role).toBe('assistant');
+  expect(body.message.parts[0].approval).toEqual({
+    id: 'approval-id',
+    signature: 'signed',
+    approved: true,
+  });
+  for (const key of ['links', 'link', 'counts'])
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: [key] });
+});

@@ -67,7 +67,11 @@ export function DockChat({
           aria-busy={chat.busy}
         >
           {chat.messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
+            <ChatMessage
+              key={message.id}
+              message={message}
+              onApproval={chat.addToolApprovalResponse}
+            />
           ))}
           {chat.messages.length === 0 && (
             <p className="silo-chat-empty">

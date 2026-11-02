@@ -34,6 +34,35 @@ describe('Librarian route access', () => {
       expect((await api.request(path ?? '', { method })).status).toBe(403);
     }
   });
+  it('passes an assistant approval envelope through to core validation', async () => {
+    const { streamLibrarianReply } = await import('@silo/core');
+    const message = {
+      id: 'assistant',
+      role: 'assistant',
+      parts: [
+        {
+          type: 'tool-trash_link',
+          state: 'approval-responded',
+          input: { id: 'link' },
+          toolCallId: 'call',
+          approval: { id: 'approval', approved: false },
+        },
+      ],
+    };
+    const response = await app('env_token').request(
+      '/librarian/chats/00000000-0000-4000-8000-000000000001/messages',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ message }),
+      },
+    );
+    expect(response.status).toBe(409);
+    expect(streamLibrarianReply).toHaveBeenCalledWith({
+      chatId: '00000000-0000-4000-8000-000000000001',
+      message,
+    });
+  });
   it('returns 409 when the feature is off', async () => {
     const response = await app('env_token').request(
       '/librarian/chats/00000000-0000-4000-8000-000000000001/messages',

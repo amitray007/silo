@@ -13,6 +13,7 @@ export {
 } from '../librarian/ports.js';
 export type { AiModelsFetcher, AiProviderModelsFetcher } from './models.js';
 export { setAiModelsFetcher } from './models.js';
+export { librarianApprovalSecret } from './secret-box.js';
 export type { AiCredential } from './status.js';
 export { resolveAiCredential, resolveAiFeatureCredential } from './status.js';
 export type { AiConnectionResult, AiConnectionTester } from './tester.js';

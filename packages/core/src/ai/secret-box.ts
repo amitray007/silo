@@ -1,4 +1,4 @@
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from 'node:crypto';
+import { createCipheriv, createDecipheriv, createHash, hkdfSync, randomBytes } from 'node:crypto';
 
 /**
  * Encryption at rest for provider API keys (AI foundation). AES-256-GCM via
@@ -128,4 +128,12 @@ export function needsReencrypt(blob: string): boolean {
   const current = currentKey();
   const parsed = parseBlob(blob);
   return current !== undefined && parsed !== undefined && parsed.kid !== current.kid;
+}
+
+/** Domain-separated signing key for Librarian approvals; never exposed to adapters. */
+export function librarianApprovalSecret(): Uint8Array | undefined {
+  const current = currentKey();
+  return current
+    ? new Uint8Array(hkdfSync('sha256', current.key, '', 'silo-librarian-approval', 32))
+    : undefined;
 }
