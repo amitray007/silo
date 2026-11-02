@@ -1,6 +1,5 @@
 import {
   type ComponentType,
-  createContext,
   lazy,
   type ReactNode,
   Suspense,
@@ -35,6 +34,7 @@ import { type PencilApi, usePencil } from '../pencil/usePencil';
 import { usePencilKeys } from '../pencil/usePencilKeys';
 import { SavedPlace } from '../place/SavedPlace';
 import { ReaderIcon } from '../ReaderIcon';
+import { DockHostContext } from './DockHostContext';
 import { TypeSheet } from './TypeSheet';
 
 // The outline rail brings the spring engine with it, so it loads only where a rail can show.
@@ -143,24 +143,6 @@ const tools: readonly DockTool[] = [
     badge: (api) => api.highlights.items.length,
   },
 ];
-
-/**
- * The reader pane's side of the dock: the element that holds it, the scroll area and the pane
- * itself, so tools can draw beside the prose, and a report of whether a dock is mounted. The
- * pane themes itself only while one is.
- */
-export type DockHost = {
-  element: HTMLElement | null;
-  scroll: HTMLElement | null;
-  panel: HTMLElement | null;
-  report: (mounted: boolean) => void;
-};
-export const DockHostContext = createContext<DockHost>({
-  element: null,
-  scroll: null,
-  panel: null,
-  report: () => {},
-});
 
 function DockButton({
   tool,

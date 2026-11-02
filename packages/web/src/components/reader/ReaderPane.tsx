@@ -12,7 +12,7 @@ import { FeedSaveAction } from '../FeedSaveAction';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
-import { DockHostContext } from './dock/ReaderDock';
+import { DockHostContext } from './dock/DockHostContext';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
 import { ReaderContent } from './ReaderContent';

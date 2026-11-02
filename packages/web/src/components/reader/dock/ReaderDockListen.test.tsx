@@ -6,7 +6,7 @@ import { makeLink } from '../../../test/fixtures';
 import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import type { LoadProgress, TtsEngine } from '../listen/engines';
 import { ReaderContent } from '../ReaderContent';
-import { DockHostContext } from './ReaderDock';
+import { DockHostContext } from './DockHostContext';
 
 const engineState = vi.hoisted(() => ({
   load: undefined as

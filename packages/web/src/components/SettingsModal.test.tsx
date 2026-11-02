@@ -45,6 +45,12 @@ function mockFetchRouter() {
   let store = { ...DEFAULT_SETTINGS };
   return vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString();
+    if (url === '/api/tts/manifest')
+      return Promise.resolve(
+        jsonResponse({
+          engines: { phonon: { revision: 'p', files: {} }, kokoro: { revision: 'k', files: {} } },
+        }),
+      );
     if (url.includes('/api/settings')) {
       if (init?.method === 'PATCH') {
         const patch = JSON.parse((init.body as string) ?? '{}');
@@ -99,7 +105,7 @@ describe('SettingsModal', () => {
     vi.unstubAllGlobals();
   });
 
-  it('opens the Plugins modal without changing the URL', () => {
+  it('opens the Plugins modal without changing the URL', async () => {
     renderPage();
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     expect(screen.getByTestId('settings-url').textContent).toBe('/');
@@ -107,31 +113,31 @@ describe('SettingsModal', () => {
       screen.getByRole('tablist', { name: 'Settings sections' }).getAttribute('aria-orientation'),
     ).toBeNull();
     expect(screen.getByRole('tab', { name: 'Plugins' }).getAttribute('aria-selected')).toBe('true');
-    expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('Hacker News')).length).toBeGreaterThan(0);
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
   });
 
-  it('switches modal tabs and keeps the existing settings controls', () => {
+  it('switches modal tabs and keeps the existing settings controls', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
     expect(screen.getByTestId('settings-url').textContent).toBe('/');
     expect(screen.getByRole('tab', { name: 'Preferences' }).getAttribute('aria-selected')).toBe(
       'true',
     );
-    expect(screen.getByRole('switch', { name: 'Compact links' })).toBeDefined();
+    expect(await screen.findByRole('switch', { name: 'Compact links' })).toBeDefined();
     fireEvent.click(screen.getByRole('tab', { name: 'Import & export' }));
-    expect(screen.getByText('Import')).toBeDefined();
+    expect(await screen.findByText('Import')).toBeDefined();
     expect(screen.getByText('Export')).toBeDefined();
     fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
-    expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('MCP access')).length).toBeGreaterThan(0);
   });
 
-  it('has a Reader tab with the type, pencil, read-aloud and voices sections', () => {
+  it('has a Reader tab with the type, pencil, read-aloud and voices sections', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Reader' }));
     expect(screen.getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe('true');
     for (const title of ['Type', 'Pencil', 'Highlights', 'Read aloud', 'Voices']) {
-      expect(screen.getByRole('heading', { name: title })).toBeDefined();
+      expect(await screen.findByRole('heading', { name: title })).toBeDefined();
     }
     expect(screen.getByRole('spinbutton', { name: 'Size' })).toBeDefined();
   });
@@ -162,22 +168,22 @@ describe('SettingsModal', () => {
     expect(document.activeElement).toBe(screen.getByRole('dialog', { name: 'Settings' }));
   });
 
-  it('remembers the last tab when reopening Settings', () => {
+  it('remembers the last tab when reopening Settings', async () => {
     renderPage();
     fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     fireEvent.click(screen.getByText('trigger'));
     expect(screen.getByTestId('settings-url').textContent).toBe('/');
-    expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
+    expect((await screen.findAllByText('MCP access')).length).toBeGreaterThan(0);
   });
 
   describe('Preferences tab', () => {
-    it('the real theme toggle changes the theme (data-theme flips)', () => {
+    it('the real theme toggle changes the theme (data-theme flips)', async () => {
       renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
 
       expect(document.documentElement.getAttribute('data-theme')).toBeNull();
-      fireEvent.click(screen.getByRole('button', { name: 'Dark' }));
+      fireEvent.click(await screen.findByRole('button', { name: 'Dark' }));
       expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
 
       fireEvent.click(screen.getByRole('button', { name: 'Light' }));
@@ -211,14 +217,14 @@ describe('SettingsModal', () => {
   });
 
   describe('Plugins tab (plan 026 — logo grid + expand panel)', () => {
-    it('renders a 4-up grid with all four sources as real toggles (no "Soon" card)', () => {
+    it('renders a 4-up grid with all four sources as real toggles (no "Soon" card)', async () => {
       renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Plugins' }));
 
       // HN's panel is expanded by default, so its name appears twice (card +
       // panel header); each brand SVG's <title> also matches its own name by
       // text content — getAllByText (existence, not uniqueness) sidesteps both.
-      expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+      expect((await screen.findAllByText('Hacker News')).length).toBeGreaterThan(0);
       expect(screen.getAllByText('Twitter / X').length).toBeGreaterThan(0);
       expect(screen.getAllByText('GitHub').length).toBeGreaterThan(0);
       expect(screen.getAllByText('YouTube').length).toBeGreaterThan(0);
@@ -245,11 +251,11 @@ describe('SettingsModal', () => {
   });
 
   describe('Import/Export tab (plan 028 — both Import and Export live)', () => {
-    it('renders Import (Choose file…) and Export (Download) both live', () => {
+    it('renders Import (Choose file…) and Export (Download) both live', async () => {
       renderPage();
       fireEvent.click(screen.getByRole('tab', { name: 'Import & export' }));
 
-      const chooseFile = screen.getByRole('button', { name: /choose file/i });
+      const chooseFile = await screen.findByRole('button', { name: /choose file/i });
       const download = screen.getByRole('button', { name: /download/i });
       expect(chooseFile).not.toHaveProperty('disabled', true);
       expect(download).not.toHaveProperty('disabled', true);

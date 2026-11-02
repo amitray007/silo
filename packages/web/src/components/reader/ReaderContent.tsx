@@ -1,15 +1,18 @@
 import { useIsMutating } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { queryKeys, useLiveReader, useRetryCapture } from '../../api/hooks';
 import type { LinkJson, LiveReaderJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
-import { ReaderDock } from './dock/ReaderDock';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
 import { TweetCard } from './TweetCard';
+
+const ReaderDock = lazy(() =>
+  import('./dock/ReaderDock').then((module) => ({ default: module.ReaderDock })),
+);
 
 function Paragraphs({ link }: { link: LinkJson }) {
   const text = link.extractedText?.trim() || link.description?.trim();
@@ -196,7 +199,10 @@ export function ReaderContent({
                 onRoot={setProseElement}
               />
             </div>
-            <ReaderDock key={link.id} link={link} prose={proseElement} trashed={trashed} />
+            {/* The dock and its layers are positioned overlays, so loading adds no flow height. */}
+            <Suspense fallback={null}>
+              <ReaderDock key={link.id} link={link} prose={proseElement} trashed={trashed} />
+            </Suspense>
           </>
         ) : (
           <Paragraphs link={link} />
