@@ -98,3 +98,8 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
   Revisit when `kokoro-js` or another permissively licensed engine speaks more languages. The
   stored Reader also has no language field, so the article language is read from its text today.
 
+### TTS file lifecycle
+
+- **Use one file handle for TTS downloads.** CodeQL `js/file-system-race` in
+  `packages/core/src/tts/files.ts` was dismissed as a false positive. A single `w+`
+  handle would remove the finding but changes the download lifecycle. Revisit separately.

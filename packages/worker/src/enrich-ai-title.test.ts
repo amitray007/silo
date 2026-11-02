@@ -501,23 +501,39 @@ describeIfPg('enrichLink AI titles (integration)', () => {
   });
 
   it('does not wait for a model that never answers beyond the feature budget', async () => {
+    const id = await newPost();
+    const deps = depsFor(modelReturning('unused'));
+    const sourceReady = deferred<void>();
+    const started = deferred<void>();
+    deps.enrichSource = async () => {
+      await sourceReady.promise;
+      return post();
+    };
+    deps.runXPostTitle = () => {
+      started.resolve();
+      return new Promise(() => {});
+    };
     vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     try {
-      const id = await newPost();
-      const deps = depsFor(modelReturning('unused'));
-      deps.runXPostTitle = () => new Promise(() => {});
       let settled = false;
       const run = enrichMod.enrichLink(id, deps).then(() => {
         settled = true;
       });
-      // The budget timer starts after the first database reads, so keep advancing.
-      for (let i = 0; i < 200 && !settled; i += 1) {
-        await vi.advanceTimersByTimeAsync(xPostTitle.timeoutMs);
-        await new Promise<void>((resolve) => setImmediate(resolve));
-      }
+      // Source I/O can finish after earlier clock advances, as on a slow CI runner.
+      await vi.advanceTimersByTimeAsync(xPostTitle.timeoutMs * 200);
+      sourceReady.resolve();
+      // The model starts only after the budget timer is armed.
+      await started.promise;
+      await vi.advanceTimersByTimeAsync(xPostTitle.timeoutMs - 1);
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
       await run;
-      expect((await core.getById(id))?.title).toBe('Interfere on X');
+      const link = await core.getById(id);
+      expect(link?.title).toBe('Interfere on X');
+      expect(link?.titleSource).toBe('page');
+      expect(link?.captureStatus).toBe('full');
     } finally {
+      sourceReady.resolve();
       vi.useRealTimers();
     }
   });

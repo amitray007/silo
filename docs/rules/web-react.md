@@ -38,7 +38,8 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
   value import drags `pg` (a Node-only library) into the browser bundle, which
   can't run there. This is enforced three ways: the import boundary
   (`.dependency-cruiser.cjs` + Biome `noRestrictedImports` on `packages/web/**`)
-  blocks the import; CI runs `turbo run build` + greps `dist/` for server code.
+  blocks the import; the Vite build guard checks module ids in the main and
+  worker bundles for server code.
 - **Web defines its OWN types.** The API's JSON shapes (dates as ISO **strings**,
   not `Date`) live in `src/api/types.ts` — copied from the API contract, not
   imported. This mild duplication is required by the boundary and by the wire

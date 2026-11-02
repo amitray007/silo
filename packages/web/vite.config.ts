@@ -1,5 +1,6 @@
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
+import { serverCodeGuard } from './vite/server-code-guard.ts';
 
 // Dev-only tooling (`agentation`, the annotation toolbar) must never reach the
 // production bundle. A runtime `import.meta.env.DEV` guard stops it LOADING in
@@ -8,7 +9,8 @@ import { defineConfig } from 'vite';
 // stub — the dynamic import resolves to nothing and no chunk is emitted. In dev
 // (`serve`) the alias is absent, so the real toolbar loads.
 export default defineConfig(({ command }) => ({
-  plugins: [react()],
+  plugins: [react(), serverCodeGuard()],
+  worker: { plugins: () => [serverCodeGuard()] },
   resolve: {
     alias:
       command === 'build'
