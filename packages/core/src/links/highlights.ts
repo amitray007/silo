@@ -21,6 +21,7 @@ export { HIGHLIGHT_CONTEXT_MAX };
 import { assertLibraryWrite } from './library-write.js';
 import { whereLibrary, whereLiveAnywhere } from './live.js';
 import { decodeReaderCursor, effectiveLimit, encodeReaderCursor } from './pagination.js';
+import { escapeIlikeNeedle } from './search-query.js';
 import { normalizeTagKey } from './tag-key.js';
 
 export { HIGHLIGHT_COLORS, type HighlightColor };
@@ -463,8 +464,7 @@ export async function listLibraryHighlights(
   const cursor =
     input.cursor === undefined ? undefined : decodeReaderCursor(input.cursor, 'highlights');
   // LIKE metacharacters are literal user text, including the escape character itself.
-  const pattern =
-    input.query === undefined ? undefined : `%${input.query.replace(/[\\%_]/g, '\\$&')}%`;
+  const pattern = input.query === undefined ? undefined : escapeIlikeNeedle(input.query);
   const rows = await db
     .select({
       id: highlights.id,
