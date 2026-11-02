@@ -2,16 +2,31 @@ import { Component, type ReactNode } from 'react';
 
 type Props = { children: ReactNode; kind: 'reader' | 'settings' | 'feed' };
 
-/** Keep a failed optional chunk inside the surface that requested it. */
-export class ChunkErrorBoundary extends Component<Props, { failed: boolean }> {
-  override state = { failed: false };
+// Browser wording for a dynamic import or CSS preload that could not load.
+const CHUNK_ERROR =
+  /dynamically imported module|importing a module script failed|unable to preload css/i;
 
-  static getDerivedStateFromError() {
-    return { failed: true };
+function isChunkLoadError(error: unknown): boolean {
+  return (
+    error instanceof Error && (error.name === 'ChunkLoadError' || CHUNK_ERROR.test(error.message))
+  );
+}
+
+/**
+ * Keep a failed optional chunk inside the surface that requested it. Any other
+ * error is rethrown so it reaches the app's root boundary as before.
+ */
+export class ChunkErrorBoundary extends Component<Props, { error: unknown }> {
+  override state: { error: unknown } = { error: null };
+
+  static getDerivedStateFromError(error: unknown) {
+    return { error };
   }
 
   override render() {
-    if (!this.state.failed) return this.props.children;
+    const { error } = this.state;
+    if (error === null) return this.props.children;
+    if (!isChunkLoadError(error)) throw error;
     if (this.props.kind === 'reader') return null;
     return (
       <div role="alert">

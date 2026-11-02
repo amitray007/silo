@@ -28,3 +28,14 @@ it('does not risk a reload loop when session storage is unavailable', () => {
   handlePreloadError(new Event('vite:preloadError', { cancelable: true }));
   expect(reload).not.toHaveBeenCalled();
 });
+
+it('does not reload while the browser is offline', () => {
+  const reload = vi.fn();
+  vi.stubGlobal('location', { reload });
+  vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(false);
+  const event = new Event('vite:preloadError', { cancelable: true });
+  handlePreloadError(event);
+  expect(reload).not.toHaveBeenCalled();
+  expect(event.defaultPrevented).toBe(false);
+  expect(sessionStorage.getItem('silo:chunk-reload')).toBeNull();
+});
