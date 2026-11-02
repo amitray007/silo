@@ -462,6 +462,10 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   overflow-y: auto;
   overscroll-behavior: contain;
 }
+/* The card shows the answer, not the model thinking aloud; the chat keeps those lines. */
+.silo-selection-body .silo-chat-step {
+  display: none;
+}
 .silo-selection-body > * + * {
   margin-top: 12px;
 }
