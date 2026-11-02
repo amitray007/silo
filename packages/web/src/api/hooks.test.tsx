@@ -578,6 +578,21 @@ describe('useCaptureLink', () => {
     resolveSecond(jsonResponse({ link: makeLink({ id: 's2' }), deduped: false }, 201));
   });
 
+  it('captures safely with a plain recents cache and invalidates it on settle', async () => {
+    const { queryClient, CaptureWrapper } = makeWrapper();
+    const recents = { links: [makeLink({ id: 'recent' })] };
+    queryClient.setQueryData(queryKeys.recentLinks(), recents);
+    const created = makeLink({ id: 'captured', url: 'https://example.com/new' });
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: created, deduped: false }, 201));
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ url: created.url });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(queryKeys.recentLinks())).toEqual(recents);
+    expect(queryClient.getQueryState(queryKeys.recentLinks())?.isInvalidated).toBe(true);
+  });
+
   it('invalidates links/counts/tags on settle (success), reconciling with the server (dedup-safe) — without a redundant duplicate invalidate on the ["links", {}] subkey', async () => {
     const { queryClient, CaptureWrapper } = makeWrapper();
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');

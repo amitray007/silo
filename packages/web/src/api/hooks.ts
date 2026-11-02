@@ -89,7 +89,7 @@ export const queryKeys = {
     if (filter?.status !== undefined) key.status = filter.status;
     return ['links', key] as const;
   },
-  recentLinks: (tag?: string) => ['links', 'recents', tag ?? null] as const,
+  recentLinks: (tag?: string) => ['links-recents', tag ?? null] as const,
   frame: (id: string) => ['frame', id] as const,
   link: (id: string) => ['link', id] as const,
   liveReader: (id: string) => ['live-reader', id] as const,
@@ -1012,6 +1012,7 @@ export function useCaptureLink() {
       // The ['links'] prefix invalidate below already covers queryKeys.links()
       // (= ['links', {}]) — a separate invalidate on that exact key is redundant.
       queryClient.invalidateQueries({ queryKey: ['links'] });
+      queryClient.invalidateQueries({ queryKey: ['links-recents'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.counts() });
       queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
       queryClient.invalidateQueries({ queryKey: ['saved-links'] });
@@ -1035,6 +1036,7 @@ export function invalidateLinkQueries(
   affects: { tags?: boolean; counts?: boolean } = {},
 ): void {
   queryClient.invalidateQueries({ queryKey: ['links'] });
+  queryClient.invalidateQueries({ queryKey: ['links-recents'] });
   queryClient.invalidateQueries({ queryKey: ['link'] });
   if (affects.counts) {
     queryClient.invalidateQueries({ queryKey: ['saved-links'] });
@@ -1299,6 +1301,7 @@ export function useRestoreLink() {
     onSettled: () => {
       invalidateTrashQueries(queryClient);
       queryClient.invalidateQueries({ queryKey: ['links'] });
+      queryClient.invalidateQueries({ queryKey: ['links-recents'] });
       queryClient.invalidateQueries({ queryKey: queryKeys.tags() });
     },
   });
