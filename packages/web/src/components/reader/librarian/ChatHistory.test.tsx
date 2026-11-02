@@ -156,7 +156,10 @@ beforeEach(() => {
   FakeObserver.all = [];
   vi.stubGlobal('IntersectionObserver', FakeObserver);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
 
 it('lists the chats newest first with their ages, and loads the next page at the end', async () => {
   const chats = Array.from({ length: 25 }, (_, index) => stored(index + 1));
@@ -293,4 +296,50 @@ it('keeps a streaming answer out of the chat you switch to, and shows it when yo
   fireEvent.click(await within(back).findByRole('button', { name: /^Chat 1/ }));
   await screen.findByText('Answer that arrived late');
   expect(screen.queryByText('Other question')).toBeNull();
+});
+
+/** jsdom has no layout; give the panel and the title button the rects the placement reads. */
+function layout(panel: [number, number], title: [number, number]) {
+  vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    const [top, bottom] = this.matches('.silo-chat-panel')
+      ? panel
+      : this.matches('.silo-chat-title')
+        ? title
+        : [0, 0];
+    return {
+      top,
+      bottom,
+      left: 0,
+      right: 0,
+      width: 0,
+      height: bottom - top,
+      x: 0,
+      y: top,
+    } as DOMRect;
+  });
+}
+
+it('opens upward from a short panel, bounded by the room above, and never over the input', async () => {
+  layout([700, 824], [708, 740]);
+  setup([stored(1)]);
+  await screen.findByText('Question 1');
+  await openMenu();
+  const root = document.querySelector<HTMLElement>('.silo-chat') as HTMLElement;
+  expect(root.dataset.history).toBe('up');
+  // 700px above the panel, minus the 8px gap and the 16px margin, capped at 440px.
+  expect(root.style.getPropertyValue('--silo-history-max')).toBe('440px');
+  fireEvent.keyDown(screen.getByRole('dialog', { name: 'Chat history' }), { key: 'Escape' });
+  await waitFor(() => expect(root.dataset.history).toBeUndefined());
+});
+
+it('keeps the menu below the title when the panel has room, and stops it above the input', async () => {
+  layout([100, 800], [108, 140]);
+  setup([stored(1)]);
+  await screen.findByText('Question 1');
+  await openMenu();
+  const root = document.querySelector<HTMLElement>('.silo-chat') as HTMLElement;
+  expect(root.dataset.history).toBe('down');
+  expect(root.style.getPropertyValue('--silo-history-max')).toBe('320px');
 });

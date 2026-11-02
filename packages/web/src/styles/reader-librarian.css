@@ -296,13 +296,20 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   flex-direction: column;
   width: min(360px, calc(100% - 16px));
   min-width: 0;
-  max-height: min(320px, calc(100% - 56px));
+  max-height: var(--silo-history-max, min(320px, calc(100% - 56px)));
   padding: 4px;
   box-shadow: var(--elev-2);
   font-size: 14px;
   line-height: 20px;
   transform-origin: top left;
   pointer-events: auto;
+}
+/* On a short panel the menu opens upward from the title, above the panel, so it never covers
+   the chat input. DockChat measures the room and sets data-history and --silo-history-max. */
+.silo-chat[data-history="up"] .silo-chat-history.silo-menu-surface {
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform-origin: bottom left;
 }
 .silo-chat-history .silo-menu-grab {
   display: none;
@@ -474,8 +481,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-reader-dockmark > i {
   position: absolute;
-  right: -2px;
-  bottom: -1px;
+  top: -2px;
+  right: -3px;
   width: 6px;
   height: 6px;
   border-radius: 50%;
