@@ -419,6 +419,66 @@ describeIfPg('reading position (integration)', () => {
       });
     });
 
+    it('pages tied timestamps by link id and accepts the existing cursor format', async () => {
+      const id = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+      await rawDb.execute(sql`
+        with seeded as (
+          insert into links (id, url, canonical_url, source_kind)
+          select ('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
+            'https://example.com/tied/' || n, 'https://example.com/tied/' || n, 'link'
+          from generate_series(1,6) n returning id
+        ) insert into reading_positions (link_id, position, source, updated_at)
+          select id, 0.5, case when right(id::text,1) = '5' then 'listen' else 'mark' end,
+            case when right(id::text,1) = '6' then '2026-01-01 00:00:00.123455+00'::timestamptz
+              else '2026-01-01 00:00:00.123456+00'::timestamptz end from seeded
+      `);
+      const first = await ops.listReadingPositions({ source: 'mark', limit: 2 });
+      expect(first.positions.map((row) => row.link.id)).toEqual([id(4), id(3)]);
+      expect(first.nextCursor).toBeDefined();
+      const payload = JSON.parse(Buffer.from(first.nextCursor ?? '', 'base64url').toString());
+      expect(payload).toEqual({
+        kind: 'reading_positions',
+        timestamp: expect.stringMatching(/\.123456[+-]/),
+        id: id(3),
+      });
+      const legacyCursor = Buffer.from(
+        JSON.stringify({
+          kind: 'reading_positions',
+          timestamp: '2026-01-01T00:00:00.123456Z',
+          id: id(3),
+        }),
+      ).toString('base64url');
+      const second = await ops.listReadingPositions({
+        source: 'mark',
+        limit: 2,
+        cursor: legacyCursor,
+      });
+      expect(second.positions.map((row) => row.link.id)).toEqual([id(2), id(1)]);
+      expect(
+        await ops.listReadingPositions({ source: 'mark', limit: 2, cursor: first.nextCursor }),
+      ).toEqual(second);
+      expect(second.nextCursor).toBeDefined();
+      const last = await ops.listReadingPositions({
+        source: 'mark',
+        limit: 2,
+        cursor: second.nextCursor,
+      });
+      expect(last.positions.map((row) => row.link.id)).toEqual([id(6)]);
+      expect(last.nextCursor).toBeUndefined();
+      expect(
+        await ops.listReadingPositions({
+          source: 'mark',
+          cursor: Buffer.from(
+            JSON.stringify({
+              kind: 'reading_positions',
+              timestamp: '2026-01-01T00:00:00.123455Z',
+              id: id(6),
+            }),
+          ).toString('base64url'),
+        }),
+      ).toEqual({ positions: [] });
+    });
+
     it('excludes trash and feed posts with stored positions', async () => {
       const live = await newLink();
       const trashed = await newLink('https://example.com/trash');
