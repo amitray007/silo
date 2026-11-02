@@ -108,7 +108,12 @@ export function SelectionBar({
   const phase = phaseOf(composer, answerAction);
   useRetainedSelection(pending?.range, phase !== 'bar');
   // Without the Custom Highlight API the passage cannot stay sharp, so nothing recedes.
-  useRecede(container, 'passage', pending !== null && phase !== 'bar' && canRetainSelection());
+  useRecede(
+    container,
+    'passage',
+    pending !== null && phase !== 'bar' && canRetainSelection(),
+    pending?.range,
+  );
   const where = pending && surfacePlacement(pending.rect, phase);
   const { root, shell, begin } = useSurfaceMotion(phase, where?.flip ? 'top' : 'bottom');
   /** Change phase: the surface remembers its old shape, then morphs into the new one. */
