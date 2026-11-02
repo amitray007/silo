@@ -37,9 +37,12 @@ describe('web cache headers', () => {
   );
 
   it('does not mark unhashed or missing assets immutable', async () => {
-    for (const path of ['/assets/unhashed.js', '/assets/missing-12345678.js']) {
+    for (const [path, status] of [
+      ['/assets/unhashed.js', 200],
+      ['/assets/missing-12345678.js', 404],
+    ] as const) {
       const res = await app.request(path);
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(status);
       expect(res.headers.get('cache-control') ?? '').not.toContain('immutable');
     }
   });
