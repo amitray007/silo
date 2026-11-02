@@ -1,6 +1,5 @@
 import { InvalidImportError, importLinks } from '@silo/core';
 import type { Hono } from 'hono';
-import { checkIngestAuth } from '../ingest-auth.js';
 
 /**
  * Ceiling on the import request body size, in bytes. 25MB sits well above
@@ -45,18 +44,6 @@ const MAX_IMPORT_BODY_BYTES = 25 * 1024 * 1024;
  */
 export function registerImportRoutes(app: Hono): void {
   app.post('/import', async (c) => {
-    const auth = await checkIngestAuth(c);
-    if (!auth.ok) {
-      // Same generic-401 discipline as routes/ingest.ts: never distinguish
-      // "token not configured" from "wrong/missing token" in the RESPONSE —
-      // the operator-relevant detail stays server-side, in the log line only.
-      console.error(`[silo/api] /api/import rejected: ${auth.reason}`);
-      return c.json(
-        { error: 'unauthorized', message: 'A valid Authorization: Bearer token is required.' },
-        401,
-      );
-    }
-
     // Size guard runs AFTER auth, BEFORE any body read — see doc comment above.
     const contentLength = Number(c.req.header('content-length'));
     if (Number.isFinite(contentLength) && contentLength > MAX_IMPORT_BODY_BYTES) {
