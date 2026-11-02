@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { expect, it, vi } from 'vitest';
 import type { LiveReaderJson } from '../../api/types';
 import { makeLink } from '../../test/fixtures';
@@ -23,7 +23,7 @@ vi.mock('./dock/ReaderDock', async () => {
   return { ReaderDock: () => <div role="toolbar" aria-label="Loaded reader tools" /> };
 });
 
-it('loads tools only for captured prose and keeps the article visible while they load', async () => {
+it('preloads tools on mount and keeps the article visible while they load', async () => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const link = makeLink({ extractedText: 'Plain fallback article.', description: null });
   const content = (
@@ -33,7 +33,7 @@ it('loads tools only for captured prose and keeps the article visible while they
   );
   const view = render(content);
   expect(screen.getByText('Plain fallback article.')).toBeDefined();
-  expect(dock.loaded).toBe(false);
+  await waitFor(() => expect(dock.loaded).toBe(true));
   reader.data = {
     contentHtml: '<p>Captured article stays visible.</p>',
     contentImages: [],

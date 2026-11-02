@@ -3,6 +3,7 @@ import { Route, Routes } from 'react-router';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { LoginGate } from './auth/LoginGate';
 import { AppFrame } from './components';
+import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
 import { ReaderLayout } from './components/reader/ReaderLayout';
 import { SegmentTabs } from './components/reader/ReaderSegment';
 import { LibraryView } from './routes/LibraryView';
@@ -64,17 +65,21 @@ function AppRoutes() {
         <Route
           path="/feeds"
           element={
-            <Suspense fallback={<FeedRouteLoading />}>
-              <FeedsView />
-            </Suspense>
+            <ChunkErrorBoundary kind="feed" key="feeds">
+              <Suspense fallback={<FeedRouteLoading />}>
+                <FeedsView />
+              </Suspense>
+            </ChunkErrorBoundary>
           }
         />
         <Route
           path="/feeds/:id"
           element={
-            <Suspense fallback={<FeedRouteLoading detail />}>
-              <FeedView />
-            </Suspense>
+            <ChunkErrorBoundary kind="feed" key="feed">
+              <Suspense fallback={<FeedRouteLoading detail />}>
+                <FeedView />
+              </Suspense>
+            </ChunkErrorBoundary>
           }
         />
         <Route path="/trash" element={<TrashView />} />

@@ -430,7 +430,7 @@ function ReaderPaneContent({
     prefs: { type },
   } = useReaderPrefs();
   const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
-  const [dockMounted, setDockMounted] = useState(false);
+  const [proseReady, setProseReady] = useState(false);
   // The scroll area and the pane exist from the first render; the dock's tools draw in them.
   const [areas, setAreas] = useState<{ scroll: HTMLElement | null; panel: HTMLElement | null }>({
     scroll: null,
@@ -442,7 +442,7 @@ function ReaderPaneContent({
   const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => setAreas({ scroll: scrollRef.current, panel: panelRef.current }), []);
   const dockHost = useMemo(
-    () => ({ element: dockElement, ...areas, report: setDockMounted }),
+    () => ({ element: dockElement, ...areas, report: setProseReady }),
     [dockElement, areas],
   );
   const [openMenu, setOpenMenu] = useState<'more' | 'settings' | null>(null);
@@ -500,7 +500,7 @@ function ReaderPaneContent({
   return (
     <section
       className="silo-readerpane"
-      data-reader-theme={tab === 'reader' && dockMounted ? type.theme : undefined}
+      data-reader-theme={tab === 'reader' && proseReady ? type.theme : undefined}
       aria-label="Link reader"
       ref={panelRef}
       tabIndex={-1}

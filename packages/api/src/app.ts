@@ -343,6 +343,7 @@ export function createApp(): Hono {
     app.get('*', (c, next) => {
       const path = c.req.path;
       if (
+        path.startsWith('/assets/') ||
         path.startsWith('/api/') ||
         path === '/api' ||
         path === '/health' ||

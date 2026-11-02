@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react';
+import { ChunkErrorBoundary } from './ChunkErrorBoundary';
 import { ModalHeader, ModalShell } from './ModalShell';
 import { type SettingsTab, useSettings } from './SettingsContext';
 
@@ -129,9 +130,11 @@ export function SettingsModal() {
       >
         <h3>{TABS.find((entry) => entry.key === tab)?.name}</h3>
         <p className="silo-settings-lead">{TAB_DESCRIPTIONS[tab]}</p>
-        <Suspense fallback={<p role="status">Loading settings…</p>}>
-          <ActiveTabPanel tab={tab} />
-        </Suspense>
+        <ChunkErrorBoundary kind="settings" key={tab}>
+          <Suspense fallback={<p role="status">Loading settings…</p>}>
+            <ActiveTabPanel tab={tab} />
+          </Suspense>
+        </ChunkErrorBoundary>
       </div>
     </ModalShell>
   );

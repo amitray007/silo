@@ -248,7 +248,7 @@ export function ReaderDock({
   prose: HTMLElement | null;
   trashed?: boolean;
 }) {
-  const { element: host, scroll, panel, report } = useContext(DockHostContext);
+  const { element: host, scroll, panel } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
   const writePosition = useSaveReadingPosition(link.id);
@@ -339,12 +339,6 @@ export function ReaderDock({
   useEffect(() => {
     if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
   }, [listening]);
-  const hosted = host !== null;
-  useEffect(() => {
-    if (!hosted) return;
-    report(true);
-    return () => report(false);
-  }, [hosted, report]);
   if (!host) return null;
   const closeSheet = () => setOpenId(null);
   const api: DockApi = { pencil, highlights, lane, listen, closeSheet, openSheet: setOpenId };
