@@ -1,0 +1,260 @@
+/* Reader tools, slice 2: the reading pencil, the resume point, the outline dial, and the
+   Pencil split button in the dock. Tokens only; Sepia recolours them with the pane. */
+
+/* The frame holds the prose and is the pencil's drawing surface. */
+.silo-prose-frame {
+  position: relative;
+}
+
+/* Reading pencil */
+.silo-pencil {
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  top: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--line-2);
+  pointer-events: none;
+  will-change: transform;
+}
+.silo-pencil::before {
+  content: "";
+  position: absolute;
+  inset: auto 0 2px;
+  height: 20px;
+  background: linear-gradient(
+    to top,
+    color-mix(in oklch, var(--mark) 12%, transparent),
+    transparent
+  );
+}
+.silo-pencil-fill {
+  position: relative;
+  height: 100%;
+  background: var(--mark);
+  transform-origin: left;
+  transform: scaleX(0);
+  border-radius: 1px;
+}
+.silo-pencil[data-style="highlighter"] {
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--mark) 16%, transparent);
+}
+.silo-pencil[data-style="highlighter"]::before {
+  display: none;
+}
+.silo-pencil[data-style="highlighter"] .silo-pencil-fill {
+  border-radius: 4px;
+  background: color-mix(in oklch, var(--mark) 22%, transparent);
+}
+
+/* The Pencil split button: the main part toggles the pencil, the chevron opens its sheet. */
+.silo-reader-dock-split {
+  display: flex;
+  align-items: center;
+  border-radius: 999px;
+}
+.silo-reader-dock-split .silo-reader-dockbtn {
+  flex: 1;
+}
+.silo-reader-dock-split[data-on="true"] {
+  background: var(--btn);
+  color: var(--btn-ink);
+}
+.silo-reader-dock-split[data-on="true"] .silo-reader-dockbtn {
+  background: none;
+  color: var(--btn-ink);
+}
+.silo-reader-dockchev {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 38px;
+  padding: 0;
+  border: 0;
+  border-radius: 0 999px 999px 0;
+  background: none;
+  color: var(--fnt);
+  cursor: pointer;
+}
+.silo-reader-dock-split[data-on="true"] .silo-reader-dockchev {
+  color: var(--btn-ink);
+}
+.silo-reader-dockchev[aria-expanded="true"] {
+  color: var(--ink);
+}
+.silo-reader-dock-split[data-on="true"] .silo-reader-dockchev[aria-expanded="true"] {
+  color: var(--btn-ink);
+  background: var(--btn-pressed);
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-reader-dockchev:hover {
+    color: var(--ink);
+    background: var(--hov);
+  }
+  .silo-reader-dock-split[data-on="true"] .silo-reader-dockchev:hover {
+    color: var(--btn-ink);
+    background: var(--btn-pressed);
+  }
+}
+
+/* The Pencil sheet: play, pace, progress, then the style. */
+.silo-pencil-transport {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.silo-pencil-play {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--btn);
+  color: var(--btn-ink);
+  cursor: pointer;
+  flex: none;
+}
+.silo-pencil-play:active {
+  transform: scale(0.96);
+}
+.silo-pencil-progress {
+  flex: 1;
+  min-width: 48px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-2);
+  overflow: hidden;
+}
+.silo-pencil-progress > div {
+  height: 100%;
+  background: var(--ink);
+}
+.silo-pencil-percent {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.silo-stepper-value {
+  white-space: nowrap;
+}
+.silo-stepper-value small {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--fnt);
+}
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-pencil-play {
+    width: 40px;
+    height: 40px;
+  }
+  .silo-reader-dockchev {
+    width: 40px;
+    height: 40px;
+  }
+}
+
+/* Outline dial: a tick rail at the pane's left edge. */
+.silo-outline {
+  position: absolute;
+  z-index: 22;
+  left: 0;
+  top: 44px;
+  bottom: 0;
+  width: 52px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  pointer-events: none;
+}
+.silo-outline-cluster {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 0;
+  pointer-events: auto;
+}
+.silo-tick {
+  display: flex;
+  align-items: center;
+  height: 6px;
+  width: 52px;
+  padding: 0 0 0 8px;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+.silo-tick i {
+  display: block;
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: color-mix(in oklch, var(--mut) 50%, transparent);
+}
+.silo-tick[data-heading="true"] i {
+  background: var(--mut);
+}
+.silo-tick[data-crest="true"] i {
+  width: 36px;
+  background: var(--ink);
+}
+.silo-tick[data-current="true"] i {
+  width: 20px;
+  background: var(--ink);
+}
+.silo-outline-card {
+  position: absolute;
+  left: 56px;
+  width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  pointer-events: none;
+}
+.silo-outline-card strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.silo-outline-card span {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 12.5px;
+  line-height: 18px;
+  color: var(--fnt);
+}
+
+/* `.silo-reader-icon` pins glyphs to 20px; these controls use the prototype's sizes. */
+.silo-reader-dock-split .silo-reader-dockbtn .silo-reader-icon {
+  width: 19px;
+  height: 19px;
+}
+.silo-reader-dockchev .silo-reader-icon {
+  width: 14px;
+  height: 14px;
+}
+.silo-pencil-play .silo-reader-icon {
+  width: 16px;
+  height: 16px;
+}
+.silo-pencil-transport .silo-stepper-btn .silo-reader-icon {
+  width: 14px;
+  height: 14px;
+}
+/* One 6px rhythm across the transport, the stepper's own gaps included. */
+.silo-pencil-transport .silo-stepper {
+  gap: 6px;
+}

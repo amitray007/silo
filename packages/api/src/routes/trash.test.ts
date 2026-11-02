@@ -333,9 +333,25 @@ describeIfPg('GET /api/trash (integration)', () => {
       expect(body.outcome).toBe('restored');
       expect(body.link.id).toBe(created.id);
       expectWhitelistedLinkShape(body.link);
+      expect(body.link.readingPosition).toBeNull();
 
       const getRes = await app.request(`/api/links/${created.id}`);
       expect(getRes.status).toBe(200);
+    });
+
+    it('a saved reading position survives trash and comes back on the restored link', async () => {
+      const { core, app } = harness.mod();
+      const created = await core.createLink({
+        url: 'https://example.com/restore-keeps-position',
+        sourceKind: 'link',
+      });
+      await core.setReadingPosition(created.id, 0.5);
+      await core.softDelete(created.id);
+      const res = await post(app, `/api/links/${created.id}/restore`);
+      const body = (await res.json()) as {
+        link: { readingPosition: { position: number } | null };
+      };
+      expect(body.link.readingPosition?.position).toBe(0.5);
     });
 
     it('the merged case — trash A, a second live row lands at the same canonical url, restoring A merges into it (different id)', async () => {
@@ -371,6 +387,7 @@ describeIfPg('GET /api/trash (integration)', () => {
         message: string;
       };
       expect(body.outcome).toBe('merged');
+      expect((body.link as Record<string, unknown>).readingPosition).toBeNull();
       expect(body.link.id).toBe(liveReplacementId);
       expect(body.link.id).not.toBe(linkA.id);
       expect(body.link.notes).toContain('note from A');

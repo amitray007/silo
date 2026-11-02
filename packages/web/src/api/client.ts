@@ -185,8 +185,16 @@ export async function apiGet<T>(path: string, signal?: AbortSignal): Promise<T> 
  * (`undefined`) omits the `body`/`content-type` entirely (used by e.g. a
  * no-body `DELETE`); most callers pass a JSON-serializable object.
  */
-async function apiRequest<T>(path: string, method: string, body?: unknown): Promise<T> {
+async function apiRequest<T>(
+  path: string,
+  method: string,
+  body?: unknown,
+  signal?: AbortSignal,
+  keepalive = false,
+): Promise<T> {
   const response = await apiFetch(path, {
+    ...(signal ? { signal } : {}),
+    ...(keepalive ? { keepalive: true } : {}),
     method,
     headers: {
       'X-Silo-CSRF': '1',
@@ -208,8 +216,8 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 /** `PUT`s `body` as JSON to `path`. Same `ApiError` contract as `apiPost`. */
-export function apiPut<T>(path: string, body: unknown): Promise<T> {
-  return apiRequest<T>(path, 'PUT', body);
+export function apiPut<T>(path: string, body: unknown, keepalive = false): Promise<T> {
+  return apiRequest<T>(path, 'PUT', body, undefined, keepalive);
 }
 
 /**
@@ -218,8 +226,14 @@ export function apiPut<T>(path: string, body: unknown): Promise<T> {
  * trivial given `apiRequest` and keeps every write verb's error handling
  * identical. Unused by this slice.
  */
-export function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  return apiRequest<T>(path, 'PATCH', body);
+export async function apiPatch<T>(path: string, body: unknown): Promise<T> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 15_000);
+  try {
+    return await apiRequest<T>(path, 'PATCH', body, controller.signal);
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -228,4 +242,19 @@ export function apiPatch<T>(path: string, body: unknown): Promise<T> {
  */
 export function apiDelete<T>(path: string): Promise<T> {
   return apiRequest<T>(path, 'DELETE');
+}
+
+/** Fire-and-forget PATCH that survives page close; failures cannot be shown after unload. */
+export function apiPatchKeepalive(path: string, body: unknown): void {
+  keepaliveRequest('PATCH', path, body);
+}
+
+function keepaliveRequest(method: string, path: string, body: unknown): void {
+  fetch(`${baseUrl}${path}`, {
+    method,
+    keepalive: true,
+    credentials: 'include',
+    headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  }).catch(() => {});
 }

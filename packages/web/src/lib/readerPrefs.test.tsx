@@ -1,7 +1,24 @@
 import { readFileSync } from 'node:fs';
 import { act, fireEvent, render, renderHook, screen } from '@testing-library/react';
-import { afterEach, expect, it, vi } from 'vitest';
-import { parseReaderType, readerTypeDefaults, readerTypeStyle, useReaderType } from './readerPrefs';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import {
+  highlightPrefsDefaults,
+  MAX_PENCIL_WPM,
+  MIN_PENCIL_WPM,
+  parseHighlightPrefs,
+  parsePencilPrefs,
+  parseReadAloudPrefs,
+  parseReaderType,
+  pencilPrefsDefaults,
+  READ_ALOUD_SPEEDS,
+  readAloudPrefsDefaults,
+  readerTypeDefaults,
+  readerTypeStyle,
+  useHighlightPrefs,
+  usePencilPrefs,
+  useReadAloudPrefs,
+  useReaderType,
+} from './readerPrefs';
 
 const KEY = 'silo.readerType';
 // Vitest blanks CSS imports, so read the stylesheet source directly.
@@ -235,4 +252,145 @@ it('re-reads on a storage event that names no key', () => {
     window.dispatchEvent(new StorageEvent('storage', { key: null }));
   });
   expect(screen.getByText('mono-19')).toBeDefined();
+});
+
+describe('pencil prefs', () => {
+  const PENCIL_KEY = 'silo.readerPencil';
+
+  afterEach(() => localStorage.removeItem(PENCIL_KEY));
+
+  it('starts at Underline and 240 wpm', () => {
+    expect(pencilPrefsDefaults).toEqual({ style: 'underline', wpm: 240 });
+    expect(renderHook(usePencilPrefs).result.current.prefs).toEqual(pencilPrefsDefaults);
+  });
+
+  it('round-trips an update through storage', () => {
+    const first = renderHook(usePencilPrefs);
+    act(() => first.result.current.update({ style: 'highlighter', wpm: 320 }));
+    expect(JSON.parse(localStorage.getItem(PENCIL_KEY) ?? '{}')).toEqual({
+      v: 1,
+      style: 'highlighter',
+      wpm: 320,
+    });
+    first.unmount();
+    expect(renderHook(usePencilPrefs).result.current.prefs).toEqual({
+      style: 'highlighter',
+      wpm: 320,
+    });
+  });
+
+  it('falls back for damaged text and keeps a good field beside a bad one', () => {
+    for (const raw of ['{nope', 'null', '[1]', '7']) {
+      expect(parsePencilPrefs(raw)).toEqual(pencilPrefsDefaults);
+    }
+    expect(parsePencilPrefs(JSON.stringify({ style: 'neon', wpm: 300 }))).toEqual({
+      style: 'underline',
+      wpm: 300,
+    });
+    expect(parsePencilPrefs(JSON.stringify({ style: 'highlighter', wpm: 'fast' }))).toEqual({
+      style: 'highlighter',
+      wpm: 240,
+    });
+  });
+
+  it('clamps the pace to 100..600 and snaps it to steps of 20', () => {
+    expect(parsePencilPrefs(JSON.stringify({ wpm: 10 })).wpm).toBe(MIN_PENCIL_WPM);
+    expect(parsePencilPrefs(JSON.stringify({ wpm: 9000 })).wpm).toBe(MAX_PENCIL_WPM);
+    expect(parsePencilPrefs(JSON.stringify({ wpm: 251 })).wpm).toBe(260);
+    expect(parsePencilPrefs(JSON.stringify({ wpm: Number.NaN })).wpm).toBe(240);
+  });
+});
+
+describe('highlight prefs', () => {
+  const HIGHLIGHT_KEY = 'silo.readerHighlight';
+  afterEach(() => localStorage.clear());
+
+  it('starts on yellow', () => {
+    expect(highlightPrefsDefaults).toEqual({ color: 'yellow' });
+    expect(renderHook(useHighlightPrefs).result.current.color).toBe('yellow');
+  });
+
+  it('round-trips a colour through storage', () => {
+    const first = renderHook(useHighlightPrefs);
+    act(() => first.result.current.setColor('violet'));
+    expect(JSON.parse(localStorage.getItem(HIGHLIGHT_KEY) ?? '{}')).toEqual({
+      v: 1,
+      color: 'violet',
+    });
+    first.unmount();
+    expect(renderHook(useHighlightPrefs).result.current.color).toBe('violet');
+  });
+
+  it('falls back to yellow for damaged or unknown values', () => {
+    for (const raw of ['{nope', 'null', '[1]', '7', JSON.stringify({ color: 'orange' })]) {
+      expect(parseHighlightPrefs(raw)).toEqual(highlightPrefsDefaults);
+    }
+    expect(parseHighlightPrefs(JSON.stringify({ color: 'pink' }))).toEqual({ color: 'pink' });
+  });
+
+  it('keeps working when storage throws', () => {
+    vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new Error('full');
+    });
+    const { result } = renderHook(useHighlightPrefs);
+    act(() => result.current.setColor('green'));
+    expect(result.current.color).toBe('green');
+    vi.restoreAllMocks();
+  });
+});
+
+describe('read aloud prefs', () => {
+  afterEach(() => localStorage.clear());
+
+  it('starts on Phonon at 1x with default voices', () => {
+    expect(readAloudPrefsDefaults).toEqual({
+      engine: 'phonon',
+      pauses: 'relaxed',
+      voices: { phonon: '', kokoro: '' },
+      rate: 1,
+    });
+  });
+
+  it('keeps each good field and defaults only the bad ones', () => {
+    expect(
+      parseReadAloudPrefs(
+        JSON.stringify({ engine: 'kokoro', voices: { phonon: 'zoe', kokoro: 7 }, rate: 1.25 }),
+      ),
+    ).toEqual({
+      engine: 'kokoro',
+      pauses: 'relaxed',
+      voices: { phonon: 'zoe', kokoro: '' },
+      rate: 1.25,
+    });
+    expect(parseReadAloudPrefs(JSON.stringify({ engine: 'mystery', rate: 1.3 }))).toEqual(
+      readAloudPrefsDefaults,
+    );
+  });
+
+  it.each(['', 'nope', '[]', 'null', '7'])('falls back to defaults for %j', (raw) => {
+    expect(parseReadAloudPrefs(raw)).toEqual(readAloudPrefsDefaults);
+  });
+
+  it('accepts only the speeds the sheet offers', () => {
+    for (const rate of READ_ALOUD_SPEEDS) {
+      expect(parseReadAloudPrefs(JSON.stringify({ rate })).rate).toBe(rate);
+    }
+    expect(parseReadAloudPrefs(JSON.stringify({ rate: 5 })).rate).toBe(1);
+  });
+
+  it('stores one voice per engine and persists the choice', () => {
+    const { result } = renderHook(() => useReadAloudPrefs());
+    act(() => result.current.update({ voice: ['phonon', 'zoe'] }));
+    act(() => result.current.update({ voice: ['kokoro', 'af_heart'], engine: 'kokoro', rate: 2 }));
+    expect(result.current.prefs).toEqual({
+      engine: 'kokoro',
+      pauses: 'relaxed',
+      voices: { phonon: 'zoe', kokoro: 'af_heart' },
+      rate: 2,
+    });
+    expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}')).toMatchObject({
+      v: 1,
+      engine: 'kokoro',
+    });
+  });
 });

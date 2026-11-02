@@ -3,18 +3,23 @@ import {
   addTag,
   addTagMany,
   captureMany,
+  clearReaderPrefs,
+  clearReadingPosition,
   createTag,
   deleteTag,
   editLink,
   getById,
   getByIds,
+  patchReaderPrefs,
+  readerPatchSchema,
   removeTag,
   removeTagMany,
+  setReadingPosition,
 } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { runBulkGuarded } from '../bulk-result.js';
-import { toLinkJson } from '../link-json.js';
+import { toLinkDetailJson } from '../link-json.js';
 import {
   addTagBodySchema,
   batchCaptureBodySchema,
@@ -23,8 +28,10 @@ import {
   captureBodySchema,
   createTagBodySchema,
   editBodySchema,
+  readingPositionBodySchema,
   tagNameParamSchema,
 } from '../query-schemas.js';
+import { readerBodyLimit } from '../reader-body-limit.js';
 import { performCapture, respondWithLink } from './mutate-link.js';
 
 /** `POST /api/links/:id/tags` and `DELETE /api/links/:id/tags/:tag`'s shared `id` param schema — a non-uuid `id` is a 400, not a pointless DB round-trip. */
@@ -116,6 +123,69 @@ export function registerLinksWriteRoutes(app: Hono): void {
       return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
     }
     return respondWithLink(c, id, 200);
+  });
+
+  app.patch('/links/:id/reader-prefs', readerBodyLimit, async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    const { writtenAt, ...body } = readerPatchSchema
+      .extend({
+        writtenAt: z.iso.datetime({ offset: true }).optional(),
+      })
+      .parse(await c.req.json().catch(() => undefined));
+    const readerPrefs = await patchReaderPrefs(
+      id,
+      body,
+      writtenAt ? new Date(writtenAt) : undefined,
+    );
+    if (readerPrefs === null) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.json({ readerPrefs });
+  });
+
+  app.delete('/links/:id/reader-prefs', async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    if (!(await clearReaderPrefs(id))) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.body(null, 204);
+  });
+
+  /**
+   * `PUT /api/links/:id/reading-position` — save where the reader stopped.
+   * Body: `{ position, source?, writtenAt? }` (source defaults to mark), a share of the article's words from 0 to 1. Returns
+   * `{ readingPosition }`. Idempotent; the write never bumps `links.updated_at`.
+   * An unknown or trashed id is a `404`; a feed post is a `409` (core's
+   * `FeedPostNotEditableError`).
+   */
+  app.put('/links/:id/reading-position', async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    const body = readingPositionBodySchema.parse(await c.req.json().catch(() => ({})));
+    const saved = await setReadingPosition(
+      id,
+      body.position,
+      body.source,
+      body.writtenAt ? new Date(body.writtenAt) : undefined,
+    );
+    if (!saved) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.json({
+      readingPosition: {
+        position: saved.position,
+        source: saved.source,
+        updatedAt: saved.updatedAt.toISOString(),
+      },
+    });
+  });
+
+  /** `DELETE /api/links/:id/reading-position` — clear the saved position. `204`; clearing an empty one is fine. */
+  app.delete('/links/:id/reading-position', async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    if (!(await clearReadingPosition(id))) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.body(null, 204);
   });
 
   /**
@@ -279,7 +349,7 @@ export function registerLinksWriteRoutes(app: Hono): void {
     if (!outcome.ok) return outcome.response;
     const results = outcome.value.map((r) => ({
       id: r.id,
-      link: r.link ? toLinkJson(r.link) : null,
+      link: r.link ? toLinkDetailJson(r.link) : null,
     }));
     return c.json({ results }, 200);
   });

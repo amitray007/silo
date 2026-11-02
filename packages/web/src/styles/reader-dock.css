@@ -77,7 +77,8 @@
   font-weight: 500;
   cursor: pointer;
 }
-.silo-reader-dockbtn[aria-expanded="true"] {
+.silo-reader-dockbtn[aria-expanded="true"],
+.silo-reader-dock-pill > .silo-reader-dockbtn[aria-pressed="true"] {
   background: var(--sel);
   color: var(--ink);
 }
@@ -94,7 +95,8 @@
     background: var(--hov);
     color: var(--ink);
   }
-  .silo-reader-dockbtn[aria-expanded="true"]:hover {
+  .silo-reader-dockbtn[aria-expanded="true"]:hover,
+  .silo-reader-dock-pill > .silo-reader-dockbtn[aria-pressed="true"]:hover {
     background: var(--sel);
   }
 }

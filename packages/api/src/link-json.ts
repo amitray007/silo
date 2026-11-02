@@ -1,8 +1,12 @@
 import type {
   CaptureSource,
+  Highlight,
+  HighlightColor,
+  LinkDetail,
   LinkSummaryWithTags,
   LinkWithTextWindow,
   ListResultRow,
+  ReaderPrefs,
   SearchResultRow,
   SourceData,
 } from '@silo/core';
@@ -98,6 +102,55 @@ function shapeSourceData(raw: unknown): SourceData {
   return parsed.data;
 }
 
+/** Where the reader stopped: a share (0 to 1) of the article's words, and when it was saved. */
+type ReadingPositionJson = {
+  position: number;
+  source: 'pencil' | 'listen' | 'mark';
+  updatedAt: string;
+};
+
+/** One passage highlight. Picked field by field; `linkId` stays out (the link carries it). */
+export type HighlightJson = {
+  id: string;
+  quote: string;
+  prefix: string;
+  suffix: string;
+  startOffset: number | null;
+  endOffset: number | null;
+  color: HighlightColor;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/**
+ * `LinkJson` plus the saved reading position (`null` when none) and the
+ * passage highlights. Only the single-link reads and writes carry them; list,
+ * search and trash rows do not, so a list query never joins either table.
+ */
+export type LinkDetailJson = LinkJson & {
+  readerTextOmitted?: true;
+  readerPrefs: ReaderPrefs;
+  readingPosition: ReadingPositionJson | null;
+  highlights: HighlightJson[];
+};
+
+/** Builds the whitelisted highlight JSON. */
+export function toHighlightJson(highlight: Highlight): HighlightJson {
+  return {
+    id: highlight.id,
+    quote: highlight.quote,
+    prefix: highlight.prefix,
+    suffix: highlight.suffix,
+    startOffset: highlight.startOffset,
+    endOffset: highlight.endOffset,
+    color: highlight.color,
+    note: highlight.note,
+    createdAt: highlight.createdAt.toISOString(),
+    updatedAt: highlight.updatedAt.toISOString(),
+  };
+}
+
 /** Summary JSON plus `deletedAt` — the Trash screen's shape (`GET /api/trash`). */
 export type TrashLinkJson = SummaryLinkJson & { deletedAt: string };
 
@@ -147,6 +200,23 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
     updatedAt: link.updatedAt.toISOString(),
   };
   /* jscpd:ignore-end */
+}
+
+/** `toLinkJson` plus the reading position and highlights, picked field by field. */
+export function toLinkDetailJson(link: LinkDetail): LinkDetailJson {
+  return {
+    ...toLinkJson(link),
+    ...(link.readerTextOmitted ? { readerTextOmitted: true as const } : {}),
+    readerPrefs: link.readerPrefs,
+    readingPosition: link.readingPosition
+      ? {
+          position: link.readingPosition.position,
+          source: link.readingPosition.source,
+          updatedAt: link.readingPosition.updatedAt.toISOString(),
+        }
+      : null,
+    highlights: link.highlights.map(toHighlightJson),
+  };
 }
 
 /**
@@ -235,11 +305,11 @@ export function toSearchResultJson(link: LinkSummaryWithTags, rank: number): Sea
  * it received. Mirrors `packages/mcp/server/src/tools/get-link.ts`'s
  * `GetLinkStructuredContent`'s identical `extractedTextLength` field.
  */
-export type LinkWithTextWindowJson = LinkJson & { extractedTextLength: number };
+export type LinkWithTextWindowJson = LinkDetailJson & { extractedTextLength: number };
 
 /** Builds the windowed-detail shape — `toLinkJson` plus `extractedTextLength`. */
 export function toLinkWithTextWindowJson(link: LinkWithTextWindow): LinkWithTextWindowJson {
-  return { ...toLinkJson(link), extractedTextLength: link.extractedTextLength };
+  return { ...toLinkDetailJson(link), extractedTextLength: link.extractedTextLength };
 }
 
 /**

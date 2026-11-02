@@ -672,6 +672,7 @@ describe('useEditLink', () => {
       headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'New title' }),
       credentials: 'include',
+      signal: expect.any(AbortSignal),
     });
     expect(response).toEqual({ link: updated });
   });

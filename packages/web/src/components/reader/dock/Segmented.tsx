@@ -3,7 +3,7 @@ import { useId } from 'react';
 export type SegmentedOption<T extends string> = { value: T; label: string };
 
 /** A radio group of text buttons: arrow keys move and select, and only the selected one tabs. */
-function Segmented<T extends string>({
+export function Segmented<T extends string>({
   labelId,
   value,
   options,

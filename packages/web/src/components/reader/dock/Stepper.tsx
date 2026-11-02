@@ -9,6 +9,8 @@ export function Stepper({
   step = 1,
   valueText,
   display,
+  lessTitle,
+  moreTitle,
   lessGlyph,
   moreGlyph,
   onChange,
@@ -20,8 +22,11 @@ export function Stepper({
   step?: number;
   /** Spoken form of the value, such as "16 pixels". */
   valueText?: string;
-  /** The text shown for the value; defaults to the number. */
-  display?: string;
+  /** What the value shows; defaults to the number. */
+  display?: ReactNode;
+  /** Tooltips for the two buttons, such as "Slower (-)". */
+  lessTitle?: string;
+  moreTitle?: string;
   /** Content of the decrease and increase buttons. */
   lessGlyph: ReactNode;
   moreGlyph: ReactNode;
@@ -34,6 +39,7 @@ export function Stepper({
         type="button"
         className="silo-stepper-btn"
         aria-label={`Decrease ${label.toLowerCase()}`}
+        title={lessTitle}
         disabled={value <= min}
         onClick={() => move(-step)}
       >
@@ -64,6 +70,7 @@ export function Stepper({
         type="button"
         className="silo-stepper-btn"
         aria-label={`Increase ${label.toLowerCase()}`}
+        title={moreTitle}
         disabled={value >= max}
         onClick={() => move(step)}
       >

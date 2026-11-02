@@ -1,11 +1,14 @@
 import { randomUUID } from 'node:crypto';
-import { db, links, linkTags, tags } from '@silo/db';
+import { db, linkReaderPrefs, links, linkTags, readingPositions, tags } from '@silo/db';
 import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { READER_VERSION } from '../capture.js';
 import type { FeedEntry } from '../feeds/types.js';
+import { parseStoredReaderPrefs, type ReaderPrefs } from '../settings/reader.js';
 import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Executor, Link, Tx } from './executor.js';
+import { type Highlight, listHighlights, moveHighlights } from './highlights.js';
 import { assertLibraryWrite } from './library-write.js';
 import { whereFeed, whereLibrary, whereLiveAnywhere, whereTrashedLibrary } from './live.js';
 import { mergeCaptureFields } from './merge-content.js';
@@ -18,6 +21,8 @@ import {
   listColumns,
   type PageParams,
 } from './pagination.js';
+import { moveReaderPrefs } from './reader-prefs.js';
+import { mergeReadingPosition, type ReadingPosition } from './reading-position.js';
 import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
@@ -518,6 +523,10 @@ export type TextWindowOptions = {
 
 /** Optional read modifiers for `getById`. */
 export type GetByIdOptions = {
+  /** For a batch reader that already loaded the highlights in one query (`getByIds`). */
+  preloadedHighlights?: Highlight[];
+  /** Presentation projection: current stored HTML replaces the redundant text. Windows win. */
+  reader?: boolean;
   /**
    * Request a character-sliced window of `extractedText` instead of the full
    * text — lets an agent read a relevant slice of a long article without
@@ -536,7 +545,19 @@ export type GetByIdOptions = {
  * (an agent) can tell there's more text beyond the window it received and
  * decide whether to request a later offset.
  */
-export type LinkWithTextWindow = LinkSummaryWithTags & { extractedTextLength: number };
+export type LinkWithTextWindow = LinkDetail & { extractedTextLength: number };
+
+/**
+ * A single link as `getById` returns it: the summary with tags, plus the saved
+ * reading position (`null` when none) and the passage highlights (one extra
+ * query per link read). List and search rows do not carry either.
+ */
+export type LinkDetail = LinkSummaryWithTags & {
+  readerTextOmitted?: true;
+  readerPrefs: ReaderPrefs;
+  readingPosition: ReadingPosition | null;
+  highlights: Highlight[];
+};
 
 /**
  * Character-slice `text` to `[offset, offset + limit)`. An out-of-range
@@ -567,22 +588,52 @@ export async function getById(
   id: string,
   opts: GetByIdOptions & { textWindow: TextWindowOptions },
 ): Promise<LinkWithTextWindow | null>;
+export async function getById(id: string, opts?: GetByIdOptions): Promise<LinkDetail | null>;
 export async function getById(
   id: string,
   opts?: GetByIdOptions,
-): Promise<LinkSummaryWithTags | null>;
-export async function getById(
-  id: string,
-  opts?: GetByIdOptions,
-): Promise<LinkSummaryWithTags | LinkWithTextWindow | null> {
-  const [row] = await db
-    .select(listColumns)
+): Promise<LinkDetail | LinkWithTextWindow | null> {
+  const omitText =
+    opts?.reader && !opts.textWindow
+      ? sql<boolean>`${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null and ${links.contentHtml} <> '' and ${links.sourceKind} <> 'twitter'`
+      : sql<boolean>`false`;
+  const [found] = await db
+    .select({
+      link: {
+        ...listColumns,
+        // Postgres returns no full text to Node when a current Reader can supply the prose.
+        extractedText: sql<
+          string | null
+        >`case when ${omitText} then null else ${links.extractedText} end`,
+      },
+      readerTextOmitted: omitText,
+      readerPrefs: linkReaderPrefs.prefs,
+      position: readingPositions.position,
+      positionUpdatedAt: readingPositions.updatedAt,
+      positionSource: readingPositions.source,
+    })
     .from(links)
+    .leftJoin(readingPositions, eq(readingPositions.linkId, links.id))
+    .leftJoin(linkReaderPrefs, eq(linkReaderPrefs.linkId, links.id))
     .where(whereLiveAnywhere(eq(links.id, id)))
     .limit(1);
-  if (!row) return null;
-  const [hydrated] = await hydrateTags(db, [row]);
-  if (!hydrated) return null;
+  if (!found) return null;
+  const [withTags] = await hydrateTags(db, [found.link]);
+  if (!withTags) return null;
+  const hydrated: LinkDetail = {
+    ...withTags,
+    ...(found.readerTextOmitted ? { readerTextOmitted: true as const } : {}),
+    readerPrefs: parseStoredReaderPrefs(found.readerPrefs),
+    highlights: opts?.preloadedHighlights ?? (await listHighlights(id)),
+    readingPosition:
+      found.position !== null && found.positionUpdatedAt !== null
+        ? {
+            position: found.position,
+            source: found.positionSource ?? 'pencil',
+            updatedAt: found.positionUpdatedAt,
+          }
+        : null,
+  };
 
   const window = opts?.textWindow;
   if (!window) return hydrated;
@@ -1374,6 +1425,9 @@ export async function restore(id: string): Promise<RestoreResult> {
             trashedTagRows.map((row) => row.name),
           );
         }
+        await mergeReadingPosition(tx, trashedRow.id, mergedRow.id);
+        await moveHighlights(tx, trashedRow.id, mergedRow.id);
+        await moveReaderPrefs(tx, trashedRow.id, mergedRow.id);
         const [finalMerged] = await tx.select().from(links).where(eq(links.id, mergedRow.id));
         return finalMerged ?? mergedRow;
       });

@@ -1,0 +1,673 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReadAloudPauses } from '../../../lib/readerPrefs';
+import type { TtsEngine } from './engines/types';
+import { Player, type PlayerEvents } from './player';
+import type { Segment } from './segments';
+import { stretch } from './stretch';
+
+/** A clock and a buffer source that only record what was scheduled. */
+class FakeAudio {
+  currentTime = 0;
+  state = 'running';
+  destination = {};
+  starts: { at: number; duration: number }[] = [];
+  stopped = 0;
+  pcm: Float32Array[] = [];
+  resume = async () => {};
+  createBuffer(_channels: number, length: number, sampleRate: number) {
+    const data = new Float32Array(length);
+    return { duration: length / sampleRate, getChannelData: () => data };
+  }
+  createBufferSource() {
+    const node = {
+      buffer: undefined as
+        | { duration: number; getChannelData(channel: number): Float32Array }
+        | undefined,
+      onended: null as (() => void) | null,
+      connect: () => {},
+      start: (at: number) => {
+        this.starts.push({ at, duration: node.buffer?.duration ?? 0 });
+        this.pcm.push(node.buffer?.getChannelData(0).slice() ?? new Float32Array());
+      },
+      stop: () => {
+        this.stopped += 1;
+      },
+    };
+    return node;
+  }
+}
+
+const SAMPLE_RATE = 24000;
+const block = (n: number) => ({ n }) as unknown as Element;
+
+/** One sentence per paragraph, each about 80 characters, so every unit stands alone. */
+function sentences(count: number): Segment[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    text: `${`Sentence number ${i} says something long enough to stay a unit of its own, truly.`}`,
+    range: {} as Range,
+    block: block(i),
+    kind: 'text' as const,
+  }));
+}
+
+type Fake = { engine: TtsEngine; calls: { text: string; signal?: AbortSignal | undefined }[] };
+
+/** An engine that answers each unit with `chunks` chunks of `seconds` / chunks each. */
+function fakeEngine({
+  supportsSpeed = true,
+  seconds = 1,
+  chunks = 1,
+  fail = '',
+}: {
+  supportsSpeed?: boolean;
+  seconds?: number;
+  chunks?: number;
+  fail?: string;
+} = {}): Fake {
+  const calls: Fake['calls'] = [];
+  const engine: TtsEngine = {
+    id: supportsSpeed ? 'kokoro' : 'phonon',
+    supportsSpeed,
+    sampleRate: SAMPLE_RATE,
+    device: 'test',
+    load: async () => {},
+    voices: () => [],
+    dispose: () => {},
+    async *stream(text, { signal }) {
+      calls.push({ text, signal });
+      if (fail) throw new Error(fail);
+      for (let i = 0; i < chunks; i += 1) {
+        await Promise.resolve();
+        if (signal?.aborted) return;
+        yield new Float32Array(Math.round((SAMPLE_RATE * seconds) / chunks)).fill(0.5);
+      }
+    },
+  };
+  return { engine, calls };
+}
+
+function setup(segmentCount = 6, rate = 1, pauses: ReadAloudPauses = 'relaxed') {
+  const audio = new FakeAudio();
+  const events = {
+    sentence: vi.fn(),
+    buffering: vi.fn(),
+    finished: vi.fn(),
+    failed: vi.fn(),
+    firstAudio: vi.fn(),
+  } satisfies PlayerEvents;
+  const list = sentences(segmentCount);
+  let clock = 1000;
+  const settings = { rate, voice: '', pauses };
+  const player = new Player({
+    context: () => audio as unknown as AudioContext,
+    segments: () => list,
+    settings: () => settings,
+    events,
+    now: () => clock,
+    transform: {
+      process: async (chunks: readonly Float32Array[], rate: number) => {
+        const joined = new Float32Array(chunks.reduce((sum, chunk) => sum + chunk.length, 0));
+        let offset = 0;
+        for (const chunk of chunks) {
+          joined.set(chunk, offset);
+          offset += chunk.length;
+        }
+        return stretch(joined, rate);
+      },
+      cancel: () => {},
+    },
+  });
+  return { audio, events, player, settings, list, advance: (ms: number) => (clock += ms) };
+}
+
+/** Group contiguous streaming buffers into the audible unit they form. */
+function scheduledUnits(audio: FakeAudio) {
+  const units: { at: number; duration: number }[] = [];
+  for (const start of audio.starts) {
+    const last = units.at(-1);
+    if (last && Math.abs(last.at + last.duration - start.at) < 1e-6)
+      last.duration += start.duration;
+    else units.push({ ...start });
+  }
+  return units;
+}
+
+const flush = () => vi.advanceTimersByTimeAsync(40);
+
+beforeEach(() => vi.useFakeTimers());
+afterEach(() => vi.useRealTimers());
+
+describe('Player scheduling', () => {
+  it('schedules units back to back with the planned pause between them', async () => {
+    const { audio, player } = setup(3);
+    const { engine } = fakeEngine({ supportsSpeed: false, seconds: 1 });
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    expect(scheduledUnits(audio)).toHaveLength(3);
+    const [a, b, c] = scheduledUnits(audio);
+    // Each unit ends a paragraph, so 610 ms of silence follows it.
+    expect(b?.at).toBeCloseTo((a?.at ?? 0) + 1 + 0.61, 6);
+    expect(c?.at).toBeCloseTo((b?.at ?? 0) + 1 + 0.61, 6);
+    player.halt();
+  });
+
+  it.each([
+    [true, 'short', 0.225],
+    [false, 'short', 0.225],
+    [true, 'relaxed', 0.305],
+    [false, 'relaxed', 0.305],
+    [true, 'natural', 0.075],
+    [false, 'natural', 0.075],
+  ] as const)('scales %s engine %s pauses by speed', async (supportsSpeed, pauses, gap) => {
+    const { audio, player } = setup(2, 2, pauses);
+    player.start(fakeEngine({ supportsSpeed, seconds: 1 }).engine, 0);
+    await flush();
+    await flush();
+    const [first, second] = scheduledUnits(audio);
+    expect(second?.at).toBeCloseTo((first?.at ?? 0) + (first?.duration ?? 0) + gap, 6);
+    player.halt();
+  });
+
+  it('streams a unit chunk by chunk when the engine has no speed option and speed is 1x', async () => {
+    const { audio, player } = setup(1);
+    const { engine } = fakeEngine({ supportsSpeed: false, seconds: 0.8, chunks: 10 });
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    expect(audio.starts.length).toBeGreaterThan(1);
+    expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.8, 6);
+    for (let i = 1; i < audio.starts.length; i += 1) {
+      const previous = audio.starts[i - 1];
+      expect(audio.starts[i]?.at).toBeCloseTo((previous?.at ?? 0) + (previous?.duration ?? 0), 6);
+    }
+    player.halt();
+  });
+
+  it('highlights streaming speech immediately and schedules the held tail without a gap', async () => {
+    const { audio, player, events } = setup(1);
+    const { engine } = fakeEngine({ supportsSpeed: false });
+    let finish: (() => void) | undefined;
+    engine.stream = async function* () {
+      yield new Float32Array(2400);
+      yield new Float32Array(4800).fill(0.5);
+      yield new Float32Array(12000);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    };
+    player.start(engine, 0);
+    await flush();
+    expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.285, 6);
+    audio.currentTime = 0.05;
+    await flush();
+    expect(events.sentence).toHaveBeenCalledWith(0);
+    finish?.();
+    await flush();
+    expect(scheduledUnits(audio)).toHaveLength(1);
+    expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.29, 6);
+    player.halt();
+  });
+
+  it.each([
+    { now: 0.1, skipped: 0 },
+    { now: 0.5, skipped: 0.235 },
+    { now: 0.708, skipped: 0.443 },
+    { now: 1, skipped: 0.445 },
+  ])(
+    'schedules held silence after an underrun at $now s and keeps replay intact',
+    async ({ now, skipped }) => {
+      const { audio, player } = setup(1);
+      const { engine } = fakeEngine({ supportsSpeed: false });
+      let resume: (() => void) | undefined;
+      engine.stream = async function* () {
+        yield new Float32Array(4800).fill(0.5); // 200 ms speech.
+        // Separate buffers make the held silence span multiple tagged chunks.
+        for (let i = 0; i < 5; i += 1) yield new Float32Array(2400).fill(0.001);
+        await new Promise<void>((resolve) => {
+          resume = resolve;
+        });
+        yield new Float32Array(4800).fill(0.25);
+      };
+      player.start(engine, 0);
+      await flush();
+      expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.255, 6);
+      const before = audio.starts.length;
+      audio.currentTime = now;
+      await flush();
+      resume?.();
+      await flush();
+      expect(audio.starts.reduce((n, chunk) => n + chunk.duration, 0)).toBeCloseTo(
+        0.9 - skipped,
+        4,
+      );
+      const released = audio.starts.slice(before);
+      expect(released[0]?.at).toBeCloseTo(now > 0.285 ? now + 0.02 : 0.285, 4);
+      for (let i = before + 1; i < audio.starts.length; i += 1)
+        expect(audio.starts[i]?.at).toBeCloseTo(
+          (audio.starts[i - 1]?.at ?? 0) + (audio.starts[i - 1]?.duration ?? 0),
+          6,
+        );
+      if (skipped) {
+        const cut = Float32Array.from(audio.pcm.slice(before).flatMap((chunk) => [...chunk]));
+        expect(cut[0]).toBe(0);
+        expect(cut[119]).toBeCloseTo(now >= 0.708 ? 0.25 : 0.001, 6);
+      }
+      const live = Float32Array.from(audio.pcm.flatMap((chunk) => [...chunk]));
+      // Scheduling must never change the waveform stored for replay.
+      player.halt();
+      audio.starts = [];
+      audio.pcm = [];
+      audio.currentTime = 0;
+      player.start(engine, 0);
+      await flush();
+      expect(scheduledUnits(audio)).toHaveLength(1);
+      expect(scheduledUnits(audio)[0]?.duration).toBeCloseTo(0.9, 6);
+      const replay = Float32Array.from(audio.pcm.flatMap((chunk) => [...chunk]));
+      if (!skipped) expect(live).toEqual(replay);
+      expect(replay.subarray(4800, 16800).every((sample) => Math.abs(sample - 0.001) < 1e-8)).toBe(
+        true,
+      );
+      player.halt();
+    },
+  );
+
+  it('uses the elapsed playback span for highlights when an underrun exceeds the held silence', async () => {
+    const { audio, player, events, list } = setup(2);
+    // Merge the sentences into one unit, without changing the merge policy.
+    list[0] = { ...(list[0] as Segment), text: 'A'.repeat(80), block: list[1]?.block as Element };
+    list[1] = { ...(list[1] as Segment), text: 'Other.' };
+    const { engine } = fakeEngine({ supportsSpeed: false });
+    let resume: (() => void) | undefined;
+    engine.stream = async function* () {
+      yield new Float32Array(4800).fill(0.5);
+      yield new Float32Array(12000);
+      await new Promise<void>((resolve) => {
+        resume = resolve;
+      });
+      yield new Float32Array(4800).fill(0.25);
+    };
+    player.start(engine, 0);
+    await flush();
+    audio.currentTime = 1;
+    await flush();
+    resume?.();
+    await flush();
+    // The remaining real gap must count toward the estimated sentence times.
+    const end = audio.starts.at(-1);
+    expect((end?.at ?? 0) + (end?.duration ?? 0)).toBeCloseTo(1.22, 4);
+    expect(events.sentence).toHaveBeenLastCalledWith(0);
+    audio.currentTime = 1.15;
+    await flush();
+    expect(events.sentence).toHaveBeenLastCalledWith(1);
+    player.halt();
+  });
+
+  it('stretches the whole unit for an engine with no speed option at other speeds', async () => {
+    const { audio, player } = setup(1, 2);
+    const { engine } = fakeEngine({ supportsSpeed: false, seconds: 1, chunks: 5 });
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    expect(audio.starts).toHaveLength(1);
+    expect(audio.starts[0]?.duration).toBeCloseTo(0.5, 2);
+    player.halt();
+  });
+
+  it('adds streaming sentence boundaries only when covered by scheduled samples, then refines them', async () => {
+    const { audio, player, events, list } = setup(2);
+    const paragraph = block(0);
+    list[0] = { ...(list[0] as Segment), text: 'One comes here.', block: paragraph };
+    list[1] = { ...(list[1] as Segment), text: 'Two comes here.', block: paragraph };
+    const { engine } = fakeEngine({ supportsSpeed: false });
+    let next: (() => void) | undefined;
+    let finish: (() => void) | undefined;
+    engine.stream = async function* () {
+      yield new Float32Array(14400).fill(0.5);
+      await new Promise<void>((resolve) => {
+        next = resolve;
+      });
+      yield new Float32Array(43200).fill(0.5);
+      await new Promise<void>((resolve) => {
+        finish = resolve;
+      });
+    };
+    player.start(engine, 0);
+    await flush();
+    audio.currentTime = 1.1;
+    await flush();
+    // The estimate is past, but its samples have not arrived yet.
+    expect(events.sentence).toHaveBeenLastCalledWith(0);
+    next?.();
+    await flush();
+    audio.currentTime = 1.2;
+    await flush();
+    expect(events.sentence).toHaveBeenLastCalledWith(1);
+    finish?.();
+    await flush();
+    // Completion refines the estimate with the full playback span, including the underrun.
+    expect(events.sentence).toHaveBeenLastCalledWith(0);
+    audio.currentTime = 1.6;
+    await flush();
+    expect(events.sentence).toHaveBeenLastCalledWith(1);
+    player.halt();
+  });
+
+  it('reports the time from the press to the first scheduled sound', async () => {
+    const { player, events, advance } = setup(1);
+    const { engine } = fakeEngine();
+    player.press();
+    advance(73);
+    player.start(engine, 0);
+    await flush();
+    expect(events.firstAudio).toHaveBeenCalledTimes(1);
+    expect(events.firstAudio).toHaveBeenCalledWith(73);
+    player.halt();
+  });
+
+  it('moves the highlighted sentence with the audio clock', async () => {
+    const { audio, player, events } = setup(3);
+    const { engine } = fakeEngine({ seconds: 1 });
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    audio.currentTime = 0.5;
+    await flush();
+    audio.currentTime = 1.7;
+    await flush();
+    audio.currentTime = 3.3;
+    await flush();
+    expect(events.sentence.mock.calls.map((call) => call[0])).toEqual([0, 1, 2]);
+    player.halt();
+  });
+
+  it('finishes once the last unit has played', async () => {
+    const { audio, player, events } = setup(2);
+    const { engine } = fakeEngine({ seconds: 1 });
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    expect(events.finished).not.toHaveBeenCalled();
+    audio.currentTime = 5;
+    await flush();
+    expect(events.finished).toHaveBeenCalledTimes(1);
+  });
+
+  it('reports a failed unit and stops scheduling', async () => {
+    const { audio, player, events } = setup(2);
+    const { engine } = fakeEngine({ fail: 'model exploded' });
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    expect(events.failed).toHaveBeenCalledWith('model exploded');
+    expect(audio.starts).toHaveLength(0);
+  });
+});
+
+describe('Player queue', () => {
+  it('keeps about 20 seconds of streaming synthesis ahead, not the whole article', async () => {
+    const { audio, player } = setup(40);
+    const { engine, calls } = fakeEngine({ supportsSpeed: false, seconds: 4 });
+    player.start(engine, 0);
+    for (let i = 0; i < 12; i += 1) await flush();
+    // Each unit is 4 s: 20 s needs 5 units; more than 12 ahead is never requested.
+    expect(calls.length).toBeGreaterThanOrEqual(5);
+    expect(calls.length).toBeLessThan(14);
+    const before = calls.length;
+    audio.currentTime = 30;
+    for (let i = 0; i < 12; i += 1) await flush();
+    expect(calls.length).toBeGreaterThan(before);
+    player.halt();
+  });
+
+  it('asks for the clicked unit first and in order after it', async () => {
+    const { player, audio } = setup(10);
+    const { engine, calls } = fakeEngine({ seconds: 2 });
+    player.start(engine, 4);
+    for (let i = 0; i < 6; i += 1) await flush();
+    expect(calls).toHaveLength(2);
+    audio.currentTime = 2.7;
+    await flush();
+    expect(calls.slice(0, 3).map((call) => call.text.match(/number (\d+)/)?.[1])).toEqual([
+      '4',
+      '5',
+      '6',
+    ]);
+    player.halt();
+  });
+
+  it('cancels stale work and stops sound when the reader jumps', async () => {
+    const { audio, player } = setup(10);
+    // Unit 0 plays; unit 1 is still being synthesized when the reader jumps.
+    const calls: { text: string; signal: AbortSignal | undefined }[] = [];
+    const engine: TtsEngine = {
+      ...fakeEngine().engine,
+      async *stream(text, { signal }) {
+        calls.push({ text, signal });
+        if (/number 0 /.test(text)) {
+          yield new Float32Array(SAMPLE_RATE);
+          return;
+        }
+        if (/number [1-6] /.test(text)) {
+          await new Promise<void>((resolve) => signal?.addEventListener('abort', () => resolve()));
+          return;
+        }
+        yield new Float32Array(SAMPLE_RATE);
+      },
+    };
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    expect(audio.starts).toHaveLength(1);
+    const running = calls.find((call) => /number 1 /.test(call.text));
+    expect(running?.signal?.aborted).toBe(false);
+    player.start(engine, 7);
+    expect(running?.signal?.aborted).toBe(true);
+    expect(audio.stopped).toBe(1);
+    await flush();
+    await flush();
+    expect(calls.some((call) => /number 7 /.test(call.text))).toBe(true);
+    expect(audio.starts.length).toBeGreaterThan(1);
+    player.halt();
+  });
+
+  it('replays from the cache without synthesizing again', async () => {
+    const { player, audio } = setup(2);
+    const { engine, calls } = fakeEngine({ supportsSpeed: false, seconds: 1 });
+    player.start(engine, 0);
+    await flush();
+    await flush();
+    const first = calls.length;
+    audio.currentTime = 0;
+    player.start(engine, 0);
+    await flush();
+    expect(calls.length).toBe(first);
+    player.halt();
+  });
+
+  it('warm-up synthesizes the first units so the next start is immediate', async () => {
+    const { player, audio, events, advance } = setup(4);
+    const { engine, calls } = fakeEngine({ seconds: 1 });
+    player.warm(engine, 0);
+    await flush();
+    await flush();
+    expect(calls).toHaveLength(2);
+    player.press();
+    advance(5);
+    player.start(engine, 0);
+    expect(audio.starts.length).toBeGreaterThan(0);
+    expect(events.firstAudio).toHaveBeenCalledWith(5);
+    expect(calls.length).toBeLessThanOrEqual(3);
+    player.halt();
+  });
+});
+
+describe('Player warm-up, release and underrun', () => {
+  /** An engine that finishes a unit only when the test says so. */
+  function gated() {
+    const calls: { text: string; signal: AbortSignal | undefined }[] = [];
+    const gates = new Map<string, () => void>();
+    const engine: TtsEngine = {
+      ...fakeEngine().engine,
+      async *stream(text, { signal }) {
+        calls.push({ text, signal });
+        await new Promise<void>((resolve) => gates.set(text, resolve));
+        if (signal?.aborted) return;
+        yield new Float32Array(SAMPLE_RATE);
+      },
+    };
+    const finish = (n: number) => {
+      for (const [text, open] of gates) if (text.includes(`number ${n} `)) open();
+    };
+    return { engine, calls, finish };
+  }
+
+  it('keeps warm-up work that is still running when Play is pressed', async () => {
+    const { player, audio, events, advance } = setup(4);
+    const { engine, calls, finish } = gated();
+    player.warm(engine, 0);
+    await flush();
+    expect(calls).toHaveLength(1);
+    player.press();
+    advance(9);
+    player.start(engine, 0);
+    // The warm-up job was not aborted, and Play did not start a second synthesis of it.
+    expect(calls[0]?.signal?.aborted).toBe(false);
+    await flush();
+    expect(calls.filter((call) => /number 0 /.test(call.text))).toHaveLength(1);
+    finish(0);
+    await flush();
+    expect(audio.starts.length).toBeGreaterThan(0);
+    expect(events.firstAudio).toHaveBeenCalledWith(9);
+    player.halt();
+  });
+
+  it('keeps the next in-flight warm job when jumping to its key', async () => {
+    const { player, audio } = setup(5);
+    const { engine, calls, finish } = gated();
+    player.warm(engine, 0);
+    await flush();
+    finish(0);
+    await flush();
+    expect(calls).toHaveLength(2);
+    player.prepare(engine, 1);
+    player.start(engine, 1);
+    expect(calls[1]?.signal?.aborted).toBe(false);
+    finish(1);
+    await flush();
+    expect(calls.filter((call) => /number 1 /.test(call.text))).toHaveLength(1);
+    expect(audio.starts.length).toBeGreaterThan(0);
+    player.halt();
+  });
+
+  it('keeps raw Phonon synthesis across a rate change, with a different transformed cache key', async () => {
+    const { player, settings, audio } = setup(1);
+    const { engine, calls } = fakeEngine({ supportsSpeed: false });
+    player.start(engine, 0);
+    await flush();
+    settings.rate = 1.25;
+    player.prepare(engine, 0);
+    player.start(engine, 0);
+    await flush();
+    expect(calls).toHaveLength(1);
+    expect(audio.starts.at(-1)?.duration).toBeCloseTo(0.8);
+    settings.rate = 2;
+    player.start(engine, 0);
+    await flush();
+    expect(calls).toHaveLength(1);
+    expect(audio.starts.at(-1)?.duration).toBeCloseTo(0.5);
+    player.halt();
+  });
+
+  it('still drops warm-up work for other sentences when the reader jumps elsewhere', async () => {
+    const { player } = setup(10);
+    const { engine, calls } = gated();
+    player.warm(engine, 0);
+    await flush();
+    player.start(engine, 6);
+    expect(calls[0]?.signal?.aborted).toBe(true);
+    player.halt();
+  });
+
+  it('lets go of a unit once it has played, and replays it from the cache', async () => {
+    const { player, audio } = setup(6);
+    const { engine, calls } = fakeEngine({ supportsSpeed: false, seconds: 1 });
+    player.start(engine, 0);
+    for (let i = 0; i < 4; i += 1) await flush();
+    const plan = () => (player as unknown as { plan: { jobs: unknown[] } }).plan;
+    expect(plan().jobs[0]).toBeDefined();
+    audio.currentTime = 5;
+    await flush();
+    expect(
+      plan()
+        .jobs.slice(0, 3)
+        .every((job) => job === undefined),
+    ).toBe(true);
+    const made = calls.length;
+    audio.currentTime = 0;
+    player.start(engine, 1);
+    await flush();
+    expect(calls.length).toBe(made);
+    player.halt();
+  });
+
+  it('reports a dry buffer, then restarts the timeline just after now when audio arrives late', async () => {
+    const { player, audio, events } = setup(2);
+    const { engine, finish } = gated();
+    player.start(engine, 0);
+    await flush();
+    audio.currentTime = 2;
+    await flush();
+    expect(events.buffering).toHaveBeenCalledWith(true);
+    finish(0);
+    await flush();
+    expect(audio.starts).toHaveLength(1);
+    // Scheduled after "now" (2 s), not in the past.
+    expect(audio.starts[0]?.at).toBeGreaterThan(2);
+    expect(audio.starts[0]?.at).toBeLessThan(2.1);
+    expect(events.buffering).toHaveBeenLastCalledWith(false);
+    player.halt();
+  });
+});
+
+it('prepares a later transformed unit before its deadline and ignores results after Stop', async () => {
+  const audio = new FakeAudio();
+  const pending: { resolve: (pcm: Float32Array) => void; chunks: readonly Float32Array[] }[] = [];
+  const transform = {
+    process: (chunks: readonly Float32Array[]) =>
+      new Promise<Float32Array>((resolve) => pending.push({ resolve, chunks })),
+    cancel: vi.fn(),
+  };
+  const events = {
+    sentence: vi.fn(),
+    buffering: vi.fn(),
+    finished: vi.fn(),
+    failed: vi.fn(),
+    firstAudio: vi.fn(),
+  };
+  const player = new Player({
+    context: () => audio as unknown as AudioContext,
+    segments: () => sentences(3),
+    settings: () => ({ rate: 1.25, voice: '', pauses: 'natural' }),
+    events,
+    transform,
+  });
+  player.start(fakeEngine({ supportsSpeed: false }).engine, 0);
+  await flush();
+  // Later units are processing even though no first-unit audio has been scheduled.
+  expect(pending).toHaveLength(3);
+  expect(audio.starts).toHaveLength(0);
+  pending[1]?.resolve(new Float32Array(19200).fill(0.25));
+  pending[0]?.resolve(new Float32Array(19200).fill(0.5));
+  await flush();
+  expect(audio.starts).toHaveLength(2);
+  expect(audio.starts[1]?.at).toBeCloseTo((audio.starts[0]?.at ?? 0) + 0.8 + 0.15 / 1.25);
+  const count = audio.starts.length;
+  player.halt();
+  pending[2]?.resolve(new Float32Array(19200));
+  await flush();
+  expect(audio.starts).toHaveLength(count);
+  expect(events.failed).not.toHaveBeenCalled();
+  expect(transform.cancel).toHaveBeenCalled();
+});

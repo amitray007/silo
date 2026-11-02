@@ -2,7 +2,7 @@ import type { CreateLinkInput } from '@silo/core';
 import { canonicalize, createLink, getById, willDedupCapture } from '@silo/core';
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { toLinkJson } from '../link-json.js';
+import { toLinkDetailJson } from '../link-json.js';
 
 /**
  * Shared "mutate -> re-fetch -> shape -> respond" helper for the A3 write
@@ -38,7 +38,7 @@ export async function respondWithLink(
       404,
     );
   }
-  return c.json({ link: toLinkJson(link) }, status);
+  return c.json({ link: toLinkDetailJson(link) }, status);
 }
 
 /**
@@ -97,5 +97,5 @@ export async function performCapture(
       404,
     );
   }
-  return c.json({ link: toLinkJson(link), deduped }, 201);
+  return c.json({ link: toLinkDetailJson(link), deduped }, 201);
 }

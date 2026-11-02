@@ -2,11 +2,18 @@ import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { serveStatic } from '@hono/node-server/serve-static';
-import { FeedPostNotEditableError, InvalidCursorError } from '@silo/core';
+import {
+  FeedPostNotEditableError,
+  InvalidCursorError,
+  InvalidHighlightError,
+  InvalidReadingPositionError,
+} from '@silo/core';
 import { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { ZodError } from 'zod';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
+import { ingestTokenAuth } from './ingest-auth.js';
 import { registerAccessTokenRoutes } from './routes/access-tokens.js';
 import { registerAiRoutes } from './routes/ai.js';
 import { registerAuthRoutes } from './routes/auth.js';
@@ -16,6 +23,7 @@ import { registerCountsRoutes } from './routes/counts.js';
 import { registerExportRoutes } from './routes/export.js';
 import { registerFaviconRoutes } from './routes/favicon.js';
 import { registerFeedRoutes } from './routes/feeds.js';
+import { registerHighlightsRoutes } from './routes/highlights.js';
 import { registerImportRoutes } from './routes/import.js';
 import { registerIngestRoutes } from './routes/ingest.js';
 import { registerLinksRoutes } from './routes/links.js';
@@ -35,6 +43,7 @@ import { registerSettingsRoutes } from './routes/settings.js';
 import { registerSourceMediaRoutes } from './routes/source-media.js';
 import { registerTagsRoutes } from './routes/tags.js';
 import { registerTrashRoutes } from './routes/trash.js';
+import { registerTtsRoutes } from './routes/tts.js';
 
 /**
  * The API's error envelope — every non-2xx JSON body this API returns has
@@ -117,6 +126,18 @@ function readIndexHtml(indexPath: string): string {
 export function createApp(): Hono {
   const app = new Hono();
 
+  // Apply these only after the route's authentication. Import permits 50,000 links.
+  const defaultBodyLimit = bodyLimit({
+    maxSize: 1024 * 1024,
+    onError: (c) =>
+      c.json({ error: 'payload_too_large', message: 'Request body exceeds 1 MB' }, 413),
+  });
+  const importBodyLimit = bodyLimit({
+    maxSize: 25 * 1024 * 1024,
+    onError: (c) =>
+      c.json({ error: 'payload_too_large', message: 'Import body exceeds 25 MB' }, 413),
+  });
+
   // Web dist resolved ONCE per app build (not per-request) — matches how
   // `corsMiddleware()`'s allowlist is captured at `createApp()` time (see its
   // doc comment). A built deployment sets `SILO_WEB_DIST` once for the
@@ -185,8 +206,8 @@ export function createApp(): Hono {
   // origin allowlist as the rest of `/api/*` (mirrors `/api/auth/check`'s
   // CORS rationale above — see `routes/login.ts`'s doc comment for the
   // route bodies).
-  app.use('/api/login', corsMiddleware());
-  app.use('/api/logout', corsMiddleware());
+  app.use('/api/login', corsMiddleware(), defaultBodyLimit);
+  app.use('/api/logout', corsMiddleware(), defaultBodyLimit);
   registerLoginRoutes(app);
 
   // `/api/config` (deployable-silo slice, Unit 4) — an ungated PUBLIC probe
@@ -211,7 +232,7 @@ export function createApp(): Hono {
   // through to the SPA catch-all) or a built deployment would serve
   // `index.html` for it instead of the consent page.
   app.use('/.well-known/oauth-authorization-server', oauthCorsMiddleware());
-  app.use('/oauth/*', oauthCorsMiddleware());
+  app.use('/oauth/*', oauthCorsMiddleware(), defaultBodyLimit);
   registerOAuthWellKnownRoutes(app);
   registerOAuthRegisterRoutes(app);
   registerOAuthAuthorizeRoutes(app);
@@ -223,16 +244,25 @@ export function createApp(): Hono {
   // any route or the token gate ever runs), THEN the optional bearer-token
   // gate (the caller-identity gate — see `general-auth.ts`'s doc comment for
   // why this ordering matters and what each layer stops). `/api/ingest`'s
-  // own always-closed gate (`ingest-auth.ts`) runs INSIDE its route handler,
-  // independent of and in addition to this optional general gate.
+  // always-closed gate (`ingest-auth.ts`) runs next, before buffering bodies.
   api.use('*', corsMiddleware());
   registerPageViewHeaders(api);
   api.use('*', generalTokenAuth);
+  // Import and ingest require a bearer even when general auth is disabled or a session passed.
+  api.post('/import', ingestTokenAuth);
+  api.post('/ingest', ingestTokenAuth);
+  api.use('*', (c, next) => {
+    if (c.req.method === 'GET' || c.req.method === 'HEAD' || !c.req.raw.body) return next();
+    const limit =
+      c.req.method === 'POST' && c.req.path === '/api/import' ? importBodyLimit : defaultBodyLimit;
+    return limit(c, next);
+  });
   registerFeedRoutes(api);
   registerLinksRoutes(api);
   registerLinksSavedRoutes(api);
   registerLinksTitlesRoutes(api);
   registerLinksWriteRoutes(api);
+  registerHighlightsRoutes(api);
   registerIngestRoutes(api);
   registerTrashRoutes(api);
   registerTagsRoutes(api);
@@ -248,7 +278,11 @@ export function createApp(): Hono {
   registerImportRoutes(api);
   registerAccessTokenRoutes(api);
   registerAiRoutes(api);
+  registerTtsRoutes(api);
   app.route('/api', api);
+
+  // Public and unmatched non-API requests retain the default cap. Protected routes ran auth first.
+  app.use('*', defaultBodyLimit);
 
   // Web SPA static serve + client-route fallback (Unit 1, deployable-silo
   // spec) — registered LAST, after the `/api` mount above, so `/api/*` keeps
@@ -300,6 +334,12 @@ export function createApp(): Hono {
   app.onError((error, c) => {
     if (error instanceof FeedPostNotEditableError) {
       return c.json(errorBody(error.code, error.message), 409);
+    }
+    if (error instanceof InvalidHighlightError) {
+      return c.json(errorBody(error.code, error.message), 400);
+    }
+    if (error instanceof InvalidReadingPositionError) {
+      return c.json(errorBody(error.code, error.message), 400);
     }
     if (error instanceof InvalidCursorError) {
       return c.json(errorBody('invalid_cursor', error.message), 400);

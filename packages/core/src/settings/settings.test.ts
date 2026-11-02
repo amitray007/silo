@@ -52,6 +52,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        reader: null,
         ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
@@ -224,6 +225,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        reader: null,
         ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
@@ -259,6 +261,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: true,
         linkPreviewImages: true,
         hoverPreview: false,
+        reader: null,
         ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: true, inline: true, hover: true, palette: true },
@@ -312,6 +315,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         mcpAccess: false,
         linkPreviewImages: true,
         hoverPreview: false,
+        reader: null,
         ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
         plugins: {
           hacker_news: { enabled: false, inline: false, hover: false, palette: false },
@@ -323,6 +327,86 @@ describeIfPg('settings store (integration, plan 016)', () => {
       // And it's actually persisted, not just returned.
       expect(await ops.getSetting('theme')).toBe('dark');
       expect(await ops.getSetting('mcpAccess')).toBe(false);
+    });
+  });
+
+  describe('reader setting', () => {
+    it('keeps an empty reader patch in the never-saved state', async () => {
+      expect((await ops.updateSettings({ reader: {} })).reader).toBeNull();
+      expect(await ops.getSetting('reader')).toBeNull();
+      const rows = await rawDb.execute(sql`SELECT key FROM settings WHERE key = 'reader'`);
+      expect(rows.rows).toEqual([]);
+      await ops.updateSettings({ reader: { width: 'wide' } });
+      expect((await ops.updateSettings({ reader: {} })).reader?.width).toBe('wide');
+    });
+
+    it.each(['fresh', 'saved'])('preserves every concurrent reader patch (%s)', async (state) => {
+      if (state === 'saved') await ops.updateSettings({ reader: { width: 'medium' } });
+      await Promise.all(
+        [
+          { type: { font: 'serif' } },
+          { type: { size: 22 } },
+          { type: { leading: 'relaxed', theme: 'sepia' } },
+          { width: 'wide' },
+          { pencil: { style: 'highlighter', wpm: 300 } },
+          { highlight: { color: 'pink' } },
+          { readAloud: { engine: 'kokoro', rate: 2 } },
+          { readAloud: { voices: { phonon: 'zoey' } } },
+          { readAloud: { voices: { kokoro: 'af_heart' } } },
+          { readAloud: { pauses: 'natural' } },
+        ].map((reader) => ops.updateSettings({ reader })),
+      );
+      expect(await ops.getSetting('reader')).toEqual({
+        type: { font: 'serif', size: 22, leading: 'relaxed', theme: 'sepia' },
+        width: 'wide',
+        pencil: { style: 'highlighter', wpm: 300 },
+        highlight: { color: 'pink' },
+        readAloud: {
+          engine: 'kokoro',
+          pauses: 'natural',
+          rate: 2,
+          voices: { phonon: 'zoey', kokoro: 'af_heart' },
+        },
+      });
+    });
+
+    it('is unset until the first write, then a partial patch merges over it', async () => {
+      expect(await ops.getSetting('reader')).toBeNull();
+      await ops.updateSettings({ reader: { readAloud: { rate: 2 } } });
+      const created = await ops.getSetting('reader');
+      expect(created?.readAloud).toEqual({
+        engine: 'phonon',
+        pauses: 'relaxed',
+        voices: { phonon: '', kokoro: '' },
+        rate: 2,
+      });
+      await ops.updateSettings({ reader: { type: { size: 18 } } });
+      const next = await ops.getSetting('reader');
+      expect(next?.type).toEqual({ font: 'inter', size: 18, leading: 'normal', theme: 'default' });
+      expect(next?.readAloud.rate).toBe(2);
+    });
+
+    it('rejects a bad field and an unknown field and writes nothing', async () => {
+      await expect(ops.updateSettings({ reader: { type: { size: 99 } } })).rejects.toThrow();
+      await expect(ops.updateSettings({ reader: { extra: 1 } })).rejects.toThrow();
+      await expect(ops.updateSettings({ reader: null })).rejects.toThrow();
+      expect(await ops.getSetting('reader')).toBeNull();
+    });
+
+    it('a stored value with one bad field keeps the rest and defaults that field', async () => {
+      await rawDb.execute(
+        sql`INSERT INTO settings (key, value) VALUES ('reader', ${JSON.stringify({
+          type: { font: 'serif', size: 99 },
+          width: 'wide',
+          pencil: 'nonsense',
+          unknown: true,
+        })}::jsonb)`,
+      );
+      const read = await ops.getSetting('reader');
+      expect(read?.type).toEqual({ font: 'serif', size: 16, leading: 'normal', theme: 'default' });
+      expect(read?.width).toBe('wide');
+      expect(read?.pencil).toEqual({ style: 'underline', wpm: 240 });
+      expect(read).not.toHaveProperty('unknown');
     });
   });
 
