@@ -1,6 +1,6 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { LinkDetail, LinkWithTextWindow } from '@silo/core';
+import type { BulkGetResult, LinkDetail, LinkWithTextWindow } from '@silo/core';
 import { getById, getByIds } from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
@@ -123,6 +123,12 @@ function highlightLines(
   ];
 }
 
+function readerGuidance(link: Pick<LinkDetail, 'id' | 'feedId'>): string {
+  return link.feedId
+    ? `Use save_feed_post with feedId ${link.feedId} and postId ${link.id} to save this post to Home, or list_feed_posts with feedId ${link.feedId} to browse the feed.`
+    : 'Use edit_highlight to change a passage note, or edit_link to move the saved place.';
+}
+
 function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
   const windowNote =
     'extractedTextLength' in link
@@ -143,23 +149,23 @@ function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
       ? `full text: ${link.extractedText.length} chars (see structuredContent.extractedText)${windowNote ? ` - ${windowNote}` : ''}`
       : undefined,
     ...highlightLines(link.highlights),
-    'Use edit_highlight to change a passage note, or edit_link to move the saved place.',
+    readerGuidance(link),
   ];
   return lines.filter((line): line is string => line !== undefined).join('\n');
 }
 
 /** Builds the `content[0].text` block for the batch (`ids`) path. */
-function toBatchTextSummary(results: GetLinkBatchResult[]): string {
+function toBatchTextSummary(results: BulkGetResult[]): string {
   if (results.length === 0) {
     return 'No ids were given.';
   }
-  const foundCount = results.filter((r) => r.found).length;
+  const foundCount = results.filter((r) => r.link !== null).length;
   const lines = [
     `${foundCount} of ${results.length} link${results.length === 1 ? '' : 's'} found (full text included; textWindow is not applied in batch mode):`,
   ];
-  for (const result of results) {
-    if (!result.found) {
-      lines.push(`- ${result.id}: not found (unknown or trashed)`);
+  for (const { id, link: result } of results) {
+    if (!result) {
+      lines.push(`- ${id}: not found (unknown or trashed)`);
       continue;
     }
     const tagsPart = result.tags && result.tags.length > 0 ? ` [${result.tags.join(', ')}]` : '';
@@ -169,7 +175,7 @@ function toBatchTextSummary(results: GetLinkBatchResult[]): string {
         `${readingSourceText(result.readingPosition.source)} ${Math.round(result.readingPosition.position * 100)}% (source ${result.readingPosition.source})`,
       );
     }
-    lines.push(...highlightLines(result.highlights ?? []));
+    lines.push(...highlightLines(result.highlights), readerGuidance(result));
   }
   return lines.join('\n');
 }
@@ -247,7 +253,7 @@ export function registerGetLink(server: McpServer): void {
         const results = outcome.value.map((r) => toBatchResult(r.id, r.link));
         const structuredContent: GetLinkOutputStructuredContent = { found: false, results };
         return {
-          content: [{ type: 'text', text: toBatchTextSummary(results) }],
+          content: [{ type: 'text', text: toBatchTextSummary(outcome.value) }],
           structuredContent,
         };
       }
