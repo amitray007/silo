@@ -183,6 +183,24 @@ export type { Db, Executor, Tx } from './links/executor.js';
 // export.ts's doc comments for the format-by-format contract.
 export type { ExportFormat, ExportResult } from './links/export.js';
 export { EXPORT_VERSION, exportLinks, InvalidExportFormatError } from './links/export.js';
+export type {
+  AddHighlightInput,
+  EditHighlightInput,
+  Highlight,
+  HighlightColor,
+} from './links/highlights.js';
+export {
+  addHighlight,
+  deleteHighlight,
+  editHighlight,
+  HIGHLIGHT_COLORS,
+  HIGHLIGHT_NOTE_MAX,
+  HIGHLIGHT_OFFSET_MAX,
+  HIGHLIGHT_QUOTE_MAX,
+  InvalidHighlightError,
+  listHighlights,
+  listHighlightsForLinks,
+} from './links/highlights.js';
 // Import (import slice, U1): importLinks is the write half of the export/
 // import round-trip — restores a silo `version: 1` JSON export back into the
 // store, reusing `createLink`'s existing canonical-URL dedup-merge (no new
@@ -241,7 +259,8 @@ export { type LiveReader, readLive, setLiveReader } from './links/live-reader.js
 // later increment; this is the callable query.
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
-export type { ReadingPosition } from './links/reading-position.js';
+export { clearReaderPrefs, patchReaderPrefs } from './links/reader-prefs.js';
+export type { ReadingPosition, ReadingPositionSource } from './links/reading-position.js';
 export {
   clearReadingPosition,
   getReadingPosition,
@@ -323,6 +342,14 @@ export {
 // reads + writes. Appended as its own minimal block (this barrel is shared
 // with the parallel scheduling slice) — see `settings/schema.ts` for the
 // per-key allowlist + defaults.
+export type { ReaderPrefs, ReaderSettings } from './settings/reader.js';
+export { readerPatchSchema } from './settings/reader.js';
 export type { SettingKey, SettingsMap, SettingValue } from './settings/schema.js';
 export { SETTINGS_DEFAULTS } from './settings/schema.js';
 export { getAllSettings, getSetting, setSetting, updateSettings } from './settings/settings.js';
+export type { TtsFiles, TtsLocalFile, TtsServe } from './tts/files.js';
+// Read aloud model files (reader tools, slice 4): the pinned manifest, the download-once file
+// store, and the data directory. `@silo/api` serves them at `/api/tts/files`.
+export { createTtsFiles, dataDir, TtsDownloadError } from './tts/files.js';
+export type { TtsFileEntry, TtsManifest } from './tts/manifest.js';
+export { TTS_MANIFEST } from './tts/manifest.js';

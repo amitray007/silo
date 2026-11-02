@@ -9,7 +9,7 @@ import { Stepper } from '../dock/Stepper';
 import { ReaderIcon } from '../ReaderIcon';
 import type { PencilApi } from './usePencil';
 
-const styles: { value: PencilStyle; label: string }[] = [
+export const pencilStyles: { value: PencilStyle; label: string }[] = [
   { value: 'underline', label: 'Underline' },
   { value: 'highlighter', label: 'Highlighter' },
 ];
@@ -64,7 +64,7 @@ export function PencilSheet({ pencil }: { pencil: PencilApi }) {
       <SegmentedRow
         label="Style"
         value={pencil.style}
-        options={styles}
+        options={pencilStyles}
         onChange={pencil.setStyle}
       />
     </div>

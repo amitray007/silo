@@ -3,12 +3,11 @@ import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
 import { isFeedPost } from '../../lib/isFeedPost';
-import { useReaderType } from '../../lib/readerPrefs';
 import { deriveTitleFromUrl } from '../../lib/url';
 import { useHideOnScroll } from '../../lib/useHideOnScroll';
 import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
 import { useHideWhileReading } from '../../lib/useHideWhileReading';
-import { useReaderWidth } from '../../lib/useReaderWidth';
+import { ReaderPrefsProvider, useReaderPrefs } from '../../lib/useReaderPrefs';
 import { FeedSaveAction } from '../FeedSaveAction';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
@@ -249,8 +248,10 @@ function ReaderArticle({
   loading: boolean;
   showLive: () => void;
 }) {
-  const [width] = useReaderWidth();
-  const { style } = useReaderType();
+  const {
+    prefs: { width },
+    style,
+  } = useReaderPrefs();
   const embed = embedFor(link.url, link.sourceData);
   const video = embed?.video ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
@@ -380,7 +381,19 @@ function EmptyReader({ message, trashed }: { message: string | undefined; trashe
   );
 }
 
-export function ReaderPane({
+type PaneProps = Parameters<typeof ReaderPaneContent>[0];
+
+export function ReaderPane(props: PaneProps) {
+  return props.link ? (
+    <ReaderPrefsProvider link={props.link}>
+      <ReaderPaneContent {...props} />
+    </ReaderPrefsProvider>
+  ) : (
+    <ReaderPaneContent {...props} />
+  );
+}
+
+function ReaderPaneContent({
   link,
   selectedId,
   tab,
@@ -413,7 +426,9 @@ export function ReaderPane({
   const showActions = showReaderActions(phone, link);
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const original = useOriginal(link, tab === 'original');
-  const { type } = useReaderType();
+  const {
+    prefs: { type },
+  } = useReaderPrefs();
   const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
   const [dockMounted, setDockMounted] = useState(false);
   // The scroll area and the pane exist from the first render; the dock's tools draw in them.

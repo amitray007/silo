@@ -1,5 +1,5 @@
-import type { LinkDetail, LinkSummaryWithTags } from '@silo/core';
-import { CAPTURE_SOURCES, sourceDataSchema, TITLE_SOURCES } from '@silo/core';
+import type { Highlight, LinkDetail, LinkSummaryWithTags } from '@silo/core';
+import { CAPTURE_SOURCES, HIGHLIGHT_COLORS, sourceDataSchema, TITLE_SOURCES } from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -52,10 +52,46 @@ const readingPositionShape = z
       .min(0)
       .max(1)
       .describe("Share of the article's words already read: 0 is the start, 1 is the end."),
+    source: z
+      .enum(['pencil', 'listen', 'mark'])
+      .describe('What saved this place. Agent writes record mark.'),
     updatedAt: z.iso.datetime().describe('When the position was last saved.'),
   })
   .nullable()
   .describe('Where the owner stopped reading this article, or null when no position is saved.');
+
+/**
+ * One passage highlight. Only single-link reads carry them (`get_link` and the
+ * write tools that return a link); list and search rows do not. Overlapping
+ * highlights are normal: each is an independent range.
+ */
+export const highlightShape = {
+  id: z.uuid(),
+  quote: z.string().describe('The highlighted text, whitespace collapsed.'),
+  prefix: z.string().describe('Up to 64 characters of the text just before the quote.'),
+  suffix: z.string().describe('Up to 64 characters of the text just after the quote.'),
+  startOffset: z.number().int().nullable().describe('Offset hint into the article text, or null.'),
+  endOffset: z.number().int().nullable().describe('Offset hint into the article text, or null.'),
+  color: z.enum(HIGHLIGHT_COLORS),
+  note: z.string().nullable().describe('The passage note, or null.'),
+  createdAt: z.iso.datetime(),
+  updatedAt: z.iso.datetime(),
+};
+
+export function toHighlightContent(highlight: Highlight) {
+  return {
+    id: highlight.id,
+    quote: highlight.quote,
+    prefix: highlight.prefix,
+    suffix: highlight.suffix,
+    startOffset: highlight.startOffset,
+    endOffset: highlight.endOffset,
+    color: highlight.color,
+    note: highlight.note,
+    createdAt: highlight.createdAt.toISOString(),
+    updatedAt: highlight.updatedAt.toISOString(),
+  };
+}
 
 export const baseLinkShape = {
   id: z.uuid(),
@@ -80,6 +116,11 @@ export const baseLinkShape = {
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
   readingPosition: readingPositionShape,
+  highlights: z
+    .array(z.object(highlightShape))
+    .describe(
+      'Passage highlights with their notes, ordered by start offset then creation time; highlights an agent added by quote have no offsets and come last. May overlap.',
+    ),
 };
 
 export type BaseLinkContent = z.infer<z.ZodObject<typeof baseLinkShape>>;
@@ -98,10 +139,12 @@ export type BaseLinkContent = z.infer<z.ZodObject<typeof baseLinkShape>>;
 const {
   extractedText: _extractedText,
   readingPosition: _readingPosition,
+  highlights: _highlights,
   ...snippetLinkBaseShape
 } = baseLinkShape;
 void _extractedText;
 void _readingPosition;
+void _highlights;
 export const snippetLinkShape = {
   ...snippetLinkBaseShape,
   sourceData: z.discriminatedUnion('kind', [
@@ -176,9 +219,11 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
     readingPosition: link.readingPosition
       ? {
           position: link.readingPosition.position,
+          source: link.readingPosition.source,
           updatedAt: link.readingPosition.updatedAt.toISOString(),
         }
       : null,
+    highlights: link.highlights.map(toHighlightContent),
   };
 }
 
@@ -205,10 +250,12 @@ export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent
   const {
     extractedText: _extractedText,
     readingPosition: _readingPosition,
+    highlights: _highlights,
     ...base
-  } = toBaseLinkContent({ ...link, extractedText: null, readingPosition: null });
+  } = toBaseLinkContent({ ...link, extractedText: null, readingPosition: null, highlights: [] });
   void _extractedText;
   void _readingPosition;
+  void _highlights;
   const sourceData = base.sourceData;
   if (sourceData.kind === 'feed_media') {
     const { content: _content, ...summary } = sourceData;

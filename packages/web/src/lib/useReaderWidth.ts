@@ -1,16 +1,11 @@
-import { createPrefStore, usePref } from './readerPrefs';
+import { useCallback } from 'react';
+import { usePref } from './prefStore';
+import { type ReaderWidth, readerSync, readerWidthStore } from './readerPrefs';
 
-export type ReaderWidth = 'narrow' | 'medium' | 'wide';
+export type { ReaderWidth };
 
-const readerWidthStore = createPrefStore<ReaderWidth>({
-  key: 'silo.readerWidth',
-  event: 'silo:reader-width',
-  initial: 'medium',
-  parse: (raw) => (raw === 'narrow' || raw === 'wide' ? raw : 'medium'),
-  serialize: (value) => value,
-});
-
-/** A browser-local reading preference; no server setting or account data changes. */
+/** The reading width, kept on this device and synced to the server with the other reader settings. */
 export function useReaderWidth() {
-  return [usePref(readerWidthStore), readerWidthStore.set] as const;
+  const setWidth = useCallback((width: ReaderWidth) => readerSync.commit({ width }), []);
+  return [usePref(readerWidthStore), setWidth] as const;
 }

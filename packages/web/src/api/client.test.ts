@@ -327,6 +327,7 @@ describe('apiPatch / apiDelete', () => {
       headers: { 'X-Silo-CSRF': '1', 'content-type': 'application/json' },
       body: JSON.stringify({ title: 'New title' }),
       credentials: 'include',
+      signal: expect.any(AbortSignal),
     });
   });
 
@@ -419,5 +420,42 @@ describe('type fidelity', () => {
       const link: LinkJson = { ...linkFixture, sourceData };
       expect(link.sourceData).toEqual(sourceData);
     }
+  });
+});
+
+describe('PATCH timeout', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('aborts a hung PATCH after 15 seconds and permits the next request', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((_resolve, reject) => {
+            init?.signal?.addEventListener('abort', () =>
+              reject(new DOMException('Timed out', 'AbortError')),
+            );
+          }),
+      ),
+    );
+    const failed = expect(
+      apiPatch('/api/settings', { reader: { width: 'wide' } }),
+    ).rejects.toMatchObject({
+      error: 'network_error',
+    });
+    await vi.advanceTimersByTimeAsync(14_999);
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.signal?.aborted).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    await failed;
+    expect(vi.mocked(fetch).mock.calls[0]?.[1]?.signal?.aborted).toBe(true);
+    vi.mocked(fetch).mockResolvedValueOnce(Response.json({ saved: true }));
+    expect(await apiPatch('/api/settings', { reader: { width: 'narrow' } })).toEqual({
+      saved: true,
+    });
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

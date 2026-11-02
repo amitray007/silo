@@ -1,5 +1,13 @@
 import type { PageParams } from '@silo/core';
-import { CAPTURE_SOURCES, normalizeFeedUrl, sourceDataSchema } from '@silo/core';
+import {
+  CAPTURE_SOURCES,
+  HIGHLIGHT_COLORS,
+  HIGHLIGHT_NOTE_MAX,
+  HIGHLIGHT_OFFSET_MAX,
+  HIGHLIGHT_QUOTE_MAX,
+  normalizeFeedUrl,
+  sourceDataSchema,
+} from '@silo/core';
 import { z } from 'zod';
 
 /**
@@ -153,7 +161,33 @@ export const editBodySchema = z.object({
 
 /** `PUT /api/links/:id/reading-position` body: a finite share of the article's words, 0 to 1. */
 export const readingPositionBodySchema = z.object({
+  writtenAt: z.iso.datetime().optional(),
+  source: z.enum(['pencil', 'listen', 'mark']).default('mark'),
   position: z.number().min(0).max(1),
+});
+
+const highlightColorSchema = z.enum(HIGHLIGHT_COLORS);
+
+/** Postgres text cannot hold a NUL byte. */
+const noNul = (value: string) => !value.includes('\u0000');
+const noNulMessage = { message: 'must not contain a NUL character' };
+
+/** `POST /api/links/:id/highlights` body. Context and offsets are optional; without them the quote is matched in the saved text. */
+export const addHighlightBodySchema = z.object({
+  quote: z.string().min(1).max(HIGHLIGHT_QUOTE_MAX).refine(noNul, noNulMessage),
+  prefix: z.string().max(64).refine(noNul, noNulMessage).optional(),
+  suffix: z.string().max(64).refine(noNul, noNulMessage).optional(),
+  startOffset: z.number().int().min(0).max(HIGHLIGHT_OFFSET_MAX).nullable().optional(),
+  endOffset: z.number().int().min(1).max(HIGHLIGHT_OFFSET_MAX).nullable().optional(),
+  occurrence: z.number().int().min(1).optional(),
+  color: highlightColorSchema.optional(),
+  note: z.string().max(HIGHLIGHT_NOTE_MAX).refine(noNul, noNulMessage).nullable().optional(),
+});
+
+/** `PATCH /api/highlights/:id` body. `note: null` clears the note. */
+export const editHighlightBodySchema = z.object({
+  color: highlightColorSchema.optional(),
+  note: z.string().max(HIGHLIGHT_NOTE_MAX).refine(noNul, noNulMessage).nullable().optional(),
 });
 
 /** `POST /api/links/:id/tags` (add tag) body schema. */

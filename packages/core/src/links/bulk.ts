@@ -1,4 +1,5 @@
 import { type EnrichOptions, requestEnrich } from './enrichment.js';
+import { listHighlightsForLinks } from './highlights.js';
 import { FeedPostNotEditableError } from './library-write.js';
 import {
   addTag,
@@ -253,8 +254,10 @@ export type BulkGetResult = { id: string; link: LinkDetail | null };
 export async function getByIds(ids: ReadonlyArray<string>): Promise<BulkGetResult[]> {
   assertWithinBulkCap(ids.length);
   const results: BulkGetResult[] = [];
+  // One query for every link's highlights, not one per id.
+  const highlightsByLink = await listHighlightsForLinks(ids);
   for (const id of ids) {
-    const link = await getById(id);
+    const link = await getById(id, { preloadedHighlights: highlightsByLink.get(id) ?? [] });
     results.push({ id, link });
   }
   return results;

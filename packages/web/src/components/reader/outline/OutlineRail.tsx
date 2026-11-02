@@ -129,10 +129,13 @@ export function OutlineRail({
   prose,
   scroll,
   panel,
+  hidden = false,
 }: {
   prose: HTMLElement;
   scroll: HTMLElement;
   panel: HTMLElement;
+  /** The notes lane has moved the column close to the rail. */
+  hidden?: boolean;
 }) {
   const reduced = useReducedMotion() ?? false;
   const { wide, height, version } = usePaneSize(panel, prose);
@@ -157,7 +160,7 @@ export function OutlineRail({
     if (hover !== null) cardY.set(cardTop);
   }, [hover, cardTop]);
 
-  if (!wide || !groups.length) return null;
+  if (hidden || !wide || !groups.length) return null;
   const hovered = hover === null ? undefined : groups[hover];
   return (
     <nav className="silo-outline" aria-label="Article outline">

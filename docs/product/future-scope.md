@@ -28,7 +28,8 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - Trend/pattern surfacing over time — needs the activity trail above.
 
 ### Deferred capture richness
-- **Separate reaction/highlight/why fields** — decided against; a single free-form `notes` field per item covers this. Revisit only if one note field proves too coarse.
+- **Separate reaction/highlight/why fields** - reversed on 2026-10-31. Passage highlights with passage notes now ship as their own `highlights` table, with API routes and MCP tools (`add_highlight`, `edit_highlight`, `delete_highlight`); see [`docs/methods/reader-tools.md`](../methods/reader-tools.md), slice 3. The link-level `notes` field stays as it was. Reaction and why fields are still not planned.
+- **Search passage notes** - highlight notes are not searchable yet. Add them to the search index and the command palette when passage notes prove worth finding by text.
 - **Mechanical semantic/embedding index** — silo stores + matches vectors so "find by meaning" is fast (NOT AI inside silo; the agent still judges relevance). Later increment on the same base.
 
 ### Deliberate agent-native boundary
@@ -88,3 +89,12 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **X accounts and lists.** No free API and no RSS.
 - **Feed content as Reader text for page posts.** Use `content:encoded` when a regular page
   fetch fails. Podcast/media show notes already use the feed content as Reader text.
+
+### Reader tools (parked from `docs/methods/reader-tools.md`, 2026-11-01)
+
+- **Multilingual read aloud.** Read aloud is English-only for now. `kokoro-js` ships English
+  voices and an English phonemizer only (even though the Kokoro model has more languages),
+  Phonon 31m is English, and Phonon 40m multilingual is CC BY-NC 4.0, so silo cannot ship it.
+  Revisit when `kokoro-js` or another permissively licensed engine speaks more languages. The
+  stored Reader also has no language field, so the article language is read from its text today.
+

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { HIGHLIGHT_OFFSET_MAX, type HighlightColor, restoreHighlights } from './highlights.js';
 import { type CreateLinkInput, createLink, willDedupCapture } from './links.js';
 import { restoreReadingPosition } from './reading-position.js';
 import type { SourceData } from './source-data.js';
@@ -14,7 +15,15 @@ export type ImportResult = {
   created: number;
   merged: number;
   skipped: ImportSkip[];
+  /**
+   * Links whose highlights were only partly imported. The link itself still counts as imported.
+   * Left out when every highlight went in.
+   */
+  highlightIssues?: ImportHighlightIssue[];
 };
+
+/** A link whose highlights could not all be imported: how many were skipped and why. */
+export type ImportHighlightIssue = { index: number; url: string; skipped: number; reason: string };
 
 /**
  * Thrown when the top-level import payload isn't a valid `version: 1`
@@ -56,11 +65,27 @@ const linkSchema = z.object({
   // Parsed apart from the link (see `readingPositionSchema`): a bad position
   // drops the position, never the link.
   readingPosition: z.unknown().optional(),
+  // Parsed apart too: each bad highlight is skipped, never the link.
+  highlights: z.unknown().optional(),
 });
 
 /** An exported reading position. Invalid values are ignored, the link still imports. */
 const readingPositionSchema = z.object({
+  source: z.enum(['pencil', 'listen', 'mark']).default('pencil'),
   position: z.number().min(0).max(1),
+  updatedAt: z.iso.datetime({ offset: true }),
+});
+
+/** One exported highlight. Invalid entries are ignored, the link still imports. */
+const highlightSchema = z.object({
+  quote: z.string(),
+  prefix: z.string().optional(),
+  suffix: z.string().optional(),
+  startOffset: z.number().int().min(0).max(HIGHLIGHT_OFFSET_MAX).nullable().optional(),
+  endOffset: z.number().int().min(0).max(HIGHLIGHT_OFFSET_MAX).nullable().optional(),
+  color: z.string(),
+  note: z.string().nullable().optional(),
+  createdAt: z.iso.datetime({ offset: true }),
   updatedAt: z.iso.datetime({ offset: true }),
 });
 
@@ -166,10 +191,66 @@ function bestEffortUrl(element: unknown): string | undefined {
   return typeof url === 'string' ? url : undefined;
 }
 
+/** Write one link's exported highlights. Returns what could not be imported, if anything. */
+async function importHighlights(
+  linkId: string,
+  link: ImportLink,
+  index: number,
+): Promise<ImportHighlightIssue | undefined> {
+  if (!Array.isArray(link.highlights)) return undefined;
+  let invalid = 0;
+  let reason: string | undefined;
+  const parsed = [];
+  for (const item of link.highlights as unknown[]) {
+    const result = highlightSchema.safeParse(item);
+    if (!result.success) {
+      invalid += 1;
+      reason ??= result.error.issues[0]?.message ?? 'invalid highlight';
+      continue;
+    }
+    const h = result.data;
+    parsed.push({
+      quote: h.quote,
+      prefix: h.prefix ?? '',
+      suffix: h.suffix ?? '',
+      startOffset: h.startOffset ?? null,
+      endOffset: h.endOffset ?? null,
+      // Checked against the palette inside `restoreHighlights`.
+      color: h.color as HighlightColor,
+      note: h.note ?? null,
+      createdAt: new Date(h.createdAt),
+      updatedAt: new Date(h.updatedAt),
+    });
+  }
+  try {
+    const restored = await restoreHighlights(linkId, parsed);
+    const skipped = invalid + restored.skipped;
+    return skipped > 0
+      ? { index, url: link.url, skipped, reason: reason ?? restored.reason ?? 'invalid highlight' }
+      : undefined;
+  } catch (error) {
+    return {
+      index,
+      url: link.url,
+      skipped: parsed.length + invalid,
+      reason: `could not save the highlights: ${databaseReason(error)}`,
+    };
+  }
+}
+
+/** The database's own message, without the SQL and parameters drizzle wraps around it. */
+function databaseReason(error: unknown): string {
+  const cause = error instanceof Error ? error.cause : undefined;
+  if (cause instanceof Error) return cause.message;
+  return error instanceof Error
+    ? (error.message.split('\n')[0]?.slice(0, 200) ?? 'unknown error')
+    : 'unknown error';
+}
+
 /** Outcome of validating + writing one raw envelope element — see `importOneLink`. */
 type ImportOneLinkResult =
-  | { outcome: 'created' }
-  | { outcome: 'merged' }
+  | { outcome: 'created'; issue?: ImportHighlightIssue }
+  | { outcome: 'merged'; issue?: ImportHighlightIssue }
   | { outcome: 'skip'; skip: ImportSkip };
 
 /**
@@ -202,10 +283,15 @@ async function importOneLink(element: unknown, index: number): Promise<ImportOne
     if (savedPosition.success) {
       await restoreReadingPosition(imported.id, {
         position: savedPosition.data.position,
+        source: savedPosition.data.source,
         updatedAt: new Date(savedPosition.data.updatedAt),
       });
     }
-    return { outcome: existed ? 'merged' : 'created' };
+    // Highlights have their own error handling: the link is already in, so a bad highlight
+    // is reported and never turns the link into a skip.
+    const issue = await importHighlights(imported.id, link, index);
+    const outcome = existed ? 'merged' : 'created';
+    return issue ? { outcome, issue } : { outcome };
   } catch (error) {
     return {
       outcome: 'skip',
@@ -283,17 +369,20 @@ export async function importLinks(payload: unknown): Promise<ImportResult> {
   let created = 0;
   let merged = 0;
   const skipped: ImportSkip[] = [];
+  const highlightIssues: ImportHighlightIssue[] = [];
 
   for (let index = 0; index < links.length; index++) {
     const result = await importOneLink(links[index], index);
-    if (result.outcome === 'created') {
-      created++;
-    } else if (result.outcome === 'merged') {
-      merged++;
-    } else {
+    if (result.outcome === 'skip') {
       skipped.push(result.skip);
+      continue;
     }
+    if (result.outcome === 'created') created++;
+    else merged++;
+    if (result.issue) highlightIssues.push(result.issue);
   }
 
-  return { version: 1, total: links.length, created, merged, skipped };
+  const summary: ImportResult = { version: 1, total: links.length, created, merged, skipped };
+  if (highlightIssues.length > 0) summary.highlightIssues = highlightIssues;
+  return summary;
 }

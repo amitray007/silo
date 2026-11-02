@@ -134,12 +134,50 @@ describeIfPg('link-json (integration)', () => {
     const json = toLinkDetailJson(link);
     expect(json.readingPosition?.position).toBe(0.5);
     expect(typeof json.readingPosition?.updatedAt).toBe('string');
-    expect(Object.keys(json.readingPosition ?? {}).sort()).toEqual(['position', 'updatedAt']);
+    expect(Object.keys(json.readingPosition ?? {}).sort()).toEqual([
+      'position',
+      'source',
+      'updatedAt',
+    ]);
     expectNoLeakedFields(json);
     expect(Object.hasOwn(json, 'deletedAt')).toBe(false);
     // List-shaped and plain shapers never carry the field.
     expect(Object.hasOwn(toLinkJson(link), 'readingPosition')).toBe(false);
     expect(Object.hasOwn(toSummaryLinkJson(link), 'readingPosition')).toBe(false);
+  });
+
+  it('toLinkDetailJson carries highlights field by field and list shapers do not', async () => {
+    const core = harness.mod();
+    const { toLinkDetailJson, toLinkJson, toSummaryLinkJson } = await import('./link-json.js');
+    const created = await core.createLink({
+      url: 'https://example.com/link-json-highlights',
+      sourceKind: 'link',
+    });
+    const empty = await core.getById(created.id);
+    if (!empty) throw new Error('missing link');
+    expect(toLinkDetailJson(empty).highlights).toEqual([]);
+
+    await core.addHighlight(created.id, { quote: 'a quote', prefix: '', suffix: '', note: 'n' });
+    const link = await core.getById(created.id);
+    if (!link) throw new Error('missing link');
+    const json = toLinkDetailJson(link);
+    expect(json.highlights).toHaveLength(1);
+    expect(Object.keys(json.highlights[0] ?? {}).sort()).toEqual([
+      'color',
+      'createdAt',
+      'endOffset',
+      'id',
+      'note',
+      'prefix',
+      'quote',
+      'startOffset',
+      'suffix',
+      'updatedAt',
+    ]);
+    expect(Object.hasOwn(json.highlights[0] ?? {}, 'linkId')).toBe(false);
+    expectNoLeakedFields(json);
+    expect(Object.hasOwn(toLinkJson(link), 'highlights')).toBe(false);
+    expect(Object.hasOwn(toSummaryLinkJson(link), 'highlights')).toBe(false);
   });
 
   it('toTrashLinkJson adds deletedAt as an ISO string for a trashed link', async () => {

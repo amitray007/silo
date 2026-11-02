@@ -9,6 +9,9 @@
  * one required divergence: dates are serialized over HTTP as ISO strings, so
  * every date field here is `string`, never `Date`.
  */
+import type { HighlightColor } from '../lib/highlights';
+import type { ReaderSettings } from '../lib/readerPrefs';
+import type { DeepPartial } from '../lib/readerSync';
 
 /** Mirrors `LinkJson['captureStatus']` in `packages/api/src/link-json.ts`. */
 export type CaptureStatus = 'enriching' | 'full' | 'partial' | 'bare';
@@ -133,6 +136,10 @@ export type SourceData =
  * strings (JSON has no native date type), NOT `Date`.
  */
 export type LinkJson = {
+  /** Current stored Reader supplies the prose; fetch default detail if it fails to load. */
+  readerTextOmitted?: true;
+  /** Browser-local write version captured when this detail request started. */
+  readerPrefsVersion?: number;
   id: string;
   url: string;
   title: string | null;
@@ -158,11 +165,34 @@ export type LinkJson = {
    * Where the reader stopped, as a share (0 to 1) of the article's words. Only single-link
    * reads carry it: `null` means none saved, and a list row leaves it out.
    */
+  readerPrefs?: DeepPartial<ReaderSettings>;
   readingPosition?: ReadingPositionJson | null;
+  /** Passage highlights. Only single-link reads carry them; a list row leaves them out. */
+  highlights?: HighlightJson[];
+};
+
+/** One passage highlight with its optional note; dates are ISO strings. */
+export type HighlightJson = {
+  id: string;
+  quote: string;
+  prefix: string;
+  suffix: string;
+  /** Hints into the prose's normalised text; `null` when the writer had none (an agent). */
+  startOffset: number | null;
+  endOffset: number | null;
+  color: HighlightColor;
+  note: string | null;
+  createdAt: string;
+  updatedAt: string;
 };
 
 /** `PUT /api/links/:id/reading-position` returns this; `updatedAt` is an ISO string. */
-export type ReadingPositionJson = { position: number; updatedAt: string };
+export type ReadingPositionSource = 'pencil' | 'listen' | 'mark';
+export type ReadingPositionJson = {
+  position: number;
+  source: ReadingPositionSource;
+  updatedAt: string;
+};
 
 /**
  * `GET /api/links/:id/reader` -- the formatted Reader built live from the page.
@@ -287,6 +317,11 @@ export type SettingsMap = {
     // `packages/core/src/settings/schema.ts`'s doc comment.
     twitter: { enabled: boolean; inline: boolean; hover: boolean; palette: boolean };
   };
+  /**
+   * Synced reader preferences; mirrors core's `readerSchema`. `null` until the first save, so a
+   * browser can upload the values it already holds once. A PATCH sends any subset of fields.
+   */
+  reader: ReaderSettings | null;
   /** Optional AI layer; mirrors core's `settingsSchema.ai`. The key is never a setting. */
   ai: {
     enabled: boolean;
@@ -298,7 +333,10 @@ export type SettingsMap = {
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
-export type UpdateSettingsRequest = Partial<SettingsMap>;
+export type UpdateSettingsRequest = Partial<Omit<SettingsMap, 'reader'>> & {
+  writtenAt?: string;
+  reader?: DeepPartial<ReaderSettings>;
+};
 
 export type AiProviderKind = 'anthropic' | 'openai' | 'gateway' | 'fireworks';
 
