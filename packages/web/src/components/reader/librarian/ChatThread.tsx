@@ -9,7 +9,9 @@ import {
 } from 'react';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
+import { StatusLine } from './StatusLine';
 import { selectionActions } from './selectionStore';
+import { statusLabel } from './status';
 import type { ThreadChat } from './useLibrarianChat';
 
 export type Passage = { quote: string; paragraph: number };
@@ -34,6 +36,43 @@ export function useChatComposer(initialPassage?: Passage) {
   return { input, setInput, passage, setPassage, field };
 }
 export type Composer = ReturnType<typeof useChatComposer>;
+
+/** Within this many pixels of the end, the log counts as pinned to the bottom. */
+const PINNED_PX = 48;
+const JUMP_MS = 600;
+
+/**
+ * Keeps a message log at its end while the reader is there, and lets go when they scroll up: new
+ * lines then raise `away`, and `jump` brings them back. Sending a message always returns to the end.
+ */
+function useStickyLog(messages: readonly { role: string }[]) {
+  const ref = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  /** A smooth jump is under way until this time, so its scroll events do not unpin the log. */
+  const jumping = useRef(0);
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!element || messages.length === 0) return;
+    if (pinned.current || messages.at(-1)?.role === 'user') {
+      pinned.current = true;
+      element.scrollTop = element.scrollHeight;
+    } else setAway(true);
+  }, [messages]);
+  const onScroll = () => {
+    const element = ref.current;
+    if (!element || performance.now() < jumping.current) return;
+    pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < PINNED_PX;
+    setAway(!pinned.current);
+  };
+  const jump = () => {
+    pinned.current = true;
+    jumping.current = performance.now() + JUMP_MS;
+    setAway(false);
+    ref.current?.scrollTo?.({ top: ref.current.scrollHeight, behavior: 'smooth' });
+  };
+  return { ref, onScroll, away, jump };
+}
 
 /**
  * A conversation: the messages and quick actions in a panel, then the passage card, the approval
@@ -74,11 +113,7 @@ export function ChatThread({
   variant?: 'dock' | 'page';
 }) {
   const { input, setInput, passage, setPassage, field } = composer;
-  const messages = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (chat.messages.length === 0) return;
-    messages.current?.scrollTo?.({ top: messages.current.scrollHeight });
-  }, [chat.messages]);
+  const log = useStickyLog(chat.messages);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
   return (
@@ -90,30 +125,45 @@ export function ChatThread({
         aria-label="Librarian conversation"
       >
         {header}
-        <div
-          className="silo-chat-messages"
-          ref={messages}
-          role="log"
-          aria-label="Messages"
-          aria-busy={chat.busy}
-        >
-          {chat.messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
-              linkId={linkId}
-              expired={message.id !== lastAssistant?.id}
-              onApproval={chat.addToolApprovalResponse}
-            />
-          ))}
-          {chat.messages.length === 0 && (
-            <p className="silo-chat-empty">{chat.loading ? 'Loading conversation…' : emptyText}</p>
-          )}
-          {notice}
-          {chat.failed && (
-            <p role="alert" className="silo-chat-error">
-              {chat.errorText}
-            </p>
+        <div className="silo-chat-log">
+          <div
+            className="silo-chat-messages"
+            ref={log.ref}
+            onScroll={log.onScroll}
+            role="log"
+            aria-label="Messages"
+            aria-busy={chat.busy}
+          >
+            {chat.messages.map((message) => (
+              <ChatMessage
+                key={message.id}
+                message={message}
+                linkId={linkId}
+                expired={message.id !== lastAssistant?.id}
+                streaming={chat.busy && message.id === lastAssistant?.id}
+                onApproval={chat.addToolApprovalResponse}
+              />
+            ))}
+            {chat.busy && !chat.pendingApproval && (
+              <StatusLine label={statusLabel(chat.messages)} className="silo-chat-pending" />
+            )}
+            {chat.messages.length === 0 && (
+              <p className="silo-chat-empty">
+                {chat.loading ? 'Loading conversation…' : emptyText}
+              </p>
+            )}
+            {notice}
+            {chat.failed && (
+              <p role="alert" className="silo-chat-error">
+                {chat.errorText}
+              </p>
+            )}
+          </div>
+          {log.away && (
+            <button type="button" className="silo-chat-jump" onClick={log.jump}>
+              <ReaderIcon name="arrowDown" size={14} />
+              Jump to latest
+            </button>
           )}
         </div>
         {chat.messages.length === 0 && !passage && (
@@ -190,14 +240,26 @@ export function ChatThread({
             onChange={(event) => setInput(event.target.value)}
           />
         </div>
-        <button
-          className="silo-chat-send"
-          type="submit"
-          aria-label="Send"
-          disabled={disabled || !input.trim()}
-        >
-          <ReaderIcon name="up" size={18} />
-        </button>
+        {chat.busy ? (
+          <button
+            className="silo-chat-send"
+            type="button"
+            data-mode="stop"
+            aria-label="Stop"
+            onClick={() => void chat.stop()}
+          >
+            <ReaderIcon name="stop" size={13} />
+          </button>
+        ) : (
+          <button
+            className="silo-chat-send"
+            type="submit"
+            aria-label="Send"
+            disabled={disabled || !input.trim()}
+          >
+            <ReaderIcon name="arrowUp" size={18} />
+          </button>
+        )}
       </form>
     </div>
   );

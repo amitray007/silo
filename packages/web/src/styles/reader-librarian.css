@@ -87,6 +87,35 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   background: var(--menu-highlight);
 }
 
+/* The log holds the scrolling messages and, over their foot, the jump-to-latest pill. */
+.silo-chat-log {
+  position: relative;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+}
+.silo-chat-jump {
+  position: absolute;
+  left: 50%;
+  bottom: 12px;
+  translate: -50% 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 12px 0 10px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  animation: siloStatusIn 160ms var(--ease-out) both;
+}
+
 /* Conversation: a question reads as the heading of its answer, with a hairline between turns. */
 .silo-chat-messages {
   min-height: 0;
@@ -201,33 +230,23 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-pending {
   color: var(--fnt);
 }
-.silo-chat-messages[aria-busy="true"]::after {
-  content: "";
-  display: block;
-  width: 6px;
-  height: 6px;
-  margin-top: 12px;
-  border-radius: 50%;
-  background: var(--fnt);
-  animation: siloChatPulse 1.2s ease-in-out infinite;
-}
 
-/* Quick actions: tag-chip pills, quiet until used. */
+/* Quick actions: quiet text, with a soft fill on hover. The same as the composer's. */
 .silo-chat-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 2px;
+  margin-left: -8px;
 }
 .silo-chat-panel > .silo-chat-actions {
   padding: 0 16px 16px;
 }
 .silo-chat-actions button {
   height: 28px;
-  padding: 0 12px;
+  padding: 0 8px;
   border: 0;
-  border-radius: 999px;
+  border-radius: 8px;
   background: none;
-  box-shadow: inset 0 0 0 0.5px var(--line-2);
   color: var(--mut);
   font: inherit;
   font-size: 13px;
@@ -696,6 +715,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   border-radius: 999px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
+  transition: box-shadow 200ms var(--ease-out);
   animation: siloChatBar 160ms var(--ease-out);
 }
 .silo-chat-bar button {
@@ -718,12 +738,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   flex: 1;
   min-width: 0;
   height: 38px;
-  padding: 0 14px;
-  border-radius: 999px;
-  background: var(--input-bg);
-}
-.silo-chat-input:focus-within {
-  outline: 1.5px solid var(--ghost);
+  padding: 0 6px;
 }
 .silo-chat-input input {
   width: 100%;
@@ -738,10 +753,23 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-input input::placeholder {
   color: var(--fnt);
 }
-.silo-chat-bar .silo-chat-send,
-.silo-selection-send {
+.silo-chat-bar .silo-chat-send {
   background: var(--btn);
   color: var(--btn-ink);
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out);
+}
+/* Nothing to send yet: a muted arrow on the bar, not a faded disc. */
+.silo-chat-bar .silo-chat-send:disabled {
+  background: none;
+  color: var(--fnt);
+  opacity: 1;
+}
+
+/* One pill, no field inside it: typing lifts the whole bar instead of ringing a box. */
+.silo-chat-bar:focus-within {
+  box-shadow: var(--elev-3);
 }
 
 /* Shared control states. */
@@ -781,6 +809,12 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     background: var(--btn);
     color: var(--btn-ink);
     opacity: 0.88;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-chat-jump:hover {
+    background: var(--menu-highlight);
   }
 }
 
@@ -966,11 +1000,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     transform: scale(0.98);
   }
 }
-@keyframes siloChatPulse {
-  50% {
-    opacity: 0.3;
-  }
-}
 
 /* Status: the label crossfades (100ms out, 160ms in, 2px of travel) and shimmers while it runs. */
 .silo-status {
@@ -1038,8 +1067,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     transition: none;
   }
   .silo-chat-panel,
-  .silo-chat-bar,
-  .silo-chat-messages[aria-busy="true"]::after {
+  .silo-chat-bar {
     animation: none;
   }
 }
@@ -1058,9 +1086,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   .silo-selection-answer footer button,
   .silo-chat-approval button {
     min-height: 40px;
-  }
-  .silo-chat-actions button {
-    padding-inline: 14px;
   }
   .silo-selection-send {
     width: 40px;
