@@ -2,6 +2,7 @@
 //
 // Architecture rule: `web`, `api`, and `mcp/server` are thin adapters that may
 // depend on `@silo/core` but NOT on each other and NOT on `@silo/db` directly.
+// Exception: browser code in `web` cannot import core or db, including types.
 // Only `@silo/core` owns data access and may import `@silo/db`.
 //
 // `@silo/queue` (plan 013) is a shared LIBRARY, not an adapter — like
@@ -19,6 +20,16 @@
 /** @type {import('dependency-cruiser').IConfiguration} */
 module.exports = {
   forbidden: [
+    {
+      name: 'web-no-core',
+      comment: 'Browser code must not import core or db, including type-only imports.',
+      severity: 'error',
+      from: {
+        path: '^packages/web/',
+        pathNot: ['\\.test\\.tsx?$', '(^|/)test-support/'],
+      },
+      to: { path: '^packages/(core|db)/' },
+    },
     {
       name: 'adapters-no-db',
       comment:
