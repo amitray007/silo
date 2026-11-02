@@ -13,7 +13,7 @@ export const compression: MiddlewareHandler = async (c, next) => {
     c.req.path.startsWith('/api/tts/files/') ||
     c.req.header('Range') !== undefined ||
     c.res.headers.has('Content-Range') ||
-    (c.res.status !== 200 && c.res.status !== 304)
+    c.res.status === 206
   ) {
     return;
   }

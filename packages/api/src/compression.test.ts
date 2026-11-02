@@ -13,6 +13,19 @@ function responseApp(contentType: string, extra: Record<string, string> = {}) {
 }
 
 describe('API compression', () => {
+  it.each([201, 400, 500])('compresses JSON responses with status %i', async (status) => {
+    const app = new Hono()
+      .use('*', compression)
+      .get(
+        '/',
+        () => new Response(body, { status, headers: { 'Content-Type': 'application/json' } }),
+      );
+    const res = await app.request('/', { headers });
+    expect(res.status).toBe(status);
+    expect(res.headers.get('content-encoding')).toBe('gzip');
+    expect(gunzipSync(Buffer.from(await res.arrayBuffer())).toString()).toBe(body);
+  });
+
   it.each([
     'text/html',
     'text/css',
