@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import type { Plugin, Rollup } from 'vite';
 
 const builtins = new Set(builtinModules);
+const serverPackages = /^(?:pg(?:-[^/]+)?|postgres|drizzle-orm|@silo\/(?:core|db))(?:\/|$)/;
 type BrowserChunk = Pick<Rollup.OutputChunk, 'type' | 'fileName' | 'imports' | 'dynamicImports'> & {
   modules: Record<string, unknown>;
 };
@@ -12,9 +13,10 @@ type BrowserBundle = Record<string, BrowserChunk | Pick<Rollup.OutputAsset, 'typ
 
 function isServerModule(rawId: string): boolean {
   const id = rawId.replaceAll('\\', '/').replace(/^\0/, '').split('?')[0] ?? rawId;
+  const packageId = id.replace(/^(?:.*\/)?node_modules\//, '');
   return (
     /(^|\/)packages\/(core|db)\//.test(id) ||
-    /(^|\/)node_modules\/(pg|drizzle-orm)(\/|$)/.test(id) ||
+    serverPackages.test(packageId) ||
     id.startsWith('node:') ||
     builtins.has(id)
   );
@@ -31,16 +33,20 @@ function hasBrowserStub(source: string, importer: string | undefined): boolean {
   return pkg.browser?.[source] === false;
 }
 
+function assertBrowserModule(id: string, location: string): void {
+  if (isServerModule(id)) {
+    throw new Error(
+      `Server code in @silo/web ${location}: "${id}". ` +
+        'Browser bundles must not include core, db, pg, postgres, drizzle-orm or Node built-ins.',
+    );
+  }
+}
+
 export function assertBrowserBundle(bundle: BrowserBundle): void {
   for (const chunk of Object.values(bundle)) {
     if (chunk.type !== 'chunk') continue;
     for (const id of [...Object.keys(chunk.modules), ...chunk.imports, ...chunk.dynamicImports]) {
-      if (isServerModule(id)) {
-        throw new Error(
-          `Server code in @silo/web chunk "${chunk.fileName}": "${id}". ` +
-            'Browser bundles must not include core, db, pg, drizzle-orm or Node built-ins.',
-        );
-      }
+      assertBrowserModule(id, `chunk "${chunk.fileName}"`);
     }
   }
 }
@@ -62,6 +68,9 @@ export function serverCodeGuard(): Plugin {
     },
     generateBundle(_options, bundle) {
       assertBrowserBundle(bundle);
+      for (const id of this.getModuleIds()) {
+        if (this.getModuleInfo(id)?.isExternal) assertBrowserModule(id, 'external import');
+      }
     },
   };
 }
