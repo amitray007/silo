@@ -231,6 +231,7 @@ it('grows the same surface into the composer, focuses the field, and Escape shri
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(screen.getByRole('toolbar', { name: 'Selection' })).toBe(surface);
   expect(surface.getAttribute('data-phase')).toBe('bar');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' }));
 });
 
 it('sends the question to the dock on Enter, and keeps Shift+Enter for a new line', () => {
@@ -483,5 +484,22 @@ it.each([
   await screen.findByText(message);
   expect(screen.getByRole('region', { name: 'Passage answer' })).toBeTruthy();
   expect(screen.getByText('Keep this answer')).toBeTruthy();
+  vi.unstubAllGlobals();
+});
+
+it('focuses the quick answer and restores Ask focus when it closes', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => answerStream('Focus answer')),
+  );
+  setup({ askReady: true, linkId: 'focus-answer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  screen.getByRole('button', { name: 'Explain' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Passage answer' }));
+  await screen.findByText('Focus answer');
+  screen.getByRole('button', { name: 'Close answer' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Close answer' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' }));
   vi.unstubAllGlobals();
 });

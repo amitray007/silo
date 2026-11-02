@@ -188,3 +188,22 @@ it('keeps the empty chat quick actions in the composer, not beside the log', () 
   const related = screen.getByRole('button', { name: 'Related' });
   expect(container.querySelector('.silo-composer-quick')?.contains(related)).toBe(true);
 });
+
+it.each([false, true])('uses the motion preference when jumping: reduced=%s', (reduced) => {
+  vi.stubGlobal(
+    'matchMedia',
+    vi.fn(() => ({ matches: reduced })),
+  );
+  mount(fakeChat());
+  const log = screen.getByRole('log', { name: 'Messages' });
+  Object.defineProperties(log, {
+    scrollHeight: { configurable: true, value: 1000 },
+    clientHeight: { configurable: true, value: 300 },
+  });
+  log.scrollTo = vi.fn();
+  log.scrollTop = 0;
+  fireEvent.scroll(log);
+  fireEvent.click(screen.getByRole('button', { name: 'Jump to latest' }));
+  expect(log.scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: reduced ? 'auto' : 'smooth' });
+  vi.unstubAllGlobals();
+});

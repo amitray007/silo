@@ -1,4 +1,5 @@
 import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
+import { reducedMotion } from '../../../lib/motion';
 import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
@@ -61,7 +62,10 @@ function useStickyLog(messages: readonly { role: string }[]) {
     pinned.current = true;
     jumping.current = performance.now() + JUMP_MS;
     setAway(false);
-    ref.current?.scrollTo?.({ top: ref.current.scrollHeight, behavior: 'smooth' });
+    ref.current?.scrollTo?.({
+      top: ref.current.scrollHeight,
+      behavior: reducedMotion() ? 'auto' : 'smooth',
+    });
   };
   return { ref, onScroll, away, jump };
 }

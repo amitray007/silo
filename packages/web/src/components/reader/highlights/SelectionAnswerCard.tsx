@@ -31,7 +31,7 @@ export function SelectionAnswerCard({
 }) {
   const assistant = messages.filter((message) => message.role === 'assistant');
   return (
-    <section className="silo-selection-answer" aria-label="Passage answer">
+    <section tabIndex={-1} className="silo-selection-answer" aria-label="Passage answer">
       <header>
         <h3>{action}</h3>
         <button

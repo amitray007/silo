@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { HighlightColor } from '../../../lib/highlights';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
@@ -116,9 +116,17 @@ export function SelectionBar({
     begin();
     change();
   };
+  const previousPhase = useRef(phase);
   useEffect(() => {
-    if (composer) root.current?.querySelector('textarea')?.focus();
-  }, [composer, root]);
+    if (phase === 'composer') root.current?.querySelector('textarea')?.focus();
+    else if (phase === 'answer')
+      root.current?.querySelector<HTMLElement>('.silo-selection-answer')?.focus();
+    else if (previousPhase.current !== 'bar') {
+      root.current?.querySelector<HTMLElement>('.silo-sb-ask')?.focus();
+      restoreSelection(pending);
+    }
+    previousPhase.current = phase;
+  }, [phase, root, pending]);
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: a new selection closes the menu.
   useEffect(() => {
