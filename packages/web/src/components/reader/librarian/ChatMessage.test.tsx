@@ -47,14 +47,25 @@ describe('ChatMessage', () => {
     expect(screen.getByText('One piece matches.')).toBeTruthy();
   });
 
-  it('says the answer came from the conversation when no tool ran', () => {
+  it('shows no trace line when no tool ran', () => {
     const message: UIMessage = {
       id: 'a3',
       role: 'assistant',
       parts: [{ type: 'text', text: 'Hello.' }],
     };
-    render(<ChatMessage message={message} />);
-    expect(screen.getByText('Answered from the conversation')).toBeTruthy();
+    const { container } = render(<ChatMessage message={message} />);
+    expect(container.querySelector('.silo-chat-trace')).toBeNull();
+  });
+
+  it('shows the passage quote under a user turn that carries one', () => {
+    const message: UIMessage = {
+      id: 'u1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Simplify' }],
+      metadata: { action: 'simplify', quote: 'A dense passage.', paragraph: 3 },
+    };
+    const { container } = render(<ChatMessage message={message} />);
+    expect(container.querySelector('.silo-chat-quote')?.textContent).toBe('A dense passage.');
   });
 });
 

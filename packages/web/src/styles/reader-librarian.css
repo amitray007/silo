@@ -115,9 +115,28 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   font-size: 13px;
 }
 .silo-chat-assistant a {
+  color: var(--ink);
   text-decoration: underline;
   text-decoration-color: var(--line-2);
   text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .silo-chat-assistant a:hover {
+    text-decoration-color: currentColor;
+  }
+}
+.silo-chat-user .silo-chat-quote {
+  margin: 6px 0 0;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-2);
+  color: var(--mut);
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 20px;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
 }
 .silo-chat-step,
 .silo-chat-denied {

@@ -112,7 +112,7 @@ function traceLine(message: UIMessage): string {
     }
   }
   if (searched) traces.add(`Searched your library${counted ? ` · ${found} links` : ''}`);
-  return [...traces].join(' · ') || 'Answered from the conversation';
+  return [...traces].join(' · ');
 }
 
 /** Text written before a later tool call is the model thinking aloud; the answer comes after the last call. */
@@ -143,13 +143,20 @@ export function ChatMessage({
       .filter((part) => part.type === 'text')
       .map((part) => part.text)
       .join('\n\n');
+    const meta = message.metadata;
+    const quote =
+      meta && typeof meta === 'object' && 'quote' in meta && typeof meta.quote === 'string'
+        ? meta.quote.trim()
+        : '';
     return (
       <div className="silo-chat-message silo-chat-user">
         <p>{text}</p>
+        {quote && <blockquote className="silo-chat-quote">{quote}</blockquote>}
       </div>
     );
   }
   const { steps, answer } = splitSteps(message);
+  const trace = traceLine(message);
   return (
     <div className="silo-chat-message silo-chat-assistant">
       {steps.map((step) => (
@@ -189,9 +196,10 @@ export function ChatMessage({
       >
         {answer}
       </Streamdown>
-      {!message.parts.some((part) => 'state' in part && part.state === 'approval-requested') && (
-        <div className="silo-chat-trace">{traceLine(message)}</div>
-      )}
+      {trace &&
+        !message.parts.some((part) => 'state' in part && part.state === 'approval-requested') && (
+          <div className="silo-chat-trace">{trace}</div>
+        )}
     </div>
   );
 }

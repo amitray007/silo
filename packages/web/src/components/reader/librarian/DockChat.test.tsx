@@ -289,7 +289,11 @@ it('attaches a passage and carries it in the next sent message', async () => {
     quote: 'Chosen passage',
     paragraph: 3,
   });
-  expect(screen.queryByText('Chosen passage')).toBeNull();
+  // The attachment chip clears; the sent turn keeps the passage as its quote.
+  expect(document.querySelector('.silo-chat-passage')).toBeNull();
+  expect(document.querySelector('.silo-chat-user .silo-chat-quote')?.textContent).toBe(
+    'Chosen passage',
+  );
 });
 
 it('expires approvals in older assistant messages', async () => {
