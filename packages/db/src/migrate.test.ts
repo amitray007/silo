@@ -44,6 +44,32 @@ describeIfPg('migrate (integration)', () => {
         'SELECT count(*)::int AS n FROM drizzle.__drizzle_migrations',
       );
       expect(applied.rows[0]?.n).toBeGreaterThanOrEqual(1);
+
+      const indexes = await check.query<{ indexname: string; indexdef: string }>(
+        `select indexname, indexdef from pg_indexes where schemaname = 'public'`,
+      );
+      const definitions = Object.fromEntries(
+        indexes.rows.map(({ indexname, indexdef }) => [indexname, indexdef]),
+      );
+      // Catalog definitions also verify the SQL-only INCLUDE payload in 0031.
+      expect(definitions).toMatchObject({
+        links_saved_link_id_idx:
+          'CREATE INDEX links_saved_link_id_idx ON public.links USING btree (saved_link_id)',
+        links_library_order_idx:
+          'CREATE INDEX links_library_order_idx ON public.links USING btree (created_at DESC, id DESC) WHERE ((deleted_at IS NULL) AND (feed_id IS NULL))',
+        links_canonical_url_library_idx:
+          'CREATE INDEX links_canonical_url_library_idx ON public.links USING btree (canonical_url) WHERE (feed_id IS NULL)',
+        links_trash_order_idx:
+          'CREATE INDEX links_trash_order_idx ON public.links USING btree (deleted_at DESC, id DESC) WHERE ((deleted_at IS NOT NULL) AND (feed_id IS NULL))',
+        highlights_created_at_id_idx:
+          'CREATE INDEX highlights_created_at_id_idx ON public.highlights USING btree (created_at DESC, id DESC)',
+        reading_positions_updated_at_link_id_idx:
+          'CREATE INDEX reading_positions_updated_at_link_id_idx ON public.reading_positions USING btree (updated_at DESC, link_id DESC)',
+        links_feed_order_idx:
+          'CREATE INDEX links_feed_order_idx ON public.links USING btree (feed_id, COALESCE(published_at, created_at) DESC, id DESC) INCLUDE (archived_at) WHERE ((deleted_at IS NULL) AND (feed_id IS NOT NULL))',
+        links_library_counts_idx:
+          'CREATE INDEX links_library_counts_idx ON public.links USING btree (deleted_at) WHERE (feed_id IS NULL)',
+      });
     } finally {
       await check.end();
     }
