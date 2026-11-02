@@ -164,4 +164,34 @@ suite('Librarian persistence', () => {
     finish?.();
     setLibrarianRunner(undefined);
   });
+  it('imports a fresh text turn after existing messages in order', async () => {
+    const c = h.mod();
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing chat');
+    await c.saveChatMessages(chat.id, [
+      { id: 'first', role: 'user', parts: [{ type: 'text', text: 'First' }] },
+    ]);
+    expect(
+      await c.importLibrarianMessages(chat.id, [
+        {
+          id: 'u',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Explain' }],
+          metadata: { action: 'explain', quote: 'Passage', paragraph: 1 },
+        },
+        { id: 'a', role: 'assistant', parts: [{ type: 'text', text: 'Answer' }] },
+      ]),
+    ).toBe('ok');
+    const stored = await c.getChat(chat.id);
+    expect(stored?.messages.map((m) => m.parts)).toEqual([
+      [{ type: 'text', text: 'First' }],
+      [{ type: 'text', text: 'Explain' }],
+      [{ type: 'text', text: 'Answer' }],
+    ]);
+    expect(stored?.messages[1]?.metadata).toEqual({
+      action: 'explain',
+      quote: 'Passage',
+      paragraph: 1,
+    });
+  });
 });

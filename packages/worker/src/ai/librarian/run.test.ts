@@ -20,54 +20,62 @@ import { runLibrarian } from './run.js';
 
 afterEach(() => vi.clearAllMocks());
 describe('Librarian streaming', () => {
-  it('streams text and saves the completed assistant', async () => {
-    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
-    vi.mocked(languageModelFor).mockReturnValue(
-      new MockLanguageModelV4({
-        doStream: async () => ({
-          stream: new ReadableStream({
-            start(c) {
-              c.enqueue({ type: 'text-start', id: 't' });
-              c.enqueue({ type: 'text-delta', id: 't', delta: 'Hello' });
-              c.enqueue({ type: 'text-end', id: 't' });
-              c.enqueue({
-                type: 'finish',
-                finishReason: { unified: 'stop', raw: undefined },
-                usage: {
-                  inputTokens: {
-                    total: 1,
-                    noCache: 1,
-                    cacheRead: undefined,
-                    cacheWrite: undefined,
+  it.each([false, true])(
+    'streams text and persists only durable replies (transient=%s)',
+    async (transient) => {
+      vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+      vi.mocked(languageModelFor).mockReturnValue(
+        new MockLanguageModelV4({
+          doStream: async () => ({
+            stream: new ReadableStream({
+              start(c) {
+                c.enqueue({ type: 'text-start', id: 't' });
+                c.enqueue({ type: 'text-delta', id: 't', delta: 'Hello' });
+                c.enqueue({ type: 'text-end', id: 't' });
+                c.enqueue({
+                  type: 'finish',
+                  finishReason: { unified: 'stop', raw: undefined },
+                  usage: {
+                    inputTokens: {
+                      total: 1,
+                      noCache: 1,
+                      cacheRead: undefined,
+                      cacheWrite: undefined,
+                    },
+                    outputTokens: { total: 1, text: 1, reasoning: undefined },
                   },
-                  outputTokens: { total: 1, text: 1, reasoning: undefined },
-                },
-              });
-              c.close();
-            },
+                });
+                c.close();
+              },
+            }),
           }),
         }),
-      }),
-    );
-    const endRun = vi.fn();
-    const response = await runLibrarian({
-      endRun,
-      chatId: 'chat',
-      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
-      link: null,
-    });
-    expect(await response.text()).toContain('Hello');
-    expect(endRun).toHaveBeenCalled();
-    expect(saveChatMessages).toHaveBeenCalledWith(
-      'chat',
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'assistant',
-          parts: expect.arrayContaining([expect.objectContaining({ text: 'Hello' })]),
-        }),
-      ]),
-    );
-  });
+      );
+      const endRun = vi.fn();
+      const response = await runLibrarian({
+        endRun,
+        transient,
+        chatId: 'chat',
+        messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+        link: null,
+      });
+      expect(await response.text()).toContain('Hello');
+      expect(endRun).toHaveBeenCalled();
+      if (transient) {
+        expect(saveChatMessages).not.toHaveBeenCalled();
+        return;
+      }
+      expect(saveChatMessages).toHaveBeenCalledWith(
+        'chat',
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'assistant',
+            parts: expect.arrayContaining([expect.objectContaining({ text: 'Hello' })]),
+          }),
+        ]),
+      );
+    },
+  );
   it('returns a fixed error without provider details', async () => {
     vi.mocked(resolveAiFeatureCredential).mockRejectedValue(
       Object.assign(new Error('secret'), { statusCode: 401 }),

@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@silo/core', async (load) => ({
   ...(await load<typeof import('@silo/core')>()),
+  quickLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
   streamLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
 }));
 
@@ -25,6 +26,8 @@ describe('Librarian route access', () => {
   it('rejects named tokens on every route', async () => {
     const api = app('db_token');
     for (const [method, path] of [
+      ['POST', '/librarian/quick'],
+      ['POST', '/librarian/chats/id/import'],
       ['GET', '/librarian/chats'],
       ['POST', '/librarian/chats'],
       ['GET', '/librarian/chats/id'],
@@ -113,4 +116,18 @@ it('maps an active run to HTTP 409 busy', async () => {
   );
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ error: 'busy' });
+});
+
+it('quick replies return 409 when the Librarian is not ready', async () => {
+  const response = await app('env_token').request('/librarian/quick', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      linkId: '00000000-0000-4000-8000-000000000001',
+      action: 'explain',
+      quote: 'Passage',
+      paragraph: 1,
+    }),
+  });
+  expect(response.status).toBe(409);
 });

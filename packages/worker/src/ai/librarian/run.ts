@@ -42,7 +42,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     const credential = await resolveAiFeatureCredential('librarian');
     if (!credential) throw new Error('Unavailable');
     const approvalSecret = librarianApprovalSecret();
-    const tools = await librarianTools(getLibrarianToolSource(), approvalSecret);
+    const tools = await librarianTools(getLibrarianToolSource(), approvalSecret, request.transient);
     const originalMessages = await validateUIMessages({
       messages: request.messages,
       tools: Object.fromEntries(
@@ -80,10 +80,11 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       onError: failure,
       onEnd: async ({ messages }) => {
         try {
-          await saveChatMessages(
-            request.chatId,
-            messages.map((message) => librarianMessageSchema.parse(message)),
-          );
+          if (!request.transient)
+            await saveChatMessages(
+              request.chatId,
+              messages.map((message) => librarianMessageSchema.parse(message)),
+            );
         } finally {
           request.endRun?.();
         }

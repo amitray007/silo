@@ -189,3 +189,50 @@ export async function streamLibrarianReply({
     throw error;
   }
 }
+
+export { importMessagesSchema, quickRequestSchema } from './types.js';
+export async function quickLibrarianReply(input: {
+  linkId: string;
+  action: string;
+  quote: string;
+  paragraph: number;
+}) {
+  if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
+  const runner = getLibrarianRunner();
+  if (!runner) return { ok: false, code: 'unavailable' } as const;
+  const [link] = await db
+    .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
+    .from(links)
+    .where(and(eq(links.id, input.linkId), isNull(links.deletedAt)));
+  if (!link) return { ok: false, code: 'not_found' } as const;
+  return {
+    ok: true,
+    response: await runner({
+      chatId: '',
+      transient: true,
+      link,
+      messages: [
+        {
+          id: crypto.randomUUID(),
+          role: 'user',
+          parts: [{ type: 'text', text: input.action }],
+          metadata: { action: input.action, quote: input.quote, paragraph: input.paragraph },
+        },
+      ],
+    }),
+  } as const;
+}
+export async function importLibrarianMessages(chatId: string, incoming: LibrarianMessage[]) {
+  const release = beginLibrarianRun(chatId);
+  if (!release) return 'busy';
+  try {
+    if (!(await getChat(chatId))) return 'not_found';
+    await saveChatMessages(
+      chatId,
+      incoming.map((m) => ({ ...m, id: crypto.randomUUID() })),
+    );
+    return 'ok';
+  } finally {
+    release();
+  }
+}
