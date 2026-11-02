@@ -233,6 +233,22 @@ describeIfPg('highlight routes (integration)', () => {
     expect(merged.link.id).toBe(twin.rows[0]?.id);
     expect(merged.link.highlights.map((h) => h.quote)).toEqual(['beta']);
   });
+  it.each([
+    ['/api/highlights', 'highlights'],
+    ['/api/reading-positions', 'reading_positions'],
+  ])('%s returns 400 for a calendar-invalid cursor', async (path, kind) => {
+    const cursor = Buffer.from(
+      JSON.stringify({
+        kind,
+        timestamp: '2026-02-30T00:00:00Z',
+        id: '00000000-0000-4000-8000-000000000001',
+      }),
+    ).toString('base64url');
+    const res = await send('GET', `${path}?cursor=${cursor}`);
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({ error: 'invalid_cursor' });
+  });
+
   describe('GET /api/highlights', () => {
     beforeEach(async () => {
       await harness.mod().pool.query('truncate links, feeds cascade');

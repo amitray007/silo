@@ -127,6 +127,22 @@ function decode(cursor: string): unknown {
   }
 }
 
+function isCursorTimestamp(timestamp: string): boolean {
+  const match =
+    /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}(?::?\d{2})?)$/.exec(
+      timestamp,
+    );
+  if (!match || match[1]?.startsWith('0000-')) return false;
+  const [, date, time, fraction = '', zone] = match;
+  const local = `${date}T${time}.${fraction.padEnd(3, '0').slice(0, 3)}`;
+  const calendarDate = new Date(`${local}Z`);
+  if (Number.isNaN(calendarDate.getTime()) || calendarDate.toISOString() !== `${local}Z`) {
+    return false;
+  }
+  const offset = zone?.length === 3 ? `${zone}:00` : zone;
+  return !Number.isNaN(new Date(`${local}${offset}`).getTime());
+}
+
 /** Reader lists retain Postgres timestamp precision and reject other tools' cursors. */
 export function encodeReaderCursor(kind: ReaderCursorKind, timestamp: string, id: string): string {
   return encode({ kind, timestamp, id });
@@ -141,7 +157,7 @@ export function decodeReaderCursor(cursor: string, kind: ReaderCursorKind): Read
     parsed.kind !== kind ||
     !('timestamp' in parsed) ||
     typeof parsed.timestamp !== 'string' ||
-    Number.isNaN(new Date(parsed.timestamp).getTime()) ||
+    !isCursorTimestamp(parsed.timestamp) ||
     !('id' in parsed) ||
     typeof parsed.id !== 'string' ||
     !UUID_RE.test(parsed.id)
@@ -160,7 +176,7 @@ export function decodeReaderCursor(cursor: string, kind: ReaderCursorKind): Read
  * precision, so a `Date`-derived cursor would silently lose the microseconds
  * the keyset predicate needs to break ties exactly against the raw column
  * (see `afterListCursor`). The raw string is stored opaquely and cast back to
- * `timestamptz` at query time — it is never re-parsed in JS.
+ * `timestamptz` at query time, preserving the original precision.
  */
 export function encodeListCursor(createdAt: string, id: string): string {
   return encode({ kind: 'list', createdAt, id });
@@ -179,11 +195,7 @@ export function decodeListCursor(cursor: string): { createdAt: string; id: strin
     throw new InvalidCursorError('cursor is not a valid list cursor');
   }
   const payload = parsed as ListCursorPayload;
-  // Validate `createdAt` parses as a real instant (rejects garbage/injection
-  // in the string that will be cast to `timestamptz`), WITHOUT round-tripping
-  // through the parsed `Date` — the original full-precision string is what's
-  // forwarded to the query, so the microseconds survive.
-  if (Number.isNaN(new Date(payload.createdAt).getTime())) {
+  if (!isCursorTimestamp(payload.createdAt)) {
     throw new InvalidCursorError('cursor createdAt is not a valid date');
   }
   if (!UUID_RE.test(payload.id)) {
@@ -202,7 +214,7 @@ export function decodeListCursor(cursor: string): { createdAt: string; id: strin
  * silently lose the microseconds the keyset predicate needs to break ties
  * exactly against the raw column (see `links.ts`'s `afterTrashCursor`). The
  * raw string is stored opaquely and cast back to `timestamptz` at query
- * time — it is never re-parsed in JS.
+ * time, preserving the original precision.
  */
 export function encodeTrashCursor(deletedAt: string, id: string): string {
   return encode({ kind: 'trash', deletedAt, id });
@@ -221,9 +233,7 @@ export function decodeTrashCursor(cursor: string): { deletedAt: string; id: stri
     throw new InvalidCursorError('cursor is not a valid trash cursor');
   }
   const payload = parsed as TrashCursorPayload;
-  // Validate `deletedAt` parses as a real instant, WITHOUT round-tripping
-  // through the parsed `Date` — see `decodeListCursor`'s identical note.
-  if (Number.isNaN(new Date(payload.deletedAt).getTime())) {
+  if (!isCursorTimestamp(payload.deletedAt)) {
     throw new InvalidCursorError('cursor deletedAt is not a valid date');
   }
   if (!UUID_RE.test(payload.id)) {
