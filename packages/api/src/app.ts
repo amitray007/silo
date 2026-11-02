@@ -11,6 +11,7 @@ import {
 import { Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { ZodError } from 'zod';
+import { compression } from './compression.js';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
 import { ingestTokenAuth } from './ingest-auth.js';
@@ -126,6 +127,7 @@ function readIndexHtml(indexPath: string): string {
  */
 export function createApp(): Hono {
   const app = new Hono();
+  app.use('*', compression);
 
   // Apply these only after the route's authentication. Import permits 50,000 links.
   const defaultBodyLimit = bodyLimit({
