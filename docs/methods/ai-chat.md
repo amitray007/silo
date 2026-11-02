@@ -266,6 +266,24 @@ the approval row, Allow trashes it (then restore it), Deny leaves it and the
 answer says so; a forged approval body (changed part or unknown approval id)
 gets 400.
 
+### Slice 5 detail
+
+Long chats use a stored summary plus recent messages. Core passes the summary,
+the number of messages it covers, and their stored sequence numbers to the worker.
+Summary updates use a conditional database write that only advances the cutoff.
+
+The worker estimates tokens as input characters divided by four after it stubs old
+tool results. Above 60% of the model context window (32,000 tokens when unknown),
+it summarizes the uncovered messages except the last six. One versioned model call
+uses the chat credential, a 1,024 token output limit and a 20 second timeout.
+It keeps owner facts, decisions, cited links and ids, actions, questions and
+preferences, and drops tool payloads. The next reply gets a labelled summary and
+only the uncovered messages. Stored messages remain available in full.
+
+If summary generation or storage fails, the worker logs a fixed failure code and
+drops the oldest model messages until the input fits the budget. Compaction errors
+do not fail the reply. Tests use the SDK 7 mock model and a disposable database.
+
 ## Out of scope (parked)
 
 - Fact-check and any web search (needs a search provider).
