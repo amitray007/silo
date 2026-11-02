@@ -22,6 +22,8 @@ function pin(content: HTMLElement, width: number, anchor: Anchor) {
 
 /** The leaving content fades out in place over the growing shell. */
 function fadeGhost(shell: HTMLElement, ghost: HTMLElement, from: Box, anchor: Anchor) {
+  // Not `silo-sb-content`: that class plays the arrival animation, and the ghost only leaves.
+  ghost.className = 'silo-sb-ghost';
   ghost.inert = true;
   ghost.setAttribute('aria-hidden', 'true');
   pin(ghost, from.w, anchor);
