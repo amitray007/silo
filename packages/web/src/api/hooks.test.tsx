@@ -20,6 +20,7 @@ import {
   useRestoreLink,
   useRetryCapture,
   useSearchLinks,
+  useSettings,
   useTags,
   useTrashLink,
   useTrashList,
@@ -575,6 +576,21 @@ describe('useCaptureLink', () => {
     });
 
     resolveSecond(jsonResponse({ link: makeLink({ id: 's2' }), deduped: false }, 201));
+  });
+
+  it('captures safely with a plain recents cache and invalidates it on settle', async () => {
+    const { queryClient, CaptureWrapper } = makeWrapper();
+    const recents = { links: [makeLink({ id: 'recent' })] };
+    queryClient.setQueryData(queryKeys.recentLinks(), recents);
+    const created = makeLink({ id: 'captured', url: 'https://example.com/new' });
+    vi.mocked(fetch).mockResolvedValueOnce(jsonResponse({ link: created, deduped: false }, 201));
+    const { result } = renderHook(() => useCaptureLink(), { wrapper: CaptureWrapper });
+    await act(async () => {
+      await result.current.mutateAsync({ url: created.url });
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(queryClient.getQueryData(queryKeys.recentLinks())).toEqual(recents);
+    expect(queryClient.getQueryState(queryKeys.recentLinks())?.isInvalidated).toBe(true);
   });
 
   it('invalidates links/counts/tags on settle (success), reconciling with the server (dedup-safe) — without a redundant duplicate invalidate on the ["links", {}] subkey', async () => {
@@ -1441,4 +1457,26 @@ describe('feed refresh without a completed poll', () => {
       }
     },
   );
+});
+
+it('refetches settings when an editor mounts even while row settings are fresh', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const fresh = { plugins: { github: { enabled: false } } };
+  client.setQueryData(queryKeys.settings(), { plugins: { github: { enabled: true } } });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => jsonResponse(fresh)),
+  );
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const row = renderHook(() => useSettings({ staleTime: 60_000 }), { wrapper });
+  expect(fetch).not.toHaveBeenCalled();
+  const editor = renderHook(() => useSettings(), { wrapper });
+  await waitFor(() => expect(editor.result.current.data).toEqual(fresh));
+  expect(fetch).toHaveBeenCalledTimes(1);
+  row.unmount();
+  editor.unmount();
+  client.clear();
+  vi.unstubAllGlobals();
 });

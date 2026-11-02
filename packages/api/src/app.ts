@@ -8,9 +8,11 @@ import {
   InvalidHighlightError,
   InvalidReadingPositionError,
 } from '@silo/core';
-import { Hono } from 'hono';
+import { type Context, Hono } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { ZodError } from 'zod';
+import { compression } from './compression.js';
+import { withETag } from './conditional-response.js';
 import { corsMiddleware } from './cors.js';
 import { generalTokenAuth } from './general-auth.js';
 import { ingestTokenAuth } from './ingest-auth.js';
@@ -126,6 +128,7 @@ function readIndexHtml(indexPath: string): string {
  */
 export function createApp(): Hono {
   const app = new Hono();
+  app.use('*', compression);
 
   // Apply these only after the route's authentication. Import permits 50,000 links.
   const defaultBodyLimit = bodyLimit({
@@ -297,13 +300,34 @@ export function createApp(): Hono {
   // all — the API behaves exactly as before this unit, falling through to
   // `app.notFound`'s JSON 404 for every unmatched GET, same as today.
   if (hasWebBuild) {
+    const serveIndex = (c: Context) => {
+      const html = readIndexHtml(webIndexPath);
+      return withETag(
+        c.html(html, 200, { 'Cache-Control': 'no-cache' }),
+        html,
+        c.req.header('If-None-Match'),
+      );
+    };
+    app.get('/', serveIndex);
+    app.get('/index.html', serveIndex);
     // Serves any request whose path matches a real file under `webDistDir`
     // (JS/CSS/image assets, `/favicon.ico`, etc.) — falls through to `next()`
     // (does NOT respond) when no file matches, per `serveStatic`'s own
     // contract (see `@hono/node-server/serve-static`'s source: `onNotFound`
     // + `next()`), so the SPA-fallback handler below still runs for a client
     // route like `/trash` that isn't a real file on disk.
-    app.use('*', serveStatic({ root: webDistDir }));
+    const serveWebAsset = serveStatic({ root: webDistDir });
+    app.use('*', async (c, next) => {
+      const response = await serveWebAsset(c, next);
+      if (
+        response instanceof Response &&
+        (response.status === 200 || response.status === 206) &&
+        /^\/assets\/(?:.*\/)?[^/]+-[\w-]{8,}\.[^/]+$/.test(c.req.path)
+      ) {
+        response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
+      }
+      return response;
+    });
 
     // SPA fallback: any GET that reached here matched neither an `/api/*`
     // route above nor a real static file — for a client-side route (e.g.
@@ -319,6 +343,7 @@ export function createApp(): Hono {
     app.get('*', (c, next) => {
       const path = c.req.path;
       if (
+        path.startsWith('/assets/') ||
         path.startsWith('/api/') ||
         path === '/api' ||
         path === '/health' ||
@@ -327,7 +352,7 @@ export function createApp(): Hono {
       ) {
         return next();
       }
-      return c.html(readIndexHtml(webIndexPath));
+      return serveIndex(c);
     });
   }
 

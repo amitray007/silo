@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { db, linkReaderPrefs, links, linkTags, readingPositions, tags } from '@silo/db';
-import { and, asc, desc, eq, type SQL, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, type SQL, sql } from 'drizzle-orm';
 import { READER_VERSION } from '../capture.js';
 import type { FeedEntry } from '../feeds/types.js';
 import { parseStoredReaderPrefs, type ReaderPrefs } from '../settings/reader.js';
@@ -8,7 +8,12 @@ import { canonicalize } from './canonicalize.js';
 import { detectSource } from './detect-source.js';
 import { enqueueEnrichment } from './enqueue.js';
 import type { Executor, Link, Tx } from './executor.js';
-import { type Highlight, listHighlights, moveHighlights } from './highlights.js';
+import {
+  type Highlight,
+  listHighlights,
+  listHighlightsForLinks,
+  moveHighlights,
+} from './highlights.js';
 import { assertLibraryWrite } from './library-write.js';
 import { whereFeed, whereLibrary, whereLiveAnywhere, whereTrashedLibrary } from './live.js';
 import { mergeCaptureFields } from './merge-content.js';
@@ -23,6 +28,7 @@ import {
 } from './pagination.js';
 import { moveReaderPrefs } from './reader-prefs.js';
 import { mergeReadingPosition, type ReadingPosition } from './reading-position.js';
+import { librarySearchSource } from './search-candidates.js';
 import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
@@ -572,11 +578,33 @@ export async function getById(
   id: string,
   opts?: GetByIdOptions,
 ): Promise<LinkDetail | LinkWithTextWindow | null> {
+  const [found] = await readDetailRows([id], opts);
+  if (!found) return null;
+  const [withTags] = await hydrateTags(db, [found.link]);
+  if (!withTags) return null;
+  const hydrated = toDetail(
+    found,
+    withTags,
+    opts?.preloadedHighlights ?? (await listHighlights(id)),
+  );
+
+  const window = opts?.textWindow;
+  if (!window) return hydrated;
+
+  const fullText = hydrated.extractedText ?? '';
+  return {
+    ...hydrated,
+    extractedText: sliceTextWindow(fullText, window),
+    extractedTextLength: fullText.length,
+  };
+}
+
+async function readDetailRows(ids: ReadonlyArray<string>, opts?: GetByIdOptions) {
   const omitText =
     opts?.reader && !opts.textWindow
       ? sql<boolean>`${links.readerVersion} = ${READER_VERSION} and ${links.contentHtml} is not null and ${links.contentHtml} <> '' and ${links.sourceKind} <> 'twitter'`
       : sql<boolean>`false`;
-  const [found] = await db
+  return db
     .select({
       link: {
         ...listColumns,
@@ -594,16 +622,21 @@ export async function getById(
     .from(links)
     .leftJoin(readingPositions, eq(readingPositions.linkId, links.id))
     .leftJoin(linkReaderPrefs, eq(linkReaderPrefs.linkId, links.id))
-    .where(whereLiveAnywhere(eq(links.id, id)))
-    .limit(1);
-  if (!found) return null;
-  const [withTags] = await hydrateTags(db, [found.link]);
-  if (!withTags) return null;
-  const hydrated: LinkDetail = {
+    .where(whereLiveAnywhere(inArray(links.id, [...ids])));
+}
+
+type DetailRow = Awaited<ReturnType<typeof readDetailRows>>[number];
+
+function toDetail(
+  found: DetailRow,
+  withTags: LinkSummaryWithTags,
+  highlights: Highlight[],
+): LinkDetail {
+  return {
     ...withTags,
     ...(found.readerTextOmitted ? { readerTextOmitted: true as const } : {}),
     readerPrefs: parseStoredReaderPrefs(found.readerPrefs),
-    highlights: opts?.preloadedHighlights ?? (await listHighlights(id)),
+    highlights,
     readingPosition:
       found.position !== null && found.positionUpdatedAt !== null
         ? {
@@ -613,16 +646,27 @@ export async function getById(
           }
         : null,
   };
+}
 
-  const window = opts?.textWindow;
-  if (!window) return hydrated;
-
-  const fullText = hydrated.extractedText ?? '';
-  return {
-    ...hydrated,
-    extractedText: sliceTextWindow(fullText, window),
-    extractedTextLength: fullText.length,
-  };
+/** Read detail rows, including positions and preferences, then hydrate related sets once. */
+export async function getDetailsByIds(
+  ids: ReadonlyArray<string>,
+): Promise<Map<string, LinkDetail>> {
+  const details = new Map<string, LinkDetail>();
+  if (ids.length === 0) return details;
+  const rows = await readDetailRows(ids);
+  const [withTags, highlights] = await Promise.all([
+    hydrateTags(
+      db,
+      rows.map((row) => row.link),
+    ),
+    listHighlightsForLinks(ids),
+  ]);
+  for (const [i, row] of rows.entries()) {
+    const link = withTags[i];
+    if (link) details.set(row.link.id, toDetail(row, link, highlights.get(row.link.id) ?? []));
+  }
+  return details;
 }
 
 export type ListFilter = {
@@ -702,7 +746,7 @@ function truncatedSnippet(text: string | null | undefined): string | null {
 }
 
 /** Build a `list()` result row: strip `extractedText`, add its truncated `snippet`. */
-function toListResultRow(link: LinkSummaryWithTags): ListResultRow {
+export function toListResultRow(link: LinkSummaryWithTags): ListResultRow {
   const { extractedText, ...rest } = link;
   return { ...rest, snippet: truncatedSnippet(extractedText ?? link.description) };
 }
@@ -1092,6 +1136,7 @@ export async function search(
   // now returns rows ALREADY shaped as `SearchResultRow` (extractedText
   // stripped, snippet + rank attached), so this returns its result directly.
   return runUnionSearch(whereLibrary(), tagSearchVector, query, tagScopeCondition, page, {
+    indexedLibrary: true,
     extraConditions,
     sort,
     snippetFor: (tsQuery) => buildSnippetHeadline(tsQuery),
@@ -1149,6 +1194,9 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
     ? sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`
     : undefined;
 
+  const source = tsQuery && filter.query ? await librarySearchSource(filter.query, tsQuery) : links;
+  // link_tags_link_id_tag_id_pk and the joined primary keys prevent duplicate links per tag.
+  const tagCount = sql<string>`count(${links.id})`;
   const tagKeys = requiredTagKeys(filter);
   const sharedConditions: ReturnType<typeof sql>[] = [];
   if (textMatchCondition) sharedConditions.push(textMatchCondition);
@@ -1160,21 +1208,21 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
   const [totalRows, bySourceRows, topTagRows] = await Promise.all([
     db
       .select({ total: sql<string>`count(*)` })
-      .from(links)
+      .from(source)
       .where(whereLibrary(...sharedConditions)),
     db
       .select({ source: links.sourceKind, count: sql<string>`count(*)` })
-      .from(links)
+      .from(source)
       .where(whereLibrary(...sharedConditions))
       .groupBy(links.sourceKind),
     db
-      .select({ tag: tags.name, count: sql<string>`count(distinct ${links.id})` })
-      .from(links)
+      .select({ tag: tags.name, count: tagCount })
+      .from(source)
       .innerJoin(linkTags, eq(linkTags.linkId, links.id))
       .innerJoin(tags, eq(tags.id, linkTags.tagId))
       .where(whereLibrary(...sharedConditions))
       .groupBy(tags.id, tags.name)
-      .orderBy(desc(sql`count(distinct ${links.id})`), asc(tags.name))
+      .orderBy(desc(tagCount), asc(tags.name))
       .limit(TOP_TAGS_LIMIT),
   ]);
 

@@ -7,13 +7,14 @@ import { join } from 'node:path';
 import { createTtsFiles, type TtsManifest } from '@silo/core';
 import { Hono } from 'hono';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { compression } from '../compression.js';
 import { parseRange, registerTtsRoutes } from './tts.js';
 
 beforeAll(() => {
   process.env.DATABASE_URL ??= 'postgres://localhost:5432/silo_placeholder';
 });
 
-const BODY = Buffer.from(Array.from({ length: 1000 }, (_, i) => i % 256));
+const BODY = Buffer.from(Array.from({ length: 2000 }, (_, i) => i % 256));
 const sha256 = createHash('sha256').update(BODY).digest('hex');
 
 let upstream: Server;
@@ -62,7 +63,7 @@ function appWith(overrides: { sha256?: string } = {}): Hono {
   const files = createTtsFiles({ dir, manifest });
   revision = files.revision('phonon') ?? '';
   registerTtsRoutes(api, files);
-  return new Hono().route('/api', api);
+  return new Hono().use('*', compression).route('/api', api);
 }
 
 const get = (app: Hono, path: string, headers: Record<string, string> = {}) =>
@@ -82,9 +83,13 @@ describe('GET /api/tts/files/:engine/:revision/*', () => {
 
   it('serves JSON files as JSON and decodes encoded names', async () => {
     const app = appWith();
-    expect((await get(app, 'config.json')).headers.get('content-type')).toMatch(
-      /^application\/json/,
-    );
+    const live = await get(app, 'config.json', { 'Accept-Encoding': 'gzip' });
+    expect(live.headers.get('content-type')).toMatch(/^application\/json/);
+    expect(live.headers.get('content-encoding')).toBeNull();
+    expect(Buffer.from(await live.arrayBuffer())).toEqual(BODY);
+    const cached = await get(app, 'config.json', { 'Accept-Encoding': 'gzip' });
+    expect(cached.headers.get('content-encoding')).toBeNull();
+    expect(Buffer.from(await cached.arrayBuffer())).toEqual(BODY);
     expect((await get(app, 'voices/Zoe%20y.safetensors')).status).toBe(200);
   });
 
@@ -98,20 +103,24 @@ describe('GET /api/tts/files/:engine/:revision/*', () => {
   it('answers a byte range with 206 and the matching Content-Range', async () => {
     const app = appWith();
     await (await get(app, 'model.q8.gguf')).arrayBuffer();
-    const res = await get(app, 'model.q8.gguf', { Range: 'bytes=10-19' });
+    const res = await get(app, 'model.q8.gguf', {
+      Range: 'bytes=10-19',
+      'Accept-Encoding': 'gzip, deflate',
+    });
     expect(res.status).toBe(206);
     expect(res.headers.get('content-range')).toBe(`bytes 10-19/${BODY.length}`);
     expect(res.headers.get('content-length')).toBe('10');
+    expect(res.headers.get('content-encoding')).toBeNull();
     expect(Buffer.from(await res.arrayBuffer()).equals(BODY.subarray(10, 20))).toBe(true);
   });
 
   it('answers open-ended and suffix ranges', async () => {
     const app = appWith();
     await (await get(app, 'model.q8.gguf')).arrayBuffer();
-    const open = await get(app, 'model.q8.gguf', { Range: 'bytes=990-' });
-    expect(open.headers.get('content-range')).toBe(`bytes 990-999/${BODY.length}`);
+    const open = await get(app, 'model.q8.gguf', { Range: 'bytes=1990-' });
+    expect(open.headers.get('content-range')).toBe(`bytes 1990-1999/${BODY.length}`);
     const tail = await get(app, 'model.q8.gguf', { Range: 'bytes=-5' });
-    expect(Buffer.from(await tail.arrayBuffer()).equals(BODY.subarray(995))).toBe(true);
+    expect(Buffer.from(await tail.arrayBuffer()).equals(BODY.subarray(1995))).toBe(true);
   });
 
   it('answers 416 for a range past the end', async () => {
@@ -172,7 +181,8 @@ describe('revision in the URL', () => {
 describe('streaming the first download', () => {
   it('sends Content-Length and ETag with the first bytes, then serves ranges from the cache', async () => {
     const app = appWith();
-    const first = await get(app, 'model.q8.gguf');
+    const first = await get(app, 'model.q8.gguf', { 'Accept-Encoding': 'gzip' });
+    expect(first.headers.get('content-encoding')).toBeNull();
     expect(first.headers.get('content-length')).toBe(String(BODY.length));
     expect(first.headers.get('etag')).toBe(`"${sha256}"`);
     expect(Buffer.from(await first.arrayBuffer()).equals(BODY)).toBe(true);

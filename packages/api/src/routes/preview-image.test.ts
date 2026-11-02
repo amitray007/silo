@@ -43,6 +43,40 @@ describeIfPg('GET /api/preview-image (integration)', () => {
     vi.restoreAllMocks();
   });
 
+  it('serves a feed post image with one cold database query', async () => {
+    const { core, app, fetchImageSafely } = harness.mod();
+    const { db, feeds, pool } = await import('@silo/db');
+    const [feed] = await db
+      .insert(feeds)
+      .values({
+        feedUrl: 'https://feed-image.example/rss',
+        title: 'Feed',
+        format: 'rss',
+        nextPollAt: new Date(),
+      })
+      .returning();
+    if (!feed) throw new Error('missing feed');
+    const post = await core.createFeedPost({
+      feedId: feed.id,
+      url: 'https://feed-image.example/post',
+    });
+    if (!post) throw new Error('missing post');
+    await core.recordEnrichment(post.id, {
+      status: 'full',
+      imageUrl: 'https://cdn.example/post.png',
+    });
+    fetchImageSafely.mockResolvedValue({
+      ok: true,
+      bytes: new Uint8Array([1, 2]),
+      contentType: 'image/png',
+    });
+    const spy = vi.spyOn(pool, 'query');
+    const response = await app.request(`/api/preview-image?linkId=${post.id}`);
+    expect(response.status).toBe(200);
+    expect(spy).toHaveBeenCalledTimes(1);
+    expect(fetchImageSafely).toHaveBeenCalledWith('https://cdn.example/post.png');
+  });
+
   it('a link with a captured imageUrl -> 200 with image bytes + content-type', async () => {
     const { core, app, fetchImageSafely } = harness.mod();
     const created = await core.createLink({
@@ -60,6 +94,23 @@ describeIfPg('GET /api/preview-image (integration)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('image/png');
     expect(res.headers.get('cache-control')).toContain('max-age=86400');
+    const etag = res.headers.get('etag');
+    expect(etag).toMatch(/^"[a-f0-9]+"$/);
+    const unchanged = await app.request(`/api/preview-image?linkId=${created.id}`, {
+      headers: { 'If-None-Match': etag ?? '', 'Accept-Encoding': 'gzip' },
+    });
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get('etag')).toBe(etag);
+    expect(unchanged.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(unchanged.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(unchanged.headers.get('content-encoding')).toBeNull();
+    expect(await unchanged.text()).toBe('');
+    const changed = await app.request(`/api/preview-image?linkId=${created.id}`, {
+      headers: { 'If-None-Match': '"stale"' },
+    });
+    expect(changed.status).toBe(200);
+    expect(new Uint8Array(await changed.arrayBuffer())).toEqual(bytes);
+
     // nosniff so a browser can't MIME-sniff the proxied bytes into something
     // executable (security review, plan 012).
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');

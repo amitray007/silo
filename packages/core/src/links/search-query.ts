@@ -10,6 +10,7 @@ import {
   listColumns,
   type PageParams,
 } from './pagination.js';
+import { librarySearchSource } from './search-candidates.js';
 
 /**
  * Shared query-building + query-running helpers for link search
@@ -154,22 +155,8 @@ export function escapeIlikeNeedle(query: string): string {
  * query (mirrors `buildPrefixTsQuery`'s empty-input contract) — callers must
  * not run the trigram side on empty input.
  *
- * `match`: `trigramText ILIKE needle ESCAPE '\'`. The `links_trgm_live_idx`
- * GIN trigram index (migration 0012) exists over this same expression and IS
- * used (a bitmap index scan) when this ILIKE predicate runs standalone. But
- * `runUnionSearch` never runs it standalone — it OR's this predicate together
- * with the FTS side in one WHERE clause (`(searchVector @@ ftsQuery OR
- * tagVector @@ ftsQuery) OR trigramText ILIKE needle`), and verified via
- * `EXPLAIN` on real Postgres (5k and 50k rows), the planner does NOT use
- * `links_trgm_live_idx` for that OR'd form — it seq-scans instead. Results
- * are still correct either way; a seq scan is an accepted tradeoff at
- * personal-store scale, not a bug, and the query is deliberately NOT
- * restructured to force index use (see `runUnionSearch`'s doc comment for why
- * the two sides stay a single unioned WHERE). The index is kept in the schema
- * regardless — it costs only insert/update-time maintenance, and remains
- * available if a future standalone trigram-only query path is added; no
- * union-level EXPLAIN test currently asserts an index scan here, so don't
- * assume one from this comment alone.
+ * `match`: `trigramText ILIKE needle ESCAPE '\\'`. Library search runs
+ * this as an indexed candidate branch before applying the shared matcher.
  * `similarityRank`: `similarity(trigramText, rawTrimmedQuery)` — used in the
  * composite ORDER BY's tie-break for trigram-only rows (D3: best trigram
  * match on top among rows that don't ALSO match FTS); kept clearly separate
@@ -231,6 +218,8 @@ export type SearchRankedPage = {
  * predates this option object keeps its exact current behavior.
  */
 export type UnionSearchOptions = {
+  /** Live library search can use its partial FTS/trigram indexes. */
+  indexedLibrary?: boolean;
   /**
    * Extra ANDed WHERE conditions (e.g. `filter.source`/`tags[]`/`since`/
    * `until` — see `links.ts`'s `search()`). ANDed in alongside
@@ -470,7 +459,11 @@ export async function runUnionSearch(
 
   const rows = await db
     .select({ link: listColumns, rank, snippet })
-    .from(links)
+    .from(
+      options.indexedLibrary && fts
+        ? await librarySearchSource(sanitized, fts.tsQuery, substring?.match)
+        : links,
+    )
     .where(andAll(basePredicate, unionMatch, scopeCondition, ...(options.extraConditions ?? [])))
     .orderBy(...orderBy)
     .limit(limit + 1)

@@ -3,7 +3,7 @@ import { db, feedEntries, feeds, links } from '@silo/db';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { canonicalize } from '../links/canonicalize.js';
 import type { Tx } from '../links/executor.js';
-import { createFeedPost } from '../links/links.js';
+import { createFeedPost, toListResultRow } from '../links/links.js';
 import { whereFeed } from '../links/live.js';
 import {
   decodeListCursor,
@@ -22,6 +22,18 @@ import {
 } from './types.js';
 
 export type FeedRow = typeof feeds.$inferSelect;
+const feedCounts = db
+  .select({
+    feedId: links.feedId,
+    inboxCount: sql<number>`count(*) filter (where ${links.archivedAt} is null)::integer`.as(
+      'inbox_count',
+    ),
+    postCount: sql<number>`count(*)::integer`.as('post_count'),
+  })
+  .from(links)
+  .where(and(isNull(links.deletedAt), isNotNull(links.feedId)))
+  .groupBy(links.feedId)
+  .as('feed_counts');
 const feedColumns = {
   id: feeds.id,
   title: sql<string>`coalesce(${feeds.customTitle}, ${feeds.title})`,
@@ -32,8 +44,8 @@ const feedColumns = {
   lastError: feeds.lastError,
   lastPolledAt: feeds.lastPolledAt,
   createdAt: feeds.createdAt,
-  inboxCount: sql<number>`(select count(*)::integer from links as posts where posts.feed_id = feeds.id and posts.deleted_at is null and posts.archived_at is null)`,
-  postCount: sql<number>`(select count(*)::integer from links as posts where posts.feed_id = feeds.id and posts.deleted_at is null)`,
+  inboxCount: sql<number>`coalesce(${feedCounts.inboxCount}, 0)`,
+  postCount: sql<number>`coalesce(${feedCounts.postCount}, 0)`,
 };
 export type Feed = Pick<
   FeedRow,
@@ -49,7 +61,11 @@ export type Feed = Pick<
 > & { postCount: number; inboxCount: number };
 
 export function listFeeds(): Promise<Feed[]> {
-  return db.select(feedColumns).from(feeds).orderBy(asc(feeds.createdAt), asc(feeds.id));
+  return db
+    .select(feedColumns)
+    .from(feeds)
+    .leftJoin(feedCounts, eq(feedCounts.feedId, feeds.id))
+    .orderBy(asc(feeds.createdAt), asc(feeds.id));
 }
 
 /** Slice the lookahead row and retain full-precision cursor dates. */
@@ -71,6 +87,7 @@ export async function listFeedsPage(page: PageParams = {}) {
   const rows = await db
     .select({ feed: feedColumns, sortDate: sql<string>`${feeds.createdAt}::text` })
     .from(feeds)
+    .leftJoin(feedCounts, eq(feedCounts.feedId, feeds.id))
     .where(
       cursor
         ? sql`(${feeds.createdAt}, ${feeds.id}) > (${cursor.createdAt}::timestamptz, ${cursor.id}::uuid)`
@@ -87,7 +104,11 @@ export async function listFeedsPage(page: PageParams = {}) {
   return { feeds: visible.map((row) => row.feed), ...cursorPage };
 }
 export async function getFeed(id: string): Promise<Feed | null> {
-  const [row] = await db.select(feedColumns).from(feeds).where(eq(feeds.id, id));
+  const [row] = await db
+    .select(feedColumns)
+    .from(feeds)
+    .leftJoin(feedCounts, eq(feedCounts.feedId, feeds.id))
+    .where(eq(feeds.id, id));
   return row ?? null;
 }
 /** Check subscription existence without loading counts. */
@@ -270,7 +291,7 @@ export async function listFeedPosts(
     (row) => row.sortDate,
     (row) => row.link.id,
   );
-  return { links: hydrated, ...(nextCursor ? { nextCursor } : {}) };
+  return { links: hydrated.map(toListResultRow), ...(nextCursor ? { nextCursor } : {}) };
 }
 
 export async function listDueFeeds(now = new Date()): Promise<string[]> {

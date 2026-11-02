@@ -18,7 +18,10 @@ import './styles/reader-listen.css';
 import './styles/reader-notes.css';
 import './styles/reader-pencil.css';
 import './styles/reader-place.css';
+import { handlePreloadError } from './lib/chunkReload';
 import { ThemeProvider } from './theme/ThemeProvider';
+
+window.addEventListener('vite:preloadError', handlePreloadError);
 
 const queryClient = new QueryClient({
   defaultOptions: {

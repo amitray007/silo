@@ -14,7 +14,7 @@ import {
 } from '@silo/core';
 import type { Context, Hono } from 'hono';
 import { z } from 'zod';
-import { toSnippetSearchResultJson, toSummaryLinkJson } from '../link-json.js';
+import { toSnippetLinkJson, toSnippetSearchResultJson } from '../link-json.js';
 import {
   feedIdParamSchema,
   feedPostParamSchema,
@@ -114,7 +114,7 @@ export function registerFeedRoutes(app: Hono): void {
     const result = await listFeedPosts(id, page);
     return c.json({
       ...result,
-      links: result.links.map(toSummaryLinkJson),
+      links: result.links.map(toSnippetLinkJson),
     });
   });
 }

@@ -186,14 +186,16 @@ describe('AppFrame', () => {
   });
 
   describe('Settings modal', () => {
-    it('clicking the sidebar Settings nav item opens the modal, with the real theme toggle inside Preferences', () => {
+    it('clicking the sidebar Settings nav item opens the modal, with the real theme toggle inside Preferences', async () => {
       renderAppFrame();
 
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
       expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
-      expect(screen.getByRole('button', { name: /^light$/i })).toBeDefined();
+      expect(
+        await screen.findByRole('button', { name: /^light$/i }, { timeout: 5000 }),
+      ).toBeDefined();
       expect(screen.getByRole('button', { name: /^dark$/i })).toBeDefined();
     });
 
@@ -221,18 +223,20 @@ describe('AppFrame', () => {
       expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
     });
 
-    it('switches tabs via the underlined tab strip (opens on Plugins by default, matching v3)', () => {
+    it('switches tabs via the underlined tab strip (opens on Plugins by default, matching v3)', async () => {
       renderAppFrame();
 
       fireEvent.click(screen.getByRole('link', { name: /settings/i }));
-      expect(screen.getAllByText('Hacker News').length).toBeGreaterThan(0);
+      expect((await screen.findAllByText('Hacker News')).length).toBeGreaterThan(0);
       expect(screen.queryByText(/plugins add inline detail/i)).toBeNull();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Preferences' }));
-      expect(screen.getByText(/match the app to light or dark/i)).toBeDefined();
+      expect(await screen.findByText(/match the app to light or dark/i)).toBeDefined();
 
       fireEvent.click(screen.getByRole('tab', { name: 'Access' }));
-      expect(screen.getByText(/let an agent add, search, and read your links/i)).toBeDefined();
+      expect(
+        await screen.findByText(/let an agent add, search, and read your links/i),
+      ).toBeDefined();
     });
 
     it('opening Settings closes an already-open Edit modal (mutual exclusion — no two stacked scrim modals)', () => {

@@ -79,7 +79,13 @@ function mount(options: MenuOptions = {}, route = '/feeds/feed') {
   const today = new Date();
   const recent = new Date(today.getFullYear(), today.getMonth(), today.getDate() - 2, 12);
   const posts: LinkJson[] = [
-    makeLink({ id: 'a', feedId: 'feed', title: 'Today post', publishedAt: today.toISOString() }),
+    makeLink({
+      id: 'a',
+      feedId: 'feed',
+      title: 'Today post',
+      publishedAt: today.toISOString(),
+      extractedText: 'The complete feed article body.',
+    }),
     makeLink({ id: 'b', feedId: 'feed', title: 'Recent post', publishedAt: recent.toISOString() }),
     makeLink({
       id: 'c',
@@ -136,7 +142,10 @@ function mount(options: MenuOptions = {}, route = '/feeds/feed') {
             .filter(
               (post) => Boolean(post.archivedAt) === (url.searchParams.get('tab') === 'archive'),
             )
-            .map((post) => ({ ...post })),
+            .map(({ extractedText, ...post }) => ({
+              ...post,
+              snippet: extractedText?.slice(0, 10) ?? null,
+            })),
         }),
     };
     const read = reads[path];
@@ -178,6 +187,20 @@ afterEach(() => {
 });
 const list = () => within(screen.getByRole('region', { name: 'Feeds / Publisher' }));
 const reader = () => within(screen.getByRole('region', { name: 'Link reader' }));
+
+it('opens a snippet row by fetching the full post detail', async () => {
+  const { fetchMock } = mount();
+  const row = await screen.findByText('Today post');
+  expect(fetchMock.mock.calls.some(([input]) => String(input).startsWith('/api/links/a'))).toBe(
+    false,
+  );
+  fireEvent.click(row);
+  expect(await reader().findByText('The complete feed article body.')).toBeDefined();
+  expect(fetchMock).toHaveBeenCalledWith(
+    '/api/links/a?view=reader',
+    expect.objectContaining({ credentials: 'include' }),
+  );
+});
 
 it('groups publisher dates, moves rows between tabs and updates the sidebar Inbox count', async () => {
   mount();
@@ -379,13 +402,15 @@ it('opens all feeds from the breadcrumb and adds a feed through a body portal', 
   mount();
   await screen.findByText('Today post');
   fireEvent.click(screen.getByRole('link', { name: 'Feeds /' }));
-  const region = await screen.findByRole('region', { name: 'Feeds' });
+  await waitFor(() =>
+    expect(
+      within(screen.getByRole('region', { name: 'Feeds' }))
+        .getByRole('link', { name: /Publisher/ })
+        .getAttribute('href'),
+    ).toBe('/feeds/feed'),
+  );
+  const region = screen.getByRole('region', { name: 'Feeds' });
   expect(within(region).getByRole('heading', { name: 'Feeds' })).toBeDefined();
-  expect(
-    within(region)
-      .getByRole('link', { name: /Publisher/ })
-      .getAttribute('href'),
-  ).toBe('/feeds/feed');
   fireEvent.click(within(region).getByRole('button', { name: 'Add feed' }));
   expect(screen.getByRole('dialog', { name: 'Add feed' }).parentElement?.parentElement).toBe(
     document.body,

@@ -226,6 +226,25 @@ export const links = pgTable(
       .on(table.feedId, table.canonicalUrl)
       .where(sql`${table.deletedAt} is null and ${table.feedId} is not null`),
     index('links_feed_id_idx').on(table.feedId),
+    index('links_saved_link_id_idx').on(table.savedLinkId),
+    index('links_library_order_idx')
+      .on(table.createdAt.desc().nullsFirst(), table.id.desc().nullsFirst())
+      .where(sql`${table.deletedAt} is null and ${table.feedId} is null`),
+    index('links_canonical_url_library_idx')
+      .on(table.canonicalUrl)
+      .where(sql`${table.feedId} is null`),
+    index('links_trash_order_idx')
+      .on(table.deletedAt.desc().nullsFirst(), table.id.desc().nullsFirst())
+      .where(sql`${table.deletedAt} is not null and ${table.feedId} is null`),
+    // 0031 adds INCLUDE (archived_at), which this Drizzle version cannot represent.
+    index('links_feed_order_idx')
+      .on(
+        table.feedId,
+        sql`coalesce(${table.publishedAt}, ${table.createdAt}) desc`,
+        table.id.desc().nullsFirst(),
+      )
+      .where(sql`${table.deletedAt} is null and ${table.feedId} is not null`),
+    index('links_library_counts_idx').on(table.deletedAt).where(sql`${table.feedId} is null`),
     check(
       'links_feed_fields_check',
       sql`${table.feedId} is not null or (${table.archivedAt} is null and ${table.savedLinkId} is null)`,

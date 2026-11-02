@@ -1,14 +1,55 @@
+import { lazy, Suspense } from 'react';
 import { Route, Routes } from 'react-router';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { LoginGate } from './auth/LoginGate';
 import { AppFrame } from './components';
-import { FeedsView } from './routes/FeedsView';
-import { FeedView } from './routes/FeedView';
+import { ChunkErrorBoundary } from './components/ChunkErrorBoundary';
+import { ReaderLayout } from './components/reader/ReaderLayout';
+import { SegmentTabs } from './components/reader/ReaderSegment';
 import { LibraryView } from './routes/LibraryView';
 import { NotFoundView } from './routes/NotFoundView';
 import { SettingsView } from './routes/SettingsView';
+import { ContentFrame } from './routes/shared/ListHeader';
+import { LoadingState } from './routes/shared/ListStates';
 import { TagView } from './routes/TagView';
 import { TrashView } from './routes/TrashView';
+
+const FeedsView = lazy(() =>
+  import('./routes/FeedsView').then((module) => ({ default: module.FeedsView })),
+);
+const FeedView = lazy(() =>
+  import('./routes/FeedView').then((module) => ({ default: module.FeedView })),
+);
+
+function FeedRouteLoading({ detail = false }: { detail?: boolean }) {
+  return (
+    <ReaderLayout links={[]} title="Feeds" loading>
+      <ContentFrame
+        title="Feeds"
+        headerSlot={null}
+        headerBelow={
+          detail ? (
+            <div className="silo-feed-tabs">
+              <SegmentTabs
+                id="feed-loading"
+                tab="inbox"
+                disabled
+                label="Feed posts"
+                tabs={[
+                  { value: 'inbox', label: 'Inbox' },
+                  { value: 'archive', label: 'Archive' },
+                ]}
+                setTab={() => {}}
+              />
+            </div>
+          ) : undefined
+        }
+      >
+        <LoadingState />
+      </ContentFrame>
+    </ReaderLayout>
+  );
+}
 
 /**
  * The real route table (W5): `AppFrame` is the layout route (renders the
@@ -21,8 +62,26 @@ function AppRoutes() {
     <Routes>
       <Route element={<AppFrame />}>
         <Route path="/" element={<LibraryView />} />
-        <Route path="/feeds" element={<FeedsView />} />
-        <Route path="/feeds/:id" element={<FeedView />} />
+        <Route
+          path="/feeds"
+          element={
+            <ChunkErrorBoundary kind="feed" key="feeds">
+              <Suspense fallback={<FeedRouteLoading />}>
+                <FeedsView />
+              </Suspense>
+            </ChunkErrorBoundary>
+          }
+        />
+        <Route
+          path="/feeds/:id"
+          element={
+            <ChunkErrorBoundary kind="feed" key="feed">
+              <Suspense fallback={<FeedRouteLoading detail />}>
+                <FeedView />
+              </Suspense>
+            </ChunkErrorBoundary>
+          }
+        />
         <Route path="/trash" element={<TrashView />} />
         <Route path="/tags/:name" element={<TagView />} />
         <Route path="/settings/*" element={<SettingsView />} />

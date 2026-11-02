@@ -1,6 +1,5 @@
 import {
   type ComponentType,
-  createContext,
   lazy,
   type ReactNode,
   Suspense,
@@ -35,6 +34,7 @@ import { type PencilApi, usePencil } from '../pencil/usePencil';
 import { usePencilKeys } from '../pencil/usePencilKeys';
 import { SavedPlace } from '../place/SavedPlace';
 import { ReaderIcon } from '../ReaderIcon';
+import { DockHostContext } from './DockHostContext';
 import { TypeSheet } from './TypeSheet';
 
 // The outline rail brings the spring engine with it, so it loads only where a rail can show.
@@ -144,24 +144,6 @@ const tools: readonly DockTool[] = [
   },
 ];
 
-/**
- * The reader pane's side of the dock: the element that holds it, the scroll area and the pane
- * itself, so tools can draw beside the prose, and a report of whether a dock is mounted. The
- * pane themes itself only while one is.
- */
-export type DockHost = {
-  element: HTMLElement | null;
-  scroll: HTMLElement | null;
-  panel: HTMLElement | null;
-  report: (mounted: boolean) => void;
-};
-export const DockHostContext = createContext<DockHost>({
-  element: null,
-  scroll: null,
-  panel: null,
-  report: () => {},
-});
-
 function DockButton({
   tool,
   api,
@@ -266,7 +248,7 @@ export function ReaderDock({
   prose: HTMLElement | null;
   trashed?: boolean;
 }) {
-  const { element: host, scroll, panel, report } = useContext(DockHostContext);
+  const { element: host, scroll, panel } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
   const writePosition = useSaveReadingPosition(link.id);
@@ -357,12 +339,6 @@ export function ReaderDock({
   useEffect(() => {
     if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
   }, [listening]);
-  const hosted = host !== null;
-  useEffect(() => {
-    if (!hosted) return;
-    report(true);
-    return () => report(false);
-  }, [hosted, report]);
   if (!host) return null;
   const closeSheet = () => setOpenId(null);
   const api: DockApi = { pencil, highlights, lane, listen, closeSheet, openSheet: setOpenId };

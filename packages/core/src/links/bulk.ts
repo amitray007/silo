@@ -1,11 +1,10 @@
 import { type EnrichOptions, requestEnrich } from './enrichment.js';
-import { listHighlightsForLinks } from './highlights.js';
 import { FeedPostNotEditableError } from './library-write.js';
 import {
   addTag,
   type CreateLinkInput,
   createLink,
-  getById,
+  getDetailsByIds,
   type Link,
   type LinkDetail,
   removeTag,
@@ -243,24 +242,21 @@ export async function retryCaptureMany(
  * simpler, correct default here. A future unit can add a per-id or shared
  * window param if a real need shows up; not built now.
  *
- * Sequential (not `Promise.all`), matching every other bulk op in this
- * module — `getById` is two lightweight selects per id, so sequential is
- * simple and fast enough at personal-store scale; also keeps this consistent
- * with the rest of the file rather than special-casing a read op to be the
- * only concurrent one.
+ * Links, positions and preferences share one read; tags and highlights each use one set read.
  */
 export type BulkGetResult = { id: string; link: LinkDetail | null };
 
 export async function getByIds(ids: ReadonlyArray<string>): Promise<BulkGetResult[]> {
   assertWithinBulkCap(ids.length);
-  const results: BulkGetResult[] = [];
-  // One query for every link's highlights, not one per id.
-  const highlightsByLink = await listHighlightsForLinks(ids);
-  for (const id of ids) {
-    const link = await getById(id, { preloadedHighlights: highlightsByLink.get(id) ?? [] });
-    results.push({ id, link });
-  }
-  return results;
+  const details = await getDetailsByIds(ids);
+  const byUuid = new Map([...details.values()].map((link) => [link.id.replaceAll('-', ''), link]));
+  return ids.map((id) => ({
+    id,
+    // PostgreSQL accepts case differences, braces and omitted UUID hyphens.
+    link:
+      byUuid.get(id.replaceAll('-', '').replaceAll('{', '').replaceAll('}', '').toLowerCase()) ??
+      null,
+  }));
 }
 
 /**

@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { queryKeys } from '../api/hooks';
@@ -678,4 +678,45 @@ describe('LinkRow hover preview', () => {
     });
     expect(screen.queryByText('Open')).toBeNull();
   });
+});
+
+it('shares one settings read while adding five pages of rows and refreshes on invalidation', async () => {
+  let reads = 0;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => {
+      reads++;
+      return new Response(JSON.stringify({ plugins: DEFAULT_PLUGINS, hoverPreview: false }));
+    }),
+  );
+  function PagedRows() {
+    const [pages, setPages] = useState(1);
+    return (
+      <>
+        <button type="button" onClick={() => setPages((value) => value + 1)}>
+          Load page
+        </button>
+        {Array.from({ length: pages * 20 }, (_, index) => `row-${index}`).map((id) => (
+          <LinkRow key={id} link={link({ id })} />
+        ))}
+      </>
+    );
+  }
+  const { queryClient, unmount } = renderRow(<PagedRows />);
+  await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  for (let page = 1; page < 5; page++) {
+    fireEvent.click(screen.getByRole('button', { name: 'Load page' }));
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+    });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  }
+  expect(reads).toBe(1);
+  await act(async () => {
+    await queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
+  });
+  expect(reads).toBe(2);
+  unmount();
+  queryClient.clear();
+  vi.unstubAllGlobals();
 });

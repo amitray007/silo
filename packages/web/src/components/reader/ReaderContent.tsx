@@ -1,15 +1,20 @@
 import { useIsMutating } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { queryKeys, useLiveReader, useRetryCapture } from '../../api/hooks';
 import type { LinkJson, LiveReaderJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
-import { ReaderDock } from './dock/ReaderDock';
+import { ChunkErrorBoundary } from '../ChunkErrorBoundary';
+import { DockHostContext } from './dock/DockHostContext';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
 import { ReaderProse } from './ReaderProse';
 import { RelatedLinks } from './RelatedLinks';
 import { TweetCard } from './TweetCard';
+
+const loadReaderDock = () =>
+  import('./dock/ReaderDock').then((module) => ({ default: module.ReaderDock }));
+const ReaderDock = lazy(loadReaderDock);
 
 function Paragraphs({ link }: { link: LinkJson }) {
   const text = link.extractedText?.trim() || link.description?.trim();
@@ -104,6 +109,19 @@ function readerLoadingLabel(refreshing: boolean, status: LinkJson['captureStatus
   return undefined;
 }
 
+function useProseReady(
+  live: ReturnType<typeof useLiveReader>,
+  loadingLabel: string | undefined,
+  kind: LinkJson['sourceData']['kind'],
+) {
+  const ready = !loadingLabel && !live.isLoading && Boolean(live.data);
+  const { report } = useContext(DockHostContext);
+  useLayoutEffect(() => {
+    report(ready && kind !== 'twitter');
+    return () => report(false);
+  }, [ready, kind, report]);
+}
+
 export function ReaderContent({
   link,
   trashed = false,
@@ -115,6 +133,10 @@ export function ReaderContent({
   showLive?: () => void;
   topPlayerSrc?: string | undefined;
 }) {
+  useEffect(() => {
+    // Preload while the article loads; the local boundary handles a rejected import.
+    void loadReaderDock().catch(() => {});
+  }, []);
   const source = link.sourceData;
   // A trashed link has no live route, and an X post has no Reader. The stored text stands in
   // whenever the live Reader is absent or fails.
@@ -127,6 +149,7 @@ export function ReaderContent({
   const anchorRef = useReaderScrollReset(link.id, live.data, refreshing);
   const [proseElement, setProseElement] = useState<HTMLElement | null>(null);
   const loadingLabel = readerLoadingLabel(refreshing, link.captureStatus);
+  useProseReady(live, loadingLabel, source.kind);
   if (loadingLabel) return <ReaderSkeleton label={loadingLabel} />;
 
   const embed = embedFor(link.url, source);
@@ -196,7 +219,12 @@ export function ReaderContent({
                 onRoot={setProseElement}
               />
             </div>
-            <ReaderDock key={link.id} link={link} prose={proseElement} trashed={trashed} />
+            {/* The dock and its layers are positioned overlays, so loading adds no flow height. */}
+            <ChunkErrorBoundary kind="reader">
+              <Suspense fallback={null}>
+                <ReaderDock key={link.id} link={link} prose={proseElement} trashed={trashed} />
+              </Suspense>
+            </ChunkErrorBoundary>
           </>
         ) : (
           <Paragraphs link={link} />

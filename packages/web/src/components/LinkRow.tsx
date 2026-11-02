@@ -20,7 +20,7 @@ export function LinkRow({ link }: { link: LinkJson }) {
   const menuOpen = openMenuId === link.id;
   const reader = useReaderSelection();
   const { scheduleShow, scheduleHide, dismiss } = useHoverPreview();
-  const { data: settings } = useSettings();
+  const { data: settings } = useSettings({ staleTime: 60_000 });
   const hoverEnabled = settings?.hoverPreview === true;
   useEffect(() => {
     if (hoverEnabled) return () => dismiss(link.id);

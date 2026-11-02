@@ -38,6 +38,28 @@ describeMcpTool('silo_mcp_feeds', 'MCP feed tools', (context) => {
     return (result.structuredContent as { feed: { id: string }; deduped: boolean }).feed.id;
   }
 
+  it('returns library-format snippets and reads full post text with get_link', async () => {
+    const { client, core } = context();
+    const feedId = await subscribe();
+    const post = (await core.listFeedPosts(feedId)).links[0];
+    if (!post) throw new Error('missing post');
+    const text = '  Full\n article text. '.repeat(1000);
+    await core.recordEnrichment(post.id, { text, status: 'full' });
+    const result = await client.callTool({
+      name: 'list_feed_posts',
+      arguments: { feedId, limit: 1 },
+    });
+    expect(result.isError).toBeFalsy();
+    const page = result.structuredContent as { posts: { id: string; snippet: string }[] };
+    expect(page.posts[0]?.snippet).toMatch(/^Full article text\./);
+    expect(page.posts[0]?.snippet.length).toBeLessThanOrEqual(201);
+    expect(page.posts[0]?.snippet).toMatch(/…$/);
+    expect(JSON.stringify(page)).not.toContain('extractedText');
+    const detail = await client.callTool({ name: 'get_link', arguments: { id: post.id } });
+    expect(detail.isError).toBeFalsy();
+    expect(detail.structuredContent).toMatchObject({ id: post.id, extractedText: text });
+  });
+
   it('searches one feed across tabs with paging, errors and bounded content', async () => {
     const { client, core } = context();
     const feedId = await subscribe();

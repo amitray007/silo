@@ -1,6 +1,7 @@
 import { findSiteIcons } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
+import { withETag } from '../conditional-response.js';
 import {
   allowedImageContentType,
   servableImageType,
@@ -178,7 +179,11 @@ export function registerFaviconRoutes(app: Hono): void {
     if (!entry.icon) {
       return c.json({ error: 'not_found', message: 'Favicon unavailable' }, 404);
     }
-    return servedImageResponse(entry.icon.bytes, entry.icon.contentType);
+    return withETag(
+      servedImageResponse(entry.icon.bytes, entry.icon.contentType),
+      entry.icon.bytes,
+      c.req.header('If-None-Match'),
+    );
   });
 }
 

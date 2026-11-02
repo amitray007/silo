@@ -156,6 +156,14 @@ describe('createApp — web SPA static serve (SILO_WEB_DIST present)', () => {
     expect(res.headers.get('content-type')).not.toContain('text/html');
   });
 
+  it('returns 404 for a missing asset instead of the SPA HTML', async () => {
+    const { createApp } = await import('./app.js');
+    const res = await createApp().request('/assets/missing-abcdefgh.js');
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).not.toContain('text/html');
+    expect(await res.text()).not.toBe(indexHtml);
+  });
+
   it('GET /api/tags still reaches the API sub-app (not shadowed by the SPA)', async () => {
     const { createApp } = await import('./app.js');
     const app = createApp();

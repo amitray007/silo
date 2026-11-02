@@ -3,8 +3,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate } from 'react-router';
 import { useFeed, useFeedPosts, useFeeds, useSearchFeedPosts } from '../api/feedHooks';
 import {
-  useInfiniteLinks,
   useLinksByTag,
+  useRecentLinks,
   useSearchLinks,
   useSearchTrash,
   useSettings,
@@ -354,8 +354,8 @@ function usePaletteResults(
  *   into this branch via the fallback above), or `useSearchTrash(text)` in
  *   `trash` scope.
  * - Else (fully empty query) -> the `RECENT_DEFAULT_COUNT` (5) most recent
- *   items FOR THE CURRENT SCOPE: `useInfiniteLinks()` (library),
- *   `useInfiniteLinks(scope.tag)` (tag page), or `useTrashList()` (trash) —
+ *   items FOR THE CURRENT SCOPE: `useRecentLinks()` (library),
+ *   `useRecentLinks(scope.tag)` (tag page), or `useTrashList()` (trash) —
  *   first page only, sliced down, no "load more" chrome. So the palette
  *   isn't just a blank box the instant it opens, but also doesn't become a
  *   second scrollable list view. Chosen over a bare empty-state hint per the
@@ -404,9 +404,7 @@ function useLibraryPaletteResults(
   // no longer eagerly fetches `/api/trash`, and opening it on TRASH no longer
   // fetches `/api/links`. Only the current scope's recents are shown before you
   // type; the other scope's list loads if/when you switch to it.
-  const recentQuery = useInfiniteLinks(isTrashScope ? undefined : routeTag, {
-    enabled: hasLibraryScope,
-  });
+  const recentQuery = useRecentLinks(isTrashScope ? undefined : routeTag, hasLibraryScope);
 
   const trashSearchQuery = useSearchTrash(trashHasText ? parsedDebounced.text : '');
   const trashRecentQuery = useTrashList({ enabled: isTrashScope });
@@ -522,7 +520,7 @@ function selectScopedResults(args: {
     hasSettledTag: boolean;
     searchQuery: ReturnType<typeof useSearchLinks>;
     tagOnlyQuery: ReturnType<typeof useLinksByTag>;
-    recentQuery: ReturnType<typeof useInfiniteLinks>;
+    recentQuery: ReturnType<typeof useRecentLinks>;
   };
   trash: {
     hasText: boolean;
@@ -558,7 +556,7 @@ function selectScopedResults(args: {
       isFullyEmpty: args.isFullyEmpty,
       searchResults: args.library.searchQuery.data?.results,
       tagResults: args.library.tagOnlyQuery.data?.links,
-      recentResults: args.library.recentQuery.data?.pages[0]?.links?.slice(0, RECENT_DEFAULT_COUNT),
+      recentResults: args.library.recentQuery.data?.links?.slice(0, RECENT_DEFAULT_COUNT),
     }),
     isSettling: selectIsSettling({
       showTagSuggestions: false,
