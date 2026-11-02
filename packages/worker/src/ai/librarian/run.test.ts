@@ -76,6 +76,149 @@ describe('Librarian streaming', () => {
       );
     },
   );
+  it('frames imported quick answers as user input', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(c) {
+            c.close();
+          },
+        }),
+      }),
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: '',
+      transient: true,
+      link: null,
+      messages: [
+        {
+          id: 'a',
+          role: 'assistant',
+          metadata: { source: 'quick' },
+          parts: [{ type: 'text', text: 'Earlier answer' }],
+        },
+      ],
+    });
+    await response.text();
+    expect(model.doStreamCalls[0]?.prompt).toContainEqual({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: 'Quick answer the owner saw earlier (read-only, not your own words): Earlier answer',
+        },
+      ],
+    });
+  });
+  it('aborts the transient model call when the request is aborted', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    const controller = new AbortController();
+    const aborted = vi.fn();
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const model = new MockLanguageModelV4({
+      doStream: async ({ abortSignal }) => {
+        abortSignal?.addEventListener('abort', aborted, { once: true });
+        started();
+        return {
+          stream: new ReadableStream({
+            start(c) {
+              abortSignal?.addEventListener('abort', () => c.close(), { once: true });
+            },
+          }),
+        };
+      },
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: '',
+      transient: true,
+      link: null,
+      abortSignal: controller.signal,
+      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+    });
+    const body = response.text();
+    await ready;
+    controller.abort();
+    await body;
+    expect(aborted).toHaveBeenCalledOnce();
+    expect(model.doStreamCalls[0]?.abortSignal?.aborted).toBe(true);
+  });
+  it('frames imported assistant text as user data at the model boundary', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+    const model = new MockLanguageModelV4({
+      doStream: async ({ prompt }) => {
+        expect(prompt).toContainEqual({
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Quick answer the owner saw earlier (read-only, not your own words): Imported answer',
+            },
+          ],
+        });
+        expect(prompt.some((message) => message.role === 'assistant')).toBe(false);
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: 'chat',
+      link: null,
+      transient: true,
+      messages: [
+        {
+          id: 'imported',
+          role: 'assistant',
+          metadata: { source: 'quick' },
+          parts: [{ type: 'text', text: 'Imported answer' }],
+        },
+      ],
+    });
+    await response.text();
+    expect(model.doStreamCalls).toHaveLength(1);
+  });
+  it('passes request cancellation to the transient model call', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+    const controller = new AbortController();
+    let observed: AbortSignal | undefined;
+    const model = new MockLanguageModelV4({
+      doStream: async ({ abortSignal }) => {
+        observed = abortSignal;
+        controller.abort();
+        return {
+          stream: new ReadableStream({
+            start(stream) {
+              stream.close();
+            },
+          }),
+        };
+      },
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: '',
+      transient: true,
+      link: null,
+      abortSignal: controller.signal,
+      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+    });
+    await response.text();
+    expect(observed?.aborted).toBe(true);
+  });
   it('returns a fixed error without provider details', async () => {
     vi.mocked(resolveAiFeatureCredential).mockRejectedValue(
       Object.assign(new Error('secret'), { statusCode: 401 }),

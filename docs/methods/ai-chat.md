@@ -142,6 +142,11 @@ Indexes: `librarian_chats (link_id, updated_at desc, id)` and
 
 ## API contract
 
+Quick replies return `409 busy` when two quick runs are active.
+Imports return `409 busy` when the chat has an active run.
+Imports return `409 approval_pending` when the last assistant message awaits approval.
+Imports return `409 ai_not_ready` when the Librarian is not ready.
+
 All routes: web session with `X-Silo-CSRF`, or the operator token. Named access
 tokens and MCP OAuth tokens get `403` (the chat spends the owner's provider
 key). Error shape as `api-hono.md`.

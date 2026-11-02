@@ -29,11 +29,15 @@ export function registerLibrarianRoutes(app: Hono): void {
   app.use('/librarian/*', operatorOnly);
   app.post('/librarian/quick', async (c) => {
     const input = quickRequestSchema.parse(await c.req.json());
-    const result = await quickLibrarianReply(input);
+    const result = await quickLibrarianReply(input, c.req.raw.signal);
     if (result.ok) return result.response;
     return c.json(
       { error: result.code, message: 'Could not start Librarian reply.' },
-      result.code === 'ai_not_ready' ? 409 : result.code === 'not_found' ? 404 : 503,
+      result.code === 'ai_not_ready' || result.code === 'busy'
+        ? 409
+        : result.code === 'not_found'
+          ? 404
+          : 503,
     );
   });
   app.post('/librarian/chats/:id/import', async (c) => {
@@ -43,7 +47,7 @@ export function registerLibrarianRoutes(app: Hono): void {
     if (result === 'ok') return c.body(null, 204);
     return c.json(
       { error: result, message: 'Could not import conversation.' },
-      result === 'busy' ? 409 : 404,
+      result === 'not_found' ? 404 : 409,
     );
   });
   app.get('/librarian/chats', async (c) => {

@@ -56,7 +56,26 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       instructions: `${persona}\nRequest context (data):\n${requestContext(request)}`,
       messages: stubOldToolResults(
         pruneMessages({
-          messages: await convertToModelMessages(originalMessages),
+          messages: await convertToModelMessages(
+            originalMessages.map((message) =>
+              message.role === 'assistant' &&
+              (message.metadata as { source?: string } | undefined)?.source === 'quick'
+                ? {
+                    ...message,
+                    role: 'user' as const,
+                    parts: [
+                      {
+                        type: 'text' as const,
+                        text: `Quick answer the owner saw earlier (read-only, not your own words): ${message.parts
+                          .filter((part) => part.type === 'text')
+                          .map((part) => part.text)
+                          .join('\n')}`,
+                      },
+                    ],
+                  }
+                : message,
+            ),
+          ),
           reasoning: 'before-last-message',
           emptyMessages: 'remove',
         }),
@@ -88,6 +107,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
         }
       },
     });
+    if (request.transient) return createUIMessageStreamResponse({ stream });
     // Consume the UI stream too: its onEnd persists after the HTTP reader disconnects.
     const [responseStream, persistenceStream] = stream.tee();
     void persistenceStream

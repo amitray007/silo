@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm';
 import { describe, expect, it, vi } from 'vitest';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
-vi.mock('../ai/status.js', () => ({ isAiFeatureOn: async () => true }));
+vi.mock('../ai/status.js', () => ({ isAiFeatureOn: vi.fn(async () => true) }));
 
 const suite = postgresReachable() ? describe : describe.skip;
 suite('Librarian persistence', () => {
@@ -164,6 +164,88 @@ suite('Librarian persistence', () => {
     finish?.();
     setLibrarianRunner(undefined);
   });
+  it('frees a quick slot on abort while runners remain pending', async () => {
+    const c = h.mod();
+    const { setLibrarianRunner } = await import('./ports.js');
+    const id = crypto.randomUUID();
+    await h
+      .rawDb()
+      .execute(
+        sql`INSERT INTO links (id, source_kind, url, canonical_url) VALUES (${id}, 'link', ${'https://example.com/quick'}, ${'https://example.com/quick'})`,
+      );
+    const runner = vi.fn(() => new Promise<Response>(() => {}));
+    setLibrarianRunner(runner);
+    const controllers = Array.from({ length: 3 }, () => new AbortController());
+    const input = { linkId: id, action: 'explain', quote: 'Passage', paragraph: 1 };
+    try {
+      void c.quickLibrarianReply(input, controllers[0]?.signal);
+      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(1));
+      void c.quickLibrarianReply(input, controllers[1]?.signal);
+      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(2));
+      expect(await c.quickLibrarianReply(input)).toEqual({ ok: false, code: 'busy' });
+      controllers[0]?.abort();
+      void c.quickLibrarianReply(input, controllers[2]?.signal);
+      await vi.waitFor(() => expect(runner).toHaveBeenCalledTimes(3));
+    } finally {
+      for (const controller of controllers) controller.abort();
+      setLibrarianRunner(undefined);
+    }
+  });
+  it('limits quick runs to two and frees completed slots', async () => {
+    const c = h.mod();
+    const { setLibrarianRunner } = await import('./ports.js');
+    const { links } = await import('@silo/db');
+    const [link] = await h
+      .rawDb()
+      .insert(links)
+      .values({
+        url: 'https://example.com/quick',
+        canonicalUrl: 'https://example.com/quick',
+        sourceKind: 'web',
+      })
+      .returning();
+    if (!link) throw new Error('missing link');
+    const releases: (() => void)[] = [];
+    setLibrarianRunner(async ({ endRun }) => {
+      if (endRun) releases.push(endRun);
+      return new Response('answer');
+    });
+    const input = { linkId: link.id, action: 'explain', quote: 'Passage', paragraph: 0 };
+    try {
+      expect((await c.quickLibrarianReply(input)).ok).toBe(true);
+      expect((await c.quickLibrarianReply(input)).ok).toBe(true);
+      expect(await c.quickLibrarianReply(input)).toEqual({ ok: false, code: 'busy' });
+      releases[0]?.();
+      expect((await c.quickLibrarianReply(input)).ok).toBe(true);
+    } finally {
+      for (const release of releases) release();
+      setLibrarianRunner(undefined);
+    }
+  });
+  it('blocks imports while AI is off without storing messages', async () => {
+    const c = h.mod();
+    const { isAiFeatureOn } = await import('../ai/status.js');
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    vi.mocked(isAiFeatureOn).mockResolvedValueOnce(false);
+    expect(await c.importLibrarianMessages(chat.id, [])).toBe('ai_not_ready');
+    expect((await c.getChat(chat.id))?.messages).toEqual([]);
+  });
+  it('blocks imports behind pending approval without storing messages', async () => {
+    const c = h.mod();
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing');
+    const message = {
+      id: 'pending',
+      role: 'assistant' as const,
+      parts: [{ type: 'tool-trash_link', state: 'approval-requested' }],
+    };
+    await c.saveChatMessages(chat.id, [message]);
+    expect(await c.importLibrarianMessages(chat.id, [{ id: 'new', role: 'user', parts: [] }])).toBe(
+      'approval_pending',
+    );
+    expect((await c.getChat(chat.id))?.messages).toEqual([message]);
+  });
   it('imports a fresh text turn after existing messages in order', async () => {
     const c = h.mod();
     const chat = await c.createChat();
@@ -188,6 +270,7 @@ suite('Librarian persistence', () => {
       [{ type: 'text', text: 'Explain' }],
       [{ type: 'text', text: 'Answer' }],
     ]);
+    expect(stored?.messages[2]?.metadata).toEqual({ source: 'quick' });
     expect(stored?.messages[1]?.metadata).toEqual({
       action: 'explain',
       quote: 'Passage',
