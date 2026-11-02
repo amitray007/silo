@@ -24,6 +24,16 @@ describe('Librarian tools', () => {
     expect(output).toContain('Output truncated');
     expect(output).toHaveLength(24000);
     expect(call).toHaveBeenCalledWith('get_link', { id: 'link' }, signal);
+    call.mockResolvedValue({
+      text: 'full text: 32 chars (see structuredContent.extractedText)',
+      structured: { extractedText: 'Hard work compounds over decades.' },
+      isError: false,
+    });
+    const withBody = await execute(
+      { id: 'link' },
+      { context: {}, toolCallId: 'test', messages: [] },
+    );
+    expect(withBody).toContain('Hard work compounds over decades.');
     call.mockResolvedValue({ text: 'Link missing', isError: true });
     await expect(execute({}, { context: {}, toolCallId: 'test', messages: [] })).rejects.toThrow(
       'Link missing',

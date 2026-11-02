@@ -40,11 +40,15 @@ suite('in-memory Librarian MCP', () => {
         title: 'Librarian source',
         sourceKind: 'web',
         captureStatus: 'full',
+        extractedText: 'Hard work compounds over decades.',
       })
       .returning();
     if (!link) throw new Error('missing link');
     const result = await handle.source.call('get_link', { id: link.id });
     expect(result.isError).toBe(false);
     expect(result.text).toContain('Librarian source');
+    expect(result.structured).toMatchObject({
+      extractedText: 'Hard work compounds over decades.',
+    });
   });
 });

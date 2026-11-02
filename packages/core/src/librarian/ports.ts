@@ -5,7 +5,7 @@ export type LibrarianToolSource = {
     name: string,
     args: Record<string, unknown>,
     signal?: AbortSignal,
-  ): Promise<{ text: string; isError: boolean }>;
+  ): Promise<{ text: string; structured?: unknown; isError: boolean }>;
 };
 export type LibrarianRequest = {
   chatId: string;

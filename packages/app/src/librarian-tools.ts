@@ -27,6 +27,7 @@ export async function registerLibrarianTools() {
           .filter((part) => part.type === 'text')
           .map((part) => part.text)
           .join('\n'),
+        ...(result.structuredContent === undefined ? {} : { structured: result.structuredContent }),
         isError: result.isError === true,
       };
     },

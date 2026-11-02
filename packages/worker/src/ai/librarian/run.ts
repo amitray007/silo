@@ -10,6 +10,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   isStepCount,
+  pruneMessages,
   streamText,
   toUIMessageStream,
   validateUIMessages,
@@ -17,8 +18,18 @@ import {
 import { aiErrorCode, logAiFailure } from '../errors.js';
 import { chatModelSettings } from '../generation.js';
 import { languageModelFor } from '../model.js';
+import { stubOldToolResults } from './history.js';
 import { persona, promptVersion, requestContext } from './persona.js';
 import { librarianTools } from './tools.js';
+
+/** Provider-specific chunks (message ids, token usage) stay on the server. */
+function withoutProviderChunks<Part extends { type: string }>() {
+  return new TransformStream<Part, Part>({
+    transform(part, controller) {
+      if (part.type !== 'custom') controller.enqueue(part);
+    },
+  });
+}
 
 function failure(error: unknown): string {
   const code = aiErrorCode(error);
@@ -39,7 +50,14 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     const result = streamText({
       model: languageModelFor(credential),
       instructions: `${persona}\nRequest context (data):\n${requestContext(request)}`,
-      messages: await convertToModelMessages(originalMessages),
+      messages: stubOldToolResults(
+        pruneMessages({
+          messages: await convertToModelMessages(originalMessages),
+          reasoning: 'before-last-message',
+          emptyMessages: 'remove',
+        }),
+      ),
+      experimental_transform: withoutProviderChunks,
       tools,
       stopWhen: isStepCount(8),
       maxRetries: 2,

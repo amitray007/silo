@@ -22,7 +22,7 @@ const ERROR_WORDS: Record<string, string> = {
 };
 
 /** Stream errors carry a fixed code; HTTP errors carry it in a JSON body. */
-export function chatErrorText(message: string | undefined): string {
+function chatErrorText(message: string | undefined): string {
   const code = message?.match(/[a-z_]+/g)?.find((word) => word in ERROR_WORDS);
   return (code && ERROR_WORDS[code]) ?? 'Could not answer. Try again.';
 }

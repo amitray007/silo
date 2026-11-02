@@ -25,46 +25,81 @@ function resultCount(output: unknown): number | null {
 function toolCount(part: UIMessage['parts'][number]) {
   return 'output' in part ? resultCount(part.output) : null;
 }
+const SEARCH_TOOLS = new Set(['search_links', 'find_related', 'list_links']);
+
+function toolName(part: UIMessage['parts'][number]): string | null {
+  if (part.type === 'dynamic-tool') return part.toolName;
+  return part.type.startsWith('tool-') ? part.type.slice(5) : null;
+}
+
 function traceLine(message: UIMessage): string {
   const traces = new Set<string>();
+  let searched = false;
+  let found = 0;
+  let counted = false;
   for (const part of message.parts) {
-    const name = part.type === 'dynamic-tool' ? part.toolName : part.type.replace(/^tool-/, '');
+    const name = toolName(part);
     if (name === 'get_link') traces.add('Read this article');
     if (name === 'list_highlights') traces.add('Read your notes');
-    if (['search_links', 'find_related', 'list_links'].includes(name)) {
+    if (name && SEARCH_TOOLS.has(name)) {
+      searched = true;
       const count = toolCount(part);
-      traces.add(`Searched your library${count === null ? '' : ` · ${count} links`}`);
+      if (count !== null) {
+        found += count;
+        counted = true;
+      }
     }
   }
+  if (searched) traces.add(`Searched your library${counted ? ` · ${found} links` : ''}`);
   return [...traces].join(' · ') || 'Answered from the conversation';
 }
+
+/** Text written before a later tool call is the model thinking aloud; the answer comes after the last call. */
+function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
+  const lastTool = message.parts.findLastIndex((part) => toolName(part) !== null);
+  const steps: string[] = [];
+  const answer: string[] = [];
+  message.parts.forEach((part, index) => {
+    if (part.type !== 'text' || !part.text.trim()) return;
+    (index < lastTool ? steps : answer).push(part.text);
+  });
+  return { steps, answer: answer.join('\n\n') };
+}
+
 export function ChatMessage({ message }: { message: UIMessage }) {
-  const text = message.parts
-    .filter((part) => part.type === 'text')
-    .map((part) => part.text)
-    .join('');
-  return (
-    <div className={`silo-chat-message silo-chat-${message.role}`}>
-      {message.role === 'user' ? (
+  if (message.role === 'user') {
+    const text = message.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('\n\n');
+    return (
+      <div className="silo-chat-message silo-chat-user">
         <p>{text}</p>
-      ) : (
-        <>
-          <Streamdown
-            skipHtml
-            components={{
-              a: ({ children, href }) => (
-                <a href={href} target="_blank" rel="noopener noreferrer">
-                  {children}
-                </a>
-              ),
-              img: () => null,
-            }}
-          >
-            {text}
-          </Streamdown>
-          <div className="silo-chat-trace">{traceLine(message)}</div>
-        </>
-      )}
+      </div>
+    );
+  }
+  const { steps, answer } = splitSteps(message);
+  return (
+    <div className="silo-chat-message silo-chat-assistant">
+      {steps.map((step) => (
+        <p key={step} className="silo-chat-step">
+          {step}
+        </p>
+      ))}
+      <Streamdown
+        skipHtml
+        components={{
+          a: ({ children, href }) => (
+            <a href={href} target="_blank" rel="noopener noreferrer">
+              {children}
+            </a>
+          ),
+          img: () => null,
+        }}
+      >
+        {answer}
+      </Streamdown>
+      <div className="silo-chat-trace">{traceLine(message)}</div>
     </div>
   );
 }

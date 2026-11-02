@@ -488,6 +488,7 @@ const PLUGIN_NAMES: Record<string, string> = {
 };
 
 const NOT_READY_WORDS: Record<string, string> = {
+  feature_disabled: 'Off. Turn it on to use it.',
   disabled: 'Turn on Use AI.',
   no_secret_key: 'Set SILO_SECRET_KEY on the server.',
   no_model: 'Choose a model.',
@@ -525,21 +526,39 @@ function FeatureRow({
         <div style={rowDesc}>{feature.plugin === 'twitter' ? 'X posts' : feature.description}</div>
         {hint && <div style={metaStyle}>{hint}</div>}
       </div>
-      <ModelPicker
-        label={`${feature.label} model`}
-        value={model}
-        providers={ai.providers}
-        disabled={disabled}
-        onChange={({ provider, id }) => {
-          patch({
-            ...settingsAi,
-            features: {
-              ...settingsAi.features,
-              [feature.id]: { ...state, model: { provider, id } },
-            },
-          });
-        }}
-      />
+      <div className="silo-ai-feature-controls">
+        <ModelPicker
+          label={`${feature.label} model`}
+          value={model}
+          providers={ai.providers}
+          disabled={disabled}
+          onChange={({ provider, id }) => {
+            patch({
+              ...settingsAi,
+              features: {
+                ...settingsAi.features,
+                [feature.id]: { ...state, model: { provider, id } },
+              },
+            });
+          }}
+        />
+        {!feature.plugin && (
+          <ToggleSwitch
+            on={state.enabled}
+            disabled={disabled}
+            label={feature.label}
+            onToggle={() =>
+              patch({
+                ...settingsAi,
+                features: {
+                  ...settingsAi.features,
+                  [feature.id]: { ...state, enabled: !state.enabled },
+                },
+              })
+            }
+          />
+        )}
+      </div>
     </div>
   );
 }
