@@ -30,3 +30,25 @@ describe('createSiloMcpServer', () => {
     expect(Object.keys(anyServer._registeredTools ?? {})).toContain('get_link');
   });
 });
+
+it('lists and retrieves the Librarian prompt over MCP', async () => {
+  const { Client } = await import('@modelcontextprotocol/sdk/client/index.js');
+  const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js');
+  const { librarianMcpPersona } = await import('@silo/core');
+  const { createSiloMcpServer } = await import('./server.js');
+  const server = createSiloMcpServer();
+  const client = new Client({ name: 'test', version: '1' });
+  const [a, b] = InMemoryTransport.createLinkedPair();
+  await Promise.all([server.connect(a), client.connect(b)]);
+  try {
+    expect((await client.listPrompts()).prompts).toContainEqual(
+      expect.objectContaining({ name: 'librarian', title: 'Silo Librarian' }),
+    );
+    expect((await client.getPrompt({ name: 'librarian' })).messages).toEqual([
+      { role: 'user', content: { type: 'text', text: librarianMcpPersona } },
+    ]);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});

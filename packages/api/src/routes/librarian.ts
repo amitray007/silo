@@ -59,7 +59,10 @@ export function registerLibrarianRoutes(app: Hono): void {
       })
       .parse(c.req.query());
     const result = await listChats(query);
-    return c.json({ chats: result.chats.map(summary), nextCursor: result.nextCursor });
+    return c.json({
+      chats: result.chats.map((chat) => ({ ...summary(chat), linkTitle: chat.linkTitle })),
+      nextCursor: result.nextCursor,
+    });
   });
   app.post('/librarian/chats', async (c) => {
     const body = z

@@ -1,4 +1,5 @@
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { librarianMcpPersona } from '@silo/core';
 import { registerAddLinkTag } from './tools/add-link-tag.js';
 import { registerCaptureLink } from './tools/capture-link.js';
 import { registerCreateTag } from './tools/create-tag.js';
@@ -98,5 +99,13 @@ export function createSiloMcpServer(): McpServer {
   registerFeedTools(server);
   registerRenameTools(server);
 
+  server.registerPrompt(
+    'librarian',
+    {
+      title: 'Silo Librarian',
+      description: 'Help the owner read and manage their Silo library.',
+    },
+    () => ({ messages: [{ role: 'user', content: { type: 'text', text: librarianMcpPersona } }] }),
+  );
   return server;
 }
