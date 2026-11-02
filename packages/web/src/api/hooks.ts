@@ -89,6 +89,7 @@ export const queryKeys = {
     if (filter?.status !== undefined) key.status = filter.status;
     return ['links', key] as const;
   },
+  recentLinks: (tag?: string) => ['links', 'recents', tag ?? null] as const,
   frame: (id: string) => ['frame', id] as const,
   link: (id: string) => ['link', id] as const,
   liveReader: (id: string) => ['live-reader', id] as const,
@@ -772,7 +773,6 @@ export function useInfiniteLinks(
   tag?: string,
   options: {
     enabled?: boolean;
-    refetchOnMount?: (query: { state: { isInvalidated: boolean } }) => boolean;
   } = {},
 ) {
   return useInfiniteQuery({
@@ -792,7 +792,20 @@ export function useInfiniteLinks(
     // doesn't eagerly fetch `/api/links` for a library-recents list it isn't
     // showing (perf: palette-open over-fetch — mirrors `useTrashList`).
     enabled: options.enabled ?? true,
-    refetchOnMount: options.refetchOnMount ?? true,
+  });
+}
+
+/** Recents have their own first-page cache so stale opens never refetch a paged library. */
+export function useRecentLinks(tag?: string, enabled = true) {
+  const client = useQueryClient();
+  const libraryKey = queryKeys.links(tag ? { tag } : undefined);
+  return useQuery({
+    queryKey: queryKeys.recentLinks(tag),
+    queryFn: () =>
+      apiGet<LinksResponse>(`/api/links${tag ? `?tag=${encodeURIComponent(tag)}` : ''}`),
+    initialData: () => client.getQueryData<InfiniteData<LinksResponse>>(libraryKey)?.pages[0],
+    initialDataUpdatedAt: () => client.getQueryState(libraryKey)?.dataUpdatedAt,
+    enabled,
   });
 }
 
@@ -1382,12 +1395,11 @@ export function useKokoroDtype() {
  * server-side default — see `core.getAllSettings`'s doc comment), so once
  * loaded every field is always present.
  */
-export function useSettings() {
+export function useSettings({ staleTime = 0 }: { staleTime?: number } = {}) {
   return useQuery({
     queryKey: queryKeys.settings(),
     queryFn: () => apiGet<SettingsMap>('/api/settings'),
-    // New rows share settings for a minute; writes and external invalidation still refresh.
-    staleTime: 60_000,
+    staleTime,
   });
 }
 

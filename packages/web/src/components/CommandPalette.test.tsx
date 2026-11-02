@@ -1456,7 +1456,7 @@ describe('CommandPalette', () => {
   });
 });
 
-it('opens cached recents without fetching 25 pages, but refreshes invalidated recents', async () => {
+it('refreshes stale recents on each open without refetching 25 cached pages', async () => {
   vi.stubGlobal('fetch', vi.fn());
   const { useCommandPalette } = await import('../lib/useCommandPalette');
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -1498,23 +1498,22 @@ it('opens cached recents without fetching 25 pages, but refreshes invalidated re
     </QueryClientProvider>,
   );
   pressCmdK();
-  await screen.findByText('Cached page 0');
-  await act(async () => {
-    await new Promise((resolve) => setTimeout(resolve, 30));
-  });
-  expect(reads).toBe(0);
-  expect(screen.queryByText('Cached page 1')).toBeNull();
-  await act(async () => {
-    await client.invalidateQueries({ queryKey: queryKeys.links() });
-  });
   await screen.findByText('Fresh page 0');
-  expect(reads).toBe(25);
+  expect(reads).toBe(1);
+  expect(screen.queryByText('Cached page 1')).toBeNull();
+  expect(client.getQueryData(queryKeys.links())).toEqual({
+    pages,
+    pageParams: [undefined, ...Array.from({ length: 24 }, (_, index) => `page-${index + 1}`)],
+  });
+  fireEvent.keyDown(document, { key: 'Escape' });
+  pressCmdK();
+  await waitFor(() => expect(reads).toBe(2));
   fireEvent.keyDown(document, { key: 'Escape' });
   await act(async () => {
     await client.invalidateQueries({ queryKey: queryKeys.links() });
   });
   pressCmdK();
-  await waitFor(() => expect(reads).toBe(50));
+  await waitFor(() => expect(reads).toBe(3));
   view.unmount();
   client.clear();
   vi.unstubAllGlobals();

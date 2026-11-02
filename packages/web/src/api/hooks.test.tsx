@@ -20,6 +20,7 @@ import {
   useRestoreLink,
   useRetryCapture,
   useSearchLinks,
+  useSettings,
   useTags,
   useTrashLink,
   useTrashList,
@@ -1441,4 +1442,26 @@ describe('feed refresh without a completed poll', () => {
       }
     },
   );
+});
+
+it('refetches settings when an editor mounts even while row settings are fresh', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const fresh = { plugins: { github: { enabled: false } } };
+  client.setQueryData(queryKeys.settings(), { plugins: { github: { enabled: true } } });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => jsonResponse(fresh)),
+  );
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  );
+  const row = renderHook(() => useSettings({ staleTime: 60_000 }), { wrapper });
+  expect(fetch).not.toHaveBeenCalled();
+  const editor = renderHook(() => useSettings(), { wrapper });
+  await waitFor(() => expect(editor.result.current.data).toEqual(fresh));
+  expect(fetch).toHaveBeenCalledTimes(1);
+  row.unmount();
+  editor.unmount();
+  client.clear();
+  vi.unstubAllGlobals();
 });
