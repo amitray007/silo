@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { ReadingPositionJson } from '../../../api/types';
 import { blocked } from '../dock/keyGuards';
 import { paragraphSections } from '../highlights/paragraphs';
-import { articleWords, shareAtBlock, wordAtShare } from './words';
+import { useProseVersion } from './proseVersion';
+import { articleWordIndex } from './words';
 
 /** Resolve one persisted word share into its paragraph without changing the prose DOM. */
 export function useSavedPlace({
@@ -16,9 +17,11 @@ export function useSavedPlace({
   saved: ReadingPositionJson | null;
   onSave: (position: number | null) => Promise<void>;
 }) {
-  const paragraphs = useMemo(() => paragraphSections(prose), [prose]);
-  const words = useMemo(() => articleWords(prose), [prose]);
-  const word = saved ? wordAtShare(words, saved.position) : undefined;
+  const version = useProseVersion(prose);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: version tracks replaced prose nodes.
+  const paragraphs = useMemo(() => paragraphSections(prose), [prose, version]);
+  const words = articleWordIndex(prose);
+  const word = saved ? words.atShare(saved.position) : undefined;
   const block = paragraphs.find((paragraph) => word && paragraph.contains(word.startContainer));
   const [hover, setHover] = useState<Element | null>(null);
   const identity = saved ? `${saved.source}:${Math.round(saved.position * 1e6)}` : '';
@@ -27,7 +30,7 @@ export function useSavedPlace({
   const save = useCallback(
     (paragraph: Element) => {
       setHover(null);
-      void onSave(shareAtBlock(words, paragraph)).catch(() => {});
+      void onSave(words.shareAtBlock(paragraph)).catch(() => {});
     },
     [words, onSave],
   );

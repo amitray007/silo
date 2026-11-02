@@ -1,4 +1,4 @@
-import { cleanup, renderHook } from '@testing-library/react';
+import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import type { ResolvedHighlight } from '../highlights/useHighlightLayer';
 import { useGroups } from './useGroups';
@@ -84,4 +84,69 @@ it('shares one fresh measurement across subscribers and finishes every read befo
   expect(result.current.read().groups).toEqual([]);
   expect(reads).toHaveBeenCalledTimes(4);
   unmount();
+});
+
+it('reuses frame-relative geometry through a spring but remeasures padding changes', async () => {
+  const frame = document.createElement('div');
+  const article = document.createElement('article');
+  article.className = 'silo-reader';
+  const prose = document.createElement('div');
+  prose.innerHTML = '<p>A highlighted paragraph.</p>';
+  frame.append(prose);
+  article.append(frame);
+  document.body.append(article);
+  const range = document.createRange();
+  range.selectNodeContents(prose.firstElementChild as Element);
+  const rectangles = vi.fn(() => [new DOMRect(0, 100, 100, 20)]);
+  Object.assign(range, { getClientRects: rectangles });
+  const resolved = [{ id: 'a', range } as ResolvedHighlight];
+  const { result } = renderHook(() => useGroups(prose, frame, resolved, true));
+  const paint = vi.fn();
+  const unsubscribe = result.current.subscribe(() => {
+    result.current.read();
+    return paint;
+  });
+  rectangles.mockClear();
+  article.style.transform = 'translateX(-100px)';
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(paint).toHaveBeenCalled();
+  expect(rectangles).not.toHaveBeenCalled();
+  article.style.paddingRight = '100px';
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(rectangles).toHaveBeenCalledOnce();
+  unsubscribe();
+});
+
+it('ignores preview insertion and coalesces multiple layout mutations', async () => {
+  const frame = document.createElement('div');
+  const article = document.createElement('article');
+  article.className = 'silo-reader';
+  const prose = document.createElement('div');
+  prose.innerHTML = '<p>A highlighted paragraph.</p>';
+  frame.append(prose);
+  article.append(frame);
+  document.body.append(article);
+  const range = document.createRange();
+  range.selectNodeContents(prose.firstElementChild as Element);
+  const rectangles = vi.fn(() => [new DOMRect(0, 100, 100, 20)]);
+  Object.assign(range, { getClientRects: rectangles });
+  const resolved = [{ id: 'a', range } as ResolvedHighlight];
+  const { result } = renderHook(() => useGroups(prose, frame, resolved, true));
+  const unsubscribe = result.current.subscribe(() => {
+    result.current.read();
+    return undefined;
+  });
+  rectangles.mockClear();
+  const preview = document.createElement('div');
+  preview.className = 'silo-place-ribbon-preview';
+  frame.append(preview);
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  preview.remove();
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  expect(rectangles).not.toHaveBeenCalled();
+  prose.style.fontSize = '20px';
+  await Promise.resolve();
+  prose.style.lineHeight = '2';
+  await waitFor(() => expect(rectangles).toHaveBeenCalledOnce());
+  unsubscribe();
 });

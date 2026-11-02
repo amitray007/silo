@@ -6,6 +6,7 @@ import type {
   LinkSummaryWithTags,
   LinkWithTextWindow,
   ListResultRow,
+  ReaderPrefs,
   SearchResultRow,
   SourceData,
 } from '@silo/core';
@@ -128,6 +129,8 @@ export type HighlightJson = {
  * search and trash rows do not, so a list query never joins either table.
  */
 export type LinkDetailJson = LinkJson & {
+  readerTextOmitted?: true;
+  readerPrefs: ReaderPrefs;
   readingPosition: ReadingPositionJson | null;
   highlights: HighlightJson[];
 };
@@ -203,6 +206,8 @@ export function toLinkJson(link: LinkSummaryWithTags): LinkJson {
 export function toLinkDetailJson(link: LinkDetail): LinkDetailJson {
   return {
     ...toLinkJson(link),
+    ...(link.readerTextOmitted ? { readerTextOmitted: true as const } : {}),
+    readerPrefs: link.readerPrefs,
     readingPosition: link.readingPosition
       ? {
           position: link.readingPosition.position,

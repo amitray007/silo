@@ -280,7 +280,7 @@ export type ReaderSettings = {
 };
 
 /** A stepper pauses this long before its change goes to the server. */
-const STEPPER_DELAY_MS = 400;
+export const STEPPER_DELAY_MS = 400;
 
 const mirrorKeys = [
   readerTypeStore,
@@ -329,9 +329,22 @@ function hasLocalReader(): boolean {
   }
 }
 
-/** The one writer of reader preferences: local first, then the server (see `readerSync`). */
+/** The defaults writer: local mirror first, then the settings API (see `readerSync`). */
 export const readerSync = createSync<ReaderSettings>({
   read: readReader,
   apply: applyReader,
   hasLocal: hasLocalReader,
 });
+
+/** Settings defaults only. Article preferences never write these mirrors. */
+export function useReaderDefaults(): ReaderSettings {
+  const type = usePref(readerTypeStore);
+  const width = usePref(readerWidthStore);
+  const pencil = usePref(pencilPrefsStore);
+  const highlight = usePref(highlightPrefsStore);
+  const readAloud = usePref(readAloudPrefsStore);
+  return useMemo(
+    () => ({ type, width, pencil, highlight, readAloud }),
+    [type, width, pencil, highlight, readAloud],
+  );
+}

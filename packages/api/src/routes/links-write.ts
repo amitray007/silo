@@ -3,12 +3,15 @@ import {
   addTag,
   addTagMany,
   captureMany,
+  clearReaderPrefs,
   clearReadingPosition,
   createTag,
   deleteTag,
   editLink,
   getById,
   getByIds,
+  patchReaderPrefs,
+  readerPatchSchema,
   removeTag,
   removeTagMany,
   setReadingPosition,
@@ -28,6 +31,7 @@ import {
   readingPositionBodySchema,
   tagNameParamSchema,
 } from '../query-schemas.js';
+import { readerBodyLimit } from '../reader-body-limit.js';
 import { performCapture, respondWithLink } from './mutate-link.js';
 
 /** `POST /api/links/:id/tags` and `DELETE /api/links/:id/tags/:tag`'s shared `id` param schema — a non-uuid `id` is a 400, not a pointless DB round-trip. */
@@ -119,6 +123,32 @@ export function registerLinksWriteRoutes(app: Hono): void {
       return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
     }
     return respondWithLink(c, id, 200);
+  });
+
+  app.patch('/links/:id/reader-prefs', readerBodyLimit, async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    const { writtenAt, ...body } = readerPatchSchema
+      .extend({
+        writtenAt: z.iso.datetime({ offset: true }).optional(),
+      })
+      .parse(await c.req.json().catch(() => undefined));
+    const readerPrefs = await patchReaderPrefs(
+      id,
+      body,
+      writtenAt ? new Date(writtenAt) : undefined,
+    );
+    if (readerPrefs === null) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.json({ readerPrefs });
+  });
+
+  app.delete('/links/:id/reader-prefs', async (c) => {
+    const { id } = idParamSchema.parse({ id: c.req.param('id') });
+    if (!(await clearReaderPrefs(id))) {
+      return c.json({ error: 'not_found', message: `No live link with id ${id}` }, 404);
+    }
+    return c.body(null, 204);
   });
 
   /**

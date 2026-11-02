@@ -2,8 +2,8 @@ import { HIGHLIGHT_COLORS } from '@silo/db';
 import { z } from 'zod';
 
 /**
- * The synced reader preferences: one setting, `reader`, holding everything the Reader's dock and
- * Settings → Reader edit. The bounds match the browser's own parsers (`packages/web/src/lib/
+ * The synced reader preferences: one setting, `reader`, holding the defaults edited in
+ * Settings → Reader. The dock uses per-article overrides. The bounds match the browser's own parsers (`packages/web/src/lib/
  * readerPrefs.ts`), which the web mirrors by hand because it must not import core.
  *
  * One field list, three wrappers, so the defaults and bounds live in one place:
@@ -111,4 +111,21 @@ export function mergeReader(base: unknown, patch: unknown): unknown {
     merged[key] = key in base ? mergeReader(base[key], value) : value;
   }
   return merged;
+}
+
+export type ReaderPrefs = z.output<typeof readerPatchSchema>;
+
+/** Keep only stored override leaves, using the same per-field fallbacks as defaults reads. */
+export function parseStoredReaderPrefs(value: unknown): ReaderPrefs {
+  if (!isPlain(value)) return {};
+  const stored = readerStoredSchema.parse(value);
+  function present(raw: unknown, parsed: unknown): unknown {
+    if (!isPlain(raw) || !isPlain(parsed)) return parsed;
+    return Object.fromEntries(
+      Object.entries(parsed)
+        .filter(([key]) => Object.hasOwn(raw, key))
+        .map(([key, child]) => [key, present(raw[key], child)]),
+    );
+  }
+  return isPlain(value) ? (present(value, stored) as ReaderPrefs) : {};
 }

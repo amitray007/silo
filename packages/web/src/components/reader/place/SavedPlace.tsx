@@ -10,7 +10,7 @@ import { withinFirstLine } from './geometry';
 import { usePlaceGeometry } from './usePlaceGeometry';
 import { usePlaceSpacing } from './usePlaceSpacing';
 import { useSavedPlace } from './useSavedPlace';
-import { articleWords, wordAtShare } from './words';
+import { articleWordIndex } from './words';
 
 function inBridge(hover: Element | null, event: PointerEvent): boolean {
   if (!hover) return false;
@@ -124,6 +124,11 @@ export function SavedPlace({
     if (!menu) return;
     popover.current?.querySelector('button')?.focus({ preventScroll: true });
     const close = () => setMenu(false);
+    const openedAt = { top: scroll.scrollTop, left: scroll.scrollLeft };
+    // Focusing the popover can emit a scroll event without moving the Reader.
+    const moved = () => {
+      if (scroll.scrollTop !== openedAt.top || scroll.scrollLeft !== openedAt.left) close();
+    };
     const outside = (event: PointerEvent) => {
       if (
         event.target instanceof Node &&
@@ -148,12 +153,12 @@ export function SavedPlace({
     };
     window.addEventListener('keydown', key, true);
     document.addEventListener('pointerdown', outside);
-    scroll.addEventListener('scroll', close, { passive: true });
+    scroll.addEventListener('scroll', moved, { passive: true });
     window.addEventListener('resize', close);
     return () => {
       window.removeEventListener('keydown', key, true);
       document.removeEventListener('pointerdown', outside);
-      scroll.removeEventListener('scroll', close);
+      scroll.removeEventListener('scroll', moved);
       window.removeEventListener('resize', close);
     };
   }, [menu, scroll]);
@@ -185,7 +190,7 @@ export function SavedPlace({
   };
   const continueListen = () => {
     pencil.stop();
-    const word = wordAtShare(articleWords(prose), saved?.position ?? 0);
+    const word = articleWordIndex(prose).atShare(saved?.position ?? 0);
     const at = word
       ? segmentIndexAt(buildSegments(prose), word.startContainer, word.startOffset)
       : 0;

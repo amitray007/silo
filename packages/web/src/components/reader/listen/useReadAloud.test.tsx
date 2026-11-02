@@ -1,6 +1,10 @@
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { act, renderHook as renderBaseHook, waitFor } from '@testing-library/react';
+import type { ReactNode } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useReadAloudPrefs } from '../../../lib/readerPrefs';
+import { ReaderPrefsProvider } from '../../../lib/useReaderPrefs';
+import { makeLink } from '../../../test/fixtures';
 import type { EngineId, LoadProgress, TtsEngine } from './engines';
 import { useReadAloud } from './useReadAloud';
 
@@ -48,6 +52,20 @@ vi.mock('./engines', async (original) => {
   };
   return { ...real, createEngine: create };
 });
+
+let nextArticle = 0;
+function renderHook<T, P>(callback: (props: P) => T, options?: { initialProps: P }) {
+  const client = new QueryClient();
+  const link = makeLink({ id: `listen-${nextArticle++}`, feedId: 'feed' });
+  return renderBaseHook(callback, {
+    ...options,
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>
+        <ReaderPrefsProvider link={link}>{children}</ReaderPrefsProvider>
+      </QueryClientProvider>
+    ),
+  });
+}
 
 class FakeAudioContext {
   static last: FakeAudioContext | undefined;
@@ -229,7 +247,7 @@ it('pauses playback that stays in a hidden tab, but not one that comes back in t
   hook.unmount();
 });
 
-it('re-plans pause changes from the current sentence, including changes made in Settings', async () => {
+it('re-plans article pause changes and keeps them when Settings changes', async () => {
   const { prose, scroll } = article();
   const hook = renderHook(() => ({
     listen: useReadAloud({ prose, scroll }),
@@ -246,9 +264,10 @@ it('re-plans pause changes from the current sentence, including changes made in 
   expect(fake.streamed.filter((text) => text === firstText).length).toBe(2);
   const stopped = context.stopped;
   await act(async () => hook.result.current.prefs.update({ pauses: 'short' }));
-  await waitFor(() => expect(context.stopped).toBeGreaterThan(stopped));
+  expect(context.stopped).toBe(stopped);
+  expect(hook.result.current.listen.pauses).toBe('natural');
   expect(hook.result.current.listen.index).toBe(2);
-  expect(hook.result.current.listen.pauses).toBe('short');
+  expect(hook.result.current.listen.pauses).toBe('natural');
   hook.unmount();
 });
 
@@ -300,16 +319,8 @@ it.each(['pauses', 'settings', 'speed', 'voice', 'engine'] as const)(
 it('resumes the saved sentence and saves only explicit pause, close, and pagehide', async () => {
   const { prose, scroll } = article();
   const onSave = vi.fn(async () => {});
-  const { articleWords, shareAtPoint } = await import('../place/words');
-  const { buildSegments } = await import('./segments');
-  const sentences = buildSegments(prose);
-  const sentence = sentences[2];
-  if (!sentence) throw new Error('Missing fixture sentence');
-  const position = shareAtPoint(
-    articleWords(prose),
-    sentence.range.startContainer,
-    sentence.range.startOffset,
-  );
+  // Legacy word stream: 20 words precede the second paragraph, 51 in total.
+  const position = 20 / 51;
   const hook = renderHook(() =>
     useReadAloud({ prose, scroll, saved: position, canSave: true, onSave }),
   );
@@ -441,4 +452,48 @@ it('discards the Listen position synchronously when Remove and pagehide precede 
   });
   hook.unmount();
   expect(onSave).not.toHaveBeenCalled();
+});
+
+it('keeps useful in-flight warm synthesis through the hook start path', async () => {
+  let finish: () => void = () => {};
+  let signal: AbortSignal | undefined;
+  fake.stream = async function* (_text, options) {
+    signal = options.signal;
+    await new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    if (!signal?.aborted) yield new Float32Array(2400).fill(0.5);
+  };
+  const { prose, scroll } = article();
+  const hook = renderHook(() => useReadAloud({ prose, scroll }));
+  act(() => hook.result.current.begin());
+  act(() => hook.result.current.warm());
+  await waitFor(() => expect(fake.streamed).toHaveLength(1));
+  const warmed = fake.streamed[0];
+  act(() => hook.result.current.startAt(0));
+  await waitFor(() => expect(hook.result.current.playing).toBe(true));
+  expect(signal?.aborted).toBe(false);
+  await act(async () => finish());
+  expect(fake.streamed.filter((text) => text === warmed)).toHaveLength(1);
+  hook.unmount();
+});
+
+it('round-trips legacy word shares through inline markup and skipped blocks', async () => {
+  const { prose, scroll } = article();
+  prose.innerHTML =
+    '<h2>A title</h2><p>One <em>small</em> sentence. Two more words.</p><pre>skip these words</pre><p>Last words.</p>';
+  const onSave = vi.fn(async () => {});
+  // The final paragraph starts at word 8 of 10. Postgres stores this as real.
+  const hook = renderHook(() =>
+    useReadAloud({ prose, scroll, saved: Math.fround(0.8), canSave: true, onSave }),
+  );
+  act(() => hook.result.current.play());
+  await waitFor(() => expect(hook.result.current.current?.text).toBe('Last words.'));
+  act(() => hook.result.current.pause());
+  expect(onSave).toHaveBeenLastCalledWith(0.8, undefined);
+  act(() => hook.result.current.play());
+  await waitFor(() => expect(hook.result.current.current?.text).toBe('Last words.'));
+  act(() => hook.result.current.stop());
+  expect(onSave).toHaveBeenLastCalledWith(0.8, undefined);
+  hook.unmount();
 });

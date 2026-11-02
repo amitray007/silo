@@ -5,11 +5,10 @@ import {
   MIN_PENCIL_WPM,
   PENCIL_WPM_STEP,
   type PencilStyle,
-  usePencilPrefs,
-  useReaderType,
+  STEPPER_DELAY_MS,
 } from '../../../lib/readerPrefs';
-import { useReaderWidth } from '../../../lib/useReaderWidth';
-import { articleWords, wordAtShare } from '../place/words';
+import { useReaderPrefs } from '../../../lib/useReaderPrefs';
+import { articleWordIndex } from '../place/words';
 import {
   advance,
   type Line,
@@ -133,9 +132,15 @@ export function usePencil({
   canSave: boolean;
   onSave: (share: number, options?: SaveOptions) => Promise<void>;
 }) {
-  const { prefs, update } = usePencilPrefs();
-  const { type } = useReaderType();
-  const [width] = useReaderWidth();
+  const {
+    prefs: { pencil: prefs, type, width },
+    update: change,
+  } = useReaderPrefs();
+  const update = useCallback(
+    (patch: Partial<typeof prefs>) =>
+      change({ pencil: patch }, 'wpm' in patch ? STEPPER_DELAY_MS : 0),
+    [change],
+  );
   const reduced = useMediaQuery('(prefers-reduced-motion: reduce)');
   const frame = prose?.parentElement ?? null;
   const [enabled, setEnabled] = useState(false);
@@ -352,7 +357,7 @@ export function usePencil({
           lines.current = measureLines(prose, frame);
           prefix.current = wordPrefix(lines.current);
         }
-        const word = wordAtShare(articleWords(prose), share);
+        const word = articleWordIndex(prose).atShare(share);
         const rect = word?.getClientRects()[0];
         const index = rect
           ? lineNear(lines.current, rect.top + rect.height / 2 - frame.getBoundingClientRect().top)

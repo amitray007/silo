@@ -4,6 +4,7 @@ import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { LinkJson } from '../../../api/types';
 import { makeLink } from '../../../test/fixtures';
+import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import { DockHostContext } from '../dock/ReaderDock';
 import { ReaderContent } from '../ReaderContent';
 
@@ -71,7 +72,9 @@ async function open(link: LinkJson = makeLink({ id: 'pencil' })) {
   render(
     <QueryClientProvider client={client}>
       <Host>
-        <ReaderContent link={link} />
+        <TestArticlePrefs link={link}>
+          <ReaderContent link={link} />
+        </TestArticlePrefs>
       </Host>
     </QueryClientProvider>,
   );
@@ -270,10 +273,10 @@ it('plays and pauses with Space while on, and changes speed with + and -', async
   play(2.1);
   expect(guideY()).toBe(GUIDE_Y(1));
   press('+');
-  expect(JSON.parse(localStorage.getItem('silo.readerPencil') ?? '{}').wpm).toBe(260);
+  expect(articlePrefs().pencil.wpm).toBe(260);
   press('-');
   press('-');
-  expect(JSON.parse(localStorage.getItem('silo.readerPencil') ?? '{}').wpm).toBe(220);
+  expect(articlePrefs().pencil.wpm).toBe(220);
 });
 
 it('ignores its keys in inputs and textareas', async () => {

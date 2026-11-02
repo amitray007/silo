@@ -21,12 +21,12 @@ export function ReaderSettingsSync() {
   useEffect(
     () =>
       readerSync.connect({
-        send: async (reader) => {
-          const saved = await send.current({ reader });
+        send: async (reader, writtenAt) => {
+          const saved = await send.current({ reader, writtenAt });
           if (!saved.reader) throw new Error('The server did not keep the reader settings');
           return saved.reader;
         },
-        keepalive: (reader) => apiPatchKeepalive('/api/settings', { reader }),
+        keepalive: (reader, writtenAt) => apiPatchKeepalive('/api/settings', { reader, writtenAt }),
       }),
     [],
   );

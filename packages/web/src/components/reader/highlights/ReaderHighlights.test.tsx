@@ -5,6 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { useLink } from '../../../api/hooks';
 import type { HighlightJson, LinkJson } from '../../../api/types';
 import { makeLink } from '../../../test/fixtures';
+import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import { DockHostContext } from '../dock/ReaderDock';
 import { ReaderContent } from '../ReaderContent';
 
@@ -102,7 +103,9 @@ function Reader() {
   const detail = useLink('hl');
   return detail.data ? (
     <article className="silo-reader">
-      <ReaderContent link={detail.data.link} />
+      <TestArticlePrefs link={detail.data.link}>
+        <ReaderContent link={detail.data.link} />
+      </TestArticlePrefs>
     </article>
   ) : null;
 }
@@ -260,7 +263,7 @@ it('gives an overlapping new highlight the next free colour', async () => {
   fireEvent.click(await toolbarButton(/Highlight/));
   await waitFor(() => expect(posts).toHaveLength(1));
   expect(posts[0]?.color).toBe('green');
-  expect(JSON.parse(localStorage.getItem('silo.readerHighlight') ?? '{}').color).toBe('green');
+  expect(articlePrefs().highlight.color).toBe('green');
 });
 
 it('highlights a selection at once while the Highlight sheet is open', async () => {

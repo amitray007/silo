@@ -9,6 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { kokoroDtype } from '../components/reader/listen/engines/files';
 import { fetchTtsManifest } from '../components/reader/listen/engines/manifest';
 import type { HighlightColor } from '../lib/highlights';
+import type { ReaderSettings } from '../lib/readerPrefs';
+import { advanceReaderPrefsVersion, readerPrefsVersion } from '../lib/readerPrefsVersion';
+import type { DeepPartial } from '../lib/readerSync';
 import { mergeDeep } from '../lib/readerSync';
 import {
   clearTitleReveal,
@@ -197,14 +200,65 @@ export function useRefreshReader(linkId: string) {
 
 /** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.link(id ?? ''),
-    queryFn: () => apiGet<LinkResponse>(`/api/links/${encodeURIComponent(id ?? '')}`),
+    queryFn: async ({ signal }) => {
+      const version = readerPrefsVersion(client, id ?? '');
+      const path = `/api/links/${encodeURIComponent(id ?? '')}`;
+      let data = await apiGet<LinkResponse>(`${path}?view=reader`, signal);
+      if (data.link.readerTextOmitted) {
+        try {
+          // Share the Reader query with useLiveReader. A failed HTML read still gets full text.
+          await client.fetchQuery({
+            queryKey: queryKeys.liveReader(id ?? ''),
+            queryFn: ({ signal }) => apiGet<LiveReaderJson>(`${path}/reader`, signal),
+            staleTime: 10 * 60 * 1000,
+            retry: false,
+          });
+        } catch {
+          data = await apiGet<LinkResponse>(path, signal);
+        }
+      }
+      return version === 0
+        ? data
+        : { ...data, link: { ...data.link, readerPrefsVersion: version } };
+    },
     enabled: Boolean(id) && (options.enabled ?? true),
     retry: false,
     refetchInterval: (query) =>
       query.state.data?.link.captureStatus === 'enriching' ? 1500 : false,
   });
+}
+
+/** The article sync queue owns optimistic state and rollback; this hook keeps detail cache current. */
+export function useUpdateReaderPrefs(linkId: string) {
+  const client = useQueryClient();
+  return useCallback(
+    async (patch: DeepPartial<ReaderSettings>, writtenAt: string) => {
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
+      const { readerPrefs } = await apiPatch<{ readerPrefs: DeepPartial<ReaderSettings> }>(
+        `/api/links/${encodeURIComponent(linkId)}/reader-prefs`,
+        { ...patch, writtenAt },
+      );
+      advanceReaderPrefsVersion(client, linkId);
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
+      client.setQueryData<LinkResponse>(queryKeys.link(linkId), (data) =>
+        data
+          ? {
+              ...data,
+              link: {
+                ...data.link,
+                readerPrefs,
+                readerPrefsVersion: readerPrefsVersion(client, linkId),
+              },
+            }
+          : data,
+      );
+      return readerPrefs;
+    },
+    [client, linkId],
+  );
 }
 
 function withReadingPosition(

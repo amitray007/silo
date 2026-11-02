@@ -9,6 +9,7 @@ export {
   HIGHLIGHT_COLORS,
   type HighlightColor,
   highlights,
+  linkReaderPrefs,
   links,
   linkTags,
   oauthClients,

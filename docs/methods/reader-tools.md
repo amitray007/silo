@@ -702,3 +702,78 @@ On real links at 1440, 1100 and 390, in light, dark and sepia:
 - a feed post shows no ribbon.
 
 Then put it side by side with the mockup and fix every unintended difference.
+
+## Slice 7: Per-article reader choices
+
+### Why
+
+Slice 5 made every change in an article update the global `reader` setting.
+The owner wants the opposite: Settings → Reader holds the defaults, and a
+change made inside an article stays with that article. This applies to
+everything in the reader: Type, width, Pencil, the default highlight colour,
+and read aloud (engine, voice, speed, pauses). There is no "use as default"
+or reset action; defaults change only in Settings.
+
+### Decisions
+
+- **Partial overrides per link.** A new table `link_reader_prefs` (migration
+  `0030_link_reader_prefs`) has these columns:
+  - `link_id` (pk, cascade);
+  - `prefs` jsonb, which holds only the fields changed in that article, in
+    the shape of the `reader` setting's `patch` mode;
+  - `updated_at`.
+  A field the article never changed keeps following the Settings default, so
+  a later default change still reaches it.
+- **Effective value.** It is the default merged with the link's overrides,
+  field by field. Core validates overrides with the existing `patch` schema,
+  and stored rows are read with the `stored` fallbacks per field.
+- **Writes.** Every control in the Reader dock, its sheets, the Listen sheet
+  and the player writes the current link's override. None of them touches the
+  `reader` setting. Settings → Reader writes only the defaults. Writes are
+  optimistic, rolled back on error, debounced for steppers, and flushed on
+  pagehide with keepalive, reusing slice 5's sync machinery.
+- **API.** Single-link JSON adds `readerPrefs` (the partial overrides, or
+  `{}`), loaded in the same query path, with no N+1. A new
+  `PATCH /api/links/:id/reader-prefs` deep-merges a partial and returns the
+  stored overrides. `DELETE` clears them. Both use the standard error
+  envelope.
+- **No MCP tool and no export.** These are presentation choices, as decided
+  in slice 5. Restore merge moves the overrides with the link, like
+  highlights.
+- **Feed posts.** Feed posts cannot be written, so changes there apply for
+  the session only and are not saved.
+- **Slice 5 migration.** The one-time upload of local values still targets
+  the defaults. Existing synced values stay as the defaults.
+
+### Tests
+
+- **Core and API, on real Postgres:**
+  - merge and partial semantics, including a nested `readAloud.voices` change
+    that keeps the other engine's voice;
+  - validation bounds;
+  - unknown fields are rejected;
+  - cascade and restore move;
+  - the link JSON shape and leak guards.
+- **Web:**
+  - an in-article change writes the link override, not the setting;
+  - another article still uses the default;
+  - a Settings change reaches fields an article did not override, but not the
+    ones it did;
+  - reloading keeps the override;
+  - rollback on failure;
+  - feed posts stay session-only;
+  - the Listen sheet, player speed, Type sheet, width, Pencil and highlight
+    colour each follow the rule.
+
+### QA
+
+1. In article A, change the voice, speed, pauses, font size, width and Pencil
+   speed.
+2. Open article B. It shows the Settings defaults.
+3. Reload A. It keeps its changes.
+4. Change the defaults in Settings. B follows. A follows only for the fields
+   it never changed.
+5. Check a second browser profile. It sees A's overrides.
+6. Check a feed post. Changes there do not persist.
+
+Run this at 1440 and 390, in light, dark and sepia.

@@ -257,12 +257,12 @@ describe('createKokoroEngine generating', () => {
       return { engine, first, abort, pending, request };
     }
 
-    it('lets a generation that finishes within 750 ms be dropped, with no restart', async () => {
+    it('lets a generation that finishes within the 4.5-second bound be dropped, with no restart', async () => {
       const { first, abort, pending, request } = await running();
       abort.abort();
       // The stream ends at once and yields nothing.
       expect((await pending).done).toBe(true);
-      await vi.advanceTimersByTimeAsync(500);
+      await vi.advanceTimersByTimeAsync(4250);
       first.reply({
         type: 'audio',
         id: request.id,
@@ -274,11 +274,11 @@ describe('createKokoroEngine generating', () => {
       expect(FakeWorker.all).toHaveLength(1);
     });
 
-    it('restarts the worker, on the same device, when it is still busy after 750 ms', async () => {
+    it('restarts the worker, on the same device, when it is still busy after the 4.5-second bound', async () => {
       const { first, abort, pending } = await running();
       abort.abort();
       await pending;
-      await vi.advanceTimersByTimeAsync(740);
+      await vi.advanceTimersByTimeAsync(4490);
       expect(first.terminated).toBe(false);
       await vi.advanceTimersByTimeAsync(20);
       expect(first.terminated).toBe(true);
@@ -294,7 +294,7 @@ describe('createKokoroEngine generating', () => {
       const { abort, pending } = await running('wasm');
       abort.abort();
       await pending;
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(4600);
       expect((FakeWorker.all[1] as FakeWorker).posted[0]).toMatchObject({ webgpuDtype: null });
     });
 
@@ -337,7 +337,7 @@ describe('createKokoroEngine generating', () => {
         .stream('Two.', { voice: 'af_heart', speed: 1 })
         [Symbol.asyncIterator]()
         .next();
-      await vi.advanceTimersByTimeAsync(800);
+      await vi.advanceTimersByTimeAsync(4600);
       const second = FakeWorker.all[1] as FakeWorker;
       expect(first.terminated).toBe(true);
       expect(second.posted.some((m) => m.type === 'generate')).toBe(false);

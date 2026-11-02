@@ -4,9 +4,10 @@ import {
   type ReaderFont,
   type ReaderLeading,
   type ReaderTheme,
-  useReaderType,
+  STEPPER_DELAY_MS,
 } from '../../../lib/readerPrefs';
-import { type ReaderWidth, useReaderWidth } from '../../../lib/useReaderWidth';
+import { useReaderPrefs } from '../../../lib/useReaderPrefs';
+import type { ReaderWidth } from '../../../lib/useReaderWidth';
 import { ReaderIcon } from '../ReaderIcon';
 import { SegmentedRow } from './Segmented';
 import { Stepper } from './Stepper';
@@ -43,10 +44,15 @@ export function StepGlyph({ size, name }: { size: 'small' | 'large'; name: 'minu
   );
 }
 
-/** Controls only: each change applies to the article at once and persists on this device. */
+/** Controls only: each change applies to the article at once and saves only its override. */
 export function TypeSheet() {
-  const { type, update } = useReaderType();
-  const [width, setWidth] = useReaderWidth();
+  const {
+    prefs: { type, width },
+    update: change,
+  } = useReaderPrefs();
+  const update = (patch: Partial<typeof type>) =>
+    change({ type: patch }, 'size' in patch ? STEPPER_DELAY_MS : 0);
+  const setWidth = (width: ReaderWidth) => change({ width });
   return (
     <div className="silo-type-sheet-body">
       <SegmentedRow
