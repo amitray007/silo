@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 
 /**
@@ -14,32 +13,16 @@ const PHONE_GUTTER: Gutter = { size: 20, gap: 0, edge: 0 };
  * Where the gutter column starts, in the prose frame's own coordinates: just past the prose,
  * pulled in when the pane is too narrow to leave room.
  */
-function useGutterLeft(
-  frame: HTMLElement | null,
-  scroll: HTMLElement | null,
+export function gutterLeft(
+  frame: HTMLElement,
+  scroll: HTMLElement,
   { size, gap, edge }: Gutter,
 ): number {
-  const [left, setLeft] = useState(0);
-  useEffect(() => {
-    if (!frame || !scroll) return;
-    const place = () => {
-      const inset = frame.getBoundingClientRect().left - scroll.getBoundingClientRect().left;
-      setLeft(Math.min(frame.clientWidth + gap, scroll.clientWidth - inset - size - edge));
-    };
-    place();
-    const observer = new ResizeObserver(place);
-    observer.observe(frame);
-    observer.observe(scroll);
-    return () => observer.disconnect();
-  }, [frame, scroll, size, gap, edge]);
-  return left;
+  const inset = frame.getBoundingClientRect().left - scroll.getBoundingClientRect().left;
+  return Math.min(frame.clientWidth + gap, scroll.clientWidth - inset - size - edge);
 }
 
-/** The gutter for this window and the x its controls share. */
-export function useGutter(
-  frame: HTMLElement | null,
-  scroll: HTMLElement | null,
-): { gutter: Gutter; left: number } {
-  const gutter = useMediaQuery(layoutMedia.phone) ? PHONE_GUTTER : DESKTOP_GUTTER;
-  return { gutter, left: useGutterLeft(frame, scroll, gutter) };
+/** The gutter for this window. Geometry is read by its controls before paint. */
+export function useGutter(): Gutter {
+  return useMediaQuery(layoutMedia.phone) ? PHONE_GUTTER : DESKTOP_GUTTER;
 }

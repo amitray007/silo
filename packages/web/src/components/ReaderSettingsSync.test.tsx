@@ -156,7 +156,7 @@ describe('ReaderSettingsSync', () => {
     await waitFor(() => expect(server.patches).toHaveLength(1));
   });
 
-  it('sends a change as a partial patch and every subscriber follows', async () => {
+  it('sends a change as a full snapshot and every subscriber follows', async () => {
     const server = fakeServer(FULL);
     const view = render(
       <>
@@ -171,7 +171,9 @@ describe('ReaderSettingsSync', () => {
       'serif/16/medium/1/',
       'serif/16/medium/1/',
     ]);
-    await waitFor(() => expect(server.patches).toEqual([{ type: { font: 'serif' } }]));
+    await waitFor(() =>
+      expect(server.patches).toEqual([{ ...FULL, type: { ...FULL.type, font: 'serif' } }]),
+    );
   });
 
   it('rolls the local value back when the server refuses the change', async () => {
@@ -182,7 +184,7 @@ describe('ReaderSettingsSync', () => {
     expect(screen.getByRole('status').textContent).toBe('inter/16/wide/1/');
     await waitFor(() => expect(screen.getByRole('status').textContent).toBe('inter/16/medium/1/'));
     expect(localStorage.getItem('silo.readerWidth')).toBe('medium');
-    expect(server.patches).toEqual([{ width: 'wide' }]);
+    expect(server.patches).toEqual([{ ...FULL, width: 'wide' }]);
   });
 
   it('debounces stepper changes into one request', async () => {
@@ -202,7 +204,9 @@ describe('ReaderSettingsSync', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(400);
     });
-    expect(server.patches).toEqual([{ type: { size: 19 }, readAloud: { rate: 1.5 } }]);
+    expect(server.patches).toEqual([
+      { ...FULL, type: { ...FULL.type, size: 19 }, readAloud: { ...FULL.readAloud, rate: 1.5 } },
+    ]);
   });
 
   it('a second profile with the same server picks up the settings', async () => {
@@ -273,7 +277,7 @@ it('times out a hung PATCH and sends the next queued edit', async () => {
   await act(async () => vi.advanceTimersByTimeAsync(0));
   act(() => screen.getByText('serif').click());
   await act(async () => vi.advanceTimersByTimeAsync(15_000));
-  expect(server.patches).toEqual([{ type: { font: 'serif' } }]);
+  expect(server.patches).toEqual([{ ...FULL, type: { ...FULL.type, font: 'serif' } }]);
   expect(screen.getByRole('status').textContent).toBe('serif/16/medium/1/');
 });
 
@@ -283,7 +287,10 @@ it('syncs Pauses to the server and restores it for the next reader', async () =>
   await waitFor(() => expect(first.result.current.prefs.pauses).toBe('relaxed'));
   await act(async () => first.result.current.update({ pauses: 'natural' }));
   await waitFor(() => expect(server.reader?.readAloud.pauses).toBe('natural'));
-  expect(server.patches).toContainEqual({ readAloud: { pauses: 'natural' } });
+  expect(server.patches).toContainEqual({
+    ...FULL,
+    readAloud: { ...FULL.readAloud, pauses: 'natural' },
+  });
   first.unmount();
   const next = renderHook(() => useReadAloudPrefs(), { wrapper: Providers });
   await waitFor(() => expect(next.result.current.prefs.pauses).toBe('natural'));

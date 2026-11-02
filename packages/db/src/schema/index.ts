@@ -11,6 +11,7 @@ export {
 } from './enums.js';
 export { feedEntries, feeds } from './feeds.js';
 export { HIGHLIGHT_COLORS, type HighlightColor, highlights } from './highlights.js';
+export { linkReaderPrefs } from './link-reader-prefs.js';
 export { linkTags } from './link-tags.js';
 export { links } from './links.js';
 export { oauthClients } from './oauth-clients.js';

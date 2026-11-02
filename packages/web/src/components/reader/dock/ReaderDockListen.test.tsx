@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { makeLink } from '../../../test/fixtures';
+import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import type { LoadProgress, TtsEngine } from '../listen/engines';
 import { ReaderContent } from '../ReaderContent';
 import { DockHostContext } from './ReaderDock';
@@ -65,7 +66,11 @@ function Host({ children }: { children: ReactNode }) {
   );
 }
 
-function renderArticle(html: string) {
+function renderArticle(
+  html: string,
+  readerPrefs: import('../../../api/types').LinkJson['readerPrefs'] = {},
+) {
+  const link = makeLink({ id: 'listen', readerPrefs });
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) =>
@@ -79,7 +84,9 @@ function renderArticle(html: string) {
   return render(
     <QueryClientProvider client={client}>
       <Host>
-        <ReaderContent link={makeLink({ id: 'listen' })} />
+        <TestArticlePrefs link={link}>
+          <ReaderContent link={link} />
+        </TestArticlePrefs>
       </Host>
     </QueryClientProvider>,
   );
@@ -164,7 +171,7 @@ it('plays and pauses on Space, and changes speed on + and -', async () => {
   await waitFor(() =>
     expect(within(toolbar()).getByRole('button', { name: /^Speed/ }).textContent).toBe('0.75x'),
   );
-  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').rate).toBe(0.75);
+  expect(articlePrefs().readAloud.rate).toBe(0.75);
 });
 
 it('steps a sentence on the arrow keys', async () => {
@@ -262,11 +269,7 @@ it('groups voices by locale, lets the reader pick one, and remembers it', async 
   );
   expect(within(list).getByRole('group', { name: 'English (UK)' })).toBeDefined();
   fireEvent.click(within(list).getByRole('option', { name: /Maeve/ }));
-  await waitFor(() =>
-    expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').voices.phonon).toBe(
-      'maeve',
-    ),
-  );
+  await waitFor(() => expect(articlePrefs().readAloud.voices.phonon).toBe('maeve'));
 });
 
 it('shows the download state with its percentage and size while the voice loads', async () => {
@@ -328,9 +331,7 @@ it('switches the engine from the sheet and keeps it for the next play', async ()
   const sheet = await screen.findByRole('dialog', { name: 'Listen' });
   fireEvent.click(within(sheet).getByRole('button', { name: 'Voice engine' }));
   fireEvent.click(await screen.findByRole('option', { name: /^Kokoro/ }));
-  await waitFor(() =>
-    expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro'),
-  );
+  await waitFor(() => expect(articlePrefs().readAloud.engine).toBe('kokoro'));
   fireEvent.click(within(toolbar()).getByRole('button', { name: 'Play' }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
 });
@@ -342,7 +343,7 @@ it('switches the engine while playing and carries on with the new one', async ()
   fireEvent.click(await screen.findByRole('button', { name: 'Voice engine' }));
   fireEvent.click(await screen.findByRole('option', { name: /^Kokoro/ }));
   expect(await within(toolbar()).findByRole('button', { name: 'Pause' })).toBeDefined();
-  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').engine).toBe('kokoro');
+  expect(articlePrefs().readAloud.engine).toBe('kokoro');
 });
 
 it('names the speed button with its visible value', async () => {
@@ -440,9 +441,10 @@ it('renders the Pauses choices and keeps the selection for the next read', async
     'true',
   );
   fireEvent.click(within(group).getByRole('radio', { name: 'Natural' }));
-  expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}').pauses).toBe('natural');
+  expect(articlePrefs().readAloud.pauses).toBe('natural');
+  const saved = { readAloud: { pauses: articlePrefs().readAloud.pauses } };
   first.unmount();
-  renderArticle(ENGLISH);
+  renderArticle(ENGLISH, saved);
   fireEvent.click(await screen.findByRole('button', { name: 'Listen' }));
   expect(
     within(screen.getByRole('radiogroup', { name: 'Pauses' }))

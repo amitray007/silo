@@ -136,6 +136,10 @@ export type SourceData =
  * strings (JSON has no native date type), NOT `Date`.
  */
 export type LinkJson = {
+  /** Current stored Reader supplies the prose; fetch default detail if it fails to load. */
+  readerTextOmitted?: true;
+  /** Browser-local write version captured when this detail request started. */
+  readerPrefsVersion?: number;
   id: string;
   url: string;
   title: string | null;
@@ -161,6 +165,7 @@ export type LinkJson = {
    * Where the reader stopped, as a share (0 to 1) of the article's words. Only single-link
    * reads carry it: `null` means none saved, and a list row leaves it out.
    */
+  readerPrefs?: DeepPartial<ReaderSettings>;
   readingPosition?: ReadingPositionJson | null;
   /** Passage highlights. Only single-link reads carry them; a list row leaves them out. */
   highlights?: HighlightJson[];
@@ -182,7 +187,12 @@ export type HighlightJson = {
 };
 
 /** `PUT /api/links/:id/reading-position` returns this; `updatedAt` is an ISO string. */
-export type ReadingPositionJson = { position: number; updatedAt: string };
+export type ReadingPositionSource = 'pencil' | 'listen' | 'mark';
+export type ReadingPositionJson = {
+  position: number;
+  source: ReadingPositionSource;
+  updatedAt: string;
+};
 
 /**
  * `GET /api/links/:id/reader` -- the formatted Reader built live from the page.
@@ -324,6 +334,7 @@ export type SettingsMap = {
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
 export type UpdateSettingsRequest = Partial<Omit<SettingsMap, 'reader'>> & {
+  writtenAt?: string;
   reader?: DeepPartial<ReaderSettings>;
 };
 

@@ -1,4 +1,4 @@
-import { type ReactNode, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { type ReactNode, useCallback, useLayoutEffect, useRef, useState } from 'react';
 import type { Slot } from './stack';
 
 type Edges = { up: boolean; down: boolean; hidden: number };
@@ -27,6 +27,7 @@ export function LaneGroup({
   version,
   smooth,
   onScrolled,
+  scrollPositions,
   children,
 }: {
   groupKey: string;
@@ -37,12 +38,12 @@ export function LaneGroup({
   smooth: boolean;
   /** The group scrolled inside itself, so anything drawn to a block must follow. */
   onScrolled: () => void;
+  /** Preserve the internal scroll offset while this group leaves the window. */
+  scrollPositions: Map<string, number>;
   children: ReactNode;
 }) {
   const scroller = useRef<HTMLDivElement>(null);
   const [edges, setEdges] = useState<Edges>(NO_EDGES);
-  // Moves animate only once the group has been placed, so it never slides in from the top.
-  const [armed, setArmed] = useState(false);
   const measure = useCallback(() => {
     const el = scroller.current;
     if (!el) return;
@@ -53,20 +54,17 @@ export function LaneGroup({
         : next,
     );
   }, []);
+  useLayoutEffect(() => {
+    if (scroller.current) scroller.current.scrollTop = scrollPositions.get(groupKey) ?? 0;
+  }, [groupKey, scrollPositions]);
   // biome-ignore lint/correctness/useExhaustiveDependencies: the slot and version are the triggers.
   useLayoutEffect(measure, [measure, slot?.max, slot?.top, version]);
   const placed = slot !== undefined;
-  useEffect(() => {
-    if (!placed) return;
-    const frame = requestAnimationFrame(() => setArmed(true));
-    return () => cancelAnimationFrame(frame);
-  }, [placed]);
   return (
     <div
       className="silo-lgroup"
       data-group={groupKey}
       data-placed={placed}
-      data-armed={armed}
       style={{ top: slot?.top ?? 0 }}
     >
       <div
@@ -75,7 +73,8 @@ export function LaneGroup({
         data-up={edges.up}
         data-down={edges.down}
         style={{ maxHeight: slot?.max ?? 'none' }}
-        onScroll={() => {
+        onScroll={(event) => {
+          scrollPositions.set(groupKey, event.currentTarget.scrollTop);
           measure();
           onScrolled();
         }}

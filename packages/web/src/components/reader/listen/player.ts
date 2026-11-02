@@ -11,7 +11,7 @@ import {
 } from './schedule';
 import type { Segment } from './segments';
 import { buildUnits, type Unit } from './speechPlan';
-import { stretch } from './stretch';
+import { StretchProcessor } from './stretchProcessor';
 import { type Job, jobKey, jobSeconds, SynthQueue } from './synthQueue';
 
 /** How often the player checks its audio clock. */
@@ -42,6 +42,7 @@ export type PlayerDeps = {
   settings: () => PlayerSettings;
   events: PlayerEvents;
   now?: () => number;
+  transform?: Pick<StretchProcessor, 'process' | 'cancel'>;
 };
 
 type Plan = {
@@ -77,12 +78,16 @@ export class Player {
   private silenceSkipUntil = 0;
   /** Units before this index have played and let go of their audio. */
   private released = 0;
+  private readonly transform: Pick<StretchProcessor, 'process' | 'cancel'>;
+  private readonly transforming = new Set<string>();
+  private readonly subscriptions = new Map<Job, () => void>();
 
   constructor(
     private readonly deps: PlayerDeps,
     cache = new ReplayCache(),
   ) {
     this.queue = new SynthQueue(cache);
+    this.transform = deps.transform ?? new StretchProcessor();
   }
 
   private get clock(): number {
@@ -95,18 +100,10 @@ export class Player {
   }
 
   /** Start speaking at a sentence with a loaded engine. */
-  start(engine: TtsEngine, from: number): void {
+  start(engine: TtsEngine, from: number, prepared?: Unit[]): void {
     this.press();
-    const units = buildUnits(this.deps.segments(), from, this.deps.settings().pauses);
-    // Warm-up work for these units is kept, so Play after a warm-up does not synthesize again.
-    const { rate, voice, pauses } = this.deps.settings();
-    const speed = engine.supportsSpeed ? rate : 1;
-    const keep = new Set(
-      units
-        .slice(0, WARM_UNITS)
-        .map((u) => jobKey(engine, voice, speed, u.text, pauses !== 'natural')),
-    );
-    this.halt(true, keep);
+    const units = prepared ?? buildUnits(this.deps.segments(), from, this.deps.settings().pauses);
+    this.prepare(engine, from, units);
     const token = this.generation;
     this.active = true;
     this.engine = engine;
@@ -122,14 +119,35 @@ export class Player {
     this.tick();
   }
 
+  /** Choose useful synthesis keys before stopping sound or clearing any work. */
+  prepare(engine: TtsEngine | undefined, from: number, units?: Unit[]): Unit[] {
+    const { rate, voice, pauses } = this.deps.settings();
+    const target = units ?? buildUnits(this.deps.segments(), from, pauses);
+    const keep = new Set<string>();
+    if (engine) {
+      const speed = engine.supportsSpeed ? rate : 1;
+      let seconds = 0;
+      for (const unit of target) {
+        if (keep.size >= this.aheadLimit(engine) || aheadEnough(seconds, keep.size)) break;
+        keep.add(jobKey(engine, voice, speed, unit.text, pauses !== 'natural'));
+        seconds += unit.text.length / CHARS_PER_SECOND / rate;
+      }
+    }
+    this.halt(true, keep);
+    return target;
+  }
+
+  /** Whole-waveform synthesis cannot be interrupted; keep only the current and next unit. */
+  private aheadLimit(engine = this.engine): number {
+    return engine?.id === 'kokoro' ? WARM_UNITS : MAX_AHEAD + 1;
+  }
+
   /** Synthesize the first units from a sentence now, so Play later is instant. */
   warm(engine: TtsEngine, from: number): void {
     const { rate, voice, pauses } = this.deps.settings();
     const speed = engine.supportsSpeed ? rate : 1;
-    for (const unit of buildUnits(this.deps.segments(), from, this.deps.settings().pauses).slice(
-      0,
-      WARM_UNITS,
-    )) {
+    const units = this.prepare(engine, from);
+    for (const unit of units.slice(0, WARM_UNITS)) {
       this.queue.request(engine, unit.text, voice, speed, WARM, pauses !== 'natural');
     }
   }
@@ -140,6 +158,10 @@ export class Player {
     this.active = false;
     clearInterval(this.timer);
     this.queue.clear(keep);
+    this.transform.cancel();
+    this.transforming.clear();
+    for (const [job, listener] of this.subscriptions) job.listeners.delete(listener);
+    this.subscriptions.clear();
     for (const node of this.sources) {
       node.onended = null;
       try {
@@ -178,27 +200,42 @@ export class Player {
       pauses !== 'natural',
     );
     const token = this.generation;
-    job.listeners.add(() => {
-      if (token === this.generation) this.step();
-    });
+    const ready = () => {
+      if (token !== this.generation) return;
+      this.prepareAudio(job);
+      this.step();
+    };
+    if (!this.subscriptions.has(job)) {
+      job.listeners.add(ready);
+      this.subscriptions.set(job, ready);
+    }
     this.plan.jobs[index] = job;
+    this.prepareAudio(job);
     this.cursor.requested = index + 1;
   }
 
-  /** The unit's whole waveform, stretched to the current speed when the engine has no speed option. */
-  private whole(job: Job, rate: number): Float32Array {
+  /** Transform lookahead as soon as synthesis finishes, before it reaches the audio deadline. */
+  private prepareAudio(job: Job): void {
+    const { rate } = this.deps.settings();
+    if (!job.done || this.engine?.supportsSpeed || Math.abs(rate - 1) <= 0.01) return;
     const key = `${job.key}|x${rate}`;
-    const cached = this.queue.cache.get(key)?.chunks[0];
-    if (cached) return cached;
-    const joined = new Float32Array(job.chunks.reduce((sum, chunk) => sum + chunk.length, 0));
-    let offset = 0;
-    for (const chunk of job.chunks) {
-      joined.set(chunk, offset);
-      offset += chunk.length;
-    }
-    const fast = stretch(joined, rate);
-    this.queue.cache.set(key, { chunks: [fast], sampleRate: job.sampleRate });
-    return fast;
+    if (this.queue.cache.get(key) || this.transforming.has(key)) return;
+    this.transforming.add(key);
+    const token = this.generation;
+    void this.transform.process(job.chunks, rate).then(
+      (pcm) => {
+        if (token !== this.generation) return;
+        this.transforming.delete(key);
+        this.queue.cache.set(key, { chunks: [pcm], sampleRate: job.sampleRate });
+        this.step();
+      },
+      (reason: unknown) => {
+        if (token !== this.generation) return;
+        this.transforming.delete(key);
+        this.halt();
+        this.deps.events.failed(reason instanceof Error ? reason.message : String(reason));
+      },
+    );
   }
 
   private schedule(pcm: Float32Array, sampleRate: number, silence = false): number {
@@ -271,17 +308,22 @@ export class Player {
     );
   }
 
+  private scheduleStretched(index: number, job: Job, rate: number): boolean {
+    if (!job.done) return false;
+    const pcm = this.queue.cache.get(`${job.key}|x${rate}`)?.chunks[0];
+    if (!pcm) {
+      this.prepareAudio(job);
+      return false;
+    }
+    this.beginUnit(index, this.schedule(pcm, job.sampleRate));
+    this.finishUnit(index, pcm.length / job.sampleRate);
+    return true;
+  }
+
   /** Schedule a unit's audio that is ready. Returns true when the unit is fully scheduled. */
   private scheduleUnit(u: number, job: Job, stretching: boolean, rate: number): boolean {
     const { plan } = this;
-    if (stretching) {
-      // Pitch-preserving speed needs the whole unit, so it does not stream.
-      if (!job.done) return false;
-      const pcm = this.whole(job, rate);
-      this.beginUnit(u, this.schedule(pcm, job.sampleRate));
-      this.finishUnit(u, pcm.length / job.sampleRate);
-      return true;
-    }
+    if (stretching) return this.scheduleStretched(u, job, rate);
     while ((plan.scheduled[u] ?? 0) < job.chunks.length) {
       const chunk = plan.scheduled[u] ?? 0;
       const at = this.schedule(
@@ -346,10 +388,18 @@ export class Player {
       plan.unitStart.findLastIndex((start) => start !== undefined && start <= audio.currentTime),
     );
     // A unit that has played lets go of its audio; going back reads the replay cache.
-    for (; this.released < playing; this.released += 1) plan.jobs[this.released] = undefined;
+    for (; this.released < playing; this.released += 1) {
+      const job = plan.jobs[this.released];
+      const listener = job && this.subscriptions.get(job);
+      if (job && listener) {
+        job.listeners.delete(listener);
+        this.subscriptions.delete(job);
+      }
+      plan.jobs[this.released] = undefined;
+    }
     for (;;) {
       const next = cursor.requested;
-      if (next >= plan.units.length || next - playing > MAX_AHEAD) break;
+      if (next >= plan.units.length || next - playing >= this.aheadLimit()) break;
       if (aheadEnough(this.secondsAhead(playing, next, rate), next - playing)) break;
       this.request(next, next);
     }

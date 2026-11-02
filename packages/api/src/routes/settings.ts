@@ -2,6 +2,7 @@ import { AI_PROVIDER_KINDS, getAllSettings, readerPatchSchema, updateSettings } 
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { operatorOnlyFailure } from '../operator-only.js';
+import { readerBodyLimit } from '../reader-body-limit.js';
 
 /**
  * `PATCH /api/settings` body schema — every field OPTIONAL (an empty body is
@@ -94,6 +95,7 @@ const settingsPatchBodySchema = z
     // Synced reader preferences: a partial value (any subset of fields), merged over the stored
     // one by core. The shape comes from core, so the bounds have one source.
     reader: readerPatchSchema.optional(),
+    writtenAt: z.iso.datetime({ offset: true }).optional(),
   })
   .strict();
 
@@ -122,13 +124,14 @@ export function registerSettingsRoutes(app: Hono): void {
     return c.json(settings);
   });
 
-  app.patch('/settings', async (c) => {
+  app.patch('/settings', readerBodyLimit, async (c) => {
     const body = settingsPatchBodySchema.parse(await c.req.json().catch(() => ({})));
     if (body.ai !== undefined) {
       const denied = operatorOnlyFailure(c);
       if (denied) return denied;
     }
-    const settings = await updateSettings(body);
+    const { writtenAt, ...patch } = body;
+    const settings = await updateSettings(patch, writtenAt ? new Date(writtenAt) : undefined);
     return c.json(settings);
   });
 }

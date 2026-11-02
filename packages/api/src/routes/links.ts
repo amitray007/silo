@@ -60,6 +60,7 @@ const idParamSchema = z.object({
  */
 const detailQuerySchema = z
   .object({
+    view: z.literal('reader').optional(),
     textOffset: z.coerce.number().int().min(0).optional(),
     textLimit: z.coerce.number().int().min(1).optional(),
   })
@@ -144,7 +145,7 @@ export function registerLinksRoutes(app: Hono): void {
 
   app.get('/links/:id', async (c) => {
     const { id } = idParamSchema.parse({ id: c.req.param('id') });
-    const { textOffset, textLimit } = detailQuerySchema.parse(c.req.query());
+    const { textOffset, textLimit, view } = detailQuerySchema.parse(c.req.query());
 
     if (textOffset !== undefined && textLimit !== undefined) {
       const windowed = await getById(id, { textWindow: { offset: textOffset, limit: textLimit } });
@@ -154,7 +155,7 @@ export function registerLinksRoutes(app: Hono): void {
       return c.json({ link: toLinkWithTextWindowJson(windowed) });
     }
 
-    const link = await getById(id);
+    const link = await getById(id, { reader: view === 'reader' });
     if (!link) {
       return c.json({ error: 'not_found', message: `No link with id ${id}` }, 404);
     }

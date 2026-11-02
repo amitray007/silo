@@ -135,7 +135,7 @@ function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
     `tags: ${link.tags.length > 0 ? link.tags.join(', ') : '(none)'}`,
     link.notes ? `note: ${link.notes}` : undefined,
     link.readingPosition
-      ? `reading position: ${Math.round(link.readingPosition.position * 100)}% of the article read (saved ${link.readingPosition.updatedAt.toISOString()})`
+      ? `reading position: ${Math.round(link.readingPosition.position * 100)}% of the article read (source ${link.readingPosition.source}, saved ${link.readingPosition.updatedAt.toISOString()})`
       : undefined,
     ...highlightLines(link),
     link.extractedText

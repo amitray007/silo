@@ -190,9 +190,11 @@ async function apiRequest<T>(
   method: string,
   body?: unknown,
   signal?: AbortSignal,
+  keepalive = false,
 ): Promise<T> {
   const response = await apiFetch(path, {
     ...(signal ? { signal } : {}),
+    ...(keepalive ? { keepalive: true } : {}),
     method,
     headers: {
       'X-Silo-CSRF': '1',
@@ -214,8 +216,8 @@ export function apiPost<T>(path: string, body: unknown): Promise<T> {
 }
 
 /** `PUT`s `body` as JSON to `path`. Same `ApiError` contract as `apiPost`. */
-export function apiPut<T>(path: string, body: unknown): Promise<T> {
-  return apiRequest<T>(path, 'PUT', body);
+export function apiPut<T>(path: string, body: unknown, keepalive = false): Promise<T> {
+  return apiRequest<T>(path, 'PUT', body, undefined, keepalive);
 }
 
 /**
@@ -242,15 +244,7 @@ export function apiDelete<T>(path: string): Promise<T> {
   return apiRequest<T>(path, 'DELETE');
 }
 
-/**
- * Fire-and-forget `PUT` that survives the page closing (`keepalive`), for the `pagehide` save.
- * No response is read and a failure is dropped: the page is already going away.
- */
-export function apiPutKeepalive(path: string, body: unknown): void {
-  keepaliveRequest('PUT', path, body);
-}
-
-/** Like `apiPutKeepalive`, for a `PATCH`. */
+/** Fire-and-forget PATCH that survives page close; failures cannot be shown after unload. */
 export function apiPatchKeepalive(path: string, body: unknown): void {
   keepaliveRequest('PATCH', path, body);
 }

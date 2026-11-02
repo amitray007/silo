@@ -17,6 +17,7 @@ import './styles/reader-highlights.css';
 import './styles/reader-listen.css';
 import './styles/reader-notes.css';
 import './styles/reader-pencil.css';
+import './styles/reader-place.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
 const queryClient = new QueryClient({

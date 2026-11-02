@@ -1,11 +1,19 @@
-import { Component, lazy, type ReactNode, Suspense, useEffect, useState } from 'react';
+import {
+  Component,
+  lazy,
+  type ReactNode,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import { useGutter } from '../gutter';
 import type { HighlightsApi } from '../highlights/useHighlights';
 import { GutterMarkers } from './GutterMarkers';
 import { useGroups } from './useGroups';
 import type { NotesLaneApi } from './useNotesLane';
 
-// The lane brings the spring engine with it, so it loads the first time it opens.
+// Prepare the small visible window at idle so opening does not mount it on the spring's first frame.
 const NotesLane = lazy(() =>
   import('./NotesLane').then((module) => ({ default: module.NotesLane })),
 );
@@ -24,10 +32,10 @@ class LaneBoundary extends Component<{ onFail: () => void; children: ReactNode }
   }
 }
 
-/** A layer in the scroll area, beside the article, that the lane and its connector draw in. */
+/** A layer in the prose frame, beside the prose, that the lane and its connector draw in. */
 function useScrollLayer(scroll: HTMLElement | null, wanted: boolean): HTMLElement | null {
   const [layer, setLayer] = useState<HTMLElement | null>(null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!scroll || !wanted) return;
     const el = document.createElement('div');
     el.className = 'silo-notes-layer';
@@ -63,27 +71,37 @@ export function NotesLayer({
   // Orphans need the lane's layout too, so an open lane measures even with nothing resolved.
   const groups = useGroups(prose, scroll, resolved, resolved.length > 0 || lane.open);
   const frame = prose?.parentElement ?? null;
-  const { gutter, left } = useGutter(frame, scroll);
+  const gutter = useGutter();
   const [overlay, setOverlay] = useState(false);
-  const layer = useScrollLayer(scroll, lane.used);
+  const [warm, setWarm] = useState(false);
+  useEffect(() => {
+    if (!resolved.length || lane.used) return;
+    if ('requestIdleCallback' in window) {
+      const idle = window.requestIdleCallback(() => setWarm(true), { timeout: 1000 });
+      return () => window.cancelIdleCallback(idle);
+    }
+    const timer = setTimeout(() => setWarm(true), 150);
+    return () => clearTimeout(timer);
+  }, [resolved.length, lane.used]);
+  const layer = useScrollLayer(frame, lane.used || warm);
   if (!prose || !scroll || !frame) return null;
   return (
     <>
       <GutterMarkers
         frame={frame}
-        groups={groups.groups}
-        frameTop={groups.frameTop}
+        groups={groups}
+        scroll={scroll}
         gutter={gutter}
-        left={left}
         resumeY={resumeY}
         lane={lane}
         hidden={overlay}
       />
-      {lane.used && layer && panel && (
+      {(lane.used || warm) && layer && panel && (
         <LaneBoundary
           onFail={() => {
+            setWarm(false);
             lane.release();
-            api.report("Couldn't open the notes lane");
+            if (lane.used) api.report("Couldn't open the notes lane");
           }}
         >
           <Suspense fallback={null}>

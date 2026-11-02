@@ -9,6 +9,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { kokoroDtype } from '../components/reader/listen/engines/files';
 import { fetchTtsManifest } from '../components/reader/listen/engines/manifest';
 import type { HighlightColor } from '../lib/highlights';
+import type { ReaderSettings } from '../lib/readerPrefs';
+import { advanceReaderPrefsVersion, readerPrefsVersion } from '../lib/readerPrefsVersion';
+import type { DeepPartial } from '../lib/readerSync';
 import { mergeDeep } from '../lib/readerSync';
 import {
   clearTitleReveal,
@@ -20,7 +23,7 @@ import {
   transferTitleReveal,
 } from '../lib/titleReveals';
 import { deriveTitleFromUrl } from '../lib/url';
-import { apiDelete, apiGet, apiPatch, apiPost, apiPut, apiPutKeepalive } from './client';
+import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './client';
 import type {
   AccessTokensResponse,
   AiProviderKind,
@@ -43,6 +46,7 @@ import type {
   LiveReaderJson,
   OAuthClientsResponse,
   ReadingPositionJson,
+  ReadingPositionSource,
   RestoreResponse,
   SaveAiKeyResponse,
   SavedLinksResponse,
@@ -196,14 +200,65 @@ export function useRefreshReader(linkId: string) {
 
 /** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.link(id ?? ''),
-    queryFn: () => apiGet<LinkResponse>(`/api/links/${encodeURIComponent(id ?? '')}`),
+    queryFn: async ({ signal }) => {
+      const version = readerPrefsVersion(client, id ?? '');
+      const path = `/api/links/${encodeURIComponent(id ?? '')}`;
+      let data = await apiGet<LinkResponse>(`${path}?view=reader`, signal);
+      if (data.link.readerTextOmitted) {
+        try {
+          // Share the Reader query with useLiveReader. A failed HTML read still gets full text.
+          await client.fetchQuery({
+            queryKey: queryKeys.liveReader(id ?? ''),
+            queryFn: ({ signal }) => apiGet<LiveReaderJson>(`${path}/reader`, signal),
+            staleTime: 10 * 60 * 1000,
+            retry: false,
+          });
+        } catch {
+          data = await apiGet<LinkResponse>(path, signal);
+        }
+      }
+      return version === 0
+        ? data
+        : { ...data, link: { ...data.link, readerPrefsVersion: version } };
+    },
     enabled: Boolean(id) && (options.enabled ?? true),
     retry: false,
     refetchInterval: (query) =>
       query.state.data?.link.captureStatus === 'enriching' ? 1500 : false,
   });
+}
+
+/** The article sync queue owns optimistic state and rollback; this hook keeps detail cache current. */
+export function useUpdateReaderPrefs(linkId: string) {
+  const client = useQueryClient();
+  return useCallback(
+    async (patch: DeepPartial<ReaderSettings>, writtenAt: string) => {
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
+      const { readerPrefs } = await apiPatch<{ readerPrefs: DeepPartial<ReaderSettings> }>(
+        `/api/links/${encodeURIComponent(linkId)}/reader-prefs`,
+        { ...patch, writtenAt },
+      );
+      advanceReaderPrefsVersion(client, linkId);
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
+      client.setQueryData<LinkResponse>(queryKeys.link(linkId), (data) =>
+        data
+          ? {
+              ...data,
+              link: {
+                ...data.link,
+                readerPrefs,
+                readerPrefsVersion: readerPrefsVersion(client, linkId),
+              },
+            }
+          : data,
+      );
+      return readerPrefs;
+    },
+    [client, linkId],
+  );
 }
 
 function withReadingPosition(
@@ -213,15 +268,24 @@ function withReadingPosition(
   return data && { ...data, link: { ...data.link, readingPosition } };
 }
 
-type SaveQueue = {
-  /** The request in flight, plus any queued behind it. */
-  flight: Promise<void> | null;
-  /** The newest position waiting for the one in flight to finish. */
-  pending: { position: number; generation: number } | null;
-  /** Counts saves, so a response for an older one never overwrites a newer position. */
+type PositionWrite = {
+  position: number | null;
+  source: ReadingPositionSource;
   generation: number;
-  /** The last position the server confirmed. */
+  writtenAt: string;
+  keepalive: boolean;
+};
+
+type SaveQueue = {
+  flight: Promise<void> | null;
+  pending: PositionWrite | null;
+  /** Keepalive requests leave immediately; later writes wait for all of them. */
+  urgent: Promise<void>[];
+  generation: number;
+  writtenAt: number;
+  confirmedGeneration: number;
   confirmed: ReadingPositionJson | null | undefined;
+  failure: { generation: number; error: unknown } | null;
 };
 
 /** Set the link's cached reading position, or clear it. */
@@ -235,72 +299,127 @@ function putCachedPosition(
   );
 }
 
-/** Send one position, then whatever newer one queued behind it. See `useSaveReadingPosition`. */
+/** Send a write, retaining only the newest confirmed result or failure. */
+async function sendPosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  write: PositionWrite,
+): Promise<void> {
+  const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
+  try {
+    let saved: ReadingPositionJson | null;
+    if (write.position === null) {
+      await apiDelete(path);
+      saved = null;
+    } else {
+      const response = await apiPut<{ readingPosition: ReadingPositionJson }>(
+        path,
+        {
+          position: write.position,
+          source: write.source,
+          writtenAt: write.writtenAt,
+        },
+        write.keepalive,
+      );
+      saved = response.readingPosition;
+    }
+    if (write.generation >= q.confirmedGeneration) {
+      q.confirmed = saved;
+      q.confirmedGeneration = write.generation;
+    }
+    if (write.generation === q.generation) putCachedPosition(queryClient, id, saved);
+  } catch (error) {
+    if (!q.failure || write.generation > q.failure.generation)
+      q.failure = { generation: write.generation, error };
+  }
+}
+
+/** Drain normal writes and all immediate keepalives before sending a later write or Remove. */
 async function drainSaves(
   queryClient: ReturnType<typeof useQueryClient>,
   q: SaveQueue,
   id: string,
-  position: number,
-  sent: number,
+  write: PositionWrite,
 ): Promise<void> {
-  const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
-  try {
-    const saved = await apiPut<{ readingPosition: ReadingPositionJson }>(path, { position });
-    q.confirmed = saved.readingPosition;
-    if (sent === q.generation) putCachedPosition(queryClient, id, saved.readingPosition);
-  } catch (error) {
-    // A newer position is waiting: it goes next, and its result decides what the cache shows.
-    if (!q.pending) {
-      if (sent === q.generation && q.confirmed !== undefined)
-        putCachedPosition(queryClient, id, q.confirmed);
-      throw error;
-    }
-  }
+  await sendPosition(queryClient, q, id, write);
+  while (q.urgent.length) await Promise.all(q.urgent.splice(0));
   const waiting = q.pending;
   q.pending = null;
-  if (waiting) await drainSaves(queryClient, q, id, waiting.position, waiting.generation);
+  if (waiting) return drainSaves(queryClient, q, id, waiting);
+  if (q.failure?.generation === q.generation) {
+    if (q.confirmed !== undefined) putCachedPosition(queryClient, id, q.confirmed);
+    throw q.failure.error;
+  }
+}
+
+function queuePosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  write: PositionWrite,
+): Promise<void> {
+  if (q.flight) {
+    if (write.keepalive && write.position !== null) {
+      q.pending = null;
+      q.urgent.push(sendPosition(queryClient, q, id, write));
+    } else q.pending = write;
+    return q.flight;
+  }
+  q.flight = drainSaves(queryClient, q, id, write).finally(() => {
+    q.flight = null;
+  });
+  return q.flight;
 }
 
 /**
- * Save where the reader stopped (`PUT /api/links/:id/reading-position`). The link query updates
- * at once, so the resume point is right without a refetch, and an in-flight refetch is
- * cancelled so it cannot overwrite the new value. Saves run one at a time: while a request is
- * in flight the newest position waits behind it, so a slow request cannot land after a later
- * one. The server's timestamp replaces the local one only when no newer save has started. The
- * promise settles when the queue drains and rejects when the last request failed; the cache
- * then returns to the last confirmed position. `keepalive` sends one request that survives the
- * page closing, outside the queue.
+ * Optimistically save the link's place. Normal writes coalesce behind the active request.
+ * Pagehide sends immediately with a newer timestamp and supersedes queued work; the server
+ * rejects stale PUTs. Later saves and Remove wait for every outstanding request to finish.
  */
 export function useSaveReadingPosition(id: string) {
   const queryClient = useQueryClient();
   const queue = useRef<SaveQueue>({
     flight: null,
     pending: null,
+    urgent: [],
     generation: 0,
+    writtenAt: 0,
+    confirmedGeneration: 0,
     confirmed: undefined,
+    failure: null,
   });
   return useCallback(
-    (position: number, options: { keepalive?: boolean } = {}): Promise<void> => {
+    (
+      position: number | null,
+      options: { keepalive?: boolean; source?: ReadingPositionSource } = {},
+    ): Promise<void> => {
+      const source = options.source ?? 'mark';
       const key = queryKeys.link(id);
-      const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
       const q = queue.current;
       const generation = ++q.generation;
-      if (q.confirmed === undefined)
-        q.confirmed = queryClient.getQueryData<LinkResponse>(key)?.link.readingPosition ?? null;
+      const cached = queryClient.getQueryData<LinkResponse>(key)?.link.readingPosition;
+      q.writtenAt = Math.max(
+        Date.now(),
+        q.writtenAt + 1,
+        cached ? Date.parse(cached.updatedAt) + 1 : 0,
+      );
+      const writtenAt = new Date(q.writtenAt).toISOString();
+      const write = {
+        position,
+        source,
+        generation,
+        writtenAt,
+        keepalive: options.keepalive ?? false,
+      };
+      if (q.confirmed === undefined) q.confirmed = cached ?? null;
       void queryClient.cancelQueries({ queryKey: key });
-      putCachedPosition(queryClient, id, { position, updatedAt: new Date().toISOString() });
-      if (options.keepalive) {
-        apiPutKeepalive(path, { position });
-        return Promise.resolve();
-      }
-      if (q.flight) {
-        q.pending = { position, generation };
-        return q.flight;
-      }
-      q.flight = drainSaves(queryClient, q, id, position, generation).finally(() => {
-        q.flight = null;
-      });
-      return q.flight;
+      putCachedPosition(
+        queryClient,
+        id,
+        position === null ? null : { position, source, updatedAt: writtenAt },
+      );
+      return queuePosition(queryClient, q, id, write);
     },
     [id, queryClient],
   );

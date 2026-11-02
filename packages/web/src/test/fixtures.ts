@@ -9,6 +9,7 @@ import type { LinkJson, SourceData, TrashLinkJson } from '../api/types';
 export function makeLink(overrides: Partial<LinkJson> = {}): LinkJson {
   return {
     id: '1',
+    readerPrefs: {},
     url: 'https://example.com',
     title: 'Example',
     description: null,

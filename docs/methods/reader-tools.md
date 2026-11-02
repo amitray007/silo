@@ -613,3 +613,167 @@ Reader follows. A second browser profile picks up the same settings. Download
 a voice from Settings, then press Listen: no download. Remove it: the next
 Listen downloads again. No engine name shows a size outside Settings. Light,
 dark and sepia; 1440 and 390.
+
+## Slice 6: Saved place
+
+### Why
+
+The owner wants to stop reading or listening and pick up later, for example
+the next day. Slice 2 already saves where the Pencil stops. This slice turns
+that into one saved place per link that the Pencil, read aloud and a manual
+mark all write, with a bookmark in the left gutter. The mockup is
+`prototype/reader-tools` at `1e4b221`, variant B, `?mark=ribbon`.
+
+### Decisions
+
+- **One place per link.** Keep the `reading_positions` row and its `position`
+  (a share of the article's words, 0 to 1). Add `source` (`pencil`, `listen`
+  or `mark`, default `pencil`) in migration `0029_reading_position_source`.
+  The latest write wins. Scrolling never saves.
+- **Who writes it.** The Pencil writes it when it stops, as today. Read aloud
+  writes the start of the current sentence when it pauses, closes, or the page
+  hides (keepalive). It does not write on every sentence. A manual mark writes
+  the start of the marked paragraph.
+- **Who reads it.** The ribbon sits at the paragraph that holds the saved word.
+  The Pencil resumes at that word's line. Listen starts at the sentence that
+  holds it, unless a sentence was clicked.
+- **One marker.** The ribbon replaces slice 2's right-gutter resume button.
+  P still resumes the Pencil from the saved place.
+- **API and MCP.** `PUT /api/links/:id/reading-position` takes an optional
+  `source`, default `mark`. Link JSON returns `{ position, source, updatedAt }`.
+  MCP follows the parity rules: an agent write records `mark`. Export and
+  import carry `source`, and old files import with `pencil`.
+- **Feed posts.** Feed posts cannot be edited, so they show no ribbon, no
+  hover and no B.
+
+### UI
+
+Match the mockup exactly:
+
+- **Ribbon.** The filled bookmark glyph sits in the left gutter column. It
+  mirrors the right-gutter note markers in size, hit area, hover circle and
+  distance from the text, and it is centred on the marked paragraph's first
+  line box. Text never moves.
+- **Label row.** It sits in the paragraph gap above the marked paragraph:
+  - a 1.5 to 2px elbow from the ribbon;
+  - the muted label "Continue here · Yesterday", or "Continue listening here"
+    when the source is `listen`, with the time relative to `updatedAt`;
+  - an 8px space, then a dashed rule (4px dashes, 4px gaps) that ends exactly
+    at the column's right text edge.
+  - Spacing is 18px above the label and 4px below it. The gap opens over
+    200ms ease-out, is instant under reduced motion, and keeps scrollTop
+    stable.
+- **Outline dial.** Where the ribbon falls inside the dial's band, a 46px
+  window clears the dial ticks and hit areas behind it.
+- **Popover.** A click on the ribbon or the label opens "Continue here · time",
+  Continue with Pencil, Listen from here, and Remove. It opens below and to
+  the right and never covers the dial.
+- **Manual mark.** Hovering a paragraph's first line, within its line boxes
+  only, shows a faint outline ribbon. A click sets the place there. B marks
+  the paragraph nearest the top of the viewport.
+- **Continue pill.** "Continue · 42%" sits above the dock when a saved place
+  exists and is off screen. It scrolls the place to about one third down the
+  viewport. Escape or scrolling past the place dismisses it.
+
+### Tests
+
+- **Core and API, on real Postgres:** source defaults and validation; old rows
+  read as `pencil`; the link JSON shape; MCP round trip and parity; export and
+  import with and without `source`.
+- **Web:**
+  - mapping a share to a paragraph and to a sentence;
+  - read aloud saving on pause, close and pagehide, but not per sentence;
+  - Listen starting at the saved sentence;
+  - the Pencil resuming;
+  - the hover hit test, B, the popover actions, and Remove;
+  - the pill showing, jumping and dismissing;
+  - the dial window.
+
+### QA and mockup parity
+
+On real links at 1440, 1100 and 390, in light, dark and sepia:
+
+- mark, reload, and see the same place;
+- listen, pause, reopen, and confirm Listen resumes at that sentence;
+- stop the Pencil and confirm the ribbon moves;
+- Remove;
+- a mark next to a note marker;
+- a mark inside the dial band;
+- a feed post shows no ribbon.
+
+Then put it side by side with the mockup and fix every unintended difference.
+
+## Slice 7: Per-article reader choices
+
+### Why
+
+Slice 5 made every change in an article update the global `reader` setting.
+The owner wants the opposite: Settings → Reader holds the defaults, and a
+change made inside an article stays with that article. This applies to
+everything in the reader: Type, width, Pencil, the default highlight colour,
+and read aloud (engine, voice, speed, pauses). There is no "use as default"
+or reset action; defaults change only in Settings.
+
+### Decisions
+
+- **Partial overrides per link.** A new table `link_reader_prefs` (migration
+  `0030_link_reader_prefs`) has these columns:
+  - `link_id` (pk, cascade);
+  - `prefs` jsonb, which holds only the fields changed in that article, in
+    the shape of the `reader` setting's `patch` mode;
+  - `updated_at`.
+  A field the article never changed keeps following the Settings default, so
+  a later default change still reaches it.
+- **Effective value.** It is the default merged with the link's overrides,
+  field by field. Core validates overrides with the existing `patch` schema,
+  and stored rows are read with the `stored` fallbacks per field.
+- **Writes.** Every control in the Reader dock, its sheets, the Listen sheet
+  and the player writes the current link's override. None of them touches the
+  `reader` setting. Settings → Reader writes only the defaults. Writes are
+  optimistic, rolled back on error, debounced for steppers, and flushed on
+  pagehide with keepalive, reusing slice 5's sync machinery.
+- **API.** Single-link JSON adds `readerPrefs` (the partial overrides, or
+  `{}`), loaded in the same query path, with no N+1. A new
+  `PATCH /api/links/:id/reader-prefs` deep-merges a partial and returns the
+  stored overrides. `DELETE` clears them. Both use the standard error
+  envelope.
+- **No MCP tool and no export.** These are presentation choices, as decided
+  in slice 5. Restore merge moves the overrides with the link, like
+  highlights.
+- **Feed posts.** Feed posts cannot be written, so changes there apply for
+  the session only and are not saved.
+- **Slice 5 migration.** The one-time upload of local values still targets
+  the defaults. Existing synced values stay as the defaults.
+
+### Tests
+
+- **Core and API, on real Postgres:**
+  - merge and partial semantics, including a nested `readAloud.voices` change
+    that keeps the other engine's voice;
+  - validation bounds;
+  - unknown fields are rejected;
+  - cascade and restore move;
+  - the link JSON shape and leak guards.
+- **Web:**
+  - an in-article change writes the link override, not the setting;
+  - another article still uses the default;
+  - a Settings change reaches fields an article did not override, but not the
+    ones it did;
+  - reloading keeps the override;
+  - rollback on failure;
+  - feed posts stay session-only;
+  - the Listen sheet, player speed, Type sheet, width, Pencil and highlight
+    colour each follow the rule.
+
+### QA
+
+1. In article A, change the voice, speed, pauses, font size, width and Pencil
+   speed.
+2. Open article B. It shows the Settings defaults.
+3. Reload A. It keeps its changes.
+4. Change the defaults in Settings. B follows. A follows only for the fields
+   it never changed.
+5. Check a second browser profile. It sees A's overrides.
+6. Check a feed post. Changes there do not persist.
+
+Run this at 1440 and 390, in light, dark and sepia.
