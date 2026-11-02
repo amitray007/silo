@@ -41,10 +41,12 @@ export function useFeed(id: string) {
 export function useFeedPosts(id: string, enabled = true, tab: FeedTab = 'inbox') {
   return useInfiniteQuery({
     queryKey: queryKeys.feedPosts(id, tab),
-    queryFn: ({ pageParam }: { pageParam: string | undefined }) =>
-      apiGet<FeedPostsResponse>(
+    queryFn: async ({ pageParam }: { pageParam: string | undefined }) => {
+      const page = await apiGet<FeedPostsResponse>(
         `/api/feeds/${id}/posts?tab=${tab}${pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ''}`,
-      ),
+      );
+      return { ...page, links: page.links.map((link) => ({ ...link, extractedText: null })) };
+    },
     initialPageParam: undefined as string | undefined,
     getNextPageParam: (page: FeedPostsResponse) => page.nextCursor,
     enabled: enabled && Boolean(id),

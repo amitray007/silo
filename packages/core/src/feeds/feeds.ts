@@ -3,7 +3,7 @@ import { db, feedEntries, feeds, links } from '@silo/db';
 import { and, asc, desc, eq, inArray, isNotNull, isNull, lte, sql } from 'drizzle-orm';
 import { canonicalize } from '../links/canonicalize.js';
 import type { Tx } from '../links/executor.js';
-import { createFeedPost } from '../links/links.js';
+import { createFeedPost, toListResultRow } from '../links/links.js';
 import { whereFeed } from '../links/live.js';
 import {
   decodeListCursor,
@@ -270,7 +270,7 @@ export async function listFeedPosts(
     (row) => row.sortDate,
     (row) => row.link.id,
   );
-  return { links: hydrated, ...(nextCursor ? { nextCursor } : {}) };
+  return { links: hydrated.map(toListResultRow), ...(nextCursor ? { nextCursor } : {}) };
 }
 
 export async function listDueFeeds(now = new Date()): Promise<string[]> {

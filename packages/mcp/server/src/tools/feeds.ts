@@ -90,7 +90,7 @@ function registerFeedReads(server: McpServer): void {
       runFeedTool(async () => {
         const page = await listFeedPosts(feedId, { ...pageParams(limit, cursor), tab });
         const posts = page.links.map((link) => ({
-          ...toSnippetLinkContent({ ...link, snippet: link.extractedText?.slice(0, 280) ?? null }),
+          ...toSnippetLinkContent(link),
           feedId,
           publishedAt: link.publishedAt?.toISOString() ?? null,
           archivedAt: link.archivedAt?.toISOString() ?? null,
