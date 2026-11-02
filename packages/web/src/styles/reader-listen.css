@@ -8,13 +8,17 @@
 
 /* The dock turns into the player: the pill grows and holds the transport. */
 /* Both modes have a set width, so the pill animates between them. 456px is the width the five
-   tools fill; a narrow pane clamps it. */
+   tools fill (536px with Ask); a narrow pane clamps it. */
 .silo-reader-dock-pill {
   transition: width 260ms var(--ease-drawer);
 }
 .silo-reader-dock-pill[data-mode="tools"] {
   width: 456px;
   max-width: calc(100% - 24px);
+}
+/* The Librarian's Ask is a sixth tool. */
+.silo-reader-dock-pill[data-mode="tools"][data-ask="true"] {
+  width: 536px;
 }
 .silo-reader-dock-pill[data-mode="player"] {
   width: 600px;
@@ -261,5 +265,21 @@
     min-width: 0;
     padding: 0 6px;
     gap: 4px;
+  }
+  /* Six tools do not fit with labels: icons only, the name stays for screen readers. */
+  .silo-reader-dock-pill[data-mode="tools"][data-ask="true"] {
+    justify-content: space-between;
+  }
+  .silo-reader-dock-pill[data-mode="tools"][data-ask="true"] .silo-reader-dockbtn {
+    min-width: 44px;
+    padding: 0 10px;
+  }
+  .silo-reader-dock-pill[data-mode="tools"][data-ask="true"] .silo-reader-docklabel {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
 }

@@ -185,7 +185,7 @@ function DockButton({
       onClick={unavailable ? undefined : onToggle}
     >
       {tool.glyph}
-      {tool.label}
+      <span className="silo-reader-docklabel">{tool.label}</span>
       {count > 0 && <span className="silo-reader-dockbadge">{count}</span>}
     </button>
   );
@@ -223,7 +223,7 @@ function SplitDockButton({
         }}
       >
         {tool.glyph}
-        {tool.label}
+        <span className="silo-reader-docklabel">{tool.label}</span>
       </button>
       <button
         type="button"
@@ -421,6 +421,7 @@ export function ReaderDock({
             ref={pill}
             className="silo-reader-dock-pill"
             data-mode={listen.active ? 'player' : 'tools'}
+            data-ask={askReady}
             role="toolbar"
             aria-label="Reader tools"
           >
