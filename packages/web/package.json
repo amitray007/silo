@@ -29,7 +29,8 @@
     "react-dom": "catalog:",
     "react-router": "catalog:",
     "shiki": "catalog:",
-    "streamdown": "2.7.1"
+    "streamdown": "2.7.1",
+    "ai": "7.0.159"
   },
   "devDependencies": {
     "@silo/tsconfig": "workspace:*",

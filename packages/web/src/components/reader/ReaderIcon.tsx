@@ -1,4 +1,6 @@
 const paths = {
+  sparkles: 'm12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5zM20 2v4M18 4h4',
+  grid: 'M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z',
   rss: 'M4 11a9 9 0 0 1 9 9M4 4a16 16 0 0 1 16 16M4 20h.01',
   warning: 'M12 3 2 21h20L12 3ZM12 9v5M12 17h.01',
   sliders:

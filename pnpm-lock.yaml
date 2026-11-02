@@ -555,6 +555,9 @@ importers:
       '@tanstack/react-query':
         specifier: 'catalog:'
         version: 5.103.2(react@19.3.0)
+      ai:
+        specifier: 7.0.159
+        version: 7.0.159(zod@4.6.7)
       approx-string-match:
         specifier: 2.0.1
         version: 2.0.1
