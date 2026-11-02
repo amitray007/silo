@@ -9,15 +9,15 @@ The design was settled in a mockup with four rounds (Shelf artifact
 `art_ZkK3zpR37qP5Tv34L2Rc8w`, "Reader AI without clutter", round 2, layout
 "Dock chat · icons").
 
-**Status:** gate 1 approved by the owner ("lets go with the build", 2026-11-02).
+Status: gate 1 approved by the owner ("lets go with the build", 2026-11-02).
 Slices ship as stacked PRs.
 
 ## Product decisions (frozen)
 
 1. **Two entry points, no new panel, no sidebar.**
-   - The text-selection bar gets one **Ask** button. Its quick actions answer
+   - The text-selection bar gets one Ask button. Its quick actions answer
      below the passage (transient), or move into the chat.
-   - The reader dock gets an **Ask** button. It turns the dock into a chat bar;
+   - The reader dock gets an Ask button. It turns the dock into a chat bar;
      the conversation panel rises above it and folds back with the minus.
 2. **The notes lane does not change.** Notes stay as shipped. The only link
    between AI and notes: "Save as note" on an answer creates an ordinary
@@ -59,7 +59,7 @@ web (useChat) ──POST /api/librarian/chats/:id/messages──▶ api (Hono ro
                                      createSiloMcpServer() (the same 34 tools) ─▶ core
 ```
 
-- **Tools are the MCP tools, in process.** `@silo/app` builds
+- Tools are the MCP tools, in process. `@silo/app` builds
   `createSiloMcpServer()` once per API process, links it to an MCP `Client`
   with `InMemoryTransport.createLinkedPair()`, and adapts the client to a
   `LibrarianToolSource` port defined in core:
@@ -72,25 +72,25 @@ web (useChat) ──POST /api/librarian/chats/:id/messages──▶ api (Hono ro
   per-request context, and an in-memory call costs microseconds next to model
   latency. Boundary check: worker never imports `@silo/mcp-server`; only
   `@silo/app` wires them.
-- **Excluded from chat:** `export_links` (unbounded output). Every other tool is
+- Excluded from chat: `export_links` (unbounded output). Every other tool is
   exposed.
-- **Approval for destructive tools:** `trash_link`, `hard_delete_link`,
+- Approval for destructive tools: `trash_link`, `hard_delete_link`,
   `delete_tag`, `delete_highlight`, `unsubscribe_feed` use AI SDK 7
   `toolApproval: { name: 'user-approval' }` with
   `experimental_toolApprovalSecret` derived from `SILO_SECRET_KEY` (HKDF, label
   `silo-librarian-approval`). The web renders an approve/deny row on the tool
   part (`approval-requested`).
-- **A second runner, same rules.** `runAiFeature` stays the one runner for
+- A second runner, same rules. `runAiFeature` stays the one runner for
   background features. The chat adds `streamLibrarianReply` beside it, as
   `ai-foundation.md` planned. It uses `languageModelFor`, the per-feature model
   selection and readiness (`isAiFeatureOn('librarian')`). It never throws to the
   route: failures become fixed codes (`AI_ERROR_CODES`) in a stream error part.
-- **Feature registration.** Add `librarian` to `AI_FEATURES` (no plugin, so its
+- Feature registration. Add `librarian` to `AI_FEATURES` (no plugin, so its
   toggle and model picker show on the AI tab), its settings default
   `{ enabled: false, model: null }`, and the worker registry entry. The chat is
   the first feature with no non-AI fallback: its "fallback" is that Ask is
   absent. Update `docs/rules/ai.md` rule 1 to say so.
-- **Process.** The route runs in the API process (`@silo/app` `api-main.ts`
+- Process. The route runs in the API process (`@silo/app` `api-main.ts`
   registers both ports, next to `registerAiConnectionTester`). Where no runner is
   registered (the standalone `packages/api` main), the route returns
   `503 { error: 'unavailable' }`.
@@ -122,7 +122,7 @@ Indexes: `librarian_chats (link_id, updated_at desc, id)` and
 `(updated_at desc, id)` for the cursor lists.
 
 - The full transcript is always stored; the UI always shows all of it.
-- **Compaction** (slice 5) changes only what the model sees. Before each call,
+- Compaction (slice 5) changes only what the model sees. Before each call,
   estimate tokens of the model input (characters / 4). When it passes 60 % of
   the model's `contextWindow` (fallback 32k tokens), summarize every message
   except the last 6 into `summary` with one `generateText` call
@@ -186,18 +186,18 @@ provider key → fix → PR.
 
 | # | Slice | Ships |
 | --- | --- | --- |
-| 1 | **Dock chat, read-only** | `librarian` feature + settings + AI tab toggle/model; tables + core chat CRUD; both ports; worker runner with persona and read-only MCP tools; routes; web dock Ask → chat bar/panel with streaming; one chat per article that resumes; trace line |
-| 2 | **Write tools + approvals** | all tools except `export_links`; approval row; approval secret; denial handling |
-| 3 | **Selection Ask** | icon-only selection bar + Ask; note/pencil glyph swap; composer with quick actions; inline answer card; Save as note; Continue in Librarian (import); passage attached to the open chat |
-| 4 | **Chat history** | title menu with cursor-paged infinite list; new chat; delete with confirm; dot on the dock Ask |
-| 5 | **Compaction** | summary + `summary_through`; `pruneMessages`; token estimate; tests on a long transcript |
-| 6 | **Librarian page** | sidebar nav entry; all chats with infinite scroll and delete; chats not tied to an article; the persona published as an MCP prompt (`librarian`) so Claude Desktop gets the same behavior |
+| 1 | Dock chat, read-only | `librarian` feature + settings + AI tab toggle/model; tables + core chat CRUD; both ports; worker runner with persona and read-only MCP tools; routes; web dock Ask → chat bar/panel with streaming; one chat per article that resumes; trace line |
+| 2 | Write tools + approvals | all tools except `export_links`; approval row; approval secret; denial handling |
+| 3 | Selection Ask | icon-only selection bar + Ask; note/pencil glyph swap; composer with quick actions; inline answer card; Save as note; Continue in Librarian (import); passage attached to the open chat |
+| 4 | Chat history | title menu with cursor-paged infinite list; new chat; delete with confirm; dot on the dock Ask |
+| 5 | Compaction | summary + `summary_through`; `pruneMessages`; token estimate; tests on a long transcript |
+| 6 | Librarian page | sidebar nav entry; all chats with infinite scroll and delete; chats not tied to an article; the persona published as an MCP prompt (`librarian`) so Claude Desktop gets the same behavior |
 
 ### Slice 1 detail (the first PR)
 
 Units, built in parallel against the API contract above:
 
-- **1A backend (Sol):** feature registration, settings default and AI tab
+- 1A backend (Sol): feature registration, settings default and AI tab
   wiring; schema + migration; core `librarian/` module (chat CRUD with cursor
   pages, message save/replace, ports `setLibrarianRunner` and
   `setLibrarianToolSource` in `@silo/core/ai-credential`-style protected subpath
@@ -209,7 +209,7 @@ Units, built in parallel against the API contract above:
   (core CRUD against real Postgres; runner with a mock language model from
   `ai/test`; route auth 403 for named tokens; in-memory MCP tool source lists
   the expected tools).
-- **1B web (Terra):** `@ai-sdk/react`; dock Ask tool; `DockChat`; history-free
+- 1B web (Terra): `@ai-sdk/react`; dock Ask tool; `DockChat`; history-free
   resume (load the newest chat for the link, else create on first send); quick
   actions for the article; trace line; AI-off absence; tests with mocked fetch.
 
