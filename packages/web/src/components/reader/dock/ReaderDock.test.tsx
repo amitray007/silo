@@ -56,7 +56,8 @@ const prose = { capturedAt: null, contentHtml: '<p>Body text</p>', contentImages
 it('renders for readable article prose', async () => {
   renderContent(undefined, prose);
   await screen.findByText('Body text');
-  const toolbar = await screen.findByRole('toolbar', { name: 'Reader tools' });
+  // The first test in the file pays the cold module load; under the full suite it passes 1s.
+  const toolbar = await screen.findByRole('toolbar', { name: 'Reader tools' }, { timeout: 3000 });
   expect(toolbar.closest('[data-testid="host"]')).not.toBeNull();
   expect(screen.getAllByRole('button', { name: 'Type' })).toHaveLength(1);
   expect(screen.queryByRole('dialog')).toBeNull();
