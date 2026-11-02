@@ -1,0 +1,162 @@
+import {
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+  useImperativeHandle,
+  useLayoutEffect,
+  useRef,
+} from 'react';
+import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
+import { ReaderIcon } from '../ReaderIcon';
+
+/** The field stops growing here and scrolls: about four lines. */
+const MAX_FIELD = 96;
+
+/** A quick action: its id travels as message metadata, its label is the message text. */
+export type QuickAction = readonly [id: string, label: string];
+
+/**
+ * The one composer: a quiet autosizing field with the send arrow inside it, then the quick
+ * actions as text under it. While an answer streams, Stop takes the arrow's place as a small ink
+ * square. The selection surface, the dock and the Librarian page all use this, so a question
+ * looks and behaves the same wherever it is typed. Enter sends; Shift+Enter adds a line.
+ */
+export function Composer({
+  value,
+  onChange,
+  onSend,
+  placeholder,
+  label,
+  fieldRef,
+  busy = false,
+  onStop,
+  sendDisabled = false,
+  lead,
+  passage,
+  quick = [],
+  onQuick,
+  quickDisabled = false,
+  className,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onSend: () => void;
+  placeholder: string;
+  /** The field's accessible name. */
+  label: string;
+  fieldRef?: Ref<HTMLTextAreaElement>;
+  /** An answer is streaming: Stop replaces Send. */
+  busy?: boolean;
+  onStop?: () => void;
+  /** Send is blocked even with text (a reply is pending, or an approval waits). */
+  sendDisabled?: boolean;
+  /** A quiet control before the field, such as the way back to the dock's tools. */
+  lead?: ReactNode | undefined;
+  /** A passage attached to the question: its words and the way to drop it. */
+  passage?: { quote: string; onRemove: () => void } | undefined;
+  quick?: readonly QuickAction[];
+  onQuick?: (id: string, label: string) => void;
+  quickDisabled?: boolean;
+  className?: string;
+}) {
+  const field = useRef<HTMLTextAreaElement>(null);
+  useImperativeHandle(fieldRef, () => field.current as HTMLTextAreaElement);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: the field resizes whenever its text changes.
+  useLayoutEffect(() => {
+    const input = field.current;
+    if (!input) return;
+    input.style.height = 'auto';
+    input.style.height = `${Math.min(input.scrollHeight, MAX_FIELD)}px`;
+  }, [value]);
+  const send = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key !== 'Enter' || event.shiftKey || event.nativeEvent.isComposing) return;
+    event.preventDefault();
+    if (value.trim() && !sendDisabled) onSend();
+  };
+  return (
+    <form
+      className={`silo-composer ${className ?? ''}`.trim()}
+      data-lead={lead ? '' : undefined}
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (value.trim() && !sendDisabled) onSend();
+      }}
+    >
+      {passage && (
+        <div className="silo-chat-passage">
+          <span>{passage.quote}</span>
+          <button
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label="Remove passage"
+            onClick={passage.onRemove}
+          >
+            <ReaderIcon name="close" size={16} />
+          </button>
+        </div>
+      )}
+      <div className="silo-composer-field">
+        {lead}
+        <textarea
+          ref={field}
+          rows={1}
+          aria-label={label}
+          placeholder={placeholder}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          onKeyDown={send}
+        />
+        {busy ? (
+          <button
+            type="button"
+            className="silo-composer-send"
+            data-mode="stop"
+            aria-label="Stop"
+            onClick={onStop}
+          >
+            <i aria-hidden="true" />
+          </button>
+        ) : (
+          <button
+            type="submit"
+            className="silo-composer-send"
+            aria-label="Send"
+            disabled={sendDisabled || !value.trim()}
+          >
+            <ReaderIcon name="arrowUp" size={16} />
+          </button>
+        )}
+      </div>
+      {quick.length > 0 && (
+        <div className="silo-composer-quick">
+          {quick.map(([id, text]) => (
+            <button
+              key={id}
+              type="button"
+              disabled={quickDisabled}
+              onClick={() => onQuick?.(id, text)}
+            >
+              {text}
+            </button>
+          ))}
+        </div>
+      )}
+    </form>
+  );
+}
+
+/**
+ * The composer on a surface of its own (the dock and the page): it lifts when focused and its
+ * height follows its content on the same no-bounce spring as the rest of the Librarian, so the
+ * quick actions leaving or a second line arriving never jumps the surface above it.
+ */
+export function ComposerBar(props: Parameters<typeof Composer>[0]) {
+  const { root, shell } = useSurfaceMotion('composer', 'bottom', { size: 'height' });
+  return (
+    <div ref={root} className="silo-chat-bar">
+      <div ref={shell} className="silo-chat-shell">
+        <Composer {...props} />
+      </div>
+    </div>
+  );
+}

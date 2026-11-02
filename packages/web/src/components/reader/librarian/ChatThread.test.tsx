@@ -104,3 +104,87 @@ it('keeps following the end while the reader has not scrolled away', () => {
   expect(log.scrollTop).toBe(900);
   expect(screen.queryByRole('button', { name: 'Jump to latest' })).toBeNull();
 });
+
+const search = (state: 'input-available' | 'output-available'): UIMessage['parts'][number] =>
+  ({
+    type: 'tool-search_links',
+    toolCallId: 'c',
+    state,
+    input: {},
+    ...(state === 'output-available' && { output: { links: [{ id: '1' }, { id: '2' }] } }),
+  }) as UIMessage['parts'][number];
+const streaming = (part: UIMessage['parts'][number]) =>
+  fakeChat({
+    busy: true,
+    messages: [text('u', 'user', 'Related?'), { id: 'a', role: 'assistant', parts: [part] }],
+  });
+
+it('shows only the running status while a step runs, and only its trace once it finishes', () => {
+  const view = mount(streaming(search('input-available')), 'x');
+  expect(screen.getByRole('status').textContent).toBe('Searching your library…');
+  expect(document.querySelector('.silo-chat-trace')).toBeNull();
+  view.rerender(
+    <ChatThread
+      chat={streaming(search('output-available'))}
+      composer={composer('x')}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />,
+  );
+  // The finished step's label drifts out (aria-hidden) while the status moves on to the next.
+  expect(document.querySelector('.silo-status-in')?.textContent).toBe('Thinking…');
+  expect(document.querySelector('.silo-chat-trace')?.textContent).toBe(
+    'Searched your library · 2 links',
+  );
+});
+
+it('holds back a trace phrase while another call of the same step is running', () => {
+  const chat = fakeChat({
+    busy: true,
+    messages: [
+      text('u', 'user', 'Related?'),
+      {
+        id: 'a',
+        role: 'assistant',
+        parts: [search('output-available'), search('input-available')],
+      },
+    ],
+  });
+  mount(chat, 'x');
+  expect(screen.getByRole('status').textContent).toBe('Searching your library…');
+  expect(document.querySelector('.silo-chat-trace')).toBeNull();
+});
+
+it('puts the quick actions, the passage and Stop inside the one composer surface', () => {
+  const chat = fakeChat({ busy: true, messages: [] });
+  const { container } = render(
+    <ChatThread
+      chat={chat}
+      composer={{ ...composer(), passage: { quote: 'A passage', paragraph: 1 } }}
+      actions={[['related', 'Related']]}
+      emptyText="Empty"
+      header={null}
+    />,
+  );
+  const form = container.querySelector('form.silo-composer') as HTMLFormElement;
+  expect(form.querySelector('.silo-chat-passage')?.textContent).toBe('A passage');
+  for (const name of ['Explain', 'Simplify', 'Counterpoint', 'Stop'])
+    expect(form.contains(screen.getByRole('button', { name }))).toBe(true);
+  expect(form.querySelector('[data-mode="stop"] i')).not.toBeNull();
+});
+
+it('keeps the empty chat quick actions in the composer, not beside the log', () => {
+  const { container } = render(
+    <ChatThread
+      chat={fakeChat({ messages: [] })}
+      composer={composer()}
+      actions={[['related', 'Related']]}
+      emptyText="Empty"
+      header={null}
+      variant="page"
+    />,
+  );
+  const related = screen.getByRole('button', { name: 'Related' });
+  expect(container.querySelector('.silo-composer-quick')?.contains(related)).toBe(true);
+});

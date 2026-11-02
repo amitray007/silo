@@ -136,7 +136,7 @@ export function DockChat({
       emptyText="Ask about this article or your library."
       rootRef={root}
       panelRef={sheet}
-      panelStyle={{ maxHeight }}
+      maxHeight={maxHeight}
       onBack={onFold}
       header={
         <header>

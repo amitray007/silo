@@ -1,22 +1,14 @@
-import {
-  type CSSProperties,
-  type ReactNode,
-  type Ref,
-  type RefObject,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
+import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
+import { ComposerBar, type QuickAction } from './Composer';
 import { StatusLine } from './StatusLine';
 import { selectionActions } from './selectionStore';
 import { statusLabel } from './status';
 import type { ThreadChat } from './useLibrarianChat';
 
 export type Passage = { quote: string; paragraph: number };
-/** A quick action: its id travels as message metadata, its label is the message text. */
-export type QuickAction = readonly [id: string, label: string];
 
 /** The quick actions of a chat about one article. */
 export const ARTICLE_ACTIONS: readonly QuickAction[] = [
@@ -32,7 +24,7 @@ export const LIBRARY_ACTIONS: readonly QuickAction[] = [['related', 'Related']];
 export function useChatComposer(initialPassage?: Passage) {
   const [input, setInput] = useState('');
   const [passage, setPassage] = useState<Passage | undefined>(initialPassage);
-  const field = useRef<HTMLInputElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
   return { input, setInput, passage, setPassage, field };
 }
 export type Composer = ReturnType<typeof useChatComposer>;
@@ -91,7 +83,7 @@ export function ChatThread({
   onBack,
   rootRef,
   panelRef,
-  panelStyle,
+  maxHeight,
   variant = 'dock',
 }: {
   chat: ThreadChat;
@@ -109,158 +101,124 @@ export function ChatThread({
   onBack?: () => void;
   rootRef?: Ref<HTMLDivElement>;
   panelRef?: RefObject<HTMLElement | null>;
-  panelStyle?: CSSProperties;
+  /** The tallest the dock's panel may grow, in pixels. */
+  maxHeight?: number | undefined;
   variant?: 'dock' | 'page';
 }) {
   const { input, setInput, passage, setPassage, field } = composer;
   const log = useStickyLog(chat.messages);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
-  return (
-    <div className="silo-chat" data-variant={variant} ref={rootRef}>
-      <section
-        ref={panelRef}
-        style={panelStyle}
-        className="silo-chat-panel"
-        aria-label="Librarian conversation"
-      >
-        {header}
-        <div className="silo-chat-log">
-          <div
-            className="silo-chat-messages"
-            ref={log.ref}
-            onScroll={log.onScroll}
-            role="log"
-            aria-label="Messages"
-            aria-busy={chat.busy}
-          >
-            {chat.messages.map((message) => (
-              <ChatMessage
-                key={message.id}
-                message={message}
-                linkId={linkId}
-                expired={message.id !== lastAssistant?.id}
-                streaming={chat.busy && message.id === lastAssistant?.id}
-                onApproval={chat.addToolApprovalResponse}
-              />
-            ))}
-            {chat.busy && !chat.pendingApproval && (
-              <StatusLine label={statusLabel(chat.messages)} className="silo-chat-pending" />
-            )}
-            {chat.messages.length === 0 && (
-              <p className="silo-chat-empty">
-                {chat.loading ? 'Loading conversation…' : emptyText}
-              </p>
-            )}
-            {notice}
-            {chat.failed && (
-              <p role="alert" className="silo-chat-error">
-                {chat.errorText}
-              </p>
-            )}
-          </div>
-          {log.away && (
-            <button type="button" className="silo-chat-jump" onClick={log.jump}>
-              <ReaderIcon name="arrowDown" size={14} />
-              Jump to latest
-            </button>
+  // The panel's height follows its content on the surface spring; the page's pane fills its column.
+  const surface = useSurfaceMotion('panel', 'bottom', { size: 'height' });
+  const panel = (
+    <section ref={panelRef} className="silo-chat-panel" aria-label="Librarian conversation">
+      {header}
+      <div className="silo-chat-log">
+        <div
+          className="silo-chat-messages"
+          ref={log.ref}
+          onScroll={log.onScroll}
+          role="log"
+          aria-label="Messages"
+          aria-busy={chat.busy}
+        >
+          {chat.messages.map((message) => (
+            <ChatMessage
+              key={message.id}
+              message={message}
+              linkId={linkId}
+              expired={message.id !== lastAssistant?.id}
+              streaming={chat.busy && message.id === lastAssistant?.id}
+              onApproval={chat.addToolApprovalResponse}
+            />
+          ))}
+          {chat.busy && !chat.pendingApproval && (
+            <StatusLine label={statusLabel(chat.messages)} className="silo-chat-pending" />
+          )}
+          {chat.messages.length === 0 && (
+            <p className="silo-chat-empty">{chat.loading ? 'Loading conversation…' : emptyText}</p>
+          )}
+          {notice}
+          {chat.failed && (
+            <p role="alert" className="silo-chat-error">
+              {chat.errorText}
+            </p>
           )}
         </div>
-        {chat.messages.length === 0 && !passage && (
-          <div className="silo-chat-actions">
-            {actions.map(([id, label]) => (
-              <button
-                type="button"
-                key={id}
-                disabled={disabled}
-                onClick={() => void chat.send(label, id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-      {menu}
-      {passage && (
-        <div className="silo-chat-passage">
-          <span>{passage.quote}</span>
-          <button
-            type="button"
-            className="silo-reader-iconbtn"
-            aria-label="Remove passage"
-            onClick={() => setPassage(undefined)}
-          >
-            <ReaderIcon name="close" size={16} />
+        {log.away && (
+          <button type="button" className="silo-chat-jump" onClick={log.jump}>
+            <ReaderIcon name="arrowDown" size={14} />
+            Jump to latest
           </button>
-          <div className="silo-chat-actions">
-            {selectionActions(passage.quote).map(([id, label]) => (
-              <button
-                type="button"
-                key={id}
-                disabled={disabled}
-                onClick={() => {
-                  void chat.send(label, id, passage);
-                  setPassage(undefined);
-                }}
-              >
-                {label}
-              </button>
-            ))}
+        )}
+      </div>
+    </section>
+  );
+  // An attached passage brings its own quick actions; an empty chat offers the chat's.
+  const quick = passage
+    ? selectionActions(passage.quote)
+    : chat.messages.length === 0
+      ? actions
+      : [];
+  return (
+    <div
+      className="silo-chat"
+      data-variant={variant}
+      ref={rootRef}
+      style={
+        maxHeight === undefined ? undefined : ({ '--silo-chat-max': `${maxHeight}px` } as object)
+      }
+    >
+      {variant === 'dock' ? (
+        <div ref={surface.root} className="silo-chat-surface">
+          <div ref={surface.shell} className="silo-chat-shell">
+            {panel}
           </div>
         </div>
+      ) : (
+        panel
       )}
+      {menu}
       {chat.pendingApproval && (
         <p role="status" className="silo-chat-hint">
           Allow or deny first.
         </p>
       )}
-      <form
-        className="silo-chat-bar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (input.trim() && !disabled) {
-            void chat.send(input, undefined, passage);
-            setPassage(undefined);
-            setInput('');
-          }
+      <ComposerBar
+        value={input}
+        onChange={setInput}
+        fieldRef={field}
+        label="Ask the Librarian"
+        placeholder="Ask the Librarian…"
+        busy={chat.busy}
+        onStop={() => void chat.stop()}
+        sendDisabled={disabled}
+        onSend={() => {
+          void chat.send(input, undefined, passage);
+          setPassage(undefined);
+          setInput('');
         }}
-      >
-        {onBack && (
-          <button type="button" aria-label="Back to tools" onClick={onBack}>
-            <ReaderIcon name="grid" size={19} />
-          </button>
-        )}
-        <div className="silo-chat-input">
-          <input
-            ref={field}
-            aria-label="Ask the Librarian"
-            placeholder="Ask the Librarian…"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-          />
-        </div>
-        {chat.busy ? (
-          <button
-            className="silo-chat-send"
-            type="button"
-            data-mode="stop"
-            aria-label="Stop"
-            onClick={() => void chat.stop()}
-          >
-            <ReaderIcon name="stop" size={13} />
-          </button>
-        ) : (
-          <button
-            className="silo-chat-send"
-            type="submit"
-            aria-label="Send"
-            disabled={disabled || !input.trim()}
-          >
-            <ReaderIcon name="arrowUp" size={18} />
-          </button>
-        )}
-      </form>
+        lead={
+          onBack && (
+            <button
+              type="button"
+              className="silo-composer-lead"
+              aria-label="Back to tools"
+              onClick={onBack}
+            >
+              <ReaderIcon name="grid" size={18} />
+            </button>
+          )
+        }
+        passage={passage && { quote: passage.quote, onRemove: () => setPassage(undefined) }}
+        quick={quick}
+        quickDisabled={disabled}
+        onQuick={(id, label) => {
+          void chat.send(label, id, passage);
+          setPassage(undefined);
+        }}
+      />
     </div>
   );
 }

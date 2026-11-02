@@ -25,16 +25,29 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   font-size: 14px;
   line-height: 1.55;
 }
-.silo-chat-panel {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) auto;
+/* The dock's panel: the surface is the sheet, and its shell clips the content only while the
+   height moves (the spring in useSurfaceMotion). */
+.silo-chat-surface {
   overflow: hidden;
   border-radius: 16px;
   background: var(--bg2);
   box-shadow: var(--elev-3);
   transform-origin: bottom center;
   animation: siloSheetRise 240ms var(--ease-drawer);
+}
+.silo-chat-shell {
+  position: relative;
+  border-radius: inherit;
+}
+.silo-chat-shell[data-morphing] {
+  height: 100%;
+  overflow: hidden;
+}
+.silo-chat-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: var(--silo-chat-max, none);
 }
 .silo-chat-panel > header {
   display: flex;
@@ -214,6 +227,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   color: var(--fnt);
   font-size: 12px;
   line-height: 16px;
+  /* The finished step arrives as its running status leaves: the same 160ms, 2px drift. */
+  animation: siloStatusIn 160ms var(--ease-out) both;
 }
 .silo-chat-empty {
   margin: 0;
@@ -229,29 +244,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-chat-pending {
   color: var(--fnt);
-}
-
-/* Quick actions: quiet text, with a soft fill on hover. The same as the composer's. */
-.silo-chat-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2px;
-  margin-left: -8px;
-}
-.silo-chat-panel > .silo-chat-actions {
-  padding: 0 16px 16px;
-}
-.silo-chat-actions button {
-  height: 28px;
-  padding: 0 8px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  color: var(--mut);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
 }
 
 /* Approval: a card in the answer, one ink primary and one quiet secondary. */
@@ -622,7 +614,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-chat[data-variant="page"] .silo-chat-panel {
   flex: 1;
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(0, 1fr);
   min-height: 0;
   border-radius: 0;
   background: none;
@@ -638,15 +630,9 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   padding-bottom: 24px;
   text-align: center;
 }
-.silo-chat[data-variant="page"] .silo-chat-panel > .silo-chat-actions {
-  padding: 0 max(16px, calc((100% - var(--silo-measure)) / 2)) 12px;
-}
-.silo-chat[data-variant="page"] > :is(.silo-chat-passage, .silo-chat-bar) {
+.silo-chat[data-variant="page"] > .silo-chat-bar {
   width: min(var(--silo-measure), calc(100% - 32px));
   margin-inline: auto;
-}
-.silo-chat[data-variant="page"] > .silo-chat-passage {
-  margin-bottom: 8px;
 }
 .silo-chat[data-variant="page"] > .silo-chat-hint {
   margin-bottom: 8px;
@@ -672,27 +658,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   box-shadow: 0 0 0 1.5px var(--bg2);
 }
 
-/* Passage attached to the next question. */
-.silo-chat-passage {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 2px 4px;
-  padding: 6px 6px 8px 14px;
-  border-radius: 12px;
-  background: var(--bg2);
-  box-shadow: var(--elev-2);
-}
-.silo-chat-passage > span {
-  padding-left: 10px;
-  border-left: 2px solid var(--line-2);
-  font-size: 13px;
-  line-height: 20px;
-}
-.silo-chat-passage .silo-chat-actions {
-  grid-column: 1 / -1;
-  padding: 4px 0 0;
-}
 .silo-chat-hint {
   align-self: center;
   margin: 0;
@@ -706,131 +671,34 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   line-height: 18px;
 }
 
-/* Bar: the dock pill, holding a field instead of tools. */
+/* The bar is the composer's own surface on the dock and the page: one rounded sheet at the
+   bar's elevation that lifts when it has focus. */
 .silo-chat-bar {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px;
-  border-radius: 999px;
+  border-radius: 16px;
   background: var(--bg2);
   box-shadow: var(--elev-2);
   transition: box-shadow 200ms var(--ease-out);
   animation: siloChatBar 160ms var(--ease-out);
 }
-.silo-chat-bar button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: none;
-  width: 38px;
-  height: 38px;
-  padding: 0;
-  border: 0;
-  border-radius: 999px;
-  background: none;
-  color: var(--mut);
-  cursor: pointer;
-}
-.silo-chat-input {
-  display: flex;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  height: 38px;
-  padding: 0 6px;
-}
-.silo-chat-input input {
-  width: 100%;
-  min-width: 0;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
-  font: inherit;
-  font-size: 14px;
-}
-.silo-chat-input input::placeholder {
-  color: var(--fnt);
-}
-.silo-chat-bar .silo-chat-send {
-  background: var(--btn);
-  color: var(--btn-ink);
-  transition:
-    background-color 140ms var(--ease-out),
-    color 140ms var(--ease-out);
-}
-/* Nothing to send yet: a muted arrow on the bar, not a faded disc. */
-.silo-chat-bar .silo-chat-send:disabled {
-  background: none;
-  color: var(--fnt);
-  opacity: 1;
-}
-
-/* One pill, no field inside it: typing lifts the whole bar instead of ringing a box. */
 .silo-chat-bar:focus-within {
   box-shadow: var(--elev-3);
 }
 
-/* Shared control states. */
-.silo-chat :is(button, input):focus-visible,
-.silo-selection-compose button:focus-visible,
-.silo-selection-answer button:focus-visible {
-  outline: 2px solid var(--ghost);
-  outline-offset: 1px;
-}
-.silo-chat-input input:focus-visible {
-  outline: 0;
-}
-.silo-chat button:active:not(:disabled),
-.silo-selection-compose button:active:not(:disabled),
-.silo-selection-answer button:active:not(:disabled) {
-  transform: scale(0.96);
-}
-.silo-chat button:disabled,
-.silo-selection-compose button:disabled,
-.silo-selection-answer button:disabled {
-  opacity: 0.35;
-  cursor: default;
-}
-@media (hover: hover) and (pointer: fine) {
-  .silo-chat-bar button:hover:not(:disabled),
-  .silo-chat-actions button:hover:not(:disabled),
-  .silo-chat-approval button:hover:not(:disabled),
-  .silo-selection-quick button:hover:not(:disabled),
-  .silo-selection-answer footer button:hover:not(:disabled) {
-    background: var(--menu-highlight);
-    color: var(--ink);
-  }
-  .silo-chat-bar .silo-chat-send:hover:not(:disabled),
-  .silo-chat-approval .silo-chat-allow:hover:not(:disabled),
-  .silo-selection-send:hover:not(:disabled),
-  .silo-selection-answer .silo-selection-primary:hover:not(:disabled) {
-    background: var(--btn);
-    color: var(--btn-ink);
-    opacity: 0.88;
-  }
-}
-
-@media (hover: hover) and (pointer: fine) {
-  .silo-chat-jump:hover {
-    background: var(--menu-highlight);
-  }
-}
-
-/* Passage composer: one field with the send arrow inside it, then the quick actions as quiet
-   text, all on the surface the bar grew into. */
-.silo-selection-compose {
+/* The composer: one quiet field with the send arrow inside it, an optional attached passage above
+   and the quick actions as text below. The selection surface, the dock and the page share it. */
+.silo-composer {
   display: grid;
-  width: min(384px, calc(100vw - 32px));
   padding: 6px 6px 6px 14px;
 }
-.silo-selection-field {
+.silo-composer[data-lead] {
+  padding-left: 6px;
+}
+.silo-composer-field {
   display: flex;
   align-items: flex-end;
   gap: 8px;
 }
-.silo-selection-field textarea {
+.silo-composer textarea {
   flex: 1;
   min-width: 0;
   max-height: 96px;
@@ -844,10 +712,11 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   font-size: 14px;
   line-height: 20px;
 }
-.silo-selection-field textarea::placeholder {
+.silo-composer textarea::placeholder {
   color: var(--fnt);
 }
-.silo-selection-send {
+.silo-composer-send,
+.silo-composer-lead {
   display: inline-grid;
   place-items: center;
   flex: none;
@@ -856,26 +725,45 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   padding: 0;
   border: 0;
   border-radius: 999px;
+  cursor: pointer;
+}
+.silo-composer-send {
   background: var(--btn);
   color: var(--btn-ink);
-  cursor: pointer;
   transition:
     background-color 140ms var(--ease-out),
     color 140ms var(--ease-out);
 }
 /* Nothing to send yet: the arrow is a muted mark on the surface, not a disabled disc. */
-.silo-selection-compose .silo-selection-send:disabled {
+.silo-composer .silo-composer-send:disabled {
   background: none;
   color: var(--fnt);
   opacity: 1;
 }
-.silo-selection-quick {
+/* Stop: a small ink square, with no disc behind it. */
+.silo-composer .silo-composer-send[data-mode="stop"] {
+  background: none;
+}
+.silo-composer-send[data-mode="stop"] i {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  background: var(--ink);
+}
+.silo-composer-lead {
+  background: none;
+  color: var(--fnt);
+}
+.silo-composer-quick {
   display: flex;
   flex-wrap: wrap;
   gap: 2px;
   margin: 2px 0 0 -8px;
 }
-.silo-selection-quick button {
+.silo-composer[data-lead] .silo-composer-quick {
+  margin-left: 0;
+}
+.silo-composer-quick button {
   height: 28px;
   padding: 0 8px;
   border: 0;
@@ -886,6 +774,80 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   font-size: 13px;
   font-weight: 500;
   cursor: pointer;
+}
+
+/* The passage the next question is about: a quote with a rule, at the top of the composer. */
+.silo-chat-passage {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0 0 4px;
+}
+.silo-chat-passage > span {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding-left: 10px;
+  border-left: 2px solid var(--line-2);
+  color: var(--mut);
+  font-size: 13px;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-chat-passage .silo-reader-iconbtn {
+  flex: none;
+  color: var(--fnt);
+}
+
+/* Shared control states. */
+.silo-chat :is(button, textarea):focus-visible,
+.silo-composer button:focus-visible,
+.silo-selection-answer button:focus-visible {
+  outline: 2px solid var(--ghost);
+  outline-offset: 1px;
+}
+.silo-composer textarea:focus-visible {
+  outline: 0;
+}
+.silo-chat button:active:not(:disabled),
+.silo-composer button:active:not(:disabled),
+.silo-selection-answer button:active:not(:disabled) {
+  transform: scale(0.96);
+}
+.silo-chat button:disabled,
+.silo-composer button:disabled,
+.silo-selection-answer button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-composer-quick button:hover:not(:disabled),
+  .silo-composer-lead:hover:not(:disabled),
+  .silo-composer-send[data-mode="stop"]:hover,
+  .silo-chat-approval button:hover:not(:disabled),
+  .silo-selection-answer footer button:hover:not(:disabled) {
+    background: var(--menu-highlight);
+    color: var(--ink);
+  }
+  .silo-composer-send:hover:not(:disabled):not([data-mode="stop"]),
+  .silo-chat-approval .silo-chat-allow:hover:not(:disabled),
+  .silo-selection-answer .silo-selection-primary:hover:not(:disabled) {
+    background: var(--btn);
+    color: var(--btn-ink);
+    opacity: 0.88;
+  }
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .silo-chat-jump:hover {
+    background: var(--menu-highlight);
+  }
+}
+
+/* Passage composer: the shared composer on the surface the bar grew into. */
+.silo-selection-compose {
+  width: min(384px, calc(100vw - 32px));
 }
 
 /* Answer card: header and footer stay put, the answer scrolls between them. */
@@ -1066,33 +1028,27 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   .silo-chat-title svg {
     transition: none;
   }
-  .silo-chat-panel,
-  .silo-chat-bar {
+  .silo-chat-surface,
+  .silo-chat-bar,
+  .silo-chat-trace {
     animation: none;
   }
 }
 
 /* Touch: controls reach 40px (docs/rules/web-react.md). */
 @media (max-width: 640px), (pointer: coarse) {
-  .silo-chat-bar button,
-  .silo-chat-input {
+  .silo-composer-send,
+  .silo-composer-lead {
+    width: 40px;
     height: 40px;
   }
-  .silo-chat-bar button {
-    width: 40px;
+  .silo-composer textarea {
+    padding: 10px 0;
   }
-  .silo-chat-actions button,
-  .silo-selection-quick button,
+  .silo-composer-quick button,
   .silo-selection-answer footer button,
   .silo-chat-approval button {
     min-height: 40px;
-  }
-  .silo-selection-send {
-    width: 40px;
-    height: 40px;
-  }
-  .silo-selection-field textarea {
-    padding: 10px 0;
   }
   .silo-chat .silo-reader-iconbtn,
   .silo-selection-answer .silo-reader-iconbtn {

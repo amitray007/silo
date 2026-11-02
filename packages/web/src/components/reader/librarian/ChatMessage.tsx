@@ -89,31 +89,40 @@ export function toolName(part: UIMessage['parts'][number]): string | null {
   return part.type.startsWith('tool-') ? part.type.slice(5) : null;
 }
 
+const RUNNING = new Set(['input-streaming', 'input-available']);
+/** A tool call that has not returned yet: the status line names it, so the trace must not. */
+export function isRunning(part: UIMessage['parts'][number]): boolean {
+  return toolName(part) !== null && 'state' in part && RUNNING.has(part.state);
+}
+
 function writeTrace(part: UIMessage['parts'][number]): string | undefined {
   if (!('state' in part) || part.state !== 'output-available') return undefined;
   return WRITE_TRACES[toolName(part) ?? ''];
 }
+/** The steps that share one trace phrase: every search reads as "Searched your library". */
+const stepOf = (name: string | null) => (name && SEARCH_TOOLS.has(name) ? 'search' : name);
+
+/** "Searched your library", with the number of links found when every search reported one. */
+function searchTrace(parts: UIMessage['parts']): string | undefined {
+  const searches = parts.filter((part) => SEARCH_TOOLS.has(toolName(part) ?? ''));
+  if (searches.length === 0) return undefined;
+  const counts = searches.map(toolCount).filter((count): count is number => count !== null);
+  const found = counts.reduce((sum, count) => sum + count, 0);
+  return `Searched your library${counts.length > 0 ? ` · ${found} links` : ''}`;
+}
+
 function traceLine(message: UIMessage): string {
-  const traces = new Set(
-    message.parts.map(writeTrace).filter((text): text is string => text !== undefined),
+  // A step that is running is the status line's to show; its trace waits until it finishes.
+  const running = new Set(message.parts.filter(isRunning).map((part) => stepOf(toolName(part))));
+  const done = message.parts.filter(
+    (part) => !isRunning(part) && !running.has(stepOf(toolName(part))),
   );
-  let searched = false;
-  let found = 0;
-  let counted = false;
-  for (const part of message.parts) {
-    const name = toolName(part);
-    if (name === 'get_link') traces.add('Read this article');
-    if (name === 'list_highlights') traces.add('Read your notes');
-    if (name && SEARCH_TOOLS.has(name)) {
-      searched = true;
-      const count = toolCount(part);
-      if (count !== null) {
-        found += count;
-        counted = true;
-      }
-    }
-  }
-  if (searched) traces.add(`Searched your library${counted ? ` · ${found} links` : ''}`);
+  const names = done.map(toolName);
+  const traces = new Set(done.map(writeTrace).filter((text): text is string => text !== undefined));
+  if (names.includes('get_link')) traces.add('Read this article');
+  if (names.includes('list_highlights')) traces.add('Read your notes');
+  const searched = searchTrace(done);
+  if (searched) traces.add(searched);
   return [...traces].join(' · ');
 }
 
