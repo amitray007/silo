@@ -89,3 +89,12 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **X accounts and lists.** No free API and no RSS.
 - **Feed content as Reader text for page posts.** Use `content:encoded` when a regular page
   fetch fails. Podcast/media show notes already use the feed content as Reader text.
+
+### Reader tools (parked from `docs/methods/reader-tools.md`, 2026-11-01)
+
+- **Multilingual read aloud.** Read aloud is English-only for now. `kokoro-js` ships English
+  voices and an English phonemizer only (even though the Kokoro model has more languages),
+  Phonon 31m is English, and Phonon 40m multilingual is CC BY-NC 4.0, so silo cannot ship it.
+  Revisit when `kokoro-js` or another permissively licensed engine speaks more languages. The
+  stored Reader also has no language field, so the article language is read from its text today.
+

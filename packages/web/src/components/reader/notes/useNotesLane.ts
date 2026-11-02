@@ -13,8 +13,9 @@ const NONE: string[] = [];
 /**
  * The notes lane's state and what a click on highlighted text does. Click priority, highest
  * first: lane open emphasises the covering notes; two or more layers open the layers popover;
- * one opens the note popover. Option-click cycles layers instead. (Listen, in the next slice,
- * goes above all of these.)
+ * one opens the note popover. Option-click cycles layers instead. While Listen is open, a click
+ * on a sentence starts reading there before any of these run (`useListenClicks` stops it in the
+ * capture phase).
  */
 export function useNotesLane(api: HighlightsApi) {
   const { prose, resolved, items, setOpenNote, closeNote: closeNotePopover, jump } = api;

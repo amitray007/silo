@@ -7,6 +7,10 @@ import { NotePopover } from './NotePopover';
 import { SelectionBar } from './SelectionBar';
 import type { HighlightsApi } from './useHighlights';
 
+const NONE: ReadonlySet<string> = new Set();
+/** Read aloud speaks English only for now, so other articles get no Listen action. */
+const NO_LISTEN: ReadonlySet<string> = new Set(['listen']);
+
 /**
  * What the highlights draw over the article: the selection toolbar, the note popover, and the
  * failure message. The dock mounts it into the pane so Sepia recolours all of it.
@@ -16,11 +20,14 @@ export function HighlightsLayer({
   lane,
   title,
   container,
+  listen,
 }: {
   api: HighlightsApi;
   lane: NotesLaneApi;
   title: string;
   container: HTMLElement;
+  /** Read aloud: whether the article can be read, and how to start at the selection. */
+  listen: { english: boolean; startHere: () => void };
 }) {
   const searchSilo = useSearchSilo();
   const { create, color, openNoteItem, scroll } = api;
@@ -42,6 +49,8 @@ export function HighlightsLayer({
         onNote={note}
         onDismiss={api.clearPending}
         onSearch={searchSilo}
+        onListen={listen.startHere}
+        hidden={listen.english ? NONE : NO_LISTEN}
       />
       {openNoteItem && scroll && (
         <NotePopover

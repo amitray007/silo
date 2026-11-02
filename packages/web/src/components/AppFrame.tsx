@@ -8,6 +8,7 @@ import { CommandPalette } from './CommandPalette';
 import { EditModal } from './EditModal';
 import { HoverPreviewProvider } from './HoverPreviewContext';
 import { MobileBar } from './MobileBar';
+import { ReaderSettingsSync } from './ReaderSettingsSync';
 import { RowMenuProvider, useRowMenu } from './RowMenuContext';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { SearchSiloContext } from './SearchSiloContext';
@@ -254,6 +255,7 @@ export function AppFrame() {
   return (
     <SettingsProvider>
       <ThemeSettingsSync />
+      <ReaderSettingsSync />
       <SearchSiloContext.Provider value={searchSilo}>
         <SidebarControlContext.Provider value={sidebarControl}>
           <HoverPreviewProvider>

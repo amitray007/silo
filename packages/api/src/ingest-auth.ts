@@ -39,7 +39,7 @@
  */
 
 import { verifyAccessToken } from '@silo/core';
-import type { Context } from 'hono';
+import type { Context, Next } from 'hono';
 import { bearerToken, readTokenEnv, timingSafeEqual } from './token-auth.js';
 
 /** Reads `SILO_API_TOKEN` fresh from the environment on every call — see
@@ -49,7 +49,7 @@ function configuredToken(): string | undefined {
   return readTokenEnv('SILO_API_TOKEN');
 }
 
-export type IngestAuthResult =
+type IngestAuthResult =
   | { ok: true }
   | { ok: false; reason: 'token_not_configured' | 'missing_or_invalid_token' };
 
@@ -92,7 +92,7 @@ export type IngestAuthResult =
  * - `missing_or_invalid_token`: a token IS configured, but the request
  *   didn't present a matching `Authorization: Bearer` header (env or DB).
  */
-export async function checkIngestAuth(c: Context): Promise<IngestAuthResult> {
+async function checkIngestAuth(c: Context): Promise<IngestAuthResult> {
   const presented = bearerToken(c);
   const expected = configuredToken();
 
@@ -107,4 +107,18 @@ export async function checkIngestAuth(c: Context): Promise<IngestAuthResult> {
     return { ok: false, reason: 'token_not_configured' };
   }
   return { ok: false, reason: 'missing_or_invalid_token' };
+}
+
+/** Always-closed bearer gate, mounted before any request-body limiter. */
+export async function ingestTokenAuth(c: Context, next: Next): Promise<Response | undefined> {
+  const auth = await checkIngestAuth(c);
+  if (!auth.ok) {
+    console.error(`[silo/api] ${c.req.path} rejected: ${auth.reason}`);
+    return c.json(
+      { error: 'unauthorized', message: 'A valid Authorization: Bearer token is required.' },
+      401,
+    );
+  }
+  await next();
+  return undefined;
 }

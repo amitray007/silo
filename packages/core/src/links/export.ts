@@ -55,7 +55,7 @@ type ExportedLink = {
   updatedAt: string;
   tags: string[];
   /** Present only when a position is saved. CSV leaves it out. */
-  readingPosition?: { position: number; updatedAt: string };
+  readingPosition?: { position: number; source: ReadingPosition['source']; updatedAt: string };
   /** Present only when the link has highlights. CSV leaves it out. */
   highlights?: ExportedHighlight[];
 };
@@ -107,6 +107,7 @@ function toExportedLink(
   if (readingPosition) {
     exported.readingPosition = {
       position: readingPosition.position,
+      source: readingPosition.source,
       updatedAt: readingPosition.updatedAt.toISOString(),
     };
   }
@@ -255,6 +256,7 @@ export async function exportLinks(opts?: { format?: ExportFormat }): Promise<Exp
       link: listColumns,
       position: readingPositions.position,
       positionUpdatedAt: readingPositions.updatedAt,
+      positionSource: readingPositions.source,
     })
     .from(links)
     .leftJoin(readingPositions, eq(readingPositions.linkId, links.id))
@@ -270,7 +272,11 @@ export async function exportLinks(opts?: { format?: ExportFormat }): Promise<Exp
     const row = rows[index];
     const saved =
       row?.position != null && row.positionUpdatedAt != null
-        ? { position: row.position, updatedAt: row.positionUpdatedAt }
+        ? {
+            position: row.position,
+            source: row.positionSource ?? 'pencil',
+            updatedAt: row.positionUpdatedAt,
+          }
         : null;
     return toExportedLink(link, saved, highlightsByLink.get(link.id));
   });

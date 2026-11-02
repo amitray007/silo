@@ -193,6 +193,8 @@ export function SelectionBar({
   onNote,
   onDismiss,
   onSearch,
+  onListen,
+  hidden,
 }: {
   pending: PendingSelection | null;
   prose: HTMLElement | null;
@@ -207,6 +209,10 @@ export function SelectionBar({
   onNote: () => void;
   onDismiss: () => void;
   onSearch: (phrase: string) => void;
+  /** Read aloud from the selection. */
+  onListen: () => void;
+  /** Action ids to leave out, such as `listen` for an article that cannot be read aloud. */
+  hidden: ReadonlySet<string>;
 }) {
   const [menu, setMenu] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -268,6 +274,11 @@ export function SelectionBar({
         onDismiss();
         window.getSelection()?.removeAllRanges();
       },
+      listen: () => {
+        onListen();
+        onDismiss();
+        window.getSelection()?.removeAllRanges();
+      },
       search: (phrase) => {
         onDismiss();
         onSearch(phrase);
@@ -293,7 +304,7 @@ export function SelectionBar({
           style={{ left: where.left, top: where.top }}
         >
           {selectionActions
-            .filter((action) => action.group === 'primary')
+            .filter((action) => action.group === 'primary' && !hidden.has(action.id))
             .map((action) => (
               <PrimaryAction
                 key={action.id}
@@ -321,7 +332,9 @@ export function SelectionBar({
           </button>
           {menu && (
             <MoreMenu
-              actions={selectionActions.filter((action) => action.group === 'more')}
+              actions={selectionActions.filter(
+                (action) => action.group === 'more' && !hidden.has(action.id),
+              )}
               onRun={run}
             />
           )}

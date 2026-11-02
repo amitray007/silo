@@ -7,7 +7,7 @@ import {
   HIGHLIGHT_QUOTE_MAX,
   type HighlightColor,
 } from '../../../lib/highlights';
-import { useHighlightPrefs } from '../../../lib/readerPrefs';
+import { useReaderPrefs } from '../../../lib/useReaderPrefs';
 import { blockedColors, colorsUsedByOverlaps } from './overlap';
 import { pulseRange } from './paint';
 import { contextAfter, contextBefore } from './textMap';
@@ -61,7 +61,16 @@ export function useHighlights({
   // A list row has no highlights until the link's detail arrives; writing before then would be lost.
   const canWrite = writable && link.highlights !== undefined;
   const { map, resolved, orphans } = useHighlightLayer(prose, items);
-  const { color, setColor } = useHighlightPrefs();
+  const {
+    prefs: {
+      highlight: { color },
+    },
+    update: changePrefs,
+  } = useReaderPrefs();
+  const setColor = useCallback(
+    (color: HighlightColor) => changePrefs({ highlight: { color } }),
+    [changePrefs],
+  );
   const { pending, clear, current } = useSelectionWatcher({
     prose,
     scroll,

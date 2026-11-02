@@ -1,7 +1,7 @@
 /* Reader tools, slice 3b: the gutter markers, the notes lane and the layers popover. Tokens
    only; Sepia recolours them with the pane. */
 
-/* The Reader's scroll area holds the lane layer; absolute children scroll with the article. */
+/* The prose frame carries markers, lane groups and their connector through column moves. */
 .silo-reader-scroll {
   position: relative;
 }
@@ -100,9 +100,6 @@
 }
 .silo-lgroup[data-placed="false"] {
   visibility: hidden;
-}
-.silo-lgroup[data-armed="true"] {
-  transition: top 160ms var(--ease-out);
 }
 .silo-lgroup-scroll {
   position: relative;

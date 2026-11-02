@@ -52,6 +52,9 @@ const readingPositionShape = z
       .min(0)
       .max(1)
       .describe("Share of the article's words already read: 0 is the start, 1 is the end."),
+    source: z
+      .enum(['pencil', 'listen', 'mark'])
+      .describe('What saved this place. Agent writes record mark.'),
     updatedAt: z.iso.datetime().describe('When the position was last saved.'),
   })
   .nullable()
@@ -216,6 +219,7 @@ export function toBaseLinkContent(link: LinkDetail): BaseLinkContent {
     readingPosition: link.readingPosition
       ? {
           position: link.readingPosition.position,
+          source: link.readingPosition.source,
           updatedAt: link.readingPosition.updatedAt.toISOString(),
         }
       : null,

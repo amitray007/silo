@@ -49,6 +49,10 @@ services:
 volumes:
   silo-pgdata:
 
+# Local dev runs silo on the host, not in this compose file. Read aloud voice models are cached
+# under SILO_DATA_DIR (default ~/.local/state/silo/tts-cache). A containerised silo mounts a
+# volume there: see docker-compose.prod.yml (`silo-data:/data`).
+
 networks:
   browser:
     driver: bridge

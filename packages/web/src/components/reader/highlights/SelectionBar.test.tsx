@@ -37,6 +37,8 @@ function setup(overrides: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
     onNote: vi.fn(),
     onDismiss: vi.fn(),
     onSearch: vi.fn(),
+    onListen: vi.fn(),
+    hidden: new Set<string>(),
     ...overrides,
   };
   render(<SelectionBar {...props} />);
@@ -175,4 +177,17 @@ it('Tab from the selection moves focus into the toolbar', () => {
 it('flips below a selection near the top of the window', () => {
   setup({ pending: { ...pending, rect: { ...pending.rect, top: 20, bottom: 40 } as DOMRect } });
   expect(screen.getByRole('toolbar').getAttribute('data-flip')).toBe('true');
+});
+
+it('runs Listen from here and then dismisses the selection', () => {
+  const props = setup();
+  fireEvent.click(screen.getByRole('button', { name: /Listen from here/ }));
+  expect(props.onListen).toHaveBeenCalledTimes(1);
+  expect(props.onDismiss).toHaveBeenCalled();
+});
+
+it('leaves Listen from here out when the article cannot be read aloud', () => {
+  setup({ hidden: new Set(['listen']) });
+  expect(screen.queryByRole('button', { name: /Listen from here/ })).toBeNull();
+  expect(screen.getByRole('button', { name: /Highlight/ })).toBeTruthy();
 });

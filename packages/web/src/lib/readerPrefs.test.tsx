@@ -7,12 +7,16 @@ import {
   MIN_PENCIL_WPM,
   parseHighlightPrefs,
   parsePencilPrefs,
+  parseReadAloudPrefs,
   parseReaderType,
   pencilPrefsDefaults,
+  READ_ALOUD_SPEEDS,
+  readAloudPrefsDefaults,
   readerTypeDefaults,
   readerTypeStyle,
   useHighlightPrefs,
   usePencilPrefs,
+  useReadAloudPrefs,
   useReaderType,
 } from './readerPrefs';
 
@@ -332,5 +336,61 @@ describe('highlight prefs', () => {
     act(() => result.current.setColor('green'));
     expect(result.current.color).toBe('green');
     vi.restoreAllMocks();
+  });
+});
+
+describe('read aloud prefs', () => {
+  afterEach(() => localStorage.clear());
+
+  it('starts on Phonon at 1x with default voices', () => {
+    expect(readAloudPrefsDefaults).toEqual({
+      engine: 'phonon',
+      pauses: 'relaxed',
+      voices: { phonon: '', kokoro: '' },
+      rate: 1,
+    });
+  });
+
+  it('keeps each good field and defaults only the bad ones', () => {
+    expect(
+      parseReadAloudPrefs(
+        JSON.stringify({ engine: 'kokoro', voices: { phonon: 'zoe', kokoro: 7 }, rate: 1.25 }),
+      ),
+    ).toEqual({
+      engine: 'kokoro',
+      pauses: 'relaxed',
+      voices: { phonon: 'zoe', kokoro: '' },
+      rate: 1.25,
+    });
+    expect(parseReadAloudPrefs(JSON.stringify({ engine: 'mystery', rate: 1.3 }))).toEqual(
+      readAloudPrefsDefaults,
+    );
+  });
+
+  it.each(['', 'nope', '[]', 'null', '7'])('falls back to defaults for %j', (raw) => {
+    expect(parseReadAloudPrefs(raw)).toEqual(readAloudPrefsDefaults);
+  });
+
+  it('accepts only the speeds the sheet offers', () => {
+    for (const rate of READ_ALOUD_SPEEDS) {
+      expect(parseReadAloudPrefs(JSON.stringify({ rate })).rate).toBe(rate);
+    }
+    expect(parseReadAloudPrefs(JSON.stringify({ rate: 5 })).rate).toBe(1);
+  });
+
+  it('stores one voice per engine and persists the choice', () => {
+    const { result } = renderHook(() => useReadAloudPrefs());
+    act(() => result.current.update({ voice: ['phonon', 'zoe'] }));
+    act(() => result.current.update({ voice: ['kokoro', 'af_heart'], engine: 'kokoro', rate: 2 }));
+    expect(result.current.prefs).toEqual({
+      engine: 'kokoro',
+      pauses: 'relaxed',
+      voices: { phonon: 'zoe', kokoro: 'af_heart' },
+      rate: 2,
+    });
+    expect(JSON.parse(localStorage.getItem('silo.readerReadAloud') ?? '{}')).toMatchObject({
+      v: 1,
+      engine: 'kokoro',
+    });
   });
 });
