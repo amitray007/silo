@@ -132,7 +132,11 @@ describe('Related links in Reader', () => {
     async (contentHtml) => {
       await renderArticle({ html: contentHtml });
       expect(screen.queryByRole('region', { name: 'Related links' })).toBeNull();
-      expect(fetchMock.mock.calls.every(([path]) => String(path).endsWith('/reader'))).toBe(true);
+      expect(
+        fetchMock.mock.calls.every(
+          ([path]) => String(path).endsWith('/reader') || path === '/api/ai',
+        ),
+      ).toBe(true);
     },
   );
 
@@ -151,7 +155,11 @@ describe('Related links in Reader', () => {
       release(json({ error: 'not_found', message: 'No Reader content' }, 404));
     });
     expect(screen.queryByRole('region', { name: 'Related links' })).toBeNull();
-    expect(fetchMock.mock.calls.every(([path]) => String(path).endsWith('/reader'))).toBe(true);
+    expect(
+      fetchMock.mock.calls.every(
+        ([path]) => String(path).endsWith('/reader') || path === '/api/ai',
+      ),
+    ).toBe(true);
   });
 
   it('hides the section for trashed articles', async () => {

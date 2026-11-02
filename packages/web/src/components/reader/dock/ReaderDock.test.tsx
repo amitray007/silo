@@ -23,13 +23,17 @@ function Host({ children }: { children: ReactNode }) {
   );
 }
 
-function renderContent(link = makeLink({ id: 'dock' }), reader: unknown = null) {
+function renderContent(link = makeLink({ id: 'dock' }), reader: unknown = null, ready = false) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) =>
-      String(input).endsWith('/reader') && reader
-        ? json(reader)
-        : json({ error: 'not_found', message: 'none' }, 404),
+      String(input).endsWith('/api/ai')
+        ? json({ status: { features: { librarian: { ready } } } })
+        : String(input).includes('/librarian/chats?')
+          ? json({ chats: [], nextCursor: null })
+          : String(input).endsWith('/reader') && reader
+            ? json(reader)
+            : json({ error: 'not_found', message: 'none' }, 404),
     ),
   );
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -209,4 +213,20 @@ it('stops the speed stepper at 100 and 600 wpm', async () => {
       return button.disabled;
     }),
   ).toBe(true);
+});
+
+it('hides Ask when Librarian is not ready', async () => {
+  renderContent(undefined, prose);
+  await screen.findByText('Body text');
+  expect(screen.queryByRole('button', { name: 'Ask' })).toBeNull();
+});
+it('opens Ask, focuses its input and restores tools and focus on fold', async () => {
+  renderContent(undefined, prose, true);
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
+  const input = await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  fireEvent.keyDown(document, { key: 'Escape' });
+  const ask = await screen.findByRole('button', { name: 'Ask' });
+  expect(document.activeElement).toBe(ask);
+  expect(screen.queryByRole('textbox', { name: 'Ask the Librarian' })).toBeNull();
 });
