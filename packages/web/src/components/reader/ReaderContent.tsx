@@ -1,8 +1,9 @@
 import { useIsMutating } from '@tanstack/react-query';
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { queryKeys, useLiveReader, useRetryCapture } from '../../api/hooks';
 import type { LinkJson, LiveReaderJson } from '../../api/types';
 import { previewImageUrl } from '../../lib/previewImage';
+import { ReaderDock } from './dock/ReaderDock';
 import { embedFor } from './embedFor';
 import { ReaderIcon } from './ReaderIcon';
 import { ReaderSkeleton } from './ReaderLoading';
@@ -124,6 +125,7 @@ export function ReaderContent({
   const refreshing =
     useIsMutating({ mutationKey: queryKeys.refreshReader(link.id), exact: true }) > 0;
   const anchorRef = useReaderScrollReset(link.id, live.data, refreshing);
+  const [proseElement, setProseElement] = useState<HTMLElement | null>(null);
   const loadingLabel = readerLoadingLabel(refreshing, link.captureStatus);
   if (loadingLabel) return <ReaderSkeleton label={loadingLabel} />;
 
@@ -183,12 +185,19 @@ export function ReaderContent({
         (live.isLoading ? (
           <ReaderSkeleton />
         ) : prose ? (
-          <ReaderProse
-            key={prose.capturedAt}
-            linkId={link.id}
-            reader={prose}
-            topPlayerSrc={topPlayerSrc}
-          />
+          <>
+            {/* The positioned frame the pencil and the resume button draw in. */}
+            <div className="silo-prose-frame">
+              <ReaderProse
+                key={prose.capturedAt}
+                linkId={link.id}
+                reader={prose}
+                topPlayerSrc={topPlayerSrc}
+                onRoot={setProseElement}
+              />
+            </div>
+            <ReaderDock key={link.id} link={link} prose={proseElement} trashed={trashed} />
+          </>
         ) : (
           <Paragraphs link={link} />
         ))}

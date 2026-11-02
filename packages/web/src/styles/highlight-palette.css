@@ -1,0 +1,79 @@
+/* Highlight palette: five semantic colours, one set of oklch tokens per theme.
+   Each colour keeps one hue; the theme sets its lightness and chroma so the tint reads on that
+   background. `--hl-<name>` tints a single highlight, `-ov` tints a stretch covered by two or
+   more (the inner colour at higher chroma), `-edge` is the solid colour for dots and bars.
+   `--hl-text` is the text colour on a tint. Text on every tint is at least 4.5:1, and no two
+   tints sit closer than about 0.08 in OKLab (checked by highlightPalette.test.ts). Orange is
+   silo's accent, so it is not in the palette. */
+:root {
+  --hl-text: oklch(14.5% 0 0);
+  --hl-yellow: oklch(92% 0.12 98);
+  --hl-yellow-ov: oklch(88% 0.16 98);
+  --hl-yellow-edge: oklch(66% 0.135 98);
+  --hl-green: oklch(86% 0.12 150);
+  --hl-green-ov: oklch(82% 0.16 150);
+  --hl-green-edge: oklch(66% 0.16 150);
+  --hl-blue: oklch(82% 0.085 250);
+  --hl-blue-ov: oklch(78% 0.115 250);
+  --hl-blue-edge: oklch(66% 0.16 250);
+  --hl-pink: oklch(82% 0.11 355);
+  --hl-pink-ov: oklch(78% 0.145 355);
+  --hl-pink-edge: oklch(66% 0.16 355);
+  --hl-violet: oklch(88% 0.06 300);
+  --hl-violet-ov: oklch(84% 0.09 300);
+  --hl-violet-edge: oklch(66% 0.16 300);
+}
+:root[data-theme="dark"] {
+  --hl-text: oklch(97% 0 0);
+  --hl-yellow: oklch(46% 0.09 98);
+  --hl-yellow-ov: oklch(52% 0.105 98);
+  --hl-yellow-edge: oklch(72% 0.145 98);
+  --hl-green: oklch(38% 0.1 150);
+  --hl-green-ov: oklch(44% 0.12 150);
+  --hl-green-edge: oklch(72% 0.15 150);
+  --hl-blue: oklch(38% 0.1 250);
+  --hl-blue-ov: oklch(44% 0.125 250);
+  --hl-blue-edge: oklch(72% 0.15 250);
+  --hl-pink: oklch(38% 0.1 355);
+  --hl-pink-ov: oklch(44% 0.14 355);
+  --hl-pink-edge: oklch(72% 0.15 355);
+  --hl-violet: oklch(45% 0.1 300);
+  --hl-violet-ov: oklch(51% 0.14 300);
+  --hl-violet-edge: oklch(72% 0.15 300);
+}
+.silo-readerpane[data-reader-theme="sepia"] {
+  --hl-text: oklch(24% 0.03 60);
+  --hl-yellow: oklch(90% 0.11 98);
+  --hl-yellow-ov: oklch(86% 0.15 98);
+  --hl-yellow-edge: oklch(64% 0.13 98);
+  --hl-green: oklch(83% 0.11 150);
+  --hl-green-ov: oklch(79% 0.15 150);
+  --hl-green-edge: oklch(64% 0.15 150);
+  --hl-blue: oklch(79% 0.1 250);
+  --hl-blue-ov: oklch(75% 0.13 250);
+  --hl-blue-edge: oklch(64% 0.15 250);
+  --hl-pink: oklch(79% 0.11 355);
+  --hl-pink-ov: oklch(75% 0.15 355);
+  --hl-pink-edge: oklch(64% 0.15 355);
+  --hl-violet: oklch(86% 0.065 300);
+  --hl-violet-ov: oklch(82% 0.105 300);
+  --hl-violet-edge: oklch(64% 0.15 300);
+}
+:root[data-theme="dark"] .silo-readerpane[data-reader-theme="sepia"] {
+  --hl-text: oklch(92% 0.03 80);
+  --hl-yellow: oklch(44% 0.085 98);
+  --hl-yellow-ov: oklch(50% 0.1 98);
+  --hl-yellow-edge: oklch(72% 0.14 98);
+  --hl-green: oklch(38% 0.1 150);
+  --hl-green-ov: oklch(44% 0.12 150);
+  --hl-green-edge: oklch(72% 0.14 150);
+  --hl-blue: oklch(38% 0.1 250);
+  --hl-blue-ov: oklch(44% 0.125 250);
+  --hl-blue-edge: oklch(72% 0.14 250);
+  --hl-pink: oklch(38% 0.1 355);
+  --hl-pink-ov: oklch(44% 0.14 355);
+  --hl-pink-edge: oklch(72% 0.14 355);
+  --hl-violet: oklch(43% 0.1 300);
+  --hl-violet-ov: oklch(49% 0.14 300);
+  --hl-violet-edge: oklch(72% 0.14 300);
+}

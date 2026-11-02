@@ -1,4 +1,4 @@
-import { type ReactNode, type RefObject, useEffect, useId, useRef, useState } from 'react';
+import { type ReactNode, type RefObject, useEffect, useId, useMemo, useRef, useState } from 'react';
 import type { LinkJson } from '../../api/types';
 import { layoutMedia, useMediaQuery } from '../../lib/breakpoints';
 import { purgeCountdownDays } from '../../lib/buckets';
@@ -7,11 +7,12 @@ import { deriveTitleFromUrl } from '../../lib/url';
 import { useHideOnScroll } from '../../lib/useHideOnScroll';
 import { useHideOnViewScroll } from '../../lib/useHideOnViewScroll';
 import { useHideWhileReading } from '../../lib/useHideWhileReading';
-import { useReaderWidth } from '../../lib/useReaderWidth';
+import { ReaderPrefsProvider, useReaderPrefs } from '../../lib/useReaderPrefs';
 import { FeedSaveAction } from '../FeedSaveAction';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
+import { DockHostContext } from './dock/ReaderDock';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
 import { ReaderContent } from './ReaderContent';
@@ -247,7 +248,10 @@ function ReaderArticle({
   loading: boolean;
   showLive: () => void;
 }) {
-  const [width] = useReaderWidth();
+  const {
+    prefs: { width },
+    style,
+  } = useReaderPrefs();
   const embed = embedFor(link.url, link.sourceData);
   const video = embed?.video ? embed : undefined;
   const deletedAt = 'deletedAt' in link && typeof link.deletedAt === 'string' ? link.deletedAt : '';
@@ -256,6 +260,7 @@ function ReaderArticle({
     <article
       className="silo-reader"
       data-width={width}
+      style={style}
       onClick={(event) => seekChapter(event, video)}
     >
       {trashed && (
@@ -376,7 +381,19 @@ function EmptyReader({ message, trashed }: { message: string | undefined; trashe
   );
 }
 
-export function ReaderPane({
+type PaneProps = Parameters<typeof ReaderPaneContent>[0];
+
+export function ReaderPane(props: PaneProps) {
+  return props.link ? (
+    <ReaderPrefsProvider link={props.link}>
+      <ReaderPaneContent {...props} />
+    </ReaderPrefsProvider>
+  ) : (
+    <ReaderPaneContent {...props} />
+  );
+}
+
+function ReaderPaneContent({
   link,
   selectedId,
   tab,
@@ -409,10 +426,25 @@ export function ReaderPane({
   const showActions = showReaderActions(phone, link);
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const original = useOriginal(link, tab === 'original');
+  const {
+    prefs: { type },
+  } = useReaderPrefs();
+  const [dockElement, setDockElement] = useState<HTMLElement | null>(null);
+  const [dockMounted, setDockMounted] = useState(false);
+  // The scroll area and the pane exist from the first render; the dock's tools draw in them.
+  const [areas, setAreas] = useState<{ scroll: HTMLElement | null; panel: HTMLElement | null }>({
+    scroll: null,
+    panel: null,
+  });
   const shownOriginal = tab === 'original' && link ? original : undefined;
   const id = useId();
   const panelRef = useRef<HTMLElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => setAreas({ scroll: scrollRef.current, panel: panelRef.current }), []);
+  const dockHost = useMemo(
+    () => ({ element: dockElement, ...areas, report: setDockMounted }),
+    [dockElement, areas],
+  );
   const [openMenu, setOpenMenu] = useState<'more' | 'settings' | null>(null);
   const [headerFocused, setHeaderFocused] = useState(false);
   const [headerHovered, setHeaderHovered] = useState(false);
@@ -468,6 +500,7 @@ export function ReaderPane({
   return (
     <section
       className="silo-readerpane"
+      data-reader-theme={tab === 'reader' && dockMounted ? type.theme : undefined}
       aria-label="Link reader"
       ref={panelRef}
       tabIndex={-1}
@@ -522,7 +555,7 @@ export function ReaderPane({
               <ReaderSegment id={id} tab={tab} setTab={setTab} disabled={!link} />
             </div>
             <div className="silo-reader-right">
-              {link && (
+              {shownOriginal && (
                 <ReaderSettings
                   key={`settings-${selectedId}-${tab}`}
                   original={shownOriginal}
@@ -575,8 +608,9 @@ export function ReaderPane({
         id={`${id}-panel`}
         {...panelSemantics(id, tab, Boolean(selectedId))}
       >
-        {content}
+        <DockHostContext.Provider value={dockHost}>{content}</DockHostContext.Provider>
       </div>
+      <div className="silo-reader-dock-host" ref={setDockElement} />
     </section>
   );
 }

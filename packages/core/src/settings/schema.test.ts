@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { readerPatchSchema, readerSchema } from './reader.js';
 import {
   normalizePluginsValue,
   parseSettingValue,
@@ -257,6 +258,81 @@ describe('hoverPreview schema and default', () => {
   });
 });
 
+describe('reader setting schema', () => {
+  it('distinguishes full, stored and partial reader schemas', async () => {
+    const { readerSchema, readerStoredSchema, readerPatchSchema } = await import('./reader.js');
+    const partial = readerPatchSchema.parse({ readAloud: { voices: { kokoro: 'af_heart' } } });
+    expect(partial).toEqual({ readAloud: { voices: { kokoro: 'af_heart' } } });
+    const full = readerSchema.parse(partial);
+    // Typed field access also guards the inferred output of every schema mode.
+    expect(full.readAloud.voices.phonon).toBe('');
+    expect(full.type.size).toBe(16);
+    expect(readerStoredSchema.parse({ type: { size: 'bad', font: 'mono' } }).type.font).toBe(
+      'mono',
+    );
+    expect(() => readerPatchSchema.parse({ type: { unknown: true } })).toThrow();
+  });
+
+  it('defaults to unset, and an empty value fills every field default', () => {
+    expect(SETTINGS_DEFAULTS.reader).toBeNull();
+    expect(parseSettingValue('reader', {})).toEqual({
+      type: { font: 'inter', size: 16, leading: 'normal', theme: 'default' },
+      width: 'medium',
+      pencil: { style: 'underline', wpm: 240 },
+      highlight: { color: 'yellow' },
+      readAloud: {
+        engine: 'phonon',
+        pauses: 'relaxed',
+        voices: { phonon: '', kokoro: '' },
+        rate: 1,
+      },
+    });
+  });
+
+  it.each([
+    [{ type: { size: 14 } }],
+    [{ type: { size: 24 } }],
+    [{ pencil: { wpm: 100 } }],
+    [{ pencil: { wpm: 600 } }],
+    [{ readAloud: { rate: 0.75 } }],
+    [{ readAloud: { rate: 3 } }],
+    [{ readAloud: { voices: { kokoro: 'x'.repeat(64) } } }],
+  ])('accepts the bound %j', (value) => {
+    expect(() => parseSettingValue('reader', value)).not.toThrow();
+  });
+
+  it.each([
+    [{ type: { size: 13 } }],
+    [{ type: { size: 25 } }],
+    [{ type: { size: 15.5 } }],
+    [{ type: { font: 'comic' } }],
+    [{ width: 'huge' }],
+    [{ pencil: { wpm: 99 } }],
+    [{ pencil: { wpm: 620 } }],
+    [{ pencil: { wpm: 250 } }],
+    [{ highlight: { color: 'red' } }],
+    [{ readAloud: { engine: 'piper' } }],
+    [{ readAloud: { rate: 1.1 } }],
+    [{ readAloud: { voices: { kokoro: 'x'.repeat(65) } } }],
+    [{ readAloud: { voices: { piper: 'x' } } }],
+    [{ unknown: true }],
+    [null],
+  ])('rejects %j', (value) => {
+    expect(() => parseSettingValue('reader', value)).toThrow();
+  });
+
+  it('a stored read defaults a bad field alone and drops an unknown one', () => {
+    const read = parseStoredSettingValue('reader', {
+      type: { size: 99, font: 'mono' },
+      readAloud: { rate: 9, engine: 'kokoro' },
+      extra: 1,
+    });
+    expect(read?.type).toEqual({ font: 'mono', size: 16, leading: 'normal', theme: 'default' });
+    expect(read?.readAloud).toMatchObject({ engine: 'kokoro', rate: 1 });
+    expect(read).not.toHaveProperty('extra');
+  });
+});
+
 describe('ai setting', () => {
   const selection = (provider: string, id: string) => ({
     enabled: true,
@@ -341,4 +417,21 @@ describe('ai setting', () => {
       expect(() => parseSettingValue('ai', value)).toThrow();
     }
   });
+});
+
+it('defaults old read-aloud settings to relaxed pauses and validates pause writes strictly', () => {
+  const old = { readAloud: { engine: 'kokoro', rate: 1.5 } };
+  expect(readerSchema.parse(old).readAloud).toMatchObject({
+    engine: 'kokoro',
+    rate: 1.5,
+    pauses: 'relaxed',
+  });
+  expect(parseStoredSettingValue('reader', old)?.readAloud.pauses).toBe('relaxed');
+  for (const pauses of ['short', 'relaxed', 'natural']) {
+    expect(readerPatchSchema.parse({ readAloud: { pauses } })).toEqual({ readAloud: { pauses } });
+  }
+  for (const pauses of ['fast', null, 1]) {
+    expect(() => readerSchema.parse({ readAloud: { pauses } })).toThrow();
+    expect(() => readerPatchSchema.parse({ readAloud: { pauses } })).toThrow();
+  }
 });

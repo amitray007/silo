@@ -5,6 +5,14 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { kokoroDtype } from '../components/reader/listen/engines/files';
+import { fetchTtsManifest } from '../components/reader/listen/engines/manifest';
+import type { HighlightColor } from '../lib/highlights';
+import type { ReaderSettings } from '../lib/readerPrefs';
+import { advanceReaderPrefsVersion, readerPrefsVersion } from '../lib/readerPrefsVersion';
+import type { DeepPartial } from '../lib/readerSync';
+import { mergeDeep } from '../lib/readerSync';
 import {
   clearTitleReveal,
   getTitleReveal,
@@ -30,12 +38,15 @@ import type {
   EmptyTrashResponse,
   FeedTab,
   FrameHint,
+  HighlightJson,
   LinkJson,
   LinkResponse,
   LinksResponse,
   LinkTitlesResponse,
   LiveReaderJson,
   OAuthClientsResponse,
+  ReadingPositionJson,
+  ReadingPositionSource,
   RestoreResponse,
   SaveAiKeyResponse,
   SavedLinksResponse,
@@ -189,14 +200,525 @@ export function useRefreshReader(linkId: string) {
 
 /** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
+  const client = useQueryClient();
   return useQuery({
     queryKey: queryKeys.link(id ?? ''),
-    queryFn: () => apiGet<LinkResponse>(`/api/links/${encodeURIComponent(id ?? '')}`),
+    queryFn: async ({ signal }) => {
+      const version = readerPrefsVersion(client, id ?? '');
+      const path = `/api/links/${encodeURIComponent(id ?? '')}`;
+      let data = await apiGet<LinkResponse>(`${path}?view=reader`, signal);
+      if (data.link.readerTextOmitted) {
+        try {
+          // Share the Reader query with useLiveReader. A failed HTML read still gets full text.
+          await client.fetchQuery({
+            queryKey: queryKeys.liveReader(id ?? ''),
+            queryFn: ({ signal }) => apiGet<LiveReaderJson>(`${path}/reader`, signal),
+            staleTime: 10 * 60 * 1000,
+            retry: false,
+          });
+        } catch {
+          data = await apiGet<LinkResponse>(path, signal);
+        }
+      }
+      return version === 0
+        ? data
+        : { ...data, link: { ...data.link, readerPrefsVersion: version } };
+    },
     enabled: Boolean(id) && (options.enabled ?? true),
     retry: false,
     refetchInterval: (query) =>
       query.state.data?.link.captureStatus === 'enriching' ? 1500 : false,
   });
+}
+
+/** The article sync queue owns optimistic state and rollback; this hook keeps detail cache current. */
+export function useUpdateReaderPrefs(linkId: string) {
+  const client = useQueryClient();
+  return useCallback(
+    async (patch: DeepPartial<ReaderSettings>, writtenAt: string) => {
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
+      const { readerPrefs } = await apiPatch<{ readerPrefs: DeepPartial<ReaderSettings> }>(
+        `/api/links/${encodeURIComponent(linkId)}/reader-prefs`,
+        { ...patch, writtenAt },
+      );
+      advanceReaderPrefsVersion(client, linkId);
+      await client.cancelQueries({ queryKey: queryKeys.link(linkId) });
+      client.setQueryData<LinkResponse>(queryKeys.link(linkId), (data) =>
+        data
+          ? {
+              ...data,
+              link: {
+                ...data.link,
+                readerPrefs,
+                readerPrefsVersion: readerPrefsVersion(client, linkId),
+              },
+            }
+          : data,
+      );
+      return readerPrefs;
+    },
+    [client, linkId],
+  );
+}
+
+function withReadingPosition(
+  data: LinkResponse | undefined,
+  readingPosition: ReadingPositionJson | null,
+): LinkResponse | undefined {
+  return data && { ...data, link: { ...data.link, readingPosition } };
+}
+
+type PositionWrite = {
+  position: number | null;
+  source: ReadingPositionSource;
+  generation: number;
+  writtenAt: string;
+  keepalive: boolean;
+};
+
+type SaveQueue = {
+  flight: Promise<void> | null;
+  pending: PositionWrite | null;
+  /** Keepalive requests leave immediately; later writes wait for all of them. */
+  urgent: Promise<void>[];
+  generation: number;
+  writtenAt: number;
+  confirmedGeneration: number;
+  confirmed: ReadingPositionJson | null | undefined;
+  failure: { generation: number; error: unknown } | null;
+};
+
+/** Set the link's cached reading position, or clear it. */
+function putCachedPosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  id: string,
+  readingPosition: ReadingPositionJson | null,
+): void {
+  queryClient.setQueryData<LinkResponse>(queryKeys.link(id), (data) =>
+    withReadingPosition(data, readingPosition),
+  );
+}
+
+/** Send a write, retaining only the newest confirmed result or failure. */
+async function sendPosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  write: PositionWrite,
+): Promise<void> {
+  const path = `/api/links/${encodeURIComponent(id)}/reading-position`;
+  try {
+    let saved: ReadingPositionJson | null;
+    if (write.position === null) {
+      await apiDelete(path);
+      saved = null;
+    } else {
+      const response = await apiPut<{ readingPosition: ReadingPositionJson }>(
+        path,
+        {
+          position: write.position,
+          source: write.source,
+          writtenAt: write.writtenAt,
+        },
+        write.keepalive,
+      );
+      saved = response.readingPosition;
+    }
+    if (write.generation >= q.confirmedGeneration) {
+      q.confirmed = saved;
+      q.confirmedGeneration = write.generation;
+    }
+    if (write.generation === q.generation) putCachedPosition(queryClient, id, saved);
+  } catch (error) {
+    if (!q.failure || write.generation > q.failure.generation)
+      q.failure = { generation: write.generation, error };
+  }
+}
+
+/** Drain normal writes and all immediate keepalives before sending a later write or Remove. */
+async function drainSaves(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  write: PositionWrite,
+): Promise<void> {
+  await sendPosition(queryClient, q, id, write);
+  while (q.urgent.length) await Promise.all(q.urgent.splice(0));
+  const waiting = q.pending;
+  q.pending = null;
+  if (waiting) return drainSaves(queryClient, q, id, waiting);
+  if (q.failure?.generation === q.generation) {
+    if (q.confirmed !== undefined) putCachedPosition(queryClient, id, q.confirmed);
+    throw q.failure.error;
+  }
+}
+
+function queuePosition(
+  queryClient: ReturnType<typeof useQueryClient>,
+  q: SaveQueue,
+  id: string,
+  write: PositionWrite,
+): Promise<void> {
+  if (q.flight) {
+    if (write.keepalive && write.position !== null) {
+      q.pending = null;
+      q.urgent.push(sendPosition(queryClient, q, id, write));
+    } else q.pending = write;
+    return q.flight;
+  }
+  q.flight = drainSaves(queryClient, q, id, write).finally(() => {
+    q.flight = null;
+  });
+  return q.flight;
+}
+
+/**
+ * Optimistically save the link's place. Normal writes coalesce behind the active request.
+ * Pagehide sends immediately with a newer timestamp and supersedes queued work; the server
+ * rejects stale PUTs. Later saves and Remove wait for every outstanding request to finish.
+ */
+export function useSaveReadingPosition(id: string) {
+  const queryClient = useQueryClient();
+  const queue = useRef<SaveQueue>({
+    flight: null,
+    pending: null,
+    urgent: [],
+    generation: 0,
+    writtenAt: 0,
+    confirmedGeneration: 0,
+    confirmed: undefined,
+    failure: null,
+  });
+  return useCallback(
+    (
+      position: number | null,
+      options: { keepalive?: boolean; source?: ReadingPositionSource } = {},
+    ): Promise<void> => {
+      const source = options.source ?? 'mark';
+      const key = queryKeys.link(id);
+      const q = queue.current;
+      const generation = ++q.generation;
+      const cached = queryClient.getQueryData<LinkResponse>(key)?.link.readingPosition;
+      q.writtenAt = Math.max(
+        Date.now(),
+        q.writtenAt + 1,
+        cached ? Date.parse(cached.updatedAt) + 1 : 0,
+      );
+      const writtenAt = new Date(q.writtenAt).toISOString();
+      const write = {
+        position,
+        source,
+        generation,
+        writtenAt,
+        keepalive: options.keepalive ?? false,
+      };
+      if (q.confirmed === undefined) q.confirmed = cached ?? null;
+      void queryClient.cancelQueries({ queryKey: key });
+      putCachedPosition(
+        queryClient,
+        id,
+        position === null ? null : { position, source, updatedAt: writtenAt },
+      );
+      return queuePosition(queryClient, q, id, write);
+    },
+    [id, queryClient],
+  );
+}
+
+/** What the reader sends to create a highlight. A temp row shows at once; the server row replaces it. */
+export type HighlightDraft = {
+  quote: string;
+  prefix: string;
+  suffix: string;
+  startOffset: number;
+  endOffset: number;
+  color: HighlightColor;
+  note?: string | null;
+};
+
+export type HighlightPatch = { color?: HighlightColor; note?: string | null };
+
+type Fields = { color: HighlightColor; note: string | null };
+
+/** Edits to one highlight, sent one at a time: the newest patch waits behind the one in flight. */
+type EditQueue = {
+  flight: Promise<void> | null;
+  pending: HighlightPatch | null;
+  /** The colour and note the server last confirmed; a failed save returns to it. */
+  confirmed: Fields | null;
+};
+
+/** A highlight still saving. `real` is set once the server answered but the cache has not shown it yet. */
+type PendingRow = HighlightJson & { real?: string };
+
+let draftCounter = 0;
+
+function mapHighlights(
+  data: LinkResponse | undefined,
+  change: (highlights: HighlightJson[]) => HighlightJson[],
+): LinkResponse | undefined {
+  return (
+    data && { ...data, link: { ...data.link, highlights: change(data.link.highlights ?? []) } }
+  );
+}
+
+/** Add rows still being saved to a link's highlights (a refetch must not hide them). */
+export function withPendingHighlights(
+  saved: readonly HighlightJson[],
+  pending: readonly (HighlightJson & { real?: string })[],
+): readonly HighlightJson[] {
+  if (pending.length === 0) return saved;
+  const shown = (row: HighlightJson & { real?: string }) =>
+    !saved.some((item) => item.id === row.id || item.id === row.real);
+  return [...saved, ...pending.filter(shown).map(({ real: _real, ...row }) => row)];
+}
+
+function applyPatch(item: HighlightJson, patch: HighlightPatch): HighlightJson {
+  const next = { ...item };
+  if (patch.color !== undefined) next.color = patch.color;
+  if (patch.note !== undefined) next.note = patch.note;
+  return next;
+}
+
+type WriterState = {
+  removed: Set<string>;
+};
+
+/** What the edit queue needs from the writer: its state, the id lookup and the row patcher. */
+type EditContext = {
+  st: WriterState;
+  realId: (id: string) => Promise<string>;
+  patchRow: (id: string, change: (row: HighlightJson) => HighlightJson) => void;
+};
+
+/** Send one patch to the real id and note what the server confirmed. */
+async function sendPatch(ctx: EditContext, root: string, queue: EditQueue, sent: HighlightPatch) {
+  const target = await ctx.realId(root);
+  const { highlight } = await apiPatch<{ highlight: HighlightJson }>(
+    `/api/highlights/${encodeURIComponent(target)}`,
+    sent,
+  );
+  queue.confirmed = queue.confirmed && applyPatch({ ...highlight, ...queue.confirmed }, sent);
+  ctx.patchRow(target, (row) => ({ ...row, updatedAt: highlight.updatedAt }));
+}
+
+/** Send an edit and whatever newer edits queue behind it. */
+async function runEdit(
+  ctx: EditContext,
+  root: string,
+  queue: EditQueue,
+  first: HighlightPatch,
+): Promise<void> {
+  let patch: HighlightPatch | null = first;
+  while (patch) {
+    try {
+      await sendPatch(ctx, root, queue, patch);
+    } catch (error) {
+      // A newer edit is waiting: it goes next, and its result decides what stays.
+      if (!queue.pending) {
+        // Deleted meanwhile: the failure means nothing now.
+        if (ctx.st.removed.has(root)) return;
+        const back = queue.confirmed;
+        if (back) ctx.patchRow(root, (row) => ({ ...row, color: back.color, note: back.note }));
+        throw error;
+      }
+    }
+    patch = queue.pending;
+    queue.pending = null;
+  }
+}
+
+/**
+ * Passage highlight writes (`POST /api/links/:id/highlights`, `PATCH` and `DELETE
+ * /api/highlights/:id`). Each updates the screen at once and rolls back when the request
+ * fails; the returned promise rejects so the caller can say so.
+ *
+ * - A new highlight lives in `pending` (state, not the query cache) under a temporary id until
+ *   the server answers, so a refetch in between cannot hide it. Edits and deletes made before
+ *   the answer wait for it, then use the real id (`resolveId` maps old to new).
+ * - Edits to one highlight run one at a time, newest wins, so a slow response never lands
+ *   after a later one. A failed save returns to the last confirmed colour and note.
+ * - `shown` is the link's highlights as the screen has them; a pending copy goes away only once
+ *   `shown` holds the saved one, so the row never blinks out in between.
+ * - Every callback is stable, so a parent re-render never re-runs an effect that depends on it.
+ */
+export function useHighlightWrites(linkId: string, shown?: readonly HighlightJson[]) {
+  const queryClient = useQueryClient();
+  const key = useMemo(() => queryKeys.link(linkId), [linkId]);
+  const [pending, setPendingState] = useState<PendingRow[]>([]);
+  const state = useRef({
+    rows: [] as PendingRow[],
+    creating: new Map<string, Promise<string>>(),
+    created: new Map<string, HighlightJson>(),
+    aliases: new Map<string, string>(),
+    /** Real id -> the temporary id it replaced, so both name one queue. */
+    origin: new Map<string, string>(),
+    failed: new Set<string>(),
+    removed: new Set<string>(),
+    queues: new Map<string, EditQueue>(),
+  });
+
+  // Once the cache shows a saved highlight, its pending copy has done its job.
+  useEffect(() => {
+    const st = state.current;
+    if (!shown) return;
+    const rest = st.rows.filter((row) => !(row.real && shown.some((item) => item.id === row.real)));
+    if (rest.length !== st.rows.length) {
+      st.rows = rest;
+      setPendingState(rest);
+    }
+  }, [shown]);
+  const api = useMemo(() => {
+    const st = state.current;
+    const setRows = (rows: PendingRow[]) => {
+      st.rows = rows;
+      setPendingState(rows);
+    };
+    const rootOf = (id: string) => st.origin.get(id) ?? id;
+    const resolveId = (id: string) => st.aliases.get(id) ?? id;
+    const find = (id: string): HighlightJson | undefined => {
+      const real = resolveId(id);
+      const saving = st.rows.find((row) => row.id === id && !row.real);
+      return (
+        saving ??
+        queryClient.getQueryData<LinkResponse>(key)?.link.highlights?.find((row) => row.id === real)
+      );
+    };
+    const updateCache = (change: (highlights: HighlightJson[]) => HighlightJson[]) => {
+      void queryClient.cancelQueries({ queryKey: key });
+      queryClient.setQueryData<LinkResponse>(key, (data) => mapHighlights(data, change));
+    };
+    /** Change one row wherever it lives: still saving, or in the cache. */
+    const patchRow = (id: string, change: (row: HighlightJson) => HighlightJson) => {
+      if (st.rows.some((row) => row.id === id && !row.real)) {
+        setRows(st.rows.map((row) => (row.id === id ? change(row) : row)));
+      } else {
+        const real = resolveId(id);
+        updateCache((list) => list.map((row) => (row.id === real ? change(row) : row)));
+      }
+    };
+    const realId = async (id: string): Promise<string> => {
+      const waiting = st.creating.get(rootOf(id)) ?? st.creating.get(id);
+      return waiting ? await waiting : resolveId(id);
+    };
+
+    const ctx: EditContext = { st, realId, patchRow };
+
+    const add = (draft: HighlightDraft): { id: string; saved: Promise<string> } => {
+      const id = `pending-${++draftCounter}`;
+      const now = new Date().toISOString();
+      setRows([
+        ...st.rows,
+        {
+          id,
+          quote: draft.quote,
+          prefix: draft.prefix,
+          suffix: draft.suffix,
+          startOffset: draft.startOffset,
+          endOffset: draft.endOffset,
+          color: draft.color,
+          note: draft.note ?? null,
+          createdAt: now,
+          updatedAt: now,
+        },
+      ]);
+      const saved = apiPost<{ highlight: HighlightJson }>(
+        `/api/links/${encodeURIComponent(linkId)}/highlights`,
+        {
+          quote: draft.quote,
+          prefix: draft.prefix,
+          suffix: draft.suffix,
+          startOffset: draft.startOffset,
+          endOffset: draft.endOffset,
+          color: draft.color,
+          ...(draft.note ? { note: draft.note } : {}),
+        },
+      ).then(
+        ({ highlight }) => {
+          st.aliases.set(id, highlight.id);
+          st.origin.set(highlight.id, id);
+          st.created.set(id, highlight);
+          st.creating.delete(id);
+          const temp = st.rows.find((row) => row.id === id);
+          if (!st.removed.has(id)) {
+            // Keep what the reader changed while the request was in flight.
+            const row = temp ? { ...highlight, color: temp.color, note: temp.note } : highlight;
+            updateCache((list) =>
+              list.some((item) => item.id === row.id)
+                ? list.map((item) => (item.id === row.id ? row : item))
+                : [...list, row],
+            );
+          }
+          // The row stays visible (as `real`) until the cache shows the saved one: no gap.
+          setRows(
+            st.removed.has(id)
+              ? st.rows.filter((row) => row.id !== id)
+              : st.rows.map((row) => (row.id === id ? { ...row, real: highlight.id } : row)),
+          );
+          return highlight.id;
+        },
+        (error: unknown) => {
+          st.failed.add(id);
+          st.creating.delete(id);
+          setRows(st.rows.filter((row) => row.id !== id));
+          throw error;
+        },
+      );
+      st.creating.set(id, saved);
+      // The caller handles the failure; keep the stored copy from reporting it unhandled.
+      saved.catch(() => {});
+      return { id, saved };
+    };
+
+    const edit = (id: string, patch: HighlightPatch): Promise<void> => {
+      const before = find(id);
+      if (!before) return Promise.resolve();
+      const root = rootOf(id);
+      const queue = st.queues.get(root) ?? { flight: null, pending: null, confirmed: null };
+      st.queues.set(root, queue);
+      if (!queue.confirmed) queue.confirmed = { color: before.color, note: before.note };
+      patchRow(before.id, (row) => applyPatch(row, patch));
+      if (queue.flight) {
+        queue.pending = { ...queue.pending, ...patch };
+        return queue.flight;
+      }
+      queue.flight = runEdit(ctx, root, queue, patch).finally(() => {
+        queue.flight = null;
+        if (!queue.pending) queue.confirmed = null;
+      });
+      return queue.flight;
+    };
+
+    const remove = async (id: string): Promise<void> => {
+      const root = rootOf(id);
+      const row = find(id);
+      if (!row) return;
+      st.removed.add(root);
+      const saving = st.rows.some((item) => item.id === row.id && !item.real);
+      const list = queryClient.getQueryData<LinkResponse>(key)?.link.highlights ?? [];
+      const at = list.findIndex((item) => item.id === row.id);
+      if (saving) setRows(st.rows.filter((item) => item.id !== row.id));
+      else updateCache((all) => all.filter((item) => item.id !== row.id));
+      try {
+        const target = await realId(id);
+        await apiDelete(`/api/highlights/${encodeURIComponent(target)}`);
+      } catch (error) {
+        // The create itself failed: the row is already gone and must not come back.
+        if (st.failed.has(root)) throw error;
+        st.removed.delete(root);
+        const back = st.created.get(root) ?? row;
+        updateCache((all) => {
+          const restored = all.filter((item) => item.id !== back.id);
+          restored.splice(at < 0 ? restored.length : Math.min(at, restored.length), 0, back);
+          return restored;
+        });
+        throw error;
+      }
+    };
+
+    return { add, edit, remove, resolveId };
+  }, [queryClient, key, linkId]);
+  return { ...api, pending };
 }
 
 /** The paginated list cache, shared by query polling and optimistic writes. */
@@ -831,6 +1353,20 @@ export function useRetryCapture(id: string, baselineTitle?: string) {
   });
 }
 
+/** The shared voice catalog and model-file manifest, including its offline fallback. */
+export function useTtsManifest() {
+  return useQuery({
+    queryKey: ['tts', 'manifest'],
+    queryFn: fetchTtsManifest,
+    staleTime: Infinity,
+  });
+}
+
+/** Preferred model size for this browser; the cache can also hold its fallback variant. */
+export function useKokoroDtype() {
+  return useQuery({ queryKey: ['tts', 'dtype'], queryFn: kokoroDtype, staleTime: Infinity });
+}
+
 /**
  * The Settings modal's read (`GET /api/settings`, plan 016) — hydrates the
  * theme picker, the 7/30/90 trash-purge-cycle picker, and the plugin
@@ -883,7 +1419,13 @@ export function useUpdateSettings() {
       // settings haven't loaded yet the callers (PluginsTab) gate their
       // controls on `loading`, so no write originates from that window.
       if (previous) {
-        queryClient.setQueryData<SettingsMap>(queryKeys.settings(), { ...previous, ...patch });
+        // `reader` is a partial value that merges into the stored one; the rest replace.
+        const { reader, ...rest } = patch;
+        queryClient.setQueryData<SettingsMap>(queryKeys.settings(), {
+          ...previous,
+          ...rest,
+          ...(reader && previous.reader ? { reader: mergeDeep(previous.reader, reader) } : {}),
+        });
       }
       return { previous };
     },

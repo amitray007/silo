@@ -126,6 +126,16 @@ describe('SettingsModal', () => {
     expect(screen.getAllByText('MCP access').length).toBeGreaterThan(0);
   });
 
+  it('has a Reader tab with the type, pencil, read-aloud and voices sections', () => {
+    renderPage();
+    fireEvent.click(screen.getByRole('tab', { name: 'Reader' }));
+    expect(screen.getByRole('tab', { name: 'Reader' }).getAttribute('aria-selected')).toBe('true');
+    for (const title of ['Type', 'Pencil', 'Highlights', 'Read aloud', 'Voices']) {
+      expect(screen.getByRole('heading', { name: title })).toBeDefined();
+    }
+    expect(screen.getByRole('spinbutton', { name: 'Size' })).toBeDefined();
+  });
+
   it('returns from Settings with its close control', () => {
     renderPage();
     fireEvent.click(screen.getByRole('button', { name: 'Close' }));

@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { LinkJson } from '../../api/types';
-import { makeLink } from '../../test/fixtures';
+import { makeLink, twitterSourceData } from '../../test/fixtures';
 import { RowMenuProvider } from '../RowMenuContext';
 import { ReaderPane } from './ReaderPane';
 import { useReaderActions } from './useReaderActions';
@@ -39,12 +39,17 @@ function Pane({
   );
 }
 
-function show(value: LinkJson | null = link, selectedId?: string | null) {
-  const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
-    String(input).includes('/frame')
-      ? json({ mode: 'direct', darkTheme: false })
-      : json({ tags: [] }),
-  );
+function show(
+  value: LinkJson | null = link,
+  selectedId?: string | null,
+  reader: 'prose' | 'none' = 'prose',
+) {
+  const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+    const path = String(input);
+    if (path.includes('/frame')) return json({ mode: 'direct', darkTheme: false });
+    if (path.endsWith('/reader') && reader === 'none') return json({ error: 'not_found' }, 404);
+    return json({ tags: [] });
+  });
   vi.stubGlobal('fetch', fetchMock);
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const tree = (value: LinkJson | null) => (
@@ -121,11 +126,11 @@ it('reveals on toolbar focus and stays shown until focus leaves', async () => {
   expect(head.dataset.hidden).toBe('true');
 });
 
-it.each(['More actions', 'View settings'])('pins the bar while %s is open', async (label) => {
+it('pins the bar while More actions is open', async () => {
   const { container } = show();
   const { head, scroll } = scrollPane(container);
   await scroll(200);
-  fireEvent.click(screen.getByRole('button', { name: label }));
+  fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
   // Move focus out to prove the open menu itself pins the header.
   act(() => (document.activeElement as HTMLElement).blur());
   await scroll(240);
@@ -191,18 +196,12 @@ afterEach(() => {
   document.documentElement.dataset.theme = 'light';
 });
 
-it('keeps only five controls inline and orders Edit and Reload before existing menu items', async () => {
+it('keeps only four controls inline and orders Edit and Reload before existing menu items', async () => {
   const { container } = show();
   const tools = within(container.querySelector('.silo-reader-right') as HTMLElement);
   const labels = () =>
     tools.getAllByRole('button').map((button) => button.getAttribute('aria-label'));
-  expect(labels()).toEqual([
-    'View settings',
-    'Copy link',
-    'Open original',
-    'Move to trash',
-    'More actions',
-  ]);
+  expect(labels()).toEqual(['Copy link', 'Open original', 'Move to trash', 'More actions']);
   fireEvent.click(tools.getByRole('button', { name: 'More actions' }));
   expect(screen.getAllByRole('menuitem').map((item) => item.textContent)).toEqual([
     'Edite',
@@ -270,4 +269,45 @@ it('reloads from More, disables another reload while pending, and keeps the fram
   fireEvent.click(screen.getByRole('menuitem', { name: 'Reload page' }));
   await waitFor(() => expect(screen.getByTitle('Live page')).not.toBe(originalFrame));
   expect(screen.queryByRole('alert')).toBeNull();
+});
+
+describe('Sepia reader theme', () => {
+  const pane = (container: HTMLElement) =>
+    container.querySelector('.silo-readerpane') as HTMLElement;
+  beforeEach(() =>
+    localStorage.setItem('silo.readerType', JSON.stringify({ v: 1, theme: 'sepia' })),
+  );
+
+  it('applies while Reader prose renders, and not on the Live tab', async () => {
+    const { container } = show();
+    await waitFor(() => expect(pane(container).dataset.readerTheme).toBe('sepia'));
+    fireEvent.click(screen.getByRole('tab', { name: 'Live' }));
+    await waitFor(() => expect(pane(container).dataset.readerTheme).toBeUndefined());
+  });
+
+  it('stays on the app theme when the page has no Reader prose', async () => {
+    const { container } = show(link, undefined, 'none');
+    await screen.findByText('Saved article text.');
+    expect(pane(container).dataset.readerTheme).toBeUndefined();
+  });
+
+  it('stays on the app theme for an X post, which never loads Reader prose', async () => {
+    const post = makeLink({
+      id: 'post',
+      url: 'https://x.com/amitray007/status/1',
+      sourceData: twitterSourceData,
+    });
+    const { container, fetchMock } = show(post);
+    await screen.findByRole('toolbar', { name: 'Reader navigation' });
+    expect(pane(container).dataset.readerTheme).toBeUndefined();
+    expect(fetchMock.mock.calls.some(([input]) => String(input).endsWith('/reader'))).toBe(false);
+  });
+
+  it('stays on the app theme while loading and with nothing selected', () => {
+    const loading = show(null, 'missing');
+    expect(pane(loading.container).dataset.readerTheme).toBeUndefined();
+    loading.unmount();
+    const empty = show(null, null);
+    expect(pane(empty.container).dataset.readerTheme).toBeUndefined();
+  });
 });

@@ -111,6 +111,10 @@ services:
       SILO_TRASH_PURGE_DAYS: ${SILO_TRASH_PURGE_DAYS:-}
       SILO_ENRICHING_STALE_MINUTES: ${SILO_ENRICHING_STALE_MINUTES:-}
       SILO_BROWSER_WS_ENDPOINT: ${SILO_BROWSER_WS_ENDPOINT:-}
+      # Read aloud voice models are downloaded here once and served to the browser.
+      SILO_DATA_DIR: /data
+    volumes:
+      - silo-data:/data
     # Migrate (idempotent) then serve via the @silo/app composition-root
     # entrypoint (web + API + in-process worker — api-main.ts). `sh -c` so both
     # run in one container. Use `pnpm --filter … run start:api` (a package
@@ -187,6 +191,7 @@ services:
 
 volumes:
   silo-pgdata:
+  silo-data:
 
 networks:
   silo:

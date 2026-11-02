@@ -1,5 +1,5 @@
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { LinkSummaryWithTags } from '@silo/core';
+import type { LinkDetail } from '@silo/core';
 import { MAX_BULK_IDS, TooManyIdsError } from '@silo/core';
 import { z } from 'zod';
 import { baseLinkShape, toBaseLinkContent } from './link-shape.js';
@@ -46,6 +46,8 @@ export const foundLinkOutputShape = {
   tags: baseLinkShape.tags.optional(),
   createdAt: baseLinkShape.createdAt.optional(),
   updatedAt: baseLinkShape.updatedAt.optional(),
+  readingPosition: baseLinkShape.readingPosition.optional(),
+  highlights: baseLinkShape.highlights.optional(),
 };
 
 /**
@@ -54,7 +56,7 @@ export const foundLinkOutputShape = {
  * duplicating `get_link`'s `toStructuredContent`/success-`content` pairing
  * verbatim (jscpd-flagged clone risk per the W3 build brief).
  */
-export function foundResult(link: LinkSummaryWithTags, text: string): CallToolResult {
+export function foundResult(link: LinkDetail, text: string): CallToolResult {
   return {
     content: [{ type: 'text', text }],
     structuredContent: { found: true, ...toBaseLinkContent(link) },

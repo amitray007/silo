@@ -11,6 +11,7 @@ import type {
   TrashLinkJson,
 } from '../../api/types';
 import { layoutMedia } from '../../lib/breakpoints';
+import { mergeDeep } from '../../lib/readerSync';
 import {
   githubSourceData,
   hackerNewsSourceData,
@@ -27,6 +28,7 @@ const settings: SettingsMap = {
   mcpAccess: true,
   linkPreviewImages: true,
   hoverPreview: true,
+  reader: null,
   ai: { enabled: false, features: {} },
   plugins: {
     hacker_news: { enabled: true, inline: true, hover: true, palette: true },
@@ -51,7 +53,7 @@ const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 
 function detailResponse(path: string, links: LinkJson[]) {
-  const link = links.find((link) => path === `/api/links/${link.id}`);
+  const link = links.find((link) => path.split('?')[0] === `/api/links/${link.id}`);
   return link ? json({ link }) : json({ error: 'not_found', message: 'Unknown link' }, 404);
 }
 
@@ -81,6 +83,23 @@ function HistoryProbe() {
   );
 }
 
+function requestMethod(init?: RequestInit) {
+  return init?.method ?? 'GET';
+}
+
+function patchArticlePrefs(
+  path: string,
+  method: string,
+  init: RequestInit | undefined,
+  links: LinkJson[],
+) {
+  if (method !== 'PATCH' || !path.endsWith('/reader-prefs')) return undefined;
+  const link = links.find((link) => path === `/api/links/${link.id}/reader-prefs`);
+  if (!link) return undefined;
+  link.readerPrefs = mergeDeep(link.readerPrefs ?? {}, JSON.parse(String(init?.body)));
+  return json({ readerPrefs: link.readerPrefs });
+}
+
 function renderReader({
   live = [a, b],
   trash = [],
@@ -104,10 +123,16 @@ function renderReader({
   pageSize?: number;
   frameHint?: FrameHint;
 } = {}) {
-  const state = { live: [...live], trash: [...trash], settings: { ...settings } };
+  const state = {
+    live: structuredClone(live),
+    trash: structuredClone(trash),
+    settings: { ...settings },
+  };
   const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const path = String(input);
-    const method = init?.method ?? 'GET';
+    const method = requestMethod(init);
+    const prefsResponse = patchArticlePrefs(path, method, init, state.live);
+    if (prefsResponse) return prefsResponse;
     const url = new URL(path, 'https://silo.test');
     const reads: Record<string, () => Response> = {
       '/api/auth/check': () => json({ authRequired: false }),
@@ -459,7 +484,9 @@ describe('reader selection and history', () => {
     const { fetchMock, container } = renderReader();
     await selectFirst();
     expect(screen.getByTestId('url').textContent).toBe('/?link=a');
-    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a')).toBe(true);
+    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a?view=reader')).toBe(
+      true,
+    );
     expect(container.querySelector('.silo-three-pane')?.getAttribute('data-reader')).toBe('true');
     fireEvent.click(screen.getByText('Browser back'));
     await waitFor(() => expect(screen.getByTestId('url').textContent).toBe('/'));
@@ -470,14 +497,14 @@ describe('reader selection and history', () => {
     const { fetchMock } = renderReader({ extra: [hidden], route: '/?link=deep' });
     await selected('Deep link');
     expect(fetchMock).toHaveBeenCalledWith(
-      '/api/links/deep',
+      '/api/links/deep?view=reader',
       expect.objectContaining({ credentials: 'include' }),
     );
   });
   it('shows an empty reader for an unknown id', async () => {
     const { fetchMock } = renderReader({ route: '/?link=missing' });
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith('/api/links/missing', expect.any(Object)),
+      expect(fetchMock).toHaveBeenCalledWith('/api/links/missing?view=reader', expect.any(Object)),
     );
     await waitFor(() => expect(reader().getByText('Select a link to read')).toBeDefined());
     expect(screen.queryByRole('alert')).toBeNull();
@@ -493,7 +520,9 @@ describe('reader selection and history', () => {
     const { fetchMock } = renderReader({ trash: [makeTrashLink(a)], route: '/trash?link=a' });
     await selected();
     expect(reader().getByText(/In trash · Purges in/)).toBeDefined();
-    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a')).toBe(false);
+    expect(fetchMock.mock.calls.some(([path]) => String(path) === '/api/links/a?view=reader')).toBe(
+      false,
+    );
   });
 });
 
@@ -1123,7 +1152,7 @@ describe('review regressions', () => {
     });
     await selected();
     await waitFor(() => expect(screen.getByText('Article heading')).toBeDefined());
-    expect(fetchMock).toHaveBeenCalledWith('/api/links/a', expect.any(Object));
+    expect(fetchMock).toHaveBeenCalledWith('/api/links/a?view=reader', expect.any(Object));
     expect(fetchMock).toHaveBeenCalledWith('/api/links/a/reader', expect.any(Object));
     const prose = container.querySelector('.silo-reader-prose');
     expect(prose?.querySelector('script, [style], [onclick], [onerror]')).toBeNull();
@@ -1275,7 +1304,7 @@ describe('responsive reader header', () => {
     expect(reader().queryByRole('button', { name: 'Copy link' })).toBeNull();
     expect(reader().queryByRole('button', { name: 'Edit' })).toBeNull();
     expect(container.querySelector('.silo-reader-rbar')).toBeNull();
-    expect(reader().getByRole('button', { name: 'View settings' })).toBeDefined();
+    expect(reader().queryByRole('button', { name: 'View settings' })).toBeNull();
     fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
     await screen.findByTitle('Live page');
     fireEvent.click(reader().getByRole('button', { name: 'More actions' }));
@@ -1331,45 +1360,49 @@ it('opens phone tag management from the collection menu and restores focus on cl
   expect(document.activeElement).toBe(collection);
 });
 
-it('opens reader settings, persists widths, handles arrow keys, and returns focus on Escape', async () => {
-  const { container } = renderReader();
-  await screen.findByText('First link');
+it('opens the Type sheet from the dock, applies and persists settings, and closes on Escape', async () => {
+  const { container } = renderReader({
+    route: '/?link=a',
+    readers: {
+      a: { capturedAt: null, contentHtml: '<p>Article text</p>', contentImages: [] },
+    },
+  });
+  await selected();
   expect(reader().queryByRole('button', { name: 'View settings' })).toBeNull();
-  await selectFirst();
-  const article = container.querySelector('article.silo-reader');
-  expect(article?.getAttribute('data-width')).toBe('medium');
-  const trigger = reader().getByRole('button', { name: 'View settings' });
+  const article = container.querySelector('article.silo-reader') as HTMLElement;
+  expect(article.getAttribute('data-width')).toBe('medium');
+  const trigger = await reader().findByRole('button', { name: 'Type' });
   trigger.focus();
   fireEvent.click(trigger);
-  expect(screen.getByRole('dialog', { name: 'View settings' })).toBeDefined();
-  expect(screen.getByRole('region', { name: 'Reader' })).toBeDefined();
-  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Medium' }));
+  expect(screen.getByRole('dialog', { name: 'Type' })).toBeDefined();
+  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Inter' }));
   for (const [label, value] of [
     ['Narrow', 'narrow'],
     ['Medium', 'medium'],
     ['Wide', 'wide'],
   ] as const) {
     fireEvent.click(screen.getByRole('radio', { name: label }));
-    expect(article?.getAttribute('data-width')).toBe(value);
-    expect(localStorage.getItem('silo.readerWidth')).toBe(value);
-    expect(screen.getByRole('radiogroup', { name: 'Width' })).toBeDefined();
+    expect(article.getAttribute('data-width')).toBe(value);
+    expect(localStorage.getItem('silo.readerWidth')).toBeNull();
   }
-  fireEvent.keyDown(screen.getByRole('radio', { name: 'Wide' }), { key: 'ArrowRight' });
-  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Narrow' }));
-  expect(article?.getAttribute('data-width')).toBe('narrow');
-  fireEvent.keyDown(document.activeElement as HTMLElement, { key: 'ArrowUp' });
-  expect(document.activeElement).toBe(screen.getByRole('radio', { name: 'Wide' }));
-  expect(article?.getAttribute('data-width')).toBe('wide');
+  fireEvent.click(screen.getByRole('radio', { name: 'Sepia' }));
+  expect(container.querySelector('.silo-readerpane')?.getAttribute('data-reader-theme')).toBe(
+    'sepia',
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Increase size' }));
+  expect(article.style.getPropertyValue('--reader-size')).toBe('17px');
+  expect(localStorage.getItem('silo.readerType')).toBeNull();
   fireEvent.keyDown(document, { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Type' })).toBeNull());
   await waitFor(() => expect(document.activeElement).toBe(trigger));
-  expect(screen.queryByRole('dialog', { name: 'View settings' })).toBeNull();
   expect(article).toBe(container.querySelector('article.silo-reader'));
-  fireEvent.click(trigger);
-  fireEvent.mouseDown(document.body);
-  await waitFor(() => expect(screen.queryByRole('dialog', { name: 'View settings' })).toBeNull());
+  // The Original tab keeps its own settings and gets no dock.
   fireEvent.click(reader().getByRole('tab', { name: 'Live' }));
-  await waitFor(() => expect(reader().queryByRole('button', { name: 'View settings' })).toBeNull());
+  await waitFor(() => expect(reader().queryByRole('button', { name: /Type/ })).toBeNull());
   expect(container.querySelector('.silo-original')?.hasAttribute('data-width')).toBe(false);
+  expect(container.querySelector('.silo-readerpane')?.hasAttribute('data-reader-theme')).toBe(
+    false,
+  );
 });
 
 describe('Live header on scroll', () => {
@@ -1457,7 +1490,6 @@ describe('Live page view settings', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Dark mode' }));
       fireEvent.click(await reader().findByRole('button', { name: 'View settings' }));
       expect(screen.getByRole('region', { name: 'Live page' })).toBeDefined();
-      expect(screen.queryByRole('radiogroup', { name: 'Width' })).toBeNull();
       expect(screen.getByText('Recolour this site to match silo.')).toBeDefined();
       const toggle = screen.getByRole('switch', { name: 'Dark page' });
       expect(toggle.getAttribute('aria-checked')).toBe('true');

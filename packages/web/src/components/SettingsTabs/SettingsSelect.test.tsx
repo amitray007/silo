@@ -157,4 +157,88 @@ describe('SettingsSelect', () => {
     expect(screen.queryByRole('listbox')).toBeNull();
     expect(screen.getByRole('dialog', { name: 'Settings' })).toBeDefined();
   });
+
+  describe('floating', () => {
+    const voices = [
+      {
+        label: 'English (US)',
+        options: [
+          { value: 'z', label: 'Zoey', hint: 'female', triggerHint: 'EN-US' },
+          { value: 'e', label: 'Easton', hint: 'male', triggerHint: 'EN-US' },
+        ],
+      },
+      { label: 'English (UK)', options: [{ value: 'm', label: 'Maeve', hint: 'female' }] },
+    ];
+
+    function floating(extra: { loading?: boolean } = {}) {
+      return (
+        <SettingsSelect
+          ariaLabel="Voice"
+          value="z"
+          groups={voices}
+          floating
+          onChange={() => {}}
+          {...extra}
+        />
+      );
+    }
+
+    it('draws the menu in the page body, fixed, with hints beside the names', () => {
+      const { container } = render(floating());
+      expect(screen.getByRole('button', { name: 'Voice' }).textContent).toContain('EN-US');
+      fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+      const list = screen.getByRole('listbox', { name: 'Voice' });
+      expect(container.contains(list)).toBe(false);
+      expect(list.parentElement).toBe(document.body);
+      expect(list.hasAttribute('data-reader-menu')).toBe(true);
+      expect(screen.getByRole('option', { name: /Zoey/ }).textContent).toContain('female');
+    });
+
+    it('jumps to the option that starts with the typed letters', () => {
+      render(floating());
+      fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+      press('m');
+      expectActive('Maeve female');
+      press('a');
+      expectActive('Maeve female');
+    });
+
+    it('starts from the next option for a repeated first letter', () => {
+      render(floating());
+      fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+      press('e');
+      expectActive('Easton male');
+    });
+
+    it('does not pick on a space while the reader is typing', () => {
+      const onChange = vi.fn();
+      render(
+        <SettingsSelect ariaLabel="Voice" value="z" groups={voices} floating onChange={onChange} />,
+      );
+      fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+      press('e');
+      press(' ');
+      expect(onChange).not.toHaveBeenCalled();
+    });
+
+    it('marks the list busy and shows skeleton rows while options load', () => {
+      render(floating({ loading: true }));
+      fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+      const list = screen.getByRole('listbox', { name: 'Voice' });
+      expect(list.getAttribute('aria-busy')).toBe('true');
+      expect(list.querySelectorAll('.silo-settings-select-skeleton > *')).toHaveLength(5);
+    });
+
+    it('closes on Escape and on a press outside, but not on a press inside', () => {
+      render(floating());
+      fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+      fireEvent.pointerDown(screen.getByRole('listbox', { name: 'Voice' }));
+      expect(screen.queryByRole('listbox')).not.toBeNull();
+      press('Escape');
+      expect(screen.queryByRole('listbox')).toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Voice' }));
+      fireEvent.pointerDown(document.body);
+      expect(screen.queryByRole('listbox')).toBeNull();
+    });
+  });
 });

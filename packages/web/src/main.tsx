@@ -1,4 +1,5 @@
 import '@fontsource-variable/inter';
+import '@fontsource-variable/literata';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
@@ -10,6 +11,13 @@ import './styles/base.css';
 import './styles/feeds.css';
 import './styles/surfaces.css';
 import './styles/link-details.css';
+import './styles/highlight-palette.css';
+import './styles/reader-dock.css';
+import './styles/reader-highlights.css';
+import './styles/reader-listen.css';
+import './styles/reader-notes.css';
+import './styles/reader-pencil.css';
+import './styles/reader-place.css';
 import { ThemeProvider } from './theme/ThemeProvider';
 
 const queryClient = new QueryClient({

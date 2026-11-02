@@ -1,5 +1,13 @@
 import createDOMPurify from 'dompurify';
-import { type KeyboardEvent, type MouseEvent, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react';
 import type { LiveReaderJson } from '../../api/types';
 import { decorateBlocks } from './decorateBlocks';
 import { embedFor } from './embedFor';
@@ -320,16 +328,26 @@ export function ReaderProse({
   linkId,
   reader,
   topPlayerSrc,
+  onRoot,
 }: {
   linkId: string;
   reader: Pick<LiveReaderJson, 'contentHtml' | 'contentImages'>;
   topPlayerSrc?: string | undefined;
+  /** Receives the prose element on mount and `null` on unmount. Pass a stable function. */
+  onRoot?: (root: HTMLElement | null) => void;
 }) {
   const html = useMemo(
     () => readerHtml(linkId, reader, topPlayerSrc),
     [linkId, reader, topPlayerSrc],
   );
-  const root = useRef<HTMLDivElement>(null);
+  const root = useRef<HTMLDivElement | null>(null);
+  const setRoot = useCallback(
+    (element: HTMLDivElement | null) => {
+      root.current = element;
+      onRoot?.(element);
+    },
+    [onRoot],
+  );
   const [viewer, setViewer] = useState<{ images: ViewerImage[]; index: number } | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: new sanitized HTML replaces image elements.
   useEffect(() => {
@@ -359,7 +377,7 @@ export function ReaderProse({
     <>
       {/* biome-ignore lint/a11y/noStaticElementInteractions: delegates to viewable images, which are focusable buttons. */}
       <div
-        ref={root}
+        ref={setRoot}
         className="silo-reader-prose"
         onClick={(event) => open(event.target, event)}
         onKeyDown={(event) => {

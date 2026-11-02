@@ -1,42 +1,11 @@
-import { useSyncExternalStore } from 'react';
+import { useCallback } from 'react';
+import { usePref } from './prefStore';
+import { type ReaderWidth, readerSync, readerWidthStore } from './readerPrefs';
 
-export type ReaderWidth = 'narrow' | 'medium' | 'wide';
-const KEY = 'silo.readerWidth';
-const EVENT = 'silo:reader-width';
-let fallback: ReaderWidth = 'medium';
-let memoryOnly = false;
+export type { ReaderWidth };
 
-function snapshot(): ReaderWidth {
-  if (memoryOnly) return fallback;
-  try {
-    const value = localStorage.getItem(KEY);
-    return value === 'narrow' || value === 'wide' ? value : 'medium';
-  } catch {
-    return fallback;
-  }
-}
-function subscribe(listener: () => void) {
-  window.addEventListener(EVENT, listener);
-  window.addEventListener('storage', listener);
-  return () => {
-    window.removeEventListener(EVENT, listener);
-    window.removeEventListener('storage', listener);
-  };
-}
-
-/** A browser-local reading preference; no server setting or account data changes. */
+/** The reading width, kept on this device and synced to the server with the other reader settings. */
 export function useReaderWidth() {
-  const width = useSyncExternalStore(subscribe, snapshot, () => 'medium' as const);
-  const setWidth = (value: ReaderWidth) => {
-    fallback = value;
-    memoryOnly = false;
-    try {
-      localStorage.setItem(KEY, value);
-    } catch {
-      memoryOnly = true;
-      /* Keep this session usable. */
-    }
-    window.dispatchEvent(new Event(EVENT));
-  };
-  return [width, setWidth] as const;
+  const setWidth = useCallback((width: ReaderWidth) => readerSync.commit({ width }), []);
+  return [usePref(readerWidthStore), setWidth] as const;
 }

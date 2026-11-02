@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { describeMcpTool, seedLink } from './test-support/mcp-server-harness.js';
 
 describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
@@ -7,11 +7,14 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
     const { client } = getContext();
     const { tools } = await client.listTools();
     expect(tools.map((tool) => tool.name).sort()).toEqual([
+      'add_highlight',
       'add_link_tag',
       'archive_feed_post',
       'capture_link',
       'create_tag',
+      'delete_highlight',
       'delete_tag',
+      'edit_highlight',
       'edit_link',
       'export_links',
       'find_related',
@@ -193,5 +196,262 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
     } finally {
       core.setReaderRefresher(undefined);
     }
+  });
+
+  describe('reading position', () => {
+    it('round-trips through edit_link and get_link, and null clears it', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position');
+
+      const before = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(before.structuredContent).toMatchObject({ found: true, readingPosition: null });
+
+      const edited = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, readingPosition: 0.37 },
+      });
+      expect(edited.isError).toBeFalsy();
+      expect(edited.structuredContent).toMatchObject({
+        found: true,
+        readingPosition: {
+          position: expect.closeTo(0.37, 5),
+          source: 'mark',
+          updatedAt: expect.any(String),
+        },
+      });
+
+      const read = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(read.structuredContent).toMatchObject({
+        readingPosition: { position: expect.closeTo(0.37, 5), source: 'mark' },
+      });
+      expect(JSON.stringify(read.content)).toContain('reading position: 37%');
+
+      const cleared = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, readingPosition: null },
+      });
+      expect(cleared.structuredContent).toMatchObject({ found: true, readingPosition: null });
+      const after = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(after.structuredContent).toMatchObject({ readingPosition: null });
+    });
+
+    it('leaves the position alone when edit_link omits it', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position-keep');
+      await client.callTool({ name: 'edit_link', arguments: { id, readingPosition: 0.5 } });
+      const edited = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, title: 'Renamed' },
+      });
+      expect(edited.structuredContent).toMatchObject({
+        title: 'Renamed',
+        readingPosition: { position: 0.5 },
+      });
+    });
+
+    it('rejects a value outside 0..1 without saving', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position-bad');
+      for (const readingPosition of [1.2, -0.1]) {
+        const result = await client.callTool({
+          name: 'edit_link',
+          arguments: { id, readingPosition },
+        });
+        expect(result.isError).toBe(true);
+      }
+      const read = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(read.structuredContent).toMatchObject({ readingPosition: null });
+    });
+
+    it('reports not found for an unknown or trashed link', async () => {
+      const { core, client } = getContext();
+      const unknown = await client.callTool({
+        name: 'edit_link',
+        arguments: { id: randomUUID(), readingPosition: 0.5 },
+      });
+      expect(unknown.structuredContent).toEqual({ found: false });
+      const id = await seedLink(getContext, 'https://example.com/reading-position-trashed');
+      await core.softDelete(id);
+      const trashed = await client.callTool({
+        name: 'edit_link',
+        arguments: { id, readingPosition: 0.5 },
+      });
+      expect(trashed.structuredContent).toEqual({ found: false });
+    });
+
+    it('keeps the field out of list_links rows', async () => {
+      const { client } = getContext();
+      const id = await seedLink(getContext, 'https://example.com/reading-position-list');
+      await client.callTool({ name: 'edit_link', arguments: { id, readingPosition: 0.5 } });
+      const list = await client.callTool({ name: 'list_links', arguments: {} });
+      const rows = (list.structuredContent as { links: Array<Record<string, unknown>> }).links;
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) expect(row).not.toHaveProperty('readingPosition');
+    });
+  });
+  describe('highlights', () => {
+    const TEXT = 'Alpha beta gamma. The quick brown fox jumps. The quick brown fox sleeps.';
+
+    async function seedWithText(url: string): Promise<string> {
+      return seedLink(getContext, url, { text: TEXT });
+    }
+
+    it('round-trips through add_highlight, get_link, edit_highlight and delete_highlight', async () => {
+      const { client } = getContext();
+      const id = await seedWithText('https://example.com/highlight-round-trip');
+
+      const before = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(before.structuredContent).toMatchObject({ found: true, highlights: [] });
+
+      const added = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id, quote: 'quick  brown fox', occurrence: 2, color: 'green', note: 'nice' },
+      });
+      expect(added.isError).toBeFalsy();
+      expect(added.structuredContent).toMatchObject({
+        found: true,
+        quote: 'quick brown fox',
+        color: 'green',
+        note: 'nice',
+        suffix: ' sleeps.',
+      });
+      const highlightId = (added.structuredContent as { id: string }).id;
+
+      const read = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(read.structuredContent).toMatchObject({
+        highlights: [{ id: highlightId, quote: 'quick brown fox', note: 'nice' }],
+      });
+      expect((read.content as Array<{ text: string }>)[0]?.text).toContain(
+        '"quick brown fox" - note: nice',
+      );
+
+      const edited = await client.callTool({
+        name: 'edit_highlight',
+        arguments: { id: highlightId, color: 'pink', note: null },
+      });
+      expect(edited.structuredContent).toMatchObject({ found: true, color: 'pink', note: null });
+
+      const deleted = await client.callTool({
+        name: 'delete_highlight',
+        arguments: { id: highlightId },
+      });
+      expect(deleted.structuredContent).toEqual({ deleted: true, id: highlightId });
+      const after = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(after.structuredContent).toMatchObject({ highlights: [] });
+      const again = await client.callTool({
+        name: 'delete_highlight',
+        arguments: { id: highlightId },
+      });
+      expect(again.structuredContent).toEqual({ deleted: false, id: highlightId });
+    });
+
+    it('allows overlapping highlights', async () => {
+      const { client } = getContext();
+      const id = await seedWithText('https://example.com/highlight-overlap');
+      for (const quote of ['quick brown fox jumps', 'brown fox jumps. The']) {
+        const result = await client.callTool({ name: 'add_highlight', arguments: { id, quote } });
+        expect(result.isError).toBeFalsy();
+      }
+      const read = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect((read.structuredContent as { highlights: unknown[] }).highlights).toHaveLength(2);
+    });
+
+    it('returns a tool error for a quote that is not in the text, and saves nothing', async () => {
+      const { client } = getContext();
+      const id = await seedWithText('https://example.com/highlight-missing');
+      const result = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id, quote: 'not in the article' },
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain('not in the saved text');
+      const read = await client.callTool({ name: 'get_link', arguments: { id } });
+      expect(read.structuredContent).toMatchObject({ highlights: [] });
+    });
+
+    it('rejects a NUL byte in a quote or note', async () => {
+      const { client } = getContext();
+      const id = await seedWithText('https://example.com/highlight-nul');
+      for (const args of [
+        { id, quote: 'Alpha\u0000' },
+        { id, quote: 'Alpha', note: 'a\u0000' },
+      ]) {
+        const result = await client.callTool({ name: 'add_highlight', arguments: args });
+        expect(result.isError).toBe(true);
+      }
+    });
+
+    it('rejects an out-of-range occurrence and a bad colour', async () => {
+      const { client } = getContext();
+      const id = await seedWithText('https://example.com/highlight-bad');
+      const far = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id, quote: 'quick brown fox', occurrence: 5 },
+      });
+      expect(far.isError).toBe(true);
+      const colour = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id, quote: 'quick', color: 'red' },
+      });
+      expect(colour.isError).toBe(true);
+    });
+
+    it('reports not found for unknown or trashed links and highlights', async () => {
+      const { core, client } = getContext();
+      const unknown = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id: randomUUID(), quote: 'x' },
+      });
+      expect(unknown.structuredContent).toEqual({ found: false });
+      const id = await seedWithText('https://example.com/highlight-trashed');
+      const added = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id, quote: 'Alpha' },
+      });
+      const highlightId = (added.structuredContent as { id: string }).id;
+      await core.softDelete(id);
+      const trashedAdd = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id, quote: 'beta' },
+      });
+      expect(trashedAdd.structuredContent).toEqual({ found: false });
+      const trashedEdit = await client.callTool({
+        name: 'edit_highlight',
+        arguments: { id: highlightId, note: 'x' },
+      });
+      expect(trashedEdit.structuredContent).toEqual({ found: false });
+      const unknownDelete = await client.callTool({
+        name: 'delete_highlight',
+        arguments: { id: randomUUID() },
+      });
+      expect(unknownDelete.structuredContent).toMatchObject({ deleted: false });
+    });
+
+    it('refuses feed posts with a normal tool error', async () => {
+      const { pool, client } = getContext();
+      const feed = await pool.query(
+        "insert into feeds (feed_url,title,format,next_poll_at) values ('https://example.com/hl-feed','P','rss',now()) returning id",
+      );
+      const post = await pool.query(
+        "insert into links (url,canonical_url,source_kind,source,feed_id,extracted_text) values ('https://example.com/hl-post','https://example.com/hl-post','link','feed',$1,'some feed text') returning id",
+        [feed.rows[0].id],
+      );
+      const result = await client.callTool({
+        name: 'add_highlight',
+        arguments: { id: post.rows[0].id, quote: 'feed text' },
+      });
+      expect(result.isError).toBe(true);
+      expect(JSON.stringify(result.content)).toContain('feed_post_not_editable');
+    });
+
+    it('keeps highlights out of list_links rows', async () => {
+      const { client } = getContext();
+      const id = await seedWithText('https://example.com/highlight-list');
+      await client.callTool({ name: 'add_highlight', arguments: { id, quote: 'Alpha' } });
+      const list = await client.callTool({ name: 'list_links', arguments: {} });
+      const rows = (list.structuredContent as { links: Array<Record<string, unknown>> }).links;
+      expect(rows.length).toBeGreaterThan(0);
+      for (const row of rows) expect(row).not.toHaveProperty('highlights');
+    });
   });
 });

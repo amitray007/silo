@@ -10,11 +10,12 @@ import {
 } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 
-export type SettingsTab = 'plugins' | 'ai' | 'prefs' | 'import' | 'access';
+export type SettingsTab = 'plugins' | 'ai' | 'prefs' | 'reader' | 'import' | 'access';
 const SETTINGS_TABS = [
   { key: 'plugins', path: 'plugins' },
   { key: 'ai', path: 'ai' },
   { key: 'prefs', path: 'preferences' },
+  { key: 'reader', path: 'reader' },
   { key: 'import', path: 'import-export' },
   { key: 'access', path: 'access' },
 ] as const;
