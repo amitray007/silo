@@ -11,6 +11,38 @@ describeMcpTool('silo_mcp_library_highlights_test', 'list_highlights', (getConte
     await getContext().pool.query('truncate links, feeds cascade');
   });
 
+  it('pages using only the cursor printed in text content', async () => {
+    const { core, client } = getContext();
+    for (const title of ['Older article', 'Newer article']) {
+      const id = await seedLink(
+        getContext,
+        `https://example.com/text-page/${title.replace(' ', '-')}`,
+        {
+          title,
+          text: 'Page passage',
+        },
+      );
+      await core.addHighlight(id, { quote: 'Page passage' });
+    }
+    const readText = async (cursor?: string) => {
+      const result = await client.callTool({
+        name: 'list_highlights',
+        arguments: { limit: 1, ...(cursor === undefined ? {} : { cursor }) },
+      });
+      expect(result.isError).toBeFalsy();
+      return (result.content as Array<{ text: string }>)[0]?.text ?? '';
+    };
+    const first = await readText();
+    expect(first).toContain('Newer article');
+    expect(first).not.toContain('Older article');
+    const cursor = /^Next cursor: (\S+)$/m.exec(first)?.[1];
+    expect(cursor).toBeTruthy();
+    const second = await readText(cursor);
+    expect(second).toContain('Older article');
+    expect(second).not.toContain('Newer article');
+    expect(second).not.toContain('Next cursor:');
+  });
+
   it('searches quotes and notes literally, with link, tag, note and color filters', async () => {
     const { core, client } = getContext();
     const id = await seedLink(getContext, 'https://example.com/highlights', {

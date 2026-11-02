@@ -58,7 +58,7 @@ export function registerListReadingPositions(server: McpServer): void {
           );
         if (page.nextCursor !== undefined)
           lines.push(
-            'More positions available; pass nextCursor as cursor to list_reading_positions.',
+            `Next cursor: ${page.nextCursor}\nPass it as cursor to list_reading_positions.`,
           );
         lines.push(
           'Use get_link with the link id to read on, or edit_link with readingPosition to move the saved place.',

@@ -11,6 +11,38 @@ describeMcpTool('silo_mcp_positions_test', 'list_reading_positions', (getContext
     await getContext().pool.query('truncate links, feeds cascade');
   });
 
+  it('pages using only the cursor printed in text content', async () => {
+    const { core, client } = getContext();
+    for (const title of ['Older article', 'Newer article']) {
+      const id = await seedLink(
+        getContext,
+        `https://example.com/text-page/${title.replace(' ', '-')}`,
+        {
+          title,
+          text: 'Page passage',
+        },
+      );
+      await core.setReadingPosition(id, 0.5, 'mark');
+    }
+    const readText = async (cursor?: string) => {
+      const result = await client.callTool({
+        name: 'list_reading_positions',
+        arguments: { limit: 1, ...(cursor === undefined ? {} : { cursor }) },
+      });
+      expect(result.isError).toBeFalsy();
+      return (result.content as Array<{ text: string }>)[0]?.text ?? '';
+    };
+    const first = await readText();
+    expect(first).toContain('Newer article');
+    expect(first).not.toContain('Older article');
+    const cursor = /^Next cursor: (\S+)$/m.exec(first)?.[1];
+    expect(cursor).toBeTruthy();
+    const second = await readText(cursor);
+    expect(second).toContain('Older article');
+    expect(second).not.toContain('Newer article');
+    expect(second).not.toContain('Next cursor:');
+  });
+
   it('returns each source and names its meaning in tool text and get_link', async () => {
     const { core, client } = getContext();
     for (const [source, words] of [

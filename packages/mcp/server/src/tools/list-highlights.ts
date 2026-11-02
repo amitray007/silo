@@ -57,7 +57,7 @@ export function registerListHighlights(server: McpServer): void {
         ];
         lines.push(...highlights.map(highlightLine));
         if (page.nextCursor !== undefined)
-          lines.push('More highlights available; pass nextCursor as cursor to list_highlights.');
+          lines.push(`Next cursor: ${page.nextCursor}\nPass it as cursor to list_highlights.`);
         lines.push(
           'Use get_link with the link id for the full article, or edit_highlight with the highlight id to change a note.',
         );
