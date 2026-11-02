@@ -208,6 +208,8 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 
 .silo-chat-approval {
+  min-width: 0;
+  margin: 0;
   padding: 10px;
   border: 1px solid var(--line);
   border-radius: 8px;

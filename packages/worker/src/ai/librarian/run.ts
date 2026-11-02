@@ -21,7 +21,7 @@ import { chatModelSettings } from '../generation.js';
 import { languageModelFor } from '../model.js';
 import { stubOldToolResults } from './history.js';
 import { persona, promptVersion, requestContext } from './persona.js';
-import { APPROVAL_TOOLS, librarianTools } from './tools.js';
+import { librarianTools, toolApproval } from './tools.js';
 
 /** Provider-specific chunks (message ids, token usage) stay on the server. */
 function withoutProviderChunks<Part extends { type: string }>() {
@@ -63,9 +63,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       ),
       experimental_transform: withoutProviderChunks,
       tools,
-      toolApproval: Object.fromEntries(
-        APPROVAL_TOOLS.map((name) => [name, 'user-approval' as const]),
-      ),
+      toolApproval,
       ...(approvalSecret ? { experimental_toolApprovalSecret: approvalSecret } : {}),
       stopWhen: isStepCount(8),
       maxRetries: 2,
