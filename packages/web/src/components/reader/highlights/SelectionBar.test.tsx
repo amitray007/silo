@@ -214,6 +214,56 @@ it('keeps labels without readiness and uses icon actions with Ask when ready', (
   expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy();
   expect(window.getSelection()?.toString()).toBe('second paragraph');
 });
+it('grows the same surface into the composer, focuses the field, and Escape shrinks it back', () => {
+  setup({ askReady: true, linkId: 'article' });
+  const surface = screen.getByRole('toolbar', { name: 'Selection' });
+  expect(surface.getAttribute('data-phase')).toBe('bar');
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(screen.getByRole('toolbar', { name: 'Selection' })).toBe(surface);
+  expect(surface.getAttribute('data-phase')).toBe('composer');
+  expect(document.activeElement).toBe(
+    screen.getByRole('textbox', { name: 'Ask about this passage' }),
+  );
+  const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
+  expect(send.disabled).toBe(true);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Why?' } });
+  expect(send.disabled).toBe(false);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.getByRole('toolbar', { name: 'Selection' })).toBe(surface);
+  expect(surface.getAttribute('data-phase')).toBe('bar');
+});
+
+it('sends the question to the dock on Enter, and keeps Shift+Enter for a new line', () => {
+  const { onDismiss } = setup({ askReady: true, linkId: 'enter-test' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  const field = screen.getByRole('textbox');
+  fireEvent.change(field, { target: { value: 'Why?' } });
+  fireEvent.keyDown(field, { key: 'Enter', shiftKey: true });
+  expect(onDismiss).not.toHaveBeenCalled();
+  fireEvent.keyDown(field, { key: 'Enter' });
+  expect(onDismiss).toHaveBeenCalled();
+});
+
+it('recedes the reader pane while the composer is open, and only when the passage can stay sharp', () => {
+  document.getElementById('pane')?.remove();
+  document.body.insertAdjacentHTML(
+    'beforeend',
+    '<section class="silo-readerpane"><div id="pane"></div></section>',
+  );
+  const pane = document.querySelector('.silo-readerpane') as HTMLElement;
+  setup({ askReady: true, linkId: 'recede-test' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(pane.hasAttribute('data-recede')).toBe(false);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  vi.stubGlobal('Highlight', class {});
+  vi.stubGlobal('CSS', { highlights: new Map() });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(pane.getAttribute('data-recede')).toBe('passage');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(pane.hasAttribute('data-recede')).toBe(false);
+  vi.unstubAllGlobals();
+});
+
 it('offers word actions for a single short word', () => {
   pending.range.setEnd(pending.range.startContainer, 10);
   setup({ askReady: true, linkId: 'article' });

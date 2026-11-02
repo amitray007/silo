@@ -15,6 +15,7 @@ import './styles/highlight-palette.css';
 import './styles/reader-dock.css';
 import './styles/reader-librarian.css';
 import './styles/reader-highlights.css';
+import './styles/reader-recede.css';
 import './styles/reader-listen.css';
 import './styles/reader-notes.css';
 import './styles/reader-pencil.css';

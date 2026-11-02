@@ -36,6 +36,7 @@ import { type PencilApi, usePencil } from '../pencil/usePencil';
 import { usePencilKeys } from '../pencil/usePencilKeys';
 import { SavedPlace } from '../place/SavedPlace';
 import { ReaderIcon } from '../ReaderIcon';
+import { useRecede } from '../useRecede';
 import { DockHostContext } from './DockHostContext';
 import { TypeSheet } from './TypeSheet';
 
@@ -378,6 +379,7 @@ export function ReaderDock({
   // closes. The first render does neither.
   const pill = useRef<HTMLDivElement>(null);
   useChatFocus(chatOpen, pill);
+  useRecede(panel, 'chat', chatOpen);
   const wasListening = useRef(false);
   useEffect(() => {
     if (listening === wasListening.current) return;

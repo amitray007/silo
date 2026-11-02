@@ -1,0 +1,117 @@
+/* Focus: while the passage composer or the chat is open, the article recedes. The text fades and
+   blurs by 2px; the selected passage stays sharp at full ink. No overlay and no filter sits over
+   the article, so nothing repaints while it scrolls. The pane's `data-recede` carries the reason.
+   The blur is a text shadow with the glyph fill removed, and the retained selection (registered as
+   the `silo-librarian-selection` highlight) restores its own fill and drops the shadow. */
+.silo-readerpane {
+  --recede: color-mix(in oklch, var(--mut) 50%, transparent);
+}
+.silo-reader-scroll {
+  transition:
+    -webkit-text-fill-color 200ms var(--ease-out),
+    text-shadow 200ms var(--ease-out);
+}
+.silo-readerpane[data-recede] .silo-reader-scroll {
+  -webkit-text-fill-color: transparent;
+  text-shadow: 0 0 2px var(--recede);
+}
+/* The browser resets the shadow on form controls, which would leave their text invisible. */
+.silo-readerpane[data-recede] .silo-reader-scroll :is(button, input, textarea) {
+  text-shadow: inherit;
+}
+.silo-readerpane[data-recede] .silo-reader-scroll :is(a, abbr, u, ins, del, s) {
+  text-decoration-color: var(--recede);
+}
+
+/* Highlights recede with the text around them: paler tint, blurred text. */
+.silo-readerpane[data-recede] ::highlight(silo-hl-yellow),
+.silo-readerpane[data-recede] ::highlight(silo-hl-green),
+.silo-readerpane[data-recede] ::highlight(silo-hl-blue),
+.silo-readerpane[data-recede] ::highlight(silo-hl-pink),
+.silo-readerpane[data-recede] ::highlight(silo-hl-violet),
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-yellow),
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-green),
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-blue),
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-pink),
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-violet) {
+  color: transparent;
+  text-shadow: 0 0 2px var(--recede);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-yellow) {
+  background-color: color-mix(in oklch, var(--hl-yellow) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-green) {
+  background-color: color-mix(in oklch, var(--hl-green) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-blue) {
+  background-color: color-mix(in oklch, var(--hl-blue) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-pink) {
+  background-color: color-mix(in oklch, var(--hl-pink) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-violet) {
+  background-color: color-mix(in oklch, var(--hl-violet) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-yellow) {
+  background-color: color-mix(in oklch, var(--hl-yellow-ov) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-green) {
+  background-color: color-mix(in oklch, var(--hl-green-ov) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-blue) {
+  background-color: color-mix(in oklch, var(--hl-blue-ov) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-pink) {
+  background-color: color-mix(in oklch, var(--hl-pink-ov) 30%, transparent);
+}
+.silo-readerpane[data-recede] ::highlight(silo-hl-ov-violet) {
+  background-color: color-mix(in oklch, var(--hl-violet-ov) 30%, transparent);
+}
+
+/* Pictures, embeds and note markers are not text, so they fade and blur as whole elements. */
+.silo-reader-scroll :is(img, video, canvas, iframe, .silo-marker) {
+  transition:
+    opacity 200ms var(--ease-out),
+    filter 200ms var(--ease-out);
+}
+.silo-readerpane[data-recede] .silo-reader-scroll :is(img, video, canvas, iframe, .silo-marker) {
+  opacity: 0.45;
+  filter: blur(2px);
+}
+
+/* The retained selection: sharp, at full ink, whatever recedes around it. */
+::highlight(silo-librarian-selection) {
+  background-color: var(--sel);
+  color: var(--ink);
+  -webkit-text-fill-color: var(--ink);
+  text-shadow: none;
+}
+
+/* Reduced motion: dim only. No blur, no transition. */
+@media (prefers-reduced-motion: reduce) {
+  .silo-reader-scroll,
+  .silo-reader-scroll :is(img, video, canvas, iframe, .silo-marker) {
+    transition: none;
+  }
+  .silo-readerpane[data-recede] .silo-reader-scroll,
+  .silo-readerpane[data-recede] .silo-reader-scroll :is(button, input, textarea) {
+    -webkit-text-fill-color: var(--recede);
+    text-shadow: none;
+  }
+  .silo-readerpane[data-recede] ::highlight(silo-hl-yellow),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-green),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-blue),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-pink),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-violet),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-ov-yellow),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-ov-green),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-ov-blue),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-ov-pink),
+  .silo-readerpane[data-recede] ::highlight(silo-hl-ov-violet) {
+    color: var(--recede);
+    text-shadow: none;
+  }
+  .silo-readerpane[data-recede] .silo-reader-scroll :is(img, video, canvas, iframe, .silo-marker) {
+    filter: none;
+  }
+}

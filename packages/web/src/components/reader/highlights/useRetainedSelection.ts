@@ -9,20 +9,18 @@ export function restoreSelection(pending: PendingSelection | null) {
   selection?.addRange(pending.range);
 }
 
+/** The Custom Highlight API can paint a range without wrapping it in DOM. */
+export function canRetainSelection(): boolean {
+  return typeof CSS !== 'undefined' && 'highlights' in CSS && typeof Highlight !== 'undefined';
+}
+
 /**
  * Keep the passage painted while the question field owns focus: the native selection greys out
- * there, so the same range is registered as a custom highlight that `reader-highlights.css` paints.
+ * there, so the same range is registered as a custom highlight that `reader-recede.css` paints.
  */
 export function useRetainedSelection(range: Range | undefined, active: boolean) {
   useEffect(() => {
-    if (
-      !range ||
-      !active ||
-      typeof CSS === 'undefined' ||
-      !('highlights' in CSS) ||
-      typeof Highlight === 'undefined'
-    )
-      return;
+    if (!range || !active || !canRetainSelection()) return;
     const mark = new Highlight(range);
     mark.priority = 15;
     CSS.highlights.set('silo-librarian-selection', mark);

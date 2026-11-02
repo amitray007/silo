@@ -4,6 +4,7 @@ import type { HighlightColor } from '../../../lib/highlights';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { selectionActions as quickActions, requestDock } from '../librarian/selectionStore';
+import { useRecede } from '../useRecede';
 import { SelectionAnswerCard } from './SelectionAnswerCard';
 import { SelectionComposer } from './SelectionComposer';
 import { SelectionBarTools } from './SelectionTools';
@@ -11,7 +12,7 @@ import type { SelectionAction } from './selectionActions';
 import { selectionContext } from './selectionContext';
 import { type SurfacePhase, surfacePlacement } from './selectionPlacement';
 import { useAnswerActions } from './useAnswerActions';
-import { restoreSelection, useRetainedSelection } from './useRetainedSelection';
+import { canRetainSelection, restoreSelection, useRetainedSelection } from './useRetainedSelection';
 import { selectedPassage, useSelectionAnswer } from './useSelectionAnswer';
 import type { PendingSelection } from './useSelectionWatcher';
 import { useTabIntoSurface } from './useTabIntoSurface';
@@ -106,6 +107,8 @@ export function SelectionBar({
   });
   const phase = phaseOf(composer, answerAction);
   useRetainedSelection(pending?.range, phase !== 'bar');
+  // Without the Custom Highlight API the passage cannot stay sharp, so nothing recedes.
+  useRecede(container, 'passage', pending !== null && phase !== 'bar' && canRetainSelection());
   const where = pending && surfacePlacement(pending.rect, phase);
   const { root, shell, begin } = useSurfaceMotion(phase, where?.flip ? 'top' : 'bottom');
   /** Change phase: the surface remembers its old shape, then morphs into the new one. */
