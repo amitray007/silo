@@ -307,6 +307,9 @@ If summary generation or storage fails, the worker logs a fixed failure code and
 drops the oldest model messages until the input fits the budget. Compaction errors
 do not fail the reply. Tests use the SDK 7 mock model and a disposable database.
 
+Summary input, including the previous summary, fits the same characters / 4 budget; each call advances only through complete user turns it summarized.
+Budget trimming preserves the last user turn and its approval continuation, even when that tail alone exceeds the budget.
+
 ## Out of scope (parked)
 
 - Fact-check and any web search (needs a search provider).
