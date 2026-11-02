@@ -406,6 +406,8 @@ function useLibraryPaletteResults(
   // type; the other scope's list loads if/when you switch to it.
   const recentQuery = useInfiniteLinks(isTrashScope ? undefined : routeTag, {
     enabled: hasLibraryScope,
+    // Ordinary opens reuse page one; a change received while closed still refreshes.
+    refetchOnMount: (query) => query.state.isInvalidated,
   });
 
   const trashSearchQuery = useSearchTrash(trashHasText ? parsedDebounced.text : '');
