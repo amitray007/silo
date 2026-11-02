@@ -12,6 +12,7 @@ export type LibrarianRequest = {
   summary?: string | null;
   summarizedCount?: number;
   messageSeqs?: number[];
+  transient?: boolean;
   endRun?: () => void;
   messages: LibrarianMessage[];
   link: { id: string; title: string | null; url: string; site: string | null } | null;

@@ -2,16 +2,18 @@ import { Chat, type UIMessage, useChat } from '@ai-sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai';
 import { useEffect, useMemo, useState } from 'react';
+import { queryKeys } from '../../../api/hooks';
 import {
   librarianApi,
   useCreateLibrarianChat,
   useLibrarianChatDetail,
   useLibrarianChats,
 } from '../../../api/librarian';
-
 import { toolName, WRITE_TRACES } from './ChatMessage';
 
 const ERROR_WORDS: Record<string, string> = {
+  approval_pending: 'Allow or deny the waiting request first.',
+  ai_not_ready: 'Turn on the Librarian in Settings first.',
   invalid_key: 'Your AI key was rejected. Check Settings → AI.',
   no_access: 'Your AI key was rejected. Check Settings → AI.',
   model_not_found: 'The chosen model is gone. Pick another in Settings → AI.',
@@ -20,12 +22,11 @@ const ERROR_WORDS: Record<string, string> = {
   busy: 'The Librarian is still answering in another tab.',
   timeout: 'The answer took too long. Try again.',
   network: 'Could not reach your AI provider. Try again.',
-  ai_not_ready: 'The Librarian is off. Turn it on in Settings → AI.',
   unavailable: 'The Librarian is not available on this server.',
 };
 
 /** Stream errors carry a fixed code; HTTP errors carry it in a JSON body. */
-function chatErrorText(message: string | undefined): string {
+export function chatErrorText(message: string | undefined): string {
   const code = message?.match(/[a-z_]+/g)?.find((word) => word in ERROR_WORDS);
   return (code && ERROR_WORDS[code]) ?? 'Could not answer. Try again.';
 }
@@ -69,6 +70,8 @@ export function useLibrarianChat(linkId: string) {
           ])
             void client.invalidateQueries({ queryKey: [key] });
         }
+        for (const id of refreshedReaderIds(message))
+          void client.invalidateQueries({ queryKey: queryKeys.liveReader(id) });
         void client.invalidateQueries({ queryKey: ['librarian'] });
       },
       transport: new DefaultChatTransport({
@@ -106,8 +109,16 @@ export function useLibrarianChat(linkId: string) {
   }, [detail.data, chat, chatId, entry, state.status]);
   const loading = list.isPending || (list.data?.chats.length !== 0 && !chatId.current);
   const busy = creating || state.status === 'submitted' || state.status === 'streaming';
-  async function send(text: string, action?: string) {
-    if (!text.trim() || busy || loading || list.error || detail.error) return;
+  const lastAssistant = state.messages.findLast((message) => message.role === 'assistant');
+  const pendingApproval =
+    lastAssistant?.parts.some((part) => 'state' in part && part.state === 'approval-requested') ??
+    false;
+  async function send(
+    text: string,
+    action?: string,
+    passage?: { quote: string; paragraph: number },
+  ) {
+    if (!text.trim() || pendingApproval || busy || loading || list.error || detail.error) return;
     setFailure(false);
     setCreating(true);
     try {
@@ -117,20 +128,40 @@ export function useLibrarianChat(linkId: string) {
         entry.title = text.trim().slice(0, 60);
         setTitle(entry.title);
       }
-      await state.sendMessage({ text: text.trim(), ...(action ? { metadata: { action } } : {}) });
+      await state.sendMessage({
+        text: text.trim(),
+        ...(action || passage ? { metadata: { ...(action ? { action } : {}), ...passage } } : {}),
+      });
     } catch {
       setFailure(true);
     } finally {
       setCreating(false);
     }
   }
+  async function loadImported(id: string) {
+    const detail = await librarianApi.get(id);
+    chatId.current = id;
+    chat.messages = detail.messages;
+    entry.title = detail.chat.title;
+    setTitle(entry.title);
+  }
   return {
     ...state,
+    loadImported,
     title,
+    pendingApproval,
     send,
     busy,
     loading,
     failed: failure || !!state.error || !!list.error || !!detail.error,
     errorText: chatErrorText(state.error?.message),
   };
+}
+
+function refreshedReaderIds(message: UIMessage): string[] {
+  return message.parts.flatMap((part) => {
+    if (toolName(part) !== 'refresh_reader' || !('input' in part)) return [];
+    const id = (part.input as { id?: string } | undefined)?.id;
+    return id ? [id] : [];
+  });
 }

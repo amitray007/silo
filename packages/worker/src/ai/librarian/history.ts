@@ -1,4 +1,4 @@
-import type { ModelMessage } from 'ai';
+import type { ModelMessage, UIMessage } from 'ai';
 
 const KEEP_RECENT = 2;
 
@@ -24,6 +24,31 @@ export function stubOldToolResults(
           ? { ...part, output: { type: 'text' as const, value: stub(part.toolName) } }
           : part,
       ),
+    };
+  });
+}
+
+/**
+ * Answers imported from a quick action were never produced in this chat, so the model must not
+ * treat them as its own words. Hand them over as context from the owner instead.
+ */
+export function frameImportedAnswers<M extends UIMessage>(messages: M[]): M[] {
+  return messages.map((message) => {
+    if (message.role !== 'assistant') return message;
+    if ((message.metadata as { source?: string } | undefined)?.source !== 'quick') return message;
+    const text = message.parts
+      .filter((part) => part.type === 'text')
+      .map((part) => part.text)
+      .join('\n');
+    return {
+      ...message,
+      role: 'user',
+      parts: [
+        {
+          type: 'text',
+          text: `Quick answer the owner saw earlier (read-only, not your own words): ${text}`,
+        },
+      ],
     };
   });
 }

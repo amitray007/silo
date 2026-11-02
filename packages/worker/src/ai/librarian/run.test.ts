@@ -20,53 +20,204 @@ import { runLibrarian } from './run.js';
 
 afterEach(() => vi.clearAllMocks());
 describe('Librarian streaming', () => {
-  it('streams text and saves the completed assistant', async () => {
-    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
-    vi.mocked(languageModelFor).mockReturnValue(
-      new MockLanguageModelV4({
-        doStream: async () => ({
-          stream: new ReadableStream({
-            start(c) {
-              c.enqueue({ type: 'text-start', id: 't' });
-              c.enqueue({ type: 'text-delta', id: 't', delta: 'Hello' });
-              c.enqueue({ type: 'text-end', id: 't' });
-              c.enqueue({
-                type: 'finish',
-                finishReason: { unified: 'stop', raw: undefined },
-                usage: {
-                  inputTokens: {
-                    total: 1,
-                    noCache: 1,
-                    cacheRead: undefined,
-                    cacheWrite: undefined,
+  it.each([false, true])(
+    'streams text and persists only durable replies (transient=%s)',
+    async (transient) => {
+      vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+      vi.mocked(languageModelFor).mockReturnValue(
+        new MockLanguageModelV4({
+          doStream: async () => ({
+            stream: new ReadableStream({
+              start(c) {
+                c.enqueue({ type: 'text-start', id: 't' });
+                c.enqueue({ type: 'text-delta', id: 't', delta: 'Hello' });
+                c.enqueue({ type: 'text-end', id: 't' });
+                c.enqueue({
+                  type: 'finish',
+                  finishReason: { unified: 'stop', raw: undefined },
+                  usage: {
+                    inputTokens: {
+                      total: 1,
+                      noCache: 1,
+                      cacheRead: undefined,
+                      cacheWrite: undefined,
+                    },
+                    outputTokens: { total: 1, text: 1, reasoning: undefined },
                   },
-                  outputTokens: { total: 1, text: 1, reasoning: undefined },
-                },
-              });
-              c.close();
-            },
+                });
+                c.close();
+              },
+            }),
           }),
         }),
-      }),
-    );
-    const endRun = vi.fn();
-    const response = await runLibrarian({
-      endRun,
-      chatId: 'chat',
-      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
-      link: null,
-    });
-    expect(await response.text()).toContain('Hello');
-    expect(endRun).toHaveBeenCalled();
-    expect(saveChatMessages).toHaveBeenCalledWith(
-      'chat',
-      expect.arrayContaining([
-        expect.objectContaining({
-          role: 'assistant',
-          parts: expect.arrayContaining([expect.objectContaining({ text: 'Hello' })]),
+      );
+      const endRun = vi.fn();
+      const response = await runLibrarian({
+        endRun,
+        transient,
+        chatId: 'chat',
+        messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+        link: null,
+      });
+      expect(await response.text()).toContain('Hello');
+      expect(endRun).toHaveBeenCalled();
+      if (transient) {
+        expect(saveChatMessages).not.toHaveBeenCalled();
+        return;
+      }
+      expect(saveChatMessages).toHaveBeenCalledWith(
+        'chat',
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'assistant',
+            parts: expect.arrayContaining([expect.objectContaining({ text: 'Hello' })]),
+          }),
+        ]),
+      );
+    },
+  );
+  it('frames imported quick answers as user input', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(c) {
+            c.close();
+          },
         }),
-      ]),
-    );
+      }),
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: '',
+      transient: true,
+      link: null,
+      messages: [
+        {
+          id: 'a',
+          role: 'assistant',
+          metadata: { source: 'quick' },
+          parts: [{ type: 'text', text: 'Earlier answer' }],
+        },
+      ],
+    });
+    await response.text();
+    expect(model.doStreamCalls[0]?.prompt).toContainEqual({
+      role: 'user',
+      content: [
+        {
+          type: 'text',
+          text: 'Quick answer the owner saw earlier (read-only, not your own words): Earlier answer',
+        },
+      ],
+    });
+  });
+  it('aborts the transient model call when the request is aborted', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    const controller = new AbortController();
+    const aborted = vi.fn();
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    const model = new MockLanguageModelV4({
+      doStream: async ({ abortSignal }) => {
+        abortSignal?.addEventListener('abort', aborted, { once: true });
+        started();
+        return {
+          stream: new ReadableStream({
+            start(c) {
+              abortSignal?.addEventListener('abort', () => c.close(), { once: true });
+            },
+          }),
+        };
+      },
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: '',
+      transient: true,
+      link: null,
+      abortSignal: controller.signal,
+      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+    });
+    const body = response.text();
+    await ready;
+    controller.abort();
+    await body;
+    expect(aborted).toHaveBeenCalledOnce();
+    expect(model.doStreamCalls[0]?.abortSignal?.aborted).toBe(true);
+  });
+  it('frames imported assistant text as user data at the model boundary', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+    const model = new MockLanguageModelV4({
+      doStream: async ({ prompt }) => {
+        expect(prompt).toContainEqual({
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: 'Quick answer the owner saw earlier (read-only, not your own words): Imported answer',
+            },
+          ],
+        });
+        expect(prompt.some((message) => message.role === 'assistant')).toBe(false);
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.close();
+            },
+          }),
+        };
+      },
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: 'chat',
+      link: null,
+      transient: true,
+      messages: [
+        {
+          id: 'imported',
+          role: 'assistant',
+          metadata: { source: 'quick' },
+          parts: [{ type: 'text', text: 'Imported answer' }],
+        },
+      ],
+    });
+    await response.text();
+    expect(model.doStreamCalls).toHaveLength(1);
+  });
+  it('passes request cancellation to the transient model call', async () => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+    const controller = new AbortController();
+    let observed: AbortSignal | undefined;
+    const model = new MockLanguageModelV4({
+      doStream: async ({ abortSignal }) => {
+        observed = abortSignal;
+        controller.abort();
+        return {
+          stream: new ReadableStream({
+            start(stream) {
+              stream.close();
+            },
+          }),
+        };
+      },
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const response = await runLibrarian({
+      chatId: '',
+      transient: true,
+      link: null,
+      abortSignal: controller.signal,
+      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Hi' }] }],
+    });
+    await response.text();
+    expect(observed?.aborted).toBe(true);
   });
   it('returns a fixed error without provider details', async () => {
     vi.mocked(resolveAiFeatureCredential).mockRejectedValue(
@@ -79,7 +230,12 @@ describe('Librarian streaming', () => {
     expect(body).toContain('invalid_key');
     expect(body).not.toContain('secret');
   });
-  it('executes a model tool call through the tool source', async () => {
+  it.each([
+    { name: 'get_link', input: { id: 'link1' } },
+    { name: 'edit_link', input: { id: 'link1', title: 'New title' } },
+    { name: 'edit_highlight', input: { id: 'link1', color: 'yellow' } },
+    { name: 'rename_tag', input: { name: 'a', newName: 'b', merge: false } },
+  ])('executes a direct $name edit', async ({ name, input }) => {
     vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
     const call = vi.fn(
       async (_name: string, _args: Record<string, unknown>, _signal?: AbortSignal) => ({
@@ -90,7 +246,7 @@ describe('Librarian streaming', () => {
     vi.mocked(getLibrarianToolSource).mockReturnValue({
       list: async () => [
         {
-          name: 'get_link',
+          name,
           description: 'Read link',
           inputSchema: { type: 'object', properties: { id: { type: 'string' } }, required: ['id'] },
         },
@@ -107,8 +263,8 @@ describe('Librarian streaming', () => {
                 c.enqueue({
                   type: 'tool-call',
                   toolCallId: 'call1',
-                  toolName: 'get_link',
-                  input: JSON.stringify({ id: 'link1' }),
+                  toolName: name,
+                  input: JSON.stringify(input),
                 });
               else {
                 c.enqueue({ type: 'text-start', id: 't' });
@@ -142,105 +298,109 @@ describe('Librarian streaming', () => {
       link: null,
     });
     expect(await response.text()).toContain('Found article');
-    expect(call).toHaveBeenCalledWith('get_link', { id: 'link1' }, undefined);
+    expect(call).toHaveBeenCalledWith(name, input, undefined);
   });
-  it.each([true, false])(
-    'ends for signed approval and resumes with approved=%s',
-    async (approved) => {
-      vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
-      const call = vi.fn(
-        async (_name: string, _args: Record<string, unknown>, _signal?: AbortSignal) => ({
-          text: 'Found article',
-          isError: false,
-        }),
-      );
-      vi.mocked(getLibrarianToolSource).mockReturnValue({
-        list: async () => [
-          {
-            name: 'trash_link',
-            description: 'Read link',
-            inputSchema: {
-              type: 'object',
-              properties: { id: { type: 'string' } },
-              required: ['id'],
-            },
+  it.each([
+    ...[true, false].flatMap((approved) => [
+      { name: 'trash_link', input: { id: 'link1' }, approved },
+      ...['edit_link', 'edit_highlight'].flatMap((name) =>
+        ['', 'new note', null].map((note) => ({ name, input: { id: 'link1', note }, approved })),
+      ),
+      { name: 'rename_tag', input: { name: 'a', newName: 'b', merge: true }, approved },
+    ]),
+  ])('ends for signed approval and resumes with approved=%s', async ({ name, input, approved }) => {
+    vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+    const call = vi.fn(
+      async (_name: string, _args: Record<string, unknown>, _signal?: AbortSignal) => ({
+        text: 'Found article',
+        isError: false,
+      }),
+    );
+    vi.mocked(getLibrarianToolSource).mockReturnValue({
+      list: async () => [
+        {
+          name,
+          description: 'Read link',
+          inputSchema: {
+            type: 'object',
+            properties: { id: { type: 'string' } },
+            required: ['id'],
           },
-        ],
-        call,
-      });
-      let step = 0;
-      vi.mocked(languageModelFor).mockReturnValue(
-        new MockLanguageModelV4({
-          doStream: async () => ({
-            stream: new ReadableStream({
-              start(c) {
-                if (step++ === 0)
-                  c.enqueue({
-                    type: 'tool-call',
-                    toolCallId: 'call1',
-                    toolName: 'trash_link',
-                    input: JSON.stringify({ id: 'link1' }),
-                  });
-                else {
-                  c.enqueue({ type: 'text-start', id: 't' });
-                  c.enqueue({ type: 'text-delta', id: 't', delta: 'Read it' });
-                  c.enqueue({ type: 'text-end', id: 't' });
-                }
+        },
+      ],
+      call,
+    });
+    let step = 0;
+    vi.mocked(languageModelFor).mockReturnValue(
+      new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(c) {
+              if (step++ === 0)
                 c.enqueue({
-                  type: 'finish',
-                  finishReason: { unified: step === 1 ? 'tool-calls' : 'stop', raw: undefined },
-                  usage: {
-                    inputTokens: {
-                      total: 1,
-                      noCache: 1,
-                      cacheRead: undefined,
-                      cacheWrite: undefined,
-                    },
-                    outputTokens: { total: 1, text: 1, reasoning: undefined },
-                  },
+                  type: 'tool-call',
+                  toolCallId: 'call1',
+                  toolName: name,
+                  input: JSON.stringify(input),
                 });
-                c.close();
-              },
-            }),
+              else {
+                c.enqueue({ type: 'text-start', id: 't' });
+                c.enqueue({ type: 'text-delta', id: 't', delta: 'Read it' });
+                c.enqueue({ type: 'text-end', id: 't' });
+              }
+              c.enqueue({
+                type: 'finish',
+                finishReason: { unified: step === 1 ? 'tool-calls' : 'stop', raw: undefined },
+                usage: {
+                  inputTokens: {
+                    total: 1,
+                    noCache: 1,
+                    cacheRead: undefined,
+                    cacheWrite: undefined,
+                  },
+                  outputTokens: { total: 1, text: 1, reasoning: undefined },
+                },
+              });
+              c.close();
+            },
           }),
         }),
-      );
-      const endRun = vi.fn();
-      const response = await runLibrarian({
-        endRun,
-        chatId: 'chat',
-        messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Read' }] }],
-        link: null,
-      });
-      expect(await response.text()).toContain('tool-approval-request');
-      expect(step).toBe(1);
-      expect(call).not.toHaveBeenCalled();
-      const saved = structuredClone(vi.mocked(saveChatMessages).mock.calls.at(-1)?.[1]);
-      if (!saved) throw new Error('missing persisted approval');
-      const assistant = saved.at(-1);
-      if (!assistant) throw new Error('missing assistant');
-      assistant.parts = assistant.parts.map((part) => {
-        if (
-          !part ||
-          typeof part !== 'object' ||
-          !('state' in part) ||
-          part.state !== 'approval-requested' ||
-          !('approval' in part)
-        )
-          return part;
-        return {
-          ...part,
-          state: 'approval-responded',
-          approval: { ...(part.approval as Record<string, unknown>), approved },
-        };
-      });
-      const resumed = await runLibrarian({ chatId: 'chat', messages: saved, link: null });
-      await resumed.text();
-      if (approved)
-        expect(call).toHaveBeenCalledExactlyOnceWith('trash_link', { id: 'link1' }, undefined);
-      else expect(call).not.toHaveBeenCalled();
-    },
-  );
+      }),
+    );
+    const endRun = vi.fn();
+    const response = await runLibrarian({
+      endRun,
+      chatId: 'chat',
+      messages: [{ id: 'u', role: 'user', parts: [{ type: 'text', text: 'Read' }] }],
+      link: null,
+    });
+    expect(await response.text()).toContain('tool-approval-request');
+    expect(step).toBe(1);
+    expect(call).not.toHaveBeenCalled();
+    const saved = structuredClone(vi.mocked(saveChatMessages).mock.calls.at(-1)?.[1]);
+    if (!saved) throw new Error('missing persisted approval');
+    const assistant = saved.at(-1);
+    if (!assistant) throw new Error('missing assistant');
+    assistant.parts = assistant.parts.map((part) => {
+      if (
+        !part ||
+        typeof part !== 'object' ||
+        !('state' in part) ||
+        part.state !== 'approval-requested' ||
+        !('approval' in part)
+      )
+        return part;
+      return {
+        ...part,
+        state: 'approval-responded',
+        approval: { ...(part.approval as Record<string, unknown>), approved },
+      };
+    });
+    const resumed = await runLibrarian({ chatId: 'chat', messages: saved, link: null });
+    await resumed.text();
+    if (approved) expect(call).toHaveBeenCalledExactlyOnceWith(name, input, undefined);
+    else expect(call).not.toHaveBeenCalled();
+  });
   it('maps streamed provider errors to fixed codes', async () => {
     const spies = ['error', 'warn', 'log'].map((method) =>
       vi.spyOn(console, method as 'error').mockImplementation(() => {}),

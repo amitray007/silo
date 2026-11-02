@@ -2,9 +2,13 @@ import {
   createChat,
   deleteChat,
   getChat,
+  importLibrarianMessages,
+  importMessagesSchema,
   incomingUserMessageSchema,
   librarianMessageSchema,
   listChats,
+  quickLibrarianReply,
+  quickRequestSchema,
   streamLibrarianReply,
 } from '@silo/core';
 import type { Hono } from 'hono';
@@ -23,6 +27,29 @@ function summary(chat: NonNullable<Awaited<ReturnType<typeof createChat>>>) {
 }
 export function registerLibrarianRoutes(app: Hono): void {
   app.use('/librarian/*', operatorOnly);
+  app.post('/librarian/quick', async (c) => {
+    const input = quickRequestSchema.parse(await c.req.json());
+    const result = await quickLibrarianReply(input, c.req.raw.signal);
+    if (result.ok) return result.response;
+    return c.json(
+      { error: result.code, message: 'Could not start Librarian reply.' },
+      result.code === 'ai_not_ready' || result.code === 'busy'
+        ? 409
+        : result.code === 'not_found'
+          ? 404
+          : 503,
+    );
+  });
+  app.post('/librarian/chats/:id/import', async (c) => {
+    const id = chatId.parse(c.req.param('id'));
+    const input = importMessagesSchema.parse(await c.req.json());
+    const result = await importLibrarianMessages(id, input.messages);
+    if (result === 'ok') return c.body(null, 204);
+    return c.json(
+      { error: result, message: 'Could not import conversation.' },
+      result === 'not_found' ? 404 : 409,
+    );
+  });
   app.get('/librarian/chats', async (c) => {
     const query = z
       .object({

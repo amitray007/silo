@@ -1695,8 +1695,10 @@
   flex: 1;
   min-width: 140px;
 }
+/* Picker column and switch column are fixed, so every feature row lines up, switch or not. */
 .silo-ai-feature-controls {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 272px) 36px;
   align-items: center;
   gap: 12px;
   min-width: 0;

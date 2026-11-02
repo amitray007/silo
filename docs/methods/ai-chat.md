@@ -142,6 +142,11 @@ Indexes: `librarian_chats (link_id, updated_at desc, id)` and
 
 ## API contract
 
+Quick replies return `409 busy` when two quick runs are active.
+Imports return `409 busy` when the chat has an active run.
+Imports return `409 approval_pending` when the last assistant message awaits approval.
+Imports return `409 ai_not_ready` when the Librarian is not ready.
+
 All routes: web session with `X-Silo-CSRF`, or the operator token. Named access
 tokens and MCP OAuth tokens get `403` (the chat spends the owner's provider
 key). Error shape as `api-hono.md`.
@@ -265,6 +270,24 @@ and the tag shows in the sidebar; "move the BBC News link to the trash" shows
 the approval row, Allow trashes it (then restore it), Deny leaves it and the
 answer says so; a forged approval body (changed part or unknown approval id)
 gets 400.
+
+### Slice 3 detail
+
+- When ready, the selection bar shows Highlight, Note and Listen as icons,
+  followed by Ask and More. Otherwise it keeps its current shape.
+- Ask opens a question field in place. Sentences offer Explain, Simplify and
+  Counterpoint; single words offer Define, In context and Related. Escape
+  returns to the bar and keeps the selection.
+- Quick actions stream a temporary answer below the passage, or a bottom sheet
+  in panes under 520px. The quick endpoint validates the passage and action,
+  checks readiness, uses read-only tools and stores no conversation rows.
+- Save as note creates a passage highlight with the answer as its note.
+- Continue in Librarian imports the text-only turn into the newest article chat
+  (creating it if needed), then opens the dock conversation.
+- Typed questions open the dock with passage metadata. If the dock is already
+  open, Ask attaches a removable passage chip and its quick actions there.
+- Saved-item citations use `[Title](/?link=<uuid>)` and open in the Reader.
+  External citations still open in a new tab.
 
 ### Slice 5 detail
 

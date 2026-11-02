@@ -19,7 +19,7 @@ import { chatModelSettings } from '../generation.js';
 import { languageModelFor } from '../model.js';
 import { compactConversation } from './compaction.js';
 import { persona, promptVersion, requestContext } from './persona.js';
-import { APPROVAL_TOOLS, librarianTools } from './tools.js';
+import { librarianTools, toolApproval } from './tools.js';
 
 /** Provider-specific chunks (message ids, token usage) stay on the server. */
 function withoutProviderChunks<Part extends { type: string }>() {
@@ -40,7 +40,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     const credential = await resolveAiFeatureCredential('librarian');
     if (!credential) throw new Error('Unavailable');
     const approvalSecret = librarianApprovalSecret();
-    const tools = await librarianTools(getLibrarianToolSource(), approvalSecret);
+    const tools = await librarianTools(getLibrarianToolSource(), approvalSecret, request.transient);
     const originalMessages = await validateUIMessages({
       messages: request.messages,
       tools: Object.fromEntries(
@@ -62,9 +62,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       ...input,
       experimental_transform: withoutProviderChunks,
       tools,
-      toolApproval: Object.fromEntries(
-        APPROVAL_TOOLS.map((name) => [name, 'user-approval' as const]),
-      ),
+      toolApproval,
       ...(approvalSecret ? { experimental_toolApprovalSecret: approvalSecret } : {}),
       stopWhen: isStepCount(8),
       maxRetries: 2,
@@ -79,15 +77,17 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       onError: failure,
       onEnd: async ({ messages }) => {
         try {
-          await saveChatMessages(
-            request.chatId,
-            messages.map((message) => librarianMessageSchema.parse(message)),
-          );
+          if (!request.transient)
+            await saveChatMessages(
+              request.chatId,
+              messages.map((message) => librarianMessageSchema.parse(message)),
+            );
         } finally {
           request.endRun?.();
         }
       },
     });
+    if (request.transient) return createUIMessageStreamResponse({ stream });
     // Consume the UI stream too: its onEnd persists after the HTTP reader disconnects.
     const [responseStream, persistenceStream] = stream.tee();
     void persistenceStream

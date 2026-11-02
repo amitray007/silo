@@ -60,3 +60,36 @@ it('exposes every source tool except export and gates destructive tools on the s
   expect(Object.keys(await librarianTools(source, new Uint8Array(32)))).toEqual(names.slice(0, -1));
   expect(source.call).not.toHaveBeenCalled();
 });
+
+it('quick actions expose only read-only tools even when approval secrets are available', async () => {
+  const source = {
+    list: async () =>
+      ['get_link', 'search_links', 'find_related', 'capture_link', 'trash_link'].map((name) => ({
+        name,
+        description: name,
+        inputSchema: { type: 'object' },
+      })),
+    call: vi.fn(),
+  };
+  expect(Object.keys(await librarianTools(source, new Uint8Array(32), true))).toEqual([
+    'get_link',
+    'search_links',
+    'find_related',
+  ]);
+});
+
+it.each([
+  ['edit_link', { note: '' }],
+  ['edit_highlight', { note: null }],
+  ['rename_tag', { merge: true }],
+] as const)('blocks protected %s calls when the secret is missing', async (name, input) => {
+  const call = vi.fn();
+  const tools = await librarianTools({
+    list: async () => [{ name, description: name, inputSchema: { type: 'object' } }],
+    call,
+  });
+  await expect(
+    tools[name]?.execute?.(input, { context: {}, toolCallId: 'c', messages: [] }),
+  ).rejects.toThrow('Approval is unavailable');
+  expect(call).not.toHaveBeenCalled();
+});

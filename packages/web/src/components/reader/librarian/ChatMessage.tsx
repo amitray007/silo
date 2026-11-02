@@ -1,5 +1,36 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { Streamdown } from 'streamdown';
+import { Link, useInRouterContext } from 'react-router';
+import { defaultRehypePlugins, Streamdown } from 'streamdown';
+import { ApprovalRow } from './ApprovalRow';
+
+const itemCitation = /^\/\?link=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function Citation({ href, children }: { href?: string | undefined; children?: React.ReactNode }) {
+  const router = useInRouterContext();
+  if (href && itemCitation.test(href) && router) return <Link to={href}>{children}</Link>;
+  if (href && !itemCitation.test(href) && !/^https?:\/\//i.test(href))
+    return <span>{children}</span>;
+  return (
+    <a href={href} target="_blank" rel="noopener noreferrer">
+      {children}
+    </a>
+  );
+}
+const citationPlugins: NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']> =
+  Object.entries(defaultRehypePlugins).map<
+    NonNullable<React.ComponentProps<typeof Streamdown>['rehypePlugins']>[number]
+  >(([name, plugin]) =>
+    name === 'harden' && Array.isArray(plugin)
+      ? [
+          plugin[0],
+          {
+            ...plugin[1],
+            allowedLinkPrefixes: ['*'],
+            allowedProtocols: ['http', 'https'],
+            defaultOrigin: 'https://silo.invalid',
+          },
+        ]
+      : plugin,
+  );
 
 function textCount(text: string): number | null {
   try {
@@ -81,11 +112,11 @@ function traceLine(message: UIMessage): string {
     }
   }
   if (searched) traces.add(`Searched your library${counted ? ` · ${found} links` : ''}`);
-  return [...traces].join(' · ') || 'Answered from the conversation';
+  return [...traces].join(' · ');
 }
 
 /** Text written before a later tool call is the model thinking aloud; the answer comes after the last call. */
-function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
+export function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
   const lastTool = message.parts.findLastIndex((part) => toolName(part) !== null);
   const steps: string[] = [];
   const answer: string[] = [];
@@ -96,21 +127,15 @@ function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
   return { steps, answer: answer.join('\n\n') };
 }
 
-function approvalSentence(name: string, input: unknown): string {
-  const args = input && typeof input === 'object' ? (input as Record<string, unknown>) : {};
-  const count = Array.isArray(args.ids) ? args.ids.length : 1;
-  if (name === 'trash_link') return `Move ${count} ${count === 1 ? 'link' : 'links'} to trash?`;
-  if (name === 'hard_delete_link')
-    return `Permanently delete ${count} ${count === 1 ? 'link' : 'links'}?`;
-  if (name === 'delete_tag') return `Delete the tag “${String(args.name ?? args.tag ?? '')}”?`;
-  if (name === 'delete_highlight') return 'Delete this highlight?';
-  return 'Unsubscribe from this feed?';
-}
 export function ChatMessage({
   message,
   onApproval,
+  expired = false,
+  linkId,
 }: {
   message: UIMessage;
+  expired?: boolean;
+  linkId?: string;
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
   if (message.role === 'user') {
@@ -118,13 +143,20 @@ export function ChatMessage({
       .filter((part) => part.type === 'text')
       .map((part) => part.text)
       .join('\n\n');
+    const meta = message.metadata;
+    const quote =
+      meta && typeof meta === 'object' && 'quote' in meta && typeof meta.quote === 'string'
+        ? meta.quote.trim()
+        : '';
     return (
       <div className="silo-chat-message silo-chat-user">
         <p>{text}</p>
+        {quote && <blockquote className="silo-chat-quote">{quote}</blockquote>}
       </div>
     );
   }
   const { steps, answer } = splitSteps(message);
+  const trace = traceLine(message);
   return (
     <div className="silo-chat-message silo-chat-assistant">
       {steps.map((step) => (
@@ -134,43 +166,40 @@ export function ChatMessage({
       ))}
       {message.parts.map((part) => {
         if (!('state' in part)) return null;
-        if (part.state === 'output-denied') return <p key={part.toolCallId}>Not done.</p>;
+        if (part.state === 'output-denied')
+          return (
+            <p key={part.toolCallId} className="silo-chat-denied">
+              Not done.
+            </p>
+          );
         if (part.state !== 'approval-requested') return null;
         return (
-          <div key={part.toolCallId} className="silo-chat-approval">
-            <p>{approvalSentence(toolName(part) ?? '', part.input)}</p>
-            <button
-              type="button"
-              className="silo-chat-allow"
-              disabled={!onApproval}
-              onClick={() => onApproval?.({ id: part.approval.id, approved: true })}
-            >
-              Allow
-            </button>
-            <button
-              type="button"
-              disabled={!onApproval}
-              onClick={() => onApproval?.({ id: part.approval.id, approved: false })}
-            >
-              Deny
-            </button>
-          </div>
+          <ApprovalRow
+            key={part.toolCallId}
+            name={toolName(part) ?? ''}
+            input={part.input}
+            expired={expired}
+            linkId={linkId}
+            onDecision={
+              onApproval ? (approved) => onApproval({ id: part.approval.id, approved }) : undefined
+            }
+          />
         );
       })}
       <Streamdown
         skipHtml
+        rehypePlugins={citationPlugins}
         components={{
-          a: ({ children, href }) => (
-            <a href={href} target="_blank" rel="noopener noreferrer">
-              {children}
-            </a>
-          ),
+          a: ({ href, children }) => <Citation href={href}>{children}</Citation>,
           img: () => null,
         }}
       >
         {answer}
       </Streamdown>
-      <div className="silo-chat-trace">{traceLine(message)}</div>
+      {trace &&
+        !message.parts.some((part) => 'state' in part && part.state === 'approval-requested') && (
+          <div className="silo-chat-trace">{trace}</div>
+        )}
     </div>
   );
 }

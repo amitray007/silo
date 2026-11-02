@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatMessage } from './ChatMessage';
 import { DockChat } from './DockChat';
+import { requestDock } from './selectionStore';
 
 const summary = {
   id: 'chat-1',
@@ -71,7 +72,7 @@ it('resumes stored messages and folds with minus, grid and Escape', async () => 
   await screen.findByText('Stored question');
   expect(screen.getByText('Saved title')).toBeTruthy();
   expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
-  fireEvent.click(screen.getByRole('button', { name: 'Fold back into the dock' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Fold chat' }));
   fireEvent.click(screen.getByRole('button', { name: 'Back to tools' }));
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(fold).toHaveBeenCalledTimes(3);
@@ -166,7 +167,7 @@ it('keeps a delayed answer alive across fold and reopen', async () => {
   await screen.findByText('Survived folding');
 });
 
-it('resumes an approval with only the assistant message and refreshes write queries', async () => {
+it.each(['trash_link'])('resumes $name and refreshes its queries', async (name) => {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   const invalidate = vi.spyOn(client, 'invalidateQueries');
   const fetcher = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) => {
@@ -179,9 +180,13 @@ it('resumes an approval with only the assistant message and refreshes write quer
       ];
       return new Response(
         `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
-        { headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' } },
+        {
+          headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+        },
       );
     }
+    if (url.startsWith('/api/links/'))
+      return json({ link: { title: 'Target title', highlights: [] } });
     if (url.includes('?')) return json({ chats: [summary], nextCursor: null });
     return json({
       chat: summary,
@@ -192,7 +197,7 @@ it('resumes an approval with only the assistant message and refreshes write quer
           parts: [
             {
               type: 'dynamic-tool',
-              toolName: 'trash_link',
+              toolName: name,
               toolCallId: 'trash-call',
               state: 'approval-requested',
               input: { id: 'link' },
@@ -206,11 +211,36 @@ it('resumes an approval with only the assistant message and refreshes write quer
   vi.stubGlobal('fetch', fetcher);
   render(
     <QueryClientProvider client={client}>
-      <DockChat linkId="approval-integration" onFold={() => {}} />
+      <DockChat linkId={`approval-integration-${name}`} onFold={() => {}} />
     </QueryClientProvider>,
   );
-  fireEvent.click(await screen.findByRole('button', { name: 'Allow' }));
+  await screen.findByRole('button', { name: 'Allow' });
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+    target: { value: 'Another question' },
+  });
+  expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
+  expect(screen.getByText('Allow or deny first.')).toBeTruthy();
+  const { act } = await import('@testing-library/react');
+  const { requestDock } = await import('./selectionStore');
+  act(() =>
+    requestDock(`approval-integration-${name}`, {
+      passage: { quote: 'A selected passage', paragraph: 2 },
+      question: 'Why this passage?',
+    }),
+  );
+  await screen.findByText('A selected passage');
+  expect(
+    (screen.getByRole('textbox', { name: 'Ask the Librarian' }) as HTMLTextAreaElement).value,
+  ).toBe('Why this passage?');
+  for (const label of ['Explain', 'Simplify', 'Counterpoint'])
+    expect(screen.getByRole('button', { name: label }).hasAttribute('disabled')).toBe(true);
+  fireEvent.submit(screen.getByRole('button', { name: 'Send' }).closest('form')!);
+  expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/messages'))).toBe(false);
+  fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
   await waitFor(() => expect(invalidate).toHaveBeenCalledWith({ queryKey: ['tags'] }));
+  if (name === 'refresh_reader')
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['live-reader', 'link'] });
+  else expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['live-reader', 'link'] });
   const request = fetcher.mock.calls.find(([url]) => String(url).endsWith('/messages'));
   const body = JSON.parse(String(request?.[1]?.body));
   expect(Object.keys(body)).toEqual(['message']);
@@ -222,4 +252,147 @@ it('resumes an approval with only the assistant message and refreshes write quer
   });
   for (const key of ['links', 'link', 'counts'])
     expect(invalidate).toHaveBeenCalledWith({ queryKey: [key] });
+});
+
+it('attaches a passage and carries it in the next sent message', async () => {
+  const { act } = await import('@testing-library/react');
+  const { requestDock } = await import('./selectionStore');
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/messages'))
+      return new Response('data: [DONE]\n\n', {
+        headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+      });
+    if (url.includes('?')) return json({ chats: [{ ...summary, id: 'attached-chat' }] });
+    return json({ chat: { ...summary, id: 'attached-chat' }, messages: [] });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <DockChat linkId="attach-test" onFold={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByText('Ask about this article or your library.');
+  act(() => requestDock('attach-test', { passage: { quote: 'Chosen passage', paragraph: 3 } }));
+  await screen.findByText('Chosen passage');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+    target: { value: 'Why?' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() =>
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/messages'))).toBe(true),
+  );
+  const request = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/messages'));
+  expect(JSON.parse(String(request?.[1]?.body)).message.metadata).toEqual({
+    quote: 'Chosen passage',
+    paragraph: 3,
+  });
+  // The attachment chip clears; the sent turn keeps the passage as its quote.
+  expect(document.querySelector('.silo-chat-passage')).toBeNull();
+  expect(document.querySelector('.silo-chat-user .silo-chat-quote')?.textContent).toBe(
+    'Chosen passage',
+  );
+});
+
+it('expires approvals in older assistant messages', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('?')) return json({ chats: [summary], nextCursor: null });
+      return json({
+        chat: summary,
+        messages: [
+          {
+            id: 'old',
+            role: 'assistant',
+            parts: [
+              {
+                type: 'dynamic-tool',
+                toolName: 'delete_tag',
+                toolCallId: 'old-call',
+                input: { name: 'old tag' },
+                state: 'approval-requested',
+                approval: { id: 'old-approval' },
+              },
+            ],
+          },
+          { id: 'latest', role: 'assistant', parts: [{ type: 'text', text: 'Latest answer' }] },
+        ],
+      });
+    }),
+  );
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <DockChat linkId="expired-chat" onFold={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByText('Expired. Ask again.');
+  expect(screen.queryByRole('button', { name: 'Allow' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Deny' })).toBeNull();
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+    target: { value: 'Ask again' },
+  });
+  expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(false);
+});
+
+it('invalidates the refreshed link live Reader after a direct refresh finishes', async () => {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const invalidate = vi.spyOn(client, 'invalidateQueries');
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith('/messages')) {
+        const chunks = [
+          { type: 'start', messageId: 'refreshed' },
+          {
+            type: 'tool-input-available',
+            toolCallId: 'refresh',
+            toolName: 'refresh_reader',
+            input: { id: 'refreshed-link' },
+            dynamic: true,
+          },
+          {
+            type: 'tool-output-available',
+            toolCallId: 'refresh',
+            output: 'Refreshed',
+            dynamic: true,
+          },
+          { type: 'finish' },
+        ];
+        return new Response(
+          `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+          {
+            headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+          },
+        );
+      }
+      if (init?.method === 'POST') return json(summary);
+      return json({ chats: [], nextCursor: null });
+    }),
+  );
+  render(
+    <QueryClientProvider client={client}>
+      <DockChat linkId="refresh-direct-chat" onFold={() => {}} />
+    </QueryClientProvider>,
+  );
+  const action = screen.getByRole('button', { name: 'Summarize' });
+  await waitFor(() => expect(action.hasAttribute('disabled')).toBe(false));
+  fireEvent.click(action);
+  await waitFor(() =>
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['live-reader', 'refreshed-link'] }),
+  );
+  expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['live-reader', 'refresh-direct-chat'] });
+});
+
+it('focuses an open dock when a passage arrives', async () => {
+  setup();
+  await screen.findByRole('textbox');
+  screen.getByRole('button', { name: 'Back to tools' }).focus();
+  requestDock(`article-${linkSequence}`, { passage: { quote: 'Attached passage', paragraph: 2 } });
+  await screen.findByText('Attached passage');
+  expect(document.activeElement).toBe(screen.getByRole('textbox'));
 });
