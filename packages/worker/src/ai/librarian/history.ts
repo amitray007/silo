@@ -10,8 +10,11 @@ function stub(toolName: string): string {
  * Old tool results (whole articles) are the bulk of a long chat. Replace them with a stub but
  * keep the calls, so the model still knows it read its sources instead of doubting its answers.
  */
-export function stubOldToolResults(messages: ModelMessage[]): ModelMessage[] {
-  const cutoff = messages.length - KEEP_RECENT;
+export function stubOldToolResults(
+  messages: ModelMessage[],
+  keepRecent = KEEP_RECENT,
+): ModelMessage[] {
+  const cutoff = messages.length - keepRecent;
   return messages.map((message, index) => {
     if (index >= cutoff || message.role !== 'tool') return message;
     return {

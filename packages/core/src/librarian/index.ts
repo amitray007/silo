@@ -71,6 +71,8 @@ export async function getChat(id: string) {
     .orderBy(asc(messages.seq));
   return {
     chat,
+    summarizedCount: stored.filter((message) => message.seq <= chat.summaryThrough).length,
+    messageSeqs: stored.map((message) => message.seq),
     messages: stored.map(({ id, role, parts, metadata }) => ({
       id,
       role,
@@ -78,6 +80,12 @@ export async function getChat(id: string) {
       ...(metadata === null ? {} : { metadata }),
     })),
   };
+}
+export async function saveChatSummary(chatId: string, summary: string, throughSeq: number) {
+  await db
+    .update(chats)
+    .set({ summary, summaryThrough: throughSeq })
+    .where(and(eq(chats.id, chatId), sql`${chats.summaryThrough} < ${throughSeq}`));
 }
 export async function deleteChat(id: string) {
   await db.delete(chats).where(eq(chats.id, id));
@@ -172,8 +180,9 @@ export async function streamLibrarianReply({
       .from(messages)
       .where(eq(messages.id, message.id));
     if (existing && existing.chatId !== chatId) return fail('invalid_message');
-    const merged = [...(continuation ? stored.messages.slice(0, -1) : stored.messages), message];
     await saveChatMessages(chatId, [message]);
+    const saved = await getChat(chatId);
+    if (!saved) return fail('not_found');
     const [link] = stored.chat.linkId
       ? await db
           .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
@@ -182,7 +191,16 @@ export async function streamLibrarianReply({
       : [];
     return {
       ok: true,
-      response: await runner({ chatId, messages: merged, link: link ?? null, abortSignal, endRun }),
+      response: await runner({
+        chatId,
+        messages: saved.messages,
+        summary: saved.chat.summary,
+        summarizedCount: saved.summarizedCount,
+        messageSeqs: saved.messageSeqs,
+        link: link ?? null,
+        abortSignal,
+        endRun,
+      }),
     } as const;
   } catch (error) {
     endRun();

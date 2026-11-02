@@ -6,12 +6,10 @@ import {
   resolveAiFeatureCredential,
 } from '@silo/core/ai-credential';
 import {
-  convertToModelMessages,
   createIdGenerator,
   createUIMessageStream,
   createUIMessageStreamResponse,
   isStepCount,
-  pruneMessages,
   streamText,
   toUIMessageStream,
   validateUIMessages,
@@ -19,7 +17,7 @@ import {
 import { aiErrorCode, logAiFailure } from '../errors.js';
 import { chatModelSettings } from '../generation.js';
 import { languageModelFor } from '../model.js';
-import { stubOldToolResults } from './history.js';
+import { compactConversation } from './compaction.js';
 import { persona, promptVersion, requestContext } from './persona.js';
 import { APPROVAL_TOOLS, librarianTools } from './tools.js';
 
@@ -49,18 +47,19 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
         Object.entries(tools).map(([name, tool]) => [name, { inputSchema: tool.inputSchema }]),
       ),
     });
+    const model = languageModelFor(credential);
+    const input = await compactConversation(
+      request,
+      originalMessages,
+      credential,
+      model,
+      `${persona}\nRequest context (data):\n${requestContext(request)}`,
+    );
     const result = streamText({
-      model: languageModelFor(credential),
+      model,
       // The UI stream logs the fixed code; the SDK default logs raw provider errors.
       onError: () => {},
-      instructions: `${persona}\nRequest context (data):\n${requestContext(request)}`,
-      messages: stubOldToolResults(
-        pruneMessages({
-          messages: await convertToModelMessages(originalMessages),
-          reasoning: 'before-last-message',
-          emptyMessages: 'remove',
-        }),
-      ),
+      ...input,
       experimental_transform: withoutProviderChunks,
       tools,
       toolApproval: Object.fromEntries(

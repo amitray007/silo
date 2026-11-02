@@ -8,6 +8,23 @@ vi.mock('../ai/status.js', () => ({ isAiFeatureOn: async () => true }));
 const suite = postgresReachable() ? describe : describe.skip;
 suite('Librarian persistence', () => {
   const h = setupPgHarness('silo_librarian', () => import('./index.js'));
+  it('only advances summary cutoffs and counts stored sequences', async () => {
+    const c = h.mod();
+    const chat = await c.createChat();
+    if (!chat) throw new Error('missing chat');
+    await c.saveChatMessages(chat.id, [
+      { id: 'summary-u', role: 'user', parts: [{ type: 'text', text: 'hello' }] },
+      { id: 'summary-a', role: 'assistant', parts: [{ type: 'text', text: 'answer' }] },
+    ]);
+    await c.saveChatSummary(chat.id, 'new', 2);
+    await c.saveChatSummary(chat.id, 'old', 1);
+    await c.saveChatSummary(chat.id, 'equal', 2);
+    const stored = await c.getChat(chat.id);
+    expect(stored?.chat.summary).toBe('new');
+    expect(stored?.chat.summaryThrough).toBe(2);
+    expect(stored?.summarizedCount).toBe(2);
+    await c.deleteChat(chat.id);
+  });
   it('creates, saves, replaces in place, titles and deletes', async () => {
     const c = h.mod();
     const chat = await c.createChat();
