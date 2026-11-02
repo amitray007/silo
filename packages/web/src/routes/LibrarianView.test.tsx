@@ -232,7 +232,7 @@ it('starts a library chat with the plus: only article-free quick actions, and no
   expect(JSON.parse(String(create?.body))).toEqual({});
   const sent = calls.find((call) => call.url.endsWith('/messages'));
   expect(sent?.url).toBe(`/api/librarian/chats/run${run}-created/messages`);
-  expect(where()).toBe(`?chat=run${run}-created`);
+  await waitFor(() => expect(where()).toBe(`?chat=run${run}-created`));
   // The new chat joins the list as a library chat.
   await waitFor(() => expect(screen.getAllByText('Library').length).toBeGreaterThan(0));
 });
