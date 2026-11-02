@@ -1,7 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { memo } from 'react';
 import { Link, useInRouterContext } from 'react-router';
-import { defaultRehypePlugins, Streamdown } from 'streamdown';
+import { Block, type BlockProps, defaultRehypePlugins, Streamdown } from 'streamdown';
 import { ApprovalRow } from './ApprovalRow';
 
 const itemCitation = /^\/\?link=[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -87,8 +87,14 @@ export const WRITE_TRACES: Record<string, string> = {
   retry_capture: 'Retried',
 };
 const SEARCH_TOOLS = new Set(['search_links', 'find_related', 'list_links']);
-/** New words fade in over 150ms as they arrive; the words already shown never move. */
-const CHUNK_FADE = { animation: 'fadeIn', duration: 150, easing: 'ease-out', sep: 'word' } as const;
+// Per-word animation wraps and reparses long list blocks on every update.
+const StreamChunk = memo(function StreamChunk(props: BlockProps) {
+  return (
+    <div className="silo-stream-chunk">
+      <Block {...props} />
+    </div>
+  );
+});
 
 export function toolName(part: UIMessage['parts'][number]): string | null {
   if (part.type === 'dynamic-tool') return part.toolName;
@@ -153,7 +159,7 @@ export const ChatMessage = memo(function ChatMessage({
 }: {
   message: UIMessage;
   expired?: boolean;
-  /** This message is still arriving: its new words fade in. */
+  /** This message is still arriving: newly mounted blocks fade in. */
   streaming?: boolean;
   linkId?: string | undefined;
   onApproval?: (response: { id: string; approved: boolean }) => void;
@@ -178,7 +184,7 @@ export const ChatMessage = memo(function ChatMessage({
   const { steps, answer } = splitSteps(message);
   const trace = traceLine(message);
   return (
-    <div className="silo-chat-message silo-chat-assistant">
+    <div className="silo-chat-message silo-chat-assistant" data-streaming={streaming}>
       {steps.map((step) => (
         <p key={step} className="silo-chat-step">
           {step}
@@ -208,7 +214,8 @@ export const ChatMessage = memo(function ChatMessage({
       })}
       <Streamdown
         skipHtml
-        animated={streaming ? CHUNK_FADE : false}
+        animated={false}
+        BlockComponent={StreamChunk}
         isAnimating={streaming}
         rehypePlugins={citationPlugins}
         components={markdownComponents}

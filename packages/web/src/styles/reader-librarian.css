@@ -148,6 +148,18 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-message p {
   margin: 0;
 }
+.silo-stream-chunk + .silo-stream-chunk {
+  margin-top: 8px;
+}
+.silo-stream-chunk:has(> :is(h1, h2, h3, h4)) + .silo-stream-chunk {
+  margin-top: 0;
+}
+.silo-chat-assistant[data-streaming="true"] .silo-stream-chunk {
+  transition: opacity 150ms var(--ease-out);
+  @starting-style {
+    opacity: 0;
+  }
+}
 .silo-chat-user {
   font-weight: 500;
 }

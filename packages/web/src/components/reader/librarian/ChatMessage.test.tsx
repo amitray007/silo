@@ -159,3 +159,23 @@ it('opens saved-item citations through the router and keeps external links in a 
   expect(saved.getAttribute('target')).toBeNull();
   expect(screen.getByRole('link', { name: 'Web' }).getAttribute('target')).toBe('_blank');
 });
+
+it('keeps completed paragraphs and list numbering through streaming and completion', () => {
+  const message: UIMessage = {
+    id: 'stable-blocks',
+    role: 'assistant',
+    parts: [{ type: 'text', text: 'First paragraph.\n\n1. One' }],
+  };
+  const view = render(<ChatMessage message={message} streaming />);
+  const paragraph = screen.getByText('First paragraph.');
+  const longer: UIMessage = {
+    ...message,
+    parts: [{ type: 'text', text: 'First paragraph.\n\n1. One\n2. Two' }],
+  };
+  view.rerender(<ChatMessage message={longer} streaming />);
+  expect(screen.getByText('First paragraph.')).toBe(paragraph);
+  expect(screen.getAllByRole('listitem').map((item) => item.textContent)).toEqual(['One', 'Two']);
+  view.rerender(<ChatMessage message={longer} />);
+  expect(screen.getByText('First paragraph.')).toBe(paragraph);
+  expect(screen.getAllByRole('list')).toHaveLength(1);
+});
