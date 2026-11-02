@@ -456,3 +456,64 @@ it('restores internal group scrolling after the group leaves and re-enters the w
   expect(restored?.scrollTop).toBe(50);
   expect(restored?.dataset.up).toBe('true');
 });
+
+it.each([72, 200])(
+  'places short-paragraph notes from their anchors after jumping to paragraph %i',
+  (target) => {
+    const scrollTo = vi.fn();
+    stub(HTMLElement.prototype, 'scrollTo', () => scrollTo);
+    const { host, frame, scroll, updateLane } = mount({
+      groups: Array.from({ length: 200 }, (_, i) => group(i + 1, [`short${i + 1}`], 100 + i * 70)),
+    });
+    const targetTop = 98 + (target - 1) * 70;
+    // A scroll jump mounts the anchor's window without visiting intervening groups.
+    frame.getBoundingClientRect = () => new DOMRect(0, -targetTop, 636, 15000);
+    fireEvent.scroll(scroll);
+    expect(tops(host)).toContainEqual({ key: `p${target}`, top: targetTop });
+    updateLane({ focusIds: [`short${target}`] });
+    expect(host.querySelector(`[data-note="short${target}"]`)?.getAttribute('data-focus')).toBe(
+      'true',
+    );
+    expect(tops(host)).toContainEqual({ key: `p${target}`, top: targetTop });
+    const placed = tops(host);
+    for (let i = 1; i < placed.length; i++) {
+      expect((placed[i]?.top ?? 0) - (placed[i - 1]?.top ?? 0)).toBeGreaterThanOrEqual(BLOCK + 12);
+    }
+    expect(host.querySelectorAll('[data-note]').length).toBeLessThan(30);
+  },
+);
+
+it.each([72, 200])(
+  'reveals paragraph %i from its anchor on a marker jump without a preceding scroll',
+  (target) => {
+    const scrollTo = vi.fn();
+    stub(HTMLElement.prototype, 'scrollTo', () => scrollTo);
+    const { host, updateLane } = mount({
+      groups: Array.from({ length: 200 }, (_, i) => group(i + 1, [`short${i + 1}`], 100 + i * 70)),
+    });
+    updateLane({ focusIds: [`short${target}`] });
+    const top = 98 + (target - 1) * 70;
+    expect(tops(host)).toContainEqual({ key: `p${target}`, top });
+    expect(scrollTo).toHaveBeenCalledWith({ top, behavior: 'auto' });
+  },
+);
+
+it('exposes unmounted notes to screen readers and moves keyboard focus across the window', () => {
+  const { host } = mount({
+    groups: Array.from({ length: 200 }, (_, i) => group(i + 1, [`short${i + 1}`], 100 + i * 70)),
+  });
+  const allNotes = host.querySelector('[aria-label="All notes"]');
+  expect(allNotes?.textContent).toContain('quote short200');
+  expect(allNotes?.closest('[aria-hidden="true"]')).toBeNull();
+  const lastGroup = host.querySelector('.silo-lgroup:last-child');
+  const controls = lastGroup?.querySelectorAll<HTMLElement>('button');
+  const last = controls?.[controls.length - 1];
+  if (!last) throw new Error('Missing last control');
+  const nextPara = Number(last.closest<HTMLElement>('[data-group]')?.dataset.group?.slice(1)) + 1;
+  expect(host.querySelector(`[data-group="p${nextPara}"]`)).toBeNull();
+  last.focus();
+  fireEvent.keyDown(last, { key: 'Tab' });
+  expect(document.activeElement?.closest<HTMLElement>('[data-group]')?.dataset.group).toBe(
+    `p${nextPara}`,
+  );
+});

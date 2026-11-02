@@ -52,6 +52,11 @@ function sameSlots(a: Map<string, Slot>, b: Map<string, Slot>): boolean {
   return true;
 }
 
+/** Paragraph positions select the window independently of measured note heights. */
+function paragraphSlots(rows: readonly StackRow[]): Map<string, Slot> {
+  return new Map(rows.map((row) => [row.key, { top: row.anchor, height: row.max, max: row.max }]));
+}
+
 function atGroupEdge(group: HTMLElement, target: HTMLElement, backwards: boolean) {
   const controls = [...group.querySelectorAll<HTMLElement>('button, textarea')];
   return target === (backwards ? controls[0] : controls.at(-1));
@@ -175,7 +180,7 @@ export function NotesLane({
         max: ORPHANS_MAX,
         blocks: [ORPHANS_MAX],
       });
-    return windowKeys(stackRows(rows));
+    return windowKeys(paragraphSlots(rows));
   });
   const mounted = new Set([...visible, focusGroup, addingGroup, tabGroup]);
   const visibleKey = visible.join('|');
@@ -207,8 +212,7 @@ export function NotesLane({
   const measure = useCallback(() => {
     if (!laneEl || (!stacked && open)) return;
     const current = groups.read();
-    // Only mounted blocks participate in DOM measurement. Reserve an unmeasured group's cap
-    // until it enters the buffer; measured heights survive unmounting and closing the lane.
+    // Only mounted blocks participate in DOM measurement; cache heights across windows.
     for (const group of laneEl.querySelectorAll<HTMLElement>('[data-group]')) {
       const key = group.dataset.group;
       if (key) heights.current.set(key, blockHeights(laneEl, key));
@@ -228,7 +232,10 @@ export function NotesLane({
         max: groupMax(group.paragraphHeight),
         blocks: heights.current.get(`p${group.para}`) ?? [groupMax(group.paragraphHeight)],
       });
-    const next = stackRows(rows);
+    // Select by paragraph geometry before stacking. Unmounted groups reserve no height.
+    const nextVisible = windowKeys(paragraphSlots(rows));
+    const selected = new Set(nextVisible);
+    const next = stackRows(rows.filter((row) => selected.has(row.key)));
     const left = frame.clientWidth + LANE_GAP;
     const placements = Array.from(
       laneEl.querySelectorAll<HTMLElement>('[data-group]'),
@@ -239,7 +246,6 @@ export function NotesLane({
       }),
     );
     const paintHairline = measureHairline(next, current.rangeYs);
-    const nextVisible = windowKeys(next);
     // All subscribers finish reading before this write phase runs in the same callback.
     return () => {
       laneEl.style.left = `${left}px`;
@@ -322,12 +328,15 @@ export function NotesLane({
     revealGroup(scroll, top + frameTop, behavior);
   }, [focusId, focusIds, open, stacked, laneEl, slots, groups.groups, reduced, scroll, frame]);
 
+  const groupOrder = [ORPHANS, ...keyed.map(({ key }) => key)].filter(
+    (key) => key !== ORPHANS || lostEntries.length > 0,
+  );
   const onTab = (event: React.KeyboardEvent<HTMLElement>) => {
     if (event.key !== 'Tab' || !(event.target instanceof HTMLElement)) return;
     const group = event.target.closest<HTMLElement>('[data-group]');
     if (!group) return;
     if (!atGroupEdge(group, event.target, event.shiftKey)) return;
-    const order = [...slots.keys()];
+    const order = groupOrder;
     const direction = event.shiftKey ? -1 : 1;
     const next = order[order.indexOf(group.dataset.group ?? '') + direction];
     if (!next) return;
@@ -359,6 +368,12 @@ export function NotesLane({
 
   if (!plan) return null;
   const everything: NoteEntry[] = [...lostEntries, ...keyed.flatMap((g) => g.entries)];
+  const mountedEntries = new Set([
+    ...lostEntries.filter(() => mounted.has(ORPHANS)).map((entry) => entry.id),
+    ...keyed
+      .filter(({ key }) => mounted.has(key))
+      .flatMap(({ entries }) => entries.map((e) => e.id)),
+  ]);
   return (
     <>
       {createPortal(
@@ -384,6 +399,16 @@ export function NotesLane({
                 overflow: stacked ? undefined : 'clip',
               }}
             >
+              <ol className="silo-sr-only" aria-label="All notes">
+                {everything
+                  .filter((entry) => !mountedEntries.has(entry.id))
+                  .map((entry) => (
+                    <li key={entry.id}>
+                      <p>{entry.quote}</p>
+                      {entry.note && <p>{entry.note}</p>}
+                    </li>
+                  ))}
+              </ol>
               {lostEntries.length > 0 && mounted.has(ORPHANS) && (
                 <LaneGroup
                   groupKey={ORPHANS}
