@@ -136,7 +136,7 @@ export function createSync<T extends object>(deps: {
       }
       if (timer === undefined) flush();
     },
-    connect(next: SyncTransport<T>, drain = false): () => void {
+    connect(next: SyncTransport<T>, drain = false, onDetached = () => {}): () => void {
       detachWhenIdle = undefined;
       transport = next;
       addEventListener('pagehide', onHide);
@@ -147,8 +147,10 @@ export function createSync<T extends object>(deps: {
         removeEventListener('pagehide', onHide);
         document.removeEventListener('visibilitychange', onVisibilityChange);
         transport = null;
+        onDetached();
       };
       return () => {
+        if (transport !== next) return;
         if (!drain) return detach();
         detachWhenIdle = detach;
         flush();

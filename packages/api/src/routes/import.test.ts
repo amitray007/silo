@@ -199,6 +199,22 @@ describeIfPg('POST /api/import (integration)', () => {
     });
   });
 
+  it.each([0, 1])('enforces the 25 MiB import boundary plus %i bytes', async (extra) => {
+    const { app } = harness.mod();
+    const json = JSON.stringify({ version: 1, links: [] });
+    const body = json + ' '.repeat(25 * 1024 * 1024 - json.length + extra);
+    const res = await postRaw(app, '/api/import', body, `Bearer ${TEST_TOKEN}`);
+    expect(res.status).toBe(extra === 0 ? 200 : 413);
+    if (extra === 0) {
+      expect(await res.json()).toMatchObject({ version: 1, total: 0, created: 0 });
+    } else {
+      expect(await res.json()).toEqual({
+        error: 'payload_too_large',
+        message: 'Import body exceeds 25 MB',
+      });
+    }
+  });
+
   describe('trusted caller — happy path', () => {
     it('valid version:1 file -> 200 with correct created/merged/skipped counts', async () => {
       const { app, core } = harness.mod();

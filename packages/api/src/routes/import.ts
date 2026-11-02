@@ -1,6 +1,5 @@
 import { InvalidImportError, importLinks } from '@silo/core';
 import type { Hono } from 'hono';
-import { checkIngestAuth } from '../ingest-auth.js';
 
 /**
  * Ceiling on the import request body size, in bytes. 25MB sits well above
@@ -29,17 +28,9 @@ const MAX_IMPORT_BODY_BYTES = 25 * 1024 * 1024;
  * the response body, so a prober can't learn whether import is enabled at
  * all on a reachable-but-unauthenticated host.
  *
- * Body-size guard: deliberately NOT Hono's `bodyLimit` middleware. That
- * middleware would run BEFORE this handler and would itself read/buffer the
- * body ahead of the auth check below — meaning an UNAUTHENTICATED caller
- * could still force body buffering (and, worse, a byte-counting timing
- * signal) before ever being rejected. Auth must run strictly first, with
- * zero body access before it. So instead: the `content-length` header is
- * checked manually, AFTER `checkIngestAuth` passes, and rejected with 413
- * before `c.req.json()` is ever called. A caller who lies about
- * `content-length` (chunked encoding / no header) isn't caught by this
- * cheap pre-check, but IS still bounded by `core.MAX_IMPORT_LINKS` once the
- * body is parsed — this header check is a fast-path guard, not the only one.
+ * The app-level bodyLimit enforces the 25 MiB cap on the stream before
+ * JSON parsing, including requests without Content-Length. The header check
+ * below remains a fast rejection after authentication.
  *
  * Body parsing is manual (`c.req.json().catch(...)`) rather than Hono's
  * usual "let a thrown `SyntaxError` fall to `onError`" — `core.importLinks`
@@ -53,18 +44,6 @@ const MAX_IMPORT_BODY_BYTES = 25 * 1024 * 1024;
  */
 export function registerImportRoutes(app: Hono): void {
   app.post('/import', async (c) => {
-    const auth = await checkIngestAuth(c);
-    if (!auth.ok) {
-      // Same generic-401 discipline as routes/ingest.ts: never distinguish
-      // "token not configured" from "wrong/missing token" in the RESPONSE —
-      // the operator-relevant detail stays server-side, in the log line only.
-      console.error(`[silo/api] /api/import rejected: ${auth.reason}`);
-      return c.json(
-        { error: 'unauthorized', message: 'A valid Authorization: Bearer token is required.' },
-        401,
-      );
-    }
-
     // Size guard runs AFTER auth, BEFORE any body read — see doc comment above.
     const contentLength = Number(c.req.header('content-length'));
     if (Number.isFinite(contentLength) && contentLength > MAX_IMPORT_BODY_BYTES) {

@@ -190,7 +190,7 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
       };
     },
   };
-  const tree = (
+  const tree = (nextLane = laneOverrides) => (
     <SidebarControlContext.Provider
       value={{
         collapsed: sidebar?.collapsed ?? false,
@@ -200,7 +200,7 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
     >
       <NotesLane
         api={api as unknown as HighlightsApi}
-        lane={lane(laneOverrides)}
+        lane={lane(nextLane)}
         groups={all}
         prose={prose}
         scroll={scroll}
@@ -212,9 +212,10 @@ function mount({ groups = [], lane: laneOverrides, sidebar }: Setup = {}) {
       />
     </SidebarControlContext.Provider>
   );
-  const view = render(tree);
+  const view = render(tree());
   return {
     view,
+    updateLane: (nextLane: Partial<NotesLaneApi>) => view.rerender(tree(nextLane)),
     host,
     panel,
     scroll,
@@ -369,4 +370,150 @@ it('updates only the connector when a group scrolls, without reading or painting
   expect(height).toHaveBeenCalled();
   height.mockRestore();
   range.mockRestore();
+});
+
+it('mounts only a buffered window and replaces it synchronously on a large article scroll', () => {
+  const { host, frame, scroll } = mount({
+    groups: Array.from({ length: 200 }, (_, i) => group(i + 1, [`h${i}`], 100 + i * 300)),
+  });
+  expect(tops(host).map((g) => g.key)).toEqual(['p1', 'p2', 'p3']);
+  frame.getBoundingClientRect = () => new DOMRect(0, -5000, 636, 60000);
+  fireEvent.scroll(scroll);
+  expect(host.querySelector('[data-group="p1"]')).toBeNull();
+  expect(tops(host).map((g) => g.key)).toEqual(['p15', 'p16', 'p17', 'p18', 'p19', 'p20']);
+});
+
+it('mounts and reveals an off-screen marker target while the lane is already open', () => {
+  const scrollTo = vi.fn();
+  stub(HTMLElement.prototype, 'scrollTo', () => scrollTo);
+  const { host, updateLane } = mount({
+    groups: [group(1, ['near'], 100), group(200, ['far'], 60000)],
+  });
+  expect(host.querySelector('[data-note="far"]')).toBeNull();
+  updateLane({ focusIds: ['far'] });
+  expect(host.querySelector('[data-note="far"]')?.getAttribute('data-focus')).toBe('true');
+  expect(scrollTo).toHaveBeenCalledWith({ top: 59998, behavior: 'auto' });
+});
+
+it('tabs to the next unmounted group and back without skipping its controls', () => {
+  const { host } = mount({
+    groups: [group(1, ['near'], 100), group(2, ['far'], 2000)],
+  });
+  const controls = host.querySelectorAll<HTMLElement>('[data-group="p1"] button');
+  const last = controls[controls.length - 1];
+  last?.focus();
+  if (!last) throw new Error('Missing last control');
+  fireEvent.keyDown(last, { key: 'Tab' });
+  const first = host.querySelector<HTMLElement>('[data-group="p2"] button');
+  expect(document.activeElement).toBe(first);
+  if (!first) throw new Error('Missing first control');
+  fireEvent.keyDown(first, { key: 'Tab', shiftKey: true });
+  // The preceding group is still mounted. Native Tab keeps its normal DOM order.
+  expect(host.querySelector('[data-group="p1"]')).not.toBeNull();
+});
+
+it('keeps an active note editor mounted when the article scrolls away', () => {
+  const { host, frame, scroll } = mount({
+    groups: [group(1, ['near'], 100), group(2, ['far'], 6000)],
+  });
+  fireEvent.click(host.querySelector('.silo-lnote-add') as HTMLElement);
+  const field = host.querySelector('textarea');
+  expect(document.activeElement).toBe(field);
+  frame.getBoundingClientRect = () => new DOMRect(0, -6000, 636, 9000);
+  fireEvent.scroll(scroll);
+  expect(host.querySelector('textarea')).toBe(field);
+  expect(host.querySelector('[data-group="p2"]')).not.toBeNull();
+});
+
+it('keeps the measured closed window ready without exposing its controls', () => {
+  const { host, updateLane } = mount({ groups: [group(2, ['a'], 190)], lane: { open: false } });
+  const section = host.querySelector<HTMLElement>('.silo-lane');
+  const block = host.querySelector('[data-note="a"]');
+  expect(section?.getAttribute('aria-hidden')).toBe('true');
+  expect(section?.hasAttribute('inert')).toBe(true);
+  expect(section?.style.visibility).toBe('hidden');
+  expect(tops(host)).toEqual([{ key: 'p2', top: 188 }]);
+  updateLane({ open: true });
+  expect(host.querySelector('[data-note="a"]')).toBe(block);
+  expect(section?.hasAttribute('inert')).toBe(false);
+  expect(section?.style.visibility).toBe('');
+});
+
+it('restores internal group scrolling after the group leaves and re-enters the window', () => {
+  const { host, frame, scroll } = mount({
+    groups: [group(1, ['a', 'b', 'c'], 100), group(2, ['far'], 6000)],
+  });
+  const scroller = host.querySelector<HTMLElement>('.silo-lgroup-scroll');
+  if (!scroller) throw new Error('Missing group scroller');
+  scroller.scrollTop = 50;
+  fireEvent.scroll(scroller);
+  frame.getBoundingClientRect = () => new DOMRect(0, -6000, 636, 9000);
+  fireEvent.scroll(scroll);
+  expect(host.querySelector('[data-group="p1"]')).toBeNull();
+  frame.getBoundingClientRect = () => new DOMRect(0, 0, 636, 9000);
+  fireEvent.scroll(scroll);
+  const restored = host.querySelector<HTMLElement>('[data-group="p1"] .silo-lgroup-scroll');
+  expect(restored?.scrollTop).toBe(50);
+  expect(restored?.dataset.up).toBe('true');
+});
+
+it.each([72, 200])(
+  'places short-paragraph notes from their anchors after jumping to paragraph %i',
+  (target) => {
+    const scrollTo = vi.fn();
+    stub(HTMLElement.prototype, 'scrollTo', () => scrollTo);
+    const { host, frame, scroll, updateLane } = mount({
+      groups: Array.from({ length: 200 }, (_, i) => group(i + 1, [`short${i + 1}`], 100 + i * 70)),
+    });
+    const targetTop = 98 + (target - 1) * 70;
+    // A scroll jump mounts the anchor's window without visiting intervening groups.
+    frame.getBoundingClientRect = () => new DOMRect(0, -targetTop, 636, 15000);
+    fireEvent.scroll(scroll);
+    expect(tops(host)).toContainEqual({ key: `p${target}`, top: targetTop });
+    updateLane({ focusIds: [`short${target}`] });
+    expect(host.querySelector(`[data-note="short${target}"]`)?.getAttribute('data-focus')).toBe(
+      'true',
+    );
+    expect(tops(host)).toContainEqual({ key: `p${target}`, top: targetTop });
+    const placed = tops(host);
+    for (let i = 1; i < placed.length; i++) {
+      expect((placed[i]?.top ?? 0) - (placed[i - 1]?.top ?? 0)).toBeGreaterThanOrEqual(BLOCK + 12);
+    }
+    expect(host.querySelectorAll('[data-note]').length).toBeLessThan(30);
+  },
+);
+
+it.each([72, 200])(
+  'reveals paragraph %i from its anchor on a marker jump without a preceding scroll',
+  (target) => {
+    const scrollTo = vi.fn();
+    stub(HTMLElement.prototype, 'scrollTo', () => scrollTo);
+    const { host, updateLane } = mount({
+      groups: Array.from({ length: 200 }, (_, i) => group(i + 1, [`short${i + 1}`], 100 + i * 70)),
+    });
+    updateLane({ focusIds: [`short${target}`] });
+    const top = 98 + (target - 1) * 70;
+    expect(tops(host)).toContainEqual({ key: `p${target}`, top });
+    expect(scrollTo).toHaveBeenCalledWith({ top, behavior: 'auto' });
+  },
+);
+
+it('exposes unmounted notes to screen readers and moves keyboard focus across the window', () => {
+  const { host } = mount({
+    groups: Array.from({ length: 200 }, (_, i) => group(i + 1, [`short${i + 1}`], 100 + i * 70)),
+  });
+  const allNotes = host.querySelector('[aria-label="All notes"]');
+  expect(allNotes?.textContent).toContain('quote short200');
+  expect(allNotes?.closest('[aria-hidden="true"]')).toBeNull();
+  const lastGroup = host.querySelector('.silo-lgroup:last-child');
+  const controls = lastGroup?.querySelectorAll<HTMLElement>('button');
+  const last = controls?.[controls.length - 1];
+  if (!last) throw new Error('Missing last control');
+  const nextPara = Number(last.closest<HTMLElement>('[data-group]')?.dataset.group?.slice(1)) + 1;
+  expect(host.querySelector(`[data-group="p${nextPara}"]`)).toBeNull();
+  last.focus();
+  fireEvent.keyDown(last, { key: 'Tab' });
+  expect(document.activeElement?.closest<HTMLElement>('[data-group]')?.dataset.group).toBe(
+    `p${nextPara}`,
+  );
 });

@@ -136,6 +136,8 @@ export type SourceData =
  * strings (JSON has no native date type), NOT `Date`.
  */
 export type LinkJson = {
+  /** Current stored Reader supplies the prose; fetch default detail if it fails to load. */
+  readerTextOmitted?: true;
   /** Browser-local write version captured when this detail request started. */
   readerPrefsVersion?: number;
   id: string;

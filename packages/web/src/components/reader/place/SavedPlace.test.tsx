@@ -272,3 +272,24 @@ it.each([
   view.unmount();
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it('keeps the place menu on unchanged scroll events and closes it on actual movement', () => {
+  mount();
+  const ribbon = frame.querySelector<HTMLButtonElement>('.silo-place-ribbon');
+  if (!ribbon) throw new Error('Missing saved-place ribbon');
+  fireEvent.click(ribbon);
+  fireEvent.scroll(scroll);
+  expect(screen.getByRole('dialog', { name: 'Saved reading place' })).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove' }));
+  expect(save).toHaveBeenCalledWith(null);
+
+  fireEvent.click(ribbon);
+  scroll.scrollTop = 10;
+  fireEvent.scroll(scroll);
+  expect(screen.queryByRole('dialog', { name: 'Saved reading place' })).toBeNull();
+
+  fireEvent.click(ribbon);
+  scroll.scrollLeft = 10;
+  fireEvent.scroll(scroll);
+  expect(screen.queryByRole('dialog', { name: 'Saved reading place' })).toBeNull();
+});

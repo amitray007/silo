@@ -3,10 +3,11 @@ import { fetchTtsManifest, ttsFilesBase } from './manifest';
 import { progressTracker, type TtsEngine, type Voice } from './types';
 
 /**
- * After an abort, the generation in the worker may finish on its own. Wait this long for it
- * before the worker is stopped and reloaded (a reload costs a second or more).
+ * QA synthesis took up to 3.97 s; replacement also spent 2.53-4.29 s loading the model.
+ * Give stale work 4.5 s to finish with a small margin, discard it, and reuse the loaded model.
+ * Beyond this bound the urgent request gets a fresh worker even if generation never settles.
  */
-const STALE_MS = 750;
+const STALE_MS = 4500;
 
 type VoiceInfo = { name: string; language: string; gender: string };
 type Progress = { status?: string; file?: string; loaded?: number; total?: number };
@@ -186,9 +187,11 @@ export function createKokoroEngine(): TtsEngine {
       // The worker is busy until this request settles, whether or not anyone still wants it.
       result.then(release, release);
       current.worker.postMessage({ type: 'generate', id, text, voice, speed });
+      let onAbort = () => {};
       const gone = new Promise<null>((resolve) => {
+        onAbort = () => resolve(null);
         if (signal?.aborted) resolve(null);
-        else signal?.addEventListener('abort', () => resolve(null), { once: true });
+        else signal?.addEventListener('abort', onAbort, { once: true });
       });
       let audio: { samples: Float32Array; sampleRate: number } | null;
       try {
@@ -196,11 +199,14 @@ export function createKokoroEngine(): TtsEngine {
       } catch (error) {
         if (signal?.aborted) return;
         throw error;
+      } finally {
+        signal?.removeEventListener('abort', onAbort);
       }
       if (audio === null) {
         abandon(current, result);
         return;
       }
+      if (signal?.aborted) return;
       engine.sampleRate = audio.sampleRate;
       yield audio.samples;
     },

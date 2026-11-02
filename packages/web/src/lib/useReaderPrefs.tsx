@@ -21,11 +21,16 @@ import {
   useReaderDefaults,
 } from './readerPrefs';
 import { advanceReaderPrefsVersion, readerPrefsVersion } from './readerPrefsVersion';
-import { createSync, type DeepPartial, mergeDeep } from './readerSync';
+import { createSync, type DeepPartial, mergeDeep, type SyncTransport } from './readerSync';
 
 type Overrides = DeepPartial<ReaderSettings>;
 
-function createArticle(initial: Overrides, sessionOnly = false, onWrite = () => {}) {
+function createArticle(
+  initial: Overrides,
+  sessionOnly = false,
+  onWrite = () => {},
+  onIdle = (_value: Overrides) => {},
+) {
   let value = initial;
   const listeners = new Set<() => void>();
   const replace = (next: Overrides) => {
@@ -42,10 +47,19 @@ function createArticle(initial: Overrides, sessionOnly = false, onWrite = () => 
   let disconnect: (() => void) | undefined;
   return {
     sessionOnly,
-    connect(transport: Parameters<typeof sync.connect>[0]) {
+    connect(transport?: SyncTransport<Overrides>) {
       disconnect?.();
-      disconnect = sync.connect(transport, true);
-      return disconnect;
+      const released = () => {
+        if (disconnect !== close) return;
+        disconnect = undefined;
+        // Strict Mode can reconnect the same scope before this turn ends.
+        queueMicrotask(() => {
+          if (disconnect === undefined) onIdle(value);
+        });
+      };
+      const close = transport ? sync.connect(transport, true, released) : released;
+      disconnect = close;
+      return close;
     },
     sync,
     commit: (patch: Overrides, delay: number) => {
@@ -65,21 +79,62 @@ function createArticle(initial: Overrides, sessionOnly = false, onWrite = () => 
 
 // Feed choices last for this page session only. Library entries retain pending writes on navigation.
 const articles = new WeakMap<QueryClient, Map<string, ReturnType<typeof createArticle>>>();
+/** Active queues only; idle entries are reduced to preference snapshots after their final write. */
+export function articleScopeCount(client: QueryClient): number {
+  return articles.get(client)?.size ?? 0;
+}
+
+const saved = new WeakMap<QueryClient, Map<string, Overrides>>();
 const ArticleContext = createContext<ReturnType<typeof createArticle> | null>(null);
 
-function articleFor(client: QueryClient, link: LinkJson) {
+/** These helpers never enter a provider's closure scope, which contains the full detail. */
+function articleWrite(client: QueryClient, id: string) {
+  return () => {
+    advanceReaderPrefsVersion(client, id);
+    void client.cancelQueries({ queryKey: queryKeys.link(id) });
+  };
+}
+
+function articleTransport(id: string, send: SyncTransport<Overrides>['send']) {
+  return {
+    send,
+    keepalive: (patch: Overrides, writtenAt: string) =>
+      apiPatchKeepalive(`/api/links/${encodeURIComponent(id)}/reader-prefs`, {
+        ...patch,
+        writtenAt,
+      }),
+  };
+}
+
+function articleFor(client: QueryClient, id: string, initial: Overrides, sessionOnly: boolean) {
   let entries = articles.get(client);
   if (!entries) {
     entries = new Map();
     articles.set(client, entries);
   }
-  let entry = entries.get(link.id);
+  let snapshots = saved.get(client);
+  if (!snapshots) {
+    snapshots = new Map();
+    saved.set(client, snapshots);
+  }
+  let entry = entries.get(id);
   if (!entry) {
-    entry = createArticle(link.readerPrefs ?? {}, link.feedId != null, () => {
-      advanceReaderPrefsVersion(client, link.id);
-      void client.cancelQueries({ queryKey: queryKeys.link(link.id) });
-    });
-    entries.set(link.id, entry);
+    const scopes = entries;
+    const values = snapshots;
+    entry = createArticle(
+      values.get(id) ?? initial,
+      sessionOnly,
+      articleWrite(client, id),
+      (value) => {
+        // Only the small preferences survive navigation, never the sync queue or its transport.
+        values.set(id, value);
+        scopes.delete(id);
+      },
+    );
+    // A stale detail may be rejected by the version guard on remount. The drained snapshot
+    // still supplies a confirmed baseline, so a new edit can flush without waiting for a GET.
+    if (values.has(id)) entry.sync.hydrate(entry.read());
+    entries.set(id, entry);
   }
   return entry;
 }
@@ -87,7 +142,7 @@ function articleFor(client: QueryClient, link: LinkJson) {
 /** Mount once around an article. Hydrate before paint when its detail arrives. */
 export function ReaderPrefsProvider({ link, children }: { link: LinkJson; children: ReactNode }) {
   const client = useQueryClient();
-  const article = articleFor(client, link);
+  const article = articleFor(client, link.id, link.readerPrefs ?? {}, link.feedId != null);
   const update = useUpdateReaderPrefs(link.id);
   const feed = link.feedId != null;
   useLayoutEffect(() => {
@@ -99,17 +154,10 @@ export function ReaderPrefsProvider({ link, children }: { link: LinkJson; childr
       article.sync.hydrate(link.readerPrefs);
     }
   }, [article, client, feed, link.id, link.readerPrefs, link.readerPrefsVersion]);
-  useEffect(() => {
-    if (feed) return;
-    return article.connect({
-      send: update,
-      keepalive: (patch, writtenAt) =>
-        apiPatchKeepalive(`/api/links/${encodeURIComponent(link.id)}/reader-prefs`, {
-          ...patch,
-          writtenAt,
-        }),
-    });
-  }, [article, feed, link.id, update]);
+  useEffect(
+    () => article.connect(feed ? undefined : articleTransport(link.id, update)),
+    [article, feed, link.id, update],
+  );
   // Disconnect after queued edits settle, including a final stepper change on navigation.
   return <ArticleContext.Provider value={article}>{children}</ArticleContext.Provider>;
 }

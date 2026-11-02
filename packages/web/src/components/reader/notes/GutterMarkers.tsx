@@ -1,13 +1,57 @@
-import { useLayoutEffect, useRef } from 'react';
+import { memo, useCallback, useLayoutEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { type Gutter, gutterLeft } from '../gutter';
 import { ReaderIcon } from '../ReaderIcon';
 import { resolveMarkerYs } from './markerLayout';
-import type { Groups } from './useGroups';
+import type { Groups, NoteGroup } from './useGroups';
 import type { NotesLaneApi } from './useNotesLane';
 
 /** The least space between two items in the gutter column. */
 const CLEARANCE = 4;
+
+/** Markers keep their DOM and icons when only the lane's open state changes. */
+const GutterMarker = memo(function GutterMarker({
+  group,
+  markers,
+  size,
+  hidden,
+  active,
+  onHover,
+  onMarker,
+}: {
+  group: NoteGroup;
+  markers: Map<number, HTMLButtonElement>;
+  size: number;
+  hidden: boolean;
+  active: boolean;
+  onHover: (ids: string[]) => void;
+  onMarker: (ids: string[]) => void;
+}) {
+  const ids = group.items.map((item) => item.id);
+  const count = ids.length;
+  return (
+    <button
+      ref={(element) => {
+        if (element) markers.set(group.para, element);
+        else markers.delete(group.para);
+      }}
+      type="button"
+      className="silo-marker"
+      data-active={active}
+      data-count={count > 1 ? count : undefined}
+      aria-label={`${count} highlight${count > 1 ? 's' : ''} on paragraph ${group.para}`}
+      style={{ width: size, height: size, visibility: hidden ? 'hidden' : undefined }}
+      onMouseEnter={() => onHover(ids)}
+      onMouseLeave={() => onHover([])}
+      onFocus={() => onHover(ids)}
+      onBlur={() => onHover([])}
+      onClick={() => onMarker(ids)}
+    >
+      <ReaderIcon name="note" size={20} />
+      {count > 1 && <small>{count}</small>}
+    </button>
+  );
+});
 
 /**
  * One note marker per paragraph, in the gutter column the resume button uses (the same x). A
@@ -33,6 +77,10 @@ export function GutterMarkers({
   hidden: boolean;
 }) {
   const markers = useRef(new Map<number, HTMLButtonElement>());
+  const handlers = useRef(lane);
+  handlers.current = lane;
+  const onHover = useCallback((ids: string[]) => handlers.current.setHoveredIds(ids), []);
+  const onMarker = useCallback((ids: string[]) => handlers.current.onMarker(ids), []);
   useLayoutEffect(() => {
     const measure = () => {
       const current = groups.read().groups;
@@ -56,37 +104,18 @@ export function GutterMarkers({
   }, [groups, frame, scroll, gutter, resumeY]);
   if (groups.groups.length === 0) return null;
   return createPortal(
-    groups.groups.map((group) => {
-      const ids = group.items.map((item) => item.id);
-      const count = ids.length;
-      return (
-        <button
-          key={group.para}
-          ref={(element) => {
-            if (element) markers.current.set(group.para, element);
-            else markers.current.delete(group.para);
-          }}
-          type="button"
-          className="silo-marker"
-          data-active={lane.open && lane.focusIds.some((id) => ids.includes(id))}
-          data-count={count > 1 ? count : undefined}
-          aria-label={`${count} highlight${count > 1 ? 's' : ''} on paragraph ${group.para}`}
-          style={{
-            width: gutter.size,
-            height: gutter.size,
-            visibility: hidden ? 'hidden' : undefined,
-          }}
-          onMouseEnter={() => lane.setHoveredIds(ids)}
-          onMouseLeave={() => lane.setHoveredIds([])}
-          onFocus={() => lane.setHoveredIds(ids)}
-          onBlur={() => lane.setHoveredIds([])}
-          onClick={() => lane.onMarker(ids)}
-        >
-          <ReaderIcon name="note" size={20} />
-          {count > 1 && <small>{count}</small>}
-        </button>
-      );
-    }),
+    groups.groups.map((group) => (
+      <GutterMarker
+        key={group.para}
+        group={group}
+        markers={markers.current}
+        size={gutter.size}
+        hidden={hidden}
+        active={lane.open && group.items.some((item) => lane.focusIds.includes(item.id))}
+        onHover={onHover}
+        onMarker={onMarker}
+      />
+    )),
     frame,
   );
 }
