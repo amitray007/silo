@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
+import { MenuPresence } from '../../MenuPresence';
 import { ReaderIcon } from '../ReaderIcon';
+import { ChatHistoryMenu } from './ChatHistoryMenu';
 import { ChatMessage } from './ChatMessage';
 import { clearDockRequest, selectionActions, useDockRequest } from './selectionStore';
 import { useLibrarianChat } from './useLibrarianChat';
@@ -11,6 +13,7 @@ const actions = [
   ['my-notes', 'My notes here'],
   ['related', 'Related'],
 ] as const;
+const HISTORY_SCOPE = '.silo-chat-history, [data-chat-history-trigger]';
 function usePanelHeight(panel: HTMLElement | null) {
   const [height, setHeight] = useState<number>();
   useEffect(() => {
@@ -64,7 +67,23 @@ export function DockChat({
   ]);
   const field = useRef<HTMLInputElement>(null);
   const messages = useRef<HTMLDivElement>(null);
+  const titleButton = useRef<HTMLButtonElement>(null);
+  const [historyOpen, setHistoryOpen] = useState(false);
   useEscapeLayer(true, onFold);
+  useEffect(() => {
+    if (!historyOpen) return;
+    // A press anywhere else in the chat counts as leaving the menu.
+    const leave = (event: MouseEvent) => {
+      if (event.target instanceof Element && !event.target.closest(HISTORY_SCOPE))
+        setHistoryOpen(false);
+    };
+    document.addEventListener('mousedown', leave);
+    return () => document.removeEventListener('mousedown', leave);
+  }, [historyOpen]);
+  const closeHistory = () => {
+    setHistoryOpen(false);
+    titleButton.current?.focus();
+  };
   useEffect(() => {
     field.current?.focus();
   }, []);
@@ -81,7 +100,35 @@ export function DockChat({
         aria-label="Librarian conversation"
       >
         <header>
-          <h3>{chat.title}</h3>
+          <h3>
+            <button
+              ref={titleButton}
+              type="button"
+              className="silo-chat-title"
+              title="Chat history"
+              aria-haspopup="dialog"
+              aria-expanded={historyOpen}
+              data-chat-history-trigger
+              onMouseDown={(event) => event.stopPropagation()}
+              onClick={() => setHistoryOpen((open) => !open)}
+            >
+              <span>{chat.title}</span>
+              <ReaderIcon name="down" size={14} />
+            </button>
+          </h3>
+          <button
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label="New chat"
+            title="New chat"
+            onClick={() => {
+              setHistoryOpen(false);
+              chat.startNew();
+              field.current?.focus();
+            }}
+          >
+            <ReaderIcon name="plus" size={18} />
+          </button>
           <button
             type="button"
             className="silo-reader-iconbtn"
@@ -139,6 +186,20 @@ export function DockChat({
           </div>
         )}
       </section>
+      <MenuPresence>
+        {historyOpen && (
+          <ChatHistoryMenu
+            linkId={linkId}
+            currentId={chat.chatId}
+            onPick={(id) => {
+              chat.open(id);
+              closeHistory();
+            }}
+            onDelete={chat.deleteChat}
+            onClose={closeHistory}
+          />
+        )}
+      </MenuPresence>
       {passage && (
         <div className="silo-chat-passage">
           <span>{passage.quote}</span>

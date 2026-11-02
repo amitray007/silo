@@ -371,7 +371,8 @@ it('invalidates the refreshed link live Reader after a direct refresh finishes',
         );
       }
       if (init?.method === 'POST') return json(summary);
-      return json({ chats: [], nextCursor: null });
+      if (url.includes('?')) return json({ chats: [], nextCursor: null });
+      return json({ chat: summary, messages: [] });
     }),
   );
   render(
