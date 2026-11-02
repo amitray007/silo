@@ -17,7 +17,6 @@ on:
       - "pnpm-workspace.yaml"
       - ".github/workflows/extensions.yml"
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
