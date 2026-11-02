@@ -9,6 +9,24 @@ import {
   useLibrarianChats,
 } from '../../../api/librarian';
 
+const ERROR_WORDS: Record<string, string> = {
+  invalid_key: 'Your AI key was rejected. Check Settings → AI.',
+  no_access: 'Your AI key was rejected. Check Settings → AI.',
+  model_not_found: 'The chosen model is gone. Pick another in Settings → AI.',
+  quota: 'Your AI provider is out of credit or over its limit.',
+  rate_limited: 'Your AI provider is busy. Try again in a moment.',
+  timeout: 'The answer took too long. Try again.',
+  network: 'Could not reach your AI provider. Try again.',
+  ai_not_ready: 'The Librarian is off. Turn it on in Settings → AI.',
+  unavailable: 'The Librarian is not available on this server.',
+};
+
+/** Stream errors carry a fixed code; HTTP errors carry it in a JSON body. */
+export function chatErrorText(message: string | undefined): string {
+  const code = message?.match(/[a-z_]+/g)?.find((word) => word in ERROR_WORDS);
+  return (code && ERROR_WORDS[code]) ?? 'Could not answer. Try again.';
+}
+
 export function useLibrarianChat(linkId: string) {
   const client = useQueryClient();
   const list = useLibrarianChats(linkId);
@@ -70,5 +88,6 @@ export function useLibrarianChat(linkId: string) {
     busy,
     loading,
     failed: failure || !!state.error || !!list.error || !!detail.error,
+    errorText: chatErrorText(state.error?.message),
   };
 }

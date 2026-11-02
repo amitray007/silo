@@ -74,7 +74,11 @@ export function DockChat({
               {chat.loading ? 'Loading conversation…' : 'Ask about this article or your library.'}
             </p>
           )}
-          {chat.failed && <p role="alert">Could not answer. Please try again.</p>}
+          {chat.failed && (
+            <p role="alert" className="silo-chat-error">
+              {chat.errorText}
+            </p>
+          )}
         </div>
         {chat.messages.length === 0 && (
           <div className="silo-chat-actions">
