@@ -38,6 +38,7 @@ type Entry = {
   title: string;
   /** The stored messages are in the chat (or the chat is new and has none to load). */
   hydrated: boolean;
+  used?: number;
 };
 
 /**
@@ -54,6 +55,27 @@ type Slot = {
   select: (active: string | null) => void;
 };
 const slots = new Map<string, Slot>();
+let usage = 0;
+
+function pruneChats(current: Entry) {
+  const recent: { slot: Slot; id: string | null; entry: Entry }[] = [];
+  for (const slot of slots.values()) {
+    const entries: { slot: Slot; id: string | null; entry: Entry }[] = [...slot.byId].map(
+      ([id, entry]) => ({ slot, id, entry }),
+    );
+    if (slot.draft) entries.push({ slot, id: null, entry: slot.draft });
+    for (const item of entries) {
+      if (item.entry === current || ['streaming', 'submitted'].includes(item.entry.chat.status))
+        continue;
+      recent.push(item);
+    }
+  }
+  recent.sort((a, b) => (b.entry.used ?? 0) - (a.entry.used ?? 0));
+  for (const { slot, id } of recent.slice(8)) {
+    if (id === null) slot.draft = undefined;
+    else slot.byId.delete(id);
+  }
+}
 
 function slotFor(linkId: string): Slot {
   const cached = slots.get(linkId);
@@ -164,6 +186,11 @@ export function useLibrarianChat(linkId: string) {
   const detail = useLibrarianChatDetail(resolved ?? undefined);
   const state = useChat({ chat });
   useEffect(() => {
+    entry.used = ++usage;
+    // Reclaim inactive entries when the visible stream settles as well as on navigation.
+    if (state.status === 'ready' || state.status === 'error') pruneChats(entry);
+  }, [entry, state.status]);
+  useEffect(() => {
     const data = detail.data;
     if (!data || data.chat.id !== chatId.current) return;
     entry.title = data.chat.title;
@@ -233,7 +260,7 @@ export function useLibrarianChat(linkId: string) {
     await remove.mutateAsync(id);
     slot.byId.get(id)?.chat.stop();
     slot.byId.delete(id);
-    if (resolved === id) {
+    if (slot.active === id) {
       if (next === null) draft();
       slot.select(next);
     }
