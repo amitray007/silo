@@ -457,7 +457,8 @@ it('moves the toolbar with the selection when the window resizes', async () => {
   }));
   fireEvent(window, new Event('resize'));
   await waitFor(() => expect(bar.style.getPropertyValue('--selection-left')).not.toBe(before));
-  expect(bar.style.getPropertyValue('--selection-top')).toBe('350px');
+  // The bar's bottom edge sits 12px above the passage, and the surface grows up from it.
+  expect(bar.style.getPropertyValue('--selection-top')).toBe('388px');
 });
 
 it('turns off, in the toolbar picker, colours used by highlights the selection overlaps', async () => {

@@ -14,11 +14,16 @@ const paths = {
   close: 'M6 6l12 12M18 6 6 18',
   up: 'm6 15 6-6 6 6',
   down: 'm6 9 6 6 6-6',
+  arrowUp: 'M12 19V5M6 11l6-6 6 6',
+  arrowDown: 'M12 5v14M6 13l6 6 6-6',
+  stop: 'M7 7h10v10H7z',
   back: 'm14 5-7 7 7 7',
   clipboard: 'M9 5H5v16h14V5h-4M9 3h6v4H9z',
   terminal: 'M3 4h18v16H3zM7 9l3 3-3 3M13 15h4',
   copy: 'M9 7V3h12v12h-4M3 9h12v12H3z',
   edit: 'm16 3 5 5-12 12-6 1 1-6zM13 6l5 5',
+  /** The pen from the approved mockup: one nib, no ridge, so it reads apart from `highlighter`. */
+  pen: 'M17 3a2.8 2.8 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z',
   external: 'M14 3h7v7M21 3 10 14M10 5H3v16h16v-7',
   arrowUpRight: 'M7 17 17 7M8.5 7H17v8.5',
   trash: 'M4 7h16M9 7V3h6v4M6 7l1 14h10l1-14M10 11v6M14 11v6',
@@ -64,7 +69,14 @@ export function readerIconPath(name: keyof typeof paths): string {
   return paths[name];
 }
 
-const filled = new Set<keyof typeof paths>(['bookmarkFilled', 'play', 'pause', 'prev', 'next']);
+const filled = new Set<keyof typeof paths>([
+  'bookmarkFilled',
+  'play',
+  'pause',
+  'prev',
+  'next',
+  'stop',
+]);
 
 /** Original silo glyphs drawn on the shared 24-unit grid. */
 export function ReaderIcon({ name, size = 20 }: { name: keyof typeof paths; size?: number }) {

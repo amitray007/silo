@@ -39,7 +39,7 @@ function setup(overrides: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
     onDismiss: vi.fn(),
     onSearch: vi.fn(),
     onListen: vi.fn(),
-    hidden: new Set<string>(),
+    unavailable: new Map<string, string>(),
     ...overrides,
   };
   const rendered = render(
@@ -191,9 +191,14 @@ it('runs Listen from here and then dismisses the selection', () => {
   expect(props.onDismiss).toHaveBeenCalled();
 });
 
-it('leaves Listen from here out when the article cannot be read aloud', () => {
-  setup({ hidden: new Set(['listen']) });
-  expect(screen.queryByRole('button', { name: /Listen from here/ })).toBeNull();
+it('keeps Listen from here, dimmed with the reason, when the article cannot be read aloud', () => {
+  const props = setup({ unavailable: new Map([['listen', 'Listen reads English articles only']]) });
+  const listen = screen.getByRole('button', { name: /Listen from here/ });
+  expect(listen.getAttribute('aria-disabled')).toBe('true');
+  expect(listen.getAttribute('title')).toBe('Listen reads English articles only');
+  fireEvent.click(listen);
+  expect(props.onListen).not.toHaveBeenCalled();
+  expect(props.onDismiss).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: /Highlight/ })).toBeTruthy();
 });
 
@@ -370,7 +375,12 @@ it('aborts passage A and saves only passage B after the selection changes', asyn
   const props = setup({ askReady: true, linkId: 'selection-regression', onSaveAnswer });
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
   fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
-  await screen.findByText('Answer A');
+  // While it streams, new words sit in their own spans, so match on the card's whole text.
+  await waitFor(() =>
+    expect(screen.getByRole('region', { name: 'Passage answer' }).textContent).toContain(
+      'Answer A',
+    ),
+  );
   const range = document.createRange();
   range.selectNodeContents(prose.querySelector('p')!);
   props.rendered.rerender(
@@ -382,7 +392,9 @@ it('aborts passage A and saves only passage B after the selection changes', asyn
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
   fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
   await screen.findByText('Answer B');
-  expect(screen.queryByText('Answer A')).toBeNull();
+  expect(screen.getByRole('region', { name: 'Passage answer' }).textContent).not.toContain(
+    'Answer A',
+  );
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
       false,

@@ -106,7 +106,7 @@ const tools: readonly DockTool[] = [
     label: 'Pencil',
     title: 'Reading pencil',
     heading: 'Reading pencil',
-    glyph: <ReaderIcon name="edit" size={19} />,
+    glyph: <ReaderIcon name="pen" size={19} />,
     sheet: ({ api }) => <PencilSheet pencil={api.pencil} />,
     split: {
       mainTitle: 'Reading pencil (P)',

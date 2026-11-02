@@ -81,6 +81,8 @@ export const WRITE_TRACES: Record<string, string> = {
   retry_capture: 'Retried',
 };
 const SEARCH_TOOLS = new Set(['search_links', 'find_related', 'list_links']);
+/** New words fade in over 150ms as they arrive; the words already shown never move. */
+const CHUNK_FADE = { animation: 'fadeIn', duration: 150, easing: 'ease-out', sep: 'word' } as const;
 
 export function toolName(part: UIMessage['parts'][number]): string | null {
   if (part.type === 'dynamic-tool') return part.toolName;
@@ -131,10 +133,13 @@ export function ChatMessage({
   message,
   onApproval,
   expired = false,
+  streaming = false,
   linkId,
 }: {
   message: UIMessage;
   expired?: boolean;
+  /** This message is still arriving: its new words fade in. */
+  streaming?: boolean;
   linkId?: string | undefined;
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
@@ -188,6 +193,8 @@ export function ChatMessage({
       })}
       <Streamdown
         skipHtml
+        animated={streaming ? CHUNK_FADE : false}
+        isAnimating={streaming}
         rehypePlugins={citationPlugins}
         components={{
           a: ({ href, children }) => <Citation href={href}>{children}</Citation>,

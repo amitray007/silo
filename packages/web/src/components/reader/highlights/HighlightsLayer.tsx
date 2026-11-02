@@ -1,15 +1,16 @@
 import { useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useSearchSilo } from '../../SearchSiloContext';
+import { ENGLISH_ONLY_TITLE } from '../listen/language';
 import type { NotesLaneApi } from '../notes/useNotesLane';
 import { LayersPopover } from './LayersPopover';
 import { NotePopover } from './NotePopover';
 import { SelectionBar } from './SelectionBar';
 import type { HighlightsApi } from './useHighlights';
 
-const NONE: ReadonlySet<string> = new Set();
-/** Read aloud speaks English only for now, so other articles get no Listen action. */
-const NO_LISTEN: ReadonlySet<string> = new Set(['listen']);
+const NONE: ReadonlyMap<string, string> = new Map();
+/** Read aloud speaks English only for now, so other articles keep a dimmed Listen action. */
+const NO_LISTEN: ReadonlyMap<string, string> = new Map([['listen', ENGLISH_ONLY_TITLE]]);
 
 /**
  * What the highlights draw over the article: the selection toolbar, the note popover, and the
@@ -62,7 +63,7 @@ export function HighlightsLayer({
         onDismiss={api.clearPending}
         onSearch={searchSilo}
         onListen={listen.startHere}
-        hidden={listen.english ? NONE : NO_LISTEN}
+        unavailable={listen.english ? NONE : NO_LISTEN}
       />
       {openNoteItem && scroll && (
         <NotePopover
