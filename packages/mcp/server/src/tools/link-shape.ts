@@ -1,6 +1,7 @@
 import type { Highlight, LinkDetail, LinkSummaryWithTags } from '@silo/core';
 import { CAPTURE_SOURCES, HIGHLIGHT_COLORS, sourceDataSchema, TITLE_SOURCES } from '@silo/core';
 import { z } from 'zod';
+import { readingSourceShape } from './reader-shape.js';
 
 /**
  * The WHITELIST (not a blacklist) of `LinkWithTags` fields every read tool
@@ -51,46 +52,46 @@ const readingPositionShape = z
       .number()
       .min(0)
       .max(1)
-      .describe("Share of the article's words already read: 0 is the start, 1 is the end."),
-    source: z
-      .enum(['pencil', 'listen', 'mark'])
-      .describe('What saved this place. Agent writes record mark.'),
+      .describe('Share of the article: 0 is the start, 1 is the end.'),
+    source: readingSourceShape.describe(
+      'pencil: read to; listen: listened to; mark: saved place (Continue here). Agent writes record mark.',
+    ),
     updatedAt: z.iso.datetime().describe('When the position was last saved.'),
   })
   .nullable()
-  .describe('Where the owner stopped reading this article, or null when no position is saved.');
+  .describe('Saved place by source, or null when none is saved.');
 
 /**
  * One passage highlight. Only single-link reads carry them (`get_link` and the
  * write tools that return a link); list and search rows do not. Overlapping
  * highlights are normal: each is an independent range.
  */
-export const highlightShape = {
+export const passageShape = {
   id: z.uuid(),
   quote: z.string().describe('The highlighted text, whitespace collapsed.'),
-  prefix: z.string().describe('Up to 64 characters of the text just before the quote.'),
-  suffix: z.string().describe('Up to 64 characters of the text just after the quote.'),
-  startOffset: z.number().int().nullable().describe('Offset hint into the article text, or null.'),
-  endOffset: z.number().int().nullable().describe('Offset hint into the article text, or null.'),
   color: z.enum(HIGHLIGHT_COLORS),
   note: z.string().nullable().describe('The passage note, or null.'),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),
 };
 
-export function toHighlightContent(highlight: Highlight) {
+export const highlightShape = { ...passageShape, linkId: z.uuid() };
+
+export function toPassageContent(
+  highlight: Pick<Highlight, 'id' | 'quote' | 'color' | 'note' | 'createdAt' | 'updatedAt'>,
+) {
   return {
     id: highlight.id,
     quote: highlight.quote,
-    prefix: highlight.prefix,
-    suffix: highlight.suffix,
-    startOffset: highlight.startOffset,
-    endOffset: highlight.endOffset,
     color: highlight.color,
     note: highlight.note,
     createdAt: highlight.createdAt.toISOString(),
     updatedAt: highlight.updatedAt.toISOString(),
   };
+}
+
+export function toHighlightContent(highlight: Highlight) {
+  return { ...toPassageContent(highlight), linkId: highlight.linkId };
 }
 
 export const baseLinkShape = {
@@ -119,7 +120,7 @@ export const baseLinkShape = {
   highlights: z
     .array(z.object(highlightShape))
     .describe(
-      'Passage highlights with their notes, ordered by start offset then creation time; highlights an agent added by quote have no offsets and come last. May overlap.',
+      'All passage highlights with notes and linkId, in article order; quote-only highlights come last. At most 1000 per link. May overlap.',
     ),
 };
 

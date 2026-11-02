@@ -1,6 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
-import { describeMcpTool, seedLink } from './test-support/mcp-server-harness.js';
+import {
+  describeMcpTool,
+  expectNoLeakedFields,
+  seedLink,
+} from './test-support/mcp-server-harness.js';
 
 describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
   it('registers exactly the expected tools, including feed subscriptions and triage', async () => {
@@ -22,7 +26,9 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       'hard_delete_link',
       'list_feed_posts',
       'list_feeds',
+      'list_highlights',
       'list_links',
+      'list_reading_positions',
       'list_tags',
       'list_trash',
       'refresh_feed',
@@ -224,7 +230,9 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
       expect(read.structuredContent).toMatchObject({
         readingPosition: { position: expect.closeTo(0.37, 5), source: 'mark' },
       });
-      expect(JSON.stringify(read.content)).toContain('reading position: 37%');
+      expect(JSON.stringify(read.content)).toContain(
+        'reading position: saved place (Continue here) 37%',
+      );
 
       const cleared = await client.callTool({
         name: 'edit_link',
@@ -313,8 +321,9 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
         quote: 'quick brown fox',
         color: 'green',
         note: 'nice',
-        suffix: ' sleeps.',
+        linkId: id,
       });
+      expectNoLeakedFields(added.structuredContent);
       const highlightId = (added.structuredContent as { id: string }).id;
 
       const read = await client.callTool({ name: 'get_link', arguments: { id } });
@@ -329,7 +338,33 @@ describeMcpTool('silo_mcp_parity_test', 'MCP parity', (getContext) => {
         name: 'edit_highlight',
         arguments: { id: highlightId, color: 'pink', note: null },
       });
-      expect(edited.structuredContent).toMatchObject({ found: true, color: 'pink', note: null });
+      expect(edited.structuredContent).toMatchObject({
+        found: true,
+        linkId: id,
+        color: 'pink',
+        note: null,
+      });
+      expectNoLeakedFields(edited.structuredContent);
+      expectNoLeakedFields(read.structuredContent);
+      const readText = (read.content as Array<{ text: string }>)[0]?.text ?? '';
+      expect(readText).toContain('highlights (1):');
+      expect(readText.indexOf('highlights (1):')).toBeGreaterThan(readText.indexOf('full text:'));
+      expect(JSON.stringify(edited.content)).toContain(id);
+      const windowed = await client.callTool({
+        name: 'get_link',
+        arguments: { id, textWindow: { offset: 0, limit: 5 } },
+      });
+      expect(windowed.structuredContent).toMatchObject({
+        extractedText: 'Alpha',
+        highlights: [{ linkId: id, id: highlightId }],
+      });
+      const windowText = (windowed.content as Array<{ text: string }>)[0]?.text ?? '';
+      expect(windowText.indexOf('highlights (1):')).toBeGreaterThan(
+        windowText.indexOf('showing a 5-char window'),
+      );
+      const batch = await client.callTool({ name: 'get_link', arguments: { ids: [id] } });
+      expect(JSON.stringify(batch.content)).toContain('highlights (1):');
+      expectNoLeakedFields(batch.structuredContent);
 
       const deleted = await client.callTool({
         name: 'delete_highlight',
