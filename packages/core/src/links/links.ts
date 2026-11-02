@@ -1194,7 +1194,7 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
     ? sql`(${links.searchVector} @@ ${tsQuery} OR ${tagSearchVector} @@ ${tsQuery})`
     : undefined;
 
-  const source = tsQuery && filter.query ? librarySearchSource(filter.query, tsQuery) : links;
+  const source = tsQuery && filter.query ? await librarySearchSource(filter.query, tsQuery) : links;
   // link_tags_link_id_tag_id_pk and the joined primary keys prevent duplicate links per tag.
   const tagCount = sql<string>`count(${links.id})`;
   const tagKeys = requiredTagKeys(filter);

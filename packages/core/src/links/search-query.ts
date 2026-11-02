@@ -461,7 +461,7 @@ export async function runUnionSearch(
     .select({ link: listColumns, rank, snippet })
     .from(
       options.indexedLibrary && fts
-        ? librarySearchSource(sanitized, fts.tsQuery, substring?.match)
+        ? await librarySearchSource(sanitized, fts.tsQuery, substring?.match)
         : links,
     )
     .where(andAll(basePredicate, unionMatch, scopeCondition, ...(options.extraConditions ?? [])))

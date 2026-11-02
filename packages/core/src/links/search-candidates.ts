@@ -1,8 +1,12 @@
 import { db, links } from '@silo/db';
-import { getTableColumns, type SQL, sql } from 'drizzle-orm';
+import { type SQL, sql } from 'drizzle-orm';
+
+const CANDIDATE_PROBE_LIMIT = 512;
 
 /** Candidate membership is a superset; callers retain their exact match and rank expressions. */
-export function librarySearchSource(query: string, tsQuery: SQL, substring?: SQL) {
+export async function librarySearchSource(query: string, tsQuery: SQL, substring?: SQL) {
+  // Short substrings cannot narrow a trigram scan.
+  if (substring && query.trim().length < 3) return links;
   // Parsed lexemes are already stemmed; cast directly to avoid stemming them a second time.
   // OR their prefixes because AND terms may live on different tags.
   const tagQuery = sql`coalesce((
@@ -22,22 +26,14 @@ export function librarySearchSource(query: string, tsQuery: SQL, substring?: SQL
     branches.push(sql`select id from links
     where deleted_at is null and feed_id is null and ${substring}`);
 
-  // Materialization plus the lateral OFFSET barrier keeps heap/ranking work on candidates only.
-  const candidates = sql`(
-    with matching_tags as materialized (
+  // Stop probing once candidates are broad enough that a scan is cheaper.
+  const candidates = sql`
+    with matching_tags as (
       select id from tags where to_tsvector('english', name) @@ ${tagQuery}
-    ), candidate_ids as materialized (${sql.join(branches, sql` union `)})
-    select candidate_id from candidate_ids
-  ) as candidates`;
-  const row = db
-    .select()
-    .from(links)
-    .where(sql`${links.id} = candidates.candidate_id`)
-    .offset(0)
-    .as('links');
-  return db
-    .select(getTableColumns(links))
-    .from(candidates)
-    .innerJoinLateral(row, sql`true`)
-    .as('links');
+    )
+    ${sql.join(branches, sql` union all `)}
+  `;
+  const probe = await db.execute(sql`${candidates} limit ${CANDIDATE_PROBE_LIMIT}`);
+  if (probe.rows.length === CANDIDATE_PROBE_LIMIT) return links;
+  return db.select().from(links).where(sql`${links.id} in (${candidates})`).as('links');
 }
