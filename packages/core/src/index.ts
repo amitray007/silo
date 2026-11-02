@@ -188,6 +188,8 @@ export type {
   EditHighlightInput,
   Highlight,
   HighlightColor,
+  LibraryHighlight,
+  ListLibraryHighlightsInput,
 } from './links/highlights.js';
 export {
   addHighlight,
@@ -200,6 +202,7 @@ export {
   InvalidHighlightError,
   listHighlights,
   listHighlightsForLinks,
+  listLibraryHighlights,
 } from './links/highlights.js';
 // Import (import slice, U1): importLinks is the write half of the export/
 // import round-trip — restores a silo `version: 1` JSON export back into the
@@ -260,11 +263,17 @@ export { type LiveReader, readLive, setLiveReader } from './links/live-reader.js
 export type { PurgeTrashOptions } from './links/purge.js';
 export { PURGE_WINDOW_DAYS, purgeTrash } from './links/purge.js';
 export { clearReaderPrefs, patchReaderPrefs } from './links/reader-prefs.js';
-export type { ReadingPosition, ReadingPositionSource } from './links/reading-position.js';
+export type {
+  LibraryReadingPosition,
+  ListReadingPositionsInput,
+  ReadingPosition,
+  ReadingPositionSource,
+} from './links/reading-position.js';
 export {
   clearReadingPosition,
   getReadingPosition,
   InvalidReadingPositionError,
+  listReadingPositions,
   setReadingPosition,
 } from './links/reading-position.js';
 // "Find related" (agent-navigation slice U3): a mechanical seeded `search()`

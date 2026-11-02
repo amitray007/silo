@@ -1,6 +1,6 @@
 import type * as CoreOps from '@silo/core';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ErrorEnvelope } from '../app.js';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
@@ -232,5 +232,111 @@ describeIfPg('highlight routes (integration)', () => {
     expect(merged.outcome).toBe('merged');
     expect(merged.link.id).toBe(twin.rows[0]?.id);
     expect(merged.link.highlights.map((h) => h.quote)).toEqual(['beta']);
+  });
+  it.each([
+    ['/api/highlights', 'highlights'],
+    ['/api/reading-positions', 'reading_positions'],
+  ])('%s returns 400 for invalid cursor timestamps', async (path, kind) => {
+    for (const timestamp of ['2026-02-30T00:00:00Z', '2026-01-01T00:00:00+16:00']) {
+      const cursor = Buffer.from(
+        JSON.stringify({
+          kind,
+          timestamp,
+          id: '00000000-0000-4000-8000-000000000001',
+        }),
+      ).toString('base64url');
+      const res = await send('GET', `${path}?cursor=${cursor}`);
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: 'invalid_cursor' });
+    }
+  });
+
+  describe('GET /api/highlights', () => {
+    beforeEach(async () => {
+      await harness.mod().pool.query('truncate links, feeds cascade');
+    });
+
+    it('filters passages, notes and literal characters, and returns compact rows', async () => {
+      const { core } = harness.mod();
+      const id = await newLinkId('https://example.com/browse', 'A 50% snake_case C:\\docs quote.');
+      await core.addTag(id, 'Research');
+      await core.addHighlight(id, {
+        quote: '50% snake_case C:\\docs',
+        note: 'Passage note',
+        color: 'blue',
+      });
+      await core.addHighlight(id, { quote: 'quote' });
+      for (const query of ['50%', '_', '\\', 'PASSAGE']) {
+        const res = await send(
+          'GET',
+          `/api/highlights?query=${encodeURIComponent(query)}&tag=RESEARCH&hasNote=true&color=blue&linkId=${id}`,
+        );
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as { highlights: Array<Record<string, unknown>> };
+        expect(body.highlights).toHaveLength(1);
+        expect(Object.keys(body.highlights[0] ?? {}).sort()).toEqual([
+          'color',
+          'createdAt',
+          'id',
+          'link',
+          'note',
+          'quote',
+          'updatedAt',
+        ]);
+        expect(body.highlights[0]).toMatchObject({
+          link: { id, title: null, url: 'https://example.com/browse' },
+          note: 'Passage note',
+        });
+      }
+      const all = await send('GET', '/api/highlights?hasNote=false');
+      expect(((await all.json()) as { highlights: unknown[] }).highlights).toHaveLength(2);
+    });
+
+    it('pages with cursors, defaults to 20, caps at 100 and excludes trash and feed posts', async () => {
+      const { core, pool } = harness.mod();
+      const id = await newLinkId('https://example.com/page');
+      await pool.query(
+        "insert into highlights (link_id, quote, color) select $1, n::text, 'yellow' from generate_series(1,105) n",
+        [id],
+      );
+      const trashed = await newLinkId('https://example.com/browse-trash');
+      await core.addHighlight(trashed, { quote: 'Alpha' });
+      await core.softDelete(trashed);
+      await pool.query(`with f as (
+        insert into feeds (feed_url,title,format,next_poll_at) values ('https://f.test/list','F','rss',now()) returning id
+      ), p as (insert into links (url,canonical_url,source_kind,feed_id) select 'https://f.test/list-post','https://f.test/list-post','link',id from f returning id)
+      insert into highlights (link_id,quote,color) select id,'feed','yellow' from p`);
+      const read = async (query: string) =>
+        (await (await send('GET', `/api/highlights${query}`)).json()) as {
+          highlights: Array<{ id: string; link: { id: string } }>;
+          nextCursor?: string;
+        };
+      expect((await read('')).highlights).toHaveLength(20);
+      const first = await read('?limit=999');
+      const second = await read(`?cursor=${first.nextCursor}&limit=100`);
+      const rows = [...first.highlights, ...second.highlights];
+      expect(first.highlights).toHaveLength(100);
+      expect(rows).toHaveLength(105);
+      expect(new Set(rows.map((r) => r.id)).size).toBe(105);
+      expect(rows.every((r) => r.link.id === id)).toBe(true);
+      expect(second.nextCursor).toBeUndefined();
+    });
+
+    it('maps invalid inputs and cursors, and requires configured auth', async () => {
+      for (const query of ['linkId=nope', 'color=red', 'hasNote=maybe', 'limit=abc']) {
+        const res = await send('GET', `/api/highlights?${query}`);
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({ error: 'validation_error' });
+      }
+      const bad = await send('GET', '/api/highlights?cursor=bad');
+      expect(bad.status).toBe(400);
+      expect(await bad.json()).toMatchObject({ error: 'invalid_cursor' });
+      vi.stubEnv('SILO_API_TOKEN', 'reader-test-token');
+      try {
+        expect((await send('GET', '/api/highlights')).status).toBe(401);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 });

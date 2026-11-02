@@ -143,7 +143,7 @@ const trigramText = sql`(coalesce(${links.title}, '') || ' ' || coalesce(${links
  * is paired with `ESCAPE '\'` at the call site so Postgres knows `\` is the
  * escape character.
  */
-function escapeIlikeNeedle(query: string): string {
+export function escapeIlikeNeedle(query: string): string {
   const escaped = query.replaceAll('\\', '\\\\').replaceAll('%', '\\%').replaceAll('_', '\\_');
   return `%${escaped}%`;
 }

@@ -28,11 +28,8 @@ const colorField = z
 const highlightOutputShape = {
   found: z.boolean(),
   id: highlightShape.id.optional(),
+  linkId: highlightShape.linkId.optional(),
   quote: highlightShape.quote.optional(),
-  prefix: highlightShape.prefix.optional(),
-  suffix: highlightShape.suffix.optional(),
-  startOffset: highlightShape.startOffset.optional(),
-  endOffset: highlightShape.endOffset.optional(),
   color: highlightShape.color.optional(),
   note: highlightShape.note.optional(),
   createdAt: highlightShape.createdAt.optional(),
@@ -158,12 +155,12 @@ export function registerHighlightTools(server: McpServer): void {
         const updated = await editHighlight(id, patch);
         if (!updated) {
           return notFound(
-            `No highlight with id ${id} (unknown, or its link is trashed). Use get_link to list a link's highlights.`,
+            `No highlight with id ${id} (unknown, or its link is trashed). Use list_highlights to find live highlights and their link ids.`,
           );
         }
         return savedResult(
           updated,
-          `Updated highlight ${id}. Call get_link with the link id to see all its highlights.`,
+          `Updated highlight ${id}. Call get_link with id ${updated.linkId} to see all its highlights.`,
         );
       } catch (error) {
         return ruleError(error);
@@ -191,8 +188,8 @@ export function registerHighlightTools(server: McpServer): void {
             {
               type: 'text',
               text: deleted
-                ? `Deleted highlight ${id}. Call get_link with the link id to see the remaining highlights.`
-                : `No highlight with id ${id} (unknown, or its link is trashed). Use get_link to list a link's highlights.`,
+                ? `Deleted highlight ${id}. Use list_highlights to see remaining highlights and their link ids.`
+                : `No highlight with id ${id} (unknown, or its link is trashed). Use list_highlights to find live highlights and their link ids.`,
             },
           ],
         };

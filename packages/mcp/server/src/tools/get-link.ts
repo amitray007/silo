@@ -1,10 +1,11 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js';
-import type { LinkDetail, LinkWithTextWindow } from '@silo/core';
+import type { BulkGetResult, LinkDetail, LinkWithTextWindow } from '@silo/core';
 import { getById, getByIds } from '@silo/core';
 import { z } from 'zod';
 import { foundLinkOutputShape, runBulkGuarded } from './found-result.js';
-import { toBaseLinkContent } from './link-shape.js';
+import { type BaseLinkContent, toBaseLinkContent } from './link-shape.js';
+import { readingSourceText } from './reader-shape.js';
 
 /**
  * Agent-facing output shape for `get_link`'s SINGLE-id path — reuses the
@@ -111,14 +112,21 @@ function toBatchResult(id: string, link: LinkDetail | null): GetLinkBatchResult 
  * can be arbitrarily large); only its presence/length is noted, with the
  * full text left to `structuredContent`.
  */
-function highlightLines(link: LinkDetail | LinkWithTextWindow): string[] {
-  if (link.highlights.length === 0) return [];
+function highlightLines(
+  highlights: Pick<BaseLinkContent['highlights'][number], 'id' | 'quote' | 'color' | 'note'>[],
+): string[] {
   return [
-    `highlights (${link.highlights.length}):`,
-    ...link.highlights.map(
+    `highlights (${highlights.length}):`,
+    ...highlights.map(
       (h) => `- [${h.color}] "${h.quote}"${h.note ? ` - note: ${h.note}` : ''} (id ${h.id})`,
     ),
   ];
+}
+
+function readerGuidance(link: Pick<LinkDetail, 'id' | 'feedId'>): string {
+  return link.feedId
+    ? `Use save_feed_post with feedId ${link.feedId} and postId ${link.id} to save this post to Home, or list_feed_posts with feedId ${link.feedId} to browse the feed.`
+    : 'Use edit_highlight to change a passage note, or edit_link to move the saved place.';
 }
 
 function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
@@ -135,32 +143,39 @@ function toTextSummary(link: LinkDetail | LinkWithTextWindow): string {
     `tags: ${link.tags.length > 0 ? link.tags.join(', ') : '(none)'}`,
     link.notes ? `note: ${link.notes}` : undefined,
     link.readingPosition
-      ? `reading position: ${Math.round(link.readingPosition.position * 100)}% of the article read (source ${link.readingPosition.source}, saved ${link.readingPosition.updatedAt.toISOString()})`
+      ? `reading position: ${readingSourceText(link.readingPosition.source)} ${Math.round(link.readingPosition.position * 100)}% (source ${link.readingPosition.source}, saved ${link.readingPosition.updatedAt.toISOString()})`
       : undefined,
-    ...highlightLines(link),
     link.extractedText
-      ? `full text: ${link.extractedText.length} chars (see structuredContent.extractedText)${windowNote ? ` — ${windowNote}` : ''}`
+      ? `full text: ${link.extractedText.length} chars (see structuredContent.extractedText)${windowNote ? ` - ${windowNote}` : ''}`
       : undefined,
+    ...highlightLines(link.highlights),
+    readerGuidance(link),
   ];
   return lines.filter((line): line is string => line !== undefined).join('\n');
 }
 
 /** Builds the `content[0].text` block for the batch (`ids`) path. */
-function toBatchTextSummary(results: GetLinkBatchResult[]): string {
+function toBatchTextSummary(results: BulkGetResult[]): string {
   if (results.length === 0) {
     return 'No ids were given.';
   }
-  const foundCount = results.filter((r) => r.found).length;
+  const foundCount = results.filter((r) => r.link !== null).length;
   const lines = [
     `${foundCount} of ${results.length} link${results.length === 1 ? '' : 's'} found (full text included; textWindow is not applied in batch mode):`,
   ];
-  for (const result of results) {
-    if (!result.found) {
-      lines.push(`- ${result.id}: not found (unknown or trashed)`);
+  for (const { id, link: result } of results) {
+    if (!result) {
+      lines.push(`- ${id}: not found (unknown or trashed)`);
       continue;
     }
     const tagsPart = result.tags && result.tags.length > 0 ? ` [${result.tags.join(', ')}]` : '';
-    lines.push(`- ${result.id}: ${result.title ?? result.url} — ${result.url}${tagsPart}`);
+    lines.push(`- ${result.id}: ${result.title ?? result.url} - ${result.url}${tagsPart}`);
+    if (result.readingPosition) {
+      lines.push(
+        `${readingSourceText(result.readingPosition.source)} ${Math.round(result.readingPosition.position * 100)}% (source ${result.readingPosition.source})`,
+      );
+    }
+    lines.push(...highlightLines(result.highlights), readerGuidance(result));
   }
   return lines.join('\n');
 }
@@ -190,8 +205,8 @@ export function registerGetLink(server: McpServer): void {
         "Fetch one or more saved links' full detail by id: metadata (url, " +
         'title, description, image, site name), extracted full text, tags, ' +
         'capture status, notes, and the reading position (`readingPosition`: ' +
-        "the share, 0 to 1, of the article's words the owner has read, or " +
-        'null) and the passage highlights (`highlights`: each quote with ' +
+        'a share from 0 to 1; pencil means read to, listen means listened to, ' +
+        'mark means saved place (Continue here); null when absent) and the passage highlights (`highlights`: each quote with ' +
         'its note, colour and id; they may overlap). Pass `id` for ONE link, or `ids` for a ' +
         'BATCH read of several in one call (if both are given, `ids` wins). ' +
         'A single-`id` fetch may pass `textWindow: { offset, limit }` to ' +
@@ -238,7 +253,7 @@ export function registerGetLink(server: McpServer): void {
         const results = outcome.value.map((r) => toBatchResult(r.id, r.link));
         const structuredContent: GetLinkOutputStructuredContent = { found: false, results };
         return {
-          content: [{ type: 'text', text: toBatchTextSummary(results) }],
+          content: [{ type: 'text', text: toBatchTextSummary(outcome.value) }],
           structuredContent,
         };
       }

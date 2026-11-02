@@ -30,6 +30,54 @@ describeMcpTool(
       expect(structured.source).toBe('chrome');
     });
 
+    it.each(['single', 'batch'] as const)(
+      '%s reads guide feed posts to saving and library links to editing',
+      async (mode) => {
+        const { pool, client } = getContext();
+        const libraryId = await newLink(`https://example.com/guidance-${mode}`);
+        const feed = await pool.query<{ id: string }>(
+          "insert into feeds (feed_url,title,format,next_poll_at) values ($1,'Guidance','rss',now()) returning id",
+          [`https://example.com/guidance-${mode}/rss`],
+        );
+        const feedId = feed.rows[0]?.id;
+        const post = await pool.query<{ id: string }>(
+          "insert into links (url,canonical_url,source_kind,feed_id) values ($1,$1,'link',$2) returning id",
+          [`https://example.com/guidance-${mode}/post`, feedId],
+        );
+        const postId = post.rows[0]?.id ?? '';
+        for (const id of [postId, libraryId]) {
+          const result = await client.callTool({
+            name: 'get_link',
+            arguments: mode === 'single' ? { id } : { ids: [id] },
+          });
+          expect(result.isError).toBeFalsy();
+          const text = (result.content as Array<{ text: string }>)[0]?.text ?? '';
+          if (id === postId) {
+            expect(text).toContain(`save_feed_post with feedId ${feedId} and postId ${postId}`);
+            expect(text).toContain(`list_feed_posts with feedId ${feedId}`);
+            expect(text).not.toMatch(/edit_highlight|edit_link/);
+          } else {
+            expect(text).toContain('edit_highlight');
+            expect(text).toContain('edit_link');
+            expect(text).not.toContain('save_feed_post');
+          }
+        }
+        if (mode === 'batch') {
+          const mixed = await client.callTool({
+            name: 'get_link',
+            arguments: { ids: [postId, libraryId] },
+          });
+          expect(mixed.isError).toBeFalsy();
+          const text = (mixed.content as Array<{ text: string }>)[0]?.text ?? '';
+          const [feedText, libraryText] = text.split(`- ${libraryId}:`);
+          expect(feedText).toContain('save_feed_post');
+          expect(feedText).not.toMatch(/edit_highlight|edit_link/);
+          expect(libraryText).toContain('edit_highlight');
+          expect(libraryText).not.toContain('save_feed_post');
+        }
+      },
+    );
+
     it('tools/list lists get_link (the capability went live)', async () => {
       const { client } = getContext();
       const { tools } = await client.listTools();

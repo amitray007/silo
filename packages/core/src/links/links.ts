@@ -27,6 +27,7 @@ import { runUnionSearch } from './search-query.js';
 import type { CaptureSource } from './source.js';
 import type { SourceData } from './source-data.js';
 import { parseFeedMediaSourceData, sourceDataSchema } from './source-data.js';
+import { normalizeTagKey } from './tag-key.js';
 
 // `Db`/`Tx`/`Executor`/`Link` live in ./executor.ts so both ./enqueue.ts and
 // ./pagination.ts can reference them without a cycle through links.ts.
@@ -35,6 +36,7 @@ import { parseFeedMediaSourceData, sourceDataSchema } from './source-data.js';
 export type { Db, Executor, Link, Tx } from './executor.js';
 export type { LinkSummaryWithTags, LinkWithTags, PageParams } from './pagination.js';
 export { InvalidCursorError } from './pagination.js';
+export { normalizeTagKey } from './tag-key.js';
 
 /** Postgres unique-violation error code (`23505`). */
 const UNIQUE_VIOLATION = '23505';
@@ -115,29 +117,6 @@ function mergeNotes(existing: string | null, incoming: string | undefined): stri
   if (!existing) return trimmedIncoming;
   if (existing.includes(trimmedIncoming)) return existing;
   return `${existing}\n\n${trimmedIncoming}`;
-}
-
-/**
- * Case-insensitive dedup key for a tag's display `name`: trimmed + lowercased.
- * Single source of truth — every read/write site that matches or creates a
- * tag goes through this, so `AI`/`ai`/` ai ` always resolve to the same key.
- * Not exported: internal to this module's tag operations.
- *
- * Scope of the case-fold: `String.prototype.toLowerCase()` is exact for ASCII
- * (all realistic tag labels — the `AI`/`ai` case included), which is the only
- * guarantee this product needs. It is NOT full Unicode case-folding: a handful
- * of locale-sensitive codepoints (e.g. Turkish dotted-İ, the Kelvin sign K)
- * fold differently than a naive reader expects, so two visually-"same" tags in
- * those alphabets could fail to collapse (or, rarely, over-collapse). Accepted
- * as out-of-scope for a personal ASCII-label store rather than pulled in via an
- * ICU dependency. IMPORTANT: the one-time migration backfill
- * (`0002_curious_gargoyle.sql`) computes the same key with Postgres
- * `lower(trim(name))`; SQL `lower()` and this function agree on ASCII, so
- * pre-existing rows stay reachable — the two only diverge on the same
- * non-ASCII codepoints noted above, the identical accepted boundary.
- */
-export function normalizeTagKey(name: string): string {
-  return name.trim().toLowerCase();
 }
 
 /**

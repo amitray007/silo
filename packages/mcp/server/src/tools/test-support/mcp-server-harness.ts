@@ -136,6 +136,7 @@ export function expectNoLeakedFields(obj: unknown): void {
   expect(obj).not.toHaveProperty('deletedAt');
   expect(obj).not.toHaveProperty('enrichFloorStatus');
   expect(obj).not.toHaveProperty('enrichFields');
+  expect(JSON.stringify(obj)).not.toMatch(/"(?:readerPrefs|prefix|suffix|startOffset|endOffset)":/);
 }
 
 /**

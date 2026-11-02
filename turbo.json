@@ -6,7 +6,11 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**"]
     },
+    "transit": {
+      "dependsOn": ["^transit"]
+    },
     "check-types": {
+      "dependsOn": ["transit"],
       "outputs": []
     },
     "lint": {
@@ -30,7 +34,7 @@
       ]
     },
     "test": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "transit"],
       "passThroughEnv": [
         "DATABASE_URL",
         "TEST_DATABASE_URL",

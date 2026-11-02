@@ -24,8 +24,8 @@ export function registerEditLink(server: McpServer): void {
         'edit with no fields is a no-op that returns the link unchanged). ' +
         'A title you set here is kept permanently: later page or AI titles ' +
         'will not replace it. ' +
-        'Also sets or clears the reading position (agent writes record source mark): `readingPosition` is a ' +
-        "number from 0 to 1, the share of the article's words already read " +
+        'Also sets or clears a saved place. Agent writes save source mark. `readingPosition` is a ' +
+        "number from 0 to 1, a share of the article's words " +
         '(0 is the start, 1 is the end), and `null` clears it. Saving a ' +
         "position does not change the link's updated time. " +
         "Cannot change the link's url, sourceKind, or tags — use " +

@@ -3,6 +3,12 @@ packages:
   - "packages/mcp/*"
   - "extensions/*"
 
+# dependency-cruiser needs the pre-TS 7 compiler API; typechecking stays on the catalog version.
+packageExtensions:
+  "dependency-cruiser@18":
+    dependencies:
+      typescript: 6.0.3
+
 catalog:
   lefthook: 2.1.14
   typescript: 7.0.2

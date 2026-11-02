@@ -156,7 +156,7 @@ export function registerSearchLinks(server: McpServer): void {
       title: 'Search links',
       description:
         "Full-text search over saved links' title, description, extracted " +
-        'text, notes, and tags. Returns matches ranked by relevance (best ' +
+        'text, link notes, and tags. Passage notes are searched with list_highlights. Returns matches ranked by relevance (best ' +
         "match first) by default, each with the link's metadata, tags, a " +
         'numeric relevance rank, and a short `snippet` — a highlighted ' +
         'excerpt around the matched terms (the `**...**` markers denote the ' +

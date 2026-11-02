@@ -25,6 +25,21 @@ export const pageQuerySchema = z.object({
   cursor: z.string().optional(),
 });
 
+export const highlightsQuerySchema = pageQuerySchema.extend({
+  query: z.string().optional(),
+  linkId: z.uuid().optional(),
+  tag: z.string().optional(),
+  hasNote: z
+    .enum(['true', 'false'])
+    .transform((value) => value === 'true')
+    .optional(),
+  color: z.enum(HIGHLIGHT_COLORS).optional(),
+});
+
+export const readingPositionsQuerySchema = pageQuerySchema.extend({
+  source: z.enum(['pencil', 'listen', 'mark']).optional(),
+});
+
 /**
  * Shared `since`/`until` date/datetime query-param validator (agent-
  * navigation slice U5) — mirrors `@silo/mcp-server`'s `tools/query-filters.ts`

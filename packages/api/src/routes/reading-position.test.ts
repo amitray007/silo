@@ -1,6 +1,6 @@
 import type * as CoreOps from '@silo/core';
 import { postgresReachable } from '@silo/db/test-support/disposable-database';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ErrorEnvelope } from '../app.js';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 
@@ -179,5 +179,93 @@ describeIfPg('reading position routes (integration)', () => {
     const body = (await res.json()) as { links: Array<Record<string, unknown>> };
     expect(body.links.length).toBeGreaterThan(0);
     for (const row of body.links) expect(Object.hasOwn(row, 'readingPosition')).toBe(false);
+  });
+  describe('GET /api/reading-positions', () => {
+    beforeEach(async () => {
+      await harness.mod().pool.query('truncate links, feeds cascade');
+    });
+
+    it('filters each source and pages newest updates first', async () => {
+      const { core, app, pool } = harness.mod();
+      const ids: string[] = [];
+      for (const [index, source] of (['pencil', 'listen', 'mark'] as const).entries()) {
+        const id = await newLinkId(`https://example.com/list-${source}`);
+        ids.push(id);
+        await core.setReadingPosition(id, 0.5, source);
+        await pool.query(
+          "update reading_positions set updated_at = '2026-01-01'::timestamptz + ($2 || ' seconds')::interval where link_id=$1",
+          [id, String(index)],
+        );
+        const res = await app.request(`/api/reading-positions?source=${source}`);
+        expect(res.status).toBe(200);
+        expect(await res.json()).toMatchObject({
+          positions: [{ link: { id }, source, position: 0.5, updatedAt: expect.any(String) }],
+        });
+      }
+      const first = (await (await app.request('/api/reading-positions?limit=2')).json()) as {
+        positions: Array<{ link: { id: string } }>;
+        nextCursor: string;
+      };
+      const second = (await (
+        await app.request(`/api/reading-positions?cursor=${first.nextCursor}`)
+      ).json()) as { positions: Array<{ link: { id: string } }>; nextCursor?: string };
+      expect([...first.positions, ...second.positions].map((r) => r.link.id)).toEqual(
+        ids.reverse(),
+      );
+      expect(second.nextCursor).toBeUndefined();
+      expect(Object.keys(first.positions[0] ?? {}).sort()).toEqual([
+        'link',
+        'position',
+        'source',
+        'updatedAt',
+      ]);
+    });
+
+    it('defaults to 20, caps at 100 and excludes trash and feed posts', async () => {
+      const { core, pool, app } = harness.mod();
+      await pool.query(`with l as (
+        insert into links (url,canonical_url,source_kind) select 'https://example.com/'||n,'https://example.com/'||n,'link' from generate_series(1,105) n returning id
+      ) insert into reading_positions (link_id,position,source) select id,0.5,'mark' from l`);
+      const trashed = await newLinkId('https://example.com/trash-position');
+      await core.setReadingPosition(trashed, 0.5);
+      await core.softDelete(trashed);
+      await pool.query(`with f as (
+        insert into feeds (feed_url,title,format,next_poll_at) values ('https://f.test/list','F','rss',now()) returning id
+      ), p as (insert into links (url,canonical_url,source_kind,feed_id) select 'https://f.test/list-post','https://f.test/list-post','link',id from f returning id)
+      insert into reading_positions (link_id,position,source) select id,0.5,'listen' from p`);
+      const read = async (q: string) =>
+        (await (await app.request(`/api/reading-positions${q}`)).json()) as {
+          positions: Array<{ link: { id: string; url: string } }>;
+          nextCursor?: string;
+        };
+      expect((await read('')).positions).toHaveLength(20);
+      const first = await read('?limit=999');
+      const second = await read(`?cursor=${first.nextCursor}&limit=100`);
+      expect(first.positions).toHaveLength(100);
+      const rows = [...first.positions, ...second.positions];
+      expect(rows).toHaveLength(105);
+      expect(new Set(rows.map((r) => r.link.id)).size).toBe(105);
+      expect(
+        rows.every((r) => r.link.url.startsWith('https://example.com/') && r.link.id !== trashed),
+      ).toBe(true);
+    });
+
+    it('maps validation and cursor errors and requires configured auth', async () => {
+      const { app } = harness.mod();
+      for (const q of ['source=scroll', 'limit=abc']) {
+        const res = await app.request(`/api/reading-positions?${q}`);
+        expect(res.status).toBe(400);
+        expect(await res.json()).toMatchObject({ error: 'validation_error' });
+      }
+      const res = await app.request('/api/reading-positions?cursor=bad');
+      expect(res.status).toBe(400);
+      expect(await res.json()).toMatchObject({ error: 'invalid_cursor' });
+      vi.stubEnv('SILO_API_TOKEN', 'reader-test-token');
+      try {
+        expect((await app.request('/api/reading-positions')).status).toBe(401);
+      } finally {
+        vi.unstubAllEnvs();
+      }
+    });
   });
 });
