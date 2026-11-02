@@ -319,7 +319,11 @@ export function createApp(): Hono {
     const serveWebAsset = serveStatic({ root: webDistDir });
     app.use('*', async (c, next) => {
       const response = await serveWebAsset(c, next);
-      if (response && /^\/assets\/(?:.*\/)?[^/]+-[\w-]{8,}\.[^/]+$/.test(c.req.path)) {
+      if (
+        response instanceof Response &&
+        (response.status === 200 || response.status === 206) &&
+        /^\/assets\/(?:.*\/)?[^/]+-[\w-]{8,}\.[^/]+$/.test(c.req.path)
+      ) {
         response.headers.set('Cache-Control', 'public, max-age=31536000, immutable');
       }
       return response;
