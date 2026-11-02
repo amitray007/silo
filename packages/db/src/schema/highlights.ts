@@ -32,6 +32,10 @@ export const highlights = pgTable(
   },
   (table) => [
     index('highlights_link_id_idx').on(table.linkId),
+    index('highlights_created_at_id_idx').on(
+      table.createdAt.desc().nullsFirst(),
+      table.id.desc().nullsFirst(),
+    ),
     check(
       'highlights_color_check',
       sql`${table.color} in (${sql.raw(HIGHLIGHT_COLORS.map((c) => `'${c}'`).join(', '))})`,

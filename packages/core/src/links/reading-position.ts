@@ -216,11 +216,11 @@ export async function listReadingPositions(
       whereLibrary(
         input.source === undefined ? undefined : eq(readingPositions.source, input.source),
         cursor
-          ? sql`(${readingPositions.updatedAt}, ${links.id}) < (${cursor.timestamp}::timestamptz, ${cursor.id}::uuid)`
+          ? sql`(${readingPositions.updatedAt}, ${readingPositions.linkId}) < (${cursor.timestamp}::timestamptz, ${cursor.id}::uuid)`
           : undefined,
       ),
     )
-    .orderBy(desc(readingPositions.updatedAt), desc(links.id))
+    .orderBy(desc(readingPositions.updatedAt), desc(readingPositions.linkId))
     .limit(limit + 1);
   const page = rows.slice(0, limit);
   const last = page.at(-1);

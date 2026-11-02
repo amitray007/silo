@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, pgTable, real, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { check, index, pgTable, real, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { links } from './links.js';
 
 /**
@@ -21,6 +21,10 @@ export const readingPositions = pgTable(
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (table) => [
+    index('reading_positions_updated_at_link_id_idx').on(
+      table.updatedAt.desc().nullsFirst(),
+      table.linkId.desc().nullsFirst(),
+    ),
     check('reading_positions_source_check', sql`${table.source} in ('pencil', 'listen', 'mark')`),
   ],
 );
