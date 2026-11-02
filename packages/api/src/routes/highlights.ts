@@ -1,19 +1,40 @@
-import { addHighlight, deleteHighlight, editHighlight } from '@silo/core';
+import { addHighlight, deleteHighlight, editHighlight, listLibraryHighlights } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { toHighlightJson } from '../link-json.js';
-import { addHighlightBodySchema, editHighlightBodySchema } from '../query-schemas.js';
+import {
+  addHighlightBodySchema,
+  editHighlightBodySchema,
+  highlightsQuerySchema,
+} from '../query-schemas.js';
 
 const idParamSchema = z.object({ id: z.uuid() });
 
 /**
  * Registers the passage-highlight routes over `core.addHighlight`,
- * `editHighlight` and `deleteHighlight`. Highlights come back on the
- * single-link read (`GET /api/links/:id`), so there is no list route.
+ * `editHighlight`, `deleteHighlight` and `listLibraryHighlights`.
  * Core owns the rules: bounds, quote matching, the feed-post guard (a `409`
  * through the app's error handler) and live-library scoping (`404`).
  */
 export function registerHighlightsRoutes(app: Hono): void {
+  app.get('/highlights', async (c) => {
+    const input = highlightsQuerySchema.parse(c.req.query());
+    const page = await listLibraryHighlights(input);
+    const highlights = page.highlights.map((row) => ({
+      id: row.id,
+      quote: row.quote,
+      note: row.note,
+      color: row.color,
+      createdAt: row.createdAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+      link: { id: row.link.id, title: row.link.title, url: row.link.url },
+    }));
+    return c.json({
+      highlights,
+      ...(page.nextCursor === undefined ? {} : { nextCursor: page.nextCursor }),
+    });
+  });
+
   /**
    * `POST /api/links/:id/highlights` — add a highlight. The web reader sends
    * `quote`, `prefix`, `suffix` and the offset hints; a quote-only body is

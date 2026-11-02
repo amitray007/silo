@@ -39,6 +39,7 @@ import { registerOAuthWellKnownRoutes } from './routes/oauth/well-known.js';
 import { registerPageViewHeaders, registerPageViewRoutes } from './routes/page-view.js';
 import { registerPreviewImageRoutes } from './routes/preview-image.js';
 import { registerReaderRoutes } from './routes/reader.js';
+import { registerReadingPositionRoutes } from './routes/reading-position.js';
 import { registerSettingsRoutes } from './routes/settings.js';
 import { registerSourceMediaRoutes } from './routes/source-media.js';
 import { registerTagsRoutes } from './routes/tags.js';
@@ -263,6 +264,7 @@ export function createApp(): Hono {
   registerLinksTitlesRoutes(api);
   registerLinksWriteRoutes(api);
   registerHighlightsRoutes(api);
+  registerReadingPositionRoutes(api);
   registerIngestRoutes(api);
   registerTrashRoutes(api);
   registerTagsRoutes(api);
