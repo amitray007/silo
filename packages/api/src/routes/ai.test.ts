@@ -118,6 +118,12 @@ describeIfPg('/api/ai routes (integration)', () => {
     );
     expect(body.features).toEqual([
       {
+        id: 'librarian',
+        label: 'Librarian',
+        description: 'Ask about what you read and your library',
+        plugin: null,
+      },
+      {
         id: 'x-post-title',
         label: 'AI titles',
         description: 'Short titles written by your AI model',

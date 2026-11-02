@@ -18,4 +18,5 @@ export {
   settings,
   tags,
 } from './schema/index.js';
+export { librarianChats, librarianMessages } from './schema/librarian.js';
 export { tsvector } from './types.js';

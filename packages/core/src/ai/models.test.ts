@@ -45,7 +45,10 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
   });
   const selection = (id: string) => ({
     enabled: true,
-    features: { 'x-post-title': { enabled: true, model: { provider: 'fireworks', id } } },
+    features: {
+      librarian: { enabled: false, model: null },
+      'x-post-title': { enabled: true, model: { provider: 'fireworks', id } },
+    },
   });
   const prepare = async () => {
     const { providers, models } = harness.mod();
@@ -404,7 +407,10 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
       await models.refreshProviderModels('gateway');
       const ai = {
         enabled: true,
-        features: { 'x-post-title': { enabled: true, model: { provider: 'gateway', id: legacy } } },
+        features: {
+          librarian: { enabled: false, model: null },
+          'x-post-title': { enabled: true, model: { provider: 'gateway', id: legacy } },
+        },
       };
       await harness
         .rawDb()
@@ -425,7 +431,10 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
         .rawDb()
         .execute(sql`SELECT value FROM settings WHERE key = 'ai'`);
       expect(stored.rows[0]?.value).toMatchObject({
-        features: { 'x-post-title': { model: expected } },
+        features: {
+          librarian: { enabled: false, model: null },
+          'x-post-title': { model: expected },
+        },
       });
     },
   );
@@ -444,7 +453,10 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     await settings.updateSettings({
       ai: {
         enabled: true,
-        features: { 'x-post-title': { enabled: true, model: { provider: kind, id } } },
+        features: {
+          librarian: { enabled: false, model: null },
+          'x-post-title': { enabled: true, model: { provider: kind, id } },
+        },
       },
     });
     expect((await settings.getSetting('ai')).features['x-post-title'].model).toEqual({
@@ -488,7 +500,10 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
       await models.refreshProviderModels(kind);
       const ai = {
         enabled: true,
-        features: { 'x-post-title': { enabled: true, model: { provider: kind, id: live.id } } },
+        features: {
+          librarian: { enabled: false, model: null },
+          'x-post-title': { enabled: true, model: { provider: kind, id: live.id } },
+        },
       };
       await settings.setSetting('ai', ai);
       expect(await settings.getSetting('ai')).toEqual(ai);

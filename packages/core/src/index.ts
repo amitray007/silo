@@ -112,6 +112,16 @@ export { searchFeedPosts } from './feeds/search.js';
 export { setFeedPostArchived } from './feeds/triage.js';
 export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
 export { normalizeFeedUrl, setFeedResolver } from './feeds/types.js';
+export {
+  createChat,
+  deleteChat,
+  getChat,
+  type LibrarianMessage,
+  librarianMessageSchema,
+  listChats,
+  saveChatMessages,
+  streamLibrarianReply,
+} from './librarian/index.js';
 // Bulk write ops + batch-read (agent-navigation slice U3): `*Many` variants
 // of the single-id write ops above, modeled on `import.ts`'s sequential-
 // bulk-with-per-item-results pattern (see bulk.ts's module doc comment).
