@@ -12,6 +12,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useAi, useSaveReadingPosition } from '../../../api/hooks';
+import { useHasLibrarianChat } from '../../../api/librarian';
 import type { LinkJson } from '../../../api/types';
 import { deriveTitleFromUrl } from '../../../lib/url';
 import { useReaderPrefs } from '../../../lib/useReaderPrefs';
@@ -53,6 +54,8 @@ type DockApi = {
   highlights: HighlightsApi;
   lane: NotesLaneApi;
   listen: ReadAloudApi;
+  /** The article has a stored Librarian chat. */
+  hasChats: boolean;
   closeSheet: () => void;
   openSheet: (id: string) => void;
 };
@@ -73,6 +76,8 @@ type DockTool = {
   unavailable?: { when: (api: DockApi) => boolean; title: string };
   /** A count beside the label. */
   badge?: (api: DockApi) => number;
+  /** A mark on the glyph, with what it says for assistive tools. */
+  mark?: { when: (api: DockApi) => boolean; label: string };
   /** A tool with a main action beside its sheet chevron. */
   split?: {
     mainTitle: string;
@@ -153,6 +158,7 @@ const tools: readonly DockTool[] = [
     title: 'Ask the Librarian',
     heading: 'Librarian',
     glyph: <ReaderIcon name="sparkles" size={19} />,
+    mark: { when: (api) => api.hasChats, label: 'Earlier chat saved' },
   },
 ];
 
@@ -171,6 +177,7 @@ function DockButton({
 }) {
   const unavailable = tool.unavailable?.when(api) ?? false;
   const count = tool.badge?.(api) ?? 0;
+  const marked = tool.mark?.when(api) ?? false;
   const pressed = tool.press?.on(api);
   return (
     <button
@@ -185,8 +192,16 @@ function DockButton({
       aria-disabled={unavailable || undefined}
       onClick={unavailable ? undefined : onToggle}
     >
-      {tool.glyph}
+      {marked ? (
+        <span className="silo-reader-dockmark">
+          {tool.glyph}
+          <i aria-hidden="true" />
+        </span>
+      ) : (
+        tool.glyph
+      )}
       <span className="silo-reader-docklabel">{tool.label}</span>
+      {marked && <span className="silo-sr-only">{tool.mark?.label}</span>}
       {count > 0 && <span className="silo-reader-dockbadge">{count}</span>}
     </button>
   );
@@ -283,6 +298,7 @@ export function ReaderDock({
   const sheetId = useId();
   const { data: aiStatus } = useAi();
   const askReady = aiStatus?.status?.features?.librarian?.ready === true;
+  const hasChats = useHasLibrarianChat(link.id, askReady);
   const chatOpen = isChatOpen(openId, askReady);
   const writePosition = useSaveReadingPosition(link.id);
   const [saveError, setSaveError] = useState('');
@@ -375,7 +391,15 @@ export function ReaderDock({
   }, [listening]);
   if (!host) return null;
   const closeSheet = () => setOpenId(null);
-  const api: DockApi = { pencil, highlights, lane, listen, closeSheet, openSheet: setOpenId };
+  const api: DockApi = {
+    pencil,
+    highlights,
+    lane,
+    listen,
+    hasChats,
+    closeSheet,
+    openSheet: setOpenId,
+  };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return createPortal(

@@ -1,11 +1,12 @@
 import { Chat, type UIMessage, useChat } from '@ai-sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useReducer, useState, useSyncExternalStore } from 'react';
 import { queryKeys } from '../../../api/hooks';
 import {
   librarianApi,
   useCreateLibrarianChat,
+  useDeleteLibrarianChat,
   useLibrarianChatDetail,
   useLibrarianChats,
 } from '../../../api/librarian';
@@ -31,23 +32,99 @@ export function chatErrorText(message: string | undefined): string {
   return (code && ERROR_WORDS[code]) ?? 'Could not answer. Try again.';
 }
 
-const chatsByLink = new Map<
-  string,
-  { chat: Chat<UIMessage>; chatId: { current: string | null }; title: string }
->();
+type Entry = {
+  chat: Chat<UIMessage>;
+  chatId: { current: string | null };
+  title: string;
+  /** The stored messages are in the chat (or the chat is new and has none to load). */
+  hydrated: boolean;
+  used?: number;
+};
+
+/**
+ * One slot per article. Each chat keeps its own `Chat`, so an answer that streams in one chat can
+ * never reach another. `active` is the chat on show: an id, `null` for a new chat that has no
+ * server row yet, or `undefined` until the newest chat is known.
+ */
+type Slot = {
+  active: string | null | undefined;
+  draft: Entry | undefined;
+  byId: Map<string, Entry>;
+  listeners: Set<() => void>;
+  subscribe: (listener: () => void) => () => void;
+  select: (active: string | null) => void;
+};
+const slots = new Map<string, Slot>();
+let usage = 0;
+
+function pruneChats(current: Entry) {
+  const recent: { slot: Slot; id: string | null; entry: Entry }[] = [];
+  for (const slot of slots.values()) {
+    const entries: { slot: Slot; id: string | null; entry: Entry }[] = [...slot.byId].map(
+      ([id, entry]) => ({ slot, id, entry }),
+    );
+    if (slot.draft) entries.push({ slot, id: null, entry: slot.draft });
+    for (const item of entries) {
+      if (item.entry === current || ['streaming', 'submitted'].includes(item.entry.chat.status))
+        continue;
+      recent.push(item);
+    }
+  }
+  recent.sort((a, b) => (b.entry.used ?? 0) - (a.entry.used ?? 0));
+  for (const { slot, id } of recent.slice(8)) {
+    if (id === null) slot.draft = undefined;
+    else slot.byId.delete(id);
+  }
+}
+
+function slotFor(linkId: string): Slot {
+  const cached = slots.get(linkId);
+  if (cached) return cached;
+  const listeners = new Set<() => void>();
+  const slot: Slot = {
+    active: undefined,
+    draft: undefined,
+    byId: new Map(),
+    listeners,
+    subscribe: (listener) => {
+      listeners.add(listener);
+      return () => {
+        listeners.delete(listener);
+      };
+    },
+    select: (active) => {
+      if (slot.active === active) return;
+      slot.active = active;
+      for (const listener of listeners) listener();
+    },
+  };
+  slots.set(linkId, slot);
+  return slot;
+}
+
+/** The server row exists now: the draft becomes an ordinary chat. */
+function adopt(slot: Slot, entry: Entry, id: string) {
+  slot.byId.set(id, entry);
+  if (slot.draft === entry) slot.draft = undefined;
+  if (slot.active === null) slot.select(id);
+}
 
 export function useLibrarianChat(linkId: string) {
   const client = useQueryClient();
   const list = useLibrarianChats(linkId);
-  const detail = useLibrarianChatDetail(list.data?.chats[0]?.id);
   const create = useCreateLibrarianChat();
+  const remove = useDeleteLibrarianChat();
+  const slot = slotFor(linkId);
+  const active = useSyncExternalStore(slot.subscribe, () => slot.active);
+  const latest = list.data ? (list.data.chats[0]?.id ?? null) : undefined;
+  const resolved = active === undefined ? latest : active;
+  useEffect(() => {
+    // Pin the newest chat once it is known, so a later refresh cannot swap it under the reader.
+    if (slot.active === undefined && latest !== undefined) slot.select(latest);
+  }, [slot, latest]);
 
-  const [failure, setFailure] = useState(false);
-  const [creating, setCreating] = useState(false);
-  const entry = useMemo(() => {
-    const cached = chatsByLink.get(linkId);
-    if (cached) return cached;
-    const chatId = { current: null as string | null };
+  const newEntry = (id: string | null): Entry => {
+    const chatId = { current: id };
     const chat = new Chat({
       sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
       onFinish: ({ message }) => {
@@ -86,29 +163,52 @@ export function useLibrarianChat(linkId: string) {
         },
       }),
     });
-    const entry = { chat, chatId, title: 'New chat' };
-    chatsByLink.set(linkId, entry);
+    return { chat, chatId, title: 'New chat', hydrated: id === null };
+  };
+  const entryFor = (id: string): Entry => {
+    const cached = slot.byId.get(id);
+    if (cached) return cached;
+    const entry = newEntry(id);
+    slot.byId.set(id, entry);
     return entry;
-  }, [linkId, client]);
+  };
+  const draft = (): Entry => {
+    slot.draft ??= newEntry(null);
+    return slot.draft;
+  };
+  // While the newest chat is unknown, the draft stands in; nothing can be sent yet.
+  const entry = resolved ? entryFor(resolved) : draft();
   const { chat, chatId } = entry;
-  const [title, setTitle] = useState(entry.title);
+
+  const [, rerender] = useReducer((count: number) => count + 1, 0);
+  const [failedEntry, setFailedEntry] = useState<Entry | null>(null);
+  const [creatingEntry, setCreatingEntry] = useState<Entry | null>(null);
+  const detail = useLibrarianChatDetail(resolved ?? undefined);
   const state = useChat({ chat });
   useEffect(() => {
-    if (!detail.data) return;
-    if (chatId.current && chatId.current !== detail.data.chat.id) return;
-    const initial = !chatId.current;
-    chatId.current = detail.data.chat.id;
-    entry.title = detail.data.chat.title;
-    setTitle(entry.title);
+    entry.used = ++usage;
+    // Reclaim inactive entries when the visible stream settles as well as on navigation.
+    if (state.status === 'ready' || state.status === 'error') pruneChats(entry);
+  }, [entry, state.status]);
+  useEffect(() => {
+    const data = detail.data;
+    if (!data || data.chat.id !== chatId.current) return;
+    entry.title = data.chat.title;
     if (
-      initial ||
+      !entry.hydrated ||
       ((state.status === 'ready' || state.status === 'error') &&
-        detail.data.messages.length > chat.messages.length)
-    )
-      chat.messages = detail.data.messages;
+        data.messages.length > chat.messages.length)
+    ) {
+      chat.messages = data.messages;
+      entry.hydrated = true;
+      rerender();
+    }
   }, [detail.data, chat, chatId, entry, state.status]);
-  const loading = list.isPending || (list.data?.chats.length !== 0 && !chatId.current);
-  const busy = creating || state.status === 'submitted' || state.status === 'streaming';
+  const title =
+    detail.data && detail.data.chat.id === chatId.current ? detail.data.chat.title : entry.title;
+  const loading = resolved === undefined || !entry.hydrated;
+  const busy =
+    creatingEntry === entry || state.status === 'submitted' || state.status === 'streaming';
   const lastAssistant = state.messages.findLast((message) => message.role === 'assistant');
   const pendingApproval =
     lastAssistant?.parts.some((part) => 'state' in part && part.state === 'approval-requested') ??
@@ -119,41 +219,65 @@ export function useLibrarianChat(linkId: string) {
     passage?: { quote: string; paragraph: number },
   ) {
     if (!text.trim() || pendingApproval || busy || loading || list.error || detail.error) return;
-    setFailure(false);
-    setCreating(true);
+    setFailedEntry(null);
+    setCreatingEntry(entry);
     try {
       if (!chatId.current) {
         const created = await create.mutateAsync(linkId);
         chatId.current = created.id;
         entry.title = text.trim().slice(0, 60);
-        setTitle(entry.title);
+        adopt(slot, entry, created.id);
       }
       await state.sendMessage({
         text: text.trim(),
         ...(action || passage ? { metadata: { ...(action ? { action } : {}), ...passage } } : {}),
       });
     } catch {
-      setFailure(true);
+      setFailedEntry(entry);
     } finally {
-      setCreating(false);
+      setCreatingEntry((current) => (current === entry ? null : current));
     }
   }
   async function loadImported(id: string) {
-    const detail = await librarianApi.get(id);
-    chatId.current = id;
-    chat.messages = detail.messages;
-    entry.title = detail.chat.title;
-    setTitle(entry.title);
+    const stored = await librarianApi.get(id);
+    const imported = entryFor(id);
+    imported.chat.messages = stored.messages;
+    imported.title = stored.chat.title;
+    imported.hydrated = true;
+    slot.select(id);
+    rerender();
+  }
+  /** Show another chat. A stream still running in this one carries on, unseen. */
+  const open = (id: string) => slot.select(id);
+  /** Show an empty chat; its server row waits for the first question. */
+  const startNew = () => {
+    if (resolved === null) return;
+    draft();
+    slot.select(null);
+  };
+  /** Delete a chat for good. When it is the one on show, `next` takes its place. */
+  async function deleteChat(id: string, next: string | null) {
+    await remove.mutateAsync(id);
+    slot.byId.get(id)?.chat.stop();
+    slot.byId.delete(id);
+    if (slot.active === id) {
+      if (next === null) draft();
+      slot.select(next);
+    }
   }
   return {
     ...state,
     loadImported,
     title,
+    chatId: resolved ?? null,
+    open,
+    startNew,
+    deleteChat,
     pendingApproval,
     send,
     busy,
     loading,
-    failed: failure || !!state.error || !!list.error || !!detail.error,
+    failed: failedEntry === entry || !!state.error || !!list.error || !!detail.error,
     errorText: chatErrorText(state.error?.message),
   };
 }
