@@ -1,6 +1,6 @@
 import { Component, type ReactNode } from 'react';
 
-type Props = { children: ReactNode; kind: 'reader' | 'settings' | 'feed' };
+type Props = { children: ReactNode; kind: 'reader' | 'settings' | 'feed' | 'librarian' };
 
 // Browser wording for a dynamic import or CSS preload that could not load.
 const CHUNK_ERROR =
@@ -11,6 +11,13 @@ function isChunkLoadError(error: unknown): boolean {
     error instanceof Error && (error.name === 'ChunkLoadError' || CHUNK_ERROR.test(error.message))
   );
 }
+
+const CHUNK_WORDS = {
+  reader: '',
+  settings: 'Could not load this tab',
+  feed: 'Could not load feeds',
+  librarian: 'Could not load the Librarian',
+} as const;
 
 /**
  * Keep a failed optional chunk inside the surface that requested it. Any other
@@ -30,7 +37,7 @@ export class ChunkErrorBoundary extends Component<Props, { error: unknown }> {
     if (this.props.kind === 'reader') return null;
     return (
       <div role="alert">
-        <p>{this.props.kind === 'settings' ? 'Could not load this tab' : 'Could not load feeds'}</p>
+        <p>{CHUNK_WORDS[this.props.kind]}</p>
         <button type="button" className="silo-reader-btn" onClick={() => window.location.reload()}>
           Reload
         </button>

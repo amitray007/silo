@@ -13,7 +13,10 @@ import type { LinkJson, TrashLinkJson } from '../api/types';
  */
 type DayBucketLabel = string;
 
-export type DayBucket = { label: DayBucketLabel; items: LinkJson[] };
+export type DayBucket<T extends { createdAt: string } = LinkJson> = {
+  label: DayBucketLabel;
+  items: T[];
+};
 
 const MONTH_NAMES = [
   'January',
@@ -122,11 +125,14 @@ function labelForTrashDelta(d: number): TrashBucketLabel {
  * buckets with no items are dropped from the result entirely. `now` is
  * injectable so tests don't depend on wall-clock time.
  */
-export function bucketByDay(links: LinkJson[], now: Date = new Date()): DayBucket[] {
-  const recentBuckets = new Map<(typeof RECENT_LABELS)[number], LinkJson[]>();
+export function bucketByDay<T extends { createdAt: string } = LinkJson>(
+  links: T[],
+  now: Date = new Date(),
+): DayBucket<T>[] {
+  const recentBuckets = new Map<(typeof RECENT_LABELS)[number], T[]>();
   // Keyed by `monthKey` (not the display label) so buckets sort correctly
   // across a year boundary without parsing the label back apart.
-  const monthBuckets = new Map<number, { label: string; items: LinkJson[] }>();
+  const monthBuckets = new Map<number, { label: string; items: T[] }>();
 
   for (const link of links) {
     const createdAt = new Date(link.createdAt);
@@ -150,7 +156,7 @@ export function bucketByDay(links: LinkJson[], now: Date = new Date()): DayBucke
 
   const recentGroups = RECENT_LABELS.filter((label) => recentBuckets.has(label)).map((label) => ({
     label,
-    items: recentBuckets.get(label) as LinkJson[],
+    items: recentBuckets.get(label) as T[],
   }));
 
   // Month buckets sort newest-first by key (descending) — `links` is

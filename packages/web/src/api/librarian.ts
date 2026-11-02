@@ -1,6 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { apiDelete, apiGet, apiPost, apiUrl } from './client';
+import { useAi } from './hooks';
 
 export type ChatSummary = {
   id: string;
@@ -31,6 +32,11 @@ export const librarianApi = {
   delete: (id: string) => apiDelete(`/api/librarian/chats/${id}`),
   messagesUrl: (id: string) => apiUrl(`/api/librarian/chats/${id}/messages`),
 };
+/** Whether the Librarian can answer: AI on, the feature on and a model chosen. Ask and its page show only then. */
+export function useLibrarianReady() {
+  const { data } = useAi();
+  return data?.status?.features?.librarian?.ready === true;
+}
 /** The newest chat for an article: what Ask reopens, and whether the dock Ask shows its dot. */
 export function useLibrarianChats(linkId: string, enabled = true) {
   return useQuery({

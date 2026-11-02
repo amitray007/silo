@@ -473,6 +473,169 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   }
 }
 
+/* Librarian page: the list sits where the Library's does, the open chat where the reader does. */
+.silo-chat-list ul {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.silo-chat-item {
+  display: block;
+}
+/* A button, so its UA look resets without outranking the row's hover and selected fills. */
+:where(.silo-chat-item .silo-chat-row) {
+  width: 100%;
+  border: 0;
+  background: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.silo-chat-row .silo-row-meta time {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+}
+.silo-chat-row .silo-row-meta {
+  /* The icon slot (24px) plus the title line's 10px gap: the meta line starts under the title. */
+  padding-left: 34px;
+}
+.silo-chat-row .silo-row-iconwrap {
+  color: var(--fnt);
+}
+.silo-chat-item[data-confirming] .silo-chat-row {
+  justify-content: center;
+  min-height: 68px;
+  padding: 6px 4px 6px 12px;
+  cursor: default;
+}
+.silo-chat-list-note {
+  margin: 0;
+  padding: 24px 12px;
+  color: var(--fnt);
+  font-size: 14px;
+  line-height: 20px;
+}
+.silo-chat-list-note button {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+@media (hover: none) {
+  /* Touch has no hover, so delete stays in reach at the row's end. */
+  .silo-chat-item .silo-row-actions {
+    display: flex;
+    padding-left: 0;
+    background: none;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .silo-chat-item .silo-chat-row {
+    padding-right: 48px;
+  }
+}
+
+.silo-chatpage-head h2 {
+  min-width: 0;
+  margin: 0;
+  overflow: hidden;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-chatpage-back {
+  display: none;
+}
+.silo-chatpage-article {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 1 auto;
+  gap: 4px;
+  min-width: 0;
+  max-width: 45%;
+  height: 32px;
+  padding: 0 8px;
+  border-radius: 8px;
+  color: var(--mut);
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: none;
+}
+.silo-chatpage-article > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-chatpage-article svg {
+  flex: none;
+  color: var(--fnt);
+}
+@media (hover: hover) and (pointer: fine) {
+  .silo-chatpage-article:hover {
+    background: var(--hov);
+    color: var(--ink);
+  }
+}
+@media (max-width: 1023px) {
+  .silo-frame .silo-chatpage-head {
+    padding-left: 8px;
+  }
+  .silo-chatpage-back {
+    display: grid;
+  }
+}
+
+/* The chat on the page: the dock's messages and bar, at reading width in a full-height pane. */
+.silo-chat[data-variant="page"] {
+  --silo-measure: 680px;
+  flex: 1;
+  gap: 0;
+  width: 100%;
+  min-height: 0;
+}
+.silo-chat[data-variant="page"] .silo-chat-panel {
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  animation: none;
+}
+.silo-chat[data-variant="page"] .silo-chat-messages {
+  padding: 24px max(16px, calc((100% - var(--silo-measure)) / 2)) 24px;
+}
+.silo-chat[data-variant="page"] .silo-chat-messages:has(> .silo-chat-empty:only-child) {
+  display: grid;
+  place-items: center;
+  padding-bottom: 24px;
+  text-align: center;
+}
+.silo-chat[data-variant="page"] .silo-chat-panel > .silo-chat-actions {
+  padding: 0 max(16px, calc((100% - var(--silo-measure)) / 2)) 12px;
+}
+.silo-chat[data-variant="page"] > :is(.silo-chat-passage, .silo-chat-bar) {
+  width: min(var(--silo-measure), calc(100% - 32px));
+  margin-inline: auto;
+}
+.silo-chat[data-variant="page"] > .silo-chat-passage {
+  margin-bottom: 8px;
+}
+.silo-chat[data-variant="page"] > .silo-chat-hint {
+  margin-bottom: 8px;
+}
+.silo-chat[data-variant="page"] > .silo-chat-bar {
+  margin-bottom: max(16px, env(safe-area-inset-bottom, 0px));
+}
+
 /* The dock Ask carries a dot while this article has a stored chat. */
 .silo-reader-dockmark {
   position: relative;
@@ -856,5 +1019,32 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   .silo-chat-history-confirm button {
     flex: 1;
     height: 40px;
+  }
+}
+
+/* Touch: the page's controls reach 40px too. */
+@media (max-width: 640px), (pointer: coarse) {
+  .silo-chat-item .silo-row-actions {
+    top: 50%;
+    translate: 0 -50%;
+  }
+  .silo-chat-item .silo-row-actions .silo-reader-iconbtn,
+  .silo-chatpage-back {
+    width: 40px;
+    height: 40px;
+  }
+  .silo-chatpage-article {
+    height: 40px;
+  }
+}
+/* On a phone the title needs the room; the article link keeps its arrow. */
+@media (max-width: 640px) {
+  .silo-chatpage-article > span {
+    display: none;
+  }
+  .silo-chatpage-article {
+    width: 40px;
+    justify-content: center;
+    padding: 0;
   }
 }

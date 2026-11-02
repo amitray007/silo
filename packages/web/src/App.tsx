@@ -17,6 +17,9 @@ import { TrashView } from './routes/TrashView';
 const FeedsView = lazy(() =>
   import('./routes/FeedsView').then((module) => ({ default: module.FeedsView })),
 );
+const LibrarianView = lazy(() =>
+  import('./routes/LibrarianView').then((module) => ({ default: module.LibrarianView })),
+);
 const FeedView = lazy(() =>
   import('./routes/FeedView').then((module) => ({ default: module.FeedView })),
 );
@@ -51,6 +54,18 @@ function FeedRouteLoading({ detail = false }: { detail?: boolean }) {
   );
 }
 
+function LibrarianRouteLoading() {
+  return (
+    <div className="silo-three-pane" data-reader="false">
+      <section className="silo-listpane" aria-label="Chats">
+        <ContentFrame title="Librarian" headerSlot={null}>
+          <LoadingState />
+        </ContentFrame>
+      </section>
+    </div>
+  );
+}
+
 /**
  * The real route table (W5): `AppFrame` is the layout route (renders the
  * sidebar + an `<Outlet/>`) wrapping each content view. Views are thin
@@ -78,6 +93,16 @@ function AppRoutes() {
             <ChunkErrorBoundary kind="feed" key="feed">
               <Suspense fallback={<FeedRouteLoading detail />}>
                 <FeedView />
+              </Suspense>
+            </ChunkErrorBoundary>
+          }
+        />
+        <Route
+          path="/librarian"
+          element={
+            <ChunkErrorBoundary kind="librarian" key="librarian">
+              <Suspense fallback={<LibrarianRouteLoading />}>
+                <LibrarianView />
               </Suspense>
             </ChunkErrorBoundary>
           }
