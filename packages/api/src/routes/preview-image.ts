@@ -1,4 +1,4 @@
-import { getById } from '@silo/core';
+import { getPreviewImageFields } from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { withETag } from '../conditional-response.js';
@@ -20,7 +20,7 @@ import { fetchImageSafely } from '../ssrf-safe-image-fetch.js';
  * (unlike `favicon.ts`, where the host is a hardcoded Google literal):
  *
  * 1. The ONLY input this route accepts is `linkId`, a UUID. It is used
- *    EXCLUSIVELY as a lookup key into `core.getById` — never interpolated
+ *    EXCLUSIVELY as a lookup key into `core.getPreviewImageFields` — never interpolated
  *    into a URL, never itself fetched. A client cannot make this route
  *    fetch an arbitrary URL of their choosing; they can only ask "show me
  *    THIS link's own image", and only for a link that already exists.
@@ -104,19 +104,14 @@ export function registerPreviewImageRoutes(app: Hono): void {
 
     // linkId is used ONLY as a lookup key — see the SSRF-safety doc comment
     // above. A trashed/nonexistent link never serves an image (live-scoped
-    // via getById, same as every other read).
-    const link = await getById(linkId);
+    // via getPreviewImageFields, same as every other read).
+    const link = await getPreviewImageFields(linkId);
     // Prefer the captured `imageUrl` (an og:image); fall back to a YouTube
     // enricher's `sourceData.thumbnailUrl` (the deterministic thumbnail URL —
     // the enricher stores it in sourceData, not imageUrl). Both are the SAME
     // server-derived urls the WORKER already validated; neither is client
     // input (linkId is the only client-supplied value — see the SSRF note).
-    const source = link?.sourceData;
-    const imageTarget =
-      link?.imageUrl ??
-      (source && typeof source === 'object' && 'thumbnailUrl' in source
-        ? (source as { thumbnailUrl?: unknown }).thumbnailUrl
-        : undefined);
+    const imageTarget = link?.imageUrl ?? link?.thumbnailUrl;
     if (typeof imageTarget !== 'string' || imageTarget.length === 0) {
       return c.json({ error: 'not_found', message: 'No preview image for this link' }, 404);
     }

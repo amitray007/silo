@@ -28,12 +28,6 @@ export type TagCount = {
  * otherwise clutter the list with a dead "tagname 0" entry that filters to
  * nothing.
  *
- * `count(distinct link_tags.link_id)` (not a bare `count(*)`) is the correct
- * aggregate even though `link_tags` has a `(link_id, tag_id)` composite
- * primary key that already forbids duplicate rows per pair — `distinct`
- * documents that the count is "distinct live links carrying this tag" and is
- * immune if the join ever fans out for an unrelated reason.
- *
  * W1 (case-insensitive tags): two links tagged `'AI'`/`'ai'` share ONE `tags`
  * row (`normalized_key` is the unique constraint — see `tags.ts` schema doc
  * comment and `links.ts`'s `normalizeTagKey`), so grouping by `tags.id` here
@@ -46,11 +40,8 @@ export async function listTagsWithCounts(): Promise<TagCount[]> {
   // the v3 sidebar). The `deletedAt is null` filter lives in the join's ON
   // clause (not a WHERE) so a tag whose only links are trashed still surfaces
   // at count 0 rather than being filtered out entirely.
-  // Count DISTINCT LIVE links (`links.id`, the left-joined side that is NULL
-  // for a trashed/absent link) — NOT `linkTags.linkId`, which survives the left
-  // join for a trashed link and would inflate the count. `count(<col>)` ignores
-  // NULLs, so an empty/all-trashed tag correctly yields 0 while still appearing.
-  const liveCount = sql<string>`count(distinct ${links.id})`;
+  // link_tags_link_id_tag_id_pk and links_pkey allow one live link per tag; NULLs count as zero.
+  const liveCount = sql<string>`count(${links.id})`;
   const rows = await db
     .select({
       name: tags.name,
