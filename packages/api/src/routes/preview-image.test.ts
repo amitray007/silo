@@ -60,6 +60,23 @@ describeIfPg('GET /api/preview-image (integration)', () => {
     expect(res.status).toBe(200);
     expect(res.headers.get('content-type')).toBe('image/png');
     expect(res.headers.get('cache-control')).toContain('max-age=86400');
+    const etag = res.headers.get('etag');
+    expect(etag).toMatch(/^"[a-f0-9]+"$/);
+    const unchanged = await app.request(`/api/preview-image?linkId=${created.id}`, {
+      headers: { 'If-None-Match': etag ?? '', 'Accept-Encoding': 'gzip' },
+    });
+    expect(unchanged.status).toBe(304);
+    expect(unchanged.headers.get('etag')).toBe(etag);
+    expect(unchanged.headers.get('cache-control')).toBe('public, max-age=86400');
+    expect(unchanged.headers.get('x-content-type-options')).toBe('nosniff');
+    expect(unchanged.headers.get('content-encoding')).toBeNull();
+    expect(await unchanged.text()).toBe('');
+    const changed = await app.request(`/api/preview-image?linkId=${created.id}`, {
+      headers: { 'If-None-Match': '"stale"' },
+    });
+    expect(changed.status).toBe(200);
+    expect(new Uint8Array(await changed.arrayBuffer())).toEqual(bytes);
+
     // nosniff so a browser can't MIME-sniff the proxied bytes into something
     // executable (security review, plan 012).
     expect(res.headers.get('x-content-type-options')).toBe('nosniff');
