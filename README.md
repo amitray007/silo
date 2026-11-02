@@ -252,8 +252,9 @@ pnpm turbo run check-types test
 pnpm quality      # Biome + import boundaries + jscpd + knip
 ```
 
-This gate runs on pre-push and in CI; `main` always passes it. Tests hit a real Postgres (via
-disposable databases), not mocks. Conventions live in [`docs/rules/`](docs/rules/README.md).
+Pre-push runs typecheck and quality. CI also runs tests and builds; `main` must pass the full
+gate. Tests hit a real Postgres via disposable databases. Conventions live in
+[`docs/rules/`](docs/rules/README.md).
 
 ## Contributing & license
 
