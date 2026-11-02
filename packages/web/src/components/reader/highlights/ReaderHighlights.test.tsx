@@ -1,12 +1,12 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { useLink } from '../../../api/hooks';
 import type { HighlightJson, LinkJson } from '../../../api/types';
 import { makeLink } from '../../../test/fixtures';
 import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
-import { DockHostContext } from '../dock/ReaderDock';
+import { DockHostContext } from '../dock/DockHostContext';
 import { ReaderContent } from '../ReaderContent';
 
 const json = (body: unknown, status = 200) =>
@@ -33,6 +33,10 @@ function highlight(overrides: Partial<HighlightJson> = {}): HighlightJson {
     ...overrides,
   };
 }
+
+beforeAll(async () => {
+  await import('../dock/ReaderDock');
+});
 
 let registry: Map<string, { ranges: Range[]; priority: number }>;
 let posts: Array<Record<string, unknown>>;
@@ -192,6 +196,7 @@ it('paints every stored highlight and leaves an orphan unpainted but listed', as
     ],
   });
   mount();
+  await screen.findByRole('toolbar', { name: 'Reader tools' }, { timeout: 5000 });
   await waitFor(() => expect(registry.get('silo-hl-yellow')).toBeDefined());
   expect(registry.get('silo-hl-yellow')?.ranges[0]?.toString()).toBe('quick brown fox');
   expect(registry.has('silo-hl-green')).toBe(false);

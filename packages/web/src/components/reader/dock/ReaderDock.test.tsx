@@ -5,7 +5,8 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { makeLink, twitterSourceData } from '../../../test/fixtures';
 import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import { ReaderContent } from '../ReaderContent';
-import { DockHostContext, ReaderDock } from './ReaderDock';
+import { DockHostContext } from './DockHostContext';
+import { ReaderDock } from './ReaderDock';
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
@@ -51,7 +52,7 @@ const prose = { capturedAt: null, contentHtml: '<p>Body text</p>', contentImages
 it('renders for readable article prose', async () => {
   renderContent(undefined, prose);
   await screen.findByText('Body text');
-  const toolbar = screen.getByRole('toolbar', { name: 'Reader tools' });
+  const toolbar = await screen.findByRole('toolbar', { name: 'Reader tools' });
   expect(toolbar.closest('[data-testid="host"]')).not.toBeNull();
   expect(screen.getAllByRole('button', { name: 'Type' })).toHaveLength(1);
   expect(screen.queryByRole('dialog')).toBeNull();

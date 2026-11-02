@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import type { ReactNode } from 'react';
 import { MemoryRouter, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { queryKeys } from '../api/hooks';
 import type { SettingsMap } from '../api/types';
 import {
   githubSourceData,
@@ -1453,4 +1454,68 @@ describe('CommandPalette', () => {
       expect(document.querySelector('.silo-popover')).toBeNull();
     });
   });
+});
+
+it('opens cached recents without fetching 25 pages, but refreshes invalidated recents', async () => {
+  vi.stubGlobal('fetch', vi.fn());
+  const { useCommandPalette } = await import('../lib/useCommandPalette');
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const pages = Array.from({ length: 25 }, (_, index) => ({
+    links: [makeLink({ id: `cached-${index}`, title: `Cached page ${index}` })],
+    nextCursor: index < 24 ? `page-${index + 1}` : undefined,
+  }));
+  client.setQueryData(queryKeys.links(), {
+    pages,
+    pageParams: [undefined, ...Array.from({ length: 24 }, (_, index) => `page-${index + 1}`)],
+  });
+  let reads = 0;
+  vi.mocked(fetch).mockImplementation(async (input) => {
+    const url = String(input);
+    if (url.startsWith('/api/links')) {
+      reads++;
+      const cursor = new URL(url, 'http://localhost').searchParams.get('cursor');
+      const index = cursor ? Number(cursor.slice(5)) : 0;
+      return jsonResponse({
+        ...pages[index],
+        links: [makeLink({ id: `fresh-${index}`, title: `Fresh page ${index}` })],
+      });
+    }
+    if (url === '/api/tags') return jsonResponse({ tags: [] });
+    if (url === '/api/feeds') return jsonResponse({ feeds: [] });
+    return jsonResponse(settingsWithPlugins());
+  });
+  function Harness() {
+    const palette = useCommandPalette();
+    return <CommandPalette palette={palette} />;
+  }
+  const view = render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter>
+        <HoverPreviewProvider>
+          <Harness />
+        </HoverPreviewProvider>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+  pressCmdK();
+  await screen.findByText('Cached page 0');
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 30));
+  });
+  expect(reads).toBe(0);
+  expect(screen.queryByText('Cached page 1')).toBeNull();
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: queryKeys.links() });
+  });
+  await screen.findByText('Fresh page 0');
+  expect(reads).toBe(25);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  await act(async () => {
+    await client.invalidateQueries({ queryKey: queryKeys.links() });
+  });
+  pressCmdK();
+  await waitFor(() => expect(reads).toBe(50));
+  view.unmount();
+  client.clear();
+  vi.unstubAllGlobals();
 });

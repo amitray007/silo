@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { LinkJson } from '../../../api/types';
 import { makeLink } from '../../../test/fixtures';
 import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
-import { DockHostContext } from '../dock/ReaderDock';
+import { DockHostContext } from '../dock/DockHostContext';
 import { ReaderContent } from '../ReaderContent';
 
 /**

@@ -1,11 +1,25 @@
+import { lazy, Suspense } from 'react';
 import { ModalHeader, ModalShell } from './ModalShell';
 import { type SettingsTab, useSettings } from './SettingsContext';
-import { AccessTab } from './SettingsTabs/AccessTab';
-import { AiTab } from './SettingsTabs/AiTab';
-import { ImportExportTab } from './SettingsTabs/ImportExportTab';
-import { PluginsTab } from './SettingsTabs/PluginsTab';
-import { PreferencesTab } from './SettingsTabs/PreferencesTab';
-import { ReaderTab } from './SettingsTabs/ReaderTab';
+
+const AccessTab = lazy(() =>
+  import('./SettingsTabs/AccessTab').then((module) => ({ default: module.AccessTab })),
+);
+const AiTab = lazy(() =>
+  import('./SettingsTabs/AiTab').then((module) => ({ default: module.AiTab })),
+);
+const ImportExportTab = lazy(() =>
+  import('./SettingsTabs/ImportExportTab').then((module) => ({ default: module.ImportExportTab })),
+);
+const PluginsTab = lazy(() =>
+  import('./SettingsTabs/PluginsTab').then((module) => ({ default: module.PluginsTab })),
+);
+const PreferencesTab = lazy(() =>
+  import('./SettingsTabs/PreferencesTab').then((module) => ({ default: module.PreferencesTab })),
+);
+const ReaderTab = lazy(() =>
+  import('./SettingsTabs/ReaderTab').then((module) => ({ default: module.ReaderTab })),
+);
 
 const TABS: { key: SettingsTab; name: string }[] = [
   { key: 'plugins', name: 'Plugins' },
@@ -115,7 +129,9 @@ export function SettingsModal() {
       >
         <h3>{TABS.find((entry) => entry.key === tab)?.name}</h3>
         <p className="silo-settings-lead">{TAB_DESCRIPTIONS[tab]}</p>
-        <ActiveTabPanel tab={tab} />
+        <Suspense fallback={<p role="status">Loading settings…</p>}>
+          <ActiveTabPanel tab={tab} />
+        </Suspense>
       </div>
     </ModalShell>
   );

@@ -768,7 +768,13 @@ export function hasEnrichingLink(data: LinksInfiniteData | undefined): boolean {
  * transient omnibar view — polling it is a possible follow-up, out of scope
  * here).
  */
-export function useInfiniteLinks(tag?: string, options: { enabled?: boolean } = {}) {
+export function useInfiniteLinks(
+  tag?: string,
+  options: {
+    enabled?: boolean;
+    refetchOnMount?: (query: { state: { isInvalidated: boolean } }) => boolean;
+  } = {},
+) {
   return useInfiniteQuery({
     queryKey: queryKeys.links(tag ? { tag } : undefined),
     queryFn: ({ pageParam }: { pageParam: string | undefined }) => {
@@ -786,6 +792,7 @@ export function useInfiniteLinks(tag?: string, options: { enabled?: boolean } = 
     // doesn't eagerly fetch `/api/links` for a library-recents list it isn't
     // showing (perf: palette-open over-fetch — mirrors `useTrashList`).
     enabled: options.enabled ?? true,
+    refetchOnMount: options.refetchOnMount ?? true,
   });
 }
 
@@ -1379,6 +1386,8 @@ export function useSettings() {
   return useQuery({
     queryKey: queryKeys.settings(),
     queryFn: () => apiGet<SettingsMap>('/api/settings'),
+    // New rows share settings for a minute; writes and external invalidation still refresh.
+    staleTime: 60_000,
   });
 }
 
