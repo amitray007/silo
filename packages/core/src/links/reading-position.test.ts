@@ -380,4 +380,58 @@ describeIfPg('reading position (integration)', () => {
       expect(imported && (await ops.getReadingPosition(imported.id))).toBeNull();
     });
   });
+  describe('listReadingPositions', () => {
+    it('filters each source and excludes links without a position', async () => {
+      await newLink();
+      for (const source of ['pencil', 'listen', 'mark'] as const) {
+        const link = await newLink(`https://example.com/list-${source}`);
+        await ops.setReadingPosition(link.id, 0.5, source);
+        const page = await ops.listReadingPositions({ source });
+        expect(page.positions).toHaveLength(1);
+        expect(page.positions[0]).toMatchObject({
+          link: { id: link.id, title: null, url: link.url },
+          position: 0.5,
+          source,
+        });
+      }
+    });
+
+    it('pages newest updates first with microsecond precision and id ties, default 20 and cap 100', async () => {
+      await rawDb.execute(sql`
+        with seeded as (
+          insert into links (id, url, canonical_url, source_kind)
+          select ('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid,
+            'https://example.com/' || n, 'https://example.com/' || n, 'link' from generate_series(1,105) n returning id
+        ) insert into reading_positions (link_id, position, source, updated_at)
+          select id, 0.5, 'mark', '2026-01-01'::timestamptz +
+            ((right(id::text,12)::integer / 2)::text || ' microseconds')::interval from seeded
+      `);
+      expect((await ops.listReadingPositions()).positions).toHaveLength(20);
+      const first = await ops.listReadingPositions({ limit: 999 });
+      expect(first.positions).toHaveLength(100);
+      const second = await ops.listReadingPositions({ cursor: first.nextCursor, limit: 100 });
+      expect([...first.positions, ...second.positions].map((r) => r.link.url)).toEqual(
+        Array.from({ length: 105 }, (_, i) => `https://example.com/${105 - i}`),
+      );
+      expect(second.nextCursor).toBeUndefined();
+      await expect(ops.listReadingPositions({ cursor: 'broken' })).rejects.toMatchObject({
+        name: 'InvalidCursorError',
+      });
+    });
+
+    it('excludes trash and feed posts with stored positions', async () => {
+      const live = await newLink();
+      const trashed = await newLink('https://example.com/trash');
+      for (const link of [live, trashed]) await ops.setReadingPosition(link.id, 0.5);
+      await linksOps.softDelete(trashed.id);
+      await rawDb.execute(sql`
+        with feed as (
+          insert into feeds (feed_url, title, format, next_poll_at) values ('https://f.test/list-rss', 'F', 'rss', now()) returning id
+        ), post as (
+          insert into links (url, canonical_url, source_kind, feed_id) select 'https://f.test/post', 'https://f.test/post', 'link', id from feed returning id
+        ) insert into reading_positions (link_id, position, source) select id, 0.5, 'listen' from post
+      `);
+      expect((await ops.listReadingPositions()).positions.map((r) => r.link.id)).toEqual([live.id]);
+    });
+  });
 });

@@ -104,7 +104,12 @@ type TrashCursorPayload = {
   id: string;
 };
 
-function encode(payload: ListCursorPayload | SearchCursorPayload | TrashCursorPayload): string {
+type ReaderCursorKind = 'highlights' | 'reading_positions';
+type ReaderCursorPayload = { kind: ReaderCursorKind; timestamp: string; id: string };
+
+function encode(
+  payload: ListCursorPayload | SearchCursorPayload | TrashCursorPayload | ReaderCursorPayload,
+): string {
   return Buffer.from(JSON.stringify(payload), 'utf8').toString('base64url');
 }
 
@@ -120,6 +125,30 @@ function decode(cursor: string): unknown {
   } catch {
     throw new InvalidCursorError('cursor did not decode to valid JSON');
   }
+}
+
+/** Reader lists retain Postgres timestamp precision and reject other tools' cursors. */
+export function encodeReaderCursor(kind: ReaderCursorKind, timestamp: string, id: string): string {
+  return encode({ kind, timestamp, id });
+}
+
+export function decodeReaderCursor(cursor: string, kind: ReaderCursorKind): ReaderCursorPayload {
+  const parsed = decode(cursor);
+  if (
+    typeof parsed !== 'object' ||
+    parsed === null ||
+    !('kind' in parsed) ||
+    parsed.kind !== kind ||
+    !('timestamp' in parsed) ||
+    typeof parsed.timestamp !== 'string' ||
+    Number.isNaN(new Date(parsed.timestamp).getTime()) ||
+    !('id' in parsed) ||
+    typeof parsed.id !== 'string' ||
+    !UUID_RE.test(parsed.id)
+  ) {
+    throw new InvalidCursorError(`cursor is not a valid ${kind} cursor`);
+  }
+  return { kind, timestamp: parsed.timestamp, id: parsed.id };
 }
 
 /**

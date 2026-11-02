@@ -1,5 +1,13 @@
-import { db, HIGHLIGHT_COLORS, type HighlightColor, highlights, links } from '@silo/db';
-import { asc, eq, inArray, sql } from 'drizzle-orm';
+import {
+  db,
+  HIGHLIGHT_COLORS,
+  type HighlightColor,
+  highlights,
+  links,
+  linkTags,
+  tags,
+} from '@silo/db';
+import { asc, desc, eq, ilike, inArray, isNotNull, or, sql } from 'drizzle-orm';
 import type { Tx } from './executor.js';
 import {
   collapseWhitespace,
@@ -11,7 +19,9 @@ import {
 export { HIGHLIGHT_CONTEXT_MAX };
 
 import { assertLibraryWrite } from './library-write.js';
+import { normalizeTagKey } from './links.js';
 import { whereLibrary, whereLiveAnywhere } from './live.js';
+import { decodeReaderCursor, effectiveLimit, encodeReaderCursor } from './pagination.js';
 
 export { HIGHLIGHT_COLORS, type HighlightColor };
 
@@ -428,4 +438,76 @@ export async function restoreHighlights(
   return reason === undefined
     ? { restored: fresh.length, skipped }
     : { restored: fresh.length, skipped, reason };
+}
+
+export type ListLibraryHighlightsInput = {
+  query?: string | undefined;
+  linkId?: string | undefined;
+  tag?: string | undefined;
+  hasNote?: boolean | undefined;
+  color?: HighlightColor | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
+};
+
+export type LibraryHighlight = Pick<
+  Highlight,
+  'id' | 'quote' | 'note' | 'color' | 'createdAt' | 'updatedAt'
+> & { link: { id: string; title: string | null; url: string } };
+
+/** Search passages and notes on live library links, newest first, with bounded keyset pages. */
+export async function listLibraryHighlights(
+  input: ListLibraryHighlightsInput = {},
+): Promise<{ highlights: LibraryHighlight[]; nextCursor?: string }> {
+  const limit = effectiveLimit(input.limit);
+  const cursor =
+    input.cursor === undefined ? undefined : decodeReaderCursor(input.cursor, 'highlights');
+  // LIKE metacharacters are literal user text, including the escape character itself.
+  const pattern =
+    input.query === undefined ? undefined : `%${input.query.replace(/[\\%_]/g, '\\$&')}%`;
+  const rows = await db
+    .select({
+      id: highlights.id,
+      quote: highlights.quote,
+      note: highlights.note,
+      color: highlights.color,
+      createdAt: highlights.createdAt,
+      updatedAt: highlights.updatedAt,
+      link: { id: links.id, title: links.title, url: links.url },
+      timestamp: sql<string>`${highlights.createdAt}::text`,
+    })
+    .from(highlights)
+    .innerJoin(links, eq(links.id, highlights.linkId))
+    .where(
+      whereLibrary(
+        input.linkId === undefined ? undefined : eq(links.id, input.linkId),
+        input.color === undefined ? undefined : eq(highlights.color, input.color),
+        input.hasNote ? isNotNull(highlights.note) : undefined,
+        pattern === undefined
+          ? undefined
+          : or(ilike(highlights.quote, pattern), ilike(highlights.note, pattern)),
+        input.tag === undefined
+          ? undefined
+          : sql`exists (
+        select 1 from ${linkTags} inner join ${tags} on ${tags.id} = ${linkTags.tagId}
+        where ${linkTags.linkId} = ${links.id} and ${tags.normalizedKey} = ${normalizeTagKey(input.tag)}
+      )`,
+        cursor
+          ? sql`(${highlights.createdAt}, ${highlights.id}) < (${cursor.timestamp}::timestamptz, ${cursor.id}::uuid)`
+          : undefined,
+      ),
+    )
+    .orderBy(desc(highlights.createdAt), desc(highlights.id))
+    .limit(limit + 1);
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    highlights: page.map(({ timestamp: _timestamp, ...row }) => ({
+      ...row,
+      color: row.color as HighlightColor,
+    })),
+    ...(rows.length > limit && last
+      ? { nextCursor: encodeReaderCursor('highlights', last.timestamp, last.id) }
+      : {}),
+  };
 }

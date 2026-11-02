@@ -1,8 +1,9 @@
 import { db, links, readingPositions } from '@silo/db';
-import { eq, sql } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import type { Tx } from './executor.js';
 import { assertLibraryWrite } from './library-write.js';
 import { whereLibrary } from './live.js';
+import { decodeReaderCursor, effectiveLimit, encodeReaderCursor } from './pagination.js';
 
 /**
  * Where the reader stopped in one link's article. `position` is a share of the
@@ -182,4 +183,51 @@ export async function restoreReadingPosition(
       },
       setWhere: sql`excluded.updated_at > ${readingPositions.updatedAt}`,
     });
+}
+
+export type ListReadingPositionsInput = {
+  source?: ReadingPositionSource | undefined;
+  limit?: number | undefined;
+  cursor?: string | undefined;
+};
+
+export type LibraryReadingPosition = ReadingPosition & {
+  link: { id: string; title: string | null; url: string };
+};
+
+/** Saved places on live library links, ordered by newest update then link id. */
+export async function listReadingPositions(
+  input: ListReadingPositionsInput = {},
+): Promise<{ positions: LibraryReadingPosition[]; nextCursor?: string }> {
+  const limit = effectiveLimit(input.limit);
+  const cursor =
+    input.cursor === undefined ? undefined : decodeReaderCursor(input.cursor, 'reading_positions');
+  const rows = await db
+    .select({
+      link: { id: links.id, title: links.title, url: links.url },
+      position: readingPositions.position,
+      source: readingPositions.source,
+      updatedAt: readingPositions.updatedAt,
+      timestamp: sql<string>`${readingPositions.updatedAt}::text`,
+    })
+    .from(readingPositions)
+    .innerJoin(links, eq(links.id, readingPositions.linkId))
+    .where(
+      whereLibrary(
+        input.source === undefined ? undefined : eq(readingPositions.source, input.source),
+        cursor
+          ? sql`(${readingPositions.updatedAt}, ${links.id}) < (${cursor.timestamp}::timestamptz, ${cursor.id}::uuid)`
+          : undefined,
+      ),
+    )
+    .orderBy(desc(readingPositions.updatedAt), desc(links.id))
+    .limit(limit + 1);
+  const page = rows.slice(0, limit);
+  const last = page.at(-1);
+  return {
+    positions: page.map(({ timestamp: _timestamp, ...row }) => row),
+    ...(rows.length > limit && last
+      ? { nextCursor: encodeReaderCursor('reading_positions', last.timestamp, last.link.id) }
+      : {}),
+  };
 }

@@ -535,4 +535,85 @@ describeIfPg('highlights (integration)', () => {
       }
     });
   });
+  describe('listLibraryHighlights', () => {
+    it('matches quote or note case-insensitively and treats LIKE characters literally', async () => {
+      const link = await newLink();
+      await ops.addHighlight(
+        link.id,
+        webInput('Rate 50% and snake_case at C:\\docs', { note: 'Useful Passage' }),
+      );
+      await ops.addHighlight(link.id, webInput('Rate 500 and snakeXcase at C:docs'));
+      for (const query of ['rate', 'PASSAGE', '%', '_', '\\']) {
+        const page = await ops.listLibraryHighlights({ query });
+        expect(page.highlights).toHaveLength(query === 'rate' ? 2 : 1);
+        expect(page.highlights[0]?.link).toEqual({ id: link.id, title: null, url: link.url });
+        expect(page.highlights[0]).not.toHaveProperty('prefix');
+      }
+    });
+
+    it('combines link, tag, color and hasNote filters', async () => {
+      const link = await newLink();
+      await linksOps.addTag(link.id, 'Science');
+      await ops.addHighlight(link.id, webInput('one', { note: 'why', color: 'blue' }));
+      await ops.addHighlight(link.id, webInput('two', { color: 'green' }));
+      const other = await newLink('https://example.com/other');
+      await ops.addHighlight(other.id, webInput('three', { note: 'why', color: 'blue' }));
+      expect((await ops.listLibraryHighlights({ linkId: link.id })).highlights).toHaveLength(2);
+      const result = await ops.listLibraryHighlights({
+        tag: 'SCIENCE',
+        color: 'blue',
+        hasNote: true,
+      });
+      expect(result.highlights.map((h) => h.quote)).toEqual(['one']);
+      expect((await ops.listLibraryHighlights({ tag: 'missing' })).highlights).toEqual([]);
+      expect((await ops.listLibraryHighlights({ hasNote: true })).highlights).toHaveLength(2);
+      expect((await ops.listLibraryHighlights({ hasNote: false })).highlights).toHaveLength(3);
+    });
+
+    it('pages at full timestamp precision, breaks ties by id, defaults to 20 and caps at 100', async () => {
+      const link = await newLink();
+      await rawDb.execute(sql`
+        insert into highlights (id, link_id, quote, color, created_at)
+        select ('00000000-0000-4000-8000-' || lpad(n::text,12,'0'))::uuid, ${link.id}, n::text, 'yellow',
+          '2026-01-01 00:00:00'::timestamptz + ((n / 2)::text || ' microseconds')::interval
+        from generate_series(1,105) as n
+      `);
+      expect((await ops.listLibraryHighlights()).highlights).toHaveLength(20);
+      const first = await ops.listLibraryHighlights({ limit: 999 });
+      expect(first.highlights).toHaveLength(100);
+      const second = await ops.listLibraryHighlights({ cursor: first.nextCursor, limit: 100 });
+      expect([...first.highlights, ...second.highlights].map((h) => h.quote)).toEqual(
+        Array.from({ length: 105 }, (_, i) => String(105 - i)),
+      );
+      expect(second.nextCursor).toBeUndefined();
+      for (const cursor of [
+        'broken',
+        Buffer.from(
+          JSON.stringify({ kind: 'list', createdAt: new Date().toISOString(), id: link.id }),
+        ).toString('base64url'),
+      ]) {
+        await expect(ops.listLibraryHighlights({ cursor })).rejects.toMatchObject({
+          name: 'InvalidCursorError',
+        });
+      }
+    });
+
+    it('excludes trash and feed posts even when they have stored highlights', async () => {
+      const live = await newLink();
+      const trashed = await newLink('https://example.com/trash');
+      for (const link of [live, trashed]) await ops.addHighlight(link.id, webInput('shared'));
+      await linksOps.softDelete(trashed.id);
+      await rawDb.execute(sql`
+        with feed as (
+          insert into feeds (feed_url, title, format, next_poll_at) values ('https://f.test/list-rss', 'F', 'rss', now()) returning id
+        ), post as (
+          insert into links (url, canonical_url, source_kind, feed_id) select 'https://f.test/post', 'https://f.test/post', 'link', id from feed returning id
+        ) insert into highlights (link_id, quote, color) select id, 'shared', 'yellow' from post
+      `);
+      expect((await ops.listLibraryHighlights()).highlights.map((h) => h.link.id)).toEqual([
+        live.id,
+      ]);
+      expect((await ops.listLibraryHighlights({ linkId: trashed.id })).highlights).toEqual([]);
+    });
+  });
 });
