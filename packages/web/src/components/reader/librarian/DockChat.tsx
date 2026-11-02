@@ -61,16 +61,22 @@ export function DockChat({
   }, [chat.messages]);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   return (
-    <>
+    <div className="silo-chat">
       <section
         style={{ maxHeight }}
         className="silo-chat-panel"
         aria-label="Librarian conversation"
       >
         <header>
-          <span>{chat.title}</span>
-          <button type="button" aria-label="Fold back into the dock" onClick={onFold}>
-            <ReaderIcon name="minus" size={18} />
+          <h3>{chat.title}</h3>
+          <button
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label="Fold back into the dock"
+            title="Fold back (Esc)"
+            onClick={onFold}
+          >
+            <ReaderIcon name="close" size={18} />
           </button>
         </header>
         <div
@@ -123,8 +129,13 @@ export function DockChat({
       {passage && (
         <div className="silo-chat-passage">
           <span>{passage.quote}</span>
-          <button type="button" aria-label="Remove passage" onClick={() => setPassage(undefined)}>
-            ×
+          <button
+            type="button"
+            className="silo-reader-iconbtn"
+            aria-label="Remove passage"
+            onClick={() => setPassage(undefined)}
+          >
+            <ReaderIcon name="close" size={16} />
           </button>
           <div className="silo-chat-actions">
             {selectionActions(passage.quote).map(([id, label]) => (
@@ -143,7 +154,11 @@ export function DockChat({
           </div>
         </div>
       )}
-      {chat.pendingApproval && <p role="status">Allow or deny first.</p>}
+      {chat.pendingApproval && (
+        <p role="status" className="silo-chat-hint">
+          Allow or deny first.
+        </p>
+      )}
       <form
         className="silo-chat-bar"
         onSubmit={(event) => {
@@ -156,10 +171,9 @@ export function DockChat({
         }}
       >
         <button type="button" aria-label="Back to tools" onClick={onFold}>
-          <ReaderIcon name="grid" size={18} />
+          <ReaderIcon name="grid" size={19} />
         </button>
         <div className="silo-chat-input">
-          <ReaderIcon name="sparkles" size={18} />
           <input
             ref={field}
             aria-label="Ask the Librarian"
@@ -177,6 +191,6 @@ export function DockChat({
           <ReaderIcon name="up" size={18} />
         </button>
       </form>
-    </>
+    </div>
   );
 }

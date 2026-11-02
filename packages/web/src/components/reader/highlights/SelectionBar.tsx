@@ -6,7 +6,7 @@ import { apiUrl } from '../../../api/client';
 import { useImportLibrarianTurn } from '../../../api/librarian';
 import { HIGHLIGHT_COLORS, type HighlightColor } from '../../../lib/highlights';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
-import { ChatMessage } from '../librarian/ChatMessage';
+import { ChatMessage, splitSteps } from '../librarian/ChatMessage';
 import { selectionActions as quickActions, requestDock } from '../librarian/selectionStore';
 import { ReaderIcon } from '../ReaderIcon';
 import { paragraphNumber } from './paragraphs';
@@ -207,10 +207,12 @@ function useSelectionAnswer(
     }),
   });
   const busy = quick.status === 'submitted' || quick.status === 'streaming';
+  // Only the text after the last tool call is the answer; text before it is the model thinking aloud.
   const answer = quick.messages
     .filter((m) => m.role === 'assistant')
-    .flatMap((m) => m.parts.flatMap((p) => (p.type === 'text' ? [p.text] : [])))
-    .join('\n');
+    .map((m) => splitSteps(m).answer)
+    .filter(Boolean)
+    .join('\n\n');
   const runQuick = (action: string, label: string) => {
     quick.setMessages([]);
     quick.clearError();
@@ -262,7 +264,11 @@ function useRetainedSelection(range: Range | undefined, active: boolean) {
   }, [range, active]);
 }
 function AnswerError({ failed, failure }: { failed: boolean; failure: string }) {
-  return failed || failure ? <p role="alert">{failure || 'Could not answer. Try again.'}</p> : null;
+  return failed || failure ? (
+    <p role="alert" className="silo-chat-error">
+      {failure || 'Could not answer. Try again.'}
+    </p>
+  ) : null;
 }
 function selectedPassage(pending: PendingSelection | null, prose: HTMLElement | null) {
   return {
@@ -270,11 +276,23 @@ function selectedPassage(pending: PendingSelection | null, prose: HTMLElement | 
     paragraph: pending && prose ? paragraphNumber(prose, pending.range.startContainer) : 0,
   };
 }
-function answerTop(rect: DOMRect) {
-  return Math.max(
-    16,
-    Math.min(rect.bottom + 14, window.innerHeight - Math.min(360, window.innerHeight * 0.55) - 16),
-  );
+/** The composer and answer card grow away from the passage: up from the bar, or down when the room above is short. */
+const CARD_GAP = 14;
+const CARD_EDGE = 16;
+function cardPlacement(rect: DOMRect, need: number) {
+  const above = rect.top - CARD_GAP - CARD_EDGE;
+  const below = window.innerHeight - rect.bottom - CARD_GAP - CARD_EDGE;
+  const up = above >= need || above >= below;
+  return {
+    flip: !up,
+    top: up ? rect.top - CARD_GAP : rect.bottom + CARD_GAP,
+    maxHeight: Math.max(160, up ? above : below),
+  };
+}
+function barPlacement(rect: DOMRect, composer: boolean, answer: boolean) {
+  const base = placement(rect, selectionPanelWidth(composer, answer));
+  if (!composer && !answer) return { ...base, maxHeight: 0 };
+  return { ...base, ...cardPlacement(rect, composer ? 120 : 320) };
 }
 function selectionPanelWidth(composer: boolean, answer: boolean) {
   if (answer) return 448;
@@ -401,9 +419,8 @@ export function SelectionBar({
   }, [pending]);
 
   if (!pending && !toast) return null;
-  const where = pending
-    ? placement(pending.rect, selectionPanelWidth(composer, !!answerAction))
-    : null;
+  const grown = composer || !!answerAction;
+  const where = pending && barPlacement(pending.rect, composer, !!answerAction);
 
   const context = (): SelectionContext | null => {
     if (!pending || !prose) return null;
@@ -446,12 +463,14 @@ export function SelectionBar({
           data-reader-menu
           data-flip={where.flip}
           data-answer={!!answerAction}
+          data-grown={grown}
           role="toolbar"
           aria-label="Selection"
           style={
             {
               '--selection-left': `${where.left}px`,
-              '--selection-top': `${answerAction ? answerTop(pending.rect) : where.top}px`,
+              '--selection-top': `${where.top}px`,
+              '--selection-max': `${where.maxHeight}px`,
             } as React.CSSProperties
           }
         >
@@ -467,16 +486,20 @@ export function SelectionBar({
                 }
               }}
             >
-              <div>
-                <ReaderIcon name="sparkles" size={17} />
+              <div className="silo-selection-field">
                 <input
                   aria-label="Ask about this passage"
                   placeholder={questionPlaceholder(quote)}
                   value={question}
                   onChange={(event) => setQuestion(event.target.value)}
                 />
-                <button type="submit" aria-label="Send" disabled={!question.trim()}>
-                  ↑
+                <button
+                  type="submit"
+                  className="silo-selection-send"
+                  aria-label="Send"
+                  disabled={!question.trim()}
+                >
+                  <ReaderIcon name="up" size={17} />
                 </button>
               </div>
               <div className="silo-chat-actions">
@@ -490,30 +513,37 @@ export function SelectionBar({
           ) : answerAction ? (
             <section className="silo-selection-answer" aria-label="Passage answer">
               <header>
-                <ReaderIcon name="sparkles" size={17} />
-                {answerAction}
+                <h3>{answerAction}</h3>
                 <button
                   type="button"
+                  className="silo-reader-iconbtn"
                   aria-label="Close answer"
                   onClick={() => {
                     void quick.stop();
                     setAnswerAction(undefined);
                   }}
                 >
-                  ×
+                  <ReaderIcon name="close" size={18} />
                 </button>
               </header>
               <blockquote>{quote}</blockquote>
-              {quick.messages
-                .filter((m) => m.role === 'assistant')
-                .map((message) => (
-                  <ChatMessage key={message.id} message={message} />
-                ))}
-              {busy && <p role="status">Answering…</p>}
-              <AnswerError failed={!!quick.error} failure={failure} />
+              <div className="silo-selection-body">
+                {quick.messages
+                  .filter((m) => m.role === 'assistant')
+                  .map((message) => (
+                    <ChatMessage key={message.id} message={message} />
+                  ))}
+                {busy && (
+                  <p role="status" className="silo-chat-pending">
+                    Answering…
+                  </p>
+                )}
+                <AnswerError failed={!!quick.error} failure={failure} />
+              </div>
               <footer>
                 <button
                   type="button"
+                  className="silo-selection-primary"
                   disabled={busy || !answer || saving}
                   onClick={async () => {
                     setSaving(true);
@@ -592,7 +622,7 @@ export function SelectionBar({
               {askReady && linkId && (
                 <button
                   type="button"
-                  className="silo-sb-btn"
+                  className="silo-sb-btn silo-sb-ask"
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     if (chatOpen) {

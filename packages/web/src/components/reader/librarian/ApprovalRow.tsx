@@ -47,14 +47,14 @@ export function ApprovalRow({
   );
   return (
     <fieldset className="silo-chat-approval" aria-label={sentence}>
-      <p>{sentence}</p>
+      <p className="silo-chat-approval-ask">{sentence}</p>
       {(name === 'edit_link' || name === 'edit_highlight') && (
-        <p>{String(args.note ?? '').slice(0, 80)}</p>
+        <p className="silo-chat-approval-note">{String(args.note ?? '').slice(0, 80)}</p>
       )}
       {expired ? (
-        <p>Expired. Ask again.</p>
+        <p className="silo-chat-approval-expired">Expired. Ask again.</p>
       ) : (
-        <>
+        <div className="silo-chat-approval-actions">
           <button
             type="button"
             className="silo-chat-allow"
@@ -66,7 +66,7 @@ export function ApprovalRow({
           <button type="button" disabled={!onDecision} onClick={() => onDecision?.(false)}>
             Deny
           </button>
-        </>
+        </div>
       )}
     </fieldset>
   );

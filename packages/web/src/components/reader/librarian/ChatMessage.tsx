@@ -116,7 +116,7 @@ function traceLine(message: UIMessage): string {
 }
 
 /** Text written before a later tool call is the model thinking aloud; the answer comes after the last call. */
-function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
+export function splitSteps(message: UIMessage): { steps: string[]; answer: string } {
   const lastTool = message.parts.findLastIndex((part) => toolName(part) !== null);
   const steps: string[] = [];
   const answer: string[] = [];
@@ -159,7 +159,12 @@ export function ChatMessage({
       ))}
       {message.parts.map((part) => {
         if (!('state' in part)) return null;
-        if (part.state === 'output-denied') return <p key={part.toolCallId}>Not done.</p>;
+        if (part.state === 'output-denied')
+          return (
+            <p key={part.toolCallId} className="silo-chat-denied">
+              Not done.
+            </p>
+          );
         if (part.state !== 'approval-requested') return null;
         return (
           <ApprovalRow

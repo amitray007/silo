@@ -287,3 +287,44 @@ it('streams a quick answer, saves its text as a note, and imports only the text 
   await screen.findByText('Saved as a note on ¶2');
   vi.unstubAllGlobals();
 });
+
+it('saves only the answer text, never the step text written before a tool call', async () => {
+  const { waitFor } = await import('@testing-library/react');
+  const chunks = [
+    { type: 'start', messageId: 'answer' },
+    { type: 'text-start', id: 's' },
+    { type: 'text-delta', id: 's', delta: 'Let me read the article first.' },
+    { type: 'text-end', id: 's' },
+    { type: 'tool-input-available', toolCallId: 'call', toolName: 'get_link', input: {} },
+    { type: 'tool-output-available', toolCallId: 'call', output: { text: 'article' } },
+    { type: 'text-start', id: 'a' },
+    { type: 'text-delta', id: 'a', delta: 'The real answer.' },
+    { type: 'text-end', id: 'a' },
+    { type: 'finish' },
+  ];
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response(
+          `${chunks.map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`).join('')}data: [DONE]\n\n`,
+          {
+            headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+          },
+        ),
+    ),
+  );
+  const onSaveAnswer = vi.fn(async () => {});
+  setup({ askReady: true, linkId: 'steps-test', onSaveAnswer });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await screen.findByText('The real answer.');
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Save as note' }));
+  await waitFor(() => expect(onSaveAnswer).toHaveBeenCalledWith('The real answer.'));
+  vi.unstubAllGlobals();
+});
