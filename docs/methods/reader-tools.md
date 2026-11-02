@@ -414,3 +414,366 @@ Real links at 1440, 1100 and 390 in light, dark and sepia; create, overlap,
 recolour, note, delete; reader refresh keeps highlights; agent round trip
 through MCP; then side by side with prototype variant B and fix every
 unintended difference.
+
+## Slice 4: Read aloud
+
+### Scope
+
+The dock's **Listen** tool reads the article aloud with an on-device voice
+model. It covers smart segmentation, a gapless lookahead queue, sentence
+highlighting, click-to-jump, a "Listen from here" toolbar action, engine and
+voice choice, speed, and model files served by silo.
+
+### Position in the product
+
+Read aloud runs a speech model in the browser. It uses no provider, no key and
+no server AI, and no article text leaves the device, so it sits outside the
+AI layer in `docs/rules/ai.md` (add one line there saying so). Nothing
+downloads until the reader presses Listen.
+
+### Engines
+
+Read aloud is **English-only for now** (owner decision, 2026-11-01). `kokoro-js@1.2.1`
+ships only `en-us` and `en-gb` voices and an English phonemizer, and Phonon 31m is
+English, so no engine here can read another language well. Multilingual read aloud is
+parked in `docs/product/future-scope.md`.
+
+- **Phonon 31m** (`phonon-tts`, code MIT or Apache-2.0, weights Apache-2.0,
+  English): the default engine. Its package runs its own worker and streams audio as it
+  generates. Its voices are the 25 `en-us` and `en-gb` voices of the
+  `gradium/phonon-voices` catalog (Apache-2.0 on its card), registered through the
+  `ModelSpec` `voices` map. The 12 character voices and the fr, de, es and pt voices are
+  not shipped.
+- **Kokoro 82M** (`kokoro-js`, Apache-2.0): the second English engine, selectable in
+  the sheet. It runs in a module Web Worker owned by silo, with the 28 voices
+  `kokoro-js` lists. WebGPU uses fp32 (the prototype measured fp16 as degraded); without a
+  real WebGPU adapter it uses q8 on WASM, and the sheet says it may be slower. A WebGPU
+  start that fails is retried on a fresh worker, because ONNX Runtime keeps the failure.
+- **Phonon 40m is excluded**: its weights are CC BY-NC 4.0.
+- The engine, one voice per engine, and the speed are browser-local
+  (`createPrefStore`, key `silo.readerReadAloud`).
+- **Language gate.** The stored reader and the link carry no language field, so the
+  article language comes from its text (`listen/language.ts`: a non-Latin script, or
+  Latin text with almost none of the common English words, is not English; text too
+  short to judge counts as English). For a non-English article the dock's Listen button
+  is disabled with the title "Read aloud is English-only for now", and "Listen from
+  here" is left out of the selection toolbar.
+
+### Model files served by silo
+
+- A manifest in code (`packages/core/src/tts/manifest.ts`) lists each engine's files:
+  source URL pinned to a commit, size, sha256, and the license. It ships 62 files:
+  Phonon (config, tokenizer, q8 weights, a default voice, 25 voices) and Kokoro
+  (config, tokenizers, the q8 and fp32 ONNX models, 28 voices).
+- `GET /api/tts/files/:engine/*path` serves only manifest entries. On the
+  first request the server downloads the file from its pinned URL into the
+  data directory (`$SILO_DATA_DIR/tts-cache/`, stored by sha256), verifies the sha256, and
+  then serves it with immutable cache headers and range support.
+  `SILO_DATA_DIR` defaults to `$XDG_STATE_HOME/silo` (or `~/.local/state/silo`); the
+  prod compose mounts a volume at `/data`. `GET /api/tts/manifest` lists the files
+  (without upstream URLs) for the web, which keeps the last good answer so a cached
+  voice loads while silo is unreachable. Concurrent first requests share
+  one download. A failed or mismatched download returns 502 and leaves no
+  partial file.
+- The web points `phonon-tts` (`ModelSpec`) and transformers.js
+  (`env.remoteHost` / `remotePathTemplate`) at these URLs, so the browser never calls
+  Hugging Face. Two things `env` does not cover are handled in the Kokoro worker:
+  `kokoro-js` fetches each voice from a hard-coded Hugging Face address (a `fetch`
+  wrapper sends it to silo and refuses any other Hugging Face request), and ONNX
+  Runtime fetches its WebAssembly files from a CDN (`wasmPaths` points at the copies
+  in the transformers.js package, which Vite serves).
+- Request `navigator.storage.persist()` when a model first loads.
+
+### Speech plan
+
+- Build segments from the prose DOM: sentences via `Intl.Segmenter`, headings
+  followed by a 250 ms pause, paragraph ends by 150 ms, list items spoken as
+  sentences with no bullet words, and code blocks, figures and captions
+  skipped.
+- Merge adjacent short sentences (under 60 characters, same paragraph) up to
+  200 characters; split sentences over 300 characters at clause boundaries.
+  Keep a sentence map so highlighting stays per sentence.
+- Keep about 20 seconds (at least 3 units) synthesized ahead; the clicked unit
+  goes first; cancel stale work on jump, voice, engine or speed change.
+- Schedule buffers on the `AudioContext` timeline (`start(when)`) for gapless
+  playback. Phonon streams its chunks as they arrive.
+- Speed 0.75 to 3x. Kokoro uses its native speed. Phonon at 1x streams; at
+  other speeds use a pitch-preserving time stretch (WSOLA, as the prototype
+  did) on the whole unit.
+- An in-memory replay cache keyed by engine, voice, speed and text, capped at
+  about 64 MB (least recently used goes first).
+- Warm up when the Listen sheet opens: load the model and synthesize the first
+  units.
+
+### UI
+
+- **Listen tool**: pressing it turns the dock into the player and opens the Listen sheet,
+  ready to play (as the prototype did; the sheet warms the voice and the audio device opens
+  on that press, so Play starts in a few milliseconds). The player has previous, play/pause
+  with a loading-dev spinner while waiting, next, the current sentence text, speed, a list
+  button for the sheet, and close. "Listen from here" and a click on a sentence start
+  playing at once.
+- **Listen sheet**: engine and voice in silo's custom listbox (voices grouped
+  by language, name at 500, muted trait, type-ahead, never truncated), the
+  speed `Stepper`, and the download state ("Downloading voice · 42%" with MB
+  and a slim bar); skeleton rows while voices load. No helper text.
+- **Sentence highlight**: a dedicated Custom Highlight with its own token, under
+  passage highlights in priority.
+- **Click to jump**: while Listen is open, a click on any sentence starts there.
+  This takes priority over the note popover. Keys: Space play or pause,
+  ArrowLeft and ArrowRight previous or next sentence, `+` and `-` speed.
+- **Selection toolbar**: add "Listen from here" to the action registry.
+- **Errors**: a model that fails to load shows Retry and an engine switch;
+  playback never blocks reading.
+
+### Tests
+
+Manifest allowlist, path traversal, sha256 mismatch, shared first download,
+range requests, and cache headers on the server; segmentation (headings,
+lists, code, abbreviations, long sentences, merge rules), the queue
+(lookahead, cancel on jump, priority, cap), scheduling maths, WSOLA length,
+replay cache eviction, the language-to-engine default, keys and click
+priority, and the sheet states on the web. Engines are mocked in unit tests.
+
+### QA and mockup parity
+
+In a real browser on real links: cold and warm load for both engines, time to
+first audio, gaps, click-to-jump, speed changes, voice changes, an article in
+another language (Listen disabled, no "Listen from here"), offline after caching, and no
+request to a third-party host. Then
+compare the dock player and Listen sheet side by side with prototype variant B
+and fix every unintended difference.
+
+## Slice 5: Reader settings
+
+### Why
+
+The owner wants reader choices to stick everywhere: a voice, speed or type
+setting changed in one article should be the default for every article, it
+should be editable from Settings, and voices should be downloadable from
+Settings before the first Listen. Engine names should not carry model sizes.
+
+### Decisions
+
+- **One synced setting.** All reader preferences move into one server setting,
+  `reader`, in the existing settings store (`packages/core/src/settings/schema.ts`
+  allowlist, `GET`/`PATCH /api/settings`). It holds `type` (font, size,
+  leading, theme), `width`, `pencil` (style, wpm), `highlight` (default
+  colour) and `readAloud` (engine, voice per engine, rate). The Zod schema
+  validates each field with per-field defaults, the same bounds the browser
+  stores use today.
+- **Instant first paint.** The browser keeps a local mirror under the existing
+  keys, so a reload paints from it before `/api/settings` answers. The server
+  value wins once it arrives. A change in the Reader or in Settings updates
+  the mirror and PATCHes the server (optimistic, rolled back on error,
+  debounced for steppers).
+- **Migration.** When the server has no `reader` value yet and the browser has
+  local values, the first load uploads them once, so nobody loses their
+  current settings.
+- **No MCP tool.** These are presentation settings with no agent use; this
+  follows the existing settings surface.
+- **Engine names.** The UI says "Phonon" and "Kokoro" everywhere. The Listen
+  sheet's engine list shows a short muted trait next to each name ("Fast" and
+  "More voices"). Model sizes and details appear only in Settings.
+
+### Settings → Reader tab
+
+A new tab in the Settings modal, built from the existing `SettingsTabs` rows
+(`rowStyles`, `SettingsSelect`, `ToggleSwitch`) plus the slice 1 `Segmented`
+and `Stepper`:
+
+- **Type**: font, size, line height, width, theme.
+- **Pencil**: style, speed.
+- **Highlights**: default colour.
+- **Read aloud**: engine, voice (grouped by language, as in the sheet), speed.
+- **Voices**: one row per engine. Name, a muted line with language, download
+  size and what it is good for (for example "English · 62 MB · Fast, streams
+  as it speaks"), and a status: Not downloaded, Downloading 42% (bar and
+  loading-dev spinner), or Downloaded. Actions: Download, Cancel while
+  downloading, and Remove. Kokoro shows the size for this browser's device
+  (fp32 on WebGPU, q8 otherwise). "Downloaded" means the files are in this
+  browser's cache, checked against the manifest URLs; Remove deletes exactly
+  those cache entries. Downloading from Settings uses the same engine load
+  path as Listen and then releases the engine, so the cache is identical.
+
+### Tests
+
+Core and API: schema bounds and defaults, a partial patch keeps other fields,
+an unknown field is rejected. Web: mirror hydration and server-wins, the
+one-time upload, rollback on a failed PATCH, the Reader and Settings staying
+in sync both ways, the Settings tab controls, and the voices rows (status
+detection, download progress, cancel, remove) with mocked engines and Cache
+API.
+
+### QA
+
+Change speed and voice in one article, open another: it keeps them; reload:
+it keeps them; open Settings: it shows them. Change them in Settings: the
+Reader follows. A second browser profile picks up the same settings. Download
+a voice from Settings, then press Listen: no download. Remove it: the next
+Listen downloads again. No engine name shows a size outside Settings. Light,
+dark and sepia; 1440 and 390.
+
+## Slice 6: Saved place
+
+### Why
+
+The owner wants to stop reading or listening and pick up later, for example
+the next day. Slice 2 already saves where the Pencil stops. This slice turns
+that into one saved place per link that the Pencil, read aloud and a manual
+mark all write, with a bookmark in the left gutter. The mockup is
+`prototype/reader-tools` at `1e4b221`, variant B, `?mark=ribbon`.
+
+### Decisions
+
+- **One place per link.** Keep the `reading_positions` row and its `position`
+  (a share of the article's words, 0 to 1). Add `source` (`pencil`, `listen`
+  or `mark`, default `pencil`) in migration `0029_reading_position_source`.
+  The latest write wins. Scrolling never saves.
+- **Who writes it.** The Pencil writes it when it stops, as today. Read aloud
+  writes the start of the current sentence when it pauses, closes, or the page
+  hides (keepalive). It does not write on every sentence. A manual mark writes
+  the start of the marked paragraph.
+- **Who reads it.** The ribbon sits at the paragraph that holds the saved word.
+  The Pencil resumes at that word's line. Listen starts at the sentence that
+  holds it, unless a sentence was clicked.
+- **One marker.** The ribbon replaces slice 2's right-gutter resume button.
+  P still resumes the Pencil from the saved place.
+- **API and MCP.** `PUT /api/links/:id/reading-position` takes an optional
+  `source`, default `mark`. Link JSON returns `{ position, source, updatedAt }`.
+  MCP follows the parity rules: an agent write records `mark`. Export and
+  import carry `source`, and old files import with `pencil`.
+- **Feed posts.** Feed posts cannot be edited, so they show no ribbon, no
+  hover and no B.
+
+### UI
+
+Match the mockup exactly:
+
+- **Ribbon.** The filled bookmark glyph sits in the left gutter column. It
+  mirrors the right-gutter note markers in size, hit area, hover circle and
+  distance from the text, and it is centred on the marked paragraph's first
+  line box. Text never moves.
+- **Label row.** It sits in the paragraph gap above the marked paragraph:
+  - a 1.5 to 2px elbow from the ribbon;
+  - the muted label "Continue here · Yesterday", or "Continue listening here"
+    when the source is `listen`, with the time relative to `updatedAt`;
+  - an 8px space, then a dashed rule (4px dashes, 4px gaps) that ends exactly
+    at the column's right text edge.
+  - Spacing is 18px above the label and 4px below it. The gap opens over
+    200ms ease-out, is instant under reduced motion, and keeps scrollTop
+    stable.
+- **Outline dial.** Where the ribbon falls inside the dial's band, a 46px
+  window clears the dial ticks and hit areas behind it.
+- **Popover.** A click on the ribbon or the label opens "Continue here · time",
+  Continue with Pencil, Listen from here, and Remove. It opens below and to
+  the right and never covers the dial.
+- **Manual mark.** Hovering a paragraph's first line, within its line boxes
+  only, shows a faint outline ribbon. A click sets the place there. B marks
+  the paragraph nearest the top of the viewport.
+- **Continue pill.** "Continue · 42%" sits above the dock when a saved place
+  exists and is off screen. It scrolls the place to about one third down the
+  viewport. Escape or scrolling past the place dismisses it.
+
+### Tests
+
+- **Core and API, on real Postgres:** source defaults and validation; old rows
+  read as `pencil`; the link JSON shape; MCP round trip and parity; export and
+  import with and without `source`.
+- **Web:**
+  - mapping a share to a paragraph and to a sentence;
+  - read aloud saving on pause, close and pagehide, but not per sentence;
+  - Listen starting at the saved sentence;
+  - the Pencil resuming;
+  - the hover hit test, B, the popover actions, and Remove;
+  - the pill showing, jumping and dismissing;
+  - the dial window.
+
+### QA and mockup parity
+
+On real links at 1440, 1100 and 390, in light, dark and sepia:
+
+- mark, reload, and see the same place;
+- listen, pause, reopen, and confirm Listen resumes at that sentence;
+- stop the Pencil and confirm the ribbon moves;
+- Remove;
+- a mark next to a note marker;
+- a mark inside the dial band;
+- a feed post shows no ribbon.
+
+Then put it side by side with the mockup and fix every unintended difference.
+
+## Slice 7: Per-article reader choices
+
+### Why
+
+Slice 5 made every change in an article update the global `reader` setting.
+The owner wants the opposite: Settings → Reader holds the defaults, and a
+change made inside an article stays with that article. This applies to
+everything in the reader: Type, width, Pencil, the default highlight colour,
+and read aloud (engine, voice, speed, pauses). There is no "use as default"
+or reset action; defaults change only in Settings.
+
+### Decisions
+
+- **Partial overrides per link.** A new table `link_reader_prefs` (migration
+  `0030_link_reader_prefs`) has these columns:
+  - `link_id` (pk, cascade);
+  - `prefs` jsonb, which holds only the fields changed in that article, in
+    the shape of the `reader` setting's `patch` mode;
+  - `updated_at`.
+  A field the article never changed keeps following the Settings default, so
+  a later default change still reaches it.
+- **Effective value.** It is the default merged with the link's overrides,
+  field by field. Core validates overrides with the existing `patch` schema,
+  and stored rows are read with the `stored` fallbacks per field.
+- **Writes.** Every control in the Reader dock, its sheets, the Listen sheet
+  and the player writes the current link's override. None of them touches the
+  `reader` setting. Settings → Reader writes only the defaults. Writes are
+  optimistic, rolled back on error, debounced for steppers, and flushed on
+  pagehide with keepalive, reusing slice 5's sync machinery.
+- **API.** Single-link JSON adds `readerPrefs` (the partial overrides, or
+  `{}`), loaded in the same query path, with no N+1. A new
+  `PATCH /api/links/:id/reader-prefs` deep-merges a partial and returns the
+  stored overrides. `DELETE` clears them. Both use the standard error
+  envelope.
+- **No MCP tool and no export.** These are presentation choices, as decided
+  in slice 5. Restore merge moves the overrides with the link, like
+  highlights.
+- **Feed posts.** Feed posts cannot be written, so changes there apply for
+  the session only and are not saved.
+- **Slice 5 migration.** The one-time upload of local values still targets
+  the defaults. Existing synced values stay as the defaults.
+
+### Tests
+
+- **Core and API, on real Postgres:**
+  - merge and partial semantics, including a nested `readAloud.voices` change
+    that keeps the other engine's voice;
+  - validation bounds;
+  - unknown fields are rejected;
+  - cascade and restore move;
+  - the link JSON shape and leak guards.
+- **Web:**
+  - an in-article change writes the link override, not the setting;
+  - another article still uses the default;
+  - a Settings change reaches fields an article did not override, but not the
+    ones it did;
+  - reloading keeps the override;
+  - rollback on failure;
+  - feed posts stay session-only;
+  - the Listen sheet, player speed, Type sheet, width, Pencil and highlight
+    colour each follow the rule.
+
+### QA
+
+1. In article A, change the voice, speed, pauses, font size, width and Pencil
+   speed.
+2. Open article B. It shows the Settings defaults.
+3. Reload A. It keeps its changes.
+4. Change the defaults in Settings. B follows. A follows only for the fields
+   it never changed.
+5. Check a second browser profile. It sees A's overrides.
+6. Check a feed post. Changes there do not persist.
+
+Run this at 1440 and 390, in light, dark and sepia.

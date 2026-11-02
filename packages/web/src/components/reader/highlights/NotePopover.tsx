@@ -24,6 +24,7 @@ export function NotePopover({
   onSetNote,
   onDelete,
   onClose,
+  onBack,
 }: {
   item: ResolvedHighlight;
   all: readonly ResolvedHighlight[];
@@ -33,6 +34,8 @@ export function NotePopover({
   onSetNote: (id: string, note: string) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
+  /** Set when the popover was opened from the layers list: a way back to it. */
+  onBack?: (() => void) | undefined;
 }) {
   const saved = item.highlight.note ?? '';
   const [, tick] = useState(0);
@@ -94,6 +97,12 @@ export function NotePopover({
       style={{ left, top }}
       data-reader-menu
     >
+      {onBack && (
+        <button type="button" className="silo-notepop-back" onClick={onBack}>
+          <ReaderIcon name="back" size={14} />
+          Layers
+        </button>
+      )}
       <textarea
         ref={field}
         className="silo-notepop-field"

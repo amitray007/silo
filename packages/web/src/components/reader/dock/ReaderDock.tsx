@@ -4,26 +4,36 @@ import {
   lazy,
   type ReactNode,
   Suspense,
+  useCallback,
   useContext,
   useEffect,
   useId,
+  useRef,
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
 import { useSaveReadingPosition } from '../../../api/hooks';
 import type { LinkJson } from '../../../api/types';
-import { useHighlightPrefs } from '../../../lib/readerPrefs';
 import { deriveTitleFromUrl } from '../../../lib/url';
+import { useReaderPrefs } from '../../../lib/useReaderPrefs';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
 import { HighlightSheet } from '../highlights/HighlightSheet';
 import { HighlightsLayer } from '../highlights/HighlightsLayer';
-import { NotesSheet } from '../highlights/NotesSheet';
 import { type HighlightsApi, useHighlights } from '../highlights/useHighlights';
+import { ListenPlayer } from '../listen/ListenPlayer';
+import { ListenSheet } from '../listen/ListenSheet';
+import { ENGLISH_ONLY_TITLE } from '../listen/language';
+import { useListenClicks } from '../listen/useListenClicks';
+import { useListenKeys } from '../listen/useListenKeys';
+import { type ReadAloudApi, useReadAloud } from '../listen/useReadAloud';
+import { NotesLayer } from '../notes/NotesLayer';
+import { type NotesLaneApi, useNotesLane } from '../notes/useNotesLane';
 import { PencilOverlay } from '../pencil/PencilOverlay';
 import { PencilSheet } from '../pencil/PencilSheet';
 import { type PencilApi, usePencil } from '../pencil/usePencil';
 import { usePencilKeys } from '../pencil/usePencilKeys';
+import { SavedPlace } from '../place/SavedPlace';
 import { ReaderIcon } from '../ReaderIcon';
 import { TypeSheet } from './TypeSheet';
 
@@ -33,7 +43,14 @@ const OutlineRail = lazy(() =>
 );
 
 /** What a dock tool's sheet can read. Later slices add their tools' state here. */
-type DockApi = { pencil: PencilApi; highlights: HighlightsApi; closeSheet: () => void };
+type DockApi = {
+  pencil: PencilApi;
+  highlights: HighlightsApi;
+  lane: NotesLaneApi;
+  listen: ReadAloudApi;
+  closeSheet: () => void;
+  openSheet: (id: string) => void;
+};
 
 type DockTool = {
   id: string;
@@ -43,7 +60,10 @@ type DockTool = {
   heading: string;
   /** The glyph beside the label. */
   glyph: ReactNode;
-  sheet: ComponentType<{ api: DockApi }>;
+  /** The sheet the button opens. A tool with `press` and no sheet only toggles. */
+  sheet?: ComponentType<{ api: DockApi }>;
+  /** A tool that toggles something beside the article instead of opening a sheet. */
+  press?: { on: (api: DockApi) => boolean; toggle: (api: DockApi) => void };
   /** A tool with nothing to show yet: the button stays, greyed, with this title. */
   unavailable?: { when: (api: DockApi) => boolean; title: string };
   /** A count beside the label. */
@@ -96,25 +116,29 @@ const tools: readonly DockTool[] = [
     ),
   },
   {
+    id: 'listen',
+    label: 'Listen',
+    title: 'Read aloud',
+    heading: 'Read aloud',
+    glyph: <ReaderIcon name="headphones" size={19} />,
+    sheet: ({ api }) => <ListenSheet listen={api.listen} />,
+    press: {
+      on: (api) => api.listen.active,
+      // Open the player and its sheet; the sheet warms the voice, and Play then starts at once.
+      toggle: (api) => {
+        api.listen.begin();
+        api.openSheet('listen');
+      },
+    },
+    unavailable: { when: (api) => !api.listen.english, title: ENGLISH_ONLY_TITLE },
+  },
+  {
     id: 'notes',
     label: 'Notes',
     title: 'Notes',
     heading: 'Notes',
     glyph: <ReaderIcon name="note" size={19} />,
-    // Slice 3b swaps this list for the notes lane.
-    sheet: ({ api }) => (
-      <NotesSheet
-        resolved={api.highlights.resolved}
-        orphans={api.highlights.orphans}
-        canWrite={api.highlights.canWrite}
-        onOpen={(id) => {
-          api.closeSheet();
-          api.highlights.jump(id);
-          api.highlights.setOpenNote(id);
-        }}
-        onDelete={api.highlights.remove}
-      />
-    ),
+    press: { on: (api) => api.lane.open, toggle: (api) => api.lane.toggle() },
     unavailable: { when: (api) => api.highlights.items.length === 0, title: 'No highlights yet' },
     badge: (api) => api.highlights.items.length,
   },
@@ -153,13 +177,16 @@ function DockButton({
 }) {
   const unavailable = tool.unavailable?.when(api) ?? false;
   const count = tool.badge?.(api) ?? 0;
+  const pressed = tool.press?.on(api);
   return (
     <button
       type="button"
       className="silo-reader-dockbtn"
+      data-tool={tool.id}
       title={unavailable ? tool.unavailable?.title : tool.title}
-      aria-haspopup="dialog"
-      aria-expanded={open}
+      aria-haspopup={tool.press ? undefined : 'dialog'}
+      aria-expanded={tool.press ? undefined : open}
+      aria-pressed={tool.press ? pressed : undefined}
       aria-controls={open ? sheetId : undefined}
       aria-disabled={unavailable || undefined}
       onClick={unavailable ? undefined : onToggle}
@@ -242,8 +269,43 @@ export function ReaderDock({
   const { element: host, scroll, panel, report } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
-  const save = useSaveReadingPosition(link.id);
-  const { color: highlightColor } = useHighlightPrefs();
+  const writePosition = useSaveReadingPosition(link.id);
+  const [saveError, setSaveError] = useState('');
+  const save = useCallback(
+    async (
+      position: number | null,
+      options?: { source?: 'pencil' | 'listen' | 'mark'; keepalive?: boolean },
+    ) => {
+      try {
+        await writePosition(position, options);
+        setSaveError('');
+      } catch (error) {
+        setSaveError('Could not save your reading place. Try again.');
+        throw error;
+      }
+    },
+    [writePosition],
+  );
+  const savePencil = useCallback(
+    (position: number, options?: { keepalive?: boolean }) =>
+      save(position, { ...options, source: 'pencil' }),
+    [save],
+  );
+  const saveListen = useCallback(
+    (position: number, options?: { keepalive?: boolean }) =>
+      save(position, { ...options, source: 'listen' }),
+    [save],
+  );
+  const saveMark = useCallback(
+    (position: number | null) => save(position, { source: 'mark' }),
+    [save],
+  );
+  const {
+    prefs: {
+      highlight: { color: highlightColor },
+    },
+  } = useReaderPrefs();
+  const [dialHidden, setDialHidden] = useState(false);
   const highlights = useHighlights({
     link,
     prose,
@@ -257,9 +319,44 @@ export function ReaderDock({
     scroll,
     saved: link.readingPosition?.position ?? null,
     canSave: canSavePosition(link, trashed),
-    onSave: save,
+    onSave: savePencil,
   });
   usePencilKeys(pencil);
+  const lane = useNotesLane(highlights);
+  const listen = useReadAloud({
+    prose,
+    scroll,
+    saved: link.readingPosition?.position ?? null,
+    canSave: canSavePosition(link, trashed),
+    onSave: saveListen,
+  });
+  useListenKeys(listen);
+  useListenClicks(prose, listen);
+  // Two guides at once would fight over Space; reading aloud wins.
+  const { stop: stopPencil, enabled: pencilOn } = pencil;
+  const listening = listen.active;
+  useEffect(() => {
+    if (listening && pencilOn) stopPencil();
+  }, [listening, pencilOn, stopPencil]);
+  // The Listen sheet warms the voice model, so Play is instant once it is chosen.
+  const { warm: warmListen } = listen;
+  useEffect(() => {
+    if (openId === 'listen') warmListen();
+  }, [openId, warmListen]);
+  // Focus follows the dock as it morphs: to Play when the player opens, back to Listen when it
+  // closes. The first render does neither.
+  const pill = useRef<HTMLDivElement>(null);
+  const wasListening = useRef(false);
+  useEffect(() => {
+    if (listening === wasListening.current) return;
+    wasListening.current = listening;
+    const target = listening ? '.silo-listen-play' : '[data-tool="listen"]';
+    pill.current?.querySelector<HTMLElement>(target)?.focus({ preventScroll: true });
+  }, [listening]);
+  // Stopping Listen closes its sheet with it.
+  useEffect(() => {
+    if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
+  }, [listening]);
   const hosted = host !== null;
   useEffect(() => {
     if (!hosted) return;
@@ -268,47 +365,95 @@ export function ReaderDock({
   }, [hosted, report]);
   if (!host) return null;
   const closeSheet = () => setOpenId(null);
-  const api: DockApi = { pencil, highlights, closeSheet };
+  const api: DockApi = { pencil, highlights, lane, listen, closeSheet, openSheet: setOpenId };
   const openTool = tools.find((tool) => tool.id === openId);
   const Sheet = openTool?.sheet;
   return createPortal(
     <>
       {prose && scroll && panel && (
         <Suspense fallback={null}>
-          <OutlineRail prose={prose} scroll={scroll} panel={panel} />
+          <OutlineRail prose={prose} scroll={scroll} panel={panel} hidden={dialHidden} />
         </Suspense>
       )}
-      <PencilOverlay pencil={pencil} prose={prose} scroll={scroll} />
+      <PencilOverlay pencil={pencil} prose={prose} />
+      {prose && scroll && panel && canSavePosition(link, trashed) && (
+        <SavedPlace
+          prose={prose}
+          scroll={scroll}
+          panel={panel}
+          saved={link.readingPosition ?? null}
+          onSave={saveMark}
+          pencil={pencil}
+          listen={listen}
+        />
+      )}
+      {saveError && (
+        <div className="silo-sb-toast" role="alert">
+          {saveError}
+        </div>
+      )}
+      <NotesLayer
+        api={highlights}
+        lane={lane}
+        resumeY={null}
+        panel={panel}
+        onDialHidden={setDialHidden}
+      />
       <HighlightsLayer
         api={highlights}
+        lane={lane}
         title={link.title ?? deriveTitleFromUrl(link.url)}
         container={host}
+        listen={listen}
       />
       <div className="silo-reader-dock">
-        <div className="silo-reader-dock-pill" role="toolbar" aria-label="Reader tools">
-          {tools.map((tool) => {
-            const toggle = () => setOpenId(openId === tool.id ? null : tool.id);
-            return tool.split ? (
-              <SplitDockButton
-                key={tool.id}
-                tool={tool}
-                split={tool.split}
-                api={api}
-                open={openId === tool.id}
-                sheetId={sheetId}
-                onToggle={toggle}
-              />
-            ) : (
-              <DockButton
-                key={tool.id}
-                tool={tool}
-                api={api}
-                open={openId === tool.id}
-                sheetId={sheetId}
-                onToggle={toggle}
-              />
-            );
-          })}
+        <div
+          ref={pill}
+          className="silo-reader-dock-pill"
+          data-mode={listen.active ? 'player' : 'tools'}
+          role="toolbar"
+          aria-label="Reader tools"
+        >
+          {listen.active ? (
+            <ListenPlayer
+              listen={listen}
+              sheetOpen={openId === 'listen'}
+              onSheet={() => setOpenId(openId === 'listen' ? null : 'listen')}
+              onClose={() => {
+                listen.stop();
+                closeSheet();
+              }}
+            />
+          ) : (
+            tools.map((tool) => {
+              const toggle = () => {
+                if (tool.press) {
+                  setOpenId(null);
+                  tool.press.toggle(api);
+                } else setOpenId(openId === tool.id ? null : tool.id);
+              };
+              return tool.split ? (
+                <SplitDockButton
+                  key={tool.id}
+                  tool={tool}
+                  split={tool.split}
+                  api={api}
+                  open={openId === tool.id}
+                  sheetId={sheetId}
+                  onToggle={toggle}
+                />
+              ) : (
+                <DockButton
+                  key={tool.id}
+                  tool={tool}
+                  api={api}
+                  open={openId === tool.id}
+                  sheetId={sheetId}
+                  onToggle={toggle}
+                />
+              );
+            })
+          )}
         </div>
         <MenuPresence>
           {openTool && Sheet && (

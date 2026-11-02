@@ -71,6 +71,7 @@ const linkSchema = z.object({
 
 /** An exported reading position. Invalid values are ignored, the link still imports. */
 const readingPositionSchema = z.object({
+  source: z.enum(['pencil', 'listen', 'mark']).default('pencil'),
   position: z.number().min(0).max(1),
   updatedAt: z.iso.datetime({ offset: true }),
 });
@@ -282,6 +283,7 @@ async function importOneLink(element: unknown, index: number): Promise<ImportOne
     if (savedPosition.success) {
       await restoreReadingPosition(imported.id, {
         position: savedPosition.data.position,
+        source: savedPosition.data.source,
         updatedAt: new Date(savedPosition.data.updatedAt),
       });
     }

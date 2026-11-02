@@ -1,6 +1,5 @@
 import type { CreateLinkInput } from '@silo/core';
 import type { Hono } from 'hono';
-import { checkIngestAuth } from '../ingest-auth.js';
 import { type IngestBody, ingestBodySchema } from '../query-schemas.js';
 import { performCapture } from './mutate-link.js';
 
@@ -87,20 +86,6 @@ function toCreateLinkInput(body: IngestBody): CreateLinkInput {
  */
 export function registerIngestRoutes(app: Hono): void {
   app.post('/ingest', async (c) => {
-    const auth = await checkIngestAuth(c);
-    if (!auth.ok) {
-      // Never distinguish "token not configured" from "wrong/missing token"
-      // in the RESPONSE (both are 401 with the same generic message) — that
-      // distinction would let a prober learn whether ingest is enabled at
-      // all on a reachable-but-unauthenticated host. The operator-relevant
-      // detail (`auth.reason`) stays server-side only, in the log line.
-      console.error(`[silo/api] /api/ingest rejected: ${auth.reason}`);
-      return c.json(
-        { error: 'unauthorized', message: 'A valid Authorization: Bearer token is required.' },
-        401,
-      );
-    }
-
     const body = ingestBodySchema.parse(await c.req.json());
     const input = toCreateLinkInput(body);
 

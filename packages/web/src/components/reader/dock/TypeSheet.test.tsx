@@ -1,12 +1,15 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it } from 'vitest';
-import { readerTypeDefaults, useReaderType } from '../../../lib/readerPrefs';
-import { useReaderWidth } from '../../../lib/useReaderWidth';
+import { readerTypeDefaults } from '../../../lib/readerPrefs';
+import { ReaderPrefsProvider, useReaderPrefs } from '../../../lib/useReaderPrefs';
+import { makeLink } from '../../../test/fixtures';
 import { TypeSheet } from './TypeSheet';
 
 function Readout() {
-  const { type } = useReaderType();
-  const [width] = useReaderWidth();
+  const {
+    prefs: { type, width },
+  } = useReaderPrefs();
   return <output data-testid="state">{`${JSON.stringify(type)}|${width}`}</output>;
 }
 
@@ -15,12 +18,15 @@ function state() {
   return { type: JSON.parse(type ?? '{}'), width };
 }
 
+let nextId = 0;
 function open() {
   return render(
-    <>
-      <TypeSheet />
-      <Readout />
-    </>,
+    <QueryClientProvider client={new QueryClient()}>
+      <ReaderPrefsProvider link={makeLink({ id: `type-${nextId++}`, feedId: 'feed' })}>
+        <TypeSheet />
+        <Readout />
+      </ReaderPrefsProvider>
+    </QueryClientProvider>,
   );
 }
 
@@ -42,7 +48,7 @@ it('shows the five rows with the defaults selected and no helper text', () => {
   expect(container.querySelector('select')).toBeNull();
 });
 
-it('applies each control to the shared settings', () => {
+it('applies each control to this article', () => {
   open();
   fireEvent.click(screen.getByRole('radio', { name: 'Literata' }));
   fireEvent.click(screen.getByRole('radio', { name: 'Relaxed' }));

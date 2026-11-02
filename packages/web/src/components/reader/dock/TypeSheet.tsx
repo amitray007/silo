@@ -4,35 +4,36 @@ import {
   type ReaderFont,
   type ReaderLeading,
   type ReaderTheme,
-  useReaderType,
+  STEPPER_DELAY_MS,
 } from '../../../lib/readerPrefs';
-import { type ReaderWidth, useReaderWidth } from '../../../lib/useReaderWidth';
+import { useReaderPrefs } from '../../../lib/useReaderPrefs';
+import type { ReaderWidth } from '../../../lib/useReaderWidth';
 import { ReaderIcon } from '../ReaderIcon';
 import { SegmentedRow } from './Segmented';
 import { Stepper } from './Stepper';
 
-const fonts: { value: ReaderFont; label: string }[] = [
+export const fonts: { value: ReaderFont; label: string }[] = [
   { value: 'inter', label: 'Inter' },
   { value: 'serif', label: 'Literata' },
   { value: 'mono', label: 'Mono' },
 ];
-const leadings: { value: ReaderLeading; label: string }[] = [
+export const leadings: { value: ReaderLeading; label: string }[] = [
   { value: 'compact', label: 'Compact' },
   { value: 'normal', label: 'Normal' },
   { value: 'relaxed', label: 'Relaxed' },
 ];
-const widths: { value: ReaderWidth; label: string }[] = [
+export const widths: { value: ReaderWidth; label: string }[] = [
   { value: 'narrow', label: 'Narrow' },
   { value: 'medium', label: 'Medium' },
   { value: 'wide', label: 'Wide' },
 ];
-const themes: { value: ReaderTheme; label: string }[] = [
+export const themes: { value: ReaderTheme; label: string }[] = [
   { value: 'default', label: 'Default' },
   { value: 'sepia', label: 'Sepia' },
 ];
 
 /** A small or large "A" beside a minus or plus: the stepper makes the text smaller or larger. */
-function StepGlyph({ size, name }: { size: 'small' | 'large'; name: 'minus' | 'plus' }) {
+export function StepGlyph({ size, name }: { size: 'small' | 'large'; name: 'minus' | 'plus' }) {
   return (
     <>
       <span className="silo-stepper-a" data-size={size} aria-hidden="true">
@@ -43,10 +44,15 @@ function StepGlyph({ size, name }: { size: 'small' | 'large'; name: 'minus' | 'p
   );
 }
 
-/** Controls only: each change applies to the article at once and persists on this device. */
+/** Controls only: each change applies to the article at once and saves only its override. */
 export function TypeSheet() {
-  const { type, update } = useReaderType();
-  const [width, setWidth] = useReaderWidth();
+  const {
+    prefs: { type, width },
+    update: change,
+  } = useReaderPrefs();
+  const update = (patch: Partial<typeof type>) =>
+    change({ type: patch }, 'size' in patch ? STEPPER_DELAY_MS : 0);
+  const setWidth = (width: ReaderWidth) => change({ width });
   return (
     <div className="silo-type-sheet-body">
       <SegmentedRow

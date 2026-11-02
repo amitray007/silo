@@ -75,12 +75,8 @@ function fuzzyAnchor(text: string, input: AnchorInput): Anchored | null {
     : null;
 }
 
-/**
- * Find a highlight in the prose text: by its offsets when the quote still sits there, else by
- * an exact search for prefix, quote and suffix, else by a fuzzy match of the quote scored with
- * its context. `null` means the passage is gone (an orphan); the highlight is kept regardless.
- */
-export function anchorHighlight(text: string, input: AnchorInput): Anchored | null {
+/** Check offsets, then complete exact context within 2048 characters of the hint. */
+export function anchorNearHint(text: string, input: AnchorInput): Anchored | null {
   const { quote, prefix, suffix, startOffset, endOffset } = input;
   if (quote.length === 0) return null;
   if (
@@ -91,6 +87,26 @@ export function anchorHighlight(text: string, input: AnchorInput): Anchored | nu
   ) {
     return { start: startOffset, end: endOffset, how: 'offsets' };
   }
+  if (startOffset === null || startOffset < 0 || startOffset > text.length) return null;
+  // Search context-start positions symmetrically around the old hint. The global matcher also
+  // measures from context-start (not quote-start), including its leftmost tie break.
+  const radius = 2048;
+  const from = Math.max(0, startOffset - radius);
+  const through = Math.min(text.length, startOffset + radius);
+  const needle = prefix + quote + suffix;
+  const window = text.slice(from, through + needle.length);
+  const at = nearest(allIndexes(window, needle), startOffset - from);
+  if (at === undefined) return null;
+  const start = from + at + prefix.length;
+  return { start, end: start + quote.length, how: 'exact' };
+}
+
+/** Full matching is reserved for the worker; the nearby path is safe during render. */
+export function anchorHighlight(text: string, input: AnchorInput): Anchored | null {
+  if (input.quote.length === 0) return null;
+  const nearby = anchorNearHint(text, input);
+  if (nearby) return nearby;
+  const { quote, prefix, suffix, startOffset } = input;
   const withContext = nearest(allIndexes(text, prefix + quote + suffix), startOffset);
   if (withContext !== undefined) {
     const start = withContext + prefix.length;

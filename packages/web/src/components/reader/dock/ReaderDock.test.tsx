@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { makeLink, twitterSourceData } from '../../../test/fixtures';
+import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import { ReaderContent } from '../ReaderContent';
 import { DockHostContext, ReaderDock } from './ReaderDock';
 
@@ -34,7 +35,9 @@ function renderContent(link = makeLink({ id: 'dock' }), reader: unknown = null) 
   return render(
     <QueryClientProvider client={client}>
       <Host>
-        <ReaderContent link={link} />
+        <TestArticlePrefs link={link}>
+          <ReaderContent link={link} />
+        </TestArticlePrefs>
       </Host>
     </QueryClientProvider>,
   );
@@ -183,7 +186,7 @@ it('keeps the pencil sheet to controls: play, speed, progress and style', async 
   expect(screen.getByRole('progressbar', { name: 'Reading progress' })).toBeDefined();
   expect(sheet.querySelector('p')).toBeNull();
   fireEvent.click(screen.getByRole('radio', { name: 'Highlighter' }));
-  expect(JSON.parse(localStorage.getItem('silo.readerPencil') ?? '{}').style).toBe('highlighter');
+  expect(articlePrefs().pencil.style).toBe('highlighter');
 });
 
 it('stops the speed stepper at 100 and 600 wpm', async () => {
@@ -197,8 +200,7 @@ it('stops the speed stepper at 100 and 600 wpm', async () => {
   expect(screen.getByRole('spinbutton', { name: 'Speed' }).getAttribute('aria-valuenow')).toBe(
     '120',
   );
-  localStorage.setItem('silo.readerPencil', JSON.stringify({ v: 1, wpm: 600 }));
-  window.dispatchEvent(new StorageEvent('storage', { key: 'silo.readerPencil' }));
+  fireEvent.keyDown(screen.getByRole('spinbutton', { name: 'Speed' }), { key: 'End' });
   expect(
     await waitFor(() => {
       const button = screen.getByRole('button', { name: 'Increase speed' }) as HTMLButtonElement;

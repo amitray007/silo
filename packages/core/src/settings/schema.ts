@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { AI_FEATURES, type AiFeatureDef, type AiFeatureId } from '../ai/features.js';
 import { AI_PROVIDER_KINDS } from '../ai/model-types.js';
+import { type ReaderSettings, readerSchema, readerStoredSchema } from './reader.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(
   (AI_FEATURES as readonly AiFeatureDef[]).map((f) => f.id),
@@ -122,13 +123,21 @@ const settingsSchema = {
     })
     .strict(),
   ai: aiSchema,
+  /**
+   * The synced reader preferences (type, width, pencil, highlight colour, read aloud). `null`
+   * until the first write, so a browser can tell "never saved" from "saved the defaults" and
+   * upload its own local values once. A write merges a partial value over the stored one.
+   */
+  reader: readerSchema,
 } as const;
 
 /** The allowlisted setting keys — `Object.keys(settingsSchema)` at the type level. */
 export type SettingKey = keyof typeof settingsSchema;
 
 /** The value type for a given known settings key, inferred from its Zod schema. */
-export type SettingValue<K extends SettingKey> = z.infer<(typeof settingsSchema)[K]>;
+export type SettingValue<K extends SettingKey> = K extends 'reader'
+  ? ReaderSettings | null
+  : z.infer<(typeof settingsSchema)[K]>;
 
 /** The full settings map shape — every known key, its own value type. */
 export type SettingsMap = { [K in SettingKey]: SettingValue<K> };
@@ -147,6 +156,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     twitter: { enabled: true, inline: true, hover: true, palette: true },
   },
   ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+  reader: null,
 };
 
 /** `true` when `key` is one of the allowlisted setting keys. */
@@ -331,5 +341,6 @@ export function parseStoredSettingValue<K extends SettingKey>(
   key: K,
   raw: unknown,
 ): SettingValue<K> {
+  if (key === 'reader') return readerStoredSchema.parse(raw) as SettingValue<K>;
   return parseSettingValue(key, key === 'ai' ? normalizeAiValue(raw, true) : raw);
 }

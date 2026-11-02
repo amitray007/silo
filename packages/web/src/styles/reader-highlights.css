@@ -443,79 +443,29 @@
   justify-content: space-between;
   margin-top: 8px;
 }
+.silo-notepop-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin: -2px 0 6px -4px;
+  padding: 2px 6px 2px 2px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--fnt);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.silo-notepop-back:hover {
+  background: var(--hov);
+  color: var(--ink);
+}
 @keyframes siloNotePop {
   from {
     opacity: 0;
     transform: translateY(-4px);
   }
-}
-
-/* The notes list sheet */
-.silo-empty-note {
-  margin: 0;
-  font-size: 13px;
-  line-height: 20px;
-  color: var(--fnt);
-}
-.silo-rows {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-}
-.silo-rows button:not(.silo-stepper-btn) {
-  display: flex;
-  gap: 10px;
-  width: 100%;
-  padding: 8px;
-  border: 0;
-  border-radius: 8px;
-  background: none;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-.silo-rows button:not(.silo-stepper-btn):hover {
-  background: var(--hov);
-}
-.silo-row-orphan {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-}
-.silo-row-line {
-  display: flex;
-  flex: 1;
-  gap: 10px;
-  min-width: 0;
-  padding: 8px;
-}
-.silo-row-bar {
-  flex: none;
-  width: 3px;
-  border-radius: 2px;
-  background: var(--hl, var(--line-2));
-}
-.silo-row-text {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-.silo-row-snippet {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 13px;
-  color: var(--ink);
-}
-.silo-row-note {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 12.5px;
-  color: var(--fnt);
 }
 
 @media (hover: hover) and (pointer: fine) {
@@ -557,12 +507,11 @@
   .silo-sb-picker {
     gap: 18px;
   }
-  .silo-notepop .silo-stepper-btn,
-  .silo-rows .silo-stepper-btn {
+  .silo-notepop .silo-stepper-btn {
     min-width: 40px;
     height: 40px;
   }
-  .silo-rows button:not(.silo-stepper-btn) {
+  .silo-notepop-back {
     min-height: 40px;
   }
 }

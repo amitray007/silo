@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, render, screen } from '@testing-library/react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
@@ -9,6 +9,7 @@ import { ThemeProvider } from '../theme/ThemeProvider';
 import { AppFrame } from './AppFrame';
 import { useRowMenu } from './RowMenuContext';
 import { useSearchSilo } from './SearchSiloContext';
+import { useSidebarControl } from './SidebarControlContext';
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -53,6 +54,19 @@ function SearchSiloProbe() {
   );
 }
 
+/** What a Reader tool does when it needs the room: borrow the sidebar's width, then give it back. */
+function SidebarProbe() {
+  const sidebar = useSidebarControl();
+  return (
+    <>
+      <span>{sidebar.collapsed ? 'collapsed' : 'open'}</span>
+      <button type="button" onClick={() => sidebar.setCollapsed(!sidebar.collapsed)}>
+        borrow
+      </button>
+    </>
+  );
+}
+
 function renderAppFrame(initialEntries: string[] = ['/']) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
@@ -72,6 +86,7 @@ function renderAppFrame(initialEntries: string[] = ['/']) {
                   }
                 />
                 <Route path="/search-silo" element={<SearchSiloProbe />} />
+                <Route path="/sidebar" element={<SidebarProbe />} />
                 <Route path="/trash" element={<div>trash content</div>} />
                 <Route path="/probe" element={<EscapeProbe />} />
                 <Route path="/settings/:tab" element={<SettingsView />} />
@@ -105,6 +120,59 @@ describe('AppFrame', () => {
     fireEvent.click(screen.getByRole('button', { name: 'search silo' }));
     const input = await screen.findByRole('combobox');
     expect((input as HTMLInputElement).value).toBe('quoted passage');
+  });
+
+  it('lets a tool collapse and restore the docked sidebar without saving the choice', () => {
+    const wide = vi.fn().mockImplementation((query: string) => ({
+      matches: query.includes('min-width'),
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    vi.stubGlobal('matchMedia', wide);
+    localStorage.removeItem('silo.sidebarCollapsed');
+    const { container } = renderAppFrame(['/sidebar']);
+    const frame = container.querySelector('.silo-frame') as HTMLElement;
+    expect(frame.dataset.collapsed).toBe('false');
+    fireEvent.click(screen.getByRole('button', { name: 'borrow' }));
+    expect(frame.dataset.collapsed).toBe('true');
+    expect(screen.getByText('collapsed')).toBeDefined();
+    expect(localStorage.getItem('silo.sidebarCollapsed')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'borrow' }));
+    expect(frame.dataset.collapsed).toBe('false');
+  });
+
+  it('still restores a borrowed sidebar when the window docks it again after a phone-width hand-back', () => {
+    let docked = true;
+    const listeners = new Set<() => void>();
+    vi.stubGlobal(
+      'matchMedia',
+      vi.fn().mockImplementation((query: string) => ({
+        get matches() {
+          return query.includes('min-width') ? docked : false;
+        },
+        media: query,
+        addEventListener: (_: string, listener: () => void) => listeners.add(listener),
+        removeEventListener: (_: string, listener: () => void) => listeners.delete(listener),
+      })),
+    );
+    const { container } = renderAppFrame(['/sidebar']);
+    const frame = container.querySelector('.silo-frame') as HTMLElement;
+    fireEvent.click(screen.getByRole('button', { name: 'borrow' }));
+    expect(frame.dataset.collapsed).toBe('true');
+    // The window shrinks to a phone, and the tool hands the sidebar back there.
+    docked = false;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'borrow' }));
+    expect(frame.dataset.collapsed).toBe('true');
+    // Back on a desktop the owed restore lands.
+    docked = true;
+    act(() => {
+      for (const listener of listeners) listener();
+    });
+    expect(frame.dataset.collapsed).toBe('false');
   });
 
   it('renders the sidebar and the routed outlet content (the theme toggle now lives in Settings, not the sidebar)', () => {
