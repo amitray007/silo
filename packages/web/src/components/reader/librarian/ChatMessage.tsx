@@ -135,7 +135,7 @@ export function ChatMessage({
 }: {
   message: UIMessage;
   expired?: boolean;
-  linkId?: string;
+  linkId?: string | undefined;
   onApproval?: (response: { id: string; approved: boolean }) => void;
 }) {
   if (message.role === 'user') {

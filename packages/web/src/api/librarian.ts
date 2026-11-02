@@ -6,6 +6,8 @@ export type ChatSummary = {
   id: string;
   title: string;
   linkId: string | null;
+  /** The article's title; null for a library chat or an article that is gone. */
+  linkTitle?: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -13,11 +15,18 @@ export type ChatPage = { chats: ChatSummary[]; nextCursor: string | null };
 const CHAT_PAGE_SIZE = 20;
 export type ChatDetail = { chat: ChatSummary; messages: UIMessage[] };
 export const librarianApi = {
-  list: (linkId: string, limit = 1, cursor?: string) =>
+  /** One article's chats, or every chat when `linkId` is null. */
+  list: (linkId: string | null, limit = 1, cursor?: string) =>
     apiGet<ChatPage>(
-      `/api/librarian/chats?${new URLSearchParams({ linkId, limit: String(limit), ...(cursor ? { cursor } : {}) })}`,
+      `/api/librarian/chats?${new URLSearchParams({
+        ...(linkId ? { linkId } : {}),
+        limit: String(limit),
+        ...(cursor ? { cursor } : {}),
+      })}`,
     ),
-  create: (linkId: string) => apiPost<ChatSummary>('/api/librarian/chats', { linkId }),
+  /** A chat tied to an article, or a library chat when `linkId` is omitted. */
+  create: (linkId?: string) =>
+    apiPost<ChatSummary>('/api/librarian/chats', linkId ? { linkId } : {}),
   get: (id: string) => apiGet<ChatDetail>(`/api/librarian/chats/${id}`),
   delete: (id: string) => apiDelete(`/api/librarian/chats/${id}`),
   messagesUrl: (id: string) => apiUrl(`/api/librarian/chats/${id}/messages`),
@@ -44,6 +53,16 @@ export function useLibrarianHistory(linkId: string, enabled: boolean) {
     enabled,
   });
 }
+/** Every chat, article or not, newest first, in cursor pages: the Librarian page's list. */
+export function useLibrarianAllChats(enabled = true) {
+  return useInfiniteQuery({
+    queryKey: ['librarian', 'all'],
+    queryFn: ({ pageParam }) => librarianApi.list(null, CHAT_PAGE_SIZE, pageParam),
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (page) => page.nextCursor ?? undefined,
+    enabled,
+  });
+}
 export function useDeleteLibrarianChat() {
   const client = useQueryClient();
   return useMutation({
@@ -65,7 +84,11 @@ export function useCreateLibrarianChat() {
   const client = useQueryClient();
   return useMutation({
     mutationFn: librarianApi.create,
-    onSuccess: () => client.invalidateQueries({ queryKey: ['librarian', 'list'] }),
+    onSuccess: () =>
+      Promise.all([
+        client.invalidateQueries({ queryKey: ['librarian', 'list'] }),
+        client.invalidateQueries({ queryKey: ['librarian', 'all'] }),
+      ]),
   });
 }
 
