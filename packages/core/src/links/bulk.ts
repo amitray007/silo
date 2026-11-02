@@ -249,17 +249,14 @@ export type BulkGetResult = { id: string; link: LinkDetail | null };
 export async function getByIds(ids: ReadonlyArray<string>): Promise<BulkGetResult[]> {
   assertWithinBulkCap(ids.length);
   const details = await getDetailsByIds(ids);
-  return ids.map((id) => {
+  const byUuid = new Map([...details.values()].map((link) => [link.id.replaceAll('-', ''), link]));
+  return ids.map((id) => ({
+    id,
     // PostgreSQL accepts case differences, braces and omitted UUID hyphens.
-    const key = id.replaceAll(/[{}-]/g, '').toLowerCase();
-    const canonical = key.replace(/^(\w{8})(\w{4})(\w{4})(\w{4})(\w{12})$/, '$1-$2-$3-$4-$5');
-    const link = details.get(canonical);
-    // Highlight batches use exact input keys; PostgreSQL normalizes only the link lookup.
-    return {
-      id,
-      link: link ? { ...link, highlights: id === canonical ? link.highlights : [] } : null,
-    };
-  });
+    link:
+      byUuid.get(id.replaceAll('-', '').replaceAll('{', '').replaceAll('}', '').toLowerCase()) ??
+      null,
+  }));
 }
 
 /**

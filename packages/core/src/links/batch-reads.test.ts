@@ -54,10 +54,13 @@ describeIfPg('batch link reads (Postgres)', () => {
       highlighted.id.toUpperCase(),
       highlighted.id.replaceAll('-', ''),
       `{${highlighted.id}}`,
+      highlighted.id,
+      highlighted.id.toUpperCase(),
+      missing,
     ];
     const alternates = await h.mod().getByIds(alternateIds);
     expect(alternates).toEqual(
-      alternateIds.map((id) => ({ id, link: { ...highlighted, highlights: [] } })),
+      alternateIds.map((id) => ({ id, link: id === missing ? null : highlighted })),
     );
   });
 
