@@ -19,9 +19,9 @@ import {
 export { HIGHLIGHT_CONTEXT_MAX };
 
 import { assertLibraryWrite } from './library-write.js';
-import { normalizeTagKey } from './links.js';
 import { whereLibrary, whereLiveAnywhere } from './live.js';
 import { decodeReaderCursor, effectiveLimit, encodeReaderCursor } from './pagination.js';
+import { normalizeTagKey } from './tag-key.js';
 
 export { HIGHLIGHT_COLORS, type HighlightColor };
 
