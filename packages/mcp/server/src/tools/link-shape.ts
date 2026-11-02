@@ -252,7 +252,13 @@ export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent
     readingPosition: _readingPosition,
     highlights: _highlights,
     ...base
-  } = toBaseLinkContent({ ...link, extractedText: null, readingPosition: null, highlights: [] });
+  } = toBaseLinkContent({
+    ...link,
+    extractedText: null,
+    readerPrefs: {},
+    readingPosition: null,
+    highlights: [],
+  });
   void _extractedText;
   void _readingPosition;
   void _highlights;
