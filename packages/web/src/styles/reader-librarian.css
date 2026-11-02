@@ -294,15 +294,18 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   z-index: 3;
   display: flex;
   flex-direction: column;
-  width: min(300px, calc(100% - 16px));
+  width: min(360px, calc(100% - 16px));
   min-width: 0;
-  max-height: min(320px, 50dvh);
+  max-height: min(320px, calc(100% - 56px));
   padding: 4px;
   box-shadow: var(--elev-2);
   font-size: 14px;
   line-height: 20px;
   transform-origin: top left;
   pointer-events: auto;
+}
+.silo-chat-history .silo-menu-grab {
+  display: none;
 }
 .silo-chat-history-scroll {
   flex: 1;
@@ -312,6 +315,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 }
 .silo-chat-history ul {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1px;
   margin: 0;
   padding: 0;
