@@ -6,7 +6,7 @@ import {
   useSpring,
   useTransform,
 } from 'motion/react';
-import { useEffect, useMemo, useState } from 'react';
+import { memo, useCallback, useEffect, useMemo, useState } from 'react';
 import { collectSections, groupSections, type OutlineGroup } from './outlineGroups';
 
 /** The pane must be this wide before the rail shows. */
@@ -23,7 +23,7 @@ const HEAD_HEIGHT = 44;
 const CARD_MAX = 170;
 
 /** One tick: how close the pointer is drives a spring that widens and brightens it. */
-function Tick({
+const Tick = memo(function Tick({
   index,
   pointerY,
   reduced,
@@ -39,14 +39,14 @@ function Tick({
   crest: boolean;
   group: OutlineGroup;
   current: boolean;
-  onEnter: () => void;
-  onClick: () => void;
+  onEnter: (index: number) => void;
+  onClick: (index: number) => void;
 }) {
   const centre = PAD + index * STEP + STEP / 2;
   const rest = current ? CURRENT : BASE;
   const lift = useTransform(pointerY, (y) => Math.max(0, 1 - Math.abs(y - centre) / REACH));
   const spring = useSpring(lift, SPRING);
-  const width = useTransform(spring, (m) => rest + m * (CREST - rest));
+  const transform = useTransform(spring, (m) => `scaleX(${(rest + m * (CREST - rest)) / CREST})`);
   const opacity = useTransform(spring, (m) => 0.55 + 0.45 * m);
   return (
     <button
@@ -57,14 +57,16 @@ function Tick({
       data-crest={reduced && crest}
       aria-label={group.title || 'Paragraph'}
       aria-current={current || undefined}
-      onMouseEnter={onEnter}
-      onFocus={onEnter}
-      onClick={onClick}
+      onMouseEnter={() => onEnter(index)}
+      onFocus={() => onEnter(index)}
+      onClick={() => onClick(index)}
     >
-      <motion.i style={reduced ? {} : { width, opacity }} />
+      <motion.i
+        style={reduced ? {} : { width: CREST, transform, transformOrigin: 'left center', opacity }}
+      />
     </button>
   );
-}
+});
 
 /** The group the reading line has reached: the last one that starts above 38% of the pane. */
 function currentGroup(groups: OutlineGroup[], scroll: HTMLElement): number {
@@ -142,12 +144,28 @@ export function OutlineRail({
   const [hover, setHover] = useState<number | null>(null);
   const pointerY = useMotionValue(FAR);
   const cardY = useSpring(0, SPRING);
+  const cardTransform = useTransform(cardY, (y) => `translateY(${y}px)`);
   // biome-ignore lint/correctness/useExhaustiveDependencies: version re-reads the prose after layout changes.
   const groups = useMemo(
     () => (wide ? groupSections(collectSections(prose)) : []),
     [prose, wide, version],
   );
   const current = useCurrentGroup(groups, scroll);
+  const goTo = useCallback(
+    (index: number) => {
+      const el = groups[index]?.sections[0]?.el;
+      if (!el) return;
+      scroll.scrollTo({
+        top:
+          scroll.scrollTop +
+          el.getBoundingClientRect().top -
+          scroll.getBoundingClientRect().top -
+          90,
+        behavior: reduced ? 'auto' : 'smooth',
+      });
+    },
+    [groups, scroll, reduced],
+  );
 
   const centre = (height - groups.length * STEP) / 2;
   const cardTop =
@@ -191,24 +209,16 @@ export function OutlineRail({
             crest={hover === index}
             group={group}
             current={index === current}
-            onEnter={() => setHover(index)}
-            onClick={() => {
-              const el = group.sections[0]?.el;
-              if (!el) return;
-              scroll.scrollTo({
-                top:
-                  scroll.scrollTop +
-                  el.getBoundingClientRect().top -
-                  scroll.getBoundingClientRect().top -
-                  90,
-                behavior: reduced ? 'auto' : 'smooth',
-              });
-            }}
+            onEnter={setHover}
+            onClick={goTo}
           />
         ))}
       </div>
       {hovered && (
-        <motion.div className="silo-outline-card" style={{ top: reduced ? cardTop : cardY }}>
+        <motion.div
+          className="silo-outline-card"
+          style={reduced ? { top: cardTop } : { top: 0, transform: cardTransform }}
+        >
           <strong>{hovered.title}</strong>
           {hovered.body && <span>{hovered.body}</span>}
         </motion.div>
