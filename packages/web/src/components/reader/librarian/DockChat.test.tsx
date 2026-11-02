@@ -1,9 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatMessage } from './ChatMessage';
 import { DockChat } from './DockChat';
 import { requestDock } from './selectionStore';
+import { forgetChat } from './useLibrarianChat';
 
 const summary = {
   id: 'chat-1',
@@ -51,7 +52,12 @@ function setup(resume = false) {
   );
   return { fetcher, fold };
 }
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  cleanup();
+  forgetChat('chat-1');
+  forgetChat('attached-chat');
+  vi.unstubAllGlobals();
+});
 it('focuses the composer, posts only the quick action message and renders the stream', async () => {
   const { fetcher } = setup();
   expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Ask the Librarian' }));

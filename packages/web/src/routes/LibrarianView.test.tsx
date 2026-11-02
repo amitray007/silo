@@ -29,6 +29,11 @@ const reply = (text: string) =>
     .map((chunk) => `data: ${JSON.stringify(chunk)}\n\n`)
     .join('')}data: [DONE]\n\n`;
 
+let ready = true;
+vi.mock('../api/librarian', async (original) => ({
+  ...(await original<typeof import('../api/librarian')>()),
+  useLibrarianReady: () => ready,
+}));
 let run = 0;
 /** Chat ids are unique per test: open chats stay cached across renders in one file. */
 const stored = (n: number, extra: Partial<Stored> = {}): Stored => ({
@@ -150,6 +155,7 @@ const rows = () => Array.from(document.querySelectorAll<HTMLElement>('[data-chat
 const where = () => screen.getByTestId('where').textContent;
 
 beforeEach(() => {
+  ready = true;
   run += 1;
   FakeObserver.all = [];
   vi.stubGlobal('IntersectionObserver', FakeObserver);
@@ -267,7 +273,7 @@ it('falls back to the empty pane when the last chat is deleted', async () => {
   fireEvent.click(screen.getByRole('button', { name: 'Delete chat: Chat 1' }));
   fireEvent.click(await screen.findByRole('button', { name: 'Delete' }));
   await screen.findByText('No chats yet. Use + to start one.');
-  expect(where()).toBe('');
+  await waitFor(() => expect(where()).toBe(''));
   expect(screen.getByText('Select a chat')).toBeTruthy();
 });
 
@@ -286,4 +292,12 @@ it('says so when there are no chats', async () => {
   setup([]);
   await screen.findByText('No chats yet. Use + to start one.');
   expect(screen.getByRole('button', { name: 'New chat' })).toBeTruthy();
+});
+
+it('gates direct navigation when the Librarian is off', () => {
+  ready = false;
+  setup([]);
+  expect(screen.getByRole('link', { name: 'Settings → AI' })).toBeTruthy();
+  expect(screen.queryByRole('textbox')).toBeNull();
+  expect(screen.queryByRole('region', { name: 'Chats' })).toBeNull();
 });

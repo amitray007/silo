@@ -49,32 +49,24 @@ type Entry = {
 type Slot = {
   active: string | null | undefined;
   draft: Entry | undefined;
-  byId: Map<string, Entry>;
   listeners: Set<() => void>;
   subscribe: (listener: () => void) => () => void;
-  select: (active: string | null) => void;
+  select: (active: string | null | undefined) => void;
 };
 const slots = new Map<string, Slot>();
+const chats = new Map<string, Entry>();
 let usage = 0;
 
 function pruneChats(current: Entry) {
-  const recent: { slot: Slot; id: string | null; entry: Entry }[] = [];
-  for (const slot of slots.values()) {
-    const entries: { slot: Slot; id: string | null; entry: Entry }[] = [...slot.byId].map(
-      ([id, entry]) => ({ slot, id, entry }),
-    );
-    if (slot.draft) entries.push({ slot, id: null, entry: slot.draft });
-    for (const item of entries) {
-      if (item.entry === current || ['streaming', 'submitted'].includes(item.entry.chat.status))
-        continue;
-      recent.push(item);
-    }
-  }
-  recent.sort((a, b) => (b.entry.used ?? 0) - (a.entry.used ?? 0));
-  for (const { slot, id } of recent.slice(8)) {
-    if (id === null) slot.draft = undefined;
-    else slot.byId.delete(id);
-  }
+  const active = new Set([...slots.values()].map((slot) => slot.active));
+  const recent = [...chats].filter(
+    ([id, entry]) =>
+      entry !== current &&
+      !active.has(id) &&
+      !['streaming', 'submitted'].includes(entry.chat.status),
+  );
+  recent.sort((a, b) => (b[1].used ?? 0) - (a[1].used ?? 0));
+  for (const [id] of recent.slice(8)) chats.delete(id);
 }
 
 function slotFor(linkId: string): Slot {
@@ -84,7 +76,6 @@ function slotFor(linkId: string): Slot {
   const slot: Slot = {
     active: undefined,
     draft: undefined,
-    byId: new Map(),
     listeners,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -104,7 +95,7 @@ function slotFor(linkId: string): Slot {
 
 /** The server row exists now: the draft becomes an ordinary chat. */
 function adopt(slot: Slot, entry: Entry, id: string) {
-  slot.byId.set(id, entry);
+  chats.set(id, entry);
   if (slot.draft === entry) slot.draft = undefined;
   if (slot.active === null) slot.select(id);
 }
@@ -152,11 +143,11 @@ function newEntry(client: QueryClient, id: string | null): Entry {
   });
   return { chat, chatId, title: 'New chat', hydrated: id === null };
 }
-function entryFor(client: QueryClient, slot: Slot, id: string): Entry {
-  const cached = slot.byId.get(id);
+function entryFor(client: QueryClient, id: string): Entry {
+  const cached = chats.get(id);
   if (cached) return cached;
   const entry = newEntry(client, id);
-  slot.byId.set(id, entry);
+  chats.set(id, entry);
   return entry;
 }
 function draftFor(client: QueryClient, slot: Slot): Entry {
@@ -275,11 +266,11 @@ export function useLibrarianChat(linkId: string) {
   }, [slot, latest]);
 
   // While the newest chat is unknown, the draft stands in; nothing can be sent yet.
-  const entry = resolved ? entryFor(client, slot, resolved) : draftFor(client, slot);
+  const entry = resolved ? entryFor(client, resolved) : draftFor(client, slot);
   const thread = useEntryChat({ entry, slot, linkId, resolved, listError: !!list.error });
   async function loadImported(id: string) {
     const stored = await librarianApi.get(id);
-    const imported = entryFor(client, slot, id);
+    const imported = entryFor(client, id);
     imported.chat.messages = stored.messages;
     imported.title = stored.chat.title;
     imported.hydrated = true;
@@ -297,8 +288,9 @@ export function useLibrarianChat(linkId: string) {
   /** Delete a chat for good. When it is the one on show, `next` takes its place. */
   async function deleteChat(id: string, next: string | null) {
     await remove.mutateAsync(id);
+    const wasActive = slot.active === id;
     forgetChat(id);
-    if (slot.active === id) {
+    if (wasActive) {
       if (next === null) draftFor(client, slot);
       slot.select(next);
     }
@@ -315,9 +307,10 @@ export function useLibrarianChat(linkId: string) {
 
 /** A deleted chat stops streaming and leaves every slot. */
 export function forgetChat(id: string) {
+  void chats.get(id)?.chat.stop();
+  chats.delete(id);
   for (const slot of slots.values()) {
-    slot.byId.get(id)?.chat.stop();
-    slot.byId.delete(id);
+    if (slot.active === id) slot.select(undefined);
   }
 }
 
@@ -325,7 +318,7 @@ const LIBRARY_PAGE = 'librarian-page';
 /**
  * The chat on the Librarian page: `chatId` is the open chat, `null` a new library chat that has no
  * server row until its first question (then `onCreated` hears the new id). The page owns which
- * chat is open; this slot only keeps each chat's conversation alive while the page stays open.
+ * chat is open; stored conversations share the same cache as the article dock.
  */
 export function useLibrarianPageChat(chatId: string | null, onCreated: (id: string) => void) {
   const client = useQueryClient();
@@ -336,7 +329,11 @@ export function useLibrarianPageChat(chatId: string | null, onCreated: (id: stri
     if (chatId) setAdopted(null);
   }, [chatId]);
   const shown = chatId ?? adopted;
-  const entry = shown ? entryFor(client, slot, shown) : draftFor(client, slot);
+  useEffect(() => {
+    slot.select(shown);
+    return () => slot.select(undefined);
+  }, [slot, shown]);
+  const entry = shown ? entryFor(client, shown) : draftFor(client, slot);
   return useEntryChat({
     entry,
     slot,

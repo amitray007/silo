@@ -1,5 +1,6 @@
 import { type CSSProperties, useCallback } from 'react';
-import { useSearchParams } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
+import { useLibrarianReady } from '../api/librarian';
 import { ListPaneDivider } from '../components/reader/ListPaneDivider';
 import { ChatList } from '../components/reader/librarian/ChatList';
 import { ChatPane } from '../components/reader/librarian/ChatPane';
@@ -46,6 +47,21 @@ function NoChatOpen() {
  * does and the open chat takes the reader's place; below 1024px the chat covers the list, with Back.
  */
 export function LibrarianView() {
+  const ready = useLibrarianReady();
+  if (!ready)
+    return (
+      <p>
+        Turn on the Librarian in{' '}
+        <Link to="/" state={{ settingsTab: 'ai' }}>
+          Settings → AI
+        </Link>
+        .
+      </p>
+    );
+  return <ReadyLibrarianView />;
+}
+
+function ReadyLibrarianView() {
   const [params, setParams] = useSearchParams();
   const fullWindow = useMediaQuery(layoutMedia.fullWindowReader);
   const [listWidth] = useListWidth();
