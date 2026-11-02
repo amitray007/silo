@@ -83,11 +83,32 @@ function trimToBudget(
   budget: number,
 ): ModelMessage[] {
   const kept = [...messages];
-  while (kept.length && estimate(instructions, kept) > budget) {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  const protectedLength = messages.length - Math.max(0, lastUser);
+  while (kept.length > protectedLength && estimate(instructions, kept) > budget) {
     kept.shift();
-    while (kept.length && kept[0]?.role !== 'user') kept.shift();
+    while (kept.length > protectedLength && kept[0]?.role !== 'user') kept.shift();
   }
   return kept;
+}
+
+async function summaryCutoff(
+  originalMessages: UIMessage[],
+  count: number,
+  summary: string | null,
+  budget: number,
+): Promise<number> {
+  let cutoff = userTurnCutoff(originalMessages, count);
+  while (cutoff > count) {
+    const prompt = JSON.stringify({
+      previousSummary: summary,
+      messages: stubOldToolResults(await modelMessages(originalMessages.slice(count, cutoff)), 0),
+    });
+    if ((summaryPrompt.length + prompt.length) / 4 <= budget) break;
+    cutoff--;
+    while (cutoff > count && originalMessages[cutoff]?.role !== 'user') cutoff--;
+  }
+  return cutoff;
 }
 
 export async function compactConversation(
@@ -104,7 +125,7 @@ export async function compactConversation(
   let messages = await modelMessages(originalMessages.slice(count));
   if (estimate(instructionsWithSummary(instructions, summary), messages) > budget) {
     try {
-      const cutoff = userTurnCutoff(originalMessages, count);
+      const cutoff = await summaryCutoff(originalMessages, count, summary, budget);
       if (cutoff > count) {
         summary = await summarize(request, originalMessages, cutoff, credential, model);
         count = cutoff;

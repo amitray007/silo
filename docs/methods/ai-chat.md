@@ -289,6 +289,34 @@ gets 400.
 - Saved-item citations use `[Title](/?link=<uuid>)` and open in the Reader.
   External citations still open in a new tab.
 
+### Slice 4 detail: chat history
+
+- The chat header has three parts: the chat title as a button with a chevron, a
+  plus button and the minus. The title opens the history menu. Plus starts a new
+  chat: an empty panel with the article quick actions. The server row for a new
+  chat is created on the first send, as before, so an unused new chat leaves
+  nothing behind.
+- The history menu looks like Silo's other menus (the Library switcher, More
+  actions). It lists every chat for this article, newest first. It loads 20
+  chats at a time and loads the next 20 when the list scrolls to its end, with
+  no upper limit. Each row shows the title, a relative time ("2 min ago") and a
+  delete button. The open chat is marked.
+- Delete asks in the row ("Delete this chat?" with Delete and Cancel), then
+  removes the chat for good. Deleting the open chat opens the next chat in the
+  list, or an empty new chat when none is left.
+- Choosing a row opens that chat with its stored messages. Arrow keys move
+  between rows, Enter opens one, Delete asks to delete it. Escape closes the
+  menu first (and cancels a pending delete first); a second Escape folds the
+  chat. Focus returns to the title button.
+- Each chat keeps its own conversation state while the page stays open. If an
+  answer is still streaming when you switch, it stops showing, it still saves on
+  the server, and it never appears in another chat. Switching back shows it.
+- The dock Ask carries a small dot (`--markt`) when this article has at least
+  one stored chat and the chat is folded.
+- The open chat is remembered per article while the page stays open, so folding
+  and reopening Ask returns to it. A fresh page load opens the newest chat.
+- No server change: the list route already takes `cursor` and `limit`.
+
 ### Slice 5 detail
 
 Long chats use a stored summary plus recent messages. Core passes the summary,
@@ -306,6 +334,9 @@ only the uncovered messages. Stored messages remain available in full.
 If summary generation or storage fails, the worker logs a fixed failure code and
 drops the oldest model messages until the input fits the budget. Compaction errors
 do not fail the reply. Tests use the SDK 7 mock model and a disposable database.
+
+Summary input, including the previous summary, fits the same characters / 4 budget; each call advances only through complete user turns it summarized.
+Budget trimming preserves the last user turn and its approval continuation, even when that tail alone exceeds the budget.
 
 ### Slice 6 detail
 
