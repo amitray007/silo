@@ -266,19 +266,25 @@ it('sends a custom chip by id with its label as the turn text', () => {
   expect(chat.send).toHaveBeenCalledWith('Plain words', 'custom:abc', undefined);
 });
 
-it('offers no chips in a library chat, which has no article to relate to', async () => {
-  const { LIBRARY_ACTIONS } = await import('./ChatThread');
+it('sends the Library chip id, and a custom Library chip its own id', () => {
+  const chat = fakeChat({ messages: [] });
   render(
     <ChatThread
-      chat={fakeChat({ messages: [] })}
+      chat={chat}
       composer={composer()}
-      actions={LIBRARY_ACTIONS}
+      actions={[
+        ['week', 'Saved this week'],
+        ['highlights', 'Recent highlights'],
+        ['custom:lib', 'Reading list'],
+      ]}
       emptyText="Empty"
       header={null}
     />,
   );
-  const chips = Array.from(document.querySelectorAll('.silo-composer-quick button'));
-  expect(chips).toEqual([]);
+  fireEvent.click(screen.getByRole('button', { name: 'Saved this week' }));
+  expect(chat.send).toHaveBeenLastCalledWith('Saved this week', 'week', undefined);
+  fireEvent.click(screen.getByRole('button', { name: 'Reading list' }));
+  expect(chat.send).toHaveBeenLastCalledWith('Reading list', 'custom:lib', undefined);
 });
 
 it('reads the passage chips from the owner setting', async () => {
