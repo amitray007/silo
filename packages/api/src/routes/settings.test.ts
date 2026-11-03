@@ -316,6 +316,41 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     ).toEqual(merged);
   });
 
+  it.each(['界', '\u0001'])(
+    'PATCH accepts the largest action lists with %j prompts',
+    async (character) => {
+      const { app, core } = harness.mod();
+      const actions = structuredClone(core.LIBRARIAN_ACTIONS_DEFAULTS);
+      for (const list of ['passage', 'article'] as const) {
+        for (const entry of actions[list]) {
+          if ('hidden' in entry) entry.hidden = true;
+        }
+        for (let i = 0; i < 6; i++) {
+          actions[list].push({
+            id: `custom:00000000-0000-4000-8000-00000000000${i}`,
+            label: character.repeat(24),
+            prompt: character.repeat(1000),
+          });
+        }
+      }
+      const response = await patchSettings(app, { librarianActions: actions });
+      expect(response.status).toBe(200);
+      expect((await core.getAllSettings()).librarianActions).toEqual(actions);
+    },
+  );
+
+  it('PATCH still rejects far larger action bodies and keeps the small limit for other keys', async () => {
+    const { app } = harness.mod();
+    for (const body of [
+      { librarianActions: { prompt: 'x'.repeat(128 * 1024) } },
+      { theme: 'dark', padding: 'x'.repeat(17 * 1024) },
+    ]) {
+      const response = await patchSettings(app, body);
+      expect(response.status).toBe(413);
+      expect(await response.json()).toMatchObject({ error: 'payload_too_large' });
+    }
+  });
+
   it('drift guard: every key in core.SETTINGS_DEFAULTS is accepted by the edge PATCH schema (200, not 400)', async () => {
     // The edge schema (settingsPatchBodySchema in routes/settings.ts) is
     // hand-duplicated from core's allowlist (schema.ts's settingsSchema),
