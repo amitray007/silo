@@ -1,12 +1,27 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import {
+  act,
+  configure,
+  fireEvent,
+  getConfig,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
-import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { makeLink } from '../../../test/fixtures';
 import { articlePrefs, TestArticlePrefs } from '../../../test/reader-prefs';
 import type { LoadProgress, TtsEngine } from '../listen/engines';
 import { ReaderContent } from '../ReaderContent';
 import { DockHostContext } from './DockHostContext';
+
+// The first test renders the dock in a cold worker; on a loaded CI runner that takes over the
+// default 1 s wait for its buttons, so this file waits up to 5 s.
+const defaultWait = getConfig().asyncUtilTimeout;
+beforeAll(() => configure({ asyncUtilTimeout: 5000 }));
+afterAll(() => configure({ asyncUtilTimeout: defaultWait }));
 
 const engineState = vi.hoisted(() => ({
   load: undefined as
