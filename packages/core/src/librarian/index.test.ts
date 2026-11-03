@@ -8,6 +8,33 @@ vi.mock('../ai/status.js', () => ({ isAiFeatureOn: vi.fn(async () => true) }));
 const suite = postgresReachable() ? describe : describe.skip;
 suite('Librarian persistence', () => {
   const h = setupPgHarness('silo_librarian', () => import('./index.js'));
+  it('lists article titles and null for library or deleted articles', async () => {
+    const c = h.mod();
+    const { db, links } = await import('@silo/db');
+    const { eq } = await import('drizzle-orm');
+    const [link] = await db
+      .insert(links)
+      .values({
+        url: 'https://example.com/librarian-six',
+        canonicalUrl: 'https://example.com/librarian-six',
+        title: 'Article six',
+        sourceKind: 'web',
+      })
+      .returning();
+    if (!link) throw new Error('missing link');
+    const article = await c.createChat({ linkId: link.id });
+    const library = await c.createChat();
+    expect((await c.listChats()).chats.find((chat) => chat.id === article?.id)?.linkTitle).toBe(
+      'Article six',
+    );
+    expect(
+      (await c.listChats()).chats.find((chat) => chat.id === library?.id)?.linkTitle,
+    ).toBeNull();
+    await db.update(links).set({ deletedAt: new Date() }).where(eq(links.id, link.id));
+    expect(
+      (await c.listChats()).chats.find((chat) => chat.id === article?.id)?.linkTitle,
+    ).toBeNull();
+  });
   it('only advances summary cutoffs and counts stored sequences', async () => {
     const c = h.mod();
     const chat = await c.createChat();

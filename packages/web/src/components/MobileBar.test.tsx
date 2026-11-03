@@ -8,6 +8,8 @@ import { ThemeProvider } from '../theme/ThemeProvider';
 import { MobileBar } from './MobileBar';
 import { SettingsProvider, useSettings } from './SettingsContext';
 
+let ready = false;
+vi.mock('../api/librarian', () => ({ useLibrarianReady: () => ready }));
 function Probe() {
   const { open } = useSettings();
   const location = useLocation();
@@ -40,6 +42,7 @@ function setup(phone = true) {
 }
 
 afterEach(() => {
+  ready = false;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   localStorage.clear();
@@ -78,4 +81,17 @@ describe('phone bottom bar', () => {
     setup(false);
     expect(screen.queryByRole('navigation')).toBeNull();
   });
+});
+
+it('opens Librarian from More on phones only when ready', () => {
+  ready = true;
+  setup();
+  fireEvent.click(screen.getByRole('button', { name: 'More' }));
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Librarian' }));
+  expect(screen.getByRole('status').textContent).toBe('/librarian');
+});
+it('hides Librarian from More when off', () => {
+  setup();
+  fireEvent.click(screen.getByRole('button', { name: 'More' }));
+  expect(screen.queryByRole('menuitem', { name: 'Librarian' })).toBeNull();
 });

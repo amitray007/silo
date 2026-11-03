@@ -42,8 +42,13 @@ export async function listChats({
   const size = Math.max(1, Math.min(100, Math.trunc(limit)));
   const key = cursor ? decodeListCursor(cursor) : null;
   const rows = await db
-    .select({ chat: chats, timestamp: sql<string>`${chats.updatedAt}::text` })
+    .select({
+      chat: chats,
+      linkTitle: links.title,
+      timestamp: sql<string>`${chats.updatedAt}::text`,
+    })
     .from(chats)
+    .leftJoin(links, and(eq(chats.linkId, links.id), isNull(links.deletedAt)))
     .where(
       and(
         linkId ? eq(chats.linkId, linkId) : undefined,
@@ -57,7 +62,7 @@ export async function listChats({
   const page = rows.slice(0, size);
   const last = page.at(-1);
   return {
-    chats: page.map((r) => r.chat),
+    chats: page.map((r) => ({ ...r.chat, linkTitle: r.linkTitle })),
     nextCursor: rows.length > size && last ? encodeListCursor(last.timestamp, last.chat.id) : null,
   };
 }

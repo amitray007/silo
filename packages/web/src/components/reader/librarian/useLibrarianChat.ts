@@ -1,5 +1,5 @@
 import { Chat, type UIMessage, useChat } from '@ai-sdk/react';
-import { useQueryClient } from '@tanstack/react-query';
+import { type QueryClient, useQueryClient } from '@tanstack/react-query';
 import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai';
 import { useEffect, useReducer, useState, useSyncExternalStore } from 'react';
 import { queryKeys } from '../../../api/hooks';
@@ -49,32 +49,24 @@ type Entry = {
 type Slot = {
   active: string | null | undefined;
   draft: Entry | undefined;
-  byId: Map<string, Entry>;
   listeners: Set<() => void>;
   subscribe: (listener: () => void) => () => void;
-  select: (active: string | null) => void;
+  select: (active: string | null | undefined) => void;
 };
 const slots = new Map<string, Slot>();
+const chats = new Map<string, Entry>();
 let usage = 0;
 
 function pruneChats(current: Entry) {
-  const recent: { slot: Slot; id: string | null; entry: Entry }[] = [];
-  for (const slot of slots.values()) {
-    const entries: { slot: Slot; id: string | null; entry: Entry }[] = [...slot.byId].map(
-      ([id, entry]) => ({ slot, id, entry }),
-    );
-    if (slot.draft) entries.push({ slot, id: null, entry: slot.draft });
-    for (const item of entries) {
-      if (item.entry === current || ['streaming', 'submitted'].includes(item.entry.chat.status))
-        continue;
-      recent.push(item);
-    }
-  }
-  recent.sort((a, b) => (b.entry.used ?? 0) - (a.entry.used ?? 0));
-  for (const { slot, id } of recent.slice(8)) {
-    if (id === null) slot.draft = undefined;
-    else slot.byId.delete(id);
-  }
+  const active = new Set([...slots.values()].map((slot) => slot.active));
+  const recent = [...chats].filter(
+    ([id, entry]) =>
+      entry !== current &&
+      !active.has(id) &&
+      !['streaming', 'submitted'].includes(entry.chat.status),
+  );
+  recent.sort((a, b) => (b[1].used ?? 0) - (a[1].used ?? 0));
+  for (const [id] of recent.slice(8)) chats.delete(id);
 }
 
 function slotFor(linkId: string): Slot {
@@ -84,7 +76,6 @@ function slotFor(linkId: string): Slot {
   const slot: Slot = {
     active: undefined,
     draft: undefined,
-    byId: new Map(),
     listeners,
     subscribe: (listener) => {
       listeners.add(listener);
@@ -104,82 +95,88 @@ function slotFor(linkId: string): Slot {
 
 /** The server row exists now: the draft becomes an ordinary chat. */
 function adopt(slot: Slot, entry: Entry, id: string) {
-  slot.byId.set(id, entry);
+  chats.set(id, entry);
   if (slot.draft === entry) slot.draft = undefined;
   if (slot.active === null) slot.select(id);
 }
 
-export function useLibrarianChat(linkId: string) {
-  const client = useQueryClient();
-  const list = useLibrarianChats(linkId);
-  const create = useCreateLibrarianChat();
-  const remove = useDeleteLibrarianChat();
-  const slot = slotFor(linkId);
-  const active = useSyncExternalStore(slot.subscribe, () => slot.active);
-  const latest = list.data ? (list.data.chats[0]?.id ?? null) : undefined;
-  const resolved = active === undefined ? latest : active;
-  useEffect(() => {
-    // Pin the newest chat once it is known, so a later refresh cannot swap it under the reader.
-    if (slot.active === undefined && latest !== undefined) slot.select(latest);
-  }, [slot, latest]);
-
-  const newEntry = (id: string | null): Entry => {
-    const chatId = { current: id };
-    const chat = new Chat({
-      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
-      onFinish: ({ message }) => {
-        if (message.parts.some((part) => toolName(part) && WRITE_TRACES[toolName(part) ?? ''])) {
-          for (const key of [
-            'links',
-            'links-recents',
-            'links-tag-only',
-            'search',
-            'link-titles',
-            'link',
-            'tags',
-            'counts',
-            'saved-links',
-            'trash',
-            'trash-search',
-            'feeds',
-            'feed',
-            'feed-posts',
-          ])
-            void client.invalidateQueries({ queryKey: [key] });
-        }
-        for (const id of refreshedReaderIds(message))
-          void client.invalidateQueries({ queryKey: queryKeys.liveReader(id) });
-        void client.invalidateQueries({ queryKey: ['librarian'] });
+/** A chat on its own `Chat`, its transport posting to the chat's id once the server row exists. */
+function newEntry(client: QueryClient, id: string | null): Entry {
+  const chatId = { current: id };
+  const chat = new Chat({
+    sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+    onFinish: ({ message }) => {
+      if (message.parts.some((part) => toolName(part) && WRITE_TRACES[toolName(part) ?? ''])) {
+        for (const key of [
+          'links',
+          'links-recents',
+          'links-tag-only',
+          'search',
+          'link-titles',
+          'link',
+          'tags',
+          'counts',
+          'saved-links',
+          'trash',
+          'trash-search',
+          'feeds',
+          'feed',
+          'feed-posts',
+        ])
+          void client.invalidateQueries({ queryKey: [key] });
+      }
+      for (const id of refreshedReaderIds(message))
+        void client.invalidateQueries({ queryKey: queryKeys.liveReader(id) });
+      void client.invalidateQueries({ queryKey: ['librarian'] });
+    },
+    transport: new DefaultChatTransport({
+      credentials: 'include',
+      headers: { 'X-Silo-CSRF': '1' },
+      prepareSendMessagesRequest: ({ messages }) => {
+        if (!chatId.current) throw new Error('Chat is not ready');
+        return {
+          api: librarianApi.messagesUrl(chatId.current),
+          body: { message: messages.at(-1) },
+        };
       },
-      transport: new DefaultChatTransport({
-        credentials: 'include',
-        headers: { 'X-Silo-CSRF': '1' },
-        prepareSendMessagesRequest: ({ messages }) => {
-          if (!chatId.current) throw new Error('Chat is not ready');
-          return {
-            api: librarianApi.messagesUrl(chatId.current),
-            body: { message: messages.at(-1) },
-          };
-        },
-      }),
-    });
-    return { chat, chatId, title: 'New chat', hydrated: id === null };
-  };
-  const entryFor = (id: string): Entry => {
-    const cached = slot.byId.get(id);
-    if (cached) return cached;
-    const entry = newEntry(id);
-    slot.byId.set(id, entry);
-    return entry;
-  };
-  const draft = (): Entry => {
-    slot.draft ??= newEntry(null);
-    return slot.draft;
-  };
-  // While the newest chat is unknown, the draft stands in; nothing can be sent yet.
-  const entry = resolved ? entryFor(resolved) : draft();
-  const { chat, chatId } = entry;
+    }),
+  });
+  return { chat, chatId, title: 'New chat', hydrated: id === null };
+}
+function entryFor(client: QueryClient, id: string): Entry {
+  const cached = chats.get(id);
+  if (cached) return cached;
+  const entry = newEntry(client, id);
+  chats.set(id, entry);
+  return entry;
+}
+function draftFor(client: QueryClient, slot: Slot): Entry {
+  slot.draft ??= newEntry(client, null);
+  return slot.draft;
+}
 
+/**
+ * Everything one chat on show needs: its messages, title, sending (creating the server row on the
+ * first send) and approval state. `resolved` is the chat's id, `null` for a new chat, `undefined`
+ * while it is still unknown; `linkId` is the article a new chat belongs to, if any.
+ */
+function useEntryChat({
+  entry,
+  slot,
+  linkId,
+  resolved,
+  listError,
+  onAdopt,
+}: {
+  entry: Entry;
+  slot: Slot;
+  linkId: string | undefined;
+  resolved: string | null | undefined;
+  listError: boolean;
+  onAdopt?: (id: string) => void;
+}) {
+  const create = useCreateLibrarianChat();
+  const { chat, chatId } = entry;
   const [, rerender] = useReducer((count: number) => count + 1, 0);
   const [failedEntry, setFailedEntry] = useState<Entry | null>(null);
   const [creatingEntry, setCreatingEntry] = useState<Entry | null>(null);
@@ -218,7 +215,7 @@ export function useLibrarianChat(linkId: string) {
     action?: string,
     passage?: { quote: string; paragraph: number },
   ) {
-    if (!text.trim() || pendingApproval || busy || loading || list.error || detail.error) return;
+    if (!text.trim() || pendingApproval || busy || loading || listError || detail.error) return;
     setFailedEntry(null);
     setCreatingEntry(entry);
     try {
@@ -227,6 +224,7 @@ export function useLibrarianChat(linkId: string) {
         chatId.current = created.id;
         entry.title = text.trim().slice(0, 60);
         adopt(slot, entry, created.id);
+        onAdopt?.(created.id);
       }
       await state.sendMessage({
         text: text.trim(),
@@ -238,48 +236,115 @@ export function useLibrarianChat(linkId: string) {
       setCreatingEntry((current) => (current === entry ? null : current));
     }
   }
+  return {
+    ...state,
+    refresh: rerender,
+    title,
+    pendingApproval,
+    send,
+    busy,
+    loading,
+    failed: failedEntry === entry || !!state.error || listError || !!detail.error,
+    errorText: chatErrorText(state.error?.message),
+  };
+}
+
+/** What a conversation view needs from a chat, whichever hook supplied it. */
+export type ThreadChat = ReturnType<typeof useLibrarianPageChat>;
+
+export function useLibrarianChat(linkId: string) {
+  const client = useQueryClient();
+  const list = useLibrarianChats(linkId);
+  const remove = useDeleteLibrarianChat();
+  const slot = slotFor(linkId);
+  const active = useSyncExternalStore(slot.subscribe, () => slot.active);
+  const latest = list.data ? (list.data.chats[0]?.id ?? null) : undefined;
+  const resolved = active === undefined ? latest : active;
+  useEffect(() => {
+    // Pin the newest chat once it is known, so a later refresh cannot swap it under the reader.
+    if (slot.active === undefined && latest !== undefined) slot.select(latest);
+  }, [slot, latest]);
+
+  // While the newest chat is unknown, the draft stands in; nothing can be sent yet.
+  const entry = resolved ? entryFor(client, resolved) : draftFor(client, slot);
+  const thread = useEntryChat({ entry, slot, linkId, resolved, listError: !!list.error });
   async function loadImported(id: string) {
     const stored = await librarianApi.get(id);
-    const imported = entryFor(id);
+    const imported = entryFor(client, id);
     imported.chat.messages = stored.messages;
     imported.title = stored.chat.title;
     imported.hydrated = true;
     slot.select(id);
-    rerender();
+    thread.refresh();
   }
   /** Show another chat. A stream still running in this one carries on, unseen. */
   const open = (id: string) => slot.select(id);
   /** Show an empty chat; its server row waits for the first question. */
   const startNew = () => {
     if (resolved === null) return;
-    draft();
+    draftFor(client, slot);
     slot.select(null);
   };
   /** Delete a chat for good. When it is the one on show, `next` takes its place. */
   async function deleteChat(id: string, next: string | null) {
     await remove.mutateAsync(id);
-    slot.byId.get(id)?.chat.stop();
-    slot.byId.delete(id);
-    if (slot.active === id) {
-      if (next === null) draft();
+    const wasActive = slot.active === id;
+    forgetChat(id);
+    if (wasActive) {
+      if (next === null) draftFor(client, slot);
       slot.select(next);
     }
   }
   return {
-    ...state,
+    ...thread,
     loadImported,
-    title,
     chatId: resolved ?? null,
     open,
     startNew,
     deleteChat,
-    pendingApproval,
-    send,
-    busy,
-    loading,
-    failed: failedEntry === entry || !!state.error || !!list.error || !!detail.error,
-    errorText: chatErrorText(state.error?.message),
   };
+}
+
+/** A deleted chat stops streaming and leaves every slot. */
+export function forgetChat(id: string) {
+  void chats.get(id)?.chat.stop();
+  chats.delete(id);
+  for (const slot of slots.values()) {
+    if (slot.active === id) slot.select(undefined);
+  }
+}
+
+const LIBRARY_PAGE = 'librarian-page';
+/**
+ * The chat on the Librarian page: `chatId` is the open chat, `null` a new library chat that has no
+ * server row until its first question (then `onCreated` hears the new id). The page owns which
+ * chat is open; stored conversations share the same cache as the article dock.
+ */
+export function useLibrarianPageChat(chatId: string | null, onCreated: (id: string) => void) {
+  const client = useQueryClient();
+  const slot = slotFor(LIBRARY_PAGE);
+  // The new chat's id reaches the page's URL a render later; until then it stays on show.
+  const [adopted, setAdopted] = useState<string | null>(null);
+  useEffect(() => {
+    if (chatId) setAdopted(null);
+  }, [chatId]);
+  const shown = chatId ?? adopted;
+  useEffect(() => {
+    slot.select(shown);
+    return () => slot.select(undefined);
+  }, [slot, shown]);
+  const entry = shown ? entryFor(client, shown) : draftFor(client, slot);
+  return useEntryChat({
+    entry,
+    slot,
+    linkId: undefined,
+    resolved: shown,
+    listError: false,
+    onAdopt: (id) => {
+      setAdopted(id);
+      onCreated(id);
+    },
+  });
 }
 
 function refreshedReaderIds(message: UIMessage): string[] {

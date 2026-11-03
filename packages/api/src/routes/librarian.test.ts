@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('@silo/core', async (load) => ({
   ...(await load<typeof import('@silo/core')>()),
   importLibrarianMessages: vi.fn(),
+  listChats: vi.fn(),
   quickLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
   streamLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
 }));
@@ -175,4 +176,30 @@ it('maps quick capacity to 409 busy', async () => {
   });
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ error: 'busy' });
+});
+
+it('includes linkTitle for article and library chats', async () => {
+  const { listChats } = await import('@silo/core');
+  const base = {
+    id: 'chat',
+    title: 'Hello',
+    linkId: null,
+    summary: null,
+    summaryThrough: 0,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+  vi.mocked(listChats).mockResolvedValueOnce({
+    chats: [
+      { ...base, linkId: 'article', linkTitle: 'Article' },
+      { ...base, id: 'library', linkTitle: null },
+    ],
+    nextCursor: null,
+  });
+  const response = await app('env_token').request('/librarian/chats');
+  expect(response.status).toBe(200);
+  expect(((await response.json()) as { chats: unknown[] }).chats).toEqual([
+    expect.objectContaining({ linkTitle: 'Article' }),
+    expect.objectContaining({ linkTitle: null }),
+  ]);
 });

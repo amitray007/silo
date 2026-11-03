@@ -56,3 +56,7 @@ recommendation) is the external agent's, performed over these primitives.
   deferred until a remote client needs one.
 - silo is single-user/private: there is no per-user ownership scoping in the read
   path.
+
+## Prompts
+
+The no-argument `librarian` prompt (Silo Librarian) returns the shared external-client persona as a user message. It asks for owner confirmation before destructive actions and cites saved items by title and URL.

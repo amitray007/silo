@@ -1,7 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { useState } from 'react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { useDeleteLibrarianChat } from '../../../api/librarian';
 import { DockChat } from './DockChat';
+import { forgetChat, useLibrarianPageChat } from './useLibrarianChat';
 
 type Stored = { id: string; title: string; updatedAt: string; messages: string[] };
 const json = (data: unknown) =>
@@ -99,6 +102,35 @@ function heldReply(): { response: Response; release: (text: string) => void } {
 
 let sequence = 0;
 /** An in-memory Librarian API: cursor pages, detail, create, delete and a stream that can be held. */
+function PageProbe() {
+  const chat = useLibrarianPageChat('chat-1', () => {});
+  const remove = useDeleteLibrarianChat();
+  return (
+    <>
+      <output data-testid="page-chat">{JSON.stringify(chat.messages)}</output>
+      <button
+        type="button"
+        onClick={async () => {
+          await remove.mutateAsync('chat-1');
+          forgetChat('chat-1');
+        }}
+      >
+        Delete from page
+      </button>
+    </>
+  );
+}
+function CrossSurface() {
+  const [page, setPage] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setPage(true)}>
+        Open page
+      </button>
+      {page && <PageProbe />}
+    </>
+  );
+}
 function setup(initial: Stored[], options: { hold?: boolean } = {}) {
   const chats = [...initial];
   const deleted: string[] = [];
@@ -129,7 +161,9 @@ function setup(initial: Stored[], options: { hold?: boolean } = {}) {
       return listPage(chats, url.searchParams);
     }
     const chat = chats.find((item) => item.id === id);
-    return chat ? detail(chat) : json({ error: 'not_found' });
+    return chat
+      ? detail(chat)
+      : new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
   });
   vi.stubGlobal('fetch', fetcher);
   const fold = vi.fn();
@@ -138,6 +172,7 @@ function setup(initial: Stored[], options: { hold?: boolean } = {}) {
       client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
     >
       <DockChat linkId={`history-${++sequence}`} onFold={fold} />
+      <CrossSurface />
     </QueryClientProvider>,
   );
   return { fetcher, fold, deleted, listUrls, view, release: held.release };
@@ -157,6 +192,9 @@ beforeEach(() => {
   vi.stubGlobal('IntersectionObserver', FakeObserver);
 });
 afterEach(() => {
+  cleanup();
+  forgetChat('chat-new');
+  for (let n = 0; n < 30; n++) forgetChat(`chat-${n}`);
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
 });
@@ -342,4 +380,33 @@ it('keeps the menu below the title when the panel has room, and stops it above t
   const root = document.querySelector<HTMLElement>('.silo-chat') as HTMLElement;
   expect(root.dataset.history).toBe('down');
   expect(root.style.getPropertyValue('--silo-history-max')).toBe('320px');
+});
+
+it('shares a dock answer with the page while the request is in flight', async () => {
+  const { release } = setup([stored(1)], { hold: true });
+  await screen.findByText('Question 1');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+    target: { value: 'Shared question' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await screen.findByText('Shared question');
+  fireEvent.click(screen.getByRole('button', { name: 'Open page' }));
+  expect(screen.getByTestId('page-chat').textContent).toContain('Shared question');
+  await act(async () => release('Shared answer'));
+  await waitFor(() =>
+    expect(screen.getByTestId('page-chat').textContent).toContain('Shared answer'),
+  );
+});
+
+it('resets the dock selection after deletion on the page', async () => {
+  setup([stored(1), stored(2)]);
+  await screen.findByText('Question 1');
+  fireEvent.click(screen.getByRole('button', { name: 'Open page' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Delete from page' }));
+  await screen.findByText('Question 2');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+    target: { value: 'Still works' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await screen.findByText('Fresh answer');
 });

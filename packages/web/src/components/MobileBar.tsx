@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useUpdateSettings } from '../api/hooks';
+import { useLibrarianReady } from '../api/librarian';
 import { useAuth } from '../auth/AuthContext';
 import { layoutMedia, useMediaQuery } from '../lib/breakpoints';
 import { useTheme } from '../theme/ThemeProvider';
 import { MenuPresence } from './MenuPresence';
 import { MenuAction, MenuSurface } from './MenuSurface';
+import { LibrarianIcon } from './NavIcons';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
 
 export function MobileBar({ onSearch }: { onSearch: () => void }) {
   const { state: authState, logout } = useAuth();
+  const librarianReady = useLibrarianReady();
   const phone = useMediaQuery(layoutMedia.phone);
   const [open, setOpen] = useState(false);
   const location = useLocation();
@@ -75,6 +78,17 @@ export function MobileBar({ onSearch }: { onSearch: () => void }) {
             >
               Feeds
             </MenuAction>
+            {librarianReady && (
+              <MenuAction
+                icon={<LibrarianIcon />}
+                onClick={() => {
+                  setOpen(false);
+                  navigate('/librarian');
+                }}
+              >
+                Librarian
+              </MenuAction>
+            )}
             <MenuAction
               icon={<ReaderIcon name="trash" />}
               onClick={() => {

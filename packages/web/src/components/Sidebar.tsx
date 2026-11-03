@@ -1,12 +1,13 @@
 import { forwardRef, type MouseEvent, type ReactNode } from 'react';
 import { useMatch, useNavigate } from 'react-router';
 import { useCounts, useTags, useUpdateSettings } from '../api/hooks';
+import { useLibrarianReady } from '../api/librarian';
 import type { TagCount } from '../api/types';
 import { useAuth } from '../auth/AuthContext';
 import { formatCount } from '../lib/formatCount';
 import { useTheme } from '../theme/ThemeProvider';
 import { BrandMark } from './BrandMark';
-import { LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon } from './NavIcons';
+import { LibrarianIcon, LibraryIcon, LogOutIcon, SearchIcon, SettingsIcon } from './NavIcons';
 import { NavItem, type NavItemVariant } from './NavItem';
 import { ReaderIcon } from './reader/ReaderIcon';
 import { useSettings } from './SettingsContext';
@@ -110,6 +111,7 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
   const { data: tagsData, isError: tagsErrored, isLoading: tagsLoading } = useTags();
   const { openSettings, closeSettings } = useSettings();
   const { state: authState, logout } = useAuth();
+  const librarianReady = useLibrarianReady();
 
   // The brand row (grain dot + "silo") acts as a home link — clicking it
   // navigates to the Library (`/`), like a site logo. A real `<a href="/">`
@@ -168,6 +170,14 @@ export const Sidebar = forwardRef<HTMLDivElement, SidebarProps>(function Sidebar
           icon={<LibraryIcon />}
           onNavigate={onNavigate}
         />
+        {librarianReady && (
+          <NavItemLink
+            to="/librarian"
+            label="Librarian"
+            icon={<LibrarianIcon />}
+            onNavigate={onNavigate}
+          />
+        )}
       </div>
       <div className="silo-sidebar-sections">
         <SidebarFeeds onNavigate={onNavigate} />

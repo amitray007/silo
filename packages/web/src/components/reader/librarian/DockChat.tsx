@@ -3,16 +3,10 @@ import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { MenuPresence } from '../../MenuPresence';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatHistoryMenu } from './ChatHistoryMenu';
-import { ChatMessage } from './ChatMessage';
-import { clearDockRequest, selectionActions, useDockRequest } from './selectionStore';
+import { ARTICLE_ACTIONS, ChatThread, useChatComposer } from './ChatThread';
+import { clearDockRequest, useDockRequest } from './selectionStore';
 import { useLibrarianChat } from './useLibrarianChat';
 
-const actions = [
-  ['summary', 'Summarize'],
-  ['claims', 'Key claims'],
-  ['my-notes', 'My notes here'],
-  ['related', 'Related'],
-] as const;
 const HISTORY_SCOPE = '.silo-chat-history, [data-chat-history-trigger]';
 /** Below this much room under the title, the history menu opens upward instead. */
 const HISTORY_ROOM = 280;
@@ -80,10 +74,10 @@ export function DockChat({
 }) {
   const maxHeight = usePanelHeight(panel);
   const chat = useLibrarianChat(linkId);
-  const [input, setInput] = useState('');
   const [importError, setImportError] = useState(false);
   const request = useDockRequest(linkId);
-  const [passage, setPassage] = useState(request?.passage);
+  const composer = useChatComposer(request?.passage);
+  const { setInput, setPassage, field } = composer;
   useEffect(() => {
     if (!request) return;
     field.current?.focus();
@@ -106,9 +100,10 @@ export function DockChat({
     chat.loadImported,
     chat.pendingApproval,
     linkId,
+    field,
+    setInput,
+    setPassage,
   ]);
-  const field = useRef<HTMLInputElement>(null);
-  const messages = useRef<HTMLDivElement>(null);
   const titleButton = useRef<HTMLButtonElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLElement>(null);
@@ -131,20 +126,19 @@ export function DockChat({
   };
   useEffect(() => {
     field.current?.focus();
-  }, []);
-  useEffect(() => {
-    if (chat.messages.length === 0) return;
-    messages.current?.scrollTo?.({ top: messages.current.scrollHeight });
-  }, [chat.messages]);
-  const disabled = chat.busy || chat.loading || chat.pendingApproval;
+  }, [field]);
   return (
-    <div className="silo-chat" ref={root}>
-      <section
-        ref={sheet}
-        style={{ maxHeight }}
-        className="silo-chat-panel"
-        aria-label="Librarian conversation"
-      >
+    <ChatThread
+      chat={chat}
+      composer={composer}
+      linkId={linkId}
+      actions={ARTICLE_ACTIONS}
+      emptyText="Ask about this article or your library."
+      rootRef={root}
+      panelRef={sheet}
+      panelStyle={{ maxHeight }}
+      onBack={onFold}
+      header={
         <header>
           <h3>
             <button
@@ -185,132 +179,28 @@ export function DockChat({
             <ReaderIcon name="minus" size={18} />
           </button>
         </header>
-        <div
-          className="silo-chat-messages"
-          ref={messages}
-          role="log"
-          aria-label="Messages"
-          aria-busy={chat.busy}
-        >
-          {chat.messages.map((message) => (
-            <ChatMessage
-              key={message.id}
-              message={message}
+      }
+      notice={
+        importError && (
+          <p role="alert">Could not load the imported answer. Reopen Librarian to try again.</p>
+        )
+      }
+      menu={
+        <MenuPresence>
+          {historyOpen && (
+            <ChatHistoryMenu
               linkId={linkId}
-              expired={
-                message.id !== chat.messages.findLast((item) => item.role === 'assistant')?.id
-              }
-              onApproval={chat.addToolApprovalResponse}
+              currentId={chat.chatId}
+              onPick={(id) => {
+                chat.open(id);
+                closeHistory();
+              }}
+              onDelete={chat.deleteChat}
+              onClose={closeHistory}
             />
-          ))}
-          {chat.messages.length === 0 && (
-            <p className="silo-chat-empty">
-              {chat.loading ? 'Loading conversation…' : 'Ask about this article or your library.'}
-            </p>
           )}
-          {importError && (
-            <p role="alert">Could not load the imported answer. Reopen Librarian to try again.</p>
-          )}
-          {chat.failed && (
-            <p role="alert" className="silo-chat-error">
-              {chat.errorText}
-            </p>
-          )}
-        </div>
-        {chat.messages.length === 0 && !passage && (
-          <div className="silo-chat-actions">
-            {actions.map(([id, label]) => (
-              <button
-                type="button"
-                key={id}
-                disabled={disabled}
-                onClick={() => void chat.send(label, id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-      <MenuPresence>
-        {historyOpen && (
-          <ChatHistoryMenu
-            linkId={linkId}
-            currentId={chat.chatId}
-            onPick={(id) => {
-              chat.open(id);
-              closeHistory();
-            }}
-            onDelete={chat.deleteChat}
-            onClose={closeHistory}
-          />
-        )}
-      </MenuPresence>
-      {passage && (
-        <div className="silo-chat-passage">
-          <span>{passage.quote}</span>
-          <button
-            type="button"
-            className="silo-reader-iconbtn"
-            aria-label="Remove passage"
-            onClick={() => setPassage(undefined)}
-          >
-            <ReaderIcon name="close" size={16} />
-          </button>
-          <div className="silo-chat-actions">
-            {selectionActions(passage.quote).map(([id, label]) => (
-              <button
-                type="button"
-                key={id}
-                disabled={disabled}
-                onClick={() => {
-                  void chat.send(label, id, passage);
-                  setPassage(undefined);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-      {chat.pendingApproval && (
-        <p role="status" className="silo-chat-hint">
-          Allow or deny first.
-        </p>
-      )}
-      <form
-        className="silo-chat-bar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (input.trim() && !disabled) {
-            void chat.send(input, undefined, passage);
-            setPassage(undefined);
-            setInput('');
-          }
-        }}
-      >
-        <button type="button" aria-label="Back to tools" onClick={onFold}>
-          <ReaderIcon name="grid" size={19} />
-        </button>
-        <div className="silo-chat-input">
-          <input
-            ref={field}
-            aria-label="Ask the Librarian"
-            placeholder="Ask the Librarian…"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-          />
-        </div>
-        <button
-          className="silo-chat-send"
-          type="submit"
-          aria-label="Send"
-          disabled={disabled || !input.trim()}
-        >
-          <ReaderIcon name="up" size={18} />
-        </button>
-      </form>
-    </div>
+        </MenuPresence>
+      }
+    />
   );
 }

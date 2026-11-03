@@ -338,6 +338,17 @@ do not fail the reply. Tests use the SDK 7 mock model and a disposable database.
 Summary input, including the previous summary, fits the same characters / 4 budget; each call advances only through complete user turns it summarized.
 Budget trimming preserves the last user turn and its approval continuation, even when that tail alone exceeds the budget.
 
+### Slice 6 detail
+
+The sidebar adds Librarian. Its page lists all chats newest first with infinite
+scroll. Each row shows the chat title, article title or Library, relative time,
+and delete. Opening a row shows its chat. Plus starts a chat without an article.
+
+Core owns the shared persona text. The worker keeps the existing in-app prompt.
+The MCP server publishes a no-argument librarian prompt for external clients,
+with owner confirmation before destructive actions and citations by title and URL.
+The chat list returns linkTitle in the same query, or null without a live article.
+
 ## Out of scope (parked)
 
 - Fact-check and any web search (needs a search provider).
