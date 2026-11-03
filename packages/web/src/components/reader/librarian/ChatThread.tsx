@@ -2,6 +2,7 @@ import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState }
 import { useLibrarianActions, useRefreshOnRemovedAction } from '../../../api/librarian';
 import { isWord, passageChips } from '../../../lib/librarianActions';
 import { reducedMotion } from '../../../lib/motion';
+import { Spinner } from '../../Spinner';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
 import { ComposerBar, type QuickAction } from './Composer';
@@ -144,9 +145,14 @@ export function ChatThread({
           {chat.busy && !chat.pendingApproval && (
             <StatusLine label={statusLabel(chat.messages)} className="silo-chat-pending" />
           )}
-          {chat.messages.length === 0 && (
-            <p className="silo-chat-empty">{chat.loading ? 'Loading conversation…' : emptyText}</p>
-          )}
+          {chat.messages.length === 0 &&
+            (chat.loading ? (
+              <div className="silo-chat-empty">
+                <Spinner label="Loading conversation" minHeight={96} />
+              </div>
+            ) : (
+              <p className="silo-chat-empty">{emptyText}</p>
+            ))}
           {notice}
           {chat.failed && (
             <p role="alert" className="silo-chat-error">

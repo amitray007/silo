@@ -10,6 +10,7 @@ import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { useIntersectionPrefetch } from '../../../lib/useIntersectionPrefetch';
 import { LoadingState } from '../../../routes/shared/ListStates';
 import { DayGroupHeading } from '../../DayGroupHeading';
+import { Spinner } from '../../Spinner';
 import { ReaderIcon } from '../ReaderIcon';
 import { type ListSelectors, onHistoryKey } from './historyKeys';
 import { forgetChat } from './useLibrarianChat';
@@ -230,7 +231,7 @@ export function ChatList({
         </div>
       ))}
       <div ref={sentinel} aria-hidden="true" style={{ height: 1 }} />
-      {isFetchingNextPage && <p className="silo-chat-list-note">Loading more…</p>}
+      {isFetchingNextPage && <Spinner label="Loading more chats" minHeight={56} />}
     </div>
   );
 }

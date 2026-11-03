@@ -93,6 +93,16 @@ no business logic — it translates `user interaction ↔ API call ↔ rendered 
 - Assert design rules alongside behavior: ink primary buttons, neutral active
   navigation, correct marks, and local favicons with the globe fallback.
 
+## Loading states
+
+- Use `components/Spinner.tsx` for code-split or data waits when the coming
+  layout is unknown. Choose the pane or inline variant and keep its 200 ms delay.
+- Give the spinner a `role=status` label in the place's words, such as
+  "Loading conversation" or "Loading settings".
+- Use skeletons when the coming layout is known.
+- Keep status words that say more than "loading", such as "Refreshing reader".
+- Never show a spinner next to an error.
+
 ## Search feedback
 
 The command palette uses `Blocks` from [`loading-dev`](https://github.com/jakubkrehel/loading)

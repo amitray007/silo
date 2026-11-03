@@ -33,3 +33,12 @@ export function aiModelLabel(
     ?.models?.find((m) => m.id === model.id)?.label;
   return `${label ?? model.id} via ${AI_PROVIDER_NAMES[model.provider]}`;
 }
+
+/** Both settings tabs use the same gate when enabling plugin AI features. */
+export function pluginAiReadiness(ai: AiSettingsResponse | undefined) {
+  const enabled = ai?.status?.enabled === true && ai.status.secretKey === 'ok';
+  return {
+    ready: enabled && ai !== undefined && defaultAiFeatureModel(ai) !== null,
+    hint: enabled ? 'Add a provider key and model in the AI tab' : 'Turn on AI in the AI tab',
+  };
+}

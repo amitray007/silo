@@ -12,6 +12,7 @@ import { FeedSaveAction } from '../FeedSaveAction';
 import { MenuPresence } from '../MenuPresence';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { LinkMenuActions } from '../RowMenu';
+import { Spinner } from '../Spinner';
 import { DockHostContext } from './dock/DockHostContext';
 import { embedFor } from './embedFor';
 import { Original } from './Original';
@@ -479,8 +480,8 @@ function ReaderPaneContent({
   let content: ReactNode = <EmptyReader message={emptyMessage} trashed={trashed} />;
   if (loading)
     content = (
-      <div className="silo-empty-reader" role="status">
-        Loading link…
+      <div className="silo-empty-reader">
+        <Spinner label="Loading link" />
       </div>
     );
   if (link)

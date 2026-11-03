@@ -12,7 +12,6 @@ import type { HighlightColor } from '../lib/highlights';
 import type { ReaderSettings } from '../lib/readerPrefs';
 import { advanceReaderPrefsVersion, readerPrefsVersion } from '../lib/readerPrefsVersion';
 import type { DeepPartial } from '../lib/readerSync';
-import { mergeDeep } from '../lib/readerSync';
 import {
   clearTitleReveal,
   getTitleReveal,
@@ -24,6 +23,7 @@ import {
 } from '../lib/titleReveals';
 import { deriveTitleFromUrl } from '../lib/url';
 import { apiDelete, apiGet, apiPatch, apiPost, apiPut } from './client';
+import { type SettingsUpdate, settingsQueryKey, settingsWriteQueue } from './settingsWrites';
 import type {
   AccessTokensResponse,
   AiProviderKind,
@@ -56,7 +56,6 @@ import type {
   TrashLinkJson,
   TrashResponse,
   TrashSearchResponse,
-  UpdateSettingsRequest,
 } from './types';
 
 /**
@@ -124,7 +123,7 @@ export const queryKeys = {
   tagOnlyList: (tag: string) => ['links-tag-only', tag] as const,
   trash: () => ['trash'] as const,
   trashSearch: (q: string) => ['trash-search', q] as const,
-  settings: () => ['settings'] as const,
+  settings: () => settingsQueryKey,
   ai: () => ['ai'] as const,
   accessTokens: () => ['access-tokens'] as const,
   oauthClients: () => ['oauth-clients'] as const,
@@ -1399,71 +1398,31 @@ export function useKokoroDtype() {
  * loaded every field is always present.
  */
 export function useSettings({ staleTime = 0 }: { staleTime?: number } = {}) {
+  const queue = settingsWriteQueue(useQueryClient());
   return useQuery({
     queryKey: queryKeys.settings(),
-    queryFn: () => apiGet<SettingsMap>('/api/settings'),
+    queryFn: async () => queue.overlay(await apiGet<SettingsMap>('/api/settings')),
     staleTime,
   });
 }
 
-/**
- * The Settings modal's write (`PATCH /api/settings`, plan 016) — every field
- * of `UpdateSettingsRequest` is optional, so a caller patches just the one
- * control the user touched (e.g. `{ theme: 'dark' }`).
- *
- * OPTIMISTIC (plan 026 review fix — ce-adversarial/ce-correctness): the
- * plugins toggles do a full-object READ-MODIFY-WRITE (`setPluginField` rebuilds
- * the whole `plugins` map from the current `useSettings()` snapshot, since the
- * store replaces the whole value with no sub-key merge). Without an
- * `onMutate` optimistic cache write, two quick toggles both read the SAME
- * stale snapshot — the second PATCH is built without the first's change and
- * clobbers it (last-write-wins), silently losing a toggle the user clicked.
- * `onMutate` merges the patch into the cached map IMMEDIATELY (before the
- * round-trip), so a rapid follow-up `writeField` reads the updated value and
- * its PATCH carries BOTH changes. Standard optimistic pattern: cancel
- * in-flight refetches, snapshot for rollback, roll back `onError`. `onSuccess`
- * still writes the server's authoritative full map; `onSettled` invalidates as
- * a cross-tab safety net.
- *
- * The merge is shallow-at-the-top (`{ ...prev, ...patch }`) — correct because
- * every caller sends a COMPLETE top-level value for each key it touches
- * (`setPluginField` returns the full three-source `plugins` object; theme /
- * trashPurgeDays are scalars), so a partial nested object never reaches here.
- */
+/** Settings writes share a queue because every response contains the whole settings map. */
 export function useUpdateSettings() {
   const queryClient = useQueryClient();
-
+  const queue = settingsWriteQueue(queryClient);
   return useMutation({
-    mutationFn: (patch: UpdateSettingsRequest) => apiPatch<SettingsMap>('/api/settings', patch),
+    scope: { id: 'settings' },
+    mutationFn: (patch: SettingsUpdate) =>
+      apiPatch<SettingsMap>('/api/settings', queue.request(patch)),
     onMutate: async (patch) => {
       await queryClient.cancelQueries({ queryKey: queryKeys.settings() });
-      const previous = queryClient.getQueryData<SettingsMap>(queryKeys.settings());
-      // Only optimistically merge when we already have a loaded snapshot — a
-      // partial merge onto `undefined` would produce an incomplete map. If
-      // settings haven't loaded yet the callers (PluginsTab) gate their
-      // controls on `loading`, so no write originates from that window.
-      if (previous) {
-        // `reader` is a partial value that merges into the stored one; the rest replace.
-        const { reader, ...rest } = patch;
-        queryClient.setQueryData<SettingsMap>(queryKeys.settings(), {
-          ...previous,
-          ...rest,
-          ...(reader && previous.reader ? { reader: mergeDeep(previous.reader, reader) } : {}),
-        });
-      }
-      return { previous };
+      queue.enqueue(patch);
     },
-    onError: (_err, _patch, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(queryKeys.settings(), context.previous);
-      }
-    },
-    onSuccess: (settings) => {
-      queryClient.setQueryData(queryKeys.settings(), settings);
-    },
+    onError: (_error, patch) => queue.settle(patch),
+    onSuccess: (settings, patch) => queue.settle(patch, settings),
     onSettled: () => {
+      if (queue.isPending()) return;
       queryClient.invalidateQueries({ queryKey: queryKeys.settings() });
-      // AI readiness (enabled, provider, resolved model) derives from these settings.
       queryClient.invalidateQueries({ queryKey: queryKeys.ai() });
     },
   });

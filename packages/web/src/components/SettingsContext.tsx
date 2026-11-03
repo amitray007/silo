@@ -28,25 +28,43 @@ interface SettingsContextValue {
   openSettings: (tab?: SettingsTab) => void;
   closeSettings: () => void;
   setTab: (tab: SettingsTab) => void;
+  pluginFocus: string | null;
+  focusPlugin: (name: string) => void;
+  clearPluginFocus: () => void;
 }
 const SettingsContext = createContext<SettingsContextValue | null>(null);
 
 /** Modal state preserves the list and reader URL when Settings opens. */
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<SettingsTab>('plugins');
+  const [tab, selectTab] = useState<SettingsTab>('plugins');
+  const [pluginFocus, setPluginFocus] = useState<string | null>(null);
+  const clearPluginFocus = useCallback(() => setPluginFocus(null), []);
+  const setTab = useCallback((next: SettingsTab) => {
+    setPluginFocus(null);
+    selectTab(next);
+  }, []);
+  const focusPlugin = useCallback((name: string) => {
+    document.getElementById('settings-tab-plugins')?.focus();
+    setPluginFocus(name);
+    selectTab('plugins');
+  }, []);
   const location = useLocation();
   const navigate = useNavigate();
   const previousPath = useRef(location.pathname);
   const openSettings = useCallback((next?: SettingsTab) => {
     setOpen(true);
-    if (next) setTab(next);
+    setPluginFocus(null);
+    if (next) selectTab(next);
   }, []);
-  const closeSettings = useCallback(() => setOpen(false), []);
+  const closeSettings = useCallback(() => {
+    setPluginFocus(null);
+    setOpen(false);
+  }, []);
   useEffect(() => {
     if (previousPath.current !== location.pathname) {
       previousPath.current = location.pathname;
-      setOpen(false);
+      closeSettings();
     }
     const next = parseSettingsTab(location.state?.settingsTab);
     if (next) {
@@ -56,10 +74,27 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
         state: null,
       });
     }
-  }, [location.pathname, location.search, location.hash, location.state, navigate, openSettings]);
+  }, [
+    location.pathname,
+    location.search,
+    location.hash,
+    location.state,
+    navigate,
+    openSettings,
+    closeSettings,
+  ]);
   const value = useMemo(
-    () => ({ open, tab, openSettings, closeSettings, setTab }),
-    [open, tab, openSettings, closeSettings],
+    () => ({
+      open,
+      tab,
+      openSettings,
+      closeSettings,
+      setTab,
+      pluginFocus,
+      focusPlugin,
+      clearPluginFocus,
+    }),
+    [open, tab, openSettings, closeSettings, setTab, pluginFocus, focusPlugin, clearPluginFocus],
   );
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>;
 }

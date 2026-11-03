@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { LinkJson } from '../../api/types';
 import { DayGroup } from '../../components/DayGroup';
+import { Spinner } from '../../components/Spinner';
 import { bucketByDay, bucketFeedPosts } from '../../lib/buckets';
 import { useIntersectionPrefetch } from '../../lib/useIntersectionPrefetch';
 import { ErrorState, LoadingState } from './ListStates';
@@ -57,11 +58,19 @@ function LinkListBody({
               padding: '6px 14px',
               fontSize: 'var(--text-base)',
               fontFamily: 'inherit',
+              position: 'relative',
               cursor: isFetchingNextPage ? 'default' : 'pointer',
               opacity: isFetchingNextPage ? 0.6 : 1,
             }}
           >
-            {isFetchingNextPage ? 'Loading…' : 'Load more'}
+            <span style={{ visibility: isFetchingNextPage ? 'hidden' : undefined }}>Load more</span>
+            {isFetchingNextPage && (
+              <span
+                style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}
+              >
+                <Spinner label="Loading more" variant="inline" delay={0} />
+              </span>
+            )}
           </button>
         </div>
       )}

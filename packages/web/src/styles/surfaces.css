@@ -1703,6 +1703,25 @@
   gap: 12px;
   min-width: 0;
 }
+/* "Turn on in Plugins > X": reads as the hint it was, acts as a link to that tab. */
+.silo-ai-feature-hint {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-color: var(--line);
+  text-underline-offset: 2px;
+}
+@media (hover: hover) {
+  .silo-ai-feature-hint:hover {
+    color: var(--ink);
+    text-decoration-color: currentColor;
+  }
+}
 /* A compact floating menu, portalled outside the modal scroll area. */
 .silo-model-picker {
   display: inline-flex;
