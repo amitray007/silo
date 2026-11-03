@@ -711,6 +711,7 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-composer textarea {
   flex: 1;
   min-width: 0;
+  min-height: 28px;
   max-height: 96px;
   padding: 4px 0;
   border: 0;
@@ -764,14 +765,38 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   background: none;
   color: var(--fnt);
 }
+/* One row that scrolls sideways with no scrollbar. The right edge fades only while more chips
+   wait there (the scroll timeline is inactive when everything fits, so --qfade stays 0). */
+@property --qfade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+@keyframes siloQuickFade {
+  from,
+  90% {
+    --qfade: 24px;
+  }
+  to {
+    --qfade: 0px;
+  }
+}
 .silo-composer-quick {
   display: flex;
-  flex-wrap: wrap;
   gap: 6px;
   margin: 6px 0 2px;
+  overflow-x: auto;
+  scrollbar-width: none;
+  animation: siloQuickFade linear both;
+  animation-timeline: scroll(self inline);
+  mask-image: linear-gradient(to right, #000 calc(100% - var(--qfade)), transparent);
+}
+.silo-composer-quick::-webkit-scrollbar {
+  display: none;
 }
 /* Soft filled chips: a low-contrast wash reads as clickable at rest, with no border or shadow. */
 .silo-composer-quick button {
+  flex: none;
   height: 28px;
   padding: 0 10px;
   border: 0;
@@ -1069,7 +1094,14 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     height: 40px;
   }
   .silo-composer textarea {
+    min-height: 40px;
     padding: 10px 0;
+  }
+  .silo-composer-quick {
+    gap: 4px;
+  }
+  .silo-composer-quick button {
+    padding: 0 8px;
   }
   .silo-composer-quick button,
   .silo-selection-answer footer button,
