@@ -560,3 +560,21 @@ it('stops the temporary answer when an outside press dismisses its card', async 
   expect(onDismiss).toHaveBeenCalledOnce();
   vi.unstubAllGlobals();
 });
+
+it('rejects a range in Librarian or crossing from the article into Librarian', () => {
+  const chat = document.createElement('div');
+  chat.textContent = 'Chat answer';
+  document.body.append(chat);
+  const range = document.createRange();
+  range.selectNodeContents(chat);
+  const props = setup({ pending: { ...pending, range }, askReady: true });
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  range.setStart(prose.querySelector('p')!.firstChild!, 0);
+  props.rendered.rerender(
+    <QueryClientProvider client={new QueryClient()}>
+      <SelectionBar {...props} pending={{ ...pending, range }} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  expect(CSS.highlights?.has('silo-librarian-selection') ?? false).toBe(false);
+});

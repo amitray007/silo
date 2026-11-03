@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { type ReactNode, useState } from 'react';
 import { afterEach, beforeAll, beforeEach, expect, it, vi } from 'vitest';
 import { useLink } from '../../../api/hooks';
@@ -87,6 +87,7 @@ beforeEach(() => {
   serverLink = makeLink({ id: 'hl', highlights: [] });
 });
 afterEach(() => {
+  cleanup();
   for (const undo of restore.reverse()) undo();
   vi.unstubAllGlobals();
 });
@@ -834,4 +835,80 @@ it('continues the temporary answer in a new dock chat after importing it', async
   const dock = await screen.findByRole('region', { name: 'Librarian conversation' });
   await within(dock).findByText('An answer saved on the passage.');
   expect(screen.queryByRole('region', { name: 'Passage answer' })).toBeNull();
+});
+
+function selectSurface(element: Element) {
+  const range = document.createRange();
+  range.selectNodeContents(element);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  fireEvent(document, new Event('selectionchange'));
+  return range.toString();
+}
+
+it('keeps native answer selection in dock chat without the article toolbar, then allows article selection', async () => {
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  fireEvent.click(await screen.findByRole('button', { name: 'Ask' }));
+  const dock = await screen.findByRole('region', { name: 'Librarian conversation' });
+  const answer = await within(dock).findByText('An answer saved on the passage.');
+  act(() => {
+    selectSurface(answer);
+  });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 220));
+  });
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  expect(registry.has('silo-librarian-selection')).toBe(false);
+  expect(window.getSelection()?.toString()).toBe('An answer saved on the passage.');
+  fireEvent.click(screen.getByRole('button', { name: 'Fold chat' }));
+  select('quick brown fox');
+  expect(await toolbarButton('Ask')).toBeTruthy();
+});
+
+it('keeps the passage answer open for native selection and removes the retained article highlight', async () => {
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  fireEvent.click(await toolbarButton('Ask'));
+  expect(registry.has('silo-librarian-selection')).toBe(true);
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  const card = await screen.findByRole('region', { name: 'Passage answer' });
+  await within(card).findByText('An answer saved on the passage.');
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
+      false,
+    ),
+  );
+  act(() => {
+    selectSurface(within(card).getByText('An answer saved on the passage.'));
+  });
+  fireEvent.pointerUp(within(card).getByText('An answer saved on the passage.'));
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 220));
+  });
+  expect(screen.getByRole('region', { name: 'Passage answer' })).toBe(card);
+  expect(document.querySelector('[data-selection-bar]')?.getAttribute('data-phase')).toBe('answer');
+  expect(within(card).queryByRole('button', { name: 'Highlight' })).toBeNull();
+  expect(registry.has('silo-librarian-selection')).toBe(false);
+  expect(window.getSelection()?.toString()).toBe('An answer saved on the passage.');
+});
+
+it('does not retain the article highlight while text is selected in the passage composer', async () => {
+  mount(true);
+  await screen.findByText('Alpha beta gamma delta.');
+  select('quick brown fox');
+  fireEvent.click(await toolbarButton('Ask'));
+  const field = screen.getByRole('textbox', {
+    name: 'Ask about this passage',
+  }) as HTMLTextAreaElement;
+  expect(registry.has('silo-librarian-selection')).toBe(true);
+  fireEvent.change(field, { target: { value: 'Explain these words' } });
+  act(() => {
+    field.setSelectionRange(0, 7);
+  });
+  fireEvent.select(field);
+  expect(registry.has('silo-librarian-selection')).toBe(false);
+  expect(field.value.slice(field.selectionStart, field.selectionEnd)).toBe('Explain');
+  expect(screen.getByRole('textbox', { name: 'Ask about this passage' })).toBe(field);
 });
