@@ -289,3 +289,24 @@ it('prepares the chat while idle without taking focus, then reuses it through op
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
   expect(await screen.findByRole('textbox', { name: 'Ask the Librarian' })).toBe(field);
 });
+
+it('folds on an outside press, retains the chat, and returns focus only from inside it', async () => {
+  renderContent(makeLink({ id: 'outside-focus' }), prose, true);
+  const ask = await screen.findByRole('button', { name: 'Ask' });
+  fireEvent.click(ask);
+  const input = await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  expect(screen.getByRole('button', { name: 'Ask' })).toBe(ask);
+  expect(document.activeElement).toBe(ask);
+  expect(document.querySelector('textarea[aria-label="Ask the Librarian"]')).toBe(input);
+  fireEvent.click(ask);
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  const outside = document.createElement('button');
+  document.body.append(outside);
+  outside.focus();
+  fireEvent(outside, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  expect(document.activeElement).toBe(outside);
+  expect(screen.getByRole('button', { name: 'Ask' })).toBe(ask);
+  outside.remove();
+});

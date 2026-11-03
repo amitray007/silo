@@ -529,3 +529,34 @@ it('focuses the quick answer and restores Ask focus when it closes', async () =>
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' }));
   vi.unstubAllGlobals();
 });
+
+it('dismisses the passage composer on an outside press without restoring the bar', () => {
+  const { onDismiss } = setup({ askReady: true, linkId: 'outside-composer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  expect(onDismiss).toHaveBeenCalledOnce();
+  expect(window.getSelection()?.isCollapsed).toBe(true);
+});
+
+it('stops the temporary answer when an outside press dismisses its card', async () => {
+  let signal: AbortSignal | null | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal;
+      return answerStream('Outside answer', true);
+    }),
+  );
+  const { onDismiss } = setup({ askReady: true, linkId: 'outside-answer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await waitFor(() =>
+    expect(screen.getByRole('region', { name: 'Passage answer' }).textContent).toContain(
+      'Outside answer',
+    ),
+  );
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  await waitFor(() => expect(signal?.aborted).toBe(true));
+  expect(onDismiss).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});

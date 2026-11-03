@@ -2,6 +2,7 @@ import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 're
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { MenuPresence } from '../../MenuPresence';
 import { ReaderIcon } from '../ReaderIcon';
+import { useOutsidePress } from '../useOutsidePress';
 import { ChatHistoryMenu } from './ChatHistoryMenu';
 import { ARTICLE_ACTIONS, ChatThread, useChatComposer } from './ChatThread';
 import { clearDockRequest, useDockRequest } from './selectionStore';
@@ -111,6 +112,7 @@ export function DockChat({
   const root = useRef<HTMLDivElement>(null);
   const sheet = useRef<HTMLElement>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
+  useOutsidePress(active && !historyOpen, root, onFold);
   useHistoryPlacement(historyOpen && active, root, sheet, titleButton);
   useEscapeLayer(active, onFold);
   useEffect(() => {

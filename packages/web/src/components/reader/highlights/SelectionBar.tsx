@@ -4,6 +4,7 @@ import type { HighlightColor } from '../../../lib/highlights';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { selectionActions as quickActions, requestDock } from '../librarian/selectionStore';
+import { useOutsidePress } from '../useOutsidePress';
 import { useRecede } from '../useRecede';
 import { SelectionAnswerCard } from './SelectionAnswerCard';
 import { SelectionComposer } from './SelectionComposer';
@@ -147,6 +148,11 @@ export function SelectionBar({
     void quick.stop();
     morph(() => setAnswerAction(undefined));
   };
+  useOutsidePress(pending !== null && phase !== 'bar', root, () => {
+    void quick.stop();
+    onDismiss();
+    window.getSelection()?.removeAllRanges();
+  });
   const escapeActions = {
     composer: () => {
       restoreSelection(pending);

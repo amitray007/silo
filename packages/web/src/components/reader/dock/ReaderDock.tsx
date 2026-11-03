@@ -267,15 +267,6 @@ function isChatOpen(id: string | null, ready: boolean) {
   return id === 'ask' && ready;
 }
 
-function useChatFocus(open: boolean, pill: { current: HTMLDivElement | null }) {
-  const wasOpen = useRef(false);
-  useEffect(() => {
-    if (wasOpen.current && !open)
-      pill.current?.querySelector<HTMLElement>('[data-tool="ask"]')?.focus({ preventScroll: true });
-    wasOpen.current = open;
-  }, [open, pill]);
-}
-
 /** Prepare the hidden transcript off the click path, then retain it until the article changes. */
 function useRetainedChat(linkId: string, open: boolean, ready: boolean) {
   const [mounted, setMounted] = useState<string | null>(null);
@@ -464,7 +455,16 @@ function DockSurface({
   // Focus follows the dock as it morphs: to Play when the player opens, back to Listen when it
   // closes. The first render does neither.
   const pill = useRef<HTMLDivElement>(null);
-  useChatFocus(chatOpen, pill);
+  const returnChatFocus = useRef(false);
+  useEffect(() => {
+    if (chatOpen || !returnChatFocus.current) return;
+    returnChatFocus.current = false;
+    pill.current?.querySelector<HTMLElement>('[data-tool="ask"]')?.focus({ preventScroll: true });
+  }, [chatOpen]);
+  const foldChat = () => {
+    returnChatFocus.current = !!host.querySelector('.silo-chat')?.contains(document.activeElement);
+    setOpenId(null);
+  };
   useRecede(panel, 'chat', chatOpen);
   const wasListening = useRef(false);
   useEffect(() => {
@@ -502,7 +502,7 @@ function DockSurface({
                 linkId={link.id}
                 panel={panel}
                 active={chatOpen}
-                onFold={closeSheet}
+                onFold={foldChat}
               />
             </Suspense>
           </div>
