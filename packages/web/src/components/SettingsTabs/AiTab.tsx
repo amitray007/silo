@@ -16,7 +16,7 @@ import type {
   AiTestCode,
   SettingsMap,
 } from '../../api/types';
-import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER } from '../../lib/aiModels';
+import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER, defaultAiFeatureModel } from '../../lib/aiModels';
 import { type LibrarianActions, resolveActions } from '../../lib/librarianActions';
 import { useEscapeLayer } from '../../lib/useEscapeLayer';
 import { ConfirmDialog } from '../ConfirmDialog';
@@ -517,12 +517,15 @@ function FeatureRow({
   ai,
   feature,
   settingsAi,
+  pluginOn,
   disabled,
   patch,
 }: {
   ai: AiSettingsResponse;
   feature: AiSettingsResponse['features'][number];
   settingsAi: AiSetting;
+  /** Whether the feature's source plugin is on; `true` for features with no plugin. */
+  pluginOn: boolean;
   disabled: boolean;
   patch: (next: AiSetting) => void;
 }) {
@@ -534,7 +537,8 @@ function FeatureRow({
   const notReady = reason
     ? (NOT_READY_WORDS[reason] ?? 'AI is not ready. Check the provider key and model.')
     : null;
-  const toPlugin = !state.enabled && pluginName !== null;
+  // Same gate as the Plugins tab: turning on needs the plugin on; turning off is always allowed.
+  const toPlugin = !pluginOn && !state.enabled && pluginName !== null;
   const hint = toPlugin ? `Turn on in Plugins > ${pluginName}` : notReady;
   return (
     <div style={settingsRow} className="silo-ai-feature-row">
@@ -576,22 +580,26 @@ function FeatureRow({
             });
           }}
         />
-        {!feature.plugin && (
-          <ToggleSwitch
-            on={state.enabled}
-            disabled={disabled}
-            label={feature.label}
-            onToggle={() =>
-              patch({
-                ...settingsAi,
-                features: {
-                  ...settingsAi.features,
-                  [feature.id]: { ...state, enabled: !state.enabled },
+        <ToggleSwitch
+          on={state.enabled}
+          disabled={disabled || toPlugin}
+          label={feature.label}
+          onToggle={() =>
+            patch({
+              ...settingsAi,
+              features: {
+                ...settingsAi.features,
+                [feature.id]: {
+                  enabled: !state.enabled,
+                  // The Plugins tab seeds a default model when it turns a feature on; do the same.
+                  model:
+                    state.model ??
+                    (!state.enabled && feature.plugin ? defaultAiFeatureModel(ai) : null),
                 },
-              })
-            }
-          />
-        )}
+              },
+            })
+          }
+        />
       </div>
     </div>
   );
@@ -600,6 +608,7 @@ function FeatureRow({
 function AiSections({
   ai,
   settingsAi,
+  plugins,
   librarianActions,
   off,
   busy,
@@ -608,6 +617,7 @@ function AiSections({
 }: {
   ai: AiSettingsResponse;
   settingsAi: AiSetting;
+  plugins: SettingsMap['plugins'] | undefined;
   librarianActions: SettingsMap['librarianActions'];
   off: boolean;
   busy: boolean;
@@ -637,6 +647,10 @@ function AiSections({
           ai={ai}
           feature={feature}
           settingsAi={settingsAi}
+          pluginOn={
+            !feature.plugin ||
+            (plugins?.[feature.plugin as keyof SettingsMap['plugins']]?.enabled ?? true)
+          }
           disabled={off || busy}
           patch={patch}
         />
@@ -692,6 +706,7 @@ export function AiTab() {
         <AiSections
           ai={ai}
           settingsAi={settingsAi}
+          plugins={settings?.plugins}
           librarianActions={settings?.librarianActions}
           off={!enabled}
           busy={update.isPending}

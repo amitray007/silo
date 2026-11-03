@@ -16,14 +16,17 @@ function jsonResponse(body: unknown, status = 200): Response {
   });
 }
 
-function settingsFixture(ai?: Partial<{ enabled: boolean; provider: string | null }>) {
+function settingsFixture(
+  ai?: Partial<{ enabled: boolean; provider: string | null }>,
+  twitterOn = false,
+) {
   return {
     theme: 'system',
     trashPurgeDays: 30,
     mcpAccess: true,
     linkPreviewImages: true,
     hoverPreview: false,
-    plugins: {},
+    plugins: { twitter: { enabled: twitterOn, inline: true, hover: true, palette: true } },
     ai: {
       enabled: ai?.enabled ?? true,
       features: {
@@ -473,6 +476,37 @@ describe('AiTab', () => {
     expect(screen.queryByRole('heading', { name: 'Model' })).toBeNull();
     expect(screen.getByText('X posts')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Turn on in Plugins > Twitter / X' })).toBeTruthy();
+  });
+
+  it('shows the AI titles switch disabled and off, with the hint, while the plugin is off', async () => {
+    setup({});
+    const toggle = (await screen.findByRole('switch', { name: 'AI titles' })) as HTMLButtonElement;
+    expect(toggle.disabled).toBe(true);
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+    expect(screen.getByRole('button', { name: 'Turn on in Plugins > Twitter / X' })).toBeTruthy();
+  });
+
+  it('turns AI titles on from here through the same setting the Plugins tab writes', async () => {
+    const { calls } = setup({
+      ai: aiFixture({ providers: [ANTHROPIC_OK] }),
+      settings: settingsFixture({ provider: 'anthropic' }, true),
+    });
+    const toggle = (await screen.findByRole('switch', { name: 'AI titles' })) as HTMLButtonElement;
+    expect(toggle.disabled).toBe(false);
+    expect(screen.queryByRole('button', { name: 'Turn on in Plugins > Twitter / X' })).toBeNull();
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(
+        (calls.find((c) => c.method === 'PATCH')?.body as any)?.ai?.features['x-post-title'],
+      ).toEqual({ enabled: true, model: { provider: 'anthropic', id: 'claude-haiku-5-5' } }),
+    );
+    await waitFor(() =>
+      expect(
+        (screen.getByRole('switch', { name: 'AI titles' }) as HTMLButtonElement).getAttribute(
+          'aria-checked',
+        ),
+      ).toBe('true'),
+    );
   });
 
   it('turns the plugin hint into a button that opens the Plugins tab', async () => {
