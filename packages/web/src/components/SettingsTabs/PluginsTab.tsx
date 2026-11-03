@@ -165,18 +165,18 @@ function AiFeatureRows({
         onToggle={() =>
           settingsAi &&
           updateSettings.mutate({
-            ai: {
-              ...settingsAi,
+            ai: (current) => ({
+              ...current,
               features: {
-                ...settingsAi.features,
+                ...current.features,
                 [feature.id]: {
                   enabled: !on,
                   model:
-                    settingsAi.features[feature.id]?.model ??
+                    current.features[feature.id]?.model ??
                     (!on && ai ? defaultAiFeatureModel(ai) : null),
                 },
               },
-            },
+            }),
           })
         }
       />
