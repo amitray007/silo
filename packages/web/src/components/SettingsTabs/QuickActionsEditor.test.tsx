@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultActions, type LibrarianActions } from '../../lib/librarianActions';
+import { ModalShell } from '../ModalShell';
 import { QuickActionsEditor } from './QuickActionsEditor';
 
 afterEach(cleanup);
@@ -259,4 +260,62 @@ it('rolls a failed save back to the confirmed value before the next success', as
     { id: 'simplify', hidden: false },
     { id: 'counterpoint', hidden: true },
   ]);
+});
+
+function mountSettings() {
+  const initial = defaultActions();
+  const custom = {
+    id: 'custom:11111111-1111-4111-8111-111111111111',
+    label: 'Plain words',
+    prompt: 'p',
+  };
+  initial.passage.push(custom);
+  initial.article.push(custom);
+  function Settings() {
+    const [open, setOpen] = useState(true);
+    const [actions, setActions] = useState(initial);
+    return open ? (
+      <ModalShell width={800} ariaLabel="Settings" onClose={() => setOpen(false)}>
+        <QuickActionsEditor
+          actions={actions}
+          save={(next) => {
+            setActions(next);
+          }}
+        />
+      </ModalShell>
+    ) : null;
+  }
+  render(<Settings />);
+}
+
+it.each(
+  (['passage', 'article'] as const).flatMap((list) =>
+    (['add', 'edit', 'delete', 'reset'] as const).map((layer) => ({ list, layer })),
+  ),
+)('Escape closes only the $list $layer layer before Settings', async ({ list, layer }) => {
+  mountSettings();
+  const region = list === 'passage' ? passage() : article();
+  const name = {
+    add: `Add ${list} action`,
+    edit: 'Edit Plain words',
+    delete: 'Delete Plain words',
+    reset: `Reset ${list} list to defaults`,
+  }[layer];
+  const trigger = within(region).getByRole('button', { name });
+  fireEvent.click(trigger);
+  if (layer === 'add' || layer === 'edit') {
+    fireEvent.change(within(region).getByLabelText('Label'), {
+      target: { value: 'Unsaved draft' },
+    });
+  }
+  fireEvent.keyDown(document.activeElement ?? document, { key: 'Escape' });
+  expect(screen.getByRole('dialog', { name: 'Settings' })).toBeTruthy();
+  expect(within(region).queryByRole('button', { name: 'Cancel' })).toBeNull();
+  expect(within(region).queryByLabelText('Label')).toBeNull();
+  expect(within(region).getByText('Plain words')).toBeTruthy();
+  await waitFor(() =>
+    expect(document.activeElement).toBe(within(region).getByRole('button', { name })),
+  );
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.queryByRole('dialog', { name: 'Settings' })).toBeNull();
 });

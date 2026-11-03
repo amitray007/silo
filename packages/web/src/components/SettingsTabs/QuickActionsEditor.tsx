@@ -11,6 +11,7 @@ import {
   listProblem,
   moveEntry,
 } from '../../lib/librarianActions';
+import { useEscapeLayer } from '../../lib/useEscapeLayer';
 import { ReaderIcon } from '../reader/ReaderIcon';
 import { QuickActionForm } from './QuickActionForm';
 import { rowDesc, rowLabel, settingsRow } from './rowStyles';
@@ -202,6 +203,17 @@ function QuickActionList({
 
   const focus = (selector: string) =>
     requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(selector)?.focus());
+  const cancelDelete = () => {
+    if (!deleting) return;
+    setDeleting(null);
+    focus(`[data-row="${CSS.escape(deleting)}"] [data-delete]`);
+  };
+  const cancelReset = () => {
+    setResetting(false);
+    focus('[data-reset]');
+  };
+  useEscapeLayer(deleting !== null, cancelDelete);
+  useEscapeLayer(resetting, cancelReset);
   const write = (change: Change) => {
     const refusal = save(list, change);
     setProblem(refusal);
@@ -275,15 +287,7 @@ function QuickActionList({
               >
                 Reset
               </button>
-              <button
-                type="button"
-                className="silo-settings-btn"
-                data-cancel
-                onClick={() => {
-                  setResetting(false);
-                  focus('[data-reset]');
-                }}
-              >
+              <button type="button" className="silo-settings-btn" data-cancel onClick={cancelReset}>
                 Cancel
               </button>
             </>
@@ -337,10 +341,7 @@ function QuickActionList({
               write((current) => current.filter((item) => item.id !== entry.id));
               focus('[data-add]');
             }}
-            onCancelDelete={() => {
-              setDeleting(null);
-              focus(`[data-row="${CSS.escape(entry.id)}"] [data-delete]`);
-            }}
+            onCancelDelete={cancelDelete}
             form={
               isCustom(entry) && (
                 <QuickActionForm

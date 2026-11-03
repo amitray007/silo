@@ -5,6 +5,7 @@ import {
   PROMPT_MAX,
   validateCustom,
 } from '../../lib/librarianActions';
+import { useEscapeLayer } from '../../lib/useEscapeLayer';
 import { rowLabel, settingsField } from './rowStyles';
 
 function FieldHead({
@@ -49,6 +50,7 @@ export function QuickActionForm({
   const labelRef = useRef<HTMLInputElement>(null);
   const ids = { label: useId(), prompt: useId(), labelError: useId(), promptError: useId() };
   useEffect(() => labelRef.current?.focus(), []);
+  useEscapeLayer(true, onCancel);
   const errors = validateCustom(label, prompt);
   // A field over its limit says so at once; "empty" waits until Save is pressed.
   const labelError = label.trim().length > LABEL_MAX || tried ? errors.label : undefined;
@@ -65,12 +67,6 @@ export function QuickActionForm({
       onSubmit={(event) => {
         event.preventDefault();
         submit();
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.stopPropagation();
-          onCancel();
-        }
       }}
     >
       <div>
