@@ -212,15 +212,19 @@ function pointToOffset(map: TextMap, container: Node, offset: number, side: 'sta
   return 0;
 }
 
-/**
- * The `[start, end)` span of a DOM range in the normalised text, trimmed of outer spaces, or
- * `null` when the range holds no prose text (or lies outside the root).
- */
+/** Both ends must belong to the article, even when a selection crosses into another surface. */
+export function isProseRange(prose: HTMLElement | null, range: Range | undefined): range is Range {
+  return (
+    !!range && !!prose && prose.contains(range.startContainer) && prose.contains(range.endContainer)
+  );
+}
+
+/** The normalised text span, trimmed of outer spaces, or null for a range outside the prose. */
 export function offsetsFromRange(
   map: TextMap,
   range: Range,
 ): { start: number; end: number } | null {
-  if (!map.root.contains(range.commonAncestorContainer)) return null;
+  if (!isProseRange(map.root, range)) return null;
   let start = pointToOffset(map, range.startContainer, range.startOffset, 'start');
   let end = pointToOffset(map, range.endContainer, range.endOffset, 'end');
   while (start < end && map.text.charAt(start) === ' ') start += 1;

@@ -6,6 +6,7 @@ import { isWord, passageChips } from '../../../lib/librarianActions';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
 import { requestDock } from '../librarian/selectionStore';
+import { useOutsidePress } from '../useOutsidePress';
 import { useRecede } from '../useRecede';
 import { SelectionAnswerCard } from './SelectionAnswerCard';
 import { SelectionComposer } from './SelectionComposer';
@@ -13,6 +14,7 @@ import { SelectionBarTools } from './SelectionTools';
 import type { SelectionAction } from './selectionActions';
 import { selectionContext } from './selectionContext';
 import { type SurfacePhase, surfacePlacement } from './selectionPlacement';
+import { isProseRange } from './textMap';
 import { useAnswerActions } from './useAnswerActions';
 import { canRetainSelection, restoreSelection, useRetainedSelection } from './useRetainedSelection';
 import { selectedPassage, useSelectionAnswer } from './useSelectionAnswer';
@@ -52,7 +54,7 @@ function escapeStep(open: { composer: boolean; answer: boolean; picker: boolean;
  * menu, then the surface; Tab from the selection moves into it.
  */
 export function SelectionBar({
-  pending,
+  pending: selection,
   linkId,
   askReady = false,
   chatOpen = false,
@@ -92,6 +94,7 @@ export function SelectionBar({
   /** Action id to the reason it cannot run here, such as `listen` on an article in another language. */
   unavailable: ReadonlyMap<string, string>;
 }) {
+  const pending = isProseRange(prose, selection?.range) ? selection : null;
   const passage = selectedPassage(pending, prose);
   const { quote } = passage;
   const answerState = useSelectionAnswer(linkId, passage);
@@ -109,7 +112,7 @@ export function SelectionBar({
     onSaved: setToast,
   });
   const phase = phaseOf(composer, answerAction);
-  useRetainedSelection(pending?.range, phase !== 'bar');
+  useRetainedSelection(prose, pending?.range, phase !== 'bar');
   // Without the Custom Highlight API the passage cannot stay sharp, so nothing recedes.
   useRecede(
     container,
@@ -150,6 +153,11 @@ export function SelectionBar({
     void quick.stop();
     morph(() => setAnswerAction(undefined));
   };
+  useOutsidePress(pending !== null && phase !== 'bar', root, () => {
+    void quick.stop();
+    onDismiss();
+    window.getSelection()?.removeAllRanges();
+  });
   const escapeActions = {
     composer: () => {
       restoreSelection(pending);

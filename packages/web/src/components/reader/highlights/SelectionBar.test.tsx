@@ -699,3 +699,52 @@ it.each(['quick', 'continue'])(
     vi.unstubAllGlobals();
   },
 );
+
+it('dismisses the passage composer on an outside press without restoring the bar', () => {
+  const { onDismiss } = setup({ askReady: true, linkId: 'outside-composer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  expect(onDismiss).toHaveBeenCalledOnce();
+  expect(window.getSelection()?.isCollapsed).toBe(true);
+});
+
+it('stops the temporary answer when an outside press dismisses its card', async () => {
+  let signal: AbortSignal | null | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal;
+      return answerStream('Outside answer', true);
+    }),
+  );
+  const { onDismiss } = setup({ askReady: true, linkId: 'outside-answer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await waitFor(() =>
+    expect(screen.getByRole('region', { name: 'Passage answer' }).textContent).toContain(
+      'Outside answer',
+    ),
+  );
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  await waitFor(() => expect(signal?.aborted).toBe(true));
+  expect(onDismiss).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
+
+it('rejects a range in Librarian or crossing from the article into Librarian', () => {
+  const chat = document.createElement('div');
+  chat.textContent = 'Chat answer';
+  document.body.append(chat);
+  const range = document.createRange();
+  range.selectNodeContents(chat);
+  const props = setup({ pending: { ...pending, range }, askReady: true });
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  range.setStart(prose.querySelector('p')!.firstChild!, 0);
+  props.rendered.rerender(
+    <QueryClientProvider client={new QueryClient()}>
+      <SelectionBar {...props} pending={{ ...pending, range }} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  expect(CSS.highlights?.has('silo-librarian-selection') ?? false).toBe(false);
+});

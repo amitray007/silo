@@ -16,6 +16,7 @@
   animation: none;
 }
 .silo-readerpane[data-recede] .silo-reader-recede {
+  pointer-events: auto;
   opacity: 1;
   @starting-style {
     opacity: 0;

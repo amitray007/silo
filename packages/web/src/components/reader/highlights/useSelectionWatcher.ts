@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { offsetsFromRange, type TextMap } from './textMap';
+import { isProseRange, offsetsFromRange, type TextMap } from './textMap';
 
 /** A text selection inside the prose, as offsets into the normalised text. */
 export type PendingSelection = {
@@ -14,11 +14,25 @@ export type PendingSelection = {
 /** Let the browser settle a touch or keyboard selection before the toolbar appears. */
 const SETTLE_MS = 180;
 
+function selectionInBar() {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount || selection.isCollapsed) return false;
+  const node = selection.getRangeAt(0).commonAncestorContainer;
+  const element = node instanceof Element ? node : node.parentElement;
+  return !!element?.closest('[data-selection-bar]');
+}
+
+function selectionOutsideProse(prose: HTMLElement) {
+  const selection = window.getSelection();
+  if (!selection || selection.isCollapsed || !selection.rangeCount) return false;
+  return !isProseRange(prose, selection.getRangeAt(0));
+}
+
 function readSelection(prose: HTMLElement, map: TextMap | null): PendingSelection | null {
   const selection = window.getSelection();
   if (!map || !selection || selection.isCollapsed || selection.rangeCount === 0) return null;
   const range = selection.getRangeAt(0);
-  if (!prose.contains(range.commonAncestorContainer)) return null;
+  if (!isProseRange(prose, range)) return null;
   const offsets = offsetsFromRange(map, range);
   if (!offsets) return null;
   return { ...offsets, range: range.cloneRange(), rect: range.getBoundingClientRect() };
@@ -58,11 +72,13 @@ export function useSelectionWatcher({
     }
     let timer = 0;
     let pressed = false;
+    let outsidePress = false;
     const settle = (delay: number) => {
-      if (document.activeElement?.closest('[data-selection-bar]')) return;
+      if (outsidePress) return;
+      if (selectionInBar() || document.activeElement?.closest('[data-selection-bar]')) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
-        if (document.activeElement?.closest('[data-selection-bar]')) return;
+        if (selectionInBar() || document.activeElement?.closest('[data-selection-bar]')) return;
         const next = readSelection(prose, mapRef.current);
         // The same selection read again keeps its identity, so an open menu stays open.
         setPending((current) =>
@@ -73,32 +89,47 @@ export function useSelectionWatcher({
       }, delay);
     };
     const onPointerDown = (event: PointerEvent) => {
+      window.clearTimeout(timer);
       if (event.target instanceof Element && event.target.closest('[data-selection-bar]')) return;
       pressed = true;
+      outsidePress = !(event.target instanceof Node && prose.contains(event.target));
       setPending(null);
     };
-    const onPointerUp = () => {
+    const onPointerUp = (event: PointerEvent) => {
       pressed = false;
-      settle(SETTLE_MS);
+      if (event.target instanceof Node && prose.contains(event.target)) settle(SETTLE_MS);
     };
-    const onRelease = () => settle(0);
+    const onPointerCancel = () => {
+      pressed = false;
+      window.clearTimeout(timer);
+    };
+    const onRelease = () => {
+      outsidePress = false;
+      settle(0);
+    };
     const onSelectionChange = () => {
+      if (selectionOutsideProse(prose)) {
+        window.clearTimeout(timer);
+        // Selecting the temporary answer keeps its card open for native copy.
+        if (!selectionInBar()) setPending(null);
+        return;
+      }
       if (document.activeElement?.closest('[data-selection-bar]')) return;
       if (!pressed) settle(SETTLE_MS);
     };
     prose.addEventListener('mouseup', onRelease);
     prose.addEventListener('keyup', onRelease);
-    document.addEventListener('pointerdown', onPointerDown);
-    document.addEventListener('pointerup', onPointerUp);
-    document.addEventListener('pointercancel', onPointerUp);
-    document.addEventListener('selectionchange', onSelectionChange);
+    document.addEventListener('pointerdown', onPointerDown, { passive: true });
+    document.addEventListener('pointerup', onPointerUp, { passive: true });
+    document.addEventListener('pointercancel', onPointerCancel, { passive: true });
+    document.addEventListener('selectionchange', onSelectionChange, { passive: true });
     return () => {
       window.clearTimeout(timer);
       prose.removeEventListener('mouseup', onRelease);
       prose.removeEventListener('keyup', onRelease);
       document.removeEventListener('pointerdown', onPointerDown);
       document.removeEventListener('pointerup', onPointerUp);
-      document.removeEventListener('pointercancel', onPointerUp);
+      document.removeEventListener('pointercancel', onPointerCancel);
       document.removeEventListener('selectionchange', onSelectionChange);
     };
   }, [prose, enabled]);
