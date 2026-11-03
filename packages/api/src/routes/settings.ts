@@ -133,7 +133,7 @@ export function registerSettingsRoutes(app: Hono): void {
 
   app.patch('/settings', readerBodyLimit, async (c) => {
     const body = settingsPatchBodySchema.parse(await c.req.json().catch(() => ({})));
-    if (body.ai !== undefined) {
+    if (body.ai !== undefined || body.librarianActions !== undefined) {
       const denied = operatorOnlyFailure(c);
       if (denied) return denied;
     }
