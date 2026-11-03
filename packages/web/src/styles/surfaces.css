@@ -1695,6 +1695,12 @@
   flex: 1;
   min-width: 140px;
 }
+.silo-ai-feature-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
 /* A compact floating menu, portalled outside the modal scroll area. */
 .silo-model-picker {
   display: inline-flex;

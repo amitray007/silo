@@ -248,3 +248,10 @@ function rememberSettings(
     expiresAt: now + REMEMBERED_TTL_MS,
   });
 }
+
+export function chatModelSettings(credential: AiCredential) {
+  const base = settingsFor(credential);
+  omitOption(base, 'format');
+  const { structuredOutput: _structuredOutput, ...settings } = base;
+  return { ...settings, maxOutputTokens: 4096 };
+}

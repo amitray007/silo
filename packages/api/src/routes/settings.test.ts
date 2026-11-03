@@ -65,7 +65,13 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       linkPreviewImages: true,
       hoverPreview: false,
       reader: null,
-      ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+      ai: {
+        enabled: false,
+        features: {
+          librarian: { enabled: false, model: null },
+          'x-post-title': { enabled: false, model: null },
+        },
+      },
       plugins: {
         hacker_news: { enabled: true, inline: true, hover: true, palette: true },
         github: { enabled: true, hover: true, palette: true },

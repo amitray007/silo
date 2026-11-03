@@ -155,7 +155,13 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     youtube: { enabled: true, hover: true, palette: true },
     twitter: { enabled: true, inline: true, hover: true, palette: true },
   },
-  ai: { enabled: false, features: { 'x-post-title': { enabled: false, model: null } } },
+  ai: {
+    enabled: false,
+    features: {
+      librarian: { enabled: false, model: null },
+      'x-post-title': { enabled: false, model: null },
+    },
+  },
   reader: null,
 };
 

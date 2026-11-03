@@ -11,7 +11,7 @@ import {
   useState,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { useSaveReadingPosition } from '../../../api/hooks';
+import { useAi, useSaveReadingPosition } from '../../../api/hooks';
 import type { LinkJson } from '../../../api/types';
 import { deriveTitleFromUrl } from '../../../lib/url';
 import { useReaderPrefs } from '../../../lib/useReaderPrefs';
@@ -36,6 +36,10 @@ import { SavedPlace } from '../place/SavedPlace';
 import { ReaderIcon } from '../ReaderIcon';
 import { DockHostContext } from './DockHostContext';
 import { TypeSheet } from './TypeSheet';
+
+const DockChat = lazy(() =>
+  import('../librarian/DockChat').then((module) => ({ default: module.DockChat })),
+);
 
 // The outline rail brings the spring engine with it, so it loads only where a rail can show.
 const OutlineRail = lazy(() =>
@@ -142,6 +146,13 @@ const tools: readonly DockTool[] = [
     unavailable: { when: (api) => api.highlights.items.length === 0, title: 'No highlights yet' },
     badge: (api) => api.highlights.items.length,
   },
+  {
+    id: 'ask',
+    label: 'Ask',
+    title: 'Ask the Librarian',
+    heading: 'Librarian',
+    glyph: <ReaderIcon name="sparkles" size={19} />,
+  },
 ];
 
 function DockButton({
@@ -174,7 +185,7 @@ function DockButton({
       onClick={unavailable ? undefined : onToggle}
     >
       {tool.glyph}
-      {tool.label}
+      <span className="silo-reader-docklabel">{tool.label}</span>
       {count > 0 && <span className="silo-reader-dockbadge">{count}</span>}
     </button>
   );
@@ -212,7 +223,7 @@ function SplitDockButton({
         }}
       >
         {tool.glyph}
-        {tool.label}
+        <span className="silo-reader-docklabel">{tool.label}</span>
       </button>
       <button
         type="button"
@@ -235,6 +246,20 @@ function canSavePosition(link: LinkJson, trashed: boolean): boolean {
   return !trashed && link.feedId === null;
 }
 
+function isChatOpen(id: string | null, ready: boolean) {
+  return id === 'ask' && ready;
+}
+
+function useChatFocus(open: boolean, pill: { current: HTMLDivElement | null }) {
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (wasOpen.current && !open) {
+      pill.current?.querySelector<HTMLElement>('[data-tool="ask"]')?.focus();
+    }
+    wasOpen.current = open;
+  }, [open, pill]);
+}
+
 /**
  * A floating pill at the bottom of the reader pane. Each tool opens a sheet above it. It also
  * runs the pencil, the outline rail and the resume point, which draw in the prose and the pane.
@@ -251,6 +276,9 @@ export function ReaderDock({
   const { element: host, scroll, panel } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
   const sheetId = useId();
+  const { data: aiStatus } = useAi();
+  const askReady = aiStatus?.status?.features?.librarian?.ready === true;
+  const chatOpen = isChatOpen(openId, askReady);
   const writePosition = useSaveReadingPosition(link.id);
   const [saveError, setSaveError] = useState('');
   const save = useCallback(
@@ -328,6 +356,7 @@ export function ReaderDock({
   // Focus follows the dock as it morphs: to Play when the player opens, back to Listen when it
   // closes. The first render does neither.
   const pill = useRef<HTMLDivElement>(null);
+  useChatFocus(chatOpen, pill);
   const wasListening = useRef(false);
   useEffect(() => {
     if (listening === wasListening.current) return;
@@ -382,55 +411,64 @@ export function ReaderDock({
         container={host}
         listen={listen}
       />
-      <div className="silo-reader-dock">
-        <div
-          ref={pill}
-          className="silo-reader-dock-pill"
-          data-mode={listen.active ? 'player' : 'tools'}
-          role="toolbar"
-          aria-label="Reader tools"
-        >
-          {listen.active ? (
-            <ListenPlayer
-              listen={listen}
-              sheetOpen={openId === 'listen'}
-              onSheet={() => setOpenId(openId === 'listen' ? null : 'listen')}
-              onClose={() => {
-                listen.stop();
-                closeSheet();
-              }}
-            />
-          ) : (
-            tools.map((tool) => {
-              const toggle = () => {
-                if (tool.press) {
-                  setOpenId(null);
-                  tool.press.toggle(api);
-                } else setOpenId(openId === tool.id ? null : tool.id);
-              };
-              return tool.split ? (
-                <SplitDockButton
-                  key={tool.id}
-                  tool={tool}
-                  split={tool.split}
-                  api={api}
-                  open={openId === tool.id}
-                  sheetId={sheetId}
-                  onToggle={toggle}
-                />
-              ) : (
-                <DockButton
-                  key={tool.id}
-                  tool={tool}
-                  api={api}
-                  open={openId === tool.id}
-                  sheetId={sheetId}
-                  onToggle={toggle}
-                />
-              );
-            })
-          )}
-        </div>
+      <div className="silo-reader-dock" data-chat={chatOpen}>
+        {chatOpen ? (
+          <Suspense fallback={<div role="status">Loading Librarian…</div>}>
+            <DockChat key={link.id} linkId={link.id} panel={panel} onFold={closeSheet} />
+          </Suspense>
+        ) : (
+          <div
+            ref={pill}
+            className="silo-reader-dock-pill"
+            data-mode={listen.active ? 'player' : 'tools'}
+            data-ask={askReady}
+            role="toolbar"
+            aria-label="Reader tools"
+          >
+            {listen.active ? (
+              <ListenPlayer
+                listen={listen}
+                sheetOpen={openId === 'listen'}
+                onSheet={() => setOpenId(openId === 'listen' ? null : 'listen')}
+                onClose={() => {
+                  listen.stop();
+                  closeSheet();
+                }}
+              />
+            ) : (
+              tools
+                .filter((tool) => tool.id !== 'ask' || askReady)
+                .map((tool) => {
+                  const toggle = () => {
+                    if (tool.press) {
+                      setOpenId(null);
+                      tool.press.toggle(api);
+                    } else setOpenId(openId === tool.id ? null : tool.id);
+                  };
+                  return tool.split ? (
+                    <SplitDockButton
+                      key={tool.id}
+                      tool={tool}
+                      split={tool.split}
+                      api={api}
+                      open={openId === tool.id}
+                      sheetId={sheetId}
+                      onToggle={toggle}
+                    />
+                  ) : (
+                    <DockButton
+                      key={tool.id}
+                      tool={tool}
+                      api={api}
+                      open={openId === tool.id}
+                      sheetId={sheetId}
+                      onToggle={toggle}
+                    />
+                  );
+                })
+            )}
+          </div>
+        )}
         <MenuPresence>
           {openTool && Sheet && (
             <MenuSurface

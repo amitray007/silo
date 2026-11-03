@@ -42,7 +42,6 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 ### Optional AI (surfaced building the AI foundation, 2026-10-28)
 - **ChatGPT subscription as a provider** - via OpenAI's "Sign in with ChatGPT" (SIWC), not ACP. Parked until the SIWC SDK ships on npm and OpenAI says how plan usage applies to unattended jobs. [Issue #104](https://github.com/amitray007/silo/issues/104).
 - **Per-feature model choice** - today one model serves every AI feature.
-- **A chat view** - would add `streamAiChat` beside `runAiFeature` on the same provider layer.
 - **AI titles for other sources** - X posts come first (`docs/methods/ai-x-titles.md`).
 - **A dependency-cruiser that reads TypeScript 7** - `pnpm boundaries` cruises only 9 JS modules today because depcruise does not support TypeScript 7 yet; Biome carries the import rules meanwhile.
 
@@ -103,3 +102,8 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **Use one file handle for TTS downloads.** CodeQL `js/file-system-race` in
   `packages/core/src/tts/files.ts` was dismissed as a false positive. A single `w+`
   handle would remove the finding but changes the download lifecycle. Revisit separately.
+
+### Librarian chat (surfaced planning `docs/methods/ai-chat.md`, 2026-11-02)
+- **Fact-check and web search** - needs a search provider; the selection quick action is parked until then.
+- **AI chat titles, rename, export and sharing** - titles come from the first message today.
+- **Resumable streams after a server restart** - an answer in flight during a restart is lost.

@@ -138,6 +138,7 @@ describeIfPg('ai provider storage (integration)', () => {
     await settings.setSetting('ai', {
       enabled: true,
       features: {
+        librarian: { enabled: false, model: null },
         'x-post-title': {
           enabled: false,
           model: { provider: 'anthropic', id: 'claude-sonnet-5-5' },
@@ -152,7 +153,10 @@ describeIfPg('ai provider storage (integration)', () => {
     ).toBe(false);
     expect(await settings.getSetting('ai')).toEqual({
       enabled: true,
-      features: { 'x-post-title': { enabled: false, model: null } },
+      features: {
+        librarian: { enabled: false, model: null },
+        'x-post-title': { enabled: false, model: null },
+      },
     });
   });
 
@@ -163,6 +167,7 @@ describeIfPg('ai provider storage (integration)', () => {
     const selected = {
       enabled: true,
       features: {
+        librarian: { enabled: false, model: null },
         'x-post-title': {
           enabled: false,
           model: { provider: 'openai' as const, id: 'gpt-6-astra' },

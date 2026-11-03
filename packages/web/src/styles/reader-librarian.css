@@ -1,0 +1,208 @@
+.silo-chat-bar,
+.silo-chat-panel {
+  position: absolute;
+  width: min(580px, calc(100% - 24px));
+  pointer-events: auto;
+  border-radius: 16px;
+  background: var(--bg2);
+  color: var(--ink);
+  box-shadow: var(--elev-2);
+  font-family: "Inter Variable", sans-serif;
+  font-size: 13px;
+}
+.silo-chat-bar {
+  bottom: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px;
+}
+.silo-chat-panel {
+  bottom: 56px;
+  max-height: min(62cqh, calc(100cqh - 120px));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  overflow: hidden;
+  animation: silo-chat-rise 200ms var(--ease-out);
+}
+.silo-chat-panel header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 4px 18px;
+  font-weight: 500;
+}
+.silo-chat-panel header span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-chat-bar button,
+.silo-chat-panel button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  min-width: 36px;
+  min-height: 36px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--mut);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.silo-chat-panel button:hover,
+.silo-chat-bar button:hover {
+  background: var(--hov);
+  color: var(--ink);
+}
+.silo-chat-bar button:focus-visible,
+.silo-chat-panel button:focus-visible {
+  outline: 2px solid var(--ghost);
+  outline-offset: 1px;
+}
+.silo-chat-input:focus-within {
+  box-shadow: inset 0 0 0 1px var(--line-2);
+}
+/* The saved-place pill sits where the chat panel opens. */
+body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
+  display: none;
+}
+.silo-chat-bar button:disabled,
+.silo-chat-panel button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.silo-chat-input {
+  display: flex;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+  gap: 8px;
+  height: 36px;
+  padding: 0 10px;
+  border-radius: 11px;
+  background: var(--hov);
+}
+.silo-chat-input svg,
+[data-tool="ask"] svg {
+  color: var(--markt);
+}
+.silo-chat-input input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 13.5px;
+}
+.silo-chat-bar .silo-chat-send,
+.silo-chat-bar .silo-chat-send:hover {
+  background: var(--ink);
+  color: var(--bg2);
+}
+.silo-chat-messages {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  min-height: 60px;
+  padding: 6px 16px 10px;
+  display: grid;
+  gap: 12px;
+  align-content: start;
+}
+.silo-chat-message {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+  font-size: 13.5px;
+}
+.silo-chat-message p {
+  margin: 0;
+}
+.silo-chat-assistant :is(p, ul, ol, pre, blockquote) + :is(p, ul, ol, pre, blockquote) {
+  margin-top: 8px;
+}
+.silo-chat-assistant :is(ul, ol) {
+  margin: 0;
+  padding-left: 20px;
+}
+.silo-chat-assistant li + li {
+  margin-top: 2px;
+}
+.silo-chat-assistant :is(h1, h2, h3, h4) {
+  margin: 10px 0 4px;
+  font-size: 13.5px;
+  font-weight: 600;
+}
+.silo-chat-assistant strong {
+  font-weight: 500;
+  color: var(--ink);
+}
+.silo-chat-assistant code {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+}
+.silo-chat-assistant a {
+  color: var(--ink);
+  text-decoration: underline;
+  text-decoration-color: var(--line-2);
+  text-underline-offset: 2px;
+}
+.silo-chat-error {
+  color: var(--warn);
+  font-size: 12.5px;
+}
+.silo-chat-user {
+  justify-self: end;
+  max-width: 85%;
+  background: var(--hov);
+  padding: 8px 12px;
+  border-radius: 12px;
+}
+.silo-chat-step {
+  margin: 0 0 6px;
+  color: var(--fnt);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.silo-chat-trace {
+  color: var(--fnt);
+  font-size: 11px;
+  margin-top: 6px;
+}
+.silo-chat-empty {
+  color: var(--mut);
+  margin: 12px 0;
+}
+.silo-chat-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 8px 12px 10px;
+  border-top: 1px solid var(--line);
+}
+.silo-chat-actions button {
+  min-height: 28px;
+  padding: 0 10px;
+  border-radius: 8px;
+  color: var(--mut);
+  font-size: 12.5px;
+  box-shadow: inset 0 0 0 0.5px var(--line-2);
+}
+@keyframes silo-chat-rise {
+  from {
+    opacity: 0;
+    translate: 0 10px;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .silo-chat-panel {
+    animation: none;
+  }
+}

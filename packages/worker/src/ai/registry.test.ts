@@ -4,7 +4,9 @@ import { AI_FEATURE_DEFINITIONS, assertAiRegistryMatchesCore } from './registry.
 
 describe('AI feature registry', () => {
   it('loads without drift and matches core', () => {
-    expect(AI_FEATURE_DEFINITIONS.map((d) => d.id)).toEqual(AI_FEATURES.map((f) => f.id));
+    expect([...AI_FEATURE_DEFINITIONS.map((d) => d.id), 'librarian'].sort()).toEqual(
+      AI_FEATURES.map((f) => f.id).sort(),
+    );
   });
 });
 

@@ -8,12 +8,16 @@ marked **ENFORCED** fail the gate. Read aloud is outside this layer: its speech 
 
 1. **Optional.** With AI off or no key, silo behaves as if the AI layer did not exist.
    No code outside `packages/core/src/ai/` and `packages/worker/src/ai/` may require it.
-   Every AI call has a non-AI result, and the caller uses it on any failure.
+   Every background AI call has a non-AI result, and the caller uses it on any failure.
+   The Librarian chat is the exception: its non-AI result is absence. With the
+   feature not ready, no Ask control renders, and the routes that call a model
+   answer `409 { error: 'ai_not_ready' }`. Reading and deleting stored chats still work.
 2. **Two levels of consent.** The master switch `ai.enabled` comes first. A feature
    runs only when the switch is on, the feature is on, and a provider is ready
    (`isAiFeatureOn`).
-3. **One runner.** A feature defines an `AiFeatureDefinition` (prompt, schema,
-   post-processing, timeout) and calls `runAiFeature`. A feature never imports a
+3. **Two runners.** A feature defines an `AiFeatureDefinition` (prompt, schema,
+   post-processing, timeout) and calls `runAiFeature`. The Librarian chat streams
+   through `streamLibrarianReply` in `packages/worker/src/ai/librarian/`. A feature never imports a
    provider SDK, reads a key, or handles retries itself. `languageModelFor` in
    `packages/worker/src/ai/model.ts` is the only file that imports provider SDKs.
 4. **Never block or fail a capture.** `runAiFeature` never throws. A capture never waits
