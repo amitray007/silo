@@ -767,19 +767,21 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-composer-quick {
   display: flex;
   flex-wrap: wrap;
-  gap: 2px;
-  margin: 2px 0 0 -8px;
+  gap: 6px;
+  margin: 6px 0 2px;
 }
-.silo-composer[data-lead] .silo-composer-quick {
-  margin-left: 0;
-}
+/* Soft filled chips: a low-contrast wash reads as clickable at rest, with no border or shadow. */
 .silo-composer-quick button {
   height: 28px;
-  padding: 0 8px;
+  padding: 0 10px;
   border: 0;
   border-radius: 8px;
-  background: none;
+  background: color-mix(in oklch, var(--ink) 6%, transparent);
   color: var(--mut);
+  transition:
+    background-color 140ms var(--ease-out),
+    color 140ms var(--ease-out),
+    transform 140ms var(--ease-out);
   font: inherit;
   font-size: 13px;
   font-weight: 500;
@@ -832,7 +834,10 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   cursor: default;
 }
 @media (hover: hover) and (pointer: fine) {
-  .silo-composer-quick button:hover:not(:disabled),
+  .silo-composer-quick button:hover:not(:disabled) {
+    background: color-mix(in oklch, var(--ink) 11%, transparent);
+    color: var(--ink);
+  }
   .silo-composer-lead:hover:not(:disabled),
   .silo-composer-send[data-mode="stop"]:hover,
   .silo-chat-approval button:hover:not(:disabled),
