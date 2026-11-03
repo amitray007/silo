@@ -1,0 +1,41 @@
+/* The article keeps its original ink. One masked backdrop scrolls with it and fades as a layer. */
+.silo-reader-recede {
+  position: absolute;
+  z-index: 8;
+  top: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+  background: color-mix(in oklch, var(--bg2) 56%, transparent);
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity 200ms var(--ease-out);
+}
+.silo-reader-scroll > .silo-reader-recede {
+  animation: none;
+}
+.silo-readerpane[data-recede] .silo-reader-recede {
+  pointer-events: auto;
+  opacity: 1;
+  @starting-style {
+    opacity: 0;
+  }
+}
+.silo-readerpane[data-recede="chat"] .silo-reader-recede {
+  transition-duration: 160ms;
+}
+
+::highlight(silo-librarian-selection) {
+  background-color: var(--sel);
+  color: var(--ink);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .silo-reader-recede {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    /* biome-ignore lint/complexity/noImportantStyles: Override the global reduced-motion transition reset. */
+    transition: none !important;
+  }
+}

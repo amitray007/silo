@@ -148,7 +148,7 @@ it('disables Listen for an article that is not English, with the reason as its t
   renderArticle(FRENCH);
   const button = await screen.findByRole('button', { name: 'Listen' });
   expect(button.getAttribute('aria-disabled')).toBe('true');
-  expect(button.getAttribute('title')).toBe('Read aloud is English-only for now');
+  expect(button.getAttribute('title')).toBe('Listen reads English articles only');
   fireEvent.click(button);
   expect(toolbar().getAttribute('data-mode')).toBe('tools');
   expect(engineState.streamed).toEqual([]);

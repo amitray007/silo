@@ -101,10 +101,16 @@ export function useCreateLibrarianChat() {
 export function useImportLibrarianTurn() {
   const client = useQueryClient();
   return useMutation({
+    /** Continue starts its own chat, so the passage turn never lands in an ongoing conversation. */
     mutationFn: async ({ linkId, messages }: { linkId: string; messages: UIMessage[] }) => {
-      const list = await librarianApi.list(linkId);
-      const chat = list.chats[0] ?? (await librarianApi.create(linkId));
-      await apiPost(`/api/librarian/chats/${chat.id}/import`, { messages });
+      const chat = await librarianApi.create(linkId);
+      try {
+        await apiPost(`/api/librarian/chats/${chat.id}/import`, { messages });
+      } catch (error) {
+        // Leave no empty chat behind when the import is refused.
+        await librarianApi.delete(chat.id).catch(() => {});
+        throw error;
+      }
       return chat.id;
     },
     onSuccess: () => client.invalidateQueries({ queryKey: ['librarian'] }),

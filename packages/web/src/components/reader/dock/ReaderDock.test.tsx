@@ -256,6 +256,57 @@ it('opens Ask, focuses its input and restores tools and focus on fold', async ()
   await waitFor(() => expect(document.activeElement).toBe(input));
   fireEvent.keyDown(document, { key: 'Escape' });
   const ask = await screen.findByRole('button', { name: 'Ask' });
-  expect(document.activeElement).toBe(ask);
+  await waitFor(() => expect(document.activeElement).toBe(ask));
   expect(screen.queryByRole('textbox', { name: 'Ask the Librarian' })).toBeNull();
+});
+
+it('prepares the chat while idle without taking focus, then reuses it through open and fold', async () => {
+  let prepare: IdleRequestCallback | undefined;
+  vi.stubGlobal('requestIdleCallback', (callback: IdleRequestCallback) => {
+    prepare = callback;
+    return 1;
+  });
+  vi.stubGlobal('cancelIdleCallback', vi.fn());
+  renderContent(makeLink({ id: 'prepared-dock' }), prose, true);
+  const ask = await screen.findByRole('button', { name: 'Ask' });
+  await waitFor(() => expect(prepare).toBeDefined());
+  act(() => prepare?.({ didTimeout: false, timeRemaining: () => 50 }));
+  const field = await waitFor(() => {
+    const input = document.querySelector('textarea[aria-label="Ask the Librarian"]');
+    expect(input).not.toBeNull();
+    return input;
+  });
+  expect(screen.queryByRole('textbox', { name: 'Ask the Librarian' })).toBeNull();
+  expect(document.activeElement).not.toBe(field);
+  fireEvent.click(ask);
+  expect(await screen.findByRole('textbox', { name: 'Ask the Librarian' })).toBe(field);
+  await waitFor(() => expect(document.activeElement).toBe(field));
+  fireEvent.click(screen.getByRole('button', { name: 'Fold chat' }));
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' })),
+  );
+  expect(document.querySelector('textarea[aria-label="Ask the Librarian"]')).toBe(field);
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(await screen.findByRole('textbox', { name: 'Ask the Librarian' })).toBe(field);
+});
+
+it('folds on an outside press, retains the chat, and returns focus only from inside it', async () => {
+  renderContent(makeLink({ id: 'outside-focus' }), prose, true);
+  const ask = await screen.findByRole('button', { name: 'Ask' });
+  fireEvent.click(ask);
+  const input = await screen.findByRole('textbox', { name: 'Ask the Librarian' });
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  expect(screen.getByRole('button', { name: 'Ask' })).toBe(ask);
+  expect(document.activeElement).toBe(ask);
+  expect(document.querySelector('textarea[aria-label="Ask the Librarian"]')).toBe(input);
+  fireEvent.click(ask);
+  await waitFor(() => expect(document.activeElement).toBe(input));
+  const outside = document.createElement('button');
+  document.body.append(outside);
+  outside.focus();
+  fireEvent(outside, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  expect(document.activeElement).toBe(outside);
+  expect(screen.getByRole('button', { name: 'Ask' })).toBe(ask);
+  outside.remove();
 });

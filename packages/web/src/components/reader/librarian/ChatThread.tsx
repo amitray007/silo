@@ -1,20 +1,14 @@
-import {
-  type CSSProperties,
-  type ReactNode,
-  type Ref,
-  type RefObject,
-  useEffect,
-  useRef,
-  useState,
-} from 'react';
+import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
+import { reducedMotion } from '../../../lib/motion';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
+import { ComposerBar, type QuickAction } from './Composer';
+import { StatusLine } from './StatusLine';
 import { selectionActions } from './selectionStore';
+import { statusLabel } from './status';
 import type { ThreadChat } from './useLibrarianChat';
 
 export type Passage = { quote: string; paragraph: number };
-/** A quick action: its id travels as message metadata, its label is the message text. */
-export type QuickAction = readonly [id: string, label: string];
 
 /** The quick actions of a chat about one article. */
 export const ARTICLE_ACTIONS: readonly QuickAction[] = [
@@ -30,10 +24,50 @@ export const LIBRARY_ACTIONS: readonly QuickAction[] = [['related', 'Related']];
 export function useChatComposer(initialPassage?: Passage) {
   const [input, setInput] = useState('');
   const [passage, setPassage] = useState<Passage | undefined>(initialPassage);
-  const field = useRef<HTMLInputElement>(null);
+  const field = useRef<HTMLTextAreaElement>(null);
   return { input, setInput, passage, setPassage, field };
 }
 export type Composer = ReturnType<typeof useChatComposer>;
+
+/** Within this many pixels of the end, the log counts as pinned to the bottom. */
+const PINNED_PX = 48;
+const JUMP_MS = 600;
+
+/**
+ * Keeps a message log at its end while the reader is there, and lets go when they scroll up: new
+ * lines then raise `away`, and `jump` brings them back. Sending a message always returns to the end.
+ */
+function useStickyLog(messages: readonly { role: string }[], active: boolean) {
+  const ref = useRef<HTMLDivElement>(null);
+  const pinned = useRef(true);
+  /** A smooth jump is under way until this time, so its scroll events do not unpin the log. */
+  const jumping = useRef(0);
+  const [away, setAway] = useState(false);
+  useEffect(() => {
+    const element = ref.current;
+    if (!active || !element || messages.length === 0) return;
+    if (pinned.current || messages.at(-1)?.role === 'user') {
+      pinned.current = true;
+      element.scrollTop = element.scrollHeight;
+    } else setAway(true);
+  }, [messages, active]);
+  const onScroll = () => {
+    const element = ref.current;
+    if (!active || !element || performance.now() < jumping.current) return;
+    pinned.current = element.scrollHeight - element.scrollTop - element.clientHeight < PINNED_PX;
+    setAway(!pinned.current);
+  };
+  const jump = () => {
+    pinned.current = true;
+    jumping.current = performance.now() + JUMP_MS;
+    setAway(false);
+    ref.current?.scrollTo?.({
+      top: ref.current.scrollHeight,
+      behavior: reducedMotion() ? 'auto' : 'smooth',
+    });
+  };
+  return { ref, onScroll, away, jump };
+}
 
 /**
  * A conversation: the messages and quick actions in a panel, then the passage card, the approval
@@ -52,8 +86,9 @@ export function ChatThread({
   onBack,
   rootRef,
   panelRef,
-  panelStyle,
+  maxHeight,
   variant = 'dock',
+  active = true,
 }: {
   chat: ThreadChat;
   composer: Composer;
@@ -70,29 +105,24 @@ export function ChatThread({
   onBack?: () => void;
   rootRef?: Ref<HTMLDivElement>;
   panelRef?: RefObject<HTMLElement | null>;
-  panelStyle?: CSSProperties;
+  /** The tallest the dock's panel may grow, in pixels. */
+  maxHeight?: number | undefined;
   variant?: 'dock' | 'page';
+  /** A folded dock keeps its rendered messages but does not move its scroll position. */
+  active?: boolean;
 }) {
   const { input, setInput, passage, setPassage, field } = composer;
-  const messages = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (chat.messages.length === 0) return;
-    messages.current?.scrollTo?.({ top: messages.current.scrollHeight });
-  }, [chat.messages]);
+  const log = useStickyLog(chat.messages, active);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
-  return (
-    <div className="silo-chat" data-variant={variant} ref={rootRef}>
-      <section
-        ref={panelRef}
-        style={panelStyle}
-        className="silo-chat-panel"
-        aria-label="Librarian conversation"
-      >
-        {header}
+  const panel = (
+    <section ref={panelRef} className="silo-chat-panel" aria-label="Librarian conversation">
+      {header}
+      <div className="silo-chat-log">
         <div
           className="silo-chat-messages"
-          ref={messages}
+          ref={log.ref}
+          onScroll={log.onScroll}
           role="log"
           aria-label="Messages"
           aria-busy={chat.busy}
@@ -103,9 +133,13 @@ export function ChatThread({
               message={message}
               linkId={linkId}
               expired={message.id !== lastAssistant?.id}
+              streaming={chat.busy && message.id === lastAssistant?.id}
               onApproval={chat.addToolApprovalResponse}
             />
           ))}
+          {chat.busy && !chat.pendingApproval && (
+            <StatusLine label={statusLabel(chat.messages)} className="silo-chat-pending" />
+          )}
           {chat.messages.length === 0 && (
             <p className="silo-chat-empty">{chat.loading ? 'Loading conversation…' : emptyText}</p>
           )}
@@ -116,89 +150,77 @@ export function ChatThread({
             </p>
           )}
         </div>
-        {chat.messages.length === 0 && !passage && (
-          <div className="silo-chat-actions">
-            {actions.map(([id, label]) => (
-              <button
-                type="button"
-                key={id}
-                disabled={disabled}
-                onClick={() => void chat.send(label, id)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-        )}
-      </section>
-      {menu}
-      {passage && (
-        <div className="silo-chat-passage">
-          <span>{passage.quote}</span>
-          <button
-            type="button"
-            className="silo-reader-iconbtn"
-            aria-label="Remove passage"
-            onClick={() => setPassage(undefined)}
-          >
-            <ReaderIcon name="close" size={16} />
+        {log.away && (
+          <button type="button" className="silo-chat-jump" onClick={log.jump}>
+            <ReaderIcon name="arrowDown" size={14} />
+            Jump to latest
           </button>
-          <div className="silo-chat-actions">
-            {selectionActions(passage.quote).map(([id, label]) => (
-              <button
-                type="button"
-                key={id}
-                disabled={disabled}
-                onClick={() => {
-                  void chat.send(label, id, passage);
-                  setPassage(undefined);
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
+        )}
+      </div>
+    </section>
+  );
+  // An attached passage brings its own quick actions; an empty chat offers the chat's.
+  const quick = passage
+    ? selectionActions(passage.quote)
+    : chat.messages.length === 0
+      ? actions
+      : [];
+  return (
+    <div
+      className="silo-chat"
+      data-variant={variant}
+      ref={rootRef}
+      style={
+        maxHeight === undefined ? undefined : ({ '--silo-chat-max': `${maxHeight}px` } as object)
+      }
+    >
+      {variant === 'dock' ? (
+        <div className="silo-chat-surface">
+          <div className="silo-chat-shell">{panel}</div>
         </div>
+      ) : (
+        panel
       )}
+      {menu}
       {chat.pendingApproval && (
         <p role="status" className="silo-chat-hint">
           Allow or deny first.
         </p>
       )}
-      <form
-        className="silo-chat-bar"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (input.trim() && !disabled) {
-            void chat.send(input, undefined, passage);
-            setPassage(undefined);
-            setInput('');
-          }
+      <ComposerBar
+        value={input}
+        onChange={setInput}
+        fieldRef={field}
+        label="Ask the Librarian"
+        placeholder="Ask the Librarian…"
+        busy={chat.busy}
+        onStop={() => void chat.stop()}
+        sendDisabled={disabled}
+        onSend={() => {
+          void chat.send(input, undefined, passage);
+          setPassage(undefined);
+          setInput('');
         }}
-      >
-        {onBack && (
-          <button type="button" aria-label="Back to tools" onClick={onBack}>
-            <ReaderIcon name="grid" size={19} />
-          </button>
-        )}
-        <div className="silo-chat-input">
-          <input
-            ref={field}
-            aria-label="Ask the Librarian"
-            placeholder="Ask the Librarian…"
-            value={input}
-            onChange={(event) => setInput(event.target.value)}
-          />
-        </div>
-        <button
-          className="silo-chat-send"
-          type="submit"
-          aria-label="Send"
-          disabled={disabled || !input.trim()}
-        >
-          <ReaderIcon name="up" size={18} />
-        </button>
-      </form>
+        lead={
+          onBack && (
+            <button
+              type="button"
+              className="silo-composer-lead"
+              aria-label="Back to tools"
+              onClick={onBack}
+            >
+              <ReaderIcon name="grid" size={18} />
+            </button>
+          )
+        }
+        passage={passage && { quote: passage.quote, onRemove: () => setPassage(undefined) }}
+        quick={quick}
+        quickDisabled={disabled}
+        onQuick={(id, label) => {
+          void chat.send(label, id, passage);
+          setPassage(undefined);
+        }}
+      />
     </div>
   );
 }

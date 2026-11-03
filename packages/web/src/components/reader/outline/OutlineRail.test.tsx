@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { OutlineRail } from './OutlineRail';
 
@@ -69,4 +69,24 @@ it('with reduced motion: no spring widths, a static crest, an instant scroll', (
   expect(tick.querySelector('i')?.getAttribute('style') ?? '').not.toContain('width');
   fireEvent.click(tick);
   expect(scroll.scrollTo).toHaveBeenCalledWith(expect.objectContaining({ behavior: 'auto' }));
+});
+
+it('updates the current group while scrolling without replacing the tick buttons', async () => {
+  const { panel, scroll, prose } = setup();
+  Object.defineProperty(scroll, 'clientHeight', { value: 800 });
+  const headings = prose.querySelectorAll('h2');
+  let secondTop = 600;
+  headings[0]!.getBoundingClientRect = () => ({ top: 100 }) as DOMRect;
+  headings[1]!.getBoundingClientRect = () => ({ top: secondTop }) as DOMRect;
+  for (const paragraph of prose.querySelectorAll('p'))
+    paragraph.getBoundingClientRect = () => ({ top: 700 }) as DOMRect;
+  render(<OutlineRail prose={prose} scroll={scroll} panel={panel} />);
+  const intro = screen.getByRole('button', { name: 'Intro heading' });
+  const second = screen.getByRole('button', { name: 'Second part' });
+  expect(intro.getAttribute('aria-current')).toBe('true');
+  secondTop = 200;
+  fireEvent.scroll(scroll);
+  await waitFor(() => expect(second.getAttribute('aria-current')).toBe('true'));
+  expect(intro.hasAttribute('aria-current')).toBe(false);
+  expect(screen.getByRole('button', { name: 'Second part' })).toBe(second);
 });

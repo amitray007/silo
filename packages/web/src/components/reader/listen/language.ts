@@ -36,4 +36,4 @@ export function isEnglishText(text: string): boolean {
 }
 
 /** The title the dock gives the disabled Listen button. */
-export const ENGLISH_ONLY_TITLE = 'Read aloud is English-only for now';
+export const ENGLISH_ONLY_TITLE = 'Listen reads English articles only';

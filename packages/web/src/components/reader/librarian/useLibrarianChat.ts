@@ -10,6 +10,7 @@ import {
   useLibrarianChatDetail,
   useLibrarianChats,
 } from '../../../api/librarian';
+import { STREAM_UPDATE_MS } from '../../../lib/motion';
 import { toolName, WRITE_TRACES } from './ChatMessage';
 
 const ERROR_WORDS: Record<string, string> = {
@@ -181,7 +182,7 @@ function useEntryChat({
   const [failedEntry, setFailedEntry] = useState<Entry | null>(null);
   const [creatingEntry, setCreatingEntry] = useState<Entry | null>(null);
   const detail = useLibrarianChatDetail(resolved ?? undefined);
-  const state = useChat({ chat });
+  const state = useChat({ chat, throttle: STREAM_UPDATE_MS });
   useEffect(() => {
     entry.used = ++usage;
     // Reclaim inactive entries when the visible stream settles as well as on navigation.

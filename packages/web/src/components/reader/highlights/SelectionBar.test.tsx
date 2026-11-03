@@ -39,7 +39,7 @@ function setup(overrides: Partial<Parameters<typeof SelectionBar>[0]> = {}) {
     onDismiss: vi.fn(),
     onSearch: vi.fn(),
     onListen: vi.fn(),
-    hidden: new Set<string>(),
+    unavailable: new Map<string, string>(),
     ...overrides,
   };
   const rendered = render(
@@ -191,9 +191,14 @@ it('runs Listen from here and then dismisses the selection', () => {
   expect(props.onDismiss).toHaveBeenCalled();
 });
 
-it('leaves Listen from here out when the article cannot be read aloud', () => {
-  setup({ hidden: new Set(['listen']) });
-  expect(screen.queryByRole('button', { name: /Listen from here/ })).toBeNull();
+it('keeps Listen from here, dimmed with the reason, when the article cannot be read aloud', () => {
+  const props = setup({ unavailable: new Map([['listen', 'Listen reads English articles only']]) });
+  const listen = screen.getByRole('button', { name: /Listen from here/ });
+  expect(listen.getAttribute('aria-disabled')).toBe('true');
+  expect(listen.getAttribute('title')).toBe('Listen reads English articles only');
+  fireEvent.click(listen);
+  expect(props.onListen).not.toHaveBeenCalled();
+  expect(props.onDismiss).not.toHaveBeenCalled();
   expect(screen.getByRole('button', { name: /Highlight/ })).toBeTruthy();
 });
 
@@ -209,6 +214,57 @@ it('keeps labels without readiness and uses icon actions with Ask when ready', (
   expect(screen.getByRole('button', { name: 'Ask' })).toBeTruthy();
   expect(window.getSelection()?.toString()).toBe('second paragraph');
 });
+it('grows the same surface into the composer, focuses the field, and Escape shrinks it back', () => {
+  setup({ askReady: true, linkId: 'article' });
+  const surface = screen.getByRole('toolbar', { name: 'Selection' });
+  expect(surface.getAttribute('data-phase')).toBe('bar');
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(screen.getByRole('toolbar', { name: 'Selection' })).toBe(surface);
+  expect(surface.getAttribute('data-phase')).toBe('composer');
+  expect(document.activeElement).toBe(
+    screen.getByRole('textbox', { name: 'Ask about this passage' }),
+  );
+  const send = screen.getByRole('button', { name: 'Send' }) as HTMLButtonElement;
+  expect(send.disabled).toBe(true);
+  fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Why?' } });
+  expect(send.disabled).toBe(false);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(screen.getByRole('toolbar', { name: 'Selection' })).toBe(surface);
+  expect(surface.getAttribute('data-phase')).toBe('bar');
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' }));
+});
+
+it('sends the question to the dock on Enter, and keeps Shift+Enter for a new line', () => {
+  const { onDismiss } = setup({ askReady: true, linkId: 'enter-test' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  const field = screen.getByRole('textbox');
+  fireEvent.change(field, { target: { value: 'Why?' } });
+  fireEvent.keyDown(field, { key: 'Enter', shiftKey: true });
+  expect(onDismiss).not.toHaveBeenCalled();
+  fireEvent.keyDown(field, { key: 'Enter' });
+  expect(onDismiss).toHaveBeenCalled();
+});
+
+it('recedes the reader pane while the composer is open, and only when the passage can stay sharp', () => {
+  document.getElementById('pane')?.remove();
+  document.body.insertAdjacentHTML(
+    'beforeend',
+    '<section class="silo-readerpane"><div id="pane"></div></section>',
+  );
+  const pane = document.querySelector('.silo-readerpane') as HTMLElement;
+  setup({ askReady: true, linkId: 'recede-test' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(pane.hasAttribute('data-recede')).toBe(false);
+  fireEvent.keyDown(document, { key: 'Escape' });
+  vi.stubGlobal('Highlight', class {});
+  vi.stubGlobal('CSS', { highlights: new Map() });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(pane.getAttribute('data-recede')).toBe('passage');
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(pane.hasAttribute('data-recede')).toBe(false);
+  vi.unstubAllGlobals();
+});
+
 it('offers word actions for a single short word', () => {
   pending.range.setEnd(pending.range.startContainer, 10);
   setup({ askReady: true, linkId: 'article' });
@@ -220,11 +276,12 @@ it('offers word actions for a single short word', () => {
 
 it('streams a quick answer, saves its text as a note, and imports only the text turn', async () => {
   const { waitFor } = await import('@testing-library/react');
-  const calls: { url: string; body: unknown }[] = [];
+  const calls: { url: string; method: string; body: unknown }[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ url, body });
+    calls.push({ url, method, body });
     if (url.endsWith('/quick')) {
       const chunks = [
         { type: 'start', messageId: 'answer' },
@@ -239,7 +296,12 @@ it('streams a quick answer, saves its text as a note, and imports only the text 
       );
     }
     if (url.endsWith('/import')) return new Response(null, { status: 204 });
-    return new Response(JSON.stringify({ chats: [{ id: 'chat' }] }), {
+    if (method === 'POST' && url.endsWith('/api/librarian/chats'))
+      return new Response(JSON.stringify({ id: 'fresh-chat' }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    return new Response(JSON.stringify({ chats: [{ id: 'ongoing-chat' }] }), {
       headers: { 'Content-Type': 'application/json' },
     });
   });
@@ -262,6 +324,15 @@ it('streams a quick answer, saves its text as a note, and imports only the text 
   });
   fireEvent.click(screen.getByRole('button', { name: 'Continue in Librarian' }));
   await waitFor(() => expect(calls.some((call) => call.url.endsWith('/import'))).toBe(true));
+  // Continue starts a fresh chat for the article instead of appending to the ongoing one.
+  const created = calls.find(
+    (call) => call.method === 'POST' && call.url.endsWith('/api/librarian/chats'),
+  );
+  expect(created?.body).toEqual({ linkId: 'quick-test' });
+  expect(calls.find((call) => call.url.endsWith('/import'))?.url).toContain(
+    '/api/librarian/chats/fresh-chat/import',
+  );
+  expect(calls.some((call) => call.url.includes('ongoing-chat'))).toBe(false);
   const imported = calls.find((call) => call.url.endsWith('/import'))?.body as {
     messages: { role: string; parts: unknown[]; metadata?: unknown }[];
   };
@@ -370,7 +441,12 @@ it('aborts passage A and saves only passage B after the selection changes', asyn
   const props = setup({ askReady: true, linkId: 'selection-regression', onSaveAnswer });
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
   fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
-  await screen.findByText('Answer A');
+  // While it streams, new words sit in their own spans, so match on the card's whole text.
+  await waitFor(() =>
+    expect(screen.getByRole('region', { name: 'Passage answer' }).textContent).toContain(
+      'Answer A',
+    ),
+  );
   const range = document.createRange();
   range.selectNodeContents(prose.querySelector('p')!);
   props.rendered.rerender(
@@ -382,7 +458,9 @@ it('aborts passage A and saves only passage B after the selection changes', asyn
   fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
   fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
   await screen.findByText('Answer B');
-  expect(screen.queryByText('Answer A')).toBeNull();
+  expect(screen.getByRole('region', { name: 'Passage answer' }).textContent).not.toContain(
+    'Answer A',
+  );
   await waitFor(() =>
     expect(screen.getByRole('button', { name: 'Save as note' }).hasAttribute('disabled')).toBe(
       false,
@@ -397,16 +475,23 @@ it.each([
   ['approval_pending', 'Allow or deny the waiting request first.'],
   ['ai_not_ready', 'Turn on the Librarian in Settings first.'],
 ])('keeps the answer open when import returns %s', async (error, message) => {
+  const { waitFor } = await import('@testing-library/react');
+  const deleted: string[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).endsWith('/quick')) return answerStream('Keep this answer');
       if (String(input).endsWith('/import'))
         return new Response(JSON.stringify({ error, message: error }), {
           status: 409,
           headers: { 'Content-Type': 'application/json' },
         });
-      return new Response(JSON.stringify({ chats: [{ id: 'import-errors' }] }), {
+      if (init?.method === 'DELETE') {
+        deleted.push(String(input));
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ id: 'import-errors' }), {
+        status: 201,
         headers: { 'Content-Type': 'application/json' },
       });
     }),
@@ -421,5 +506,75 @@ it.each([
   await screen.findByText(message);
   expect(screen.getByRole('region', { name: 'Passage answer' })).toBeTruthy();
   expect(screen.getByText('Keep this answer')).toBeTruthy();
+  // The refused import leaves no empty chat behind.
+  await waitFor(() =>
+    expect(deleted.some((url) => url.endsWith('/api/librarian/chats/import-errors'))).toBe(true),
+  );
   vi.unstubAllGlobals();
+});
+
+it('focuses the quick answer and restores Ask focus when it closes', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => answerStream('Focus answer')),
+  );
+  setup({ askReady: true, linkId: 'focus-answer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  screen.getByRole('button', { name: 'Explain' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  expect(document.activeElement).toBe(screen.getByRole('region', { name: 'Passage answer' }));
+  await screen.findByText('Focus answer');
+  screen.getByRole('button', { name: 'Close answer' }).focus();
+  fireEvent.click(screen.getByRole('button', { name: 'Close answer' }));
+  expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' }));
+  vi.unstubAllGlobals();
+});
+
+it('dismisses the passage composer on an outside press without restoring the bar', () => {
+  const { onDismiss } = setup({ askReady: true, linkId: 'outside-composer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  expect(onDismiss).toHaveBeenCalledOnce();
+  expect(window.getSelection()?.isCollapsed).toBe(true);
+});
+
+it('stops the temporary answer when an outside press dismisses its card', async () => {
+  let signal: AbortSignal | null | undefined;
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      signal = init?.signal;
+      return answerStream('Outside answer', true);
+    }),
+  );
+  const { onDismiss } = setup({ askReady: true, linkId: 'outside-answer' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Explain' }));
+  await waitFor(() =>
+    expect(screen.getByRole('region', { name: 'Passage answer' }).textContent).toContain(
+      'Outside answer',
+    ),
+  );
+  fireEvent(document.body, new MouseEvent('pointerdown', { bubbles: true, button: 0 }));
+  await waitFor(() => expect(signal?.aborted).toBe(true));
+  expect(onDismiss).toHaveBeenCalledOnce();
+  vi.unstubAllGlobals();
+});
+
+it('rejects a range in Librarian or crossing from the article into Librarian', () => {
+  const chat = document.createElement('div');
+  chat.textContent = 'Chat answer';
+  document.body.append(chat);
+  const range = document.createRange();
+  range.selectNodeContents(chat);
+  const props = setup({ pending: { ...pending, range }, askReady: true });
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  range.setStart(prose.querySelector('p')!.firstChild!, 0);
+  props.rendered.rerender(
+    <QueryClientProvider client={new QueryClient()}>
+      <SelectionBar {...props} pending={{ ...pending, range }} />
+    </QueryClientProvider>,
+  );
+  expect(screen.queryByRole('toolbar', { name: 'Selection' })).toBeNull();
+  expect(CSS.highlights?.has('silo-librarian-selection') ?? false).toBe(false);
 });

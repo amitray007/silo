@@ -188,15 +188,45 @@
 .silo-sb {
   position: fixed;
   z-index: 900;
-  transform: translateX(-50%);
+  left: var(--selection-left);
+  top: var(--selection-top);
+  /* The edge nearest the passage is the anchor: the surface grows up from it, or down when flipped. */
+  translate: -50% -100%;
+  border-radius: 12px;
+  background: var(--bg2);
+  box-shadow: var(--elev-2);
+  transform-origin: 50% 100%;
+  animation: siloSbPop 120ms var(--ease-out);
+}
+.silo-sb[data-flip="true"] {
+  translate: -50% 0;
+  transform-origin: 50% 0;
+}
+.silo-sb[data-phase="composer"] {
+  border-radius: 14px;
+}
+.silo-sb[data-phase="answer"] {
+  border-radius: 16px;
+  box-shadow: var(--elev-3);
+}
+/* The shell clips the content only while the surface changes size. */
+.silo-sb-shell {
+  position: relative;
+  border-radius: inherit;
+}
+.silo-sb-shell[data-morphing] {
+  height: 100%;
+  overflow: hidden;
+}
+/* New content arrives a beat after the old begins to leave, so the two never overlap in full. */
+.silo-sb-shell[data-morphing] > .silo-sb-content {
+  animation: siloContentIn 160ms 70ms var(--ease-out) backwards;
+}
+.silo-sb-tools {
   display: flex;
   align-items: center;
   gap: 2px;
   padding: 4px;
-  border-radius: 12px;
-  background: var(--bg2);
-  box-shadow: var(--elev-2);
-  animation: siloSbPop 120ms var(--ease-out);
 }
 .silo-sb::after {
   content: "";
@@ -242,6 +272,13 @@
 .silo-sb-btn:focus-visible,
 .silo-sb-btn[aria-expanded="true"] {
   background: var(--menu-highlight);
+}
+.silo-sb-btn[aria-disabled="true"] {
+  opacity: 0.45;
+  cursor: default;
+}
+.silo-sb-btn[aria-disabled="true"]:hover {
+  background: none;
 }
 .silo-sb-more {
   padding: 0 7px;
@@ -390,7 +427,13 @@
 @keyframes siloSbPop {
   from {
     opacity: 0;
-    transform: translateX(-50%) scale(0.96);
+    transform: scale(0.96);
+  }
+}
+@keyframes siloContentIn {
+  from {
+    opacity: 0;
+    translate: 0 2px;
   }
 }
 @keyframes siloSbPicker {
@@ -523,10 +566,4 @@
   .silo-notepop {
     animation: none;
   }
-}
-
-/* Keep the selected passage visible while the question input owns focus. */
-::highlight(silo-librarian-selection) {
-  background: var(--sel);
-  color: var(--ink);
 }

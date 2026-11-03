@@ -43,15 +43,17 @@ function setup(resume = false) {
   });
   vi.stubGlobal('fetch', fetcher);
   const fold = vi.fn();
-  render(
-    <QueryClientProvider
-      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
-    >
-      <DockChat linkId={`article-${++linkSequence}`} onFold={fold} />
-    </QueryClientProvider>,
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  const linkId = `article-${++linkSequence}`;
+  const content = (active: boolean) => (
+    <QueryClientProvider client={client}>
+      <DockChat linkId={linkId} onFold={fold} active={active} />
+    </QueryClientProvider>
   );
-  return { fetcher, fold };
+  const view = render(content(true));
+  return { fetcher, fold, setActive: (active: boolean) => view.rerender(content(active)) };
 }
+
 afterEach(() => {
   cleanup();
   forgetChat('chat-1');
@@ -402,4 +404,22 @@ it('focuses an open dock when a passage arrives', async () => {
   requestDock(`article-${linkSequence}`, { passage: { quote: 'Attached passage', paragraph: 2 } });
   await screen.findByText('Attached passage');
   expect(document.activeElement).toBe(screen.getByRole('textbox'));
+});
+
+it('leaves focus and Escape alone while folded and restores the composer on reopen', async () => {
+  const { fold, setActive } = setup();
+  setActive(false);
+  const outside = document.createElement('button');
+  document.body.append(outside);
+  outside.focus();
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(fold).not.toHaveBeenCalled();
+  expect(document.activeElement).toBe(outside);
+  setActive(true);
+  await waitFor(() =>
+    expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Ask the Librarian' })),
+  );
+  fireEvent.keyDown(document, { key: 'Escape' });
+  expect(fold).toHaveBeenCalledTimes(1);
+  outside.remove();
 });

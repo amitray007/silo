@@ -1,0 +1,18 @@
+.silo-feedback-launcher {
+  position: fixed;
+  z-index: 100000;
+  right: 20px;
+  bottom: 20px;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: white;
+  background: #1a1a1a;
+  box-shadow:
+    0 2px 8px #0003,
+    0 4px 16px #0000001a;
+}

@@ -301,3 +301,19 @@ it('gates direct navigation when the Librarian is off', () => {
   expect(screen.queryByRole('textbox')).toBeNull();
   expect(screen.queryByRole('region', { name: 'Chats' })).toBeNull();
 });
+
+it('keeps native text selection on the Librarian page without article selection controls', async () => {
+  setup([stored(1)]);
+  fireEvent.click(await screen.findByRole('button', { name: /^Chat 1/ }));
+  const answer = await screen.findByText('Answer 1');
+  const range = document.createRange();
+  range.selectNodeContents(answer);
+  act(() => {
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    fireEvent(document, new Event('selectionchange'));
+  });
+  expect(window.getSelection()?.toString()).toBe('Answer 1');
+  expect(document.querySelector('.silo-reader-prose')).toBeNull();
+  expect(document.querySelector('[data-selection-bar]')).toBeNull();
+});

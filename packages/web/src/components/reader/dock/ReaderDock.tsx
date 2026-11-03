@@ -36,6 +36,7 @@ import { type PencilApi, usePencil } from '../pencil/usePencil';
 import { usePencilKeys } from '../pencil/usePencilKeys';
 import { SavedPlace } from '../place/SavedPlace';
 import { ReaderIcon } from '../ReaderIcon';
+import { useRecede } from '../useRecede';
 import { DockHostContext } from './DockHostContext';
 import { TypeSheet } from './TypeSheet';
 
@@ -106,7 +107,7 @@ const tools: readonly DockTool[] = [
     label: 'Pencil',
     title: 'Reading pencil',
     heading: 'Reading pencil',
-    glyph: <ReaderIcon name="edit" size={19} />,
+    glyph: <ReaderIcon name="pen" size={19} />,
     sheet: ({ api }) => <PencilSheet pencil={api.pencil} />,
     split: {
       mainTitle: 'Reading pencil (P)',
@@ -266,14 +267,21 @@ function isChatOpen(id: string | null, ready: boolean) {
   return id === 'ask' && ready;
 }
 
-function useChatFocus(open: boolean, pill: { current: HTMLDivElement | null }) {
-  const wasOpen = useRef(false);
+/** Prepare the hidden transcript off the click path, then retain it until the article changes. */
+function useRetainedChat(linkId: string, open: boolean, ready: boolean) {
+  const [mounted, setMounted] = useState<string | null>(null);
+  const prepare = useCallback(() => setMounted(linkId), [linkId]);
   useEffect(() => {
-    if (wasOpen.current && !open) {
-      pill.current?.querySelector<HTMLElement>('[data-tool="ask"]')?.focus();
+    if (!ready || mounted === linkId) return;
+    if (typeof requestIdleCallback === 'function') {
+      const idle = requestIdleCallback(prepare);
+      return () => cancelIdleCallback(idle);
     }
-    wasOpen.current = open;
-  }, [open, pill]);
+    const timer = window.setTimeout(prepare, 150);
+    return () => window.clearTimeout(timer);
+  }, [ready, mounted, linkId, prepare]);
+  if (open && mounted !== linkId) setMounted(linkId);
+  return { mounted: open || mounted === linkId, prepare };
 }
 
 /**
@@ -290,16 +298,10 @@ export function ReaderDock({
   trashed?: boolean;
 }) {
   const { element: host, scroll, panel } = useContext(DockHostContext);
-  const [openId, setOpenId] = useState<string | null>(null);
-  const selectionRequest = useDockRequest(link.id);
-  useEffect(() => {
-    if (selectionRequest) setOpenId('ask');
-  }, [selectionRequest]);
-  const sheetId = useId();
+  const [highlighting, setHighlighting] = useState(false);
   const { data: aiStatus } = useAi();
   const askReady = aiStatus?.status?.features?.librarian?.ready === true;
   const hasChats = useHasLibrarianChat(link.id, askReady);
-  const chatOpen = isChatOpen(openId, askReady);
   const writePosition = useSaveReadingPosition(link.id);
   const [saveError, setSaveError] = useState('');
   const save = useCallback(
@@ -343,7 +345,7 @@ export function ReaderDock({
     scroll,
     writable: canSavePosition(link, trashed),
     // While the Highlight sheet is open, a selection is highlighted at once.
-    autoColor: openId === 'highlight' ? highlightColor : null,
+    autoColor: highlighting ? highlightColor : null,
   });
   const pencil = usePencil({
     prose,
@@ -369,39 +371,7 @@ export function ReaderDock({
   useEffect(() => {
     if (listening && pencilOn) stopPencil();
   }, [listening, pencilOn, stopPencil]);
-  // The Listen sheet warms the voice model, so Play is instant once it is chosen.
-  const { warm: warmListen } = listen;
-  useEffect(() => {
-    if (openId === 'listen') warmListen();
-  }, [openId, warmListen]);
-  // Focus follows the dock as it morphs: to Play when the player opens, back to Listen when it
-  // closes. The first render does neither.
-  const pill = useRef<HTMLDivElement>(null);
-  useChatFocus(chatOpen, pill);
-  const wasListening = useRef(false);
-  useEffect(() => {
-    if (listening === wasListening.current) return;
-    wasListening.current = listening;
-    const target = listening ? '.silo-listen-play' : '[data-tool="listen"]';
-    pill.current?.querySelector<HTMLElement>(target)?.focus({ preventScroll: true });
-  }, [listening]);
-  // Stopping Listen closes its sheet with it.
-  useEffect(() => {
-    if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
-  }, [listening]);
   if (!host) return null;
-  const closeSheet = () => setOpenId(null);
-  const api: DockApi = {
-    pencil,
-    highlights,
-    lane,
-    listen,
-    hasChats,
-    closeSheet,
-    openSheet: setOpenId,
-  };
-  const openTool = tools.find((tool) => tool.id === openId);
-  const Sheet = openTool?.sheet;
   return createPortal(
     <>
       {prose && scroll && panel && (
@@ -433,6 +403,86 @@ export function ReaderDock({
         panel={panel}
         onDialHidden={setDialHidden}
       />
+      <DockSurface
+        link={link}
+        host={host}
+        panel={panel}
+        askReady={askReady}
+        features={{ pencil, highlights, lane, listen, hasChats }}
+        onHighlighting={setHighlighting}
+      />
+    </>,
+    host,
+  );
+}
+
+/** Sheet and chat changes leave the article overlays and their geometry untouched. */
+function DockSurface({
+  link,
+  host,
+  panel,
+  askReady,
+  features,
+  onHighlighting,
+}: {
+  link: LinkJson;
+  host: HTMLElement;
+  panel: HTMLElement | null;
+  askReady: boolean;
+  features: Omit<DockApi, 'closeSheet' | 'openSheet'>;
+  onHighlighting: (active: boolean) => void;
+}) {
+  const { highlights, lane, listen } = features;
+  const [openId, setOpenId] = useState<string | null>(null);
+  const selectionRequest = useDockRequest(link.id);
+  useEffect(() => {
+    if (selectionRequest) setOpenId('ask');
+  }, [selectionRequest]);
+  const sheetId = useId();
+  const chatOpen = isChatOpen(openId, askReady);
+  const { mounted: mountedChat, prepare: prepareChat } = useRetainedChat(
+    link.id,
+    chatOpen,
+    askReady,
+  );
+  useEffect(() => onHighlighting(openId === 'highlight'), [openId, onHighlighting]);
+  const listening = listen.active;
+  // The Listen sheet warms the voice model, so Play is instant once it is chosen.
+  const { warm: warmListen } = listen;
+  useEffect(() => {
+    if (openId === 'listen') warmListen();
+  }, [openId, warmListen]);
+  // Focus follows the dock as it morphs: to Play when the player opens, back to Listen when it
+  // closes. The first render does neither.
+  const pill = useRef<HTMLDivElement>(null);
+  const returnChatFocus = useRef(false);
+  useEffect(() => {
+    if (chatOpen || !returnChatFocus.current) return;
+    returnChatFocus.current = false;
+    pill.current?.querySelector<HTMLElement>('[data-tool="ask"]')?.focus({ preventScroll: true });
+  }, [chatOpen]);
+  const foldChat = () => {
+    returnChatFocus.current = !!host.querySelector('.silo-chat')?.contains(document.activeElement);
+    setOpenId(null);
+  };
+  useRecede(panel, 'chat', chatOpen);
+  const wasListening = useRef(false);
+  useEffect(() => {
+    if (listening === wasListening.current) return;
+    wasListening.current = listening;
+    const target = listening ? '.silo-listen-play' : '[data-tool="listen"]';
+    pill.current?.querySelector<HTMLElement>(target)?.focus({ preventScroll: true });
+  }, [listening]);
+  // Stopping Listen closes its sheet with it.
+  useEffect(() => {
+    if (!listening) setOpenId((id) => (id === 'listen' ? null : id));
+  }, [listening]);
+  const closeSheet = () => setOpenId(null);
+  const api: DockApi = { ...features, closeSheet, openSheet: setOpenId };
+  const openTool = tools.find((tool) => tool.id === openId);
+  const Sheet = openTool?.sheet;
+  return (
+    <>
       <HighlightsLayer
         linkId={link.id}
         askReady={askReady}
@@ -444,63 +494,73 @@ export function ReaderDock({
         listen={listen}
       />
       <div className="silo-reader-dock" data-chat={chatOpen}>
-        {chatOpen ? (
-          <Suspense fallback={<div role="status">Loading Librarian…</div>}>
-            <DockChat key={link.id} linkId={link.id} panel={panel} onFold={closeSheet} />
-          </Suspense>
-        ) : (
-          <div
-            ref={pill}
-            className="silo-reader-dock-pill"
-            data-mode={listen.active ? 'player' : 'tools'}
-            data-ask={askReady}
-            role="toolbar"
-            aria-label="Reader tools"
-          >
-            {listen.active ? (
-              <ListenPlayer
-                listen={listen}
-                sheetOpen={openId === 'listen'}
-                onSheet={() => setOpenId(openId === 'listen' ? null : 'listen')}
-                onClose={() => {
-                  listen.stop();
-                  closeSheet();
-                }}
+        {askReady && mountedChat && (
+          <div className="silo-reader-chat-cache" aria-hidden={!chatOpen} inert={!chatOpen}>
+            <Suspense fallback={chatOpen ? <div role="status">Loading Librarian…</div> : null}>
+              <DockChat
+                key={link.id}
+                linkId={link.id}
+                panel={panel}
+                active={chatOpen}
+                onFold={foldChat}
               />
-            ) : (
-              tools
-                .filter((tool) => tool.id !== 'ask' || askReady)
-                .map((tool) => {
-                  const toggle = () => {
-                    if (tool.press) {
-                      setOpenId(null);
-                      tool.press.toggle(api);
-                    } else setOpenId(openId === tool.id ? null : tool.id);
-                  };
-                  return tool.split ? (
-                    <SplitDockButton
-                      key={tool.id}
-                      tool={tool}
-                      split={tool.split}
-                      api={api}
-                      open={openId === tool.id}
-                      sheetId={sheetId}
-                      onToggle={toggle}
-                    />
-                  ) : (
-                    <DockButton
-                      key={tool.id}
-                      tool={tool}
-                      api={api}
-                      open={openId === tool.id}
-                      sheetId={sheetId}
-                      onToggle={toggle}
-                    />
-                  );
-                })
-            )}
+            </Suspense>
           </div>
         )}
+        <div
+          hidden={chatOpen}
+          ref={pill}
+          className="silo-reader-dock-pill"
+          data-mode={listen.active ? 'player' : 'tools'}
+          data-ask={askReady}
+          role="toolbar"
+          aria-label="Reader tools"
+          onPointerEnter={askReady ? prepareChat : undefined}
+          onFocusCapture={askReady ? prepareChat : undefined}
+        >
+          {listen.active ? (
+            <ListenPlayer
+              listen={listen}
+              sheetOpen={openId === 'listen'}
+              onSheet={() => setOpenId(openId === 'listen' ? null : 'listen')}
+              onClose={() => {
+                listen.stop();
+                closeSheet();
+              }}
+            />
+          ) : (
+            tools
+              .filter((tool) => tool.id !== 'ask' || askReady)
+              .map((tool) => {
+                const toggle = () => {
+                  if (tool.press) {
+                    setOpenId(null);
+                    tool.press.toggle(api);
+                  } else setOpenId(openId === tool.id ? null : tool.id);
+                };
+                return tool.split ? (
+                  <SplitDockButton
+                    key={tool.id}
+                    tool={tool}
+                    split={tool.split}
+                    api={api}
+                    open={openId === tool.id}
+                    sheetId={sheetId}
+                    onToggle={toggle}
+                  />
+                ) : (
+                  <DockButton
+                    key={tool.id}
+                    tool={tool}
+                    api={api}
+                    open={openId === tool.id}
+                    sheetId={sheetId}
+                    onToggle={toggle}
+                  />
+                );
+              })
+          )}
+        </div>
         <MenuPresence>
           {openTool && Sheet && (
             <MenuSurface
@@ -529,7 +589,6 @@ export function ReaderDock({
           )}
         </MenuPresence>
       </div>
-    </>,
-    host,
+    </>
   );
 }
