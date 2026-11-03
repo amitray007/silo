@@ -285,7 +285,7 @@ function useEntryChat({
   }, [detail.data, chat, chatId, entry, state.status]);
   const title =
     detail.data && detail.data.chat.id === chatId.current ? detail.data.chat.title : entry.title;
-  const loading = resolved === undefined || !entry.hydrated;
+  const loading = !listError && !detail.error && (resolved === undefined || !entry.hydrated);
   const busy =
     creatingEntry === entry || state.status === 'submitted' || state.status === 'streaming';
   const lastAssistant = state.messages.findLast((message) => message.role === 'assistant');

@@ -1,10 +1,10 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { fireEvent, render as renderPlain, screen } from '@testing-library/react';
+import { act, fireEvent, render as renderPlain, screen } from '@testing-library/react';
 import type { ReactElement } from 'react';
 import { expect, it, vi } from 'vitest';
 import { ChatThread, type Composer } from './ChatThread';
-import type { ThreadChat } from './useLibrarianChat';
+import { type ThreadChat, useLibrarianPageChat } from './useLibrarianChat';
 
 const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 const render = (ui: ReactElement) =>
@@ -342,4 +342,39 @@ it('announces the stored conversation loading with a spinner, then shows the emp
   );
   expect(screen.queryByRole('status')).toBeNull();
   expect(screen.getByText('Empty')).toBeDefined();
+});
+
+it('ends the conversation spinner and shows the error after a detail fetch fails', async () => {
+  let fail: (response: Response) => void = () => {};
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      () =>
+        new Promise<Response>((resolve) => {
+          fail = resolve;
+        }),
+    ),
+  );
+  function Conversation() {
+    const chat = useLibrarianPageChat('failed-initial-detail', () => {});
+    return (
+      <ChatThread chat={chat} composer={composer()} actions={[]} emptyText="Empty" header={null} />
+    );
+  }
+  try {
+    render(<Conversation />);
+    expect(screen.getByRole('status').textContent).toBe('Loading conversation');
+    await act(async () => {
+      fail(
+        new Response(JSON.stringify({ error: 'unavailable', message: 'Unavailable' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      );
+    });
+    expect((await screen.findByRole('alert')).textContent).toBe('Could not answer. Try again.');
+    expect(screen.queryByRole('status')).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+  }
 });
