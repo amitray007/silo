@@ -82,7 +82,7 @@ it('keeps an in-flight chat beyond the recent cache limit', async () => {
         })
       : normal(input, init),
   );
-  let sending!: Promise<void>;
+  let sending!: ReturnType<typeof result.current.send>;
   act(() => {
     sending = result.current.send('Keep answering');
   });

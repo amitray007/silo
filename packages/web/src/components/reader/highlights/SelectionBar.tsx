@@ -221,6 +221,7 @@ export function SelectionBar({
               {phase === 'composer' && (
                 <SelectionComposer
                   quote={quote}
+                  error={answerState.error}
                   question={answerState.question}
                   onChange={answerState.setQuestion}
                   onSend={sendQuestion}

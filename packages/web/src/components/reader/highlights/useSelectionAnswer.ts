@@ -1,6 +1,6 @@
 import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiUrl } from '../../../api/client';
 import { useImportLibrarianTurn, useRefreshOnRemovedAction } from '../../../api/librarian';
 import { STREAM_UPDATE_MS } from '../../../lib/motion';
@@ -53,6 +53,18 @@ export function useSelectionAnswer(linkId: string | undefined, passage: Passage)
     .filter(Boolean)
     .join('\n\n');
   useRefreshOnRemovedAction(quick.error?.message);
+  const recoverRemovedAction = useCallback(() => {
+    quick.setMessages([]);
+    quick.clearError();
+    setFailure(chatErrorText('unknown_action'));
+    setAnswerAction(undefined);
+    setAnswerId(undefined);
+    setComposer(true);
+  }, [quick.setMessages, quick.clearError]);
+  useEffect(() => {
+    if (!/\bunknown_action\b/.test(quick.error?.message ?? '')) return;
+    recoverRemovedAction();
+  }, [quick.error, recoverRemovedAction]);
   const error = failure || (quick.error ? chatErrorText(quick.error.message) : '');
   const runQuick = (action: string, label: string) => {
     void quick.stop();
@@ -82,5 +94,6 @@ export function useSelectionAnswer(linkId: string | undefined, passage: Passage)
     busy,
     answer,
     runQuick,
+    recoverRemovedAction,
   };
 }

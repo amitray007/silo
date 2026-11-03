@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { defaultActions } from '../../../lib/librarianActions';
 import { ChatMessage } from './ChatMessage';
 import { DockChat } from './DockChat';
 import { requestDock } from './selectionStore';
@@ -423,3 +424,80 @@ it('leaves focus and Escape alone while folded and restores the composer on reop
   expect(fold).toHaveBeenCalledTimes(1);
   outside.remove();
 });
+
+it.each(['new', 'empty', 'history'])(
+  'recovers removed actions in a %s chat without losing the composer',
+  async (kind) => {
+    const linkId = `removed-${kind}`;
+    const id = `removed-chat-${kind}`;
+    const passage = { quote: 'A selected passage', paragraph: 2 };
+    const old = { id: 'old', role: 'user', parts: [{ type: 'text', text: 'Earlier question' }] };
+    const custom = {
+      id: 'custom:11111111-1111-4111-8111-111111111111',
+      label: 'Plain words',
+      prompt: 'p',
+    };
+    let exists = kind !== 'new';
+    const storedMessages = kind === 'history' ? [old] : [];
+    let settingsReads = 0;
+    const ownerActions = defaultActions();
+    ownerActions.article.push(custom);
+    ownerActions.passage.push(custom);
+    const readActions = () => (++settingsReads === 1 ? ownerActions : defaultActions());
+    const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      const method = init?.method;
+      if (url.endsWith('/api/settings')) {
+        return json({ librarianActions: readActions() });
+      }
+      if (method === 'DELETE') {
+        exists = false;
+        return new Response(null, { status: 204 });
+      }
+      if (url.endsWith('/messages'))
+        return new Response(JSON.stringify({ error: 'unknown_action' }), { status: 400 });
+      if (method === 'POST') {
+        exists = true;
+        return json({ ...summary, id, linkId });
+      }
+      if (url.includes('?'))
+        return json({ chats: exists ? [{ ...summary, id, linkId }] : [], nextCursor: null });
+      return json({ chat: { ...summary, id, linkId }, messages: storedMessages });
+    });
+    vi.stubGlobal('fetch', fetcher);
+    if (kind === 'history') requestDock(linkId, { passage });
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <DockChat linkId={linkId} onFold={() => {}} />
+      </QueryClientProvider>,
+    );
+    const chip = await screen.findByRole('button', { name: 'Plain words' });
+    await waitFor(() => expect(chip.hasAttribute('disabled')).toBe(false));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+      target: { value: 'My unfinished question' },
+    });
+    fireEvent.click(chip);
+    expect(await screen.findByText('This action was removed. Pick another.')).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Plain words' })).toBeNull());
+    const replacement = kind === 'history' ? 'Simplify' : 'Summarize';
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: replacement }).hasAttribute('disabled')).toBe(
+        false,
+      ),
+    );
+    expect(
+      (screen.getByRole('textbox', { name: 'Ask the Librarian' }) as HTMLTextAreaElement).value,
+    ).toBe('My unfinished question');
+    await waitFor(() => expect(screen.getByRole('log').textContent).not.toContain('Plain words'));
+    if (kind === 'history') {
+      expect(screen.getByText('Earlier question')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Remove passage' })).toBeTruthy();
+    }
+    expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(
+      kind === 'new' ? 1 : 0,
+    );
+    expect(exists).toBe(kind !== 'new');
+    forgetChat(id);
+  },
+);

@@ -554,6 +554,7 @@ const OWNER_ACTIONS = {
 function ownerFetch(
   quick: () => Response | Promise<Response>,
   calls: { url: string; body: unknown }[] = [],
+  settings = () => OWNER_ACTIONS,
 ) {
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
@@ -565,7 +566,7 @@ function ownerFetch(
         status: 201,
         headers: { 'Content-Type': 'application/json' },
       });
-    return new Response(JSON.stringify(OWNER_ACTIONS), {
+    return new Response(JSON.stringify(settings()), {
       headers: { 'Content-Type': 'application/json' },
     });
   });
@@ -631,3 +632,70 @@ it('says a removed action is gone and refreshes the settings', async () => {
   );
   vi.unstubAllGlobals();
 });
+
+it.each(['quick', 'continue'])(
+  'returns to refreshed selection chips when %s rejects a removed action',
+  async (path) => {
+    let stale = true;
+    ownerFetch(
+      () =>
+        path === 'quick'
+          ? new Response(
+              JSON.stringify({
+                error: 'unknown_action',
+                message: 'Could not import conversation.',
+              }),
+              { status: 400 },
+            )
+          : answerStream('An answer.'),
+      [],
+      () =>
+        stale
+          ? OWNER_ACTIONS
+          : {
+              librarianActions: {
+                ...OWNER_ACTIONS.librarianActions,
+                passage: OWNER_ACTIONS.librarianActions.passage.filter(
+                  (entry) => !entry.id.startsWith('custom:'),
+                ),
+              },
+            },
+    );
+    const fetcher = vi.mocked(fetch);
+    const original = fetcher.getMockImplementation();
+    fetcher.mockImplementation(async (input, init) => {
+      if (String(input).endsWith('/quick')) stale = false;
+      if (String(input).endsWith('/import'))
+        return new Response(
+          JSON.stringify({ error: 'unknown_action', message: 'Could not import conversation.' }),
+          {
+            status: 400,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        );
+      if (init?.method === 'DELETE') return new Response(null, { status: 204 });
+      if (!original) throw new Error('Missing fetch fixture');
+      return original(input, init);
+    });
+    setup({ askReady: true, linkId: `removed-selection-${path}` });
+    fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Ask about this passage' }), {
+      target: { value: 'My draft question' },
+    });
+    fireEvent.click(await screen.findByRole('button', { name: 'Plain words' }));
+    if (path === 'continue') {
+      await screen.findByText('An answer.');
+      const button = screen.getByRole('button', { name: 'Continue in Librarian' });
+      await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false));
+      fireEvent.click(button);
+    }
+    expect(await screen.findByText('This action was removed. Pick another.')).toBeTruthy();
+    const field = await screen.findByRole('textbox', { name: 'Ask about this passage' });
+    expect((field as HTMLTextAreaElement).value).toBe('My draft question');
+    expect(await screen.findByRole('button', { name: 'Simplify' })).toBeTruthy();
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Plain words' })).toBeNull());
+    if (path === 'continue')
+      expect(fetcher.mock.calls.filter(([, init]) => init?.method === 'DELETE')).toHaveLength(1);
+    vi.unstubAllGlobals();
+  },
+);

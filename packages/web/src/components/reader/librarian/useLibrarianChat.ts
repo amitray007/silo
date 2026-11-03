@@ -157,6 +157,85 @@ function draftFor(client: QueryClient, slot: Slot): Entry {
   return slot.draft;
 }
 
+async function discardEmptyCreatedChat(
+  entry: Entry,
+  id: string,
+  remove: (id: string) => Promise<unknown>,
+) {
+  const stored = await librarianApi.get(id);
+  if (stored.messages.length > 0) {
+    entry.chat.messages = stored.messages;
+    return false;
+  }
+  await remove(id);
+  chats.delete(id);
+  entry.chatId.current = null;
+  entry.title = 'New chat';
+  return true;
+}
+
+type TurnTarget = {
+  entry: Entry;
+  slot: Slot;
+  create: () => Promise<{ id: string }>;
+  remove: (id: string) => Promise<unknown>;
+  onAdopt: ((id: string) => void) | undefined;
+};
+
+function userTurn(text: string, action?: string, passage?: { quote: string; paragraph: number }) {
+  return {
+    text: text.trim(),
+    ...(action || passage ? { metadata: { ...(action ? { action } : {}), ...passage } } : {}),
+  };
+}
+
+async function recoverRejectedTurn(
+  target: TurnTarget,
+  previous: UIMessage[],
+  createdId: string | undefined,
+) {
+  const { entry, slot, remove, onAdopt } = target;
+  entry.chat.messages = previous;
+  if (!createdId) return;
+  const discarded =
+    previous.length === 0 &&
+    (await discardEmptyCreatedChat(entry, createdId, remove).catch(() => false));
+  if (discarded) return;
+  adopt(slot, entry, createdId);
+  onAdopt?.(createdId);
+}
+
+async function sendEntryTurn(
+  target: TurnTarget,
+  text: string,
+  action?: string,
+  passage?: { quote: string; paragraph: number },
+) {
+  const { entry, slot, create, onAdopt } = target;
+  const { chat, chatId } = entry;
+  const previous = chat.messages;
+  let createdId: string | undefined;
+  const publish = (id: string) => {
+    adopt(slot, entry, id);
+    onAdopt?.(id);
+  };
+  const custom = action?.startsWith('custom:');
+  if (!chatId.current) {
+    const created = await create();
+    chatId.current = created.id;
+    entry.title = text.trim().slice(0, 60);
+    createdId = created.id;
+    // Keep a first custom turn in its draft until the server accepts the saved action.
+    if (!custom) publish(created.id);
+  }
+  await chat.sendMessage(userTurn(text, action, passage));
+  if (/\bunknown_action\b/.test(chat.error?.message ?? '')) {
+    await recoverRejectedTurn(target, previous, createdId);
+    return 'unknown_action' as const;
+  }
+  if (createdId && custom) publish(createdId);
+}
+
 /**
  * Everything one chat on show needs: its messages, title, sending (creating the server row on the
  * first send) and approval state. `resolved` is the chat's id, `null` for a new chat, `undefined`
@@ -178,6 +257,7 @@ function useEntryChat({
   onAdopt?: (id: string) => void;
 }) {
   const create = useCreateLibrarianChat();
+  const remove = useDeleteLibrarianChat();
   const { chat, chatId } = entry;
   const [, rerender] = useReducer((count: number) => count + 1, 0);
   const [failedEntry, setFailedEntry] = useState<Entry | null>(null);
@@ -221,17 +301,18 @@ function useEntryChat({
     setFailedEntry(null);
     setCreatingEntry(entry);
     try {
-      if (!chatId.current) {
-        const created = await create.mutateAsync(linkId);
-        chatId.current = created.id;
-        entry.title = text.trim().slice(0, 60);
-        adopt(slot, entry, created.id);
-        onAdopt?.(created.id);
-      }
-      await state.sendMessage({
-        text: text.trim(),
-        ...(action || passage ? { metadata: { ...(action ? { action } : {}), ...passage } } : {}),
-      });
+      return await sendEntryTurn(
+        {
+          entry,
+          slot,
+          create: () => create.mutateAsync(linkId),
+          remove: remove.mutateAsync,
+          onAdopt,
+        },
+        text,
+        action,
+        passage,
+      );
     } catch {
       setFailedEntry(entry);
     } finally {

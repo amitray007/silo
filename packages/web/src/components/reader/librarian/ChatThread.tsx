@@ -111,6 +111,17 @@ export function ChatThread({
   useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
+  const send = (text: string, action?: string) => {
+    const sent = chat.send(text, action, passage);
+    setPassage(undefined);
+    if (!action) setInput('');
+    void Promise.resolve(sent).then((result) => {
+      if (result !== 'unknown_action') return;
+      if (!action) setInput((current) => current || input);
+      setPassage((current) => current ?? passage);
+      field.current?.focus();
+    });
+  };
   const panel = (
     <section ref={panelRef} className="silo-chat-panel" aria-label="Librarian conversation">
       {header}
@@ -193,9 +204,7 @@ export function ChatThread({
         onStop={() => void chat.stop()}
         sendDisabled={disabled}
         onSend={() => {
-          void chat.send(input, undefined, passage);
-          setPassage(undefined);
-          setInput('');
+          send(input);
         }}
         lead={
           onBack && (
@@ -213,8 +222,7 @@ export function ChatThread({
         quick={quick}
         quickDisabled={disabled}
         onQuick={(id, label) => {
-          void chat.send(label, id, passage);
-          setPassage(undefined);
+          send(label, id);
         }}
       />
     </div>

@@ -71,8 +71,10 @@ export function useAnswerActions({
       },
       (error) => {
         if (!(error instanceof ApiError)) return 'Could not continue in Librarian. Try again.';
-        if (error.error === 'unknown_action')
+        if (error.error === 'unknown_action') {
           void client.invalidateQueries({ queryKey: queryKeys.settings() });
+          answerState.recoverRemovedAction();
+        }
         return chatErrorText(error.error);
       },
     );

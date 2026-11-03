@@ -10,6 +10,7 @@ function placeholderFor(quote: string) {
 export function SelectionComposer({
   quote,
   question,
+  error,
   onChange,
   onSend,
   quick,
@@ -17,21 +18,29 @@ export function SelectionComposer({
 }: {
   quote: string;
   question: string;
+  error?: string;
   onChange: (question: string) => void;
   onSend: () => void;
   quick: readonly QuickAction[];
   onQuick: (id: string, label: string) => void;
 }) {
   return (
-    <Composer
-      className="silo-selection-compose"
-      value={question}
-      onChange={onChange}
-      onSend={onSend}
-      label="Ask about this passage"
-      placeholder={placeholderFor(quote)}
-      quick={quick}
-      onQuick={onQuick}
-    />
+    <>
+      <Composer
+        className="silo-selection-compose"
+        value={question}
+        onChange={onChange}
+        onSend={onSend}
+        label="Ask about this passage"
+        placeholder={placeholderFor(quote)}
+        quick={quick}
+        onQuick={onQuick}
+      />
+      {error && (
+        <p role="alert" className="silo-chat-error">
+          {error}
+        </p>
+      )}
+    </>
   );
 }
