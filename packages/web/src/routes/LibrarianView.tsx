@@ -33,7 +33,7 @@ function NoChatOpen() {
       <div className="silo-panehead" aria-hidden="true" />
       <div className="silo-empty-reader">
         <div>
-          <ReaderIcon name="sparkles" />
+          <ReaderIcon name="librarian" />
           <p>Select a chat</p>
           <span>Or start a new one with +.</span>
         </div>

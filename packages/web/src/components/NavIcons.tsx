@@ -4,7 +4,7 @@ export function LibraryIcon() {
   return <ReaderIcon name="library" />;
 }
 export function LibrarianIcon() {
-  return <ReaderIcon name="sparkles" />;
+  return <ReaderIcon name="librarian" />;
 }
 export function SettingsIcon() {
   return <ReaderIcon name="settings" />;
