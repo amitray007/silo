@@ -65,6 +65,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       linkPreviewImages: true,
       hoverPreview: false,
       reader: null,
+      librarianActions: harness.mod().core.LIBRARIAN_ACTIONS_DEFAULTS,
       ai: {
         enabled: false,
         features: {
@@ -92,6 +93,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     expect(Object.keys(body).sort()).toEqual([
       'ai',
       'hoverPreview',
+      'librarianActions',
       'linkPreviewImages',
       'mcpAccess',
       'plugins',

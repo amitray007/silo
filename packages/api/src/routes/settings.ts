@@ -1,4 +1,10 @@
-import { AI_PROVIDER_KINDS, getAllSettings, readerPatchSchema, updateSettings } from '@silo/core';
+import {
+  AI_PROVIDER_KINDS,
+  getAllSettings,
+  librarianActionsSchema,
+  readerPatchSchema,
+  updateSettings,
+} from '@silo/core';
 import type { Hono } from 'hono';
 import { z } from 'zod';
 import { operatorOnlyFailure } from '../operator-only.js';
@@ -95,6 +101,7 @@ const settingsPatchBodySchema = z
     // Synced reader preferences: a partial value (any subset of fields), merged over the stored
     // one by core. The shape comes from core, so the bounds have one source.
     reader: readerPatchSchema.optional(),
+    librarianActions: librarianActionsSchema.optional(),
     writtenAt: z.iso.datetime({ offset: true }).optional(),
   })
   .strict();

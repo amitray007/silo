@@ -2,6 +2,7 @@ import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { LIBRARIAN_ACTIONS_DEFAULTS } from '../librarian/actions.js';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 import type * as SettingsOps from './settings.js';
 
@@ -53,6 +54,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -67,6 +69,36 @@ describeIfPg('settings store (integration, plan 016)', () => {
           twitter: { enabled: true, inline: true, hover: true, palette: true },
         },
       });
+    });
+  });
+
+  it('round-trips action order, hidden flags and trimmed custom text through Postgres', async () => {
+    expect(await ops.getSetting('librarianActions')).toEqual(LIBRARIAN_ACTIONS_DEFAULTS);
+    const value = structuredClone(LIBRARIAN_ACTIONS_DEFAULTS);
+    value.passage.reverse();
+    value.article.push({
+      id: 'custom:00000000-0000-4000-8000-000000000001',
+      label: ' Ask ',
+      prompt: ' Explain ',
+    });
+    await ops.setSetting('librarianActions', value);
+    expect(await ops.getSetting('librarianActions')).toEqual({
+      ...value,
+      article: [
+        ...value.article.slice(0, -1),
+        { id: 'custom:00000000-0000-4000-8000-000000000001', label: 'Ask', prompt: 'Explain' },
+      ],
+    });
+    await rawDb.execute(
+      sql`UPDATE settings SET value = ${JSON.stringify({ ...value, passage: value.passage.filter((entry) => entry.id !== 'explain') })}::jsonb WHERE key = 'librarianActions'`,
+    );
+    expect((await ops.getSetting('librarianActions')).passage.at(-1)).toEqual({
+      id: 'explain',
+      hidden: false,
+    });
+    expect((await ops.getAllSettings()).librarianActions.passage.at(-1)).toEqual({
+      id: 'explain',
+      hidden: false,
     });
   });
 
@@ -232,6 +264,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -274,6 +307,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -340,6 +374,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {
