@@ -1000,14 +1000,14 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   inset: 0;
   color: var(--ink);
   mask-image: linear-gradient(90deg, transparent 35%, currentcolor 50%, transparent 65%);
-  animation: siloShimmer 1.8s linear infinite;
+  animation: siloStatusGlint 1.8s linear infinite;
 }
 .silo-shimmer-glint::before {
   content: attr(data-label);
   display: block;
   animation: siloShimmerText 1.8s linear infinite;
 }
-@keyframes siloShimmer {
+@keyframes siloStatusGlint {
   from {
     transform: translateX(-100%);
   }
@@ -1043,11 +1043,6 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
   .silo-status-in,
   .silo-status-out {
     animation-name: siloFade;
-  }
-}
-@keyframes siloFade {
-  from {
-    opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
