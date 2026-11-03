@@ -17,6 +17,7 @@ import type {
   SettingsMap,
 } from '../../api/types';
 import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER } from '../../lib/aiModels';
+import { type LibrarianActions, resolveActions } from '../../lib/librarianActions';
 import { useEscapeLayer } from '../../lib/useEscapeLayer';
 import { ConfirmDialog } from '../ConfirmDialog';
 import { MenuAction, MenuSurface } from '../MenuSurface';
@@ -25,6 +26,7 @@ import { ReaderIcon } from '../reader/ReaderIcon';
 import { Skeleton } from '../Skeleton';
 import { ModelPicker } from './ModelPicker';
 import { ProviderLogo } from './ProviderLogo';
+import { QuickActionsEditor } from './QuickActionsEditor';
 import {
   providerRow,
   rowDesc,
@@ -566,15 +568,19 @@ function FeatureRow({
 function AiSections({
   ai,
   settingsAi,
+  librarianActions,
   off,
   busy,
   patch,
+  saveActions,
 }: {
   ai: AiSettingsResponse;
   settingsAi: AiSetting;
+  librarianActions: SettingsMap['librarianActions'];
   off: boolean;
   busy: boolean;
   patch: (next: AiSetting) => void;
+  saveActions: (next: LibrarianActions) => Promise<unknown>;
 }) {
   if (ai.status.secretKey !== 'ok') return <SecretKeyCallout state={ai.status.secretKey} />;
   return (
@@ -603,6 +609,9 @@ function AiSections({
           patch={patch}
         />
       ))}
+      {settingsAi.features.librarian?.enabled === true && (
+        <QuickActionsEditor actions={resolveActions(librarianActions)} save={saveActions} />
+      )}
     </div>
   );
 }
@@ -651,9 +660,11 @@ export function AiTab() {
         <AiSections
           ai={ai}
           settingsAi={settingsAi}
+          librarianActions={settings?.librarianActions}
           off={!enabled}
           busy={update.isPending}
           patch={patch}
+          saveActions={(next) => update.mutateAsync({ librarianActions: next })}
         />
       )}
     </>

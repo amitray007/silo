@@ -2,6 +2,7 @@ import { postgresReachable } from '@silo/db/test-support/disposable-database';
 import { sql } from 'drizzle-orm';
 import type { drizzle } from 'drizzle-orm/node-postgres';
 import { beforeEach, describe, expect, it } from 'vitest';
+import { LIBRARIAN_ACTIONS_DEFAULTS } from '../librarian/actions.js';
 import { setupPgHarness } from '../test-support/pg-harness.js';
 import type * as SettingsOps from './settings.js';
 
@@ -53,6 +54,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -68,6 +70,69 @@ describeIfPg('settings store (integration, plan 016)', () => {
         },
       });
     });
+  });
+
+  it('round-trips action order, hidden flags and trimmed custom text through Postgres', async () => {
+    expect(await ops.getSetting('librarianActions')).toEqual(LIBRARIAN_ACTIONS_DEFAULTS);
+    const value = structuredClone(LIBRARIAN_ACTIONS_DEFAULTS);
+    value.passage.reverse();
+    value.library.reverse();
+    value.library[0] = { id: 'highlights', hidden: true };
+    value.library.push({
+      id: 'custom:00000000-0000-4000-8000-000000000002',
+      label: ' Library request ',
+      prompt: ' Search the library ',
+    });
+    value.article.push({
+      id: 'custom:00000000-0000-4000-8000-000000000001',
+      label: ' Ask ',
+      prompt: ' Explain ',
+    });
+    await ops.setSetting('librarianActions', value);
+    expect(await ops.getSetting('librarianActions')).toEqual({
+      ...value,
+      library: [
+        ...value.library.slice(0, -1),
+        {
+          id: 'custom:00000000-0000-4000-8000-000000000002',
+          label: 'Library request',
+          prompt: 'Search the library',
+        },
+      ],
+      article: [
+        ...value.article.slice(0, -1),
+        { id: 'custom:00000000-0000-4000-8000-000000000001', label: 'Ask', prompt: 'Explain' },
+      ],
+    });
+    await rawDb.execute(
+      sql`UPDATE settings SET value = ${JSON.stringify({ ...value, passage: value.passage.filter((entry) => entry.id !== 'explain') })}::jsonb WHERE key = 'librarianActions'`,
+    );
+    expect((await ops.getSetting('librarianActions')).passage.at(-1)).toEqual({
+      id: 'explain',
+      hidden: false,
+    });
+    expect((await ops.getAllSettings()).librarianActions.passage.at(-1)).toEqual({
+      id: 'explain',
+      hidden: false,
+    });
+  });
+
+  it('reads legacy two-list storage with Library defaults without resetting owner choices', async () => {
+    const { library: _library, ...legacy } = structuredClone(LIBRARIAN_ACTIONS_DEFAULTS);
+    legacy.article.reverse();
+    legacy.passage[0] = { id: 'explain', hidden: true };
+    await rawDb.execute(
+      sql`INSERT INTO settings (key, value) VALUES ('librarianActions', ${JSON.stringify(legacy)}::jsonb)`,
+    );
+    const expected = {
+      ...legacy,
+      library: [
+        { id: 'week', hidden: false },
+        { id: 'highlights', hidden: false },
+      ],
+    };
+    expect(await ops.getSetting('librarianActions')).toEqual(expected);
+    expect((await ops.getAllSettings()).librarianActions).toEqual(expected);
   });
 
   describe('setSetting / getSetting round-trip', () => {
@@ -232,6 +297,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -274,6 +340,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {
@@ -340,6 +407,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         reader: null,
+        librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
         ai: {
           enabled: false,
           features: {

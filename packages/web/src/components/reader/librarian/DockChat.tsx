@@ -1,10 +1,11 @@
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useArticleChips } from '../../../api/librarian';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { MenuPresence } from '../../MenuPresence';
 import { ReaderIcon } from '../ReaderIcon';
 import { useOutsidePress } from '../useOutsidePress';
 import { ChatHistoryMenu } from './ChatHistoryMenu';
-import { ARTICLE_ACTIONS, ChatThread, useChatComposer } from './ChatThread';
+import { ChatThread, useChatComposer } from './ChatThread';
 import { clearDockRequest, useDockRequest } from './selectionStore';
 import { useLibrarianChat } from './useLibrarianChat';
 
@@ -80,6 +81,7 @@ export function DockChat({
   const [importError, setImportError] = useState(false);
   const request = useDockRequest(linkId);
   const composer = useChatComposer(request?.passage);
+  const articleActions = useArticleChips();
   const { setInput, setPassage, field } = composer;
   useEffect(() => {
     if (!active || !request) return;
@@ -139,7 +141,7 @@ export function DockChat({
       chat={chat}
       composer={composer}
       linkId={linkId}
-      actions={ARTICLE_ACTIONS}
+      actions={articleActions}
       emptyText="Ask about this article or your library."
       rootRef={root}
       panelRef={sheet}

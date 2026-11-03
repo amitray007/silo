@@ -89,10 +89,10 @@ function Where() {
 }
 
 /** An in-memory Librarian API. */
-function setup(initial: Stored[], path = '/librarian') {
+function setup(initial: Stored[], path = '/librarian', settings: unknown = {}) {
   const chats = [...initial];
   const calls: { method: string; url: string; body: unknown }[] = [];
-  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+  const serve = async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = new URL(String(input), 'http://silo.test');
     const method = init?.method ?? 'GET';
     calls.push({ method, url: url.pathname + url.search, body: init?.body });
@@ -137,7 +137,10 @@ function setup(initial: Stored[], path = '/librarian') {
           })),
         })
       : new Response(JSON.stringify({ error: 'not_found' }), { status: 404 });
-  });
+  };
+  const fetcher = vi.fn((input: RequestInfo | URL, init?: RequestInit) =>
+    String(input).startsWith('/api/settings') ? json(settings) : serve(input, init),
+  );
   vi.stubGlobal('fetch', fetcher);
   render(
     <QueryClientProvider
@@ -212,12 +215,14 @@ it('shows the open chat with its messages, and an article chat links to the Read
   expect(screen.queryByRole('link', { name: /Open article/ })).toBeNull();
 });
 
-it('starts a library chat with the plus: only article-free quick actions, and no linkId on create', async () => {
+it('starts a library chat with the plus: Library chips only, and no linkId on create', async () => {
   const { calls } = setup([stored(1)]);
   await screen.findByText('Chat 1');
   fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
   expect(where()).toBe('?chat=new');
-  expect(screen.getByRole('button', { name: 'Related' })).toBeTruthy();
+  expect(await screen.findByRole('button', { name: 'Saved this week' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Recent highlights' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Related' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Summarize' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'My notes here' })).toBeNull();
   fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
@@ -235,6 +240,39 @@ it('starts a library chat with the plus: only article-free quick actions, and no
   await waitFor(() => expect(where()).toBe(`?chat=run${run}-created`));
   // The new chat joins the list as a library chat.
   await waitFor(() => expect(screen.getAllByText('Library').length).toBeGreaterThan(0));
+});
+
+const sentActions = (calls: { url: string; body: unknown }[]) => {
+  const sent = calls.find((call) => call.url.endsWith('/messages'));
+  const body = JSON.parse(String(sent?.body)) as {
+    message: { metadata?: { action?: string } };
+  };
+  return body.message.metadata?.action;
+};
+
+it('sends week from the default Library chip in a new chat', async () => {
+  const { calls } = setup([stored(1)], '/librarian?chat=new');
+  fireEvent.click(await screen.findByRole('button', { name: 'Saved this week' }));
+  await screen.findByText('Fresh answer');
+  expect(sentActions(calls)).toBe('week');
+});
+
+it('shows the owner Library list and sends a custom chip id', async () => {
+  const { calls } = setup([stored(1)], '/librarian?chat=new', {
+    librarianActions: {
+      passage: [],
+      article: [],
+      library: [
+        { id: 'week', hidden: true },
+        { id: 'highlights', hidden: false },
+        { id: 'custom:lib1', label: 'Reading list', prompt: 'List my reading.' },
+      ],
+    },
+  });
+  fireEvent.click(await screen.findByRole('button', { name: 'Reading list' }));
+  expect(screen.queryByRole('button', { name: 'Saved this week' })).toBeNull();
+  await screen.findByText('Fresh answer');
+  expect(sentActions(calls)).toBe('custom:lib1');
 });
 
 it('asks before deleting, cancels on Escape, and moves to the next chat when the open one goes', async () => {

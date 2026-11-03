@@ -1,8 +1,22 @@
-import { AI_PROVIDER_KINDS, getAllSettings, readerPatchSchema, updateSettings } from '@silo/core';
+import {
+  AI_PROVIDER_KINDS,
+  getAllSettings,
+  librarianActionsSchema,
+  readerPatchSchema,
+  updateSettings,
+} from '@silo/core';
 import type { Hono } from 'hono';
+import { bodyLimit } from 'hono/body-limit';
 import { z } from 'zod';
 import { operatorOnlyFailure } from '../operator-only.js';
-import { readerBodyLimit } from '../reader-body-limit.js';
+import { READER_BODY_LIMIT_BYTES } from '../reader-body-limit.js';
+
+// 18 actions × (1,000 prompt + 24 label code units) × 6 JSON escape bytes, plus ids and margin.
+const settingsBodyLimit = bodyLimit({
+  maxSize: 128 * 1024,
+  onError: (c) =>
+    c.json({ error: 'payload_too_large', message: 'Request body exceeds 128 KB' }, 413),
+});
 
 /**
  * `PATCH /api/settings` body schema — every field OPTIONAL (an empty body is
@@ -95,6 +109,7 @@ const settingsPatchBodySchema = z
     // Synced reader preferences: a partial value (any subset of fields), merged over the stored
     // one by core. The shape comes from core, so the bounds have one source.
     reader: readerPatchSchema.optional(),
+    librarianActions: librarianActionsSchema.optional(),
     writtenAt: z.iso.datetime({ offset: true }).optional(),
   })
   .strict();
@@ -124,9 +139,14 @@ export function registerSettingsRoutes(app: Hono): void {
     return c.json(settings);
   });
 
-  app.patch('/settings', readerBodyLimit, async (c) => {
-    const body = settingsPatchBodySchema.parse(await c.req.json().catch(() => ({})));
-    if (body.ai !== undefined) {
+  app.patch('/settings', settingsBodyLimit, async (c) => {
+    const input: unknown = await c.req.json().catch(() => ({}));
+    const hasActions = typeof input === 'object' && input !== null && 'librarianActions' in input;
+    if (!hasActions && (await c.req.arrayBuffer()).byteLength > READER_BODY_LIMIT_BYTES) {
+      return c.json({ error: 'payload_too_large', message: 'Request body exceeds 16 KB' }, 413);
+    }
+    const body = settingsPatchBodySchema.parse(input);
+    if (body.ai !== undefined || body.librarianActions !== undefined) {
       const denied = operatorOnlyFailure(c);
       if (denied) return denied;
     }

@@ -978,3 +978,52 @@ describe('AiTab', () => {
     );
   });
 });
+
+describe('AiTab quick actions', () => {
+  const withLibrarian = (enabled: boolean) =>
+    ({
+      ...settingsFixture(),
+      ai: { enabled: true, features: { librarian: { enabled, model: null } } },
+    }) as unknown as ReturnType<typeof settingsFixture>;
+
+  it('shows the section only while the Librarian is on', async () => {
+    setup({ settings: withLibrarian(false) });
+    await screen.findByRole('switch', { name: 'Use AI' });
+    expect(screen.queryByRole('region', { name: 'Quick actions' })).toBeNull();
+    cleanup();
+    setup({ settings: withLibrarian(true) });
+    expect(await screen.findByRole('region', { name: 'Quick actions' })).toBeTruthy();
+    // Nothing stored: every built-in shows, in default order.
+    expect(screen.getByRole('button', { name: 'Hide Explain' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Hide Key claims' })).toBeTruthy();
+  });
+
+  it('PATCHes the whole librarianActions value on a change', async () => {
+    const { calls } = setup({ settings: withLibrarian(true) });
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide Summarize' }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+    const value = (
+      calls[0]?.body as {
+        librarianActions: { passage: unknown[]; article: { id: string; hidden?: boolean }[] };
+      }
+    ).librarianActions;
+    expect(value.passage).toHaveLength(6);
+    expect(value.article[0]).toEqual({ id: 'summary', hidden: true });
+    expect(await screen.findByRole('button', { name: 'Show Summarize' })).toBeTruthy();
+  });
+
+  it('rolls the change back and says so when the save fails', async () => {
+    const { calls } = setup({ settings: withLibrarian(true) });
+    const fetchMock = vi.mocked(fetch);
+    const original = fetchMock.getMockImplementation();
+    fetchMock.mockImplementation((input, init) =>
+      init?.method === 'PATCH'
+        ? Promise.resolve(jsonResponse({ error: 'invalid', message: 'Could not save.' }, 400))
+        : (original?.(input, init) as Promise<Response>),
+    );
+    fireEvent.click(await screen.findByRole('button', { name: 'Hide Summarize' }));
+    expect(await screen.findByText('Could not save.')).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Hide Summarize' })).toBeTruthy();
+    expect(calls).toHaveLength(0);
+  });
+});

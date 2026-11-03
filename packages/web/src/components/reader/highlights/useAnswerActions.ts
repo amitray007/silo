@@ -1,5 +1,7 @@
+import { useQueryClient } from '@tanstack/react-query';
 import { ApiError } from '../../../api/client';
-import { selectionActions as quickActions, requestDock } from '../librarian/selectionStore';
+import { queryKeys } from '../../../api/hooks';
+import { requestDock } from '../librarian/selectionStore';
 import { chatErrorText } from '../librarian/useLibrarianChat';
 import type { useSelectionAnswer } from './useSelectionAnswer';
 
@@ -20,7 +22,9 @@ export function useAnswerActions({
   /** Say what was saved, in a short toast. */
   onSaved: (message: string) => void;
 }) {
-  const { answer, answerAction, setAnswerAction, setFailure, setSaving, importTurn } = answerState;
+  const client = useQueryClient();
+  const { answer, answerAction, answerId, setAnswerAction, setFailure, setSaving, importTurn } =
+    answerState;
   /** Run `work` with the saving flag up; a thrown error becomes `failure` on the card. */
   const guarded = async (work: () => Promise<void>, failure: (error: unknown) => string) => {
     setSaving(true);
@@ -49,7 +53,7 @@ export function useAnswerActions({
     guarded(
       async () => {
         if (!linkId) return;
-        const action = quickActions(passage.quote).find(([, label]) => label === answerAction)?.[0];
+        const action = answerId;
         const chatId = await importTurn.mutateAsync({
           linkId,
           messages: [
@@ -65,10 +69,14 @@ export function useAnswerActions({
         requestDock(linkId, { chatId });
         finish();
       },
-      (error) =>
-        error instanceof ApiError
-          ? chatErrorText(error.error)
-          : 'Could not continue in Librarian. Try again.',
+      (error) => {
+        if (!(error instanceof ApiError)) return 'Could not continue in Librarian. Try again.';
+        if (error.error === 'unknown_action') {
+          void client.invalidateQueries({ queryKey: queryKeys.settings() });
+          answerState.recoverRemovedAction();
+        }
+        return chatErrorText(error.error);
+      },
     );
   return { saveAnswer, continueInLibrarian };
 }

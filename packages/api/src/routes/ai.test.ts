@@ -357,6 +357,41 @@ describeIfPg('/api/ai routes (integration)', () => {
       expect((await app.request('/api/ai', { headers: h })).status).toBe(200);
     });
 
+    it.each(['ai', 'librarianActions', 'both'])(
+      'named tokens cannot replace owner prompts through %s',
+      async (key) => {
+        process.env.SILO_API_TOKEN = ENV_TOKEN;
+        const { core, app } = harness.mod();
+        const { token } = await core.generateAccessToken(`settings-${key}`);
+        const before = await core.getAllSettings();
+        const actions = structuredClone(core.LIBRARIAN_ACTIONS_DEFAULTS);
+        actions.article.push({
+          id: 'custom:00000000-0000-4000-8000-000000000001',
+          label: 'Owner request',
+          prompt: 'Use the owner prompt.',
+        });
+        const body = {
+          ...(key !== 'librarianActions' ? { ai: before.ai } : {}),
+          ...(key !== 'ai' ? { librarianActions: actions } : {}),
+        };
+        const denied = await app.request('/api/settings', {
+          method: 'PATCH',
+          headers: bearer(token),
+          body: JSON.stringify(body),
+        });
+        expect(denied.status).toBe(403);
+        expect(await denied.json()).toMatchObject({ error: 'operator_only' });
+        expect(await core.getAllSettings()).toEqual(before);
+        const allowed = await app.request('/api/settings', {
+          method: 'PATCH',
+          headers: bearer(ENV_TOKEN),
+          body: JSON.stringify(body),
+        });
+        expect(allowed.status).toBe(200);
+        await core.updateSettings({ librarianActions: core.LIBRARIAN_ACTIONS_DEFAULTS });
+      },
+    );
+
     it('the env token may change AI settings', async () => {
       process.env.SILO_API_TOKEN = ENV_TOKEN;
       const { app } = harness.mod();

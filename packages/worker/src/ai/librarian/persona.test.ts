@@ -1,10 +1,31 @@
-import { createHash } from 'node:crypto';
 import { expect, it } from 'vitest';
-import { persona, promptVersion } from './persona.js';
+import { persona, promptVersion, requestContext } from './persona.js';
 
-it('preserves the version 8 in-app prompt byte for byte', () => {
-  expect(promptVersion).toBe(8);
-  expect(createHash('sha256').update(persona).digest('hex')).toBe(
-    'f780aaeace42fdca1ef20842d782e6167fbbacebeacf800962009b0fea252873',
+it('versions the saved owner request instruction in the in-app persona', () => {
+  expect(promptVersion).toBe(10);
+  expect(persona).toContain(
+    "An ownerAction is the owner's own saved request: follow its prompt for the attached passage, article or library, with the usual tools and rules.",
   );
+  expect(persona).toContain('week (call list_links with since seven days before the request date');
+  expect(persona).toContain('group what was saved by theme in a few lines with links');
+  expect(persona).toContain('highlights (call list_highlights with no link, newest first');
+  expect(persona).toContain('latest highlights and notes with their articles');
+});
+it('omits a deleted custom action from an old user turn', () => {
+  const context = JSON.parse(
+    requestContext({
+      chatId: 'old',
+      link: null,
+      messages: [
+        {
+          id: 'u',
+          role: 'user',
+          parts: [{ type: 'text', text: 'Old label' }],
+          metadata: { action: 'custom:00000000-0000-4000-8000-000000000001' },
+        },
+      ],
+    }),
+  );
+  expect(context).not.toHaveProperty('ownerAction');
+  expect(context.selection.action).toBe('custom:00000000-0000-4000-8000-000000000001');
 });

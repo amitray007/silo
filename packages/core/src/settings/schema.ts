@@ -1,6 +1,11 @@
 import { z } from 'zod';
 import { AI_FEATURES, type AiFeatureDef, type AiFeatureId } from '../ai/features.js';
 import { AI_PROVIDER_KINDS } from '../ai/model-types.js';
+import {
+  LIBRARIAN_ACTIONS_DEFAULTS,
+  librarianActionsSchema,
+  librarianActionsStoredSchema,
+} from '../librarian/actions.js';
 import { type ReaderSettings, readerSchema, readerStoredSchema } from './reader.js';
 
 const registeredFeatureIds: ReadonlySet<string> = new Set(
@@ -129,6 +134,7 @@ const settingsSchema = {
    * upload its own local values once. A write merges a partial value over the stored one.
    */
   reader: readerSchema,
+  librarianActions: librarianActionsSchema,
 } as const;
 
 /** The allowlisted setting keys — `Object.keys(settingsSchema)` at the type level. */
@@ -163,6 +169,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
     },
   },
   reader: null,
+  librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
 };
 
 /** `true` when `key` is one of the allowlisted setting keys. */
@@ -347,6 +354,7 @@ export function parseStoredSettingValue<K extends SettingKey>(
   key: K,
   raw: unknown,
 ): SettingValue<K> {
+  if (key === 'librarianActions') return librarianActionsStoredSchema.parse(raw) as SettingValue<K>;
   if (key === 'reader') return readerStoredSchema.parse(raw) as SettingValue<K>;
   return parseSettingValue(key, key === 'ai' ? normalizeAiValue(raw, true) : raw);
 }

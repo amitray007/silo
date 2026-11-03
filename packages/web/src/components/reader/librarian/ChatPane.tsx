@@ -1,8 +1,13 @@
 import { useEffect } from 'react';
 import { Link } from 'react-router';
-import { useLibrarianAllChats, useLibrarianChatDetail } from '../../../api/librarian';
+import {
+  useArticleChips,
+  useLibrarianAllChats,
+  useLibrarianChatDetail,
+  useLibraryChips,
+} from '../../../api/librarian';
 import { ReaderIcon } from '../ReaderIcon';
-import { ARTICLE_ACTIONS, ChatThread, LIBRARY_ACTIONS, useChatComposer } from './ChatThread';
+import { ChatThread, useChatComposer } from './ChatThread';
 import { useLibrarianPageChat } from './useLibrarianChat';
 
 /** The article a chat belongs to, from the loaded list or, for a chat opened by link, its detail. */
@@ -31,6 +36,8 @@ export function ChatPane({
   const chat = useLibrarianPageChat(chatId, onCreated);
   const article = useChatArticle(chatId);
   const composer = useChatComposer();
+  const articleActions = useArticleChips();
+  const libraryActions = useLibraryChips();
   const { setInput, setPassage, field } = composer;
   // A question typed in one chat is not carried into another.
   useEffect(() => {
@@ -69,7 +76,7 @@ export function ChatPane({
         chat={chat}
         composer={composer}
         linkId={article.linkId ?? undefined}
-        actions={article.linkId ? ARTICLE_ACTIONS : LIBRARY_ACTIONS}
+        actions={article.linkId ? articleActions : libraryActions}
         emptyText={
           article.linkId ? 'Ask about this article or your library.' : 'Ask about your library.'
         }

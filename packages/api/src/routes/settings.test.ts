@@ -65,6 +65,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
       linkPreviewImages: true,
       hoverPreview: false,
       reader: null,
+      librarianActions: harness.mod().core.LIBRARIAN_ACTIONS_DEFAULTS,
       ai: {
         enabled: false,
         features: {
@@ -92,6 +93,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     expect(Object.keys(body).sort()).toEqual([
       'ai',
       'hoverPreview',
+      'librarianActions',
       'linkPreviewImages',
       'mcpAccess',
       'plugins',
@@ -312,6 +314,44 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     expect(
       (await expectOk<{ reader: Record<string, unknown> }>(app, '/api/settings')).reader,
     ).toEqual(merged);
+  });
+
+  it.each(['界', '\u0001'])(
+    'PATCH accepts the largest action lists with %j prompts',
+    async (character) => {
+      const { app, core } = harness.mod();
+      const actions = structuredClone(core.LIBRARIAN_ACTIONS_DEFAULTS);
+      for (const list of ['passage', 'article', 'library'] as const) {
+        for (const entry of actions[list]) {
+          if ('hidden' in entry) entry.hidden = true;
+        }
+        for (let i = 0; i < 6; i++) {
+          actions[list].push({
+            id: `custom:00000000-0000-4000-8000-00000000000${i}`,
+            label: character.repeat(24),
+            prompt: character.repeat(1000),
+          });
+        }
+      }
+      const size = Buffer.byteLength(JSON.stringify({ librarianActions: actions }));
+      expect(size).toBeLessThan(128 * 1024);
+      if (character === '\u0001') expect(size).toBeGreaterThan(96 * 1024);
+      const response = await patchSettings(app, { librarianActions: actions });
+      expect(response.status).toBe(200);
+      expect((await core.getAllSettings()).librarianActions).toEqual(actions);
+    },
+  );
+
+  it('PATCH still rejects far larger action bodies and keeps the small limit for other keys', async () => {
+    const { app } = harness.mod();
+    for (const body of [
+      { librarianActions: { prompt: 'x'.repeat(128 * 1024) } },
+      { theme: 'dark', padding: 'x'.repeat(17 * 1024) },
+    ]) {
+      const response = await patchSettings(app, body);
+      expect(response.status).toBe(413);
+      expect(await response.json()).toMatchObject({ error: 'payload_too_large' });
+    }
   });
 
   it('drift guard: every key in core.SETTINGS_DEFAULTS is accepted by the edge PATCH schema (200, not 400)', async () => {

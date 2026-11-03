@@ -2,6 +2,7 @@ import { librarianChats as chats, db, links, librarianMessages as messages } fro
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { isAiFeatureOn } from '../ai/status.js';
 import { decodeListCursor, encodeListCursor } from '../links/pagination.js';
+import { resolveAction, resolveMessageAction } from './action-resolution.js';
 import { isApprovalContinuation } from './approval.js';
 import { beginLibrarianRun, getLibrarianRunner } from './ports.js';
 import { incomingUserMessageSchema, type LibrarianMessage } from './types.js';
@@ -168,7 +169,9 @@ export async function streamLibrarianReply({
   if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
   const endRun = beginLibrarianRun(chatId);
   if (!endRun) return { ok: false, code: 'busy' } as const;
-  function fail<Code extends 'not_found' | 'unavailable' | 'invalid_message'>(code: Code) {
+  function fail<Code extends 'not_found' | 'unavailable' | 'invalid_message' | 'unknown_action'>(
+    code: Code,
+  ) {
     endRun?.();
     return { ok: false, code } as const;
   }
@@ -180,6 +183,8 @@ export async function streamLibrarianReply({
     const continuation = isApprovalContinuation(message, stored.messages.at(-1));
     if (!continuation && !incomingUserMessageSchema.safeParse(message).success)
       return fail('invalid_message');
+    const incomingAction = await resolveMessageAction([message], stored.chat.linkId);
+    if (!continuation && !incomingAction.valid) return fail('unknown_action');
     const [existing] = await db
       .select({ chatId: messages.chatId })
       .from(messages)
@@ -194,9 +199,11 @@ export async function streamLibrarianReply({
           .from(links)
           .where(and(eq(links.id, stored.chat.linkId), isNull(links.deletedAt)))
       : [];
+    const { ownerAction } = await resolveMessageAction(saved.messages, saved.chat.linkId);
     return {
       ok: true,
       response: await runner({
+        ...(ownerAction ? { ownerAction } : {}),
         chatId,
         messages: saved.messages,
         summary: saved.chat.summary,
@@ -248,9 +255,15 @@ export async function quickLibrarianReply(
       endRun();
       return { ok: false, code: 'not_found' } as const;
     }
+    const { valid, ownerAction } = await resolveAction('passage', input.action);
+    if (!valid) {
+      endRun();
+      return { ok: false, code: 'unknown_action' } as const;
+    }
     return {
       ok: true,
       response: await runner({
+        ...(ownerAction ? { ownerAction } : {}),
         chatId: '',
         transient: true,
         abortSignal,
@@ -260,7 +273,7 @@ export async function quickLibrarianReply(
           {
             id: crypto.randomUUID(),
             role: 'user',
-            parts: [{ type: 'text', text: input.action }],
+            parts: [{ type: 'text', text: ownerAction?.label ?? input.action }],
             metadata: { action: input.action, quote: input.quote, paragraph: input.paragraph },
           },
         ],
@@ -284,6 +297,8 @@ export async function importLibrarianMessages(chatId: string, incoming: Libraria
       last.parts.some((part) => (part as { state?: string }).state === 'approval-requested')
     )
       return 'approval_pending';
+    const action = await resolveMessageAction(incoming, stored.chat.linkId);
+    if (!action.valid) return 'unknown_action';
     await saveChatMessages(
       chatId,
       incoming.map((m) => ({

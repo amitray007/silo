@@ -112,6 +112,19 @@ export { searchFeedPosts } from './feeds/search.js';
 export { setFeedPostArchived } from './feeds/triage.js';
 export type { FeedEntry, FeedPollResult, FeedResolver, ResolvedFeed } from './feeds/types.js';
 export { normalizeFeedUrl, setFeedResolver } from './feeds/types.js';
+export { resolveLibrarianAction } from './librarian/action-resolution.js';
+export {
+  ARTICLE_ACTION_IDS,
+  LIBRARIAN_ACTIONS_DEFAULTS,
+  LIBRARY_ACTION_IDS,
+  type LibrarianActionKind,
+  type LibrarianActions,
+  librarianActionsSchema,
+  type OwnerAction,
+  PASSAGE_ACTION_IDS,
+  PASSAGE_PHRASE_ACTION_IDS,
+  PASSAGE_WORD_ACTION_IDS,
+} from './librarian/actions.js';
 export {
   createChat,
   deleteChat,

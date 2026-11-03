@@ -1,3 +1,4 @@
+import type { OwnerAction } from './actions.js';
 import type { LibrarianMessage } from './types.js';
 export type LibrarianToolSource = {
   list(): Promise<{ name: string; description: string; inputSchema: Record<string, unknown> }[]>;
@@ -13,6 +14,7 @@ export type LibrarianRequest = {
   summarizedCount?: number;
   messageSeqs?: number[];
   transient?: boolean;
+  ownerAction?: OwnerAction;
   endRun?: () => void;
   messages: LibrarianMessage[];
   link: { id: string; title: string | null; url: string; site: string | null } | null;

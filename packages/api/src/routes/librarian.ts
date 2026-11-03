@@ -37,7 +37,9 @@ export function registerLibrarianRoutes(app: Hono): void {
         ? 409
         : result.code === 'not_found'
           ? 404
-          : 503,
+          : result.code === 'unknown_action'
+            ? 400
+            : 503,
     );
   });
   app.post('/librarian/chats/:id/import', async (c) => {
@@ -47,7 +49,7 @@ export function registerLibrarianRoutes(app: Hono): void {
     if (result === 'ok') return c.body(null, 204);
     return c.json(
       { error: result, message: 'Could not import conversation.' },
-      result === 'not_found' ? 404 : 409,
+      result === 'not_found' ? 404 : result === 'unknown_action' ? 400 : 409,
     );
   });
   app.get('/librarian/chats', async (c) => {
@@ -105,6 +107,7 @@ export function registerLibrarianRoutes(app: Hono): void {
       unavailable: 503,
       not_found: 404,
       invalid_message: 400,
+      unknown_action: 400,
     } as const;
     return c.json(
       { error: result.code, message: 'Could not start Librarian reply.' },

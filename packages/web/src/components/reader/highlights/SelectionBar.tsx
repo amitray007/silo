@@ -1,9 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useLibrarianActions } from '../../../api/librarian';
 import type { HighlightColor } from '../../../lib/highlights';
+import { isWord, passageChips } from '../../../lib/librarianActions';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { useSurfaceMotion } from '../../../lib/useSurfaceMotion';
-import { selectionActions as quickActions, requestDock } from '../librarian/selectionStore';
+import { requestDock } from '../librarian/selectionStore';
 import { useOutsidePress } from '../useOutsidePress';
 import { useRecede } from '../useRecede';
 import { SelectionAnswerCard } from './SelectionAnswerCard';
@@ -96,6 +98,7 @@ export function SelectionBar({
   const passage = selectedPassage(pending, prose);
   const { quote } = passage;
   const answerState = useSelectionAnswer(linkId, passage);
+  const ownerActions = useLibrarianActions();
   const { composer, setComposer, answerAction, setAnswerAction, quick } = answerState;
   const [menu, setMenu] = useState(false);
   const [picker, setPicker] = useState(false);
@@ -226,10 +229,11 @@ export function SelectionBar({
               {phase === 'composer' && (
                 <SelectionComposer
                   quote={quote}
+                  error={answerState.error}
                   question={answerState.question}
                   onChange={answerState.setQuestion}
                   onSend={sendQuestion}
-                  quick={quickActions(quote)}
+                  quick={passageChips(ownerActions, isWord(quote))}
                   onQuick={(id, label) => morph(() => answerState.runQuick(id, label))}
                 />
               )}

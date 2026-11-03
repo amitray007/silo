@@ -204,6 +204,7 @@ provider key → fix → PR.
 | 4 | Chat history | title menu with cursor-paged infinite list; new chat; delete with confirm; dot on the dock Ask |
 | 5 | Compaction | summary + `summary_through`; `pruneMessages`; token estimate; tests on a long transcript |
 | 6 | Librarian page | sidebar nav entry; all chats with infinite scroll and delete; chats not tied to an article; the persona published as an MCP prompt (`librarian`) so Claude Desktop gets the same behavior |
+| 7 | Custom quick actions | Settings → AI → Librarian → Quick actions: hide and reorder built-ins, add your own label + prompt for passages and for article chats; the server resolves the prompt by id |
 
 ### Slice 1 detail (the first PR)
 
@@ -349,6 +350,61 @@ Core owns the shared persona text. The worker keeps the existing in-app prompt.
 The MCP server publishes a no-argument librarian prompt for external clients,
 with owner confirmation before destructive actions and citations by title and URL.
 The chat list returns linkTitle in the same query, or null without a live article.
+
+### Slice 7 detail: custom quick actions
+
+The owner edits three lists in Settings → AI → Librarian → Quick actions:
+Passage (the selection composer), Article (an empty article chat in the dock
+or on the Librarian page) and Library (an empty chat on the Librarian page
+with no article). Each list holds the built-ins in their default order plus
+the owner's own actions.
+
+- Built-ins can be hidden and moved, never deleted or renamed. Passage built-ins:
+  Explain, Simplify, Counterpoint for phrases, and Define, In context, Related
+  for single words. Article built-ins: Summarize, Key claims, My notes here,
+  Related. Library built-ins: Saved this week (`week`: call `list_links` with
+  `since` seven days before the request date, then group what was saved by
+  theme in a few lines with links) and Recent highlights (`highlights`: call
+  `list_highlights` with no link, newest first, and report the latest
+  highlights and notes with their articles). Related is not in Library: it
+  needs an article.
+- A custom action has a label (1-24 characters) and a prompt (1-1,000
+  characters). Each list holds at most 6 custom actions. A custom passage
+  action shows for phrases and for single words, after the visible built-ins
+  of that set. A save is refused when any set would show more than 6 chips
+  (Passage: visible phrase built-ins plus custom, and visible word built-ins
+  plus custom; Article and Library: visible built-ins plus custom).
+- Order is the list order. Moving is up and down buttons (keyboard first); no
+  drag.
+- Storage: one settings row, key `librarianActions`, value
+  `{ passage: Entry[], article: Entry[], library: Entry[] }`. A built-in entry is
+  `{ id, hidden }` with `id` one of the built-in action ids. A custom entry is
+  `{ id: 'custom:<uuid>', label, prompt }`. The default (nothing stored) is all
+  built-ins in today's order, nothing hidden. A write replaces the whole value;
+  core validates it with a strict schema (unknown built-in ids, duplicates,
+  and the limits above are rejected).
+  Every built-in id appears exactly once per list; a stored value missing one
+  (an older value after a new built-in ships) is read with the missing one
+  appended, visible. A stored value without `library` reads it as the
+  default list.
+- Runs: the client sends only the action id, never prompt text. Quick runs
+  (`POST /quick`), imports (Continue) and chat messages accept
+  `custom:<uuid>` as `action` only when it exists in the stored list of the
+  matching kind: passage for quick runs, imports and chat turns that carry a
+  passage quote; article for other turns in a chat with an article; library
+  for other turns in a chat without one. Built-in ids follow the same kinds
+  (`week` in an article chat is refused). Otherwise `400 unknown_action`. The user turn's text is the
+  label. The worker adds `ownerAction: { label, prompt }` to the request
+  context for the last user turn when its action is custom. The persona says:
+  an `ownerAction` is the owner's own saved request; follow its prompt for the
+  attached passage, the article, or the library, with the usual tools and rules. Bump
+  `promptVersion`.
+- Quick runs stay read-only. A custom article action in the dock runs as a
+  normal chat turn, so write tools still ask Allow or Deny.
+- Deleting a custom action leaves old turns as they are (their text is the
+  label). A turn whose custom action no longer exists gets no `ownerAction`.
+- Out of scope: prompt variables, a Library list, sharing actions, an AI
+  generated label.
 
 ## Out of scope (parked)
 

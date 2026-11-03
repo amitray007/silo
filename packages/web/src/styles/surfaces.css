@@ -2158,3 +2158,127 @@
 .silo-palette-row > .silo-palette-feed-result > .silo-palette-feed-kind {
   display: inline;
 }
+
+/* Settings → AI → Quick actions: rows are siblings of the feature rows above them. */
+.silo-qa-list {
+  margin-bottom: 8px;
+}
+.silo-qa-head h4 {
+  margin: 0;
+}
+.silo-qa-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.silo-qa-row {
+  padding: 12px 0;
+  flex-wrap: nowrap;
+}
+.silo-qa-copy {
+  flex: 1;
+  min-width: 0;
+}
+.silo-qa-head .silo-qa-copy {
+  min-width: 140px;
+}
+.silo-qa-copy[data-hidden] > div {
+  color: var(--fnt);
+}
+.silo-qa-sub {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.silo-qa-controls {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.silo-qa-head {
+  flex-wrap: wrap;
+}
+.silo-qa-ask {
+  color: var(--mut);
+  font-size: var(--text-sm);
+}
+.silo-settings-btn.silo-qa-icon {
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  min-height: 32px;
+  height: 32px;
+  padding: 0;
+}
+.silo-settings-btn.silo-qa-toggle,
+.silo-qa-controls .silo-settings-btn:not(.silo-qa-icon) {
+  min-height: 32px;
+  padding: 4px 12px;
+}
+.silo-qa-toggle {
+  width: 72px;
+  min-width: 72px;
+  justify-content: center;
+}
+.silo-settings-btn.silo-qa-danger {
+  background: var(--danger-soft);
+  color: var(--warn);
+}
+@media (pointer: coarse) {
+  .silo-settings-btn.silo-qa-icon {
+    width: 40px;
+    min-width: 40px;
+    height: 40px;
+    min-height: 40px;
+  }
+  .silo-qa-controls .silo-settings-btn:not(.silo-qa-icon) {
+    min-height: 40px;
+  }
+}
+.silo-qa-add {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0 16px;
+  border-bottom: 0.5px solid var(--line);
+}
+.silo-qa-note {
+  color: var(--fnt);
+  font-size: var(--text-sm);
+}
+.silo-qa-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding: 16px 0;
+  border-bottom: 0.5px solid var(--line);
+}
+.silo-qa-field-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+.silo-qa-count {
+  color: var(--fnt);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+.silo-qa-count[data-over] {
+  color: var(--warn);
+}
+.silo-qa-error {
+  margin-top: 8px;
+  color: var(--warn);
+  font-size: var(--text-sm);
+}
+.silo-qa-problem {
+  margin: 0;
+  padding: 12px 0;
+}
+.silo-qa-form-actions {
+  display: flex;
+  gap: 8px;
+}
