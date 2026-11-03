@@ -92,9 +92,10 @@ const TAB_DESCRIPTIONS: Record<SettingsTab, string> = {
 };
 
 function ActiveTabPanel({ tab }: { tab: SettingsTab }) {
+  const { pluginFocus, clearPluginFocus } = useSettings();
   switch (tab) {
     case 'plugins':
-      return <PluginsTab />;
+      return <PluginsTab focusPlugin={pluginFocus} onPluginFocused={clearPluginFocus} />;
     case 'ai':
       return <AiTab />;
     case 'prefs':

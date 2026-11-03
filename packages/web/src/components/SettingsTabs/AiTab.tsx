@@ -505,19 +505,6 @@ const NOT_READY_WORDS: Record<string, string> = {
   key_unreadable: "The provider key can't be read. Add it again.",
 };
 
-/** The Plugins tab loads lazily, so wait for its source row, then move focus to it. */
-function focusPluginRow(name: string) {
-  let tries = 0;
-  const timer = window.setInterval(() => {
-    const row = Array.from(
-      document.querySelectorAll<HTMLElement>('.silo-plugin-body[aria-label]'),
-    ).find((el) => el.getAttribute('aria-label') === name);
-    row?.focus();
-    tries += 1;
-    if (row || tries >= 40) window.clearInterval(timer);
-  }, 50);
-}
-
 function FeatureRow({
   ai,
   feature,
@@ -537,7 +524,7 @@ function FeatureRow({
   const state = settingsAi.features[feature.id] ?? { enabled: false, model: null };
   const model = state.model;
   const reason = ai.status.features[feature.id]?.reason;
-  const { setTab } = useSettingsModal();
+  const { focusPlugin } = useSettingsModal();
   const pluginName = feature.plugin ? (PLUGIN_NAMES[feature.plugin] ?? feature.plugin) : null;
   const notReady = reason
     ? (NOT_READY_WORDS[reason] ?? 'AI is not ready. Check the provider key and model.')
@@ -563,8 +550,7 @@ function FeatureRow({
                 type="button"
                 className="silo-ai-feature-hint"
                 onClick={() => {
-                  setTab('plugins');
-                  focusPluginRow(pluginName);
+                  focusPlugin(pluginName);
                 }}
               >
                 {hint}

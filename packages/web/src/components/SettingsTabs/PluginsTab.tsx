@@ -1,4 +1,4 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useAi, useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
 import { aiModelLabel, defaultAiFeatureModel, pluginAiReadiness } from '../../lib/aiModels';
@@ -229,7 +229,19 @@ function SiloSettingsSection({
 }
 
 // Keep feature choices when disabling a source; writes replace the full plugins map.
-export function PluginsTab() {
+export function PluginsTab({
+  focusPlugin,
+  onPluginFocused,
+}: {
+  focusPlugin?: string | null;
+  onPluginFocused?: () => void;
+} = {}) {
+  const focusTarget = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!focusPlugin || !focusTarget.current) return;
+    focusTarget.current.focus();
+    onPluginFocused?.();
+  }, [focusPlugin, onPluginFocused]);
   const { data: settings } = useSettings();
   const updateSettings = useUpdateSettings();
   const plugins = settings?.plugins ?? LOADING_PLUGINS;
@@ -260,6 +272,7 @@ export function PluginsTab() {
               <div className="silo-plugin-source-row">
                 <button
                   type="button"
+                  ref={source.name === focusPlugin ? focusTarget : undefined}
                   className="silo-plugin-body"
                   onClick={toggleExpanded}
                   aria-label={source.name}
