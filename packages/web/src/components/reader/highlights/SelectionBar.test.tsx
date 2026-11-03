@@ -316,7 +316,7 @@ it('streams a quick answer, saves its text as a note, and imports only the text 
       false,
     ),
   );
-  expect(calls[0]?.body).toEqual({
+  expect(calls.find((call) => call.url.endsWith('/quick'))?.body).toEqual({
     linkId: 'quick-test',
     action: 'explain',
     quote: 'second paragraph',
@@ -428,7 +428,9 @@ it('aborts passage A and saves only passage B after the selection changes', asyn
   let calls = 0;
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).endsWith('/quick'))
+        return new Response('{}', { headers: { 'Content-Type': 'application/json' } });
       calls++;
       if (calls === 1) {
         signal = init?.signal;
@@ -527,5 +529,105 @@ it('focuses the quick answer and restores Ask focus when it closes', async () =>
   screen.getByRole('button', { name: 'Close answer' }).focus();
   fireEvent.click(screen.getByRole('button', { name: 'Close answer' }));
   expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Ask' }));
+  vi.unstubAllGlobals();
+});
+
+const OWNER_ACTIONS = {
+  librarianActions: {
+    passage: [
+      { id: 'explain', hidden: true },
+      { id: 'simplify', hidden: false },
+      { id: 'counterpoint', hidden: false },
+      { id: 'define', hidden: false },
+      { id: 'context', hidden: false },
+      { id: 'related', hidden: false },
+      {
+        id: 'custom:11111111-1111-4111-8111-111111111111',
+        label: 'Plain words',
+        prompt: 'Say it plainly.',
+      },
+    ],
+    article: [],
+  },
+};
+
+function ownerFetch(
+  quick: () => Response | Promise<Response>,
+  calls: { url: string; body: unknown }[] = [],
+) {
+  const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input);
+    calls.push({ url, body: init?.body ? JSON.parse(String(init.body)) : undefined });
+    if (url.endsWith('/quick')) return quick();
+    if (url.endsWith('/import')) return new Response(null, { status: 204 });
+    if (init?.method === 'POST' && url.endsWith('/api/librarian/chats'))
+      return new Response(JSON.stringify({ id: 'fresh' }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    return new Response(JSON.stringify(OWNER_ACTIONS), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  return calls;
+}
+
+it('shows the owner chips: a hidden built-in is gone, a custom one follows the built-ins', async () => {
+  ownerFetch(() => answerStream('x'));
+  setup({ askReady: true, linkId: 'owner-chips' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  expect(await screen.findByRole('button', { name: 'Plain words' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Explain' })).toBeNull();
+  const names = Array.from(document.querySelectorAll('.silo-composer-quick button')).map(
+    (b) => b.textContent,
+  );
+  expect(names).toEqual(['Simplify', 'Counterpoint', 'Plain words']);
+  vi.unstubAllGlobals();
+});
+
+it('runs a custom chip by id, shows its label, and Continue carries both', async () => {
+  const calls = ownerFetch(() => answerStream('Plainly said.'));
+  setup({ askReady: true, linkId: 'owner-run' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Plain words' }));
+  await screen.findByText('Plainly said.');
+  expect(screen.getByRole('heading', { name: 'Plain words' })).toBeTruthy();
+  const quick = calls.find((call) => call.url.endsWith('/quick'));
+  const body = quick?.body as { action: string };
+  expect(body.action).toBe('custom:11111111-1111-4111-8111-111111111111');
+  expect(JSON.stringify(body)).not.toContain('Say it plainly');
+  await waitFor(() =>
+    expect(
+      screen.getByRole('button', { name: 'Continue in Librarian' }).hasAttribute('disabled'),
+    ).toBe(false),
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Continue in Librarian' }));
+  await waitFor(() => expect(calls.some((call) => call.url.endsWith('/import'))).toBe(true));
+  const imported = calls.find((call) => call.url.endsWith('/import'))?.body as {
+    messages: { parts: { text: string }[]; metadata?: { action?: string } }[];
+  };
+  expect(imported.messages[0]?.parts[0]?.text).toBe('Plain words');
+  expect(imported.messages[0]?.metadata?.action).toBe(
+    'custom:11111111-1111-4111-8111-111111111111',
+  );
+  vi.unstubAllGlobals();
+});
+
+it('says a removed action is gone and refreshes the settings', async () => {
+  const calls = ownerFetch(
+    () =>
+      new Response(JSON.stringify({ error: 'unknown_action' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+  );
+  setup({ askReady: true, linkId: 'owner-gone' });
+  fireEvent.click(screen.getByRole('button', { name: 'Ask' }));
+  fireEvent.click(await screen.findByRole('button', { name: 'Plain words' }));
+  expect(await screen.findByText('This action was removed. Pick another.')).toBeTruthy();
+  await waitFor(() =>
+    expect(calls.filter((call) => call.url.endsWith('/api/settings')).length).toBeGreaterThan(1),
+  );
   vi.unstubAllGlobals();
 });

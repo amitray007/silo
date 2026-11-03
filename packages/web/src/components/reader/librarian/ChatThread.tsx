@@ -1,22 +1,16 @@
 import { type ReactNode, type Ref, type RefObject, useEffect, useRef, useState } from 'react';
+import { useLibrarianActions, useRefreshOnRemovedAction } from '../../../api/librarian';
+import { isWord, passageChips } from '../../../lib/librarianActions';
 import { reducedMotion } from '../../../lib/motion';
 import { ReaderIcon } from '../ReaderIcon';
 import { ChatMessage } from './ChatMessage';
 import { ComposerBar, type QuickAction } from './Composer';
 import { StatusLine } from './StatusLine';
-import { selectionActions } from './selectionStore';
 import { statusLabel } from './status';
 import type { ThreadChat } from './useLibrarianChat';
 
 export type Passage = { quote: string; paragraph: number };
 
-/** The quick actions of a chat about one article. */
-export const ARTICLE_ACTIONS: readonly QuickAction[] = [
-  ['summary', 'Summarize'],
-  ['claims', 'Key claims'],
-  ['my-notes', 'My notes here'],
-  ['related', 'Related'],
-];
 /** A chat about the whole library has no article to summarize, so it keeps the one that needs none. */
 export const LIBRARY_ACTIONS: readonly QuickAction[] = [['related', 'Related']];
 
@@ -113,6 +107,8 @@ export function ChatThread({
 }) {
   const { input, setInput, passage, setPassage, field } = composer;
   const log = useStickyLog(chat.messages, active);
+  const owner = useLibrarianActions();
+  useRefreshOnRemovedAction(chat.error?.message);
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
   const panel = (
@@ -161,7 +157,7 @@ export function ChatThread({
   );
   // An attached passage brings its own quick actions; an empty chat offers the chat's.
   const quick = passage
-    ? selectionActions(passage.quote)
+    ? passageChips(owner, isWord(passage.quote))
     : chat.messages.length === 0
       ? actions
       : [];

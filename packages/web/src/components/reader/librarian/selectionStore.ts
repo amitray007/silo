@@ -23,15 +23,3 @@ export function useDockRequest(linkId: string) {
     () => requests.get(linkId),
   );
 }
-export const selectionActions = (quote: string) =>
-  !/\s/.test(quote) && quote.length <= 32
-    ? ([
-        ['define', 'Define'],
-        ['context', 'In context'],
-        ['related', 'Related'],
-      ] as const)
-    : ([
-        ['explain', 'Explain'],
-        ['simplify', 'Simplify'],
-        ['counterpoint', 'Counterpoint'],
-      ] as const);

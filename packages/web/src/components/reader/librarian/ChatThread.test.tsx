@@ -1,8 +1,18 @@
 import type { UIMessage } from '@ai-sdk/react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { fireEvent, render as renderPlain, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { expect, it, vi } from 'vitest';
 import { ChatThread, type Composer } from './ChatThread';
 import type { ThreadChat } from './useLibrarianChat';
+
+const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+const render = (ui: ReactElement) =>
+  renderPlain(ui, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
 
 const text = (id: string, role: 'user' | 'assistant', body: string): UIMessage => ({
   id,
@@ -236,4 +246,77 @@ it('does not scroll a folded chat and restores its pinned end when it reopens', 
   expect(log.scrollTop).toBe(700);
   view.rerender(renderThread(true, messages));
   expect(log.scrollTop).toBe(1300);
+});
+
+it('sends a custom chip by id with its label as the turn text', () => {
+  const chat = fakeChat({ messages: [] });
+  render(
+    <ChatThread
+      chat={chat}
+      composer={composer()}
+      actions={[
+        ['summary', 'Summarize'],
+        ['custom:abc', 'Plain words'],
+      ]}
+      emptyText="Empty"
+      header={null}
+    />,
+  );
+  fireEvent.click(screen.getByRole('button', { name: 'Plain words' }));
+  expect(chat.send).toHaveBeenCalledWith('Plain words', 'custom:abc', undefined);
+});
+
+it('keeps Related as the only chip of a library chat', async () => {
+  const { LIBRARY_ACTIONS } = await import('./ChatThread');
+  render(
+    <ChatThread
+      chat={fakeChat({ messages: [] })}
+      composer={composer()}
+      actions={LIBRARY_ACTIONS}
+      emptyText="Empty"
+      header={null}
+    />,
+  );
+  const chips = Array.from(document.querySelectorAll('.silo-composer-quick button'));
+  expect(chips.map((chip) => chip.textContent)).toEqual(['Related']);
+});
+
+it('reads the passage chips from the owner setting', async () => {
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            librarianActions: {
+              passage: [
+                { id: 'explain', hidden: true },
+                { id: 'custom:abc', label: 'Plain words', prompt: 'p' },
+              ],
+              article: [],
+            },
+          }),
+          { headers: { 'Content-Type': 'application/json' } },
+        ),
+    ),
+  );
+  render(
+    <ChatThread
+      chat={fakeChat({ messages: [] })}
+      composer={{ ...composer(), passage: { quote: 'a long enough phrase', paragraph: 1 } }}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />,
+  );
+  expect(await screen.findByRole('button', { name: 'Plain words' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Explain' })).toBeNull();
+  vi.unstubAllGlobals();
+});
+
+it('shows the removed-action line for an unknown_action failure', async () => {
+  const { chatErrorText } = await import('./useLibrarianChat');
+  expect(chatErrorText('{"error":"unknown_action"}')).toBe(
+    'This action was removed. Pick another.',
+  );
 });

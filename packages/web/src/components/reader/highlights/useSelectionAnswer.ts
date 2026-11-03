@@ -2,9 +2,10 @@ import { useChat } from '@ai-sdk/react';
 import { DefaultChatTransport } from 'ai';
 import { useEffect, useState } from 'react';
 import { apiUrl } from '../../../api/client';
-import { useImportLibrarianTurn } from '../../../api/librarian';
+import { useImportLibrarianTurn, useRefreshOnRemovedAction } from '../../../api/librarian';
 import { STREAM_UPDATE_MS } from '../../../lib/motion';
 import { splitSteps } from '../librarian/ChatMessage';
+import { chatErrorText } from '../librarian/useLibrarianChat';
 import { paragraphNumber } from './paragraphs';
 import type { PendingSelection } from './useSelectionWatcher';
 
@@ -23,6 +24,8 @@ export function useSelectionAnswer(linkId: string | undefined, passage: Passage)
   const [composer, setComposer] = useState(false);
   const [question, setQuestion] = useState('');
   const [answerAction, setAnswerAction] = useState<string>();
+  /** The id of the action that produced the answer: a custom action's id is not its label. */
+  const [answerId, setAnswerId] = useState<string>();
   const [failure, setFailure] = useState('');
   const [saving, setSaving] = useState(false);
   const importTurn = useImportLibrarianTurn();
@@ -49,13 +52,15 @@ export function useSelectionAnswer(linkId: string | undefined, passage: Passage)
     .map((m) => splitSteps(m).answer)
     .filter(Boolean)
     .join('\n\n');
-  const error = failure || (quick.error ? 'Could not answer. Try again.' : '');
+  useRefreshOnRemovedAction(quick.error?.message);
+  const error = failure || (quick.error ? chatErrorText(quick.error.message) : '');
   const runQuick = (action: string, label: string) => {
     void quick.stop();
     quick.setMessages([]);
     quick.clearError();
     setFailure('');
     setAnswerAction(label);
+    setAnswerId(action);
     setComposer(false);
     void quick.sendMessage({ text: label }, { body: { linkId, action, ...passage } });
   };
@@ -65,6 +70,7 @@ export function useSelectionAnswer(linkId: string | undefined, passage: Passage)
     question,
     setQuestion,
     answerAction,
+    answerId,
     setAnswerAction,
     failure,
     error,

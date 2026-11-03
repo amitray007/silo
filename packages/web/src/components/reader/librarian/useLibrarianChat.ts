@@ -24,6 +24,7 @@ const ERROR_WORDS: Record<string, string> = {
   busy: 'The Librarian is still answering in another tab.',
   timeout: 'The answer took too long. Try again.',
   network: 'Could not reach your AI provider. Try again.',
+  unknown_action: 'This action was removed. Pick another.',
   unavailable: 'The Librarian is not available on this server.',
 };
 
