@@ -59,8 +59,10 @@ export function useSelectionWatcher({
     let timer = 0;
     let pressed = false;
     const settle = (delay: number) => {
+      if (document.activeElement?.closest('[data-selection-bar]')) return;
       window.clearTimeout(timer);
       timer = window.setTimeout(() => {
+        if (document.activeElement?.closest('[data-selection-bar]')) return;
         const next = readSelection(prose, mapRef.current);
         // The same selection read again keeps its identity, so an open menu stays open.
         setPending((current) =>
@@ -81,6 +83,7 @@ export function useSelectionWatcher({
     };
     const onRelease = () => settle(0);
     const onSelectionChange = () => {
+      if (document.activeElement?.closest('[data-selection-bar]')) return;
       if (!pressed) settle(SETTLE_MS);
     };
     prose.addEventListener('mouseup', onRelease);

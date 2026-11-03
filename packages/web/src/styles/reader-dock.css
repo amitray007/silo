@@ -92,7 +92,7 @@
 }
 @media (hover: hover) and (pointer: fine) {
   .silo-reader-dockbtn:hover {
-    background: var(--hov);
+    background: var(--menu-highlight);
     color: var(--ink);
   }
   .silo-reader-dockbtn[aria-expanded="true"]:hover,

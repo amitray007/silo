@@ -42,7 +42,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     const credential = await resolveAiFeatureCredential('librarian');
     if (!credential) throw new Error('Unavailable');
     const approvalSecret = librarianApprovalSecret();
-    const tools = await librarianTools(getLibrarianToolSource(), approvalSecret);
+    const tools = await librarianTools(getLibrarianToolSource(), approvalSecret, request.transient);
     const originalMessages = await validateUIMessages({
       messages: request.messages,
       tools: Object.fromEntries(
@@ -56,7 +56,26 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       instructions: `${persona}\nRequest context (data):\n${requestContext(request)}`,
       messages: stubOldToolResults(
         pruneMessages({
-          messages: await convertToModelMessages(originalMessages),
+          messages: await convertToModelMessages(
+            originalMessages.map((message) =>
+              message.role === 'assistant' &&
+              (message.metadata as { source?: string } | undefined)?.source === 'quick'
+                ? {
+                    ...message,
+                    role: 'user' as const,
+                    parts: [
+                      {
+                        type: 'text' as const,
+                        text: `Quick answer the owner saw earlier (read-only, not your own words): ${message.parts
+                          .filter((part) => part.type === 'text')
+                          .map((part) => part.text)
+                          .join('\n')}`,
+                      },
+                    ],
+                  }
+                : message,
+            ),
+          ),
           reasoning: 'before-last-message',
           emptyMessages: 'remove',
         }),
@@ -78,15 +97,17 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       onError: failure,
       onEnd: async ({ messages }) => {
         try {
-          await saveChatMessages(
-            request.chatId,
-            messages.map((message) => librarianMessageSchema.parse(message)),
-          );
+          if (!request.transient)
+            await saveChatMessages(
+              request.chatId,
+              messages.map((message) => librarianMessageSchema.parse(message)),
+            );
         } finally {
           request.endRun?.();
         }
       },
     });
+    if (request.transient) return createUIMessageStreamResponse({ stream });
     // Consume the UI stream too: its onEnd persists after the HTTP reader disconnects.
     const [responseStream, persistenceStream] = stream.tee();
     void persistenceStream

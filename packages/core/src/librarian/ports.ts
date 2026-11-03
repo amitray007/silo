@@ -9,6 +9,7 @@ export type LibrarianToolSource = {
 };
 export type LibrarianRequest = {
   chatId: string;
+  transient?: boolean;
   endRun?: () => void;
   messages: LibrarianMessage[];
   link: { id: string; title: string | null; url: string; site: string | null } | null;

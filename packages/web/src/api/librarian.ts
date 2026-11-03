@@ -40,3 +40,16 @@ export function useCreateLibrarianChat() {
     onSuccess: () => client.invalidateQueries({ queryKey: ['librarian', 'list'] }),
   });
 }
+
+export function useImportLibrarianTurn() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ linkId, messages }: { linkId: string; messages: UIMessage[] }) => {
+      const list = await librarianApi.list(linkId);
+      const chat = list.chats[0] ?? (await librarianApi.create(linkId));
+      await apiPost(`/api/librarian/chats/${chat.id}/import`, { messages });
+      return chat.id;
+    },
+    onSuccess: () => client.invalidateQueries({ queryKey: ['librarian'] }),
+  });
+}

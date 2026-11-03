@@ -189,3 +189,88 @@ export async function streamLibrarianReply({
     throw error;
   }
 }
+
+export { importMessagesSchema, quickRequestSchema } from './types.js';
+
+let activeQuickRuns = 0;
+export async function quickLibrarianReply(
+  input: {
+    linkId: string;
+    action: string;
+    quote: string;
+    paragraph: number;
+  },
+  abortSignal?: AbortSignal,
+) {
+  if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
+  const runner = getLibrarianRunner();
+  if (!runner) return { ok: false, code: 'unavailable' } as const;
+  if (activeQuickRuns >= 2) return { ok: false, code: 'busy' } as const;
+  activeQuickRuns++;
+  let released = false;
+  const endRun = () => {
+    if (!released) {
+      released = true;
+      activeQuickRuns--;
+    }
+  };
+  // A cancelled stream may never reach the runner's onEnd; free the slot on abort too.
+  abortSignal?.addEventListener('abort', endRun, { once: true });
+  try {
+    const [link] = await db
+      .select({ id: links.id, title: links.title, url: links.url, site: links.siteName })
+      .from(links)
+      .where(and(eq(links.id, input.linkId), isNull(links.deletedAt)));
+    if (!link) {
+      endRun();
+      return { ok: false, code: 'not_found' } as const;
+    }
+    return {
+      ok: true,
+      response: await runner({
+        chatId: '',
+        transient: true,
+        abortSignal,
+        endRun,
+        link,
+        messages: [
+          {
+            id: crypto.randomUUID(),
+            role: 'user',
+            parts: [{ type: 'text', text: input.action }],
+            metadata: { action: input.action, quote: input.quote, paragraph: input.paragraph },
+          },
+        ],
+      }),
+    } as const;
+  } catch (error) {
+    endRun();
+    throw error;
+  }
+}
+export async function importLibrarianMessages(chatId: string, incoming: LibrarianMessage[]) {
+  if (!(await isAiFeatureOn('librarian'))) return 'ai_not_ready';
+  const release = beginLibrarianRun(chatId);
+  if (!release) return 'busy';
+  try {
+    const stored = await getChat(chatId);
+    if (!stored) return 'not_found';
+    const last = stored.messages.at(-1);
+    if (
+      last?.role === 'assistant' &&
+      last.parts.some((part) => (part as { state?: string }).state === 'approval-requested')
+    )
+      return 'approval_pending';
+    await saveChatMessages(
+      chatId,
+      incoming.map((m) => ({
+        ...m,
+        metadata: m.role === 'assistant' ? { source: 'quick' } : m.metadata,
+        id: crypto.randomUUID(),
+      })),
+    );
+    return 'ok';
+  } finally {
+    release();
+  }
+}

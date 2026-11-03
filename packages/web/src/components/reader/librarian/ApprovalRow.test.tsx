@@ -72,3 +72,8 @@ it('expires an old approval without decision buttons', () => {
   expect(screen.getByText('Expired. Ask again.')).toBeTruthy();
   expect(screen.queryByRole('button')).toBeNull();
 });
+
+it('names the tag from the MCP input', () => {
+  show('delete_tag', { tag: 'science' });
+  expect(screen.getByRole('group', { name: 'Delete the tag “science”?' })).toBeTruthy();
+});

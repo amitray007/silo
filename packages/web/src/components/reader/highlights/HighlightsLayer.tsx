@@ -17,12 +17,18 @@ const NO_LISTEN: ReadonlySet<string> = new Set(['listen']);
  */
 export function HighlightsLayer({
   api,
+  linkId,
+  askReady,
+  chatOpen,
   lane,
   title,
   container,
   listen,
 }: {
   api: HighlightsApi;
+  linkId: string;
+  askReady: boolean;
+  chatOpen: boolean;
   lane: NotesLaneApi;
   title: string;
   container: HTMLElement;
@@ -38,6 +44,12 @@ export function HighlightsLayer({
   return (
     <>
       <SelectionBar
+        linkId={linkId}
+        askReady={askReady}
+        chatOpen={chatOpen}
+        onSaveAnswer={async (answer) => {
+          await create(color, { answer });
+        }}
         pending={api.pending}
         prose={api.prose}
         container={container}

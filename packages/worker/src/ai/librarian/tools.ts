@@ -36,11 +36,26 @@ function toolText(outcome: { text: string; structured?: unknown }): string {
 export async function librarianTools(
   source: LibrarianToolSource | undefined,
   approvalSecret?: Uint8Array,
+  readOnly = false,
 ): Promise<Record<string, Tool<Record<string, unknown>, string>>> {
   const tools: Record<string, Tool<Record<string, unknown>, string>> = {};
   for (const spec of (await source?.list()) ?? []) {
     if (
       !source ||
+      (readOnly &&
+        !new Set([
+          'get_link',
+          'search_links',
+          'list_links',
+          'find_related',
+          'list_tags',
+          'list_highlights',
+          'list_reading_positions',
+          'list_feeds',
+          'list_feed_posts',
+          'search_feed_posts',
+          'list_trash',
+        ]).has(spec.name)) ||
       spec.name === 'export_links' ||
       (!approvalSecret && APPROVAL_TOOLS.some((name) => name === spec.name))
     )

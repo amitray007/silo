@@ -47,14 +47,25 @@ describe('ChatMessage', () => {
     expect(screen.getByText('One piece matches.')).toBeTruthy();
   });
 
-  it('says the answer came from the conversation when no tool ran', () => {
+  it('shows no trace line when no tool ran', () => {
     const message: UIMessage = {
       id: 'a3',
       role: 'assistant',
       parts: [{ type: 'text', text: 'Hello.' }],
     };
-    render(<ChatMessage message={message} />);
-    expect(screen.getByText('Answered from the conversation')).toBeTruthy();
+    const { container } = render(<ChatMessage message={message} />);
+    expect(container.querySelector('.silo-chat-trace')).toBeNull();
+  });
+
+  it('shows the passage quote under a user turn that carries one', () => {
+    const message: UIMessage = {
+      id: 'u1',
+      role: 'user',
+      parts: [{ type: 'text', text: 'Simplify' }],
+      metadata: { action: 'simplify', quote: 'A dense passage.', paragraph: 3 },
+    };
+    const { container } = render(<ChatMessage message={message} />);
+    expect(container.querySelector('.silo-chat-quote')?.textContent).toBe('A dense passage.');
   });
 });
 
@@ -86,6 +97,7 @@ it('offers Allow and Deny for an approval and sends the matching decision', asyn
     </QueryClientProvider>,
   );
   expect(await screen.findByRole('group', { name: 'Move “Named article” to trash?' })).toBeTruthy();
+  expect(screen.queryByText('Answered from the conversation')).toBeNull();
   vi.unstubAllGlobals();
   fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
   expect(onApproval).toHaveBeenLastCalledWith({ id: 'approve', approved: true });
@@ -122,4 +134,28 @@ it('shows denied calls and successful write traces', () => {
   expect(screen.getByText('Not done.')).toBeTruthy();
   expect(screen.getByText('Tagged')).toBeTruthy();
   expect(screen.queryByText('Moved to trash')).toBeNull();
+});
+
+it('opens saved-item citations through the router and keeps external links in a new tab', async () => {
+  const { MemoryRouter } = await import('react-router');
+  render(
+    <MemoryRouter>
+      <ChatMessage
+        message={{
+          id: 'citation',
+          role: 'assistant',
+          parts: [
+            {
+              type: 'text',
+              text: '[Saved](/?link=00000000-0000-4000-8000-000000000001) [Web](https://example.com)',
+            },
+          ],
+        }}
+      />
+    </MemoryRouter>,
+  );
+  const saved = await screen.findByRole('link', { name: 'Saved' });
+  expect(saved.getAttribute('href')).toBe('/?link=00000000-0000-4000-8000-000000000001');
+  expect(saved.getAttribute('target')).toBeNull();
+  expect(screen.getByRole('link', { name: 'Web' }).getAttribute('target')).toBe('_blank');
 });

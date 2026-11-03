@@ -20,6 +20,7 @@ import { MenuSurface } from '../../MenuSurface';
 import { HighlightSheet } from '../highlights/HighlightSheet';
 import { HighlightsLayer } from '../highlights/HighlightsLayer';
 import { type HighlightsApi, useHighlights } from '../highlights/useHighlights';
+import { useDockRequest } from '../librarian/selectionStore';
 import { ListenPlayer } from '../listen/ListenPlayer';
 import { ListenSheet } from '../listen/ListenSheet';
 import { ENGLISH_ONLY_TITLE } from '../listen/language';
@@ -275,6 +276,10 @@ export function ReaderDock({
 }) {
   const { element: host, scroll, panel } = useContext(DockHostContext);
   const [openId, setOpenId] = useState<string | null>(null);
+  const selectionRequest = useDockRequest(link.id);
+  useEffect(() => {
+    if (selectionRequest) setOpenId('ask');
+  }, [selectionRequest]);
   const sheetId = useId();
   const { data: aiStatus } = useAi();
   const askReady = aiStatus?.status?.features?.librarian?.ready === true;
@@ -405,6 +410,9 @@ export function ReaderDock({
         onDialHidden={setDialHidden}
       />
       <HighlightsLayer
+        linkId={link.id}
+        askReady={askReady}
+        chatOpen={chatOpen}
         api={highlights}
         lane={lane}
         title={link.title ?? deriveTitleFromUrl(link.url)}

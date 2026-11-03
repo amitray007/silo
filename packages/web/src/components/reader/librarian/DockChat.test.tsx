@@ -3,6 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ChatMessage } from './ChatMessage';
 import { DockChat } from './DockChat';
+import { requestDock } from './selectionStore';
 
 const summary = {
   id: 'chat-1',
@@ -71,7 +72,7 @@ it('resumes stored messages and folds with minus, grid and Escape', async () => 
   await screen.findByText('Stored question');
   expect(screen.getByText('Saved title')).toBeTruthy();
   expect(fetcher.mock.calls.some(([, init]) => init?.method === 'POST')).toBe(false);
-  fireEvent.click(screen.getByRole('button', { name: 'Fold back into the dock' }));
+  fireEvent.click(screen.getByRole('button', { name: 'Fold chat' }));
   fireEvent.click(screen.getByRole('button', { name: 'Back to tools' }));
   fireEvent.keyDown(document, { key: 'Escape' });
   expect(fold).toHaveBeenCalledTimes(3);
@@ -219,6 +220,20 @@ it.each(['trash_link'])('resumes $name and refreshes its queries', async (name) 
   });
   expect(screen.getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
   expect(screen.getByText('Allow or deny first.')).toBeTruthy();
+  const { act } = await import('@testing-library/react');
+  const { requestDock } = await import('./selectionStore');
+  act(() =>
+    requestDock(`approval-integration-${name}`, {
+      passage: { quote: 'A selected passage', paragraph: 2 },
+      question: 'Why this passage?',
+    }),
+  );
+  await screen.findByText('A selected passage');
+  expect(
+    (screen.getByRole('textbox', { name: 'Ask the Librarian' }) as HTMLTextAreaElement).value,
+  ).toBe('Why this passage?');
+  for (const label of ['Explain', 'Simplify', 'Counterpoint'])
+    expect(screen.getByRole('button', { name: label }).hasAttribute('disabled')).toBe(true);
   fireEvent.submit(screen.getByRole('button', { name: 'Send' }).closest('form')!);
   expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/messages'))).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Allow' }));
@@ -237,6 +252,48 @@ it.each(['trash_link'])('resumes $name and refreshes its queries', async (name) 
   });
   for (const key of ['links', 'link', 'counts'])
     expect(invalidate).toHaveBeenCalledWith({ queryKey: [key] });
+});
+
+it('attaches a passage and carries it in the next sent message', async () => {
+  const { act } = await import('@testing-library/react');
+  const { requestDock } = await import('./selectionStore');
+  const fetcher = vi.fn(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url.endsWith('/messages'))
+      return new Response('data: [DONE]\n\n', {
+        headers: { 'Content-Type': 'text/event-stream', 'x-vercel-ai-ui-message-stream': 'v1' },
+      });
+    if (url.includes('?')) return json({ chats: [{ ...summary, id: 'attached-chat' }] });
+    return json({ chat: { ...summary, id: 'attached-chat' }, messages: [] });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  render(
+    <QueryClientProvider
+      client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}
+    >
+      <DockChat linkId="attach-test" onFold={() => {}} />
+    </QueryClientProvider>,
+  );
+  await screen.findByText('Ask about this article or your library.');
+  act(() => requestDock('attach-test', { passage: { quote: 'Chosen passage', paragraph: 3 } }));
+  await screen.findByText('Chosen passage');
+  fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
+    target: { value: 'Why?' },
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+  await waitFor(() =>
+    expect(fetcher.mock.calls.some(([url]) => String(url).endsWith('/messages'))).toBe(true),
+  );
+  const request = vi.mocked(fetch).mock.calls.find(([url]) => String(url).endsWith('/messages'));
+  expect(JSON.parse(String(request?.[1]?.body)).message.metadata).toEqual({
+    quote: 'Chosen passage',
+    paragraph: 3,
+  });
+  // The attachment chip clears; the sent turn keeps the passage as its quote.
+  expect(document.querySelector('.silo-chat-passage')).toBeNull();
+  expect(document.querySelector('.silo-chat-user .silo-chat-quote')?.textContent).toBe(
+    'Chosen passage',
+  );
 });
 
 it('expires approvals in older assistant messages', async () => {
@@ -329,4 +386,13 @@ it('invalidates the refreshed link live Reader after a direct refresh finishes',
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['live-reader', 'refreshed-link'] }),
   );
   expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['live-reader', 'refresh-direct-chat'] });
+});
+
+it('focuses an open dock when a passage arrives', async () => {
+  setup();
+  await screen.findByRole('textbox');
+  screen.getByRole('button', { name: 'Back to tools' }).focus();
+  requestDock(`article-${linkSequence}`, { passage: { quote: 'Attached passage', paragraph: 2 } });
+  await screen.findByText('Attached passage');
+  expect(document.activeElement).toBe(screen.getByRole('textbox'));
 });

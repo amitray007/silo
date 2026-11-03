@@ -7,6 +7,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('@silo/core', async (load) => ({
   ...(await load<typeof import('@silo/core')>()),
+  importLibrarianMessages: vi.fn(),
+  quickLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
   streamLibrarianReply: vi.fn(async () => ({ ok: false, code: 'ai_not_ready' })),
 }));
 
@@ -25,6 +27,8 @@ describe('Librarian route access', () => {
   it('rejects named tokens on every route', async () => {
     const api = app('db_token');
     for (const [method, path] of [
+      ['POST', '/librarian/quick'],
+      ['POST', '/librarian/chats/id/import'],
       ['GET', '/librarian/chats'],
       ['POST', '/librarian/chats'],
       ['GET', '/librarian/chats/id'],
@@ -111,6 +115,64 @@ it('maps an active run to HTTP 409 busy', async () => {
       }),
     },
   );
+  expect(response.status).toBe(409);
+  expect(await response.json()).toMatchObject({ error: 'busy' });
+});
+
+it('quick replies return 409 when the Librarian is not ready', async () => {
+  const response = await app('env_token').request('/librarian/quick', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      linkId: '00000000-0000-4000-8000-000000000001',
+      action: 'explain',
+      quote: 'Passage',
+      paragraph: 1,
+    }),
+  });
+  expect(response.status).toBe(409);
+});
+
+it.each(['approval_pending', 'ai_not_ready', 'not_found'] as const)(
+  'maps import %s',
+  async (code) => {
+    const { importLibrarianMessages } = await import('@silo/core');
+    vi.mocked(importLibrarianMessages).mockResolvedValueOnce(code);
+    const response = await app('env_token').request(
+      '/librarian/chats/00000000-0000-4000-8000-000000000001/import',
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          messages: [
+            {
+              id: 'u',
+              role: 'user',
+              parts: [{ type: 'text', text: 'Explain' }],
+              metadata: { action: 'explain', quote: 'Passage', paragraph: 1 },
+            },
+            { id: 'a', role: 'assistant', parts: [{ type: 'text', text: 'Answer' }] },
+          ],
+        }),
+      },
+    );
+    expect(response.status).toBe(code === 'not_found' ? 404 : 409);
+    expect(await response.json()).toMatchObject({ error: code });
+  },
+);
+it('maps quick capacity to 409 busy', async () => {
+  const { quickLibrarianReply } = await import('@silo/core');
+  vi.mocked(quickLibrarianReply).mockResolvedValueOnce({ ok: false, code: 'busy' });
+  const response = await app('env_token').request('/librarian/quick', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      linkId: '00000000-0000-4000-8000-000000000001',
+      action: 'explain',
+      quote: 'Passage',
+      paragraph: 1,
+    }),
+  });
   expect(response.status).toBe(409);
   expect(await response.json()).toMatchObject({ error: 'busy' });
 });

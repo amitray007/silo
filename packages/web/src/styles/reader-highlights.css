@@ -237,10 +237,11 @@
   white-space: nowrap;
   cursor: pointer;
 }
+/* --hov equals the bar's own fill in dark, so hover reads from --menu-highlight. */
 .silo-sb-btn:hover,
 .silo-sb-btn:focus-visible,
 .silo-sb-btn[aria-expanded="true"] {
-  background: var(--hov);
+  background: var(--menu-highlight);
 }
 .silo-sb-more {
   padding: 0 7px;
@@ -345,7 +346,7 @@
 }
 .silo-sb-menu button:hover,
 .silo-sb-menu button:focus-visible {
-  background: var(--hov);
+  background: var(--menu-highlight);
 }
 .silo-sb-menu svg {
   flex: none;
@@ -522,4 +523,10 @@
   .silo-notepop {
     animation: none;
   }
+}
+
+/* Keep the selected passage visible while the question input owns focus. */
+::highlight(silo-librarian-selection) {
+  background: var(--sel);
+  color: var(--ink);
 }
