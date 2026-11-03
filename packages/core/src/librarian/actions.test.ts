@@ -15,6 +15,7 @@ describe('Librarian action settings', () => {
         (id) => ({ id, hidden: false }),
       ),
       article: ['summary', 'claims', 'my-notes', 'related'].map((id) => ({ id, hidden: false })),
+      library: ['week', 'highlights'].map((id) => ({ id, hidden: false })),
     });
   });
   it('trims labels and prompts and preserves ordering and hidden choices', () => {
@@ -29,15 +30,29 @@ describe('Librarian action settings', () => {
   it('appends a missing stored built-in visible without accepting that write', () => {
     const value = defaults();
     value.passage = value.passage.filter((entry) => entry.id !== 'explain');
+    value.library = value.library.filter((entry) => entry.id !== 'week');
     value.article = value.article.filter((entry) => entry.id !== 'summary');
     expect(() => parseSettingValue('librarianActions', value)).toThrow();
     const parsed = parseStoredSettingValue('librarianActions', value);
     expect(parsed.passage.at(-1)).toEqual({ id: 'explain', hidden: false });
     expect(parsed.article.at(-1)).toEqual({ id: 'summary', hidden: false });
+    expect(parsed.library.at(-1)).toEqual({ id: 'week', hidden: false });
+  });
+  it('reads a two-list stored value with Library defaults but refuses it as a write', () => {
+    const { library: _library, ...legacy } = defaults();
+    legacy.article.reverse();
+    expect(() => parseSettingValue('librarianActions', legacy)).toThrow();
+    expect(parseStoredSettingValue('librarianActions', legacy)).toEqual({
+      ...legacy,
+      library: [
+        { id: 'week', hidden: false },
+        { id: 'highlights', hidden: false },
+      ],
+    });
   });
   it('accepts six customs when built-ins are hidden and the exact text bounds', () => {
     const value = defaults();
-    for (const list of [value.passage, value.article]) {
+    for (const list of [value.passage, value.article, value.library]) {
       for (const entry of list) if ('hidden' in entry) entry.hidden = true;
       list.push(
         ...Array.from({ length: 6 }, (_, n) => ({

@@ -321,7 +321,7 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
     async (character) => {
       const { app, core } = harness.mod();
       const actions = structuredClone(core.LIBRARIAN_ACTIONS_DEFAULTS);
-      for (const list of ['passage', 'article'] as const) {
+      for (const list of ['passage', 'article', 'library'] as const) {
         for (const entry of actions[list]) {
           if ('hidden' in entry) entry.hidden = true;
         }
@@ -333,6 +333,9 @@ describeIfPg('GET/PATCH /api/settings (integration, plan 016)', () => {
           });
         }
       }
+      const size = Buffer.byteLength(JSON.stringify({ librarianActions: actions }));
+      expect(size).toBeLessThan(128 * 1024);
+      if (character === '\u0001') expect(size).toBeGreaterThan(96 * 1024);
       const response = await patchSettings(app, { librarianActions: actions });
       expect(response.status).toBe(200);
       expect((await core.getAllSettings()).librarianActions).toEqual(actions);

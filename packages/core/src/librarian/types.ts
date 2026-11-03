@@ -1,5 +1,10 @@
 import { z } from 'zod';
-import { ARTICLE_ACTION_IDS, customActionIdSchema, PASSAGE_ACTION_IDS } from './actions.js';
+import {
+  ARTICLE_ACTION_IDS,
+  customActionIdSchema,
+  LIBRARY_ACTION_IDS,
+  PASSAGE_ACTION_IDS,
+} from './actions.js';
 export const librarianMessageSchema = z.object({
   id: z.string().min(1).max(200),
   role: z.enum(['user', 'assistant']),
@@ -20,15 +25,18 @@ export type LibrarianMessage = {
   metadata?: unknown;
 };
 
+const actionIdSchema = z.union([
+  z.enum([...PASSAGE_ACTION_IDS, ...ARTICLE_ACTION_IDS, ...LIBRARY_ACTION_IDS]),
+  customActionIdSchema,
+]);
+
 export const incomingUserMessageSchema = librarianMessageSchema
   .extend({
     role: z.literal('user'),
     metadata: librarianMessageSchema.shape.metadata
       .unwrap()
       .extend({
-        action: z
-          .union([z.enum([...PASSAGE_ACTION_IDS, ...ARTICLE_ACTION_IDS]), customActionIdSchema])
-          .optional(),
+        action: actionIdSchema.optional(),
       })
       .optional(),
     parts: z
@@ -38,7 +46,7 @@ export const incomingUserMessageSchema = librarianMessageSchema
   })
   .strict();
 
-const quickActionSchema = z.union([z.enum(PASSAGE_ACTION_IDS), customActionIdSchema]);
+const quickActionSchema = actionIdSchema;
 export const quickRequestSchema = z
   .object({
     linkId: z.string().uuid(),

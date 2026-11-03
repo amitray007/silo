@@ -13,6 +13,12 @@ const passage = {
   prompt: 'Check this passage for logical errors.',
 };
 const article = { id: articleId, label: 'Read critically', prompt: 'Check the article claims.' };
+const libraryId = 'custom:00000000-0000-4000-8000-000000000003';
+const library = {
+  id: libraryId,
+  label: 'Find connections',
+  prompt: 'Find themes across the library.',
+};
 const user = (action: string, quote?: string): LibrarianMessage => ({
   id: crypto.randomUUID(),
   role: 'user',
@@ -90,6 +96,9 @@ suite('custom actions over HTTP and real Postgres', () => {
     expect(((await before.json()) as { librarianActions: unknown }).librarianActions).toEqual(
       actions,
     );
+    actions.library.reverse();
+    actions.library[0] = { id: 'highlights', hidden: true };
+    actions.library.push(library);
     actions.passage.reverse();
     actions.passage[0] = { id: 'related', hidden: true };
     actions.article.push({
@@ -122,7 +131,7 @@ suite('custom actions over HTTP and real Postgres', () => {
   });
 
   it('accepts six custom actions per hidden list and exact text bounds over HTTP', async () => {
-    for (const list of [actions.passage, actions.article]) {
+    for (const list of [actions.passage, actions.article, actions.library]) {
       for (const entry of list) if ('hidden' in entry) entry.hidden = true;
       list.push(
         ...Array.from({ length: 6 }, (_, n) => ({
@@ -248,10 +257,89 @@ suite('custom actions over HTTP and real Postgres', () => {
       }),
     ],
   ];
-  it.each(rejections)('rejects %s with 400 and preserves storage', async (_name, change) => {
-    expect((await save(change(actions))).status).toBe(400);
-    expect(await h.mod().core.getSetting('librarianActions')).toEqual(actions);
-  });
+  const libraryRejections: [string, (value: LibrarianActions) => unknown][] = [
+    ['missing Library list', (v) => ({ passage: v.passage, article: v.article })],
+    ['missing Library built-in', (v) => ({ ...v, library: v.library.slice(1) })],
+    [
+      'unknown Library built-in',
+      (v) => ({ ...v, library: [...v.library, { id: 'bogus', hidden: false }] }),
+    ],
+    [
+      'wrong-kind Library built-in',
+      (v) => ({ ...v, library: [...v.library, { id: 'related', hidden: false }] }),
+    ],
+    [
+      'renamed Library built-in',
+      (v) => ({
+        ...v,
+        library: [{ id: 'week', hidden: false, label: 'Renamed' }, ...v.library.slice(1)],
+      }),
+    ],
+    ['duplicate Library built-in', (v) => ({ ...v, library: [...v.library, v.library[0]] })],
+    ['duplicate Library custom', (v) => ({ ...v, library: [...v.library, library, library] })],
+    [
+      'missing Library hidden flag',
+      (v) => ({ ...v, library: [{ id: 'week' }, ...v.library.slice(1)] }),
+    ],
+    [
+      'nonboolean Library hidden flag',
+      (v) => ({ ...v, library: [{ id: 'week', hidden: 'yes' }, ...v.library.slice(1)] }),
+    ],
+    [
+      'invalid Library custom id',
+      (v) => ({ ...v, library: [...v.library, { ...library, id: 'custom:bad' }] }),
+    ],
+    ['empty Library label', (v) => ({ ...v, library: [...v.library, { ...library, label: ' ' }] })],
+    [
+      'Library label over 24',
+      (v) => ({ ...v, library: [...v.library, { ...library, label: 'x'.repeat(25) }] }),
+    ],
+    [
+      'empty Library prompt',
+      (v) => ({ ...v, library: [...v.library, { ...library, prompt: ' ' }] }),
+    ],
+    [
+      'Library prompt over 1000',
+      (v) => ({ ...v, library: [...v.library, { ...library, prompt: 'x'.repeat(1001) }] }),
+    ],
+    [
+      'unknown Library custom field',
+      (v) => ({ ...v, library: [...v.library, { ...library, other: true }] }),
+    ],
+    [
+      'over six Library customs',
+      (v) => ({
+        ...v,
+        library: [
+          ...v.library.map((entry) => ({ ...entry, hidden: true })),
+          ...Array.from({ length: 7 }, (_, n) => ({
+            ...library,
+            id: `custom:00000000-0000-4000-8000-00000000000${n}`,
+          })),
+        ],
+      }),
+    ],
+    [
+      'over six Library chips',
+      (v) => ({
+        ...v,
+        library: [
+          ...v.library,
+          ...Array.from({ length: 5 }, (_, n) => ({
+            ...library,
+            id: `custom:00000000-0000-4000-8000-00000000000${n}`,
+          })),
+        ],
+      }),
+    ],
+  ];
+  it.each([...rejections, ...libraryRejections])(
+    'rejects %s with 400 and preserves storage',
+    async (_name, change) => {
+      expect((await save(change(actions))).status).toBe(400);
+      expect(await h.mod().core.getSetting('librarianActions')).toEqual(actions);
+    },
+  );
 
   it('runs passage and article actions and imports a custom passage turn', async () => {
     actions.passage.push(passage);
@@ -303,6 +391,103 @@ suite('custom actions over HTTP and real Postgres', () => {
     expect((await h.mod().core.getChat(chatId))?.messages).toEqual([]);
     expect(requests).toEqual([]);
   });
+  it('runs Library built-ins and custom actions using the chat kind', async () => {
+    actions.library.push(library);
+    actions.passage.push(passage);
+    expect((await save(actions)).status).toBe(200);
+    const chat = await h.mod().core.createChat();
+    if (!chat) throw new Error('missing library chat');
+    for (const action of ['week', 'highlights', libraryId]) {
+      expect(
+        (await request(`/librarian/chats/${chat.id}/messages`, { message: user(action) })).status,
+      ).toBe(200);
+      expect(requests.at(-1)).toMatchObject({
+        link: null,
+        messages: expect.arrayContaining([expect.objectContaining({ metadata: { action } })]),
+      });
+    }
+    expect(requests.at(-1)?.ownerAction).toEqual({ label: library.label, prompt: library.prompt });
+    expect(
+      (await request(`/librarian/chats/${chat.id}/messages`, { message: user(passageId, 'Quote') }))
+        .status,
+    ).toBe(200);
+    expect(requests.at(-1)?.ownerAction).toEqual({ label: passage.label, prompt: passage.prompt });
+  });
+
+  it('rejects wrong-kind built-ins and Library customs before storing new turns', async () => {
+    actions.library.push(library);
+    actions.article.push(article);
+    expect((await save(actions)).status).toBe(200);
+    const chat = await h.mod().core.createChat();
+    if (!chat) throw new Error('missing library chat');
+    for (const response of [
+      await request(`/librarian/chats/${chatId}/messages`, { message: user('week') }),
+      await request(`/librarian/chats/${chatId}/messages`, { message: user('highlights') }),
+      await request(`/librarian/chats/${chatId}/messages`, { message: user(libraryId) }),
+      await request(`/librarian/chats/${chatId}/messages`, { message: user('explain') }),
+      await request(`/librarian/chats/${chatId}/messages`, { message: user('summary', 'Quote') }),
+      await request(`/librarian/chats/${chat.id}/messages`, { message: user('related') }),
+      await request(`/librarian/chats/${chat.id}/messages`, { message: user('summary') }),
+      await request(`/librarian/chats/${chat.id}/messages`, { message: user(articleId) }),
+      await request(`/librarian/chats/${chat.id}/messages`, { message: user('week', 'Quote') }),
+      await request(`/librarian/chats/${chat.id}/messages`, { message: user(libraryId, 'Quote') }),
+      await quick('week'),
+      await quick('summary'),
+      await quick(libraryId),
+      await imported('week'),
+      await imported('summary'),
+      await imported(libraryId),
+    ]) {
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: 'unknown_action' });
+    }
+    expect((await h.mod().core.getChat(chatId))?.messages).toEqual([]);
+    expect((await h.mod().core.getChat(chat.id))?.messages).toEqual([]);
+    expect(requests).toEqual([]);
+  });
+
+  it('loads and replays an old Library related turn, including an approval continuation', async () => {
+    const { core } = h.mod();
+    const chat = await core.createChat();
+    if (!chat) throw new Error('missing library chat');
+    const oldUser = user('related');
+    const approval = {
+      id: crypto.randomUUID(),
+      role: 'assistant' as const,
+      parts: [
+        { type: 'tool-trash_link', state: 'approval-requested', approval: { id: 'approval' } },
+      ],
+    };
+    await core.saveChatMessages(chat.id, [oldUser, approval]);
+    const loaded = await request(`/librarian/chats/${chat.id}`, undefined, 'GET');
+    expect(loaded.status).toBe(200);
+    expect(((await loaded.json()) as { messages: unknown[] }).messages).toEqual([
+      oldUser,
+      approval,
+    ]);
+    expect(
+      (
+        await request(`/librarian/chats/${chat.id}/messages`, {
+          message: {
+            ...approval,
+            parts: [
+              {
+                ...approval.parts[0],
+                state: 'approval-responded',
+                approval: { id: 'approval', approved: false },
+              },
+            ],
+          },
+        })
+      ).status,
+    ).toBe(200);
+    expect(requests.at(-1)?.messages[0]).toEqual(oldUser);
+    expect(
+      (await request(`/librarian/chats/${chat.id}/messages`, { message: user('week') })).status,
+    ).toBe(200);
+    expect(requests.at(-1)?.messages[0]).toEqual(oldUser);
+  });
+
   it('keeps quick capacity ahead of unknown action and releases both slots', async () => {
     const releases: (() => void)[] = [];
     h.mod().ports.setLibrarianRunner(async (input) => {

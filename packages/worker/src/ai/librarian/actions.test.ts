@@ -56,6 +56,7 @@ suite('saved actions at the model boundary (real Postgres)', () => {
     const actions = structuredClone(core.LIBRARIAN_ACTIONS_DEFAULTS);
     actions.passage.push({ id: actionId, ...ownerAction });
     actions.article.push({ id: actionId, ...ownerAction });
+    actions.library.push({ id: actionId, ...ownerAction });
     await core.setSetting('librarianActions', actions);
     const link = await core.createLink({
       sourceKind: 'link',
@@ -116,6 +117,100 @@ suite('saved actions at the model boundary (real Postgres)', () => {
       content: [{ type: 'text', text: ownerAction.label }],
     });
     expect((await core.listChats()).chats).toEqual([]);
+  });
+
+  it.each(['week', 'highlights', actionId])(
+    'passes Library action %s to the model',
+    async (action) => {
+      const model = new MockLanguageModelV4({
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(c) {
+              c.close();
+            },
+          }),
+        }),
+      });
+      vi.mocked(languageModelFor).mockReturnValue(model);
+      const chat = await core.createChat();
+      if (!chat) throw new Error('missing library chat');
+      const text =
+        action === actionId
+          ? ownerAction.label
+          : action === 'week'
+            ? 'Saved this week'
+            : 'Recent highlights';
+      const reply = await core.streamLibrarianReply({
+        chatId: chat.id,
+        message: {
+          id: crypto.randomUUID(),
+          role: 'user',
+          parts: [{ type: 'text', text }],
+          metadata: { action },
+        },
+      });
+      expect(reply.ok).toBe(true);
+      if (!reply.ok) throw new Error(reply.code);
+      await reply.response.text();
+      const call = model.doStreamCalls[0];
+      const system = call?.prompt
+        .filter((message) => message.role === 'system')
+        .map((message) => message.content)
+        .join('\n');
+      expect(system).toContain(`"action":"${action}"`);
+      expect(system).toContain('"link":null');
+      if (action === actionId)
+        expect(system).toContain(`"ownerAction":${JSON.stringify(ownerAction)}`);
+      else expect(system).not.toContain('"ownerAction":');
+      expect(call?.prompt).toContainEqual({ role: 'user', content: [{ type: 'text', text }] });
+    },
+  );
+
+  it('replays an old Library related turn to the model when a new Library action runs', async () => {
+    const model = new MockLanguageModelV4({
+      doStream: async () => ({
+        stream: new ReadableStream({
+          start(c) {
+            c.close();
+          },
+        }),
+      }),
+    });
+    vi.mocked(languageModelFor).mockReturnValue(model);
+    const chat = await core.createChat();
+    if (!chat) throw new Error('missing library chat');
+    await core.saveChatMessages(chat.id, [
+      {
+        id: crypto.randomUUID(),
+        role: 'user',
+        parts: [{ type: 'text', text: 'Related' }],
+        metadata: { action: 'related' },
+      },
+      {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        parts: [{ type: 'text', text: 'An old answer' }],
+      },
+    ]);
+    const reply = await core.streamLibrarianReply({
+      chatId: chat.id,
+      message: {
+        id: crypto.randomUUID(),
+        role: 'user',
+        parts: [{ type: 'text', text: 'Saved this week' }],
+        metadata: { action: 'week' },
+      },
+    });
+    expect(reply.ok).toBe(true);
+    if (!reply.ok) throw new Error(reply.code);
+    await reply.response.text();
+    expect(model.doStreamCalls[0]?.prompt).toEqual(
+      expect.arrayContaining([
+        { role: 'user', content: [{ type: 'text', text: 'Related' }] },
+        { role: 'assistant', content: [{ type: 'text', text: 'An old answer' }] },
+        { role: 'user', content: [{ type: 'text', text: 'Saved this week' }] },
+      ]),
+    );
   });
 
   it('keeps article writes behind approval and omits a deleted action when resuming history', async () => {

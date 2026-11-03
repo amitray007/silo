@@ -116,6 +116,7 @@ export { resolveLibrarianAction } from './librarian/action-resolution.js';
 export {
   ARTICLE_ACTION_IDS,
   LIBRARIAN_ACTIONS_DEFAULTS,
+  LIBRARY_ACTION_IDS,
   type LibrarianActionKind,
   type LibrarianActions,
   librarianActionsSchema,
