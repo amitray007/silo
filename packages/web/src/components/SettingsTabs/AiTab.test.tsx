@@ -486,6 +486,26 @@ describe('AiTab', () => {
     expect(screen.getByRole('button', { name: 'Turn on in Plugins > Twitter / X' })).toBeTruthy();
   });
 
+  it('blocks enabling AI titles without a ready provider and explains why', async () => {
+    const { calls } = setup({ settings: settingsFixture({}, true) });
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    expect(toggle).toHaveProperty('disabled', true);
+    expect(screen.getByText('Add a provider key and model in the AI tab')).toBeTruthy();
+    fireEvent.click(toggle);
+    expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(0);
+  });
+
+  it('allows disabling AI titles after the provider is removed', async () => {
+    const settings = settingsFixture({}, true);
+    settings.ai.features['x-post-title'].enabled = true;
+    const { calls } = setup({ settings });
+    const toggle = await screen.findByRole('switch', { name: 'AI titles' });
+    expect(toggle).toHaveProperty('disabled', false);
+    fireEvent.click(toggle);
+    await waitFor(() => expect(calls.filter((call) => call.method === 'PATCH')).toHaveLength(1));
+    expect(toggle.getAttribute('aria-checked')).toBe('false');
+  });
+
   it('turns AI titles on from here through the same setting the Plugins tab writes', async () => {
     const { calls } = setup({
       ai: aiFixture({ providers: [ANTHROPIC_OK] }),

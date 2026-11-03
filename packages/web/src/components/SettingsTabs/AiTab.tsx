@@ -16,7 +16,12 @@ import type {
   AiTestCode,
   SettingsMap,
 } from '../../api/types';
-import { AI_PROVIDER_NAMES, AI_PROVIDER_ORDER, defaultAiFeatureModel } from '../../lib/aiModels';
+import {
+  AI_PROVIDER_NAMES,
+  AI_PROVIDER_ORDER,
+  defaultAiFeatureModel,
+  pluginAiReadiness,
+} from '../../lib/aiModels';
 import { type LibrarianActions, resolveActions } from '../../lib/librarianActions';
 import { useEscapeLayer } from '../../lib/useEscapeLayer';
 import { ConfirmDialog } from '../ConfirmDialog';
@@ -539,7 +544,13 @@ function FeatureRow({
     : null;
   // Same gate as the Plugins tab: turning on needs the plugin on; turning off is always allowed.
   const toPlugin = !pluginOn && !state.enabled && pluginName !== null;
-  const hint = toPlugin ? `Turn on in Plugins > ${pluginName}` : notReady;
+  const readiness = pluginAiReadiness(ai);
+  const blocked = !!feature.plugin && !state.enabled && !readiness.ready;
+  const hint = toPlugin
+    ? `Turn on in Plugins > ${pluginName}`
+    : blocked
+      ? readiness.hint
+      : notReady;
   return (
     <div style={settingsRow} className="silo-ai-feature-row">
       <div className="silo-ai-feature-copy">
@@ -582,7 +593,7 @@ function FeatureRow({
         />
         <ToggleSwitch
           on={state.enabled}
-          disabled={disabled || toPlugin}
+          disabled={disabled || toPlugin || blocked}
           label={feature.label}
           onToggle={() =>
             patch({

@@ -1,7 +1,7 @@
 import { useId, useState } from 'react';
 import { useAi, useSettings, useUpdateSettings } from '../../api/hooks';
 import type { SettingsMap } from '../../api/types';
-import { aiModelLabel, defaultAiFeatureModel } from '../../lib/aiModels';
+import { aiModelLabel, defaultAiFeatureModel, pluginAiReadiness } from '../../lib/aiModels';
 import type { PluginSource, PluginsMap } from '../../lib/pluginSettings';
 import { setPluginField } from '../../lib/pluginSettings';
 import { type LogoSource, PluginLogo } from './PluginLogo';
@@ -127,8 +127,6 @@ function FeatureToggleRow({
   );
 }
 
-const AI_HINT = 'Turn on AI in the AI tab';
-
 /**
  * The plugin-placed AI features (`GET /api/ai` -> `features[].plugin`).
  * Turning a feature on requires AI readiness; turning it off is always available.
@@ -147,9 +145,7 @@ function AiFeatureRows({
   const { data: ai } = useAi();
   const features = (ai?.features ?? []).filter((feature) => feature.plugin === source);
   const settingsAi = settings?.ai;
-  const aiEnabled = ai?.status?.enabled === true && ai.status.secretKey === 'ok';
-  const ready = aiEnabled && defaultAiFeatureModel(ai) !== null;
-  const hint = aiEnabled ? 'Add a provider key and model in the AI tab' : AI_HINT;
+  const { ready, hint } = pluginAiReadiness(ai);
   return features.map((feature) => {
     const on =
       settingsAi?.features[feature.id as keyof typeof settingsAi.features]?.enabled === true;
