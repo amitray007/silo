@@ -3,6 +3,7 @@ import {
   articleChips,
   chipLabel,
   defaultActions,
+  libraryChips,
   listProblem,
   moveEntry,
   passageChips,
@@ -27,6 +28,14 @@ describe('resolveActions', () => {
       'My notes here',
       'Related',
     ]);
+  });
+
+  it('reads the default Library list when the value or its library list is missing', () => {
+    const labels = ['Saved this week', 'Recent highlights'];
+    expect(libraryChips(resolveActions(undefined)).map(([, label]) => label)).toEqual(labels);
+    const older = resolveActions({ article: [{ id: 'summary', hidden: true }] });
+    expect(libraryChips(older).map(([id]) => id)).toEqual(['week', 'highlights']);
+    expect(older.library).toEqual(defaultActions().library);
   });
 
   it('appends a built-in the stored value lacks, visible', () => {
@@ -61,6 +70,20 @@ describe('chips', () => {
     const actions = defaultActions();
     actions.article = [custom(1), ...actions.article];
     expect(articleChips(actions)[0]).toEqual(['custom:1', 'Mine 1']);
+  });
+
+  it('keeps Library list order, hides a built-in, and shows custom actions', () => {
+    const actions = defaultActions();
+    actions.library = [
+      custom(1),
+      { id: 'week', hidden: true },
+      { id: 'highlights', hidden: false },
+    ];
+    expect(libraryChips(actions)).toEqual([
+      ['custom:1', 'Mine 1'],
+      ['highlights', 'Recent highlights'],
+    ]);
+    expect(chipLabel(actions, 'week')).toBe('Saved this week');
   });
 
   it('names an action from its id', () => {

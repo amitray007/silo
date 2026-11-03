@@ -1,7 +1,7 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
-import { articleChips, resolveActions } from '../lib/librarianActions';
+import { articleChips, libraryChips, resolveActions } from '../lib/librarianActions';
 import { apiDelete, apiGet, apiPost, apiUrl } from './client';
 import { queryKeys, useAi, useSettings } from './hooks';
 
@@ -129,6 +129,12 @@ export function useLibrarianActions() {
 export function useArticleChips() {
   const actions = useLibrarianActions();
   return useMemo(() => articleChips(actions), [actions]);
+}
+
+/** The chips of an empty chat without an article, from the owner's library list. */
+export function useLibraryChips() {
+  const actions = useLibrarianActions();
+  return useMemo(() => libraryChips(actions), [actions]);
 }
 
 /** A removed custom action leaves the settings cache stale: refetch it when a run reports that. */
