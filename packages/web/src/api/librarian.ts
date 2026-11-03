@@ -1,7 +1,9 @@
 import type { UIMessage } from '@ai-sdk/react';
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
+import { articleChips, resolveActions } from '../lib/librarianActions';
 import { apiDelete, apiGet, apiPost, apiUrl } from './client';
-import { useAi } from './hooks';
+import { queryKeys, useAi, useSettings } from './hooks';
 
 export type ChatSummary = {
   id: string;
@@ -115,4 +117,25 @@ export function useImportLibrarianTurn() {
     },
     onSuccess: () => client.invalidateQueries({ queryKey: ['librarian'] }),
   });
+}
+
+/** The owner's quick actions, resolved: the stored value, or the defaults while it is missing. */
+export function useLibrarianActions() {
+  const { data } = useSettings({ staleTime: 60_000 });
+  return useMemo(() => resolveActions(data?.librarianActions), [data?.librarianActions]);
+}
+
+/** The chips of an empty article chat, from the owner's article list. */
+export function useArticleChips() {
+  const actions = useLibrarianActions();
+  return useMemo(() => articleChips(actions), [actions]);
+}
+
+/** A removed custom action leaves the settings cache stale: refetch it when a run reports that. */
+export function useRefreshOnRemovedAction(message: string | undefined) {
+  const client = useQueryClient();
+  useEffect(() => {
+    if (message && /\bunknown_action\b/.test(message))
+      void client.invalidateQueries({ queryKey: queryKeys.settings() });
+  }, [message, client]);
 }

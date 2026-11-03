@@ -10,6 +10,7 @@
  * every date field here is `string`, never `Date`.
  */
 import type { HighlightColor } from '../lib/highlights';
+import type { LibrarianActions } from '../lib/librarianActions';
 import type { ReaderSettings } from '../lib/readerPrefs';
 import type { DeepPartial } from '../lib/readerSync';
 
@@ -330,6 +331,8 @@ export type SettingsMap = {
       { enabled: boolean; model: { provider: AiProviderKind; id: string } | null }
     >;
   };
+  /** The Librarian's quick actions; absent until the owner edits them (then the defaults apply). */
+  librarianActions?: LibrarianActions;
 };
 
 /** `PATCH /api/settings` request body — every field optional; an empty body is a valid no-op (mirrors `EditLinkRequest`'s discipline). */
