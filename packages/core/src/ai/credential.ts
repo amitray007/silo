@@ -4,6 +4,7 @@
  * (web/api/mcp) must not (Biome `noRestrictedImports` + dependency-cruiser).
  */
 
+export { saveChatSummary } from '../librarian/index.js';
 export {
   getLibrarianToolSource,
   type LibrarianRequest,
