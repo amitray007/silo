@@ -104,7 +104,7 @@ it('keeps an empty header band with no selection', () => {
 
 it('disables both segment tabs while the selected link loads', () => {
   show(null, 'loading');
-  expect(screen.getByRole('status').textContent).toBe('Loading link…');
+  expect(screen.getByRole('status').textContent).toBe('Loading link');
   for (const tab of screen.getAllByRole('tab')) {
     expect((tab as HTMLButtonElement).disabled).toBe(true);
   }

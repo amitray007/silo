@@ -3,6 +3,7 @@ import { type ChatSummary, useLibrarianHistory } from '../../../api/librarian';
 import { relativeTimeFromNow } from '../../../lib/relativeTime';
 import { useEscapeLayer } from '../../../lib/useEscapeLayer';
 import { MenuSurface } from '../../MenuSurface';
+import { Spinner } from '../../Spinner';
 import { ReaderIcon } from '../ReaderIcon';
 import { onHistoryKey, PICK, pickButtons } from './historyKeys';
 
@@ -126,7 +127,7 @@ export function ChatHistoryMenu({
         ref={list}
         onKeyDown={(event) => onHistoryKey(event, askDelete)}
       >
-        {history.isPending && <p className="silo-chat-history-note">Loading chats…</p>}
+        {history.isPending && <Spinner label="Loading chats" minHeight={96} />}
         {history.isError && (
           <p className="silo-chat-history-note" role="alert">
             Could not load your chats.{' '}
@@ -199,7 +200,7 @@ export function ChatHistoryMenu({
             {hasNextPage && <li ref={end} className="silo-chat-history-end" aria-hidden="true" />}
           </ul>
         )}
-        {isFetchingNextPage && <p className="silo-chat-history-note">Loading more…</p>}
+        {isFetchingNextPage && <Spinner label="Loading more chats" minHeight={40} />}
       </div>
     </MenuSurface>
   );

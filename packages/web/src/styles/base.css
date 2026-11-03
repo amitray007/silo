@@ -1072,3 +1072,26 @@ select {
   line-height: 20px;
   font-weight: 500;
 }
+
+/* Spinner: `pane` fills and centers in its container; `inline` stays on the text line. */
+.silo-spinner {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  color: var(--fnt);
+}
+.silo-spinner[data-variant="pane"] {
+  display: flex;
+  width: 100%;
+  height: 100%;
+  min-height: 160px;
+}
+.silo-spinner[data-variant="inline"] {
+  width: 14px;
+  height: 14px;
+  vertical-align: middle;
+}
+.silo-spinner > svg {
+  display: block;
+}

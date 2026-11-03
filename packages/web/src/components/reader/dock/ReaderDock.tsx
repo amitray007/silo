@@ -18,6 +18,7 @@ import { deriveTitleFromUrl } from '../../../lib/url';
 import { useReaderPrefs } from '../../../lib/useReaderPrefs';
 import { MenuPresence } from '../../MenuPresence';
 import { MenuSurface } from '../../MenuSurface';
+import { Spinner } from '../../Spinner';
 import { HighlightSheet } from '../highlights/HighlightSheet';
 import { HighlightsLayer } from '../highlights/HighlightsLayer';
 import { type HighlightsApi, useHighlights } from '../highlights/useHighlights';
@@ -496,7 +497,17 @@ function DockSurface({
       <div className="silo-reader-dock" data-chat={chatOpen}>
         {askReady && mountedChat && (
           <div className="silo-reader-chat-cache" aria-hidden={!chatOpen} inert={!chatOpen}>
-            <Suspense fallback={chatOpen ? <div role="status">Loading Librarian…</div> : null}>
+            <Suspense
+              fallback={
+                chatOpen ? (
+                  <div className="silo-chat">
+                    <div className="silo-chat-surface">
+                      <Spinner label="Loading Librarian" minHeight={200} />
+                    </div>
+                  </div>
+                ) : null
+              }
+            >
               <DockChat
                 key={link.id}
                 linkId={link.id}

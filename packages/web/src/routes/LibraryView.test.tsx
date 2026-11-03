@@ -144,6 +144,21 @@ describe('LibraryView', () => {
     expect(fetchNextPage).toHaveBeenCalledTimes(1);
   });
 
+  it('swaps the Load more text for a spinner while the next page loads', () => {
+    mockUseInfiniteLinks({
+      data: {
+        pages: [{ links: [link({ id: 'p1', title: 'Page one' })] } as LinksResponse],
+        pageParams: [undefined],
+      },
+      hasNextPage: true,
+      isFetchingNextPage: true,
+    });
+    renderLibraryView();
+    expect(screen.getByRole('status', { name: '' }).textContent).toBe('Loading more');
+    const button = screen.getByRole('button', { name: 'Loading more' }) as HTMLButtonElement;
+    expect(button.disabled).toBe(true);
+  });
+
   it('appends page 2 rows once the mocked hook reflects two pages', () => {
     const page1 = link({ id: 'p1', title: 'Page one' });
     const page2 = link({ id: 'p2', title: 'Page two' });

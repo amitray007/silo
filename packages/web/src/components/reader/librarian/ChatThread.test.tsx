@@ -320,3 +320,20 @@ it('shows the removed-action line for an unknown_action failure', async () => {
     'This action was removed. Pick another.',
   );
 });
+
+it('announces the stored conversation loading with a spinner, then shows the empty text', () => {
+  const { rerender } = mount(fakeChat({ messages: [], loading: true }));
+  expect(screen.getByRole('status').textContent).toBe('Loading conversation');
+  expect(screen.queryByText('Empty')).toBeNull();
+  rerender(
+    <ChatThread
+      chat={fakeChat({ messages: [], loading: false })}
+      composer={composer()}
+      actions={[]}
+      emptyText="Empty"
+      header={null}
+    />,
+  );
+  expect(screen.queryByRole('status')).toBeNull();
+  expect(screen.getByText('Empty')).toBeDefined();
+});

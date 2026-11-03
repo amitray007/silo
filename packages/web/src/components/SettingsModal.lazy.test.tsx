@@ -38,7 +38,7 @@ it('loads a settings tab only on opening and keeps the modal shell while suspend
   );
   expect(plugin.loaded).toBe(false);
   fireEvent.click(screen.getByRole('button', { name: 'Open settings' }));
-  expect(screen.getByRole('status').textContent).toBe('Loading settings…');
+  expect(screen.getByRole('status').textContent).toBe('Loading settings');
   const shell = screen.getByRole('dialog', { name: 'Settings' });
   const panel = screen.getByRole('tabpanel');
   expect(shell.classList.contains('silo-modal-panel-settings')).toBe(true);
