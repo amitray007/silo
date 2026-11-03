@@ -356,7 +356,8 @@ The chat list returns linkTitle in the same query, or null without a live articl
 The owner edits two lists in Settings → AI → Librarian → Quick actions:
 Passage (the selection composer) and Article (an empty article chat in the dock
 or on the Librarian page). Each list holds the built-ins in their default order
-plus the owner's own actions. Library chats keep Related only.
+plus the owner's own actions. Library chats show no quick actions: every
+built-in, Related included, needs an article.
 
 - Built-ins can be hidden and moved, never deleted or renamed. Passage built-ins:
   Explain, Simplify, Counterpoint for phrases, and Define, In context, Related

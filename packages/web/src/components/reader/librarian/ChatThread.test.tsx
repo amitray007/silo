@@ -266,7 +266,7 @@ it('sends a custom chip by id with its label as the turn text', () => {
   expect(chat.send).toHaveBeenCalledWith('Plain words', 'custom:abc', undefined);
 });
 
-it('keeps Related as the only chip of a library chat', async () => {
+it('offers no chips in a library chat, which has no article to relate to', async () => {
   const { LIBRARY_ACTIONS } = await import('./ChatThread');
   render(
     <ChatThread
@@ -278,7 +278,7 @@ it('keeps Related as the only chip of a library chat', async () => {
     />,
   );
   const chips = Array.from(document.querySelectorAll('.silo-composer-quick button'));
-  expect(chips.map((chip) => chip.textContent)).toEqual(['Related']);
+  expect(chips).toEqual([]);
 });
 
 it('reads the passage chips from the owner setting', async () => {

@@ -212,12 +212,12 @@ it('shows the open chat with its messages, and an article chat links to the Read
   expect(screen.queryByRole('link', { name: /Open article/ })).toBeNull();
 });
 
-it('starts a library chat with the plus: only article-free quick actions, and no linkId on create', async () => {
+it('starts a library chat with the plus: no quick actions, and no linkId on create', async () => {
   const { calls } = setup([stored(1)]);
   await screen.findByText('Chat 1');
   fireEvent.click(screen.getByRole('button', { name: 'New chat' }));
   expect(where()).toBe('?chat=new');
-  expect(screen.getByRole('button', { name: 'Related' })).toBeTruthy();
+  expect(screen.queryByRole('button', { name: 'Related' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Summarize' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'My notes here' })).toBeNull();
   fireEvent.change(screen.getByRole('textbox', { name: 'Ask the Librarian' }), {
