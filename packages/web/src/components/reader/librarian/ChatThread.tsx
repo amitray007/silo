@@ -12,9 +12,6 @@ import type { ThreadChat } from './useLibrarianChat';
 
 export type Passage = { quote: string; paragraph: number };
 
-/** A chat about the whole library has no article, so no quick action applies: Related needs one too. */
-export const LIBRARY_ACTIONS: readonly QuickAction[] = [];
-
 /** The composer's state: the typed question and the passage attached to it. */
 export function useChatComposer(initialPassage?: Passage) {
   const [input, setInput] = useState('');

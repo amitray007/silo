@@ -19,6 +19,7 @@ import { rowDesc, rowLabel, settingsRow } from './rowStyles';
 const LISTS: { list: ActionList; title: string; desc: string }[] = [
   { list: 'passage', title: 'Passage', desc: 'Chips under a selected passage in the reader.' },
   { list: 'article', title: 'Article', desc: 'Chips in an empty chat about an article.' },
+  { list: 'library', title: 'Library', desc: 'Chips in a new chat on the Librarian page.' },
 ];
 const SET_HINT: Record<string, string> = {
   explain: 'Phrases',
@@ -398,7 +399,7 @@ function QuickActionList({
   );
 }
 
-/** Settings → AI → Librarian → Quick actions: the owner's two chip lists. */
+/** Settings → AI → Librarian → Quick actions: the owner's three chip lists. */
 export function QuickActionsEditor({
   actions,
   save,

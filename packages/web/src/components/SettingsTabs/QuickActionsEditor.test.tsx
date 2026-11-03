@@ -33,6 +33,11 @@ const article = () =>
     .getByRole('region', { name: 'Quick actions' })
     .querySelector('[data-list="article"]') as HTMLElement;
 
+const library = () =>
+  screen
+    .getByRole('region', { name: 'Quick actions' })
+    .querySelector('[data-list="library"]') as HTMLElement;
+
 function addAction(list: HTMLElement, label: string, prompt: string) {
   fireEvent.click(within(list).getByRole('button', { name: /^Add .* action$/ }));
   fireEvent.change(within(list).getByLabelText('Label'), { target: { value: label } });
@@ -138,6 +143,64 @@ describe('custom actions', () => {
     fireEvent.click(within(passage()).getByRole('button', { name: 'Save' }));
     expect(screen.getAllByText(/At most 6 chips can show for phrases/).length).toBeGreaterThan(0);
     expect(saved).toHaveLength(before);
+  });
+});
+
+describe('library list', () => {
+  it('shows the two built-ins under its own heading and description', () => {
+    mount();
+    expect(within(library()).getByRole('heading', { name: 'Library' })).toBeTruthy();
+    expect(within(library()).getByText('Chips in a new chat on the Librarian page.')).toBeTruthy();
+    expect(within(library()).getByText('Saved this week')).toBeTruthy();
+    expect(within(library()).getByText('Recent highlights')).toBeTruthy();
+  });
+
+  it('hides, adds, edits, reorders and deletes, saving the whole value', async () => {
+    const saved = mount();
+    fireEvent.click(within(library()).getByRole('button', { name: 'Hide Recent highlights' }));
+    expect(saved.at(-1)?.library[1]).toEqual({ id: 'highlights', hidden: true });
+    expect(saved.at(-1)?.article).toHaveLength(4);
+    addAction(library(), 'Reading list', 'List what I saved to read.');
+    const added = saved.at(-1)?.library.at(-1);
+    expect(added).toMatchObject({ label: 'Reading list', prompt: 'List what I saved to read.' });
+    fireEvent.click(within(library()).getByRole('button', { name: 'Edit Reading list' }));
+    fireEvent.change(within(library()).getByLabelText('Label'), { target: { value: 'To read' } });
+    fireEvent.click(within(library()).getByRole('button', { name: 'Save' }));
+    expect(saved.at(-1)?.library.at(-1)).toMatchObject({ label: 'To read' });
+    fireEvent.click(within(library()).getByRole('button', { name: 'Move To read up' }));
+    expect(saved.at(-1)?.library.map((entry) => entry.id)).toEqual([
+      'week',
+      added?.id,
+      'highlights',
+    ]);
+    fireEvent.click(within(library()).getByRole('button', { name: 'Delete To read' }));
+    fireEvent.click(within(library()).getByRole('button', { name: 'Delete' }));
+    expect(saved.at(-1)?.library.map((entry) => entry.id)).toEqual(['week', 'highlights']);
+  });
+
+  it('refuses a seventh chip, then a seventh custom action, and resets only its list', () => {
+    const saved = mount();
+    for (let n = 0; n < 4; n += 1) addAction(library(), `Mine ${n}`, 'Do it.');
+    const before = saved.length;
+    addAction(library(), 'Mine 4', 'Do it.');
+    expect(saved).toHaveLength(before);
+    expect(within(library()).getByRole('alert').textContent).toMatch(/At most 6 chips/);
+    fireEvent.click(within(library()).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(library()).getByRole('button', { name: 'Hide Saved this week' }));
+    fireEvent.click(within(library()).getByRole('button', { name: 'Hide Recent highlights' }));
+    addAction(library(), 'Mine 4', 'Do it.');
+    addAction(library(), 'Mine 5', 'Do it.');
+    expect(saved.at(-1)?.library).toHaveLength(8);
+    expect(
+      (within(library()).getByRole('button', { name: 'Add library action' }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    fireEvent.click(
+      within(library()).getByRole('button', { name: 'Reset library list to defaults' }),
+    );
+    fireEvent.click(within(library()).getByRole('button', { name: 'Reset' }));
+    expect(saved.at(-1)?.library).toEqual(defaultActions().library);
+    expect(saved.at(-1)?.passage).toEqual(defaultActions().passage);
   });
 });
 

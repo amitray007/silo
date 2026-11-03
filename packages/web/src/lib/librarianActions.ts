@@ -6,7 +6,11 @@
 type BuiltinEntry = { id: string; hidden: boolean };
 export type CustomEntry = { id: string; label: string; prompt: string };
 export type ActionEntry = BuiltinEntry | CustomEntry;
-export type LibrarianActions = { passage: ActionEntry[]; article: ActionEntry[] };
+export type LibrarianActions = {
+  passage: ActionEntry[];
+  article: ActionEntry[];
+  library: ActionEntry[];
+};
 export type ActionList = keyof LibrarianActions;
 /** A chip: its id travels as message metadata, its label is the message text. */
 export type Chip = readonly [id: string, label: string];
@@ -32,7 +36,12 @@ export const BUILTIN_LABELS: Record<ActionList, readonly Chip[]> = {
     ['my-notes', 'My notes here'],
     ['related', 'Related'],
   ],
+  library: [
+    ['week', 'Saved this week'],
+    ['highlights', 'Recent highlights'],
+  ],
 };
+const LIST_NAMES = ['passage', 'article', 'library'] as const;
 const PHRASE_IDS = new Set(['explain', 'simplify', 'counterpoint']);
 const WORD_IDS = new Set(['define', 'context', 'related']);
 
@@ -44,12 +53,13 @@ export const defaultList = (list: ActionList): ActionEntry[] =>
 export const defaultActions = (): LibrarianActions => ({
   passage: defaultList('passage'),
   article: defaultList('article'),
+  library: defaultList('library'),
 });
 
 /** The stored value, with any built-in it lacks appended visible (an older value, a new built-in). */
 export function resolveActions(stored: Partial<LibrarianActions> | null | undefined) {
   const out = defaultActions();
-  for (const list of ['passage', 'article'] as const) {
+  for (const list of LIST_NAMES) {
     const entries = stored?.[list];
     if (!Array.isArray(entries)) continue;
     const have = new Set(entries.map((entry) => entry.id));
@@ -73,7 +83,7 @@ function visible(list: ActionList, entries: readonly ActionEntry[]) {
   return out;
 }
 
-/** A passage set shows custom chips after its visible built-ins; an article list keeps list order. */
+/** A passage set shows custom chips after its visible built-ins; an article or library list keeps list order. */
 function chipsFor(list: ActionList, entries: readonly ActionEntry[], only?: Set<string>) {
   const shown = visible(list, entries).filter(
     ({ chip, custom }) => custom || !only || only.has(chip[0]),
@@ -91,13 +101,15 @@ export function passageChips(actions: LibrarianActions, word: boolean): Chip[] {
 }
 export const articleChips = (actions: LibrarianActions): Chip[] =>
   chipsFor('article', actions.article);
+export const libraryChips = (actions: LibrarianActions): Chip[] =>
+  chipsFor('library', actions.library);
 
 /** A selection of one short word gets the word set. */
 export const isWord = (quote: string) => !/\s/.test(quote) && quote.length <= 32;
 
 /** The label of the action an id names, for the card and Continue. */
 export function chipLabel(actions: LibrarianActions, id: string) {
-  for (const list of ['passage', 'article'] as const) {
+  for (const list of LIST_NAMES) {
     const entry = actions[list].find((item) => item.id === id);
     if (entry) return isCustom(entry) ? entry.label : labelOf(list, id);
   }

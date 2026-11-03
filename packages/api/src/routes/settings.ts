@@ -11,11 +11,11 @@ import { z } from 'zod';
 import { operatorOnlyFailure } from '../operator-only.js';
 import { READER_BODY_LIMIT_BYTES } from '../reader-body-limit.js';
 
-// 12 actions × (1,000 prompt + 24 label code units) × 6 JSON escape bytes, plus ids and margin.
+// 18 actions × (1,000 prompt + 24 label code units) × 6 JSON escape bytes, plus ids and margin.
 const settingsBodyLimit = bodyLimit({
-  maxSize: 96 * 1024,
+  maxSize: 128 * 1024,
   onError: (c) =>
-    c.json({ error: 'payload_too_large', message: 'Request body exceeds 96 KB' }, 413),
+    c.json({ error: 'payload_too_large', message: 'Request body exceeds 128 KB' }, 413),
 });
 
 /**

@@ -7,6 +7,7 @@ export const PASSAGE_ACTION_IDS = [
   ...PASSAGE_WORD_ACTION_IDS,
 ] as const;
 export const ARTICLE_ACTION_IDS = ['summary', 'claims', 'my-notes', 'related'] as const;
+export const LIBRARY_ACTION_IDS = ['week', 'highlights'] as const;
 export const customActionIdSchema = z
   .string()
   .regex(/^custom:/)
@@ -26,10 +27,14 @@ const articleEntrySchema = z.union([
   z.object({ id: z.enum(ARTICLE_ACTION_IDS), hidden: z.boolean() }).strict(),
   customActionSchema,
 ]);
-export type LibrarianActionKind = 'passage' | 'article';
+const libraryEntrySchema = z.union([
+  z.object({ id: z.enum(LIBRARY_ACTION_IDS), hidden: z.boolean() }).strict(),
+  customActionSchema,
+]);
+export type LibrarianActionKind = 'passage' | 'article' | 'library';
 export type OwnerAction = Pick<z.infer<typeof customActionSchema>, 'label' | 'prompt'>;
 
-function actionList<S extends typeof passageEntrySchema | typeof articleEntrySchema>(
+function actionList<S extends z.ZodType<{ id: string; hidden?: boolean; prompt?: string }>>(
   entry: S,
   sets: readonly (readonly string[])[],
   requireBuiltins: boolean,
@@ -62,6 +67,9 @@ function actionsSchema(requireBuiltins: boolean) {
         requireBuiltins,
       ),
       article: actionList(articleEntrySchema, [ARTICLE_ACTION_IDS], requireBuiltins),
+      library: requireBuiltins
+        ? actionList(libraryEntrySchema, [LIBRARY_ACTION_IDS], true)
+        : actionList(libraryEntrySchema, [LIBRARY_ACTION_IDS], false).default([]),
     })
     .strict();
 }
@@ -70,6 +78,7 @@ export type LibrarianActions = z.infer<typeof librarianActionsSchema>;
 export const LIBRARIAN_ACTIONS_DEFAULTS: LibrarianActions = {
   passage: PASSAGE_ACTION_IDS.map((id) => ({ id, hidden: false })),
   article: ARTICLE_ACTION_IDS.map((id) => ({ id, hidden: false })),
+  library: LIBRARY_ACTION_IDS.map((id) => ({ id, hidden: false })),
 };
 
 /** Fill registry additions on reads without losing the owner's order or choices. */
@@ -84,6 +93,12 @@ export const librarianActionsStoredSchema = actionsSchema(false).transform((valu
     ...value.article,
     ...LIBRARIAN_ACTIONS_DEFAULTS.article.filter(
       (builtin) => !value.article.some((entry) => entry.id === builtin.id),
+    ),
+  ],
+  library: [
+    ...value.library,
+    ...LIBRARIAN_ACTIONS_DEFAULTS.library.filter(
+      (builtin) => !value.library.some((entry) => entry.id === builtin.id),
     ),
   ],
 }));

@@ -107,4 +107,4 @@ These are things an agent (Claude over MCP) does; listed so we remember what the
 - **Fact-check and web search** - needs a search provider; the selection quick action is parked until then.
 - **AI chat titles, rename, export and sharing** - titles come from the first message today.
 - **Resumable streams after a server restart** - an answer in flight during a restart is lost.
-- **More custom quick actions** (surfaced in slice 7, 2026-11-03) - prompt variables such as `{title}`, a list for library chats, sharing actions, and saving a typed question as an action.
+- **More custom quick actions** (surfaced in slice 7, 2026-11-03) - prompt variables such as `{title}`, sharing actions, and saving a typed question as an action.
