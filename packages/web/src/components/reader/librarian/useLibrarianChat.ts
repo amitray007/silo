@@ -1,13 +1,15 @@
 import { Chat, type UIMessage, useChat } from '@ai-sdk/react';
 import { useQueryClient } from '@tanstack/react-query';
-import { DefaultChatTransport } from 'ai';
+import { DefaultChatTransport, lastAssistantMessageIsCompleteWithApprovalResponses } from 'ai';
 import { useEffect, useMemo, useState } from 'react';
+import { queryKeys } from '../../../api/hooks';
 import {
   librarianApi,
   useCreateLibrarianChat,
   useLibrarianChatDetail,
   useLibrarianChats,
 } from '../../../api/librarian';
+import { toolName, WRITE_TRACES } from './ChatMessage';
 
 const ERROR_WORDS: Record<string, string> = {
   invalid_key: 'Your AI key was rejected. Check Settings → AI.',
@@ -46,7 +48,29 @@ export function useLibrarianChat(linkId: string) {
     if (cached) return cached;
     const chatId = { current: null as string | null };
     const chat = new Chat({
-      onFinish: () => {
+      sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses,
+      onFinish: ({ message }) => {
+        if (message.parts.some((part) => toolName(part) && WRITE_TRACES[toolName(part) ?? ''])) {
+          for (const key of [
+            'links',
+            'links-recents',
+            'links-tag-only',
+            'search',
+            'link-titles',
+            'link',
+            'tags',
+            'counts',
+            'saved-links',
+            'trash',
+            'trash-search',
+            'feeds',
+            'feed',
+            'feed-posts',
+          ])
+            void client.invalidateQueries({ queryKey: [key] });
+        }
+        for (const id of refreshedReaderIds(message))
+          void client.invalidateQueries({ queryKey: queryKeys.liveReader(id) });
         void client.invalidateQueries({ queryKey: ['librarian'] });
       },
       transport: new DefaultChatTransport({
@@ -84,8 +108,12 @@ export function useLibrarianChat(linkId: string) {
   }, [detail.data, chat, chatId, entry, state.status]);
   const loading = list.isPending || (list.data?.chats.length !== 0 && !chatId.current);
   const busy = creating || state.status === 'submitted' || state.status === 'streaming';
+  const lastAssistant = state.messages.findLast((message) => message.role === 'assistant');
+  const pendingApproval =
+    lastAssistant?.parts.some((part) => 'state' in part && part.state === 'approval-requested') ??
+    false;
   async function send(text: string, action?: string) {
-    if (!text.trim() || busy || loading || list.error || detail.error) return;
+    if (!text.trim() || pendingApproval || busy || loading || list.error || detail.error) return;
     setFailure(false);
     setCreating(true);
     try {
@@ -105,10 +133,19 @@ export function useLibrarianChat(linkId: string) {
   return {
     ...state,
     title,
+    pendingApproval,
     send,
     busy,
     loading,
     failed: failure || !!state.error || !!list.error || !!detail.error,
     errorText: chatErrorText(state.error?.message),
   };
+}
+
+function refreshedReaderIds(message: UIMessage): string[] {
+  return message.parts.flatMap((part) => {
+    if (toolName(part) !== 'refresh_reader' || !('input' in part)) return [];
+    const id = (part.input as { id?: string } | undefined)?.id;
+    return id ? [id] : [];
+  });
 }

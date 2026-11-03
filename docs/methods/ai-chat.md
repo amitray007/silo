@@ -232,6 +232,40 @@ Acceptance (QA, real browser, real key):
 7. Bad key → a fixed error line in the panel; the reader keeps working.
 8. Named access token → `403` on every `/api/librarian` route.
 
+### Slice 2 detail: write tools and approvals
+
+- Tools: every MCP tool except `export_links`. Writes that are easy to undo run
+  directly (`capture_link`, `edit_link`, tags, highlights, `restore_link`,
+  feed triage). Five need the owner's approval: `trash_link`,
+  `hard_delete_link`, `delete_tag`, `delete_highlight`, `unsubscribe_feed`.
+- Approval: AI SDK 7 `toolApproval` with `experimental_toolApprovalSecret`. Core
+  derives the secret from `SILO_SECRET_KEY` with HKDF (label
+  `silo-librarian-approval`) and exports it only through
+  `@silo/core/ai-credential`. Without `SILO_SECRET_KEY` the five tools are left
+  out instead of running unapproved.
+- The approval answer: the client sends back the last assistant message with
+  `approval-responded` parts. Core accepts an assistant message only when its id
+  is the last stored assistant message and every part equals the stored part,
+  except that an `approval-requested` tool part may become `approval-responded`
+  with the same approval id and a boolean `approved` (optional reason up to 500
+  characters). Anything else is `400 invalid_message`. The per-chat run lock
+  applies to the continuation.
+- Web: an approval row on the tool part, "Move 1 link to trash?" with Allow and
+  Deny (the sentence comes from the tool name and its input count);
+  `sendAutomaticallyWhen: lastAssistantMessageIsCompleteWithApprovalResponses`;
+  a denied call shows "Not done." Trace words for writes: "Saved to your
+  library", "Tagged", "Edited", "Highlighted", "Moved to trash", "Deleted".
+  After a message with a write tool finishes, invalidate the library queries so
+  lists, tags and highlights refresh.
+- Persona: may act on clear requests; says what it changed; never retries a
+  denied action in the same turn.
+
+Acceptance (QA, real key): "tag this article essays" tags it with no prompt
+and the tag shows in the sidebar; "move the BBC News link to the trash" shows
+the approval row, Allow trashes it (then restore it), Deny leaves it and the
+answer says so; a forged approval body (changed part or unknown approval id)
+gets 400.
+
 ## Out of scope (parked)
 
 - Fact-check and any web search (needs a search provider).

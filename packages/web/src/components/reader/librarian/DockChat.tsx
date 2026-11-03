@@ -45,7 +45,7 @@ export function DockChat({
     if (chat.messages.length === 0) return;
     messages.current?.scrollTo?.({ top: messages.current.scrollHeight });
   }, [chat.messages]);
-  const disabled = chat.busy || chat.loading;
+  const disabled = chat.busy || chat.loading || chat.pendingApproval;
   return (
     <>
       <section
@@ -67,7 +67,15 @@ export function DockChat({
           aria-busy={chat.busy}
         >
           {chat.messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
+            <ChatMessage
+              key={message.id}
+              message={message}
+              linkId={linkId}
+              expired={
+                message.id !== chat.messages.findLast((item) => item.role === 'assistant')?.id
+              }
+              onApproval={chat.addToolApprovalResponse}
+            />
           ))}
           {chat.messages.length === 0 && (
             <p className="silo-chat-empty">
@@ -95,6 +103,7 @@ export function DockChat({
           </div>
         )}
       </section>
+      {chat.pendingApproval && <p role="status">Allow or deny first.</p>}
       <form
         className="silo-chat-bar"
         onSubmit={(event) => {

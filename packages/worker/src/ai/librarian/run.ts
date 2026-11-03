@@ -2,6 +2,7 @@ import { librarianMessageSchema, saveChatMessages } from '@silo/core';
 import {
   getLibrarianToolSource,
   type LibrarianRequest,
+  librarianApprovalSecret,
   resolveAiFeatureCredential,
 } from '@silo/core/ai-credential';
 import {
@@ -20,7 +21,7 @@ import { chatModelSettings } from '../generation.js';
 import { languageModelFor } from '../model.js';
 import { stubOldToolResults } from './history.js';
 import { persona, promptVersion, requestContext } from './persona.js';
-import { librarianTools } from './tools.js';
+import { librarianTools, toolApproval } from './tools.js';
 
 /** Provider-specific chunks (message ids, token usage) stay on the server. */
 function withoutProviderChunks<Part extends { type: string }>() {
@@ -40,7 +41,8 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
   try {
     const credential = await resolveAiFeatureCredential('librarian');
     if (!credential) throw new Error('Unavailable');
-    const tools = await librarianTools(getLibrarianToolSource());
+    const approvalSecret = librarianApprovalSecret();
+    const tools = await librarianTools(getLibrarianToolSource(), approvalSecret);
     const originalMessages = await validateUIMessages({
       messages: request.messages,
       tools: Object.fromEntries(
@@ -61,6 +63,8 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       ),
       experimental_transform: withoutProviderChunks,
       tools,
+      toolApproval,
+      ...(approvalSecret ? { experimental_toolApprovalSecret: approvalSecret } : {}),
       stopWhen: isStepCount(8),
       maxRetries: 2,
       telemetry: { isEnabled: false },

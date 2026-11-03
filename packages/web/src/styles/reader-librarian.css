@@ -206,3 +206,24 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
     animation: none;
   }
 }
+
+.silo-chat-approval {
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.silo-chat-approval button {
+  padding: 6px 12px;
+  color: var(--mut);
+  border-radius: 6px;
+}
+.silo-chat-approval .silo-chat-allow {
+  color: var(--bg2);
+  background: var(--ink);
+}
+.silo-chat-approval button:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}

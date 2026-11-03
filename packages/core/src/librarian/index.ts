@@ -2,6 +2,7 @@ import { librarianChats as chats, db, links, librarianMessages as messages } fro
 import { and, asc, desc, eq, isNull, sql } from 'drizzle-orm';
 import { isAiFeatureOn } from '../ai/status.js';
 import { decodeListCursor, encodeListCursor } from '../links/pagination.js';
+import { isApprovalContinuation } from './approval.js';
 import { beginLibrarianRun, getLibrarianRunner } from './ports.js';
 import { incomingUserMessageSchema, type LibrarianMessage } from './types.js';
 
@@ -152,22 +153,26 @@ export async function streamLibrarianReply({
   abortSignal?: AbortSignal;
 }) {
   if (!(await isAiFeatureOn('librarian'))) return { ok: false, code: 'ai_not_ready' } as const;
-  const stored = await getChat(chatId);
-  if (!stored) return { ok: false, code: 'not_found' } as const;
-  const runner = getLibrarianRunner();
-  if (!runner) return { ok: false, code: 'unavailable' } as const;
-  if (!incomingUserMessageSchema.safeParse(message).success)
-    return { ok: false, code: 'invalid_message' } as const;
-  const [existing] = await db
-    .select({ chatId: messages.chatId })
-    .from(messages)
-    .where(eq(messages.id, message.id));
-  if (existing && existing.chatId !== chatId)
-    return { ok: false, code: 'invalid_message' } as const;
   const endRun = beginLibrarianRun(chatId);
   if (!endRun) return { ok: false, code: 'busy' } as const;
+  function fail<Code extends 'not_found' | 'unavailable' | 'invalid_message'>(code: Code) {
+    endRun?.();
+    return { ok: false, code } as const;
+  }
   try {
-    const merged = [...stored.messages, message];
+    const stored = await getChat(chatId);
+    if (!stored) return fail('not_found');
+    const runner = getLibrarianRunner();
+    if (!runner) return fail('unavailable');
+    const continuation = isApprovalContinuation(message, stored.messages.at(-1));
+    if (!continuation && !incomingUserMessageSchema.safeParse(message).success)
+      return fail('invalid_message');
+    const [existing] = await db
+      .select({ chatId: messages.chatId })
+      .from(messages)
+      .where(eq(messages.id, message.id));
+    if (existing && existing.chatId !== chatId) return fail('invalid_message');
+    const merged = [...(continuation ? stored.messages.slice(0, -1) : stored.messages), message];
     await saveChatMessages(chatId, [message]);
     const [link] = stored.chat.linkId
       ? await db
