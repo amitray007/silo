@@ -23,14 +23,19 @@ function Host({ children }: { children: ReactNode }) {
   );
 }
 
-function renderContent(link = makeLink({ id: 'dock' }), reader: unknown = null, ready = false) {
+function renderContent(
+  link = makeLink({ id: 'dock' }),
+  reader: unknown = null,
+  ready = false,
+  chats: unknown[] = [],
+) {
   vi.stubGlobal(
     'fetch',
     vi.fn(async (input: RequestInfo | URL) =>
       String(input).endsWith('/api/ai')
         ? json({ status: { features: { librarian: { ready } } } })
         : String(input).includes('/librarian/chats?')
-          ? json({ chats: [], nextCursor: null })
+          ? json({ chats, nextCursor: null })
           : String(input).endsWith('/reader') && reader
             ? json(reader)
             : json({ error: 'not_found', message: 'none' }, 404),
@@ -61,6 +66,24 @@ it('renders for readable article prose', async () => {
   expect(toolbar.closest('[data-testid="host"]')).not.toBeNull();
   expect(screen.getAllByRole('button', { name: 'Type' })).toHaveLength(1);
   expect(screen.queryByRole('dialog')).toBeNull();
+});
+
+const storedChat = { id: 'c1', title: 'Earlier', linkId: 'dock', createdAt: '', updatedAt: '' };
+
+it('marks the dock Ask when the article has a stored chat', async () => {
+  renderContent(undefined, prose, true, [storedChat]);
+  const ask = await screen.findByRole('button', { name: /^Ask/ });
+  await waitFor(() => expect(ask.querySelector('.silo-reader-dockmark > i')).not.toBeNull());
+  expect(ask.textContent).toContain('Earlier chat saved');
+});
+
+it('leaves the dock Ask unmarked without a stored chat', async () => {
+  renderContent(undefined, prose, true);
+  const ask = await screen.findByRole('button', { name: /^Ask/ });
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  });
+  expect(ask.querySelector('.silo-reader-dockmark')).toBeNull();
 });
 
 it('does not render when the page has no Reader prose', async () => {
