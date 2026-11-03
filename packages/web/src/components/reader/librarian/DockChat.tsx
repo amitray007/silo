@@ -82,7 +82,7 @@ export function DockChat({
   const { setInput, setPassage, field } = composer;
   useEffect(() => {
     if (!active || !request) return;
-    field.current?.focus();
+    field.current?.focus({ preventScroll: true });
     if (request.chatId) void chat.loadImported(request.chatId).catch(() => setImportError(true));
     setPassage(request.passage);
     if (request.question) {
@@ -128,7 +128,7 @@ export function DockChat({
     titleButton.current?.focus();
   };
   useEffect(() => {
-    if (active) field.current?.focus();
+    if (active) field.current?.focus({ preventScroll: true });
     else setHistoryOpen(false);
   }, [field, active]);
   return (

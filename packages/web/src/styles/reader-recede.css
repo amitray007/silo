@@ -21,6 +21,9 @@
     opacity: 0;
   }
 }
+.silo-readerpane[data-recede="chat"] .silo-reader-recede {
+  transition-duration: 160ms;
+}
 
 ::highlight(silo-librarian-selection) {
   background-color: var(--sel);

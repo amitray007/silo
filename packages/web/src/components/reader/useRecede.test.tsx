@@ -4,7 +4,10 @@ import { render, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { useRecede } from './useRecede';
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 
 function Probe({ passage, chat, range }: { passage: boolean; chat: boolean; range?: Range }) {
   const host = document.getElementById('host');
@@ -14,6 +17,44 @@ function Probe({ passage, chat, range }: { passage: boolean; chat: boolean; rang
 }
 
 const pane = () => document.querySelector('.silo-readerpane') as HTMLElement;
+
+it('lets chat paint before making its backdrop and cancels a folded pending open', () => {
+  document.body.innerHTML =
+    '<section class="silo-readerpane"><div class="silo-reader-scroll"><article class="silo-reader"><p id="host">Body</p></article></div></section>';
+  const frames = new Map<number, FrameRequestCallback>();
+  let sequence = 0;
+  vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => {
+    frames.set(++sequence, callback);
+    return sequence;
+  });
+  vi.stubGlobal('cancelAnimationFrame', (frame: number) => frames.delete(frame));
+  const advance = () => {
+    const pending = [...frames.values()];
+    frames.clear();
+    for (const callback of pending) callback(0);
+  };
+  const view = render(<Probe passage={false} chat />);
+  expect(document.querySelector('.silo-reader-recede')).toBeNull();
+  advance();
+  expect(document.querySelector('.silo-reader-recede')).toBeNull();
+  view.rerender(<Probe passage={false} chat={false} />);
+  advance();
+  expect(document.querySelector('.silo-reader-recede')).toBeNull();
+  view.rerender(<Probe passage={false} chat />);
+  advance();
+  advance();
+  expect(pane().getAttribute('data-recede')).toBe('chat');
+  expect(document.querySelectorAll('.silo-reader-recede')).toHaveLength(1);
+  view.unmount();
+});
+
+it('starts chat recede at once under reduced motion', () => {
+  vi.stubGlobal('matchMedia', () => ({ matches: true }));
+  document.body.innerHTML = '<section class="silo-readerpane"><div id="host"></div></section>';
+  const view = render(<Probe passage={false} chat />);
+  expect(pane().getAttribute('data-recede')).toBe('chat');
+  view.unmount();
+});
 
 it('marks the reader pane while a reason holds, and clears it when the last reason ends', () => {
   document.body.innerHTML = '<section class="silo-readerpane"><div id="host"></div></section>';

@@ -148,13 +148,27 @@ export function useRecede(
   useEffect(() => {
     const pane = host?.closest('.silo-readerpane');
     if (!pane || !active) return;
-    let layer = layers.get(pane);
-    if (!layer) {
-      layer = new RecedeLayer(pane);
-      layers.set(pane, layer);
-    }
-    const entry = { reason, range };
-    layer.add(entry);
-    return () => layer.remove(entry);
+    let release: (() => void) | undefined;
+    let frame = 0;
+    const show = () => {
+      let layer = layers.get(pane);
+      if (!layer) {
+        layer = new RecedeLayer(pane);
+        layers.set(pane, layer);
+      }
+      const entry = { reason, range };
+      layer.add(entry);
+      release = () => layer.remove(entry);
+    };
+    // A new backdrop's geometry and blur must not compete with the chat's first paint.
+    if (reason === 'chat' && !layers.has(pane) && !reducedMotion()) {
+      frame = requestAnimationFrame(() => {
+        frame = requestAnimationFrame(show);
+      });
+    } else show();
+    return () => {
+      cancelAnimationFrame(frame);
+      release?.();
+    };
   }, [host, reason, active, range]);
 }

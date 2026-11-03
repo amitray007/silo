@@ -60,6 +60,27 @@
   box-shadow: var(--elev-2);
   pointer-events: auto;
 }
+.silo-reader-dock-pill[hidden] {
+  display: none;
+}
+/* Keep transcript layout ready while folded; hiding it must not reflow every stored message. */
+.silo-reader-dock > .silo-reader-chat-cache {
+  display: contents;
+}
+.silo-reader-chat-cache > .silo-chat {
+  position: absolute;
+  bottom: 0;
+}
+.silo-reader-chat-cache > .silo-chat > .silo-chat-surface {
+  animation-duration: 160ms;
+}
+.silo-reader-chat-cache[aria-hidden="true"] > .silo-chat {
+  opacity: 0;
+  pointer-events: none;
+}
+.silo-reader-chat-cache[aria-hidden="true"] :is(.silo-chat-surface, .silo-chat-bar) {
+  animation: none;
+}
 .silo-reader-dockbtn {
   display: inline-flex;
   align-items: center;
