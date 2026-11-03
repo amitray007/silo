@@ -1,8 +1,10 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { ModalShell } from '../ModalShell';
+import { SettingsProvider, useSettings } from '../SettingsContext';
 import { AiTab } from './AiTab';
 
 const TEST_KEY = 'sk-test-0123456789abcdef';
@@ -131,10 +133,21 @@ function setup(opts: {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={client}>
-      {opts.inSettings ? <SettingsHarness /> : <AiTab />}
+      <MemoryRouter>
+        <SettingsProvider>
+          <TabProbe />
+          {opts.inSettings ? <SettingsHarness /> : <AiTab />}
+        </SettingsProvider>
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   return { calls };
+}
+
+function TabProbe() {
+  const { tab, openSettings } = useSettings();
+  useEffect(() => openSettings('ai'), [openSettings]);
+  return <output data-testid="settings-tab">{tab}</output>;
 }
 
 function SettingsHarness() {
@@ -459,7 +472,15 @@ describe('AiTab', () => {
     expect(screen.queryByRole('radiogroup')).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Model' })).toBeNull();
     expect(screen.getByText('X posts')).toBeTruthy();
-    expect(screen.getByText('Turn on in Plugins > Twitter / X')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Turn on in Plugins > Twitter / X' })).toBeTruthy();
+  });
+
+  it('turns the plugin hint into a button that opens the Plugins tab', async () => {
+    setup({});
+    const hint = await screen.findByRole('button', { name: 'Turn on in Plugins > Twitter / X' });
+    expect(screen.getByTestId('settings-tab').textContent).toBe('ai');
+    fireEvent.click(hint);
+    expect(screen.getByTestId('settings-tab').textContent).toBe('plugins');
   });
 
   it('groups models by readable provider with decorative marks and saves provider plus id', async () => {
@@ -970,7 +991,11 @@ describe('AiTab', () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <AiTab />
+        <MemoryRouter>
+          <SettingsProvider>
+            <AiTab />
+          </SettingsProvider>
+        </MemoryRouter>
       </QueryClientProvider>,
     );
     expect((await screen.findByText(/Could not load AI settings/)).textContent).toContain(

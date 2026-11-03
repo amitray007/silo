@@ -23,6 +23,7 @@ import { ConfirmDialog } from '../ConfirmDialog';
 import { MenuAction, MenuSurface } from '../MenuSurface';
 import { RowPopover } from '../RowPopover';
 import { ReaderIcon } from '../reader/ReaderIcon';
+import { useSettings as useSettingsModal } from '../SettingsContext';
 import { Skeleton } from '../Skeleton';
 import { ModelPicker } from './ModelPicker';
 import { ProviderLogo } from './ProviderLogo';
@@ -499,6 +500,19 @@ const NOT_READY_WORDS: Record<string, string> = {
   key_unreadable: "The provider key can't be read. Add it again.",
 };
 
+/** The Plugins tab loads lazily, so wait for its source row, then move focus to it. */
+function focusPluginRow(name: string) {
+  let tries = 0;
+  const timer = window.setInterval(() => {
+    const row = Array.from(
+      document.querySelectorAll<HTMLElement>('.silo-plugin-body[aria-label]'),
+    ).find((el) => el.getAttribute('aria-label') === name);
+    row?.focus();
+    tries += 1;
+    if (row || tries >= 40) window.clearInterval(timer);
+  }, 50);
+}
+
 function FeatureRow({
   ai,
   feature,
@@ -515,18 +529,36 @@ function FeatureRow({
   const state = settingsAi.features[feature.id] ?? { enabled: false, model: null };
   const model = state.model;
   const reason = ai.status.features[feature.id]?.reason;
-  const hint =
-    !state.enabled && feature.plugin
-      ? `Turn on in Plugins > ${PLUGIN_NAMES[feature.plugin] ?? feature.plugin}`
-      : reason
-        ? (NOT_READY_WORDS[reason] ?? 'AI is not ready. Check the provider key and model.')
-        : null;
+  const { setTab } = useSettingsModal();
+  const pluginName = feature.plugin ? (PLUGIN_NAMES[feature.plugin] ?? feature.plugin) : null;
+  const notReady = reason
+    ? (NOT_READY_WORDS[reason] ?? 'AI is not ready. Check the provider key and model.')
+    : null;
+  const toPlugin = !state.enabled && pluginName !== null;
+  const hint = toPlugin ? `Turn on in Plugins > ${pluginName}` : notReady;
   return (
     <div style={settingsRow} className="silo-ai-feature-row">
       <div className="silo-ai-feature-copy">
         <div style={rowLabel}>{feature.label}</div>
         <div style={rowDesc}>{feature.plugin === 'twitter' ? 'X posts' : feature.description}</div>
-        {hint && <div style={metaStyle}>{hint}</div>}
+        {hint && (
+          <div style={metaStyle}>
+            {toPlugin ? (
+              <button
+                type="button"
+                className="silo-ai-feature-hint"
+                onClick={() => {
+                  setTab('plugins');
+                  focusPluginRow(pluginName);
+                }}
+              >
+                {hint}
+              </button>
+            ) : (
+              hint
+            )}
+          </div>
+        )}
       </div>
       <div className="silo-ai-feature-controls">
         <ModelPicker
