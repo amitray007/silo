@@ -282,8 +282,9 @@ gets 400.
   in panes under 520px. The quick endpoint validates the passage and action,
   checks readiness, uses read-only tools and stores no conversation rows.
 - Save as note creates a passage highlight with the answer as its note.
-- Continue in Librarian imports the text-only turn into the newest article chat
-  (creating it if needed), then opens the dock conversation.
+- Continue in Librarian starts a new article chat, imports the text-only turn
+  into it, then opens it in the dock. Ongoing chats stay as they were. If the
+  import is refused, the new empty chat is deleted.
 - Typed questions open the dock with passage metadata. If the dock is already
   open, Ask attaches a removable passage chip and its quick actions there.
 - Saved-item citations use `[Title](/?link=<uuid>)` and open in the Reader.

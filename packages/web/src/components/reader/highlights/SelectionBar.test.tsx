@@ -276,11 +276,12 @@ it('offers word actions for a single short word', () => {
 
 it('streams a quick answer, saves its text as a note, and imports only the text turn', async () => {
   const { waitFor } = await import('@testing-library/react');
-  const calls: { url: string; body: unknown }[] = [];
+  const calls: { url: string; method: string; body: unknown }[] = [];
   const fetcher = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
+    const method = init?.method ?? 'GET';
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
-    calls.push({ url, body });
+    calls.push({ url, method, body });
     if (url.endsWith('/quick')) {
       const chunks = [
         { type: 'start', messageId: 'answer' },
@@ -295,7 +296,12 @@ it('streams a quick answer, saves its text as a note, and imports only the text 
       );
     }
     if (url.endsWith('/import')) return new Response(null, { status: 204 });
-    return new Response(JSON.stringify({ chats: [{ id: 'chat' }] }), {
+    if (method === 'POST' && url.endsWith('/api/librarian/chats'))
+      return new Response(JSON.stringify({ id: 'fresh-chat' }), {
+        status: 201,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    return new Response(JSON.stringify({ chats: [{ id: 'ongoing-chat' }] }), {
       headers: { 'Content-Type': 'application/json' },
     });
   });
@@ -318,6 +324,15 @@ it('streams a quick answer, saves its text as a note, and imports only the text 
   });
   fireEvent.click(screen.getByRole('button', { name: 'Continue in Librarian' }));
   await waitFor(() => expect(calls.some((call) => call.url.endsWith('/import'))).toBe(true));
+  // Continue starts a fresh chat for the article instead of appending to the ongoing one.
+  const created = calls.find(
+    (call) => call.method === 'POST' && call.url.endsWith('/api/librarian/chats'),
+  );
+  expect(created?.body).toEqual({ linkId: 'quick-test' });
+  expect(calls.find((call) => call.url.endsWith('/import'))?.url).toContain(
+    '/api/librarian/chats/fresh-chat/import',
+  );
+  expect(calls.some((call) => call.url.includes('ongoing-chat'))).toBe(false);
   const imported = calls.find((call) => call.url.endsWith('/import'))?.body as {
     messages: { role: string; parts: unknown[]; metadata?: unknown }[];
   };
@@ -460,16 +475,23 @@ it.each([
   ['approval_pending', 'Allow or deny the waiting request first.'],
   ['ai_not_ready', 'Turn on the Librarian in Settings first.'],
 ])('keeps the answer open when import returns %s', async (error, message) => {
+  const { waitFor } = await import('@testing-library/react');
+  const deleted: string[] = [];
   vi.stubGlobal(
     'fetch',
-    vi.fn(async (input: RequestInfo | URL) => {
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       if (String(input).endsWith('/quick')) return answerStream('Keep this answer');
       if (String(input).endsWith('/import'))
         return new Response(JSON.stringify({ error, message: error }), {
           status: 409,
           headers: { 'Content-Type': 'application/json' },
         });
-      return new Response(JSON.stringify({ chats: [{ id: 'import-errors' }] }), {
+      if (init?.method === 'DELETE') {
+        deleted.push(String(input));
+        return new Response(null, { status: 204 });
+      }
+      return new Response(JSON.stringify({ id: 'import-errors' }), {
+        status: 201,
         headers: { 'Content-Type': 'application/json' },
       });
     }),
@@ -484,6 +506,10 @@ it.each([
   await screen.findByText(message);
   expect(screen.getByRole('region', { name: 'Passage answer' })).toBeTruthy();
   expect(screen.getByText('Keep this answer')).toBeTruthy();
+  // The refused import leaves no empty chat behind.
+  await waitFor(() =>
+    expect(deleted.some((url) => url.endsWith('/api/librarian/chats/import-errors'))).toBe(true),
+  );
   vi.unstubAllGlobals();
 });
 

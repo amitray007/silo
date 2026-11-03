@@ -121,6 +121,9 @@ let holdPost: Promise<void> | null = null;
 function selectionFixture(url: string, ready: boolean) {
   if (url.includes('/librarian/chats?'))
     return json({ chats: [{ id: 'imported-chat', title: 'Imported', linkId: 'hl' }] });
+  // Continue creates a new chat for the passage turn; it then opens in the dock.
+  if (url.endsWith('/librarian/chats'))
+    return json({ id: 'imported-chat', title: 'New chat', linkId: 'hl' });
   if (url.endsWith('/librarian/chats/imported-chat'))
     return json({
       chat: { id: 'imported-chat', title: 'Imported', linkId: 'hl' },
@@ -815,7 +818,7 @@ it('saves a quick answer through the normal highlight create path with its note'
   await screen.findByText('Saved as a note on ¶2');
 });
 
-it('continues the temporary answer in the open dock chat after importing it', async () => {
+it('continues the temporary answer in a new dock chat after importing it', async () => {
   mount(true);
   await screen.findByText('Alpha beta gamma delta.');
   select('quick brown fox');
