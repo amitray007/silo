@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { defaultActions, type LibrarianActions } from '../../lib/librarianActions';
@@ -198,4 +198,65 @@ describe('reset', () => {
     expect(saved.at(-1)?.article).toEqual(defaultActions().article);
     expect(saved.at(-1)?.passage).toEqual(defaultActions().passage);
   });
+});
+
+function deferredSave() {
+  let resolve: () => void = () => {};
+  let reject: (error: Error) => void = () => {};
+  const promise = new Promise<void>((yes, no) => {
+    resolve = yes;
+    reject = no;
+  });
+  return { promise, resolve, reject };
+}
+
+it('keeps rapid changes in the same and different lists and sends them in order', async () => {
+  const first = deferredSave();
+  const saved: LibrarianActions[] = [];
+  const save = vi.fn((next: LibrarianActions) => {
+    saved.push(next);
+    return saved.length === 1 ? first.promise : Promise.resolve();
+  });
+  render(<QuickActionsEditor actions={defaultActions()} save={save} />);
+  act(() => {
+    fireEvent.click(within(passage()).getByRole('button', { name: 'Hide Explain' }));
+    fireEvent.click(within(passage()).getByRole('button', { name: 'Hide Simplify' }));
+    fireEvent.click(within(article()).getByRole('button', { name: 'Hide Summarize' }));
+  });
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(within(passage()).getByRole('button', { name: 'Show Explain' })).toBeTruthy();
+  expect(within(passage()).getByRole('button', { name: 'Show Simplify' })).toBeTruthy();
+  await act(async () => first.resolve());
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+  expect(saved.at(-1)?.passage.slice(0, 2)).toEqual([
+    { id: 'explain', hidden: true },
+    { id: 'simplify', hidden: true },
+  ]);
+  expect(saved.at(-1)?.article[0]).toEqual({ id: 'summary', hidden: true });
+});
+
+it('rolls a failed save back to the confirmed value before the next success', async () => {
+  const second = deferredSave();
+  const saved: LibrarianActions[] = [];
+  const save = vi.fn((next: LibrarianActions) => {
+    saved.push(next);
+    return saved.length === 2 ? second.promise : Promise.resolve();
+  });
+  render(<QuickActionsEditor actions={defaultActions()} save={save} />);
+  fireEvent.click(within(passage()).getByRole('button', { name: 'Hide Explain' }));
+  await act(async () => {});
+  fireEvent.click(within(passage()).getByRole('button', { name: 'Hide Simplify' }));
+  fireEvent.click(within(passage()).getByRole('button', { name: 'Hide Counterpoint' }));
+  expect(save).toHaveBeenCalledTimes(2);
+  await act(async () => second.reject(new Error('Could not save actions.')));
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(3));
+  expect(screen.getByRole('alert').textContent).toBe('Could not save actions.');
+  expect(within(passage()).getByRole('button', { name: 'Show Explain' })).toBeTruthy();
+  expect(within(passage()).getByRole('button', { name: 'Hide Simplify' })).toBeTruthy();
+  expect(within(passage()).getByRole('button', { name: 'Show Counterpoint' })).toBeTruthy();
+  expect(saved.at(-1)?.passage.slice(0, 3)).toEqual([
+    { id: 'explain', hidden: true },
+    { id: 'simplify', hidden: false },
+    { id: 'counterpoint', hidden: true },
+  ]);
 });

@@ -28,6 +28,9 @@ const SET_HINT: Record<string, string> = {
   related: 'Single words',
 };
 
+type Change = (entries: ActionEntry[]) => ActionEntry[];
+type Write = (list: ActionList, change: Change) => string | null;
+
 type Pending = { id: string; index: number; dir: 'up' | 'down' };
 
 function RowActions({
@@ -185,7 +188,7 @@ function QuickActionList({
   title: string;
   desc: string;
   actions: LibrarianActions;
-  save: (next: LibrarianActions) => void;
+  save: Write;
 }) {
   const entries = actions[list];
   const [adding, setAdding] = useState(false);
@@ -199,16 +202,13 @@ function QuickActionList({
 
   const focus = (selector: string) =>
     requestAnimationFrame(() => root.current?.querySelector<HTMLElement>(selector)?.focus());
-  const write = (next: ActionEntry[]) => {
-    const refusal = listProblem(list, next);
+  const write = (change: Change) => {
+    const refusal = save(list, change);
     setProblem(refusal);
-    if (refusal) return false;
-    save({ ...actions, [list]: next });
-    return true;
+    return !refusal;
   };
 
   // A moved row keeps focus on the button that moved it, or on its twin at the end of the list.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: runs after each change of the list.
   useEffect(() => {
     const moved = pending.current;
     if (!moved || entries[moved.index]?.id !== moved.id) return;
@@ -225,18 +225,19 @@ function QuickActionList({
     const from = entries.findIndex((entry) => entry.id === id);
     const index = from + (dir === 'up' ? -1 : 1);
     pending.current = { id, index, dir };
-    write(moveEntry(entries, id, dir === 'up' ? -1 : 1));
+    write((current) => moveEntry(current, id, dir === 'up' ? -1 : 1));
   };
   const addCustom = (label: string, prompt: string) => {
     const entry: CustomEntry = { id: `custom:${crypto.randomUUID()}`, label, prompt };
-    if (write([...entries, entry])) {
+    if (write((current) => [...current, entry])) {
       setAdding(false);
       focus('[data-add]');
     }
   };
   const editCustom = (id: string, label: string, prompt: string) => {
-    const next = entries.map((entry) => (entry.id === id ? { id, label, prompt } : entry));
-    if (write(next)) {
+    if (
+      write((current) => current.map((entry) => (entry.id === id ? { id, label, prompt } : entry)))
+    ) {
       setEditing(null);
       focus(`[data-row="${CSS.escape(id)}"] [data-edit]`);
     }
@@ -268,7 +269,7 @@ function QuickActionList({
                   setAdding(false);
                   setEditing(null);
                   setProblem(null);
-                  save({ ...actions, [list]: defaultList(list) });
+                  write(() => defaultList(list));
                   focus('[data-reset]');
                 }}
               >
@@ -314,8 +315,8 @@ function QuickActionList({
             deleting={deleting === entry.id}
             onMove={(dir) => move(entry.id, dir)}
             onHide={() =>
-              write(
-                entries.map((item) =>
+              write((current) =>
+                current.map((item) =>
                   item.id === entry.id && !isCustom(item)
                     ? { ...item, hidden: !item.hidden }
                     : item,
@@ -333,7 +334,7 @@ function QuickActionList({
             }}
             onDelete={() => {
               setDeleting(null);
-              write(entries.filter((item) => item.id !== entry.id));
+              write((current) => current.filter((item) => item.id !== entry.id));
               focus('[data-add]');
             }}
             onCancelDelete={() => {
@@ -402,13 +403,62 @@ export function QuickActionsEditor({
   save,
 }: {
   actions: LibrarianActions;
-  save: (next: LibrarianActions) => void;
+  save: (next: LibrarianActions) => Promise<unknown> | undefined;
 }) {
+  const [visible, setVisible] = useState(actions);
+  const [error, setError] = useState<string | null>(null);
+  const latest = useRef(actions);
+  const confirmed = useRef(actions);
+  const queue = useRef<((current: LibrarianActions) => LibrarianActions)[]>([]);
+  useEffect(() => {
+    if (queue.current.length > 0) return;
+    confirmed.current = actions;
+    latest.current = actions;
+    setVisible(actions);
+  }, [actions]);
+
+  const publish = () => {
+    latest.current = queue.current.reduce((current, change) => change(current), confirmed.current);
+    setVisible(latest.current);
+  };
+  const flush = () => {
+    const change = queue.current[0];
+    if (!change) return;
+    const next = change(confirmed.current);
+    const settled = (failure?: unknown) => {
+      if (failure) setError(failure instanceof Error ? failure.message : 'Could not save actions.');
+      else confirmed.current = next;
+      queue.current.shift();
+      publish();
+      flush();
+    };
+    try {
+      const result = save(next);
+      if (result) void result.then(() => settled(), settled);
+      else settled();
+    } catch (failure) {
+      settled(failure);
+    }
+  };
+  const write: Write = (list, change) => {
+    const refusal = listProblem(list, change(latest.current[list]));
+    if (refusal) return refusal;
+    setError(null);
+    queue.current.push((current) => ({ ...current, [list]: change(current[list]) }));
+    publish();
+    if (queue.current.length === 1) flush();
+    return null;
+  };
   return (
     <section aria-label="Quick actions">
       <h3 className="silo-plugin-section-label">Quick actions</h3>
+      {error && (
+        <div role="alert" className="silo-qa-error">
+          {error}
+        </div>
+      )}
       {LISTS.map((item) => (
-        <QuickActionList key={item.list} {...item} actions={actions} save={save} />
+        <QuickActionList key={item.list} {...item} actions={visible} save={write} />
       ))}
     </section>
   );

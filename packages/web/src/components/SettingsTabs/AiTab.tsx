@@ -580,7 +580,7 @@ function AiSections({
   off: boolean;
   busy: boolean;
   patch: (next: AiSetting) => void;
-  saveActions: (next: LibrarianActions) => void;
+  saveActions: (next: LibrarianActions) => Promise<unknown>;
 }) {
   if (ai.status.secretKey !== 'ok') return <SecretKeyCallout state={ai.status.secretKey} />;
   return (
@@ -664,7 +664,7 @@ export function AiTab() {
           off={!enabled}
           busy={update.isPending}
           patch={patch}
-          saveActions={(next) => update.mutate({ librarianActions: next })}
+          saveActions={(next) => update.mutateAsync({ librarianActions: next })}
         />
       )}
     </>
