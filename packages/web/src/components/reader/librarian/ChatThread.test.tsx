@@ -135,10 +135,16 @@ const streaming = (part: UIMessage['parts'][number]) =>
     messages: [text('u', 'user', 'Related?'), { id: 'a', role: 'assistant', parts: [part] }],
   });
 
-it('shows only the running status while a step runs, and only its trace once it finishes', () => {
+const shimmer = () => document.querySelector('.silo-reasoning-head.silo-shimmer')?.textContent;
+
+it('names a running step once, in the message, and leaves the status line silent', () => {
+  mount(streaming(search('input-available')), 'x');
+  expect(shimmer()).toBe('Searching your library');
+  expect(screen.queryByRole('status')).toBeNull();
+});
+
+it('folds a finished step into "Used 1 tool" while the status line moves on', () => {
   const view = mount(streaming(search('input-available')), 'x');
-  expect(screen.getByRole('status').textContent).toBe('Searching your library…');
-  expect(document.querySelector('.silo-chat-trace')).toBeNull();
   view.rerender(
     <ChatThread
       chat={streaming(search('output-available'))}
@@ -148,14 +154,12 @@ it('shows only the running status while a step runs, and only its trace once it 
       header={null}
     />,
   );
-  // The finished step's label drifts out (aria-hidden) while the status moves on to the next.
+  expect(shimmer()).toBeUndefined();
+  expect(screen.getByRole('button', { name: /^Used 1 tool/ })).toBeTruthy();
   expect(document.querySelector('.silo-status-in')?.textContent).toBe('Thinking…');
-  expect(document.querySelector('.silo-chat-trace')?.textContent).toBe(
-    'Searched your library · 2 links',
-  );
 });
 
-it('holds back a trace phrase while another call of the same step is running', () => {
+it('keeps one running line while a parallel call of the same step is still running', () => {
   const chat = fakeChat({
     busy: true,
     messages: [
@@ -168,8 +172,8 @@ it('holds back a trace phrase while another call of the same step is running', (
     ],
   });
   mount(chat, 'x');
-  expect(screen.getByRole('status').textContent).toBe('Searching your library…');
-  expect(document.querySelector('.silo-chat-trace')).toBeNull();
+  expect(shimmer()).toBe('Searching your library');
+  expect(screen.queryByRole('button', { name: /^Used/ })).toBeNull();
 });
 
 it('puts the quick actions, the passage and Stop inside the one composer surface', () => {

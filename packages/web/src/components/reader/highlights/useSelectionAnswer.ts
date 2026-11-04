@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { apiUrl } from '../../../api/client';
 import { useImportLibrarianTurn, useRefreshOnRemovedAction } from '../../../api/librarian';
 import { STREAM_UPDATE_MS } from '../../../lib/motion';
-import { splitSteps } from '../librarian/ChatMessage';
+import { splitSteps } from '../librarian/tools';
 import { chatErrorText } from '../librarian/useLibrarianChat';
 import { paragraphNumber } from './paragraphs';
 import type { PendingSelection } from './useSelectionWatcher';

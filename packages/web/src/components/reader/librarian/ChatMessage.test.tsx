@@ -35,7 +35,7 @@ function search(id: string, count: number) {
 }
 
 describe('ChatMessage', () => {
-  it('merges several library searches into one trace with the total count', () => {
+  it('merges several library searches into one step with the total count', () => {
     const message: UIMessage = {
       id: 'a1',
       role: 'assistant',
@@ -48,7 +48,9 @@ describe('ChatMessage', () => {
       ],
     };
     render(<ChatMessage message={message} />);
-    expect(screen.getByText('Searched your library · 17 links')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Used 3 tools' }));
+    expect(screen.getAllByText('Searched your library')).toHaveLength(1);
+    expect(screen.getByText('17 links')).toBeTruthy();
   });
 
   it('shows text written before a tool call as a muted step, apart from the answer', () => {
@@ -66,14 +68,14 @@ describe('ChatMessage', () => {
     expect(screen.getByText('One piece matches.')).toBeTruthy();
   });
 
-  it('shows no trace line when no tool ran', () => {
+  it('shows no steps line when no tool ran', () => {
     const message: UIMessage = {
       id: 'a3',
       role: 'assistant',
       parts: [{ type: 'text', text: 'Hello.' }],
     };
     const { container } = render(<ChatMessage message={message} />);
-    expect(container.querySelector('.silo-chat-trace')).toBeNull();
+    expect(container.querySelector('.silo-reasoning')).toBeNull();
   });
 
   it('shows the passage quote under a user turn that carries one', () => {
@@ -151,6 +153,7 @@ it('shows denied calls and successful write traces', () => {
     />,
   );
   expect(screen.getByText('Not done.')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: 'Used 1 tool' }));
   expect(screen.getByText('Tagged')).toBeTruthy();
   expect(screen.queryByText('Moved to trash')).toBeNull();
 });
@@ -182,9 +185,10 @@ it('opens saved-item citations through the router and keeps external links in a 
   expect(screen.getByRole('link', { name: 'Web' }).getAttribute('target')).toBe('_blank');
 });
 
-it('puts the site favicon before each link: its own host, or the cited link domain', async () => {
+it('shows a pill with the link text and the site favicon: its own host, or the cited link domain', async () => {
   await renderCitations();
   const web = await screen.findByRole('link', { name: 'Web' });
+  expect(web.textContent).toBe('Web');
   expect(web.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=example.com');
   const saved = await screen.findByRole('link', { name: 'Saved' });
   await waitFor(() =>

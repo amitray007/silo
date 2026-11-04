@@ -132,6 +132,7 @@ export function ChatThread({
   const disabled = chat.busy || chat.loading || chat.pendingApproval;
   const lastAssistant = chat.messages.findLast((item) => item.role === 'assistant');
   const reasoningShown = showsLiveReasoning(lastAssistant, wholeAnswers);
+  const status = statusLabel(chat.messages);
   const send = (text: string, action?: string) => {
     const sent = chat.send(text, action, passage);
     setPassage(undefined);
@@ -166,8 +167,8 @@ export function ChatThread({
               onApproval={chat.addToolApprovalResponse}
             />
           ))}
-          {chat.busy && !chat.pendingApproval && !reasoningShown && (
-            <StatusLine label={statusLabel(chat.messages)} className="silo-chat-pending" />
+          {chat.busy && !chat.pendingApproval && !reasoningShown && status && (
+            <StatusLine label={status} className="silo-chat-pending" />
           )}
           {chat.messages.length === 0 &&
             (chat.loading ? (

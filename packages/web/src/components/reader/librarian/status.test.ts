@@ -10,15 +10,11 @@ it('says Thinking before the assistant has written anything', () => {
   expect(statusLabel([user, assistant([])])).toBe('Thinking…');
 });
 
-it('names the tool that is running', () => {
-  const running = (toolName: string) =>
-    assistant([
-      { type: `tool-${toolName}`, toolCallId: 'c', state: 'input-available', input: {} },
-    ] as UIMessage['parts']);
-  expect(statusLabel([user, running('get_link')])).toBe('Reading the article…');
-  expect(statusLabel([user, running('list_highlights')])).toBe('Reading your notes…');
-  expect(statusLabel([user, running('search_links')])).toBe('Searching your library…');
-  expect(statusLabel([user, running('capture_link')])).toBe('Working…');
+it('stays silent while a tool runs: the steps line in the message names it', () => {
+  const running = assistant([
+    { type: 'tool-search_links', toolCallId: 'c', state: 'input-available', input: {} },
+  ] as UIMessage['parts']);
+  expect(statusLabel([user, running])).toBeNull();
 });
 
 it('says Answering once text follows the last tool call, not for thinking aloud before it', () => {
