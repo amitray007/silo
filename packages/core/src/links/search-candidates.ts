@@ -6,7 +6,12 @@ const CANDIDATE_PROBE_FLOOR = 512;
 const CANDIDATE_SCAN_FRACTION = 0.5;
 
 /** Candidate membership is a superset; callers retain their exact match and rank expressions. */
-export async function librarySearchSource(query: string, tsQuery: SQL, substring?: SQL) {
+export async function librarySearchSource(
+  query: string,
+  tsQuery: SQL,
+  substring?: SQL,
+  options: { broadProbe?: boolean } = {},
+) {
   // Short substrings cannot narrow a trigram scan.
   if (substring && query.trim().length < 3) return links;
   // Parsed lexemes are already stemmed; cast directly to avoid stemming them a second time.
@@ -39,7 +44,17 @@ export async function librarySearchSource(query: string, tsQuery: SQL, substring
     )
     ${sql.join(branches, sql` union all `)}
   `;
-  // reltuples is -1 on a never-analyzed table, which leaves the floor.
+  const candidateLink = () =>
+    db.select().from(links).where(sql`${links.id} in (${candidates})`).as('links');
+  // Stage 1: one cheap round trip. Most terms are rare and stop here.
+  const cheap = await db.execute<{ n: string }>(
+    sql`select count(*) as n from (${candidates} limit ${CANDIDATE_PROBE_FLOOR}) as probe`,
+  );
+  if (Number(cheap.rows[0]?.n) < CANDIDATE_PROBE_FLOOR) return candidateLink();
+  // A selective tag scope makes the scan start from the tag, which beats any candidate list.
+  if (options.broadProbe === false) return links;
+  // Stage 2: broad terms are scanned only past half the library. reltuples is -1 on a
+  // never-analyzed table, which leaves the floor.
   const probeSql = sql`
     with probe_limit as (
       select greatest(${CANDIDATE_PROBE_FLOOR}, (reltuples * ${CANDIDATE_SCAN_FRACTION})::bigint) as n
@@ -55,5 +70,5 @@ export async function librarySearchSource(query: string, tsQuery: SQL, substring
     return tx.execute<{ broad: boolean }>(probeSql);
   });
   if (probe.rows[0]?.broad) return links;
-  return db.select().from(links).where(sql`${links.id} in (${candidates})`).as('links');
+  return candidateLink();
 }

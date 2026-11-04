@@ -266,6 +266,11 @@ export type UnionSearchOptions = {
    * contributes no candidates), never an error.
    */
   ftsOnly?: boolean;
+  /**
+   * False when the caller's tag scope is selective: candidate probing then stops at the cheap
+   * stage, so a broad term falls back to the scan that starts from the tag.
+   */
+  broadProbe?: boolean;
 };
 
 /**
@@ -461,7 +466,9 @@ export async function runUnionSearch(
     .select({ link: listColumns, rank, snippet })
     .from(
       options.indexedLibrary && fts
-        ? await librarySearchSource(sanitized, fts.tsQuery, substring?.match)
+        ? await librarySearchSource(sanitized, fts.tsQuery, substring?.match, {
+            broadProbe: options.broadProbe !== false,
+          })
         : links,
     )
     .where(andAll(basePredicate, unionMatch, scopeCondition, ...(options.extraConditions ?? [])))

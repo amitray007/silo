@@ -879,6 +879,13 @@ async function resolveListTagFilter(tagKeys: ReadonlyArray<string>): Promise<Lis
   return rarest ? { tagIds, candidateLinkIds: rarest.linkIds } : { tagIds };
 }
 
+/** True when the rarest required tag is selective (see `SELECTIVE_TAG_MAX_LINKS`) or names no tag. */
+async function hasSelectiveTagScope(tagKeys: ReadonlyArray<string>): Promise<boolean> {
+  if (tagKeys.length === 0) return false;
+  const resolved = await resolveListTagFilter(tagKeys);
+  return resolved === null || resolved.candidateLinkIds !== undefined;
+}
+
 /** ANDed correlated `EXISTS` conditions on resolved tag ids; see `requiredTagConditions` for the key-based form. */
 function requiredTagIdConditions(tagIds: ReadonlyArray<string>): ReturnType<typeof sql>[] {
   return tagIds.map(
@@ -1250,8 +1257,10 @@ export async function search(
   // description -> title) and the fixed headline options. `runUnionSearch`
   // now returns rows ALREADY shaped as `SearchResultRow` (extractedText
   // stripped, snippet + rank attached), so this returns its result directly.
+  const selectiveTag = query.trim() ? await hasSelectiveTagScope(requiredTagKeys(filter)) : false;
   return runUnionSearch(whereLibrary(), tagSearchVector, query, tagScopeCondition, page, {
     indexedLibrary: true,
+    ...(selectiveTag ? { broadProbe: false } : {}),
     extraConditions,
     sort,
     snippetFor: (tsQuery) => buildSnippetHeadline(tsQuery),
@@ -1312,7 +1321,12 @@ export async function countLinks(filter: CountFilter = {}): Promise<LinkCounts> 
   const tagIds = await resolveRequiredTagIds(requiredTagKeys(filter));
   // An unknown tag matches no link: skip the three queries.
   if (tagIds === null) return { total: 0, bySource: {}, topTags: [] };
-  const source = tsQuery && filter.query ? await librarySearchSource(filter.query, tsQuery) : links;
+  const source =
+    tsQuery && filter.query
+      ? await librarySearchSource(filter.query, tsQuery, undefined, {
+          broadProbe: !(await hasSelectiveTagScope(requiredTagKeys(filter))),
+        })
+      : links;
   // link_tags_link_id_tag_id_pk and the joined primary keys prevent duplicate links per tag.
   const tagCount = sql<string>`count(${links.id})`;
   const sharedConditions: ReturnType<typeof sql>[] = [];
