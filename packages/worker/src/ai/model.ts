@@ -54,13 +54,17 @@ function gatewayBudgetModel(
   fetch: typeof globalThis.fetch = globalThis.fetch,
 ): ReturnType<ReturnType<typeof createGateway>['languageModel']> {
   const gateway = createGateway({ apiKey, fetch })(id);
-  const compatible = (budget: unknown) =>
+  const compatible = (gatewayOptions: Record<string, unknown> | undefined) =>
     createOpenAI({
       apiKey,
       baseURL: 'https://ai-gateway.vercel.sh/v1',
       fetch: (url, init) => {
         const body = JSON.parse(String(init?.body));
+        const budget = gatewayOptions?.reasoningBudget;
         if (typeof budget === 'number') body.reasoning = { max_tokens: budget };
+        // The Chat Completions endpoint reads Gateway extensions from a providerOptions body field.
+        if (gatewayOptions?.caching === 'auto')
+          body.providerOptions = { gateway: { caching: 'auto' } };
         return fetch(url, { ...init, body: JSON.stringify(body) });
       },
     }).chat(id);
@@ -70,9 +74,7 @@ function gatewayBudgetModel(
     provider: gateway.provider,
     modelId: id,
     supportedUrls: gateway.supportedUrls,
-    doStream: (options) =>
-      compatible(options.providerOptions?.gateway?.reasoningBudget).doStream(options),
-    doGenerate: (options) =>
-      compatible(options.providerOptions?.gateway?.reasoningBudget).doGenerate(options),
+    doStream: (options) => compatible(options.providerOptions?.gateway).doStream(options),
+    doGenerate: (options) => compatible(options.providerOptions?.gateway).doGenerate(options),
   };
 }

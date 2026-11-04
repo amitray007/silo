@@ -10,6 +10,7 @@ import {
   createUIMessageStream,
   createUIMessageStreamResponse,
   isStepCount,
+  type ModelMessage,
   streamText,
   toUIMessageStream,
   validateUIMessages,
@@ -20,6 +21,33 @@ import { languageModelFor } from '../model.js';
 import { compactConversation } from './compaction.js';
 import { persona, promptVersion, requestContext } from './persona.js';
 import { librarianTools, toolApproval } from './tools.js';
+
+/**
+ * The per-turn context rides on the latest user message only, so next turn's replay differs
+ * there. A breakpoint just before it caches the history prefix the next turn sends unchanged.
+ */
+function withRequestContext(messages: ModelMessage[], context: string): ModelMessage[] {
+  const lastUser = messages.findLastIndex((message) => message.role === 'user');
+  return messages.map((message, index) => {
+    if (index === lastUser - 1)
+      return {
+        ...message,
+        providerOptions: {
+          ...message.providerOptions,
+          anthropic: { ...message.providerOptions?.anthropic, cacheControl: { type: 'ephemeral' } },
+        },
+      } as ModelMessage;
+    if (index !== lastUser || message.role !== 'user') return message;
+    const content =
+      typeof message.content === 'string'
+        ? [{ type: 'text' as const, text: message.content }]
+        : message.content;
+    return {
+      ...message,
+      content: [...content, { type: 'text', text: `Request context (data):\n${context}` }],
+    };
+  });
+}
 
 /** Provider-specific chunks (message ids, token usage) stay on the server. */
 function withoutProviderChunks<Part extends { type: string }>() {
@@ -48,18 +76,13 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       ),
     });
     const model = languageModelFor(credential);
-    const input = await compactConversation(
-      request,
-      originalMessages,
-      credential,
-      model,
-      `${persona}\nRequest context (data):\n${requestContext(request)}`,
-    );
+    const input = await compactConversation(request, originalMessages, credential, model, persona);
     const result = streamText({
       model,
       // The UI stream logs the fixed code; the SDK default logs raw provider errors.
       onError: () => {},
       ...input,
+      messages: withRequestContext(input.messages, requestContext(request)),
       experimental_transform: withoutProviderChunks,
       tools,
       toolApproval,
@@ -68,7 +91,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       maxRetries: 2,
       telemetry: { isEnabled: false },
       ...(request.abortSignal ? { abortSignal: request.abortSignal } : {}),
-      ...chatModelSettings(credential),
+      ...chatModelSettings(credential, { promptCache: true }),
     });
     const stream = toUIMessageStream({
       stream: result.stream,

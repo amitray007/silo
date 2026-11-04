@@ -83,7 +83,7 @@ suite('saved actions at the model boundary (real Postgres)', () => {
     vi.unstubAllEnvs();
   });
 
-  it('resolves a quick passage prompt in system text and exposes only read tools', async () => {
+  it('resolves a quick passage prompt in user context and exposes only read tools', async () => {
     const model = new MockLanguageModelV4({
       doStream: async () => ({
         stream: new ReadableStream({
@@ -105,16 +105,20 @@ suite('saved actions at the model boundary (real Postgres)', () => {
     expect(reply.response.status).toBe(200);
     await reply.response.text();
     const call = model.doStreamCalls[0];
-    const system = call?.prompt
-      .filter((message) => message.role === 'system')
-      .map((message) => message.content)
+    const context = call?.prompt
+      .filter((message) => message.role === 'user')
+      .flatMap((message) =>
+        typeof message.content === 'string'
+          ? [message.content]
+          : message.content.filter((part) => part.type === 'text').map((part) => part.text),
+      )
       .join('\n');
-    expect(system).toContain(`"ownerAction":${JSON.stringify(ownerAction)}`);
-    expect(system).toContain('"quote":"A passage"');
+    expect(context).toContain(`"ownerAction":${JSON.stringify(ownerAction)}`);
+    expect(context).toContain('"quote":"A passage"');
     expect(call?.tools?.map((tool) => tool.name)).toEqual(['get_link']);
     expect(call?.prompt).toContainEqual({
       role: 'user',
-      content: [{ type: 'text', text: ownerAction.label }],
+      content: expect.arrayContaining([{ type: 'text', text: ownerAction.label }]),
     });
     expect((await core.listChats()).chats).toEqual([]);
   });
@@ -153,16 +157,23 @@ suite('saved actions at the model boundary (real Postgres)', () => {
       if (!reply.ok) throw new Error(reply.code);
       await reply.response.text();
       const call = model.doStreamCalls[0];
-      const system = call?.prompt
-        .filter((message) => message.role === 'system')
-        .map((message) => message.content)
+      const context = call?.prompt
+        .filter((message) => message.role === 'user')
+        .flatMap((message) =>
+          typeof message.content === 'string'
+            ? [message.content]
+            : message.content.filter((part) => part.type === 'text').map((part) => part.text),
+        )
         .join('\n');
-      expect(system).toContain(`"action":"${action}"`);
-      expect(system).toContain('"link":null');
+      expect(context).toContain(`"action":"${action}"`);
+      expect(context).toContain('"link":null');
       if (action === actionId)
-        expect(system).toContain(`"ownerAction":${JSON.stringify(ownerAction)}`);
-      else expect(system).not.toContain('"ownerAction":');
-      expect(call?.prompt).toContainEqual({ role: 'user', content: [{ type: 'text', text }] });
+        expect(context).toContain(`"ownerAction":${JSON.stringify(ownerAction)}`);
+      else expect(context).not.toContain('"ownerAction":');
+      expect(call?.prompt).toContainEqual({
+        role: 'user',
+        content: expect.arrayContaining([{ type: 'text', text }]),
+      });
     },
   );
 
@@ -207,8 +218,14 @@ suite('saved actions at the model boundary (real Postgres)', () => {
     expect(model.doStreamCalls[0]?.prompt).toEqual(
       expect.arrayContaining([
         { role: 'user', content: [{ type: 'text', text: 'Related' }] },
-        { role: 'assistant', content: [{ type: 'text', text: 'An old answer' }] },
-        { role: 'user', content: [{ type: 'text', text: 'Saved this week' }] },
+        expect.objectContaining({
+          role: 'assistant',
+          content: [{ type: 'text', text: 'An old answer' }],
+        }),
+        {
+          role: 'user',
+          content: expect.arrayContaining([{ type: 'text', text: 'Saved this week' }]),
+        },
       ]),
     );
   });
@@ -283,12 +300,16 @@ suite('saved actions at the model boundary (real Postgres)', () => {
     expect(resumed.ok).toBe(true);
     if (!resumed.ok) throw new Error(resumed.code);
     await resumed.response.text();
-    const system = resumedModel.doStreamCalls[0]?.prompt
-      .filter((message) => message.role === 'system')
-      .map((message) => message.content)
+    const context = resumedModel.doStreamCalls[0]?.prompt
+      .filter((message) => message.role === 'user')
+      .flatMap((message) =>
+        typeof message.content === 'string'
+          ? [message.content]
+          : message.content.filter((part) => part.type === 'text').map((part) => part.text),
+      )
       .join('\n');
-    expect(system).not.toContain('"ownerAction":');
-    expect(system).not.toContain(ownerAction.prompt);
+    expect(context).not.toContain('"ownerAction":');
+    expect(context).not.toContain(ownerAction.prompt);
     expect((await core.getChat(chat.id))?.messages[0]?.parts).toEqual([
       { type: 'text', text: ownerAction.label },
     ]);

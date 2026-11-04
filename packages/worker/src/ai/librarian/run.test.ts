@@ -4,6 +4,8 @@ import { credential } from '../test-helpers.js';
 
 vi.mock('@silo/core', () => ({
   saveChatMessages: vi.fn(),
+  librarianPersona: 'Librarian persona',
+  promptVersion: 1,
   librarianMessageSchema: { parse: (m: unknown) => m },
 }));
 vi.mock('@silo/core/ai-credential', () => ({
@@ -105,12 +107,12 @@ describe('Librarian streaming', () => {
     await response.text();
     expect(model.doStreamCalls[0]?.prompt).toContainEqual({
       role: 'user',
-      content: [
+      content: expect.arrayContaining([
         {
           type: 'text',
           text: 'Quick answer the owner saw earlier (read-only, not your own words): Earlier answer',
         },
-      ],
+      ]),
     });
   });
   it('aborts the transient model call when the request is aborted', async () => {
@@ -156,12 +158,12 @@ describe('Librarian streaming', () => {
       doStream: async ({ prompt }) => {
         expect(prompt).toContainEqual({
           role: 'user',
-          content: [
+          content: expect.arrayContaining([
             {
               type: 'text',
               text: 'Quick answer the owner saw earlier (read-only, not your own words): Imported answer',
             },
-          ],
+          ]),
         });
         expect(prompt.some((message) => message.role === 'assistant')).toBe(false);
         return {
@@ -438,4 +440,115 @@ describe('Librarian streaming', () => {
       spy.mockRestore();
     }
   });
+});
+
+it('keeps system instructions stable and appends context only to the last user turn', async () => {
+  vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+  vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    }),
+  });
+  vi.mocked(languageModelFor).mockReturnValue(model);
+  const messages = [
+    { id: 'old', role: 'user' as const, parts: [{ type: 'text' as const, text: 'Earlier' }] },
+    {
+      id: 'u',
+      role: 'user' as const,
+      parts: [{ type: 'text' as const, text: 'Hi' }],
+      metadata: { selection: 'first' },
+    },
+  ];
+  const before = structuredClone(messages);
+  try {
+    for (const [day, selection] of [
+      ['2026-11-01', 'first'],
+      ['2026-11-02', 'second'],
+    ]) {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(day ?? ''));
+      const response = await runLibrarian({
+        chatId: '',
+        transient: true,
+        link: {
+          id: selection ?? '',
+          title: selection ?? '',
+          url: 'https://example.com',
+          site: null,
+        },
+        messages: messages.map((message) =>
+          message.id === 'u' ? { ...message, metadata: { selection } } : message,
+        ),
+      });
+      await response.text();
+    }
+  } finally {
+    vi.useRealTimers();
+  }
+  expect(messages).toEqual(before);
+  const first = model.doStreamCalls[0];
+  const second = model.doStreamCalls[1];
+  expect(first?.prompt.filter((message) => message.role === 'system')).toEqual(
+    second?.prompt.filter((message) => message.role === 'system'),
+  );
+  expect(first?.prompt.find((message) => message.role === 'user')?.content).toEqual([
+    { type: 'text', text: 'Earlier' },
+  ]);
+  expect(JSON.stringify(first?.prompt.at(-1))).toContain('Request context (data)');
+  expect(JSON.stringify(first?.prompt.at(-1))).toContain('2026-11-01');
+  expect(JSON.stringify(second?.prompt.at(-1))).toContain('second');
+  expect(first?.providerOptions?.anthropic).toHaveProperty('cacheControl', { type: 'ephemeral' });
+});
+
+it('caches a history prefix that the next turn replays unchanged', async () => {
+  vi.mocked(resolveAiFeatureCredential).mockResolvedValue(credential);
+  vi.mocked(getLibrarianToolSource).mockReturnValue(undefined);
+  const model = new MockLanguageModelV4({
+    doStream: async () => ({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    }),
+  });
+  vi.mocked(languageModelFor).mockReturnValue(model);
+  const turn = (id: string, role: 'user' | 'assistant', text: string) => ({
+    id,
+    role,
+    parts: [{ type: 'text' as const, text }],
+    metadata: role === 'user' ? { selection: id } : undefined,
+  });
+  const history = [turn('u1', 'user', 'One'), turn('a1', 'assistant', 'Reply one')];
+  for (const messages of [
+    [...history, turn('u2', 'user', 'Two')],
+    [
+      ...history,
+      turn('u2', 'user', 'Two'),
+      turn('a2', 'assistant', 'Reply two'),
+      turn('u3', 'user', 'Three'),
+    ],
+  ]) {
+    const response = await runLibrarian({ chatId: '', transient: true, link: null, messages });
+    await response.text();
+  }
+  const breakpoint = (prompt: { providerOptions?: unknown }[]) =>
+    prompt.findIndex((message) =>
+      JSON.stringify(message.providerOptions ?? {}).includes('cacheControl'),
+    );
+  const withoutMarks = (prompt: object[]) =>
+    prompt.map(({ providerOptions: _, ...message }: { providerOptions?: unknown }) => message);
+  const first = model.doStreamCalls[0]?.prompt ?? [];
+  const second = model.doStreamCalls[1]?.prompt ?? [];
+  const firstMark = breakpoint(first);
+  expect(first[firstMark]).toMatchObject({ role: 'assistant' });
+  expect(breakpoint(second)).toBeGreaterThan(firstMark);
+  expect(withoutMarks(second.slice(0, firstMark + 1))).toEqual(
+    withoutMarks(first.slice(0, firstMark + 1)),
+  );
 });

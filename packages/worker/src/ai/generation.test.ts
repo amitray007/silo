@@ -3,7 +3,7 @@ import { generateText, NoOutputGeneratedError, Output } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { withModelSettings } from './generation.js';
+import { chatModelSettings, withModelSettings } from './generation.js';
 import { languageModelFor } from './model.js';
 import { runAiFeature } from './run.js';
 import { apiError, credential, okResult } from './test-helpers.js';
@@ -376,4 +376,74 @@ describe('bounded fallbacks', () => {
     );
     expect(model.doGenerateCalls.map((c) => c.reasoning)).toEqual(['low', undefined]);
   });
+});
+
+describe('chat prompt caching', () => {
+  it('opts in for Anthropic while preserving reasoning and omitting format', () => {
+    expect(chatModelSettings(credential, { promptCache: true }).providerOptions).toEqual({
+      anthropic: {
+        thinking: { type: 'disabled' },
+        effort: 'low',
+        cacheControl: { type: 'ephemeral' },
+      },
+    });
+    expect(chatModelSettings(credential).providerOptions?.anthropic).not.toHaveProperty(
+      'cacheControl',
+    );
+  });
+  it('creates Anthropic options when there are no reasoning settings', () => {
+    expect(
+      chatModelSettings(
+        {
+          ...credential,
+          model: { ...credential.model, reasoning: { type: 'openai' } },
+        },
+        { promptCache: true },
+      ).providerOptions,
+    ).toEqual({
+      anthropic: { cacheControl: { type: 'ephemeral' } },
+    });
+  });
+  it('opts in for Gateway while preserving the reasoning budget', () => {
+    const gateway = {
+      ...credential,
+      kind: 'gateway' as const,
+      model: { ...credential.model, reasoning: { type: 'gateway' as const, budgetTokens: 1024 } },
+    };
+    expect(chatModelSettings(gateway, { promptCache: true }).providerOptions).toEqual({
+      gateway: { reasoningBudget: 1024, caching: 'auto' },
+    });
+    expect(chatModelSettings(gateway).providerOptions?.gateway).not.toHaveProperty('caching');
+  });
+});
+
+it('forwards Gateway caching on the budget model Chat Completions body', async () => {
+  const sent: Record<string, unknown>[] = [];
+  const fetch: typeof globalThis.fetch = async (_url, init) => {
+    sent.push(JSON.parse(String(init?.body)));
+    return Response.json({ error: { message: 'test failure' } }, { status: 500 });
+  };
+  const gateway = {
+    kind: 'gateway' as const,
+    apiKey: 'fake-wire-key',
+    model: {
+      id: 'alibaba/qwen3-max-thinking',
+      label: 'Qwen',
+      structuredOutput: 'native' as const,
+      reasoning: { type: 'gateway' as const, budgetTokens: 1 },
+    },
+  };
+  for (const promptCache of [true, false])
+    await generateText({
+      model: languageModelFor(gateway, fetch),
+      prompt: 'hi',
+      maxRetries: 0,
+      ...chatModelSettings(gateway, { promptCache }),
+    }).catch(() => {});
+  expect(sent[0]).toMatchObject({
+    reasoning: { max_tokens: 1 },
+    providerOptions: { gateway: { caching: 'auto' } },
+  });
+  expect(sent[1]).toMatchObject({ reasoning: { max_tokens: 1 } });
+  expect(sent[1]).not.toHaveProperty('providerOptions');
 });
