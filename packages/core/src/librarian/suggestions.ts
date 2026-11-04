@@ -64,6 +64,7 @@ async function generate(chatId: string, messageId: string): Promise<Outcome> {
   const result = await runner(
     text(stored?.messages.findLast((m) => m.role === 'user')),
     text(last),
+    metadata?.model,
   );
   // A failed call shows no chips now and may be retried on a later visit.
   if (result === null) return [];

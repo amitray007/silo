@@ -37,12 +37,18 @@ const reply = (text: string, streaming = false) =>
   render(
     <QueryClientProvider client={new QueryClient()}>
       <MemoryRouter>
-        <ChatMessage
-          streaming={streaming}
-          message={
-            { id: 'a', role: 'assistant', parts: [{ type: 'text', text }] } as unknown as UIMessage
-          }
-        />
+        <div className="silo-chat-messages">
+          <ChatMessage
+            streaming={streaming}
+            message={
+              {
+                id: 'a',
+                role: 'assistant',
+                parts: [{ type: 'text', text }],
+              } as unknown as UIMessage
+            }
+          />
+        </div>
       </MemoryRouter>
     </QueryClientProvider>,
   );
@@ -64,6 +70,8 @@ it('opens a card on hover and focus with site, saved date and title, and Escape 
   await waitFor(() => expect(pill.querySelector('img')).toBeTruthy());
   fireEvent.mouseEnter(pill);
   const card = screen.getByRole('tooltip');
+  expect(card.parentElement).toBe(document.body);
+  expect(card.closest('.silo-chat-messages')).toBeNull();
   expect(card.textContent).toContain('site1.com');
   expect(card.textContent).toContain('Saved');
   expect(card.textContent).toContain('Title 1');

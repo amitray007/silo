@@ -56,7 +56,15 @@ export function beginLibrarianRun(chatId: string): (() => void) | undefined {
 export type Suggestions = { kind: 'ask' | 'do'; text: string }[];
 /** Resolves to null when the model call failed: a failure is retried later, never stored. */
 let suggestionsRunner:
-  | ((question: string, answer: string) => Promise<Suggestions | null>)
+  | ((
+      question: string,
+      answer: string,
+      model?: {
+        provider: import('../ai/model-types.js').AiProviderKind;
+        id: string;
+        label: string;
+      },
+    ) => Promise<Suggestions | null>)
   | undefined;
 export function setLibrarianSuggestionsRunner(value: typeof suggestionsRunner) {
   suggestionsRunner = value;
