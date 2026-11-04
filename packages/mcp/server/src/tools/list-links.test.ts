@@ -64,6 +64,8 @@ describeMcpTool(
 
       const [content] = result.content as Array<{ type: 'text'; text: string }>;
       expect(content?.text).toContain('newest first');
+      expect(content?.text).toContain(`Basic one (id: ${firstId}) —`);
+      expect(content?.text).toContain(`Basic two (id: ${secondId}) —`);
     });
 
     it('LEAK-ABSENCE: a link never carries searchVector/canonicalUrl/deletedAt', async () => {

@@ -259,11 +259,11 @@ export function toSnippetLinkContent(link: SnippetSourceRow): SnippetLinkContent
  * One `content[0].text` line for a ranked, snippet-carrying result — shared
  * by `search_links` and `find_related` (agent-navigation slice U4), both of
  * which list `SnippetLinkContent & { rank: number }` rows: `- (rank 0.123)
- * Title — url [tags] — snippet`. Factored out once the two tools' otherwise
+ * Title (id: uuid) — url [tags] — snippet`. Factored out once the two tools' otherwise
  * near-identical `toTextSummary` loop bodies were flagged as a jscpd clone.
  */
 export function toRankedResultLine(result: SnippetLinkContent & { rank: number }): string {
   const tagsPart = result.tags.length > 0 ? ` [${result.tags.join(', ')}]` : '';
   const snippetPart = result.snippet ? ` — ${result.snippet}` : '';
-  return `- (rank ${result.rank.toFixed(3)}) ${result.title ?? result.url} — ${result.url}${tagsPart}${snippetPart}`;
+  return `- (rank ${result.rank.toFixed(3)}) ${result.title ?? result.url} (id: ${result.id}) — ${result.url}${tagsPart}${snippetPart}`;
 }

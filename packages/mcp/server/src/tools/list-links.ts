@@ -52,7 +52,9 @@ function toTextSummary(links: SnippetLinkContent[], nextCursor?: string): string
   for (const link of links) {
     const tagsPart = link.tags.length > 0 ? ` [${link.tags.join(', ')}]` : '';
     const snippetPart = link.snippet ? ` — ${link.snippet}` : '';
-    lines.push(`- ${link.title ?? link.url} — ${link.url}${tagsPart}${snippetPart}`);
+    lines.push(
+      `- ${link.title ?? link.url} (id: ${link.id}) — ${link.url}${tagsPart}${snippetPart}`,
+    );
   }
   if (nextCursor !== undefined) {
     lines.push('More links available (pass cursor to continue).');

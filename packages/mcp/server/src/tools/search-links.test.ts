@@ -74,6 +74,7 @@ describeMcpTool(
       // Text summary is a readable ranked list.
       const [content] = result.content as Array<{ type: 'text'; text: string }>;
       expect(content?.text).toContain('2 results for "octopus"');
+      for (const id of ids) expect(content?.text).toContain(`(id: ${id}) —`);
     });
 
     it('H2: finds a link by a word that appears ONLY in its notes', async () => {
