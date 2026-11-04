@@ -899,9 +899,9 @@ it('does not retain the article highlight while text is selected in the passage 
   await screen.findByText('Alpha beta gamma delta.');
   select('quick brown fox');
   fireEvent.click(await toolbarButton('Ask'));
-  const field = screen.getByRole('textbox', {
+  const field = (await screen.findByRole('textbox', {
     name: 'Ask about this passage',
-  }) as HTMLTextAreaElement;
+  })) as HTMLTextAreaElement;
   expect(registry.has('silo-librarian-selection')).toBe(true);
   fireEvent.change(field, { target: { value: 'Explain these words' } });
   act(() => {

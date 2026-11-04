@@ -20,6 +20,7 @@ function plain(line: string): string {
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
     .replace(/<[^>]+>/g, '')
+    .replace(/[<>]/g, '')
     .replace(/(\*\*|__|\*|`|~~)/g, '');
 }
 

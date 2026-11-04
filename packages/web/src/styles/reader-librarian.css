@@ -223,6 +223,17 @@ body:has(.silo-reader-dock[data-chat="true"]) .silo-continue {
 .silo-chat-actions .silo-reader-iconbtn[aria-pressed="true"] {
   color: var(--ink);
 }
+/* With a pointer, the actions show while the answer is hovered or focused, or while one runs. */
+@media (hover: hover) {
+  .silo-chat-actions {
+    opacity: 0;
+    transition: opacity 150ms var(--ease-out);
+  }
+  .silo-chat-assistant:is(:hover, :focus-within) .silo-chat-actions,
+  .silo-chat-actions:has([aria-pressed="true"]) {
+    opacity: 1;
+  }
+}
 .silo-chat-assistant a .silo-letter-chip {
   margin-right: 4px;
   vertical-align: -2px;
