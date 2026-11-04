@@ -2,7 +2,7 @@ import type { UIMessage } from '@ai-sdk/react';
 import { memo, useState } from 'react';
 import { Link, useInRouterContext } from 'react-router';
 import { Block, type BlockProps, defaultRehypePlugins, Streamdown } from 'streamdown';
-import { useLink } from '../../../api/hooks';
+import { useLinkUrl } from '../../../api/hooks';
 import { deriveDomain } from '../../../lib/url';
 import { Chip } from '../../Chip';
 import { ReaderIcon } from '../ReaderIcon';
@@ -12,10 +12,10 @@ import { ApprovalRow } from './ApprovalRow';
 const itemCitation = /^\/\?link=([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})$/i;
 const FAVICON_PX = 14;
 
-/** The cited link's own site icon: its domain comes from the cached link, the globe until then. */
+/** The cited link's own site icon: the globe until its URL arrives. */
 function CitedFavicon({ id }: { id: string }) {
-  const { data } = useLink(id);
-  return <Chip domain={data ? deriveDomain(data.link.url) : null} size={FAVICON_PX} />;
+  const { data: url } = useLinkUrl(id);
+  return <Chip domain={url ? deriveDomain(url) : null} size={FAVICON_PX} />;
 }
 
 function Citation({ href, children }: { href?: string | undefined; children?: React.ReactNode }) {

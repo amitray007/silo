@@ -198,6 +198,23 @@ export function useRefreshReader(linkId: string) {
   });
 }
 
+/**
+ * A cited link's URL, for its favicon: a one-character text window keeps the response small, and
+ * a link's URL never changes, so one fetch per id is enough.
+ */
+export function useLinkUrl(id: string) {
+  return useQuery({
+    queryKey: ['link-url', id] as const,
+    queryFn: ({ signal }) =>
+      apiGet<LinkResponse>(
+        `/api/links/${encodeURIComponent(id)}?textOffset=0&textLimit=1`,
+        signal,
+      ).then((data) => data.link.url),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: false,
+  });
+}
+
 /** Fetch one link's detail for the open reader. Polls while the link is still enriching. */
 export function useLink(id: string | undefined, options: { enabled?: boolean } = {}) {
   const client = useQueryClient();
