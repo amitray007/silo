@@ -1,4 +1,9 @@
-import { librarianMessageSchema, replaceLastAnswer, saveChatMessages } from '@silo/core';
+import {
+  getSetting,
+  librarianMessageSchema,
+  replaceLastAnswer,
+  saveChatMessages,
+} from '@silo/core';
 import {
   getLibrarianToolSource,
   type LibrarianRequest,
@@ -84,6 +89,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
         Object.entries(tools).map(([name, tool]) => [name, { inputSchema: tool.inputSchema }]),
       ),
     });
+    const thinking = await getSetting('librarianThinking');
     const model = languageModelFor(credential);
     const input = await compactConversation(request, originalMessages, credential, model, persona);
     const last = originalMessages.at(-1);
@@ -94,7 +100,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
     let failed = false;
     let finished = false;
     const result = streamText({
-      model: chatStreamingModel(model, credential),
+      model: chatStreamingModel(model, credential, thinking),
       // The UI stream logs the fixed code; the SDK default logs raw provider errors.
       onError: () => {
         failed = true;
@@ -112,7 +118,7 @@ export async function runLibrarian(request: LibrarianRequest): Promise<Response>
       stopWhen: isStepCount(8),
       maxRetries: 2,
       telemetry: { isEnabled: false },
-      ...chatModelSettings(credential, { promptCache: true, readableReasoning: true }),
+      ...chatModelSettings(credential, { promptCache: true, readableReasoning: true, thinking }),
     });
     const metadata = {
       model: { provider: credential.kind, id: credential.model.id, label: credential.model.label },

@@ -129,6 +129,7 @@ const settingsSchema = {
     .strict(),
   ai: aiSchema,
   /** How Librarian answers arrive: word by word as they stream, or whole once finished. */
+  librarianThinking: z.enum(['off', 'low', 'medium', 'high']),
   librarianSuggestions: z.boolean(),
   chatAnswers: z.enum(['streamed', 'complete']),
   /**
@@ -158,6 +159,7 @@ export const SETTINGS_DEFAULTS: SettingsMap = {
   mcpAccess: true,
   linkPreviewImages: true,
   hoverPreview: false,
+  librarianThinking: 'low',
   librarianSuggestions: true,
   chatAnswers: 'streamed',
   plugins: {

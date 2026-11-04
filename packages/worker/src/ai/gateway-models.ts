@@ -28,10 +28,12 @@ const modelSchema = z.object({
 const pageSchema = z.object({ data: z.array(z.unknown()) });
 
 function reasoning(options: z.infer<typeof optionSchema>[]): AiLiveModel['reasoning'] {
-  if (options.some((o) => o.type === 'toggle')) return { type: 'gateway', effort: 'none' };
+  const toggle = options.some((o) => o.type === 'toggle');
   const values = options.find((o) => o.type === 'effort')?.values ?? [];
-  const effort = effortOrder.find((value) => values.includes(value));
-  if (effort) return { type: 'gateway', effort };
+  const efforts = effortOrder.filter((value) => values.includes(value));
+  const effort = efforts[0];
+  if (effort) return { type: 'gateway', efforts, effort };
+  if (toggle) return { type: 'gateway', effort: 'none' };
   const budget = options.find((o) => o.type === 'budget_tokens');
   return { type: 'gateway', ...(budget ? { budgetTokens: budget.min ?? 1 } : {}) };
 }

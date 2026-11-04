@@ -309,6 +309,7 @@ export type SettingsMap = {
   /** List-row hover cards. Default false; independent of palette previews. */
   hoverPreview: boolean;
   /** How Librarian answers arrive; absent reads as 'streamed'. */
+  librarianThinking?: 'off' | 'low' | 'medium' | 'high';
   librarianSuggestions?: boolean;
   chatAnswers?: 'streamed' | 'complete';
   plugins: {

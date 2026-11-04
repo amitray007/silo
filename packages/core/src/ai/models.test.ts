@@ -545,12 +545,15 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     models.refreshStaleProviderModels(snapshot);
     await expect.poll(() => seen.length).toBe(2);
     expect(seen.sort()).toEqual(['anthropic', 'openai']);
-    const refreshes = [
-      models.refreshProviderModels('anthropic'),
-      models.refreshProviderModels('openai'),
-    ];
+    // A manual refresh reads the key asynchronously. Releasing the fetch before
+    // that read finishes can legitimately start a new refresh after the first.
     release?.();
-    await Promise.all(refreshes);
+    await expect
+      .poll(async () => {
+        const rows = await providers.listAiProviders();
+        return rows.filter((row) => row.modelsFetchedAt !== null).length;
+      })
+      .toBe(2);
     models.refreshStaleProviderModels(await providers.listAiProviders());
     expect(seen).toHaveLength(2);
     await harness
@@ -559,8 +562,15 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
         sql`UPDATE ai_providers SET models_fetched_at = NOW() - INTERVAL '25 hours' WHERE kind = 'anthropic'`,
       );
     models.refreshStaleProviderModels(await providers.listAiProviders());
-    await models.refreshProviderModels('anthropic');
+    await expect
+      .poll(async () => {
+        const row = (await providers.listAiProviders()).find((p) => p.kind === 'anthropic');
+        return row?.modelsFetchedAt != null && Date.now() - row.modelsFetchedAt.getTime() < 60_000;
+      })
+      .toBe(true);
     expect(seen).toHaveLength(3);
+    await models.refreshProviderModels('anthropic');
+    expect(seen).toHaveLength(4);
   });
 
   it('upgrades an existing Fireworks cache in place without a database migration', async () => {

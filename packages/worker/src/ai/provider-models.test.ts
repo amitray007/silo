@@ -76,7 +76,13 @@ describe('Anthropic models', () => {
           contextWindow: 1000000,
           maxOutputTokens: 128000,
           structuredOutput: 'native',
-          reasoning: { type: 'anthropic', thinking: 'disabled', effort: 'low' },
+          reasoning: {
+            type: 'anthropic',
+            thinking: 'disabled',
+            effort: 'low',
+            thinkingModes: ['disabled', 'adaptive'],
+            efforts: ['low', 'high'],
+          },
         },
         {
           id: 'unknown',
@@ -86,7 +92,7 @@ describe('Anthropic models', () => {
           contextWindow: 1000000,
           maxOutputTokens: 128000,
           structuredOutput: 'unknown',
-          reasoning: { type: 'anthropic' },
+          reasoning: { type: 'anthropic', thinkingModes: [], efforts: [] },
         },
       ],
     });
@@ -229,6 +235,13 @@ describe('Gateway models', () => {
           gateway('budget', {
             reasoning_options: [{ type: 'budget_tokens', min: 64, max: 8192 }],
           }),
+          gateway('combined', {
+            reasoning_options: [
+              { type: 'toggle' },
+              { type: 'effort', values: ['low', 'high'] },
+              { type: 'budget_tokens', min: 0, max: 100 },
+            ],
+          }),
           gateway('image', { type: 'image' }),
           gateway('no-json', { tags: [] }),
           gateway('no-access', {
@@ -253,9 +266,20 @@ describe('Gateway models', () => {
     );
     const result = await createGatewayModelsFetcher(fetch)(KEY);
     expect(result.ok && result.models.map((m) => [m.id, m.reasoning])).toEqual([
-      ['anthropic/claude-opus-5.5', { type: 'gateway', effort: 'low' }],
+      [
+        'anthropic/claude-opus-5.5',
+        { type: 'gateway', effort: 'low', efforts: ['low', 'medium', 'high'] },
+      ],
       ['toggle', { type: 'gateway', effort: 'none' }],
       ['budget', { type: 'gateway', budgetTokens: 64 }],
+      [
+        'combined',
+        {
+          type: 'gateway',
+          efforts: ['low', 'high'],
+          effort: 'low',
+        },
+      ],
     ]);
     expect(String(fetch.mock.calls[0]?.[0])).toBe(
       'https://ai-gateway.vercel.sh/v1/models?include_availability',

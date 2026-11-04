@@ -3,7 +3,7 @@ import { generateText, NoOutputGeneratedError, Output } from 'ai';
 import { MockLanguageModelV4 } from 'ai/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
-import { chatModelSettings, withModelSettings } from './generation.js';
+import { chatModelSettings, chatStreamingModel, withModelSettings } from './generation.js';
 import { languageModelFor } from './model.js';
 import { runAiFeature } from './run.js';
 import { apiError, credential, okResult } from './test-helpers.js';
@@ -479,4 +479,143 @@ it('forwards Gateway caching on the budget model Chat Completions body', async (
   });
   expect(sent[1]).toMatchObject({ reasoning: { max_tokens: 1 } });
   expect(sent[1]).not.toHaveProperty('providerOptions');
+});
+
+describe('chat thinking', () => {
+  function selected(kind: AiProviderKind, reasoning: AiLiveModel['reasoning']) {
+    return {
+      ...credential,
+      kind,
+      model: { ...credential.model, id: `thinking-${kind}`, reasoning },
+    };
+  }
+  it.each(['none', 'minimal', 'low'] as const)(
+    'keeps OpenAI minimum %s only when off',
+    (effort) => {
+      const model = selected('openai', { type: 'openai', effort });
+      expect(
+        chatModelSettings(model, { thinking: 'off' }).providerOptions?.openai?.reasoningEffort,
+      ).toBe(effort);
+      expect(
+        chatModelSettings(model, { thinking: 'high' }).providerOptions?.openai?.reasoningEffort,
+      ).toBe('high');
+    },
+  );
+  it('leaves non-reasoning OpenAI models alone', () => {
+    expect(
+      chatModelSettings(selected('openai', { type: 'openai' }), { thinking: 'high' })
+        .providerOptions,
+    ).toBeUndefined();
+  });
+  it('clamps Gateway effort to the advertised options', () => {
+    const model = selected('gateway', {
+      type: 'gateway',
+      effort: 'none',
+      efforts: ['none', 'medium'],
+    });
+    expect(chatModelSettings(model, { thinking: 'high' }).reasoning).toBe('medium');
+    expect(chatModelSettings(model, { thinking: 'off' }).reasoning).toBe('none');
+  });
+  it('keeps Gateway toggle and budget settings unchanged for every Thinking value', () => {
+    const toggle = selected('gateway', { type: 'gateway', effort: 'none' });
+    const budget = selected('gateway', { type: 'gateway', budgetTokens: 64 });
+    for (const thinking of ['off', 'low', 'medium', 'high'] as const) {
+      expect(chatModelSettings(toggle, { thinking })).toEqual(chatModelSettings(toggle));
+      expect(chatModelSettings(toggle, { thinking }).reasoning).toBe('none');
+      expect(chatModelSettings(budget, { thinking })).toEqual(chatModelSettings(budget));
+      expect(chatModelSettings(budget, { thinking }).providerOptions).toEqual({
+        gateway: { reasoningBudget: 64 },
+      });
+    }
+  });
+  it.each(['low', 'medium', 'high'] as const)('clamps Anthropic effort: %s', (thinking) => {
+    const model = selected('anthropic', {
+      type: 'anthropic',
+      thinking: 'adaptive',
+      thinkingModes: ['adaptive'],
+      efforts: ['medium', 'high'],
+    });
+    expect(chatModelSettings(model, { thinking }).providerOptions?.anthropic).toMatchObject({
+      thinking: { type: 'adaptive' },
+      effort: thinking === 'low' ? 'medium' : thinking,
+    });
+  });
+  it('enables adaptive thinking and permits off only when advertised', () => {
+    const model = selected('anthropic', {
+      type: 'anthropic',
+      thinking: 'disabled',
+      thinkingModes: ['disabled', 'adaptive'],
+      efforts: ['low', 'high'],
+    });
+    expect(chatModelSettings(model, { thinking: 'high' }).providerOptions?.anthropic).toMatchObject(
+      { thinking: { type: 'adaptive' }, effort: 'high' },
+    );
+    expect(
+      chatModelSettings(model, { thinking: 'off' }).providerOptions?.anthropic?.thinking,
+    ).toEqual({ type: 'disabled' });
+    model.model.reasoning = {
+      type: 'anthropic',
+      thinking: 'adaptive',
+      thinkingModes: ['adaptive'],
+      efforts: ['medium', 'high'],
+    };
+    expect(chatModelSettings(model, { thinking: 'off' }).providerOptions?.anthropic).toMatchObject({
+      thinking: { type: 'adaptive' },
+      effort: 'medium',
+    });
+  });
+  it('maps Fireworks and leaves background generation unchanged', async () => {
+    const model = selected('fireworks', { type: 'fireworks' });
+    expect(
+      chatModelSettings(model, { thinking: 'high' }).providerOptions?.fireworks?.reasoningEffort,
+    ).toBe('high');
+    expect(
+      chatModelSettings(model, { thinking: 'off' }).providerOptions?.fireworks?.reasoningEffort,
+    ).toBe('none');
+    await withModelSettings(model, 1000, async (settings) => {
+      expect(settings.providerOptions?.fireworks?.reasoningEffort).toBe('low');
+    });
+  });
+});
+
+it('removes a rejected Gateway chat effort before retrying the stream', async () => {
+  const doStream = vi
+    .fn<MockLanguageModelV4['doStream']>()
+    .mockRejectedValueOnce(apiError(400, 'reasoning is not supported'))
+    .mockResolvedValue({
+      stream: new ReadableStream({
+        start(controller) {
+          controller.close();
+        },
+      }),
+    });
+  const model = new MockLanguageModelV4({ doStream });
+  const selected = {
+    ...credential,
+    kind: 'gateway' as const,
+    model: {
+      ...credential.model,
+      id: 'gateway-chat-retry',
+      reasoning: {
+        type: 'gateway' as const,
+        effort: 'low' as const,
+        efforts: ['low', 'high'] as const,
+      },
+    },
+  };
+  const wrapped = chatStreamingModel(
+    model,
+    {
+      ...selected,
+      model: {
+        ...selected.model,
+        reasoning: { ...selected.model.reasoning, efforts: [...selected.model.reasoning.efforts] },
+      },
+    },
+    'high',
+  );
+  await wrapped.doStream({ prompt: [], reasoning: 'high' });
+  expect(doStream).toHaveBeenCalledTimes(2);
+  expect(doStream.mock.calls[0]?.[0].reasoning).toBe('high');
+  expect(doStream.mock.calls[1]?.[0].reasoning).toBeUndefined();
 });

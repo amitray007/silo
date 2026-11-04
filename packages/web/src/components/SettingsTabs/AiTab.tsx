@@ -608,6 +608,17 @@ function FeatureRow({
   );
 }
 
+const THINKING_LEVELS = [
+  {
+    options: [
+      { value: 'off', label: 'Off' },
+      { value: 'low', label: 'Low' },
+      { value: 'medium', label: 'Medium' },
+      { value: 'high', label: 'High' },
+    ],
+  },
+] satisfies { options: { value: 'off' | 'low' | 'medium' | 'high'; label: string }[] }[];
+
 const ANSWER_MODES = [
   {
     options: [
@@ -654,12 +665,16 @@ function AiSections({
   saveChatAnswers,
   suggestions,
   saveSuggestions,
+  thinking,
+  saveThinking,
 }: {
   ai: AiSettingsResponse;
   settingsAi: AiSetting;
   plugins: SettingsMap['plugins'] | undefined;
   librarianActions: SettingsMap['librarianActions'];
   chatAnswers: ChatAnswers;
+  thinking: 'off' | 'low' | 'medium' | 'high';
+  saveThinking: (value: 'off' | 'low' | 'medium' | 'high') => void;
   suggestions: boolean;
   saveSuggestions: () => void;
   off: boolean;
@@ -708,6 +723,22 @@ function AiSections({
               on={suggestions}
               onToggle={saveSuggestions}
               disabled={off || busy}
+            />
+          </div>
+          <div style={settingsRowDivided}>
+            <div style={{ flex: 1 }}>
+              <div style={rowLabel}>Thinking</div>
+              <div style={rowDesc}>
+                How hard the Librarian thinks before answering. High shows its reasoning most often
+                and answers more slowly.
+              </div>
+            </div>
+            <SettingsSelect
+              ariaLabel="Thinking"
+              value={thinking}
+              groups={THINKING_LEVELS}
+              disabled={off || busy}
+              onChange={saveThinking}
             />
           </div>
           <ChatAnswersRow value={chatAnswers} onChange={saveChatAnswers} />
@@ -765,6 +796,8 @@ export function AiTab() {
           plugins={settings?.plugins}
           librarianActions={settings?.librarianActions}
           chatAnswers={settings?.chatAnswers ?? 'streamed'}
+          thinking={settings?.librarianThinking ?? 'low'}
+          saveThinking={(value) => update.mutate({ librarianThinking: value })}
           suggestions={settings?.librarianSuggestions ?? true}
           saveSuggestions={() =>
             update.mutate({ librarianSuggestions: !(settings?.librarianSuggestions ?? true) })

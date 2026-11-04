@@ -54,6 +54,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         chatAnswers: 'streamed',
+        librarianThinking: 'low',
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
@@ -72,6 +73,12 @@ describeIfPg('settings store (integration, plan 016)', () => {
         },
       });
     });
+  });
+
+  it('defaults missing thinking rows and persists the selected effort', async () => {
+    expect(await ops.getSetting('librarianThinking')).toBe('low');
+    await ops.setSetting('librarianThinking', 'high');
+    expect(await ops.getSetting('librarianThinking')).toBe('high');
   });
 
   it('round-trips action order, hidden flags and trimmed custom text through Postgres', async () => {
@@ -299,6 +306,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         chatAnswers: 'streamed',
+        librarianThinking: 'low',
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
@@ -344,6 +352,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         chatAnswers: 'streamed',
+        librarianThinking: 'low',
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,
@@ -413,6 +422,7 @@ describeIfPg('settings store (integration, plan 016)', () => {
         linkPreviewImages: true,
         hoverPreview: false,
         chatAnswers: 'streamed',
+        librarianThinking: 'low',
         librarianSuggestions: true,
         reader: null,
         librarianActions: LIBRARIAN_ACTIONS_DEFAULTS,

@@ -50,6 +50,7 @@ const settingsPatchBodySchema = z
     // card shows the captured og:image.
     linkPreviewImages: z.boolean().optional(),
     hoverPreview: z.boolean().optional(),
+    librarianThinking: z.enum(['off', 'low', 'medium', 'high']).optional(),
     librarianSuggestions: z.boolean().optional(),
     chatAnswers: z.enum(['streamed', 'complete']).optional(),
     // Plan 026: per-source objects (master `enabled` + the render features that
@@ -151,6 +152,7 @@ export function registerSettingsRoutes(app: Hono): void {
     if (
       body.ai !== undefined ||
       body.librarianActions !== undefined ||
+      body.librarianThinking !== undefined ||
       body.librarianSuggestions !== undefined
     ) {
       const denied = operatorOnlyFailure(c);
