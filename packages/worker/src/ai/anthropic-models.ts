@@ -50,6 +50,12 @@ function normalize(raw: unknown): AiLiveModel | undefined {
     structuredOutput: m.capabilities?.structured_outputs?.supported ? 'native' : 'unknown',
     reasoning: {
       type: 'anthropic',
+      thinkingModes: THINKING_ORDER.filter(
+        (mode) => m.capabilities?.thinking?.types?.[mode]?.supported,
+      ),
+      efforts: EFFORT_ORDER.filter(
+        (level) => support.safeParse(m.capabilities?.effort?.[level]).data?.supported,
+      ),
       ...(thinking ? { thinking } : {}),
       ...(effort ? { effort } : {}),
     },

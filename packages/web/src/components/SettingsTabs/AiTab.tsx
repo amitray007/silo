@@ -654,12 +654,16 @@ function AiSections({
   saveChatAnswers,
   suggestions,
   saveSuggestions,
+  thinking,
+  saveThinking,
 }: {
   ai: AiSettingsResponse;
   settingsAi: AiSetting;
   plugins: SettingsMap['plugins'] | undefined;
   librarianActions: SettingsMap['librarianActions'];
   chatAnswers: ChatAnswers;
+  thinking: 'off' | 'low' | 'medium' | 'high';
+  saveThinking: (value: 'off' | 'low' | 'medium' | 'high') => void;
   suggestions: boolean;
   saveSuggestions: () => void;
   off: boolean;
@@ -709,6 +713,22 @@ function AiSections({
               onToggle={saveSuggestions}
               disabled={off || busy}
             />
+          </div>
+          <div style={settingsRowDivided}>
+            <label style={rowLabel} htmlFor="librarian-thinking">
+              Thinking
+            </label>
+            <select
+              id="librarian-thinking"
+              value={thinking}
+              disabled={off || busy}
+              onChange={(event) => saveThinking(event.target.value as typeof thinking)}
+            >
+              <option value="off">Off</option>
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+            </select>
           </div>
           <ChatAnswersRow value={chatAnswers} onChange={saveChatAnswers} />
           <QuickActionsEditor actions={resolveActions(librarianActions)} save={saveActions} />
@@ -765,6 +785,8 @@ export function AiTab() {
           plugins={settings?.plugins}
           librarianActions={settings?.librarianActions}
           chatAnswers={settings?.chatAnswers ?? 'streamed'}
+          thinking={settings?.librarianThinking ?? 'low'}
+          saveThinking={(value) => update.mutate({ librarianThinking: value })}
           suggestions={settings?.librarianSuggestions ?? true}
           saveSuggestions={() =>
             update.mutate({ librarianSuggestions: !(settings?.librarianSuggestions ?? true) })

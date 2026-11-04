@@ -20,6 +20,7 @@ export type AiProviderModelsFetcher = (
   apiKey: string,
 ) => Promise<AiModelsResult>;
 let fetcher: AiProviderModelsFetcher | undefined;
+const automaticRefreshes = new Map<AiProviderKind, Promise<AiModelsResult>>();
 const inFlight = new Map<string, Promise<AiModelsResult>>();
 type Backoff = { identity: string; failures: number; retryAt: number };
 const backoffs = new Map<AiProviderKind, Backoff>();
@@ -74,7 +75,12 @@ export function refreshStaleProviderModels(providers: readonly AiProviderSummary
     if (!provider.configured || !provider.keyReadable) continue;
     if (provider.modelsFetchedAt && Date.now() - provider.modelsFetchedAt.getTime() <= 86_400_000)
       continue;
-    void refreshWithBackoff(provider.kind, true).catch(() => {});
+    if (automaticRefreshes.has(provider.kind)) continue;
+    const refresh = refreshWithBackoff(provider.kind, true).finally(() => {
+      automaticRefreshes.delete(provider.kind);
+    });
+    automaticRefreshes.set(provider.kind, refresh);
+    void refresh.catch(() => {});
   }
 }
 

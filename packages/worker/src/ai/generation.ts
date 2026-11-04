@@ -269,11 +269,60 @@ function withReadableReasoning(credential: AiCredential, base: Settings): void {
     providerOptions.openai.reasoningSummary = 'auto';
 }
 
+type Thinking = 'off' | 'low' | 'medium' | 'high';
+const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
+function clampEffort(value: Thinking, supported: readonly string[]): string | undefined {
+  const target = value === 'off' ? 0 : EFFORTS.indexOf(value);
+  return [...supported].sort(
+    (a, b) =>
+      Math.abs(EFFORTS.indexOf(a as (typeof EFFORTS)[number]) - target) -
+      Math.abs(EFFORTS.indexOf(b as (typeof EFFORTS)[number]) - target),
+  )[0];
+}
+function applyChatThinking(base: Settings, credential: AiCredential, thinking: Thinking): void {
+  const reasoning = credential.model.reasoning;
+  if (reasoning.type === 'openai' && reasoning.effort) {
+    const minimum = reasoning.effort;
+    base.providerOptions = { openai: { reasoningEffort: thinking === 'off' ? minimum : thinking } };
+  }
+  if (reasoning.type === 'fireworks')
+    base.providerOptions = {
+      fireworks: { reasoningEffort: thinking === 'off' ? 'none' : thinking },
+    };
+  if (reasoning.type === 'gateway' && reasoning.efforts?.length)
+    base.reasoning = clampEffort(thinking, reasoning.efforts) as NonNullable<Settings['reasoning']>;
+  applyAnthropicThinking(base, reasoning, thinking);
+}
+function applyAnthropicThinking(
+  base: Settings,
+  reasoning: AiCredential['model']['reasoning'],
+  thinking: Thinking,
+): void {
+  if (reasoning.type !== 'anthropic') return;
+  const options = base.providerOptions?.anthropic;
+  if (!options) return;
+  const modes = reasoning.thinkingModes ?? (reasoning.thinking ? [reasoning.thinking] : []);
+  if (thinking === 'off' && modes.includes('disabled')) {
+    delete options.thinking;
+    delete options.effort;
+    return;
+  }
+  const mode = modes.includes('adaptive') ? 'adaptive' : modes.find((mode) => mode !== 'disabled');
+  if (mode)
+    options.thinking = { type: mode, ...(mode === 'enabled' ? { budgetTokens: 1024 } : {}) };
+  const effort = clampEffort(
+    thinking,
+    reasoning.efforts ?? (reasoning.effort ? [reasoning.effort] : []),
+  );
+  if (effort) options.effort = effort;
+}
+
 export function chatModelSettings(
   credential: AiCredential,
-  options: { promptCache?: boolean; readableReasoning?: boolean } = {},
+  options: { promptCache?: boolean; readableReasoning?: boolean; thinking?: Thinking } = {},
 ) {
   const base = settingsFor(credential);
+  if (options.thinking) applyChatThinking(base, credential, options.thinking);
   if (options.readableReasoning) withReadableReasoning(credential, base);
   for (const option of rememberedOptions(`${credential.kind}:${credential.model.id}`) ?? [])
     omitOption(base, option);
@@ -295,7 +344,11 @@ export function chatModelSettings(
 }
 
 /** Retry only while the provider has emitted no content. Later stream failures pass through. */
-export function chatStreamingModel(model: LanguageModel, credential: AiCredential) {
+export function chatStreamingModel(
+  model: LanguageModel,
+  credential: AiCredential,
+  thinking?: Thinking,
+) {
   if (typeof model === 'string') throw new Error('Expected provider model');
   let started = false;
   return wrapLanguageModel({
@@ -307,14 +360,17 @@ export function chatStreamingModel(model: LanguageModel, credential: AiCredentia
         const previous = rememberedOptions(key);
         const settings: Settings = {
           ...chatModelSettings(credential, {
+            ...(thinking ? { thinking } : {}),
             promptCache: true,
             readableReasoning: true,
           }),
           structuredOutput: false,
         };
         const attempt = async () => {
+          const { reasoning: _reasoning, ...rest } = params;
           const result = await model.doStream({
-            ...params,
+            ...rest,
+            ...(settings.reasoning ? { reasoning: settings.reasoning } : {}),
             providerOptions: settings.providerOptions ?? {},
           });
           const stream = await primeStream(result.stream);

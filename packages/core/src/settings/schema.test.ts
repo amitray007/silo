@@ -461,3 +461,10 @@ it('defaults Librarian follow-ups on for existing settings', () => {
   expect(SETTINGS_DEFAULTS.librarianSuggestions).toBe(true);
   expect(parseSettingValue('librarianSuggestions', false)).toBe(false);
 });
+
+it('defaults Librarian thinking to low and accepts only supported choices', () => {
+  expect(SETTINGS_DEFAULTS.librarianThinking).toBe('low');
+  for (const value of ['off', 'low', 'medium', 'high'])
+    expect(parseSettingValue('librarianThinking', value)).toBe(value);
+  expect(() => parseSettingValue('librarianThinking', 'max')).toThrow();
+});

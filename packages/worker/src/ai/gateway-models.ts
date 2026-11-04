@@ -31,7 +31,12 @@ function reasoning(options: z.infer<typeof optionSchema>[]): AiLiveModel['reason
   if (options.some((o) => o.type === 'toggle')) return { type: 'gateway', effort: 'none' };
   const values = options.find((o) => o.type === 'effort')?.values ?? [];
   const effort = effortOrder.find((value) => values.includes(value));
-  if (effort) return { type: 'gateway', effort };
+  if (effort)
+    return {
+      type: 'gateway',
+      effort,
+      efforts: effortOrder.filter((value) => values.includes(value)),
+    };
   const budget = options.find((o) => o.type === 'budget_tokens');
   return { type: 'gateway', ...(budget ? { budgetTokens: budget.min ?? 1 } : {}) };
 }

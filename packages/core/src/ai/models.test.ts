@@ -545,12 +545,15 @@ describeIfPg('Fireworks live-list port and selection validation', () => {
     models.refreshStaleProviderModels(snapshot);
     await expect.poll(() => seen.length).toBe(2);
     expect(seen.sort()).toEqual(['anthropic', 'openai']);
-    const refreshes = [
-      models.refreshProviderModels('anthropic'),
-      models.refreshProviderModels('openai'),
-    ];
+    // A manual refresh reads the key asynchronously. Releasing the fetch before
+    // that read finishes can legitimately start a new refresh after the first.
     release?.();
-    await Promise.all(refreshes);
+    await expect
+      .poll(async () => {
+        const rows = await providers.listAiProviders();
+        return rows.filter((row) => row.modelsFetchedAt !== null).length;
+      })
+      .toBe(2);
     models.refreshStaleProviderModels(await providers.listAiProviders());
     expect(seen).toHaveLength(2);
     await harness

@@ -7,12 +7,15 @@ const effort = z.enum(['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max
 const reasoningSchema = z.discriminatedUnion('type', [
   z.object({
     type: z.literal('anthropic'),
+    thinkingModes: z.array(z.enum(['disabled', 'between_tools', 'adaptive', 'enabled'])).optional(),
+    efforts: z.array(effort).optional(),
     thinking: z.enum(['disabled', 'between_tools', 'adaptive', 'enabled']).optional(),
     effort: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
   }),
   z.object({ type: z.literal('openai'), effort: effort.optional() }),
   z.object({
     type: z.literal('gateway'),
+    efforts: z.array(effort).optional(),
     effort: effort.optional(),
     budgetTokens: z.number().int().nonnegative().optional(),
   }),
