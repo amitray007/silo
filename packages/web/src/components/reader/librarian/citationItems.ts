@@ -2,15 +2,23 @@ import type { UIMessage } from '@ai-sdk/react';
 
 export type CitationItem = { id: string; title: string | null };
 
-function readItems(output: unknown): CitationItem[] {
-  if (typeof output === 'string') {
-    const start = output.search(/[[{]/);
-    try {
-      return readItems(JSON.parse(output.slice(start)));
-    } catch {
-      return [];
-    }
+const DATA_MARKER = 'Data (JSON):';
+// Summary lines read "- Title (id: <uuid>) — url"; they survive when the JSON after them is truncated.
+const summaryLine = /^- (?:\(rank [\d.]+\) )?(.+?) \(id: ([0-9a-f-]{36})\)/gim;
+
+function readText(output: string): CitationItem[] {
+  const marker = output.indexOf(DATA_MARKER);
+  try {
+    return readItems(
+      JSON.parse(output.slice(marker === -1 ? output.search(/[[{]/) : marker + DATA_MARKER.length)),
+    );
+  } catch {
+    return [...output.matchAll(summaryLine)].map(([, title = '', id = '']) => ({ id, title }));
   }
+}
+
+function readItems(output: unknown): CitationItem[] {
+  if (typeof output === 'string') return readText(output);
   if (Array.isArray(output)) return output.flatMap(readItems);
   if (!output || typeof output !== 'object') return [];
   if (

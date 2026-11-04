@@ -332,11 +332,21 @@ async function renderHealing(output?: unknown, results: { id: string; title: str
 
 it('heals a fake id from summary-prefixed tool JSON and uses the saved favicon', async () => {
   const { fetcher } = await renderHealing(
-    `1 result\n${JSON.stringify({ links: [{ id: SAVED, title: ' title ' }] })}`,
+    `1 link: [ai]\n\nData (JSON):\n${JSON.stringify({ links: [{ id: SAVED, title: ' title ' }] })}`,
   );
   const link = await screen.findByRole('link', { name: 'Title: subtitle' });
   expect(link.getAttribute('href')).toBe(`/?link=${SAVED}`);
   expect(link.querySelector('img')?.getAttribute('src')).toBe('/api/favicon?domain=saved.example');
+  expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(false);
+});
+
+it('heals a fake id from summary lines when the tool JSON was cut off', async () => {
+  const { fetcher } = await renderHealing(
+    `1 result for "t":\n- (rank 0.500) Title (id: ${SAVED}) — https://saved.example/post [ai]\n\nData (JSON):\n{"results":[{"id":`,
+  );
+  expect((await screen.findByRole('link', { name: 'Title: subtitle' })).getAttribute('href')).toBe(
+    `/?link=${SAVED}`,
+  );
   expect(fetcher.mock.calls.some(([url]) => String(url).includes('/search?'))).toBe(false);
 });
 
